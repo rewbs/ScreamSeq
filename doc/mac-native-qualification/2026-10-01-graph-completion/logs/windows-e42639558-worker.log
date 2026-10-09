@@ -1,0 +1,848 @@
+Start testing: Oct 02 02:34 Coordinated Universal Time
+----------------------------------------------------------
+40/86 Testing: native-audio-bus
+40/86 Test: native-audio-bus
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/native-audio-bus-tests.exe" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/ScreamSeqVST3Scanner.exe" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/ScreamSeqVST3Fixture.vst3" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/audio-bus-cache.json"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"native-audio-bus" start time: Oct 02 02:34 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS actual Windows VST3 5/3-channel buses: all pairs, odd mono, inactive capacity, state identity, timed automation; 44.1/48/96 kHz, 17/128/4096 frames, host C++ allocation/free audit; live ordinary/sample graph add, Amount, remove/Undo, rejected publication and render clock; live rack/recipe 0/13/3-sample PDC without vendor activation; live rack preset/restore, subsequent routing and manual fence, ongoing ramp preservation; typed aggregate stage cables and exact auxiliary-output follower PCM
+<end of output>
+Test time =   6.44 sec
+----------------------------------------------------------
+Test Passed.
+"native-audio-bus" end time: Oct 02 02:35 Coordinated Universal Time
+"native-audio-bus" time elapsed: 00:00:06
+----------------------------------------------------------
+
+41/86 Testing: recorded-automation-tests
+41/86 Test: recorded-automation-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/recorded-automation-tests.exe"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"recorded-automation-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS recorded timeline rate/partition parity, boundary catch-up/removal, saved baseline after seek, stale/full queue rejection and callback audit
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"recorded-automation-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"recorded-automation-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+42/86 Testing: live-parameter-tests
+42/86 Test: live-parameter-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/live-parameter-tests.exe"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"live-parameter-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS atomic rejection, complete batches, ring wrap and render boundary
+PASS 2048 concurrent SPSC batches of 130 changes
+PASS manual PCM rate=44100 blocks=17,128,4096,8193 energy=3591 changed-L1=1748.25 max-partition-delta=1.0198e-07
+PASS manual PCM rate=48000 blocks=17,128,4096,8193 energy=3902.57 changed-L1=1894.47 max-partition-delta=1.05239e-07
+PASS manual PCM rate=96000 blocks=17,128,4096,8193 energy=7820.76 changed-L1=3803.79 max-partition-delta=0
+PASS scoped host C++ new/delete audit (not malloc, locks or vendor internals)
+<end of output>
+Test time =   0.24 sec
+----------------------------------------------------------
+Test Passed.
+"live-parameter-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"live-parameter-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+43/86 Testing: hosted-project-tests
+43/86 Test: hosted-project-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/hosted-project-tests.exe"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"hosted-project-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+audition rate=44100 energy=499.004 partition=0
+audition rate=48000 energy=543.348 partition=0
+audition rate=96000 energy=1086.36 partition=0
+panic residual peak=0 lastFrame=0 voices=0
+repeated residual peak=0 lastFrame=0 voices=0
+PASS preview release ramps at 3 rates, 6 tick phases, note-off and Panic
+rate=44100 energy=1341.16 wet-dry=3998.09 partition=6.70552e-08
+automation rate=44100 before=0 after-L1=2112.29 partition=2.08616e-07
+rate=48000 energy=1456.15 wet-dry=4340.89 partition=1.04308e-07
+automation rate=48000 before=0 after-L1=2288.28 partition=3.241e-07
+rate=96000 energy=2919.96 wet-dry=8704.6 partition=0
+automation rate=96000 before=0 after-L1=4599.31 partition=0
+PASS detached owner lifetime and repeated late preparation failure
+SKIP optional actual Mac fixture
+host_cpp_allocations=0 host_cpp_deallocations=0 (not direct malloc/free or locks)
+PASS project-to-shared-host preparation; offline only
+<end of output>
+Test time =   1.13 sec
+----------------------------------------------------------
+Test Passed.
+"hosted-project-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"hosted-project-tests" time elapsed: 00:00:01
+----------------------------------------------------------
+
+44/86 Testing: project-preservation-tests
+44/86 Test: project-preservation-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/project-preservation-tests.exe"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"project-preservation-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS known update with opaque root/entity preservation
+PASS stable identity merge, insertion and intentional deletion
+PASS indexed/sequence identities and ambiguous unknown rejection
+PASS exact scalar types and float bits
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"project-preservation-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"project-preservation-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+45/86 Testing: graph-document-stageConnectionOperations
+45/86 Test: graph-document-stageConnectionOperations
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "stageConnectionOperations"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-stageConnectionOperations" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN stageConnectionOperations
+PASS stageConnectionOperations
+Passed 1 scenario groups
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-stageConnectionOperations" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-stageConnectionOperations" time elapsed: 00:00:00
+----------------------------------------------------------
+
+46/86 Testing: graph-document-noteRoutingOperations
+46/86 Test: graph-document-noteRoutingOperations
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "noteRoutingOperations"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-noteRoutingOperations" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN noteRoutingOperations
+PASS noteRoutingOperations
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-noteRoutingOperations" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-noteRoutingOperations" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/86 Testing: graph-document-graphEditingOperations
+47/86 Test: graph-document-graphEditingOperations
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "graphEditingOperations"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-graphEditingOperations" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN graphEditingOperations
+PASS graphEditingOperations
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-graphEditingOperations" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-graphEditingOperations" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/86 Testing: graph-document-groupBypassOperations
+48/86 Test: graph-document-groupBypassOperations
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "groupBypassOperations"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-groupBypassOperations" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN groupBypassOperations
+PASS groupBypassOperations
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-groupBypassOperations" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-groupBypassOperations" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/86 Testing: graph-document-graphProvenance
+49/86 Test: graph-document-graphProvenance
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "graphProvenance"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-graphProvenance" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN graphProvenance
+PASS graphProvenance
+Passed 1 scenario groups
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-graphProvenance" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-graphProvenance" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/86 Testing: graph-document-graphPresentation
+50/86 Test: graph-document-graphPresentation
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "graphPresentation"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-graphPresentation" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN graphPresentation
+PASS graphPresentation
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-graphPresentation" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-graphPresentation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/86 Testing: graph-document-songModulationSources
+51/86 Test: graph-document-songModulationSources
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "songModulationSources"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-songModulationSources" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN songModulationSources
+PASS songModulationSources
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-songModulationSources" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-songModulationSources" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/86 Testing: graph-document-songAutomationAndBanks
+52/86 Test: graph-document-songAutomationAndBanks
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "songAutomationAndBanks"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-songAutomationAndBanks" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN songAutomationAndBanks
+PASS songAutomationAndBanks
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-songAutomationAndBanks" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-songAutomationAndBanks" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/86 Testing: graph-document-stableImplicitMaster
+53/86 Test: graph-document-stableImplicitMaster
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "stableImplicitMaster"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-stableImplicitMaster" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN stableImplicitMaster
+PASS stableImplicitMaster
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-stableImplicitMaster" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-stableImplicitMaster" time elapsed: 00:00:00
+----------------------------------------------------------
+
+54/86 Testing: graph-document-songCableCuts
+54/86 Test: graph-document-songCableCuts
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "songCableCuts"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-songCableCuts" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN songCableCuts
+PASS songCableCuts
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-songCableCuts" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-songCableCuts" time elapsed: 00:00:00
+----------------------------------------------------------
+
+55/86 Testing: graph-document-createReadHistory
+55/86 Test: graph-document-createReadHistory
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "createReadHistory"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-createReadHistory" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN createReadHistory
+PASS createReadHistory
+Passed 1 scenario groups
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-createReadHistory" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-createReadHistory" time elapsed: 00:00:00
+----------------------------------------------------------
+
+56/86 Testing: graph-document-nodesAndCloning
+56/86 Test: graph-document-nodesAndCloning
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "nodesAndCloning"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-nodesAndCloning" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN nodesAndCloning
+PASS nodesAndCloning
+Passed 1 scenario groups
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-nodesAndCloning" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-nodesAndCloning" time elapsed: 00:00:00
+----------------------------------------------------------
+
+57/86 Testing: graph-document-automationAndBanks
+57/86 Test: graph-document-automationAndBanks
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "automationAndBanks"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-automationAndBanks" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN automationAndBanks
+PASS automationAndBanks
+Passed 1 scenario groups
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-automationAndBanks" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-automationAndBanks" time elapsed: 00:00:00
+----------------------------------------------------------
+
+58/86 Testing: graph-document-assignmentsRoutesLayoutCommands
+58/86 Test: graph-document-assignmentsRoutesLayoutCommands
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "assignmentsRoutesLayoutCommands"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-assignmentsRoutesLayoutCommands" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN assignmentsRoutesLayoutCommands
+PASS assignmentsRoutesLayoutCommands
+Passed 1 scenario groups
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-assignmentsRoutesLayoutCommands" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-assignmentsRoutesLayoutCommands" time elapsed: 00:00:00
+----------------------------------------------------------
+
+59/86 Testing: graph-document-hostHooks
+59/86 Test: graph-document-hostHooks
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "hostHooks"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-hostHooks" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN hostHooks
+PASS hostHooks
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-hostHooks" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-hostHooks" time elapsed: 00:00:00
+----------------------------------------------------------
+
+60/86 Testing: graph-document-automationOrderAndRedo
+60/86 Test: graph-document-automationOrderAndRedo
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "automationOrderAndRedo"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-automationOrderAndRedo" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN automationOrderAndRedo
+PASS automationOrderAndRedo
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-automationOrderAndRedo" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-automationOrderAndRedo" time elapsed: 00:00:00
+----------------------------------------------------------
+
+61/86 Testing: graph-document-cableInsertionAndDetachment
+61/86 Test: graph-document-cableInsertionAndDetachment
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "cableInsertionAndDetachment"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-cableInsertionAndDetachment" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN cableInsertionAndDetachment
+PASS cableInsertionAndDetachment
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-cableInsertionAndDetachment" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-cableInsertionAndDetachment" time elapsed: 00:00:00
+----------------------------------------------------------
+
+62/86 Testing: graph-document-songProcessingGroups
+62/86 Test: graph-document-songProcessingGroups
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "songProcessingGroups"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-songProcessingGroups" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN songProcessingGroups
+PASS songProcessingGroups
+Passed 1 scenario groups
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-songProcessingGroups" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-songProcessingGroups" time elapsed: 00:00:00
+----------------------------------------------------------
+
+63/86 Testing: graph-document-processingGroups
+63/86 Test: graph-document-processingGroups
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "processingGroups"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-processingGroups" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN processingGroups
+PASS processingGroups
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-processingGroups" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-processingGroups" time elapsed: 00:00:00
+----------------------------------------------------------
+
+64/86 Testing: graph-document-strictValidation
+64/86 Test: graph-document-strictValidation
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "strictValidation"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-strictValidation" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN strictValidation
+PASS strictValidation
+Passed 1 scenario groups
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-strictValidation" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-strictValidation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+65/86 Testing: graph-document-dryRunsAndRedo
+65/86 Test: graph-document-dryRunsAndRedo
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "dryRunsAndRedo"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-dryRunsAndRedo" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN dryRunsAndRedo
+PASS dryRunsAndRedo
+Passed 1 scenario groups
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-dryRunsAndRedo" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-dryRunsAndRedo" time elapsed: 00:00:00
+----------------------------------------------------------
+
+66/86 Testing: graph-document-callbackOrderingAndUnrelatedData
+66/86 Test: graph-document-callbackOrderingAndUnrelatedData
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/graph-document-tests.exe" "callbackOrderingAndUnrelatedData"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"graph-document-callbackOrderingAndUnrelatedData" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+RUN callbackOrderingAndUnrelatedData
+PASS callbackOrderingAndUnrelatedData
+Passed 1 scenario groups
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"graph-document-callbackOrderingAndUnrelatedData" end time: Oct 02 02:35 Coordinated Universal Time
+"graph-document-callbackOrderingAndUnrelatedData" time elapsed: 00:00:00
+----------------------------------------------------------
+
+67/86 Testing: mixer-document-tests
+67/86 Test: mixer-document-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/mixer-document-tests.exe"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"mixer-document-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS portable Windows mixer: silent return/send/placement, atomic history, detached inserts, valid UTF-8 and rejected mutations
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"mixer-document-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"mixer-document-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+68/86 Testing: windows-save-scratch
+68/86 Test: windows-save-scratch
+Command: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" "-DDIRECTORY=D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/windows-save" "-P" "D:/a/ScreamSeq/ScreamSeq/windows/cmake/FreshDirectory.cmake"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"windows-save-scratch" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"windows-save-scratch" end time: Oct 02 02:35 Coordinated Universal Time
+"windows-save-scratch" time elapsed: 00:00:00
+----------------------------------------------------------
+
+69/86 Testing: windows-save-tests
+69/86 Test: windows-save-tests
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/windows-save-tests.exe" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/windows-save"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"windows-save-tests" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+Unicode save, existing-file replacement, reopen, failure preservation and temporary cleanup passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"windows-save-tests" end time: Oct 02 02:35 Coordinated Universal Time
+"windows-save-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+70/86 Testing: document-controller-scratch
+70/86 Test: document-controller-scratch
+Command: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" "-DDIRECTORY=D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller" "-P" "D:/a/ScreamSeq/ScreamSeq/windows/cmake/FreshDirectory.cmake"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-scratch" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-scratch" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-scratch" time elapsed: 00:00:00
+----------------------------------------------------------
+
+71/86 Testing: document-controller-fixtures
+71/86 Test: document-controller-fixtures
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--fixtures" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-fixtures" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-fixtures" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-fixtures" time elapsed: 00:00:00
+----------------------------------------------------------
+
+72/86 Testing: document-controller-large-fixture
+72/86 Test: document-controller-large-fixture
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--large-fixture" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-large-fixture" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-large-fixture" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-large-fixture" time elapsed: 00:00:00
+----------------------------------------------------------
+
+73/86 Testing: document-controller-publication
+73/86 Test: document-controller-publication
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--publication" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-publication" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+publication tests passed
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-publication" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-publication" time elapsed: 00:00:00
+----------------------------------------------------------
+
+74/86 Testing: document-controller-cache
+74/86 Test: document-controller-cache
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--cache" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-cache" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+large cache tests passed
+<end of output>
+Test time =   0.14 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-cache" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-cache" time elapsed: 00:00:00
+----------------------------------------------------------
+
+75/86 Testing: document-controller-assets
+75/86 Test: document-controller-assets
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--assets" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-assets" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+asset worker cache, guards, clipboard, history and persistence passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-assets" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-assets" time elapsed: 00:00:00
+----------------------------------------------------------
+
+76/86 Testing: document-controller-live-parameters
+76/86 Test: document-controller-live-parameters
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--live-parameters" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-live-parameters" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS live worker/UI publication, invalid/dry/no-op/failed batches, overflow fallback, independent history and save/reopen
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-live-parameters" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-live-parameters" time elapsed: 00:00:00
+----------------------------------------------------------
+
+77/86 Testing: document-controller-live-rack-publication
+77/86 Test: document-controller-live-rack-publication
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--live-rack-publication" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-live-rack-publication" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS Windows live implicit rack preparation, effect add/duplicate/remove, busy rejection, grouped Undo/Redo and persistence
+<end of output>
+Test time =   0.48 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-live-rack-publication" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-live-rack-publication" time elapsed: 00:00:00
+----------------------------------------------------------
+
+78/86 Testing: document-controller-live-graph-publication
+78/86 Test: document-controller-live-graph-publication
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--live-graph-publication" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-live-graph-publication" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS Windows worker live recipe controls/bypass, queue and vendor-preparation failure recovery, Undo/Redo and persistence
+<end of output>
+Test time =   0.72 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-live-graph-publication" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-live-graph-publication" time elapsed: 00:00:00
+----------------------------------------------------------
+
+79/86 Testing: document-controller-live-recorded-publication
+79/86 Test: document-controller-live-recorded-publication
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--live-recorded-publication" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-live-recorded-publication" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS Windows recorded point preview/add/move/remove, live queue refusal, Undo/Redo, opaque baseline and persistence
+<end of output>
+Test time =   0.28 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-live-recorded-publication" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-live-recorded-publication" time elapsed: 00:00:00
+----------------------------------------------------------
+
+80/86 Testing: document-controller-trigger-instruments
+80/86 Test: document-controller-trigger-instruments
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--trigger-instruments" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-trigger-instruments" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS trigger conversion rate=44100 max-PCM-delta=0
+PASS trigger conversion rate=48000 max-PCM-delta=0
+PASS trigger conversion rate=96000 max-PCM-delta=0
+<end of output>
+Test time =   0.37 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-trigger-instruments" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-trigger-instruments" time elapsed: 00:00:00
+----------------------------------------------------------
+
+81/86 Testing: document-controller-pattern-performance
+81/86 Test: document-controller-pattern-performance
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--pattern-performance" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-pattern-performance" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS API FX 1 -> FX 8/4 rate=44100 block=17 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=44100 block=128 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=44100 block=4096 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=44100 block=8193 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=48000 block=17 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=48000 block=128 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=48000 block=4096 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=48000 block=8193 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=96000 block=17 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=96000 block=128 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=96000 block=4096 max-PCM-delta=0
+PASS API FX 1 -> FX 8/4 rate=96000 block=8193 max-PCM-delta=0
+PASS immutable FX/note cache, no-op/dry-run reuse, history/reopen and precommit budget guard
+<end of output>
+Test time =   1.13 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-pattern-performance" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-pattern-performance" time elapsed: 00:00:01
+----------------------------------------------------------
+
+82/86 Testing: document-controller-pattern-clipboard
+82/86 Test: document-controller-pattern-clipboard
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--pattern-clipboard" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-pattern-clipboard" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS Mac Pattern 2 text, CRLF, stable bindings, legacy hex, malformed/oversized rejection, sparse note boundaries and native reopen
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-pattern-clipboard" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-pattern-clipboard" time elapsed: 00:00:00
+----------------------------------------------------------
+
+83/86 Testing: document-controller-graph-recipes
+83/86 Test: document-controller-graph-recipes
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--graph-recipes" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-graph-recipes" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS graph recipe gain, independent rack, Undo/reopen, 44.1/48/96 kHz blocks 17/128/4096/8193; max delta 7.43264e-09
+<end of output>
+Test time =   1.74 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-graph-recipes" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-graph-recipes" time elapsed: 00:00:01
+----------------------------------------------------------
+
+84/86 Testing: document-controller-mixer-integration
+84/86 Test: document-controller-mixer-integration
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--mixer-integration" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-mixer-integration" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS mixer live publication/refusal/preview/history, live topology, disconnection/sends/reopen and PCM at 44.1/48/96 kHz
+<end of output>
+Test time =   1.67 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-mixer-integration" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-mixer-integration" time elapsed: 00:00:01
+----------------------------------------------------------
+
+85/86 Testing: document-controller-unified-plugin-history
+85/86 Test: document-controller-unified-plugin-history
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--unified-plugin-history" "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/test-scratch/document-controller"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-unified-plugin-history" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence
+<end of output>
+Test time =   0.44 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-unified-plugin-history" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-unified-plugin-history" time elapsed: 00:00:00
+----------------------------------------------------------
+
+86/86 Testing: document-controller-graph-pattern-view
+86/86 Test: document-controller-graph-pattern-view
+Command: "D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/document-controller-tests.exe" "--graph-pattern-view"
+Directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+"document-controller-graph-pattern-view" start time: Oct 02 02:35 Coordinated Universal Time
+Output:
+----------------------------------------------------------
+PASS graph lane projection, exact offsets, immutable reuse, rename Undo and precommit cache budget
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"document-controller-graph-pattern-view" end time: Oct 02 02:35 Coordinated Universal Time
+"document-controller-graph-pattern-view" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 02 02:35 Coordinated Universal Time
+
+cxx-allocation-audit =   7.87 sec*proc
+
+functional =   8.72 sec*proc
+
+hosted =   7.87 sec*proc
+
+live-parameters =   0.24 sec*proc
+
+native-vst3 =   6.44 sec*proc
+
+no-realtime-audit =   8.72 sec*proc
+
+project-native =   0.01 sec*proc
+
+worker =  16.60 sec*proc

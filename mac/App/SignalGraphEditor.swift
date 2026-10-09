@@ -30,7 +30,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   }
   func reload(){operationFailure=nil;shownFields=[:];pendingMoves=[:];hasDraft=false;load()}
 
-  var hasDraft:Bool {get{fieldDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || envelopeEditor.hasDraft || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
+  var hasDraft:Bool {get{fieldDraft || trimControls.hasDraft || rackControls.rangeEditing || pluginControls.parametersView.rangeEditing || envelopeEditor.hasDraft || canvas.isEditing || canvas.hasPendingNudge || busControls.editing || visualControls.dirty} set{fieldDraft=newValue}}
   func controlTextDidChange(_ notification:Notification){if notification.object as AnyObject? === nodeSearch {changeNodeFilter()}else{hasDraft=true}}
   let canvas=SignalCanvas(frame:NSRect(x:0,y:0,width:1000,height:600)), scroll=NSScrollView()
   let library=NSPopUpButton(),filter=NSPopUpButton(),source=NSPopUpButton(),destination=NSPopUpButton(),connection=NSPopUpButton()
@@ -66,16 +66,22 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var definition:[String:Any]?{definitions.first{$0["id"] as? String==graphID}}
   var nodes:[[String:Any]]{definition?["nodes"] as? [[String:Any]] ?? []}
   var selectedNode:[String:Any]?{graphID==nil ? songSource(selectedID):nodes.first{$0["id"] as? String==selectedID}}
+  let trimControls=GraphTrimControls()
   let inspector=NSView(), inspectorScroll=verticalScrollView()
   let breadcrumbs=NSStackView(), scopeLabel=Theme.label("",size:10,color:Theme.muted)
   let addMenu=GraphAddMenu(),targetMenu=GraphAddMenu()
+  var graphPasteboard=NSPasteboard.general
   var addCatalog=[[String:Any]](), addCatalogLoaded=false, addGeneration=0
   var graphViewStates=[String:GraphViewState](), graphOrigin:String?,graphTarget:String?
+  var panelReturn:GraphPanelReturn?
   var provisionalLayouts=[String:[String:NSPoint]](), projectionDocument=""
   var onShowPattern:((String)->Void)?
   var onReveal:(()->Void)?
   var deferredGraphCommand:(()->Void)?
   var manualConnection = false
+  var noteActivityPending=false,noteActivityLastRead=0.0
+  let stageExplanation=NSTextField(wrappingLabelWithString:"Shared auxiliary inputs feed every prepared row, persistent and ordinary copy. Combined outputs sum their audible Wet and tail contributions. Open a copy to inspect its own processing.")
+  let noteControls=GraphNoteRouteControls(frame:.zero)
   let connectionHeading=Theme.label("NEW CONNECTION",size:11,weight:.semibold)
   let connectionHint=Theme.label("Drag between matching ports, or choose endpoints below.",size:11,color:Theme.muted)
   var connectionSection:NSStackView!,connectionForm:NSStackView!,nodeSection:NSStackView!
@@ -95,6 +101,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var sourceRateRow:NSStackView!,sourceEnvelopeRow:NSStackView!,sourceCCRow:NSStackView!,sourceAmountRow:NSStackView!,sourceScopeRow:NSStackView!
   var portCatalogs=[String:[String:Any]](),exposedParameters=[String:UInt32]()
   var signalReadings=GraphSignalReadings(),lastOverload:String?
+  var lastSignalData=[String:Any]()
+  let copyObservation=GraphCopyObservation(frame:.zero)
   var signalNamePrefixes=[String:[String]](),signalPortNames=[String:(node:String,raw:String,shown:String)]()
   lazy var enableRouting=ActionButton("Enable routing"){[weak self] in self?.mutate("mixer.enable",[:])}
   let envelopeEditor=GraphEnvelopeEditor(frame:.zero)
@@ -122,6 +130,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   var lastTouchedReadGeneration=0
   func showActivity(_ values:[[String:Any]],playing:Bool){
     playbackActivity=values;playbackRunning=playing
+    refreshNoteActivity()
     var active=[String:[String:Any]]()
     for item in values{if item["role"] as? String=="instrument"{active["instrument-graph:\(item["instrument"] as? String ?? ""):\(item["target"] as? String ?? "")"]=item;continue};let role=(item["role"] as? String ?? "").capitalized;active["graph:\(item["target"] as? String ?? ""):\(role):\(item["graph"] as? String ?? "")"]=item}
     for i in canvas.nodes.indices where canvas.nodes[i].id.hasPrefix("graph:") || canvas.nodes[i].id.hasPrefix("instrument-graph:"){
@@ -165,6 +174,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     canvas.cableOrigin = {[weak self] key in self?.cableOrigin(key)}
     canvas.validateCable = {[weak self] a,b,index in self?.previewCable(a,b,replacing:index)}
     canvas.describeCable = {[weak self] a,b,out,input,mod in self?.cableDescription(a,b,out:out,input:input,modulation:mod) ?? "Release to connect"}
+    canvas.describeSocket = {[weak self] key in self?.socketPatchHelp(key)}
     canvas.onMoveNodes = {[weak self] positions in self?.moveNodes(positions)}
     canvas.onInsertNodes = {[weak self] ids,edge,positions in self?.insertNodes(ids,edge:edge,positions:positions)}
     canvas.onDetachNodes = {[weak self] ids,positions,remove in self?.detachNodes(ids,positions:positions,remove:remove)}
@@ -172,8 +182,15 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     canvas.insertionHint = {[weak self] ids,edge in self?.insertionDescription(ids,edge:edge)}
     canvas.onConnect = {[weak self] a,b in self?.connect(a,b)}
     canvas.onOpen = {[weak self] id in self?.openNode(id)}
-    canvas.onAdd = {[weak self] point in self?.showAdd(at:point)}
-    canvas.onAddConnected = {[weak self] node,port,output,point in self?.showAdd(at:point,connecting:GraphAddConnection(node:node,port:port,output:output))}
+    canvas.onAdd = {[weak self] point in
+      guard let self else{return}
+      self.showAdd(at:self.canvas.selected != nil && self.canvas.selectedEdge==nil ? nil:point)
+    }
+    canvas.onAddConnected = {[weak self] node,port,output,point in
+      guard let self else{return}
+      if port.signalType == .events{self.connectFromSocket(.init(node:node,number:port.number,output:output,modulation:false));return}
+      self.showAdd(at:point,connecting:GraphAddConnection(node:node,port:port,output:output))
+    }
     canvas.onParent = {[weak self] in self?.navigateParent()}
     canvas.onGroup = {[weak self] unpack in if unpack{self?.ungroupSelection()}else{self?.groupSelection()}}
     canvas.onFit = {[weak self] in self?.fit()}
@@ -190,6 +207,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     listenControls.onError={[weak self] message in self?.status.stringValue=message}
     canvas.onListen={[weak self] key in guard let self else{return};self.listenControls.select(key==self.listenControls.port ? nil:key)}
     canvas.onChooseListen={[weak self] in self?.listenSelected()}
+    noteControls.onChange={[weak self] enabled,channel in self?.updateNoteRoute(enabled:enabled,channel:channel)}
+    canvas.onClipboard={[weak self] action in switch action {case "copy":self?.copyGraphSelection();case "cut":self?.copyGraphSelection(cutting:true);case "paste":self?.pasteGraphSelection();default:self?.duplicateGraphSelection()}}
     canvas.onBypass={[weak self] in self?.toggleSelectedBypass()}
     canvas.onStopListening={[weak self] in self?.listenControls.select(nil)}
     canvas.onScope={[weak self] port,spectrum in self?.signalScope.show(port:port,spectrum:spectrum)}
@@ -229,20 +248,23 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     for view in [outputChoice,inputChoice] {portRow.addArrangedSubview(view)}
     connectionGainRow=stack(.horizontal,[gainLabel,connectionGain])
     audioPorts=stack(.vertical,[portRow,connectionGainRow],spacing:5)
-    modulationSection=stack(.vertical,[stack(.horizontal,[Theme.label("Parameter ID",size:11),parameter]),stack(.horizontal,[Theme.label("Range",size:11),minimum,maximum]),stack(.horizontal,[modulationBaseLabel,base,connectionEnabled]),connectionQuantized],spacing:5)
+    modulationSection=stack(.vertical,[stack(.horizontal,[Theme.label("Parameter ID",size:11),parameter]),stack(.horizontal,[Theme.label("Range",size:11),minimum,maximum]),stack(.horizontal,[modulationBaseLabel,base]),connectionQuantized],spacing:5)
     connectionKind.target=self;connectionKind.action = #selector(connectionControlChanged(_:))
     for popup in [source,destination] {popup.target=self;popup.action = #selector(connectionControlChanged(_:))}
     connectionEnabled.target=self;connectionEnabled.action = #selector(connectionControlChanged(_:))
     connectionHint.lineBreakMode = .byWordWrapping;connectionHint.maximumNumberOfLines=0;connectionHint.preferredMaxLayoutWidth=246
     connectionHint.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-    connectionForm=stack(.vertical,[connectionKind,stack(.horizontal,[Theme.label("From",size:11),source]),stack(.horizontal,[Theme.label("To",size:11),destination]),audioPorts,modulationSection],spacing:7)
+    connectionForm=stack(.vertical,[connectionKind,stack(.horizontal,[Theme.label("From",size:11),source]),stack(.horizontal,[Theme.label("To",size:11),destination]),audioPorts,modulationSection,connectionEnabled],spacing:7)
     connectionForm.stretchAcrossAxis()
-    connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,connectionForm],spacing:7)
+    connectionSection=stack(.vertical,[stack(.horizontal,[connectionHeading,NSView(),ActionButton("New…"){[weak self] in self?.newConnection()}]),stack(.horizontal,[connectButton,updateConnectionButton,removeConnectionButton]),connection,connectionHint,openConnectionOwnerButton,noteControls,connectionForm],spacing:7)
     connectionSection.stretchAcrossAxis()
-    nodeSection=stack(.vertical,[detail,pluginControls,rackControls,name,
+    stageExplanation.font = .systemFont(ofSize:11);stageExplanation.textColor=Theme.muted;stageExplanation.preferredMaxLayoutWidth=246;stageExplanation.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
+    nodeSection=stack(.vertical,[detail,stageExplanation,pluginControls,rackControls,name,trimControls,
       useDetector,busControls,busSection,sourceSection],spacing:7)
+    trimControls.read={[weak self] p,done in self?.onRequest?("graph.trim.get",p,done)}
+    trimControls.edit={[weak self] p in self?.mutate("graph.trim.set",p)}
     nodeSection.stretchAcrossAxis()
-    let help=Theme.label("Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.",size:11,color:Theme.muted)
+    let help=Theme.label("Sockets add cables and mix audio into inputs; selected wire handles reroute only that cable. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert, or choose Move insert chain…. Hollow sockets enable automatically.",size:11,color:Theme.muted)
     help.lineBreakMode = .byWordWrapping;help.maximumNumberOfLines=0;help.preferredMaxLayoutWidth=246
     let controls=stack(.vertical,[connectionSection,librarySection,provenanceControls,visualControls,nodeSection,help],spacing:12)
     controls.stretchAcrossAxis();controls.fill(inspector,inset:8)
@@ -259,8 +281,9 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     nodeSearch.placeholderString="Filter nodes…";nodeSearch.setAccessibilityLabel("Filter graph nodes");nodeSearch.delegate=self;nodeSearch.sendsSearchStringImmediately=true;nodeSearch.sendsWholeSearchString=false;nodeSearch.fixed(width:200)
     nodeCategory.addItems(withTitles:["All node types","Channels & buses","Plugins & subgraphs","Modulation sources"]);nodeCategory.setAccessibilityLabel("Graph node type filter");nodeCategory.target=self;nodeCategory.action = #selector(changeNodeFilter)
     let filters=stack(.horizontal,[nodeSearch,nodeCategory,ActionButton("Clear filters"){[weak self] in self?.clearNodeFilters()},filterCount,NSView()],spacing:5)
+    copyObservation.onChange={[weak self] in self?.applyCopyObservation()}
     routingStatus.isHidden=true;routingStatus.setAccessibilityLabel("Routing playback state")
-    let content=stack(.vertical,[toolbar,scopeLabel,listenControls,add,filters,body,routingStatus,status],spacing:5);content.stretchAcrossAxis();content.fill(self,inset:6)
+    let content=stack(.vertical,[toolbar,scopeLabel,copyObservation,listenControls,add,filters,body,routingStatus,status],spacing:5);content.stretchAcrossAxis();content.fill(self,inset:6)
     for popup in [library,filter,source,destination,assignment,connection]{popup.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)}
   }
   func actionMenu() -> NSMenu {
@@ -275,9 +298,16 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     menu.addItem(GraphCommand.traceSilence.item("Trace silence"){[weak self] in self?.traceSilence()})
     menu.addItem(GraphCommand.findOverload.item("Find next overload"){[weak self] in self?.findOverload()})
     menu.addItem(GraphCommand.clearOverloads.item("Clear overload indicators"){[weak self] in self?.clearOverloads()})
+    menu.addItem(GraphCommand.observeCopy.item("Choose observed graph copy…",reason:graphID==nil ? "Enter a reusable graph to inspect its actual copies":nil){[weak self] in self?.chooseObservedCopy()})
     menu.addItem(GraphCommand.scope.item("Scope selected signal",key:"q"){[weak self] in self?.openScope(spectrum:false)})
     menu.addItem(GraphCommand.spectrum.item("Spectrum of selected signal",key:"q",modifiers:.shift){[weak self] in self?.openScope(spectrum:true)})
     menu.addItem(GraphCommand.openPlugin.item("Open plugin interface",key:"\r"){[weak self] in self?.openSelectedPlugin()})
+    menu.addItem(GraphCommand.copySelection.item("Copy nodes",key:"c",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.copyGraphSelection()})
+    menu.addItem(GraphCommand.cutSelection.item("Cut nodes",key:"x",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.copyGraphSelection(cutting:true)})
+    menu.addItem(GraphCommand.pasteSelection.item("Paste nodes",key:"v",modifiers:.command,reason:graphClipboardReason){[weak self] in self?.pasteGraphSelection()})
+    menu.addItem(GraphCommand.duplicateSelection.item("Duplicate node(s)",key:"d",modifiers:.command){[weak self] in self?.duplicateGraphSelection()})
+    menu.addItem(GraphCommand.presetSave.item("Save plugin preset…"){[weak self] in self?.showGraphPreset(saving:true)})
+    menu.addItem(GraphCommand.presetLoad.item("Load plugin preset…"){[weak self] in self?.showGraphPreset(saving:false)})
     appendParameterCommands(to:menu)
     appendPresentationCommands(to:menu)
     menu.addItem(GraphCommand.bypass.item(bypassActionTitle,key:"m",reason:bypassUnavailableReason){[weak self] in self?.toggleSelectedBypass()})
@@ -291,9 +321,14 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     menu.addItem(GraphCommand.newGroup.item("New subgraph…") { [weak self] in self?.mutate("graph.create", ["name":"New subgraph"]) })
     menu.addItem(GraphCommand.groupSelection.item("Group selection",key:"g",modifiers:.control,reason:canvas.selection.isEmpty ? "Select processors to package":nil){[weak self] in self?.groupSelection()})
     menu.addItem(GraphCommand.ungroup.item("Ungroup",key:"g",modifiers:[.control,.option],reason:selectedProcessingGroup==nil ? "Select a processing group to unpack":nil){[weak self] in self?.ungroupSelection()})
+    menu.addItem(GraphCommand.groupDryPaths.item("Group dry paths…",reason:processingGroups.isEmpty ? "Create a processing group first":nil){[weak self] in self?.chooseGroupDryPaths()})
     menu.addItem(GraphCommand.exportGroup.item("Save to subgraph library…",reason:selectedProcessingGroup==nil ? "Select a processing group to save an independent copy":nil){[weak self] in self?.exportProcessingGroup()})
     let clone=GraphCommand.cloneGroup.item("Clone subgraph"){[weak self] in self?.withProcessingGroup(title:"Clone processing group",createThenAct:false){[weak self] id in self?.mutate("graph.clone",["graph":id])}}
     clone.toolTip="Choose the shared definition to make an independent copy";menu.addItem(clone)
+    menu.addItem(GraphCommand.restoreNoteAssignment.item("Restore assigned instrument notes…",reason:graphID != nil ? "Assigned note routing lives in the Song graph":nil){[weak self] in self?.restoreNoteAssignment()})
+    menu.addItem(GraphCommand.noteSampleMapping.item("Use instrument sample mapping…",reason:graphID != nil ? "Instrument note routing lives in the Song graph":nil){[weak self] in self?.useNoteSampleMapping()})
+    menu.addItem(GraphCommand.noteAssignPlugin.item("Assign plugin to note instrument…",reason:graphID != nil ? "Instrument note routing lives in the Song graph":rackPlugins.contains{$0["isInstrument"] as? Bool==true} ? nil:"Add a plugin instrument first"){[weak self] in self?.assignNoteSourcePlugin()})
+    menu.addItem(GraphCommand.makeIndependent.item("Make use independent…"){[weak self] in self?.makeIndependentUse()})
     let sources=NSMenu(title:"Add modulation source");sources.autoenablesItems=false
     for (label,kind,command) in [("Pattern envelope","automation",GraphCommand.sourceAutomation),("LFO","lfo",.sourceLFO),("Audio follower","follower",.sourceFollower),("Random","random",.sourceRandom),("Note envelope","note-envelope",.sourceNote),("MIDI controller","midi",.sourceMIDI),("Amount","amount",.sourceAmount)] {
       let item=command.item(label){[weak self] in self?.nodeKind.selectItem(withTitle:kind);self?.addSource()}
@@ -302,6 +337,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     ContextActions.appendMenu(sources,to:menu)
     appendPortCommands(to:menu)
     menu.addItem(GraphCommand.cut.item("Cut cables…"){[weak self] in guard let self else{return};self.canvas.cutTool=true;self.window?.makeFirstResponder(self.canvas);self.status.stringValue="Drag across cables to disconnect · Esc cancels"})
+    menu.addItem(GraphCommand.reconnectMain.item("Reconnect cut main input/output…",reason:graphID != nil ? "Reconnect recipe ports directly":nil){[weak self] in self?.reconnectSongMain()})
+    menu.addItem(GraphCommand.cutMasterOutput.item("Cut Master output",reason:graphID != nil ? "Select the song graph":mixer["masterOutputDisconnected"] as? Bool==true ? "Master output is already disconnected":nil){[weak self] in self?.cutSongMasterOutput()})
     menu.addItem(GraphCommand.detach.item("Detach and reconnect"){[weak self] in guard let self else{return};self.detachNodes(Array(self.canvas.selection),positions:[],remove:false)})
     menu.addItem(GraphCommand.deleteHeal.item("Delete and reconnect",key:"x",modifiers:.control){[weak self] in guard let self else{return};self.detachNodes(Array(self.canvas.selection),positions:[],remove:true)})
     menu.addItem(GraphCommand.arrangeSelection.item("Arrange selection",reason:canvas.selection.isEmpty ? "Select nodes to arrange without moving the rest of the graph":nil) { [weak self] in self?.arrange(onlySelection:true) })
@@ -381,12 +418,12 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
         instrumentPicker.removeAllItems();manualConnection=false;pendingModulationFocus=nil;deferredGraphCommand=nil
         addGeneration+=1;addMenu.close();targetMenu.close()
         portCatalogs=[:];catalogFailures=[:];catalogGeneration+=1;exposedParameters=[:];catalogLoading=false
-        envelopeEditor.resetDocument()
+        envelopeEditor.resetDocument();copyObservation.resetDocument()
         playbackActivity=[];playbackRunning=false;showSignals([:]);lastOverload=nil
       }
       operationFailure=nil;shownFields=[:];pendingMoves=[:]
       lastTouchedReadGeneration+=1;lastTouchedReturn=nil
-      portReturn=nil;provenance.reset();provisionalLayouts=[:];graphViewStates=[:];processingGroupID=nil;boundaryPorts=[:];projectionDocument=document
+      portReturn=nil;panelReturn=nil;provenance.reset();provisionalLayouts=[:];graphViewStates=[:];processingGroupID=nil;boundaryPorts=[:];projectionDocument=document
     }
     data=value;canvas.selectedEdge=nil
     if graphID != nil && definition==nil{graphID=nil}
@@ -415,7 +452,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     enableRouting.isHidden = !buses.isEmpty
     canvas.emptyMessage = buses.isEmpty && graphID==nil ? "Open or create a song to connect channels, instruments and effects." : "Create a subgraph to start connecting sound."
     let scope=graphID != nil
-    if configuredScope != scope {configuredScope=scope;connectionGain.doubleValue=scope ? 1 : 0;connectionKind.removeAllItems();connectionKind.addItems(withTitles:scope ? ["Audio","Modulation"] : ["Main output","Send","Graph sidechain","Graph auxiliary","Plugin sidechain","Plugin auxiliary","Mix into main","Modulation","Follower input"])}
+    if configuredScope != scope {configuredScope=scope;connectionGain.doubleValue=scope ? 1 : 0;connectionKind.removeAllItems();connectionKind.addItems(withTitles:scope ? ["Audio","Modulation"] : ["Main output","Send","Graph sidechain","Graph auxiliary","Plugin sidechain","Plugin auxiliary","Direct plugin audio","Stage audio","Mix into main","Modulation","Follower input"])}
     connectionModeChanged()
 
     var display=[SignalCanvasNode](),edges=[SignalCanvasEdge]()
@@ -433,7 +470,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     if graphID==nil {songConnections=definitionEdgeIndices.map{songConnections[$0]}}
     (display,edges)=projectVisualPresentation(display,edges:edges)
     signalReadings.aliases=boundaryPorts
-    canvas.signalReadings=graphID==nil ? signalReadings:GraphSignalReadings()
+    applyCopyObservation()
     portActionNodes=display;portActionEdges=edges
     (display,edges)=filterNodes(display,edges:edges)
     canvas.update(display,edges:edges);canvas.selected=selectedID
@@ -452,6 +489,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     let context=object,libraryTarget="\(projectionDocument)/library/\(graphID ?? "")"
     defer {fieldDraft=hasUncommittedFields}
     defer {if changedObject{layoutSubtreeIfNeeded();inspectorScroll.contentView.scroll(to:.zero);inspectorScroll.reflectScrolledClipView(inspectorScroll.contentView)}}
+    trimControls.context(graph:graphID,node:canvas.selectedEdge==nil ? selectedID:nil,revision:revision)
     inspectParameterProvenance()
     visualControls.isHidden=selectedVisualRegion==nil;visualControls.context(selectedVisualRegion)
     nodeSection.isHidden=canvas.selectedEdge != nil || selectedID == nil || selectedVisualRegion != nil || selectedProvenance != nil
@@ -463,7 +501,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     busControls.isHidden=selectedBus==nil;busControls.implicit=data["implicitMixer"] as? Bool==true;busControls.context(selectedBus,revision:revision)
     rackControls.isHidden=rackPlugin==nil;rackControls.context(rackPlugin,revision:revision)
     let copyGraph=selectedID.flatMap{songNodeGraph[$0]},ordinaryCopy=selectedID?.contains(":Ordinary:")==true
-    name.isHidden=rackPlugin != nil || (graphID==nil && (copyGraph != nil || selectedInstrument != nil))
+    stageExplanation.isHidden=graphID != nil || selectedID.flatMap{stageTarget($0)}==nil
+    name.isHidden = !stageExplanation.isHidden || rackPlugin != nil || (graphID==nil && (copyGraph != nil || selectedInstrument != nil))
     librarySection.isHidden=graphID==nil || canvas.selectedEdge != nil || selectedID != nil
     busSection.isHidden=graphID != nil || rackPlugin != nil || (selectedBus==nil && selectedInstrument==nil && !ordinaryCopy)
     assignmentHeading.stringValue=selectedInstrument==nil ? "ORDINARY CHANNEL GRAPH" : "INSTRUMENT GRAPH · ALL CHANNELS"
@@ -477,7 +516,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     configureParameterRanges()
     show(libraryName,definition?["name"] as? String ?? "",target:libraryTarget);show(libraryNumber,String(definition?["number"] as? Int ?? 1),target:libraryTarget)
 
-    if let rackPlugin{detail.stringValue=rackPlugin["name"] as? String ?? "Processor"}
+    if !stageExplanation.isHidden{detail.stringValue=(busID.flatMap{busLabels[$0]} ?? "Channel")+" · graph stage"}
+    else if let rackPlugin{detail.stringValue=rackPlugin["name"] as? String ?? "Processor"}
     else if graphID==nil,let instrument=selectedInstrument{
       let channel=busID.flatMap{id in buses.first{$0["id"] as? String==id}?["name"] as? String}
       detail.stringValue="I\(instrument["index"] ?? 0) · \(instrument["name"] as? String ?? "Instrument")"+(channel.map{" › \($0)"} ?? " · before channel");show(name,instrument["name"] as? String ?? "Instrument",target:context)
@@ -530,8 +570,8 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     guard onRequest != nil else{return}
     operationFailure=nil;status.stringValue="Applying graph change…"
     var p=params
-    if method=="graph.node.add",let processingGroupID{p["parent"]=processingGroupID}
-    p["expectedRevision"]=revision
+    if ["graph.node.add","graph.song.source.add"].contains(method),let processingGroupID{p["parent"]=processingGroupID}
+    if p["expectedRevision"] == nil {p["expectedRevision"]=revision}
     startMutation(method,p,document:projectionDocument,context:viewContext,after:after)
   }
   private func startMutation(_ method:String,_ params:[String:Any],document:String,context:[String],attempt:Int=0,
@@ -590,12 +630,13 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
   private func renameLibrary(){guard let number=Int(libraryNumber.stringValue)else{return};updateDefinition{$0["name"]=libraryName.stringValue;$0["number"]=number}}
   @objc func connectionControlChanged(_ sender:NSControl){hasDraft=true;if sender===connectionKind {connectionModeChanged()}else if sender===source || sender===destination {refreshPortChoices();if canvas.selectedEdge==nil{inferConnectionKind()}};updateQuantizationControl();if canvas.selectedEdge != nil {updateConnection()}}
   @objc func connectionModeChanged(){let kind=connectionKind.titleOfSelectedItem ?? "",modulation=kind=="Modulation";modulationSection?.isHidden = !modulation;audioPorts?.isHidden=modulation
+    connectionEnabled.isHidden = !modulation && !["Direct plugin audio","Stage audio"].contains(kind)
     base.isHidden=graphID==nil;modulationBaseLabel.isHidden=graphID==nil;connectionQuantized.isHidden=false;connectionQuantized.title=graphID==nil ? "Quantize to parameter steps":"Quantize target (all sources)"
     gainLabel.stringValue=graphID == nil ? "Gain dB" : "Gain ×"
     connectionGain.toolTip=graphID == nil ? "Send / sidechain gain in dB" : "Audio gain multiplier, −16…16"
-    outputPort.isEnabled=graphID != nil || kind=="Graph auxiliary" || kind=="Plugin auxiliary" || kind=="Follower input"
-    inputPort.isEnabled=graphID != nil || kind=="Graph sidechain" || kind=="Plugin sidechain"
-    let hasGain=graphID != nil || kind=="Send" || kind.contains("sidechain") || kind=="Mix into main"
+    outputPort.isEnabled=graphID != nil || kind=="Graph auxiliary" || kind=="Plugin auxiliary" || kind=="Follower input" || ["Direct plugin audio","Stage audio"].contains(kind)
+    inputPort.isEnabled=graphID != nil || kind=="Graph sidechain" || kind=="Plugin sidechain" || ["Direct plugin audio","Stage audio"].contains(kind)
+    let hasGain=graphID != nil || kind=="Send" || kind.contains("sidechain") || kind=="Mix into main" || ["Direct plugin audio","Stage audio"].contains(kind)
     connectionGain.isEnabled=hasGain;connectionGainRow.isHidden = !hasGain
     portRow.isHidden=kind=="Send"
     refreshPortChoices()

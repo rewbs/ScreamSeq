@@ -12,6 +12,7 @@
         case openCommand:return {"ctrl+o"};case saveCommand:return {"ctrl+s"};case saveAsCommand:return {"ctrl+shift+s"};
         case undoCommand:return {"ctrl+z"};case redoCommand:return {"ctrl+y"};case redoAlternateCommand:return {"ctrl+shift+z"};
         case copyFocusedCommand:return {"ctrl+c"};case pasteFocusedCommand:return {"ctrl+v"};case cutFocusedCommand:return {"ctrl+x"};
+        case patternClearField:return {"."};case patternDeleteChannelRow:return {"shift+delete"};
         case deleteFocusedCommand:return {"delete"};case selectAllFocusedCommand:return {"ctrl+a"};case patternPasteMix:return {"ctrl+shift+v"};
         case sampleImportCommand:return {"ctrl+i"};case composeCommand:return {"ctrl+1"};case patternCommand:return {"ctrl+2"};case soundCommand:return {"ctrl+3"};
         case pinCommand:return {"ctrl+p"};case cursorCommand:return {"ctrl+home"};case returnCommand:return {"alt+left"};
@@ -161,8 +162,8 @@
     }
     void runWorkspaceShortcut(int id) {
         const auto focus=GetFocus();const auto panel=workspaceState.focus;const bool inspector=inspectorCanvasFocus;
-        if(id==patternPasteMix&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
-            status=L"Focus the pattern selection before mix paste";return;
+        if((id==patternPasteMix||id==patternClearField||id==patternDeleteChannelRow)&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
+            status=L"Focus the pattern selection before using this command";return;
         }
         const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
         command(id);

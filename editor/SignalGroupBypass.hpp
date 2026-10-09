@@ -1,0 +1,65 @@
+#pragma once
+#include "SignalRouteIdentity.hpp"
+#include <cstdint>
+#include <set>
+#include <map>
+#include <vector>
+namespace Tracker {
+struct SignalDefinition;
+struct SignalGraph;
+struct MixerGraph;
+struct SignalGroupInput {
+  uint64_t source=0,target=0;
+  uint32_t output=0,input=0;
+  bool operator==(const SignalGroupInput &) const = default;
+};
+struct SignalGroupOutput {
+  uint64_t node=0;
+  uint32_t port=0;
+  bool operator==(const SignalGroupOutput &) const = default;
+};
+struct SignalGroupDryRoute {
+  // An all-zero input denotes prepared silence, only for a zero-ingress group.
+  SignalGroupInput input;
+  SignalGroupOutput output;
+  bool operator==(const SignalGroupDryRoute &) const = default;
+};
+struct SignalSongGroupDryRoute {
+  // Empty input identity denotes prepared silence, only with zero ingress.
+  SignalRouteIdentity input,output;
+  bool operator==(const SignalSongGroupDryRoute &) const = default;
+};
+struct SignalGroupBoundary {
+  std::vector<SignalGroupInput> inputs;
+  std::vector<SignalGroupOutput> outputs;
+};
+struct SignalSongGroupBoundary {
+  std::vector<SignalRouteIdentity> inputs,outputs;
+};
+inline std::string audioTrimKey(const SignalGroupInput &p){return "i:"+std::to_string(p.source)+"/"+std::to_string(p.output)+"/"+std::to_string(p.target)+"/"+std::to_string(p.input);}
+inline std::string audioTrimKey(const SignalGroupOutput &p){return "o:"+std::to_string(p.node)+"/"+std::to_string(p.port);}
+inline std::string audioTrimKey(const SignalRouteIdentity &p,bool output){auto part=[](const std::string &s){return std::to_string(s.size())+":"+s;};return std::string(output?"o:":"i:")+part(p.kind)+part(p.source)+part(p.target)+part(p.plugin)+part(p.tap)+"/"+std::to_string(p.input)+"/"+std::to_string(p.output);}
+std::set<uint64_t> signalGroupMembers(const SignalDefinition &,uint64_t group);
+SignalGroupBoundary signalGroupBoundary(const SignalDefinition &,uint64_t group);
+// Empty mappings infer a unique boundary, or silence when no audio enters.
+// Ambiguous dry maps must be supplied explicitly before bypassing the group.
+std::vector<SignalGroupDryRoute> resolvedSignalGroupDryRoutes(const SignalDefinition &,uint64_t group,bool requireComplete=true);
+SignalSongGroupBoundary signalSongGroupBoundary(const SignalGraph &,const MixerGraph &,const std::vector<std::string> &orderedEffectRack,uint64_t group);
+std::vector<SignalSongGroupDryRoute> resolvedSongGroupDryRoutes(const SignalGraph &,const MixerGraph &,const std::vector<std::string> &orderedEffectRack,uint64_t group,bool requireComplete=true);
+// Inserting one rack processor can replace a group's old terminal/next-insert
+// boundary. Preserve the chosen dry source without inferring a different path.
+// Conflicting fan-out maps reject atomically rather than collapse musical intent.
+void preserveSongGroupInsertion(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,
+  const std::vector<std::string> &previousRack,const std::vector<std::string> &nextRack,
+  const std::string &insertedPlugin);
+// Detaching cuts the old serial ingress/egress. Retain explicit sidechain and
+// auxiliary mappings, and track internal serial wires onto their new owner.
+void preserveSongGroupDetachment(SignalGraph &next,const SignalGraph &previous,
+  const MixerGraph &previousMixer,const MixerGraph &nextMixer,
+  const std::vector<std::string> &orderedEffectRack);
+void remapSignalGroupDryRoutes(SignalDefinition &,const std::map<uint64_t,uint64_t> &);
+// Only remove boundaries which no longer exist. A changed surviving ingress is
+// deliberately not guessed; callers must choose it in the same atomic edit.
+void pruneSignalGroupDryRoutes(SignalDefinition &);
+}

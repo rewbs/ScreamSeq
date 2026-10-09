@@ -76,7 +76,7 @@
         if(mixer)adoptInitialMixer(std::move(*mixer));
         adoptWorkspaceEditors(std::move(editors));
         graphEditorOpen=editor=="graph";mixerEditorOpen=editor=="mixer";
-        effectEditorOpen=editor=="effects";
+        effectEditorOpen=editor=="effects";if(effectEditorOpen)effectInline=false;
         workspaceState.layout=base;workspaceState.active=active;
         workspaceState.rightWidth=right;workspaceState.lowerHeight=lower;
         workspaceState.lowerVisible=v.at("lowerVisible").get<bool>();

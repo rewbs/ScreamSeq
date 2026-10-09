@@ -1,0 +1,29 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+      Start  53: mixer-publication
+ 1/12 Test  #53: mixer-publication ................   Passed    1.06 sec
+      Start  55: native-mixer
+ 2/12 Test  #55: native-mixer .....................   Passed   51.55 sec
+      Start  56: rack-preset
+ 3/12 Test  #56: rack-preset ......................   Passed    5.35 sec
+      Start  59: multi-bus
+ 4/12 Test  #59: multi-bus ........................   Passed   15.04 sec
+      Start  65: plugin-latency
+ 5/12 Test  #65: plugin-latency ...................   Passed    1.69 sec
+      Start  75: native-note-routing
+ 6/12 Test  #75: native-note-routing ..............   Passed    2.32 sec
+      Start  76: native-source-migration
+ 7/12 Test  #76: native-source-migration ..........   Passed   13.46 sec
+      Start  81: song-modulation
+ 8/12 Test  #81: song-modulation ..................   Passed    0.43 sec
+      Start  82: native-signal-graph
+ 9/12 Test  #82: native-signal-graph ..............   Passed   11.22 sec
+      Start 100: signal-group-runtime
+10/12 Test #100: signal-group-runtime .............   Passed    0.70 sec
+      Start 101: song-group-runtime
+11/12 Test #101: song-group-runtime ...............   Passed    0.59 sec
+      Start 102: mixer-plugin-routing
+12/12 Test #102: mixer-plugin-routing .............   Passed    0.44 sec
+
+100% tests passed, 0 tests failed out of 12
+
+Total Test time (real) = 103.87 sec

@@ -1,0 +1,61 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 pop up button Description: Graph channel filter, Value: All channels
+	6 button Add…
+	7 button More…, Help: Secondary actions · also available with ⌘K
+	8 text Channels → row graphs → persistent graphs → ordinary graphs → inserts → outputs
+	9 search text field (settable) Description: Filter graph nodes, Value: Wide, Placeholder: Filter nodes…
+		10 button Search
+		11 button cancel
+	12 pop up button Description: Graph node type filter, Value: All node types
+	13 button Clear filters
+	14 text 4 / 29 nodes · 2 hidden branches
+	15 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		16 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Send, Sidechain 3, Sidechain 1, Sidechain 2, Sidechain 4; Master → ; QA Wide ports → ; ScreamSeq Wide Bus Fixture → Output, Aux 4, Aux 1, Aux 2, Aux 3; 11 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Apple: AUMatrixReverb, Compressor, Compressor, QA Instrument inputs, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 2 other outputs  › · Reveal Compressor, Sidechain dynamics
+		17 scroll bar (disabled, settable, float) 0
+		18 scroll bar (settable, float) 0.09523809523908272
+			19 value indicator (settable, float) 0.09523809523908272
+			20 increment arrow button
+			21 decrement arrow button
+			22 increment page button
+			23 decrement page button
+	24 scroll area Secondary Actions: Scroll Up, Scroll Down
+		25 text ScreamSeq Wide Bus Fixture
+		26 checkbox Bypass, Help: Host bypass · M on the graph · processing keeps running with latency preserved, Value: 0, ID: graph.bypass
+		27 button Open interface
+		28 search text field (settable) Description: Find graph processor parameter, Placeholder: Find a parameter…
+			29 button Search
+		30 scroll area Secondary Actions: Scroll Up, Scroll Down
+			31 table Description: Selected graph processor parameters, Help: Select a processor, then drag a modulation source card onto a visible parameter here. The source stays in place; the connection starts at zero depth.
+				32 row (selectable)
+					33 cell
+						34 text Gain
+						35 button …, Help: Secondary actions · also available with ⌘K
+						36 slider (settable, float) Description: Gain, Value: 0.5
+							37 value indicator (settable, float) 0.5
+						38 text Value: Base, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						39 text field (settable) Description: Gain manual base, Value: 0.5, Help: Manual / preset base · 0.0…1.0 . Pattern or recorded automation may replace this base before graph modulation; Inspect shows the actual final value.
+						40 text Description: Gain effective snapshot, Value: Last read 0.5, ID: parameter-effective-7, Help: Last host read: 0.5 . Includes currently scheduled automation and modulation. Inspect effective value for a live time trace.
+			41 scroll bar (disabled, settable, float) 0
+		42 text Drop a modulation source onto a parameter here · menus offer automation and effective values. Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		43 scroll bar (disabled, settable, float) 0
+	44 text Configured routes · live stack order appears on playing copies
+	45 close button
+	46 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	47 minimize button
+	48 text Audio & modulation graph
+49 menu bar
+	50 ScreamSeq Final QA
+	51 File
+	52 Edit
+	53 Automation
+	54 Playback
+	55 Pattern
+	56 Workspace
+	57 Window
+
+The focused UI element is 16 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Send, Sidechain 3, Sidechain 1, Sidechain 2, Sidechain 4; Master → ; QA Wide ports → ; ScreamSeq Wide Bus Fixture → Output, Aux 4, Aux 1, Aux 2, Aux 3; 11 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Apple: AUMatrixReverb, Compressor, Compressor, QA Instrument inputs, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 2 other outputs  › · Reveal Compressor, Sidechain dynamics

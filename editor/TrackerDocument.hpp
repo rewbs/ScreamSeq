@@ -14,6 +14,8 @@
 #include "NativeSong.hpp"
 #include "PreciseNoteRuntime.hpp"
 #include "RecordNudgeRuntime.hpp"
+#include "ScratchRuntime.hpp"
+#include "NativePatternRuntime.hpp"
 #include "RecordingClock.hpp"
 #include "SampleProcessing.hpp"
 #include "SampleWaveform.hpp"
@@ -269,6 +271,8 @@ struct PlaybackRegion {
 	// pattern == UINT32_MAX follows the song; otherwise endRow is exclusive.
 	uint32_t pattern = UINT32_MAX, startRow = 0, endRow = 0, cursorRow = 0;
 	bool loop = false;
+	// Offline pattern capture inherits tempo/effect state without prior-pattern voices.
+	bool seekSamplePositions = true;
 };
 struct PreviewNote
 {
@@ -300,6 +304,8 @@ class Renderer
 	uint32_t regionLastRow_ = UINT32_MAX;
 	std::unique_ptr<PreciseNoteRuntime> preciseNotes_;
 	std::unique_ptr<RecordNudgeRuntime> recordNudges_;
+	std::unique_ptr<ScratchRuntime> scratches_;
+	std::unique_ptr<NativePatternRuntime> nativePatterns_;
 	std::shared_ptr<RecordingClock> recordingClock_ = std::make_shared<RecordingClock>();
 	uint64_t renderHostTime_ = 0;
 	double hostTicksPerSample_ = 0;
@@ -328,7 +334,9 @@ public:
 	Renderer(const std::vector<std::byte> &bytes, uint32_t sampleRate, uint32_t order = 0, bool preview = false, const std::string &sourcePath = {}, uint32_t sequence = 0, PlaybackRegion region = {}, const NativeSong *native = nullptr);
 	void loop(bool value) noexcept { loop_.store(value, std::memory_order_relaxed); }
 	CSoundFile &song() { return *song_; }
-	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); native.prepareEffects(*song_); }
+	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); scratches_=std::make_unique<ScratchRuntime>(native); nativePatterns_=std::make_unique<NativePatternRuntime>(native,*song_); native.prepareEffects(*song_); }
+	std::unique_ptr<ScratchGestureLibrary> prepareScratchUpdate(const NativeSong &native) const { return ScratchRuntime::prepareUpdate(native); }
+	bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &update) noexcept { return scratches_ && scratches_->publishUpdate(update); }
 	void recordingTime(uint64_t hostTime,double ticksPerSample) noexcept { renderHostTime_=hostTime;hostTicksPerSample_=ticksPerSample; }
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
 	std::shared_ptr<const RecordingClock> recordingClockSnapshot() const noexcept { return recordingClock_; }

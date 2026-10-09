@@ -1,3 +1,4 @@
+#include "editor/hosted/PluginAudioLayout.hpp"
 #include "VST3Host.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
@@ -16,6 +17,8 @@
 #import <AppKit/AppKit.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -31,6 +34,21 @@ namespace {
 void require(tresult value, const char *message) {
   if (value != kResultOk)
     throw std::runtime_error(message);
+}
+bool editorSize(const ViewRect &rect, NSSize &size) {
+  const int64_t width=int64_t(rect.right)-rect.left,height=int64_t(rect.bottom)-rect.top;
+  if(width<1||height<1||width>8192||height>8192)return false;
+  size=NSMakeSize(width,height);return true;
+}
+void traceEditorGeometry(const std::string &name,const char *phase,tresult result,const ViewRect &rect,NSView *parent) {
+  if(!std::getenv("SCREAMSEQ_PLUGIN_EDITOR_GEOMETRY"))return;
+  const auto frame=parent.frame,bounds=parent.bounds;
+  std::fprintf(stderr,"VST3 editor [%s] %s result=%d rect=(%d,%d,%d,%d) parent=(%.1f,%.1f,%.1f,%.1f) bounds=(%.1f,%.1f,%.1f,%.1f) children=%lu\n",
+    name.c_str(),phase,int(result),int(rect.left),int(rect.top),int(rect.right),int(rect.bottom),
+    frame.origin.x,frame.origin.y,frame.size.width,frame.size.height,bounds.origin.x,bounds.origin.y,bounds.size.width,bounds.size.height,(unsigned long)parent.subviews.count);
+  for(NSView *child in parent.subviews){const auto f=child.frame,b=child.bounds;
+    std::fprintf(stderr,"  child %s frame=(%.1f,%.1f,%.1f,%.1f) bounds=(%.1f,%.1f,%.1f,%.1f) flipped=%d\n",NSStringFromClass(child.class).UTF8String,
+      f.origin.x,f.origin.y,f.size.width,f.size.height,b.origin.x,b.origin.y,b.size.width,b.size.height,int([child isFlipped]));}
 }
 bool same(const TUID a, const FUID &b) {
   return FUnknownPrivate::iidEqual(a, b);
@@ -349,6 +367,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   NSWindow *window = nil;
   NSView *container = nil;
   RSPluginWindowDelegate *windowDelegate = nil;
+  bool editorSized = false;
+  bool editorClosing = false;
+  uint64_t editorAcceptedResize = 0;
+  ViewRect editorRect;
   bool separateController = false, initialized = false, controllerInitialized = false, active = false,
        processing = false, offline = false;
   double rate = 48000;
@@ -356,12 +378,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // ProcessData includes every declared bus, including inactive auxiliaries.
   // Allocate channel-pointer arrays once, never in the render callback.
   std::vector<AudioBusBuffers> inputBuffers, outputBuffers;
-  std::vector<std::vector<float *>> inputChannels, outputChannels;
   std::vector<PluginAudioBus> buses;
-  std::vector<std::unique_ptr<PluginAudioStorage>> inputStorage, outputStorage;
+  std::unique_ptr<PluginAudioBufferPlan> audio;
   Events events;
   Changes changes, outputChanges;
-  std::array<float, 4096> left{}, right{}, outLeft{}, outRight{};
   std::vector<PluginParameter> metadata;
   std::vector<float> controllerValues;
   std::unique_ptr<std::atomic<float>[]> values;
@@ -414,7 +434,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   std::atomic<uint64_t> droppedEdits{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
-  std::atomic<bool> latencyChanged{false};
+  std::atomic<uint64_t> latencySerial{0},acknowledgedLatency{0};
   BORROWED_REF
   tresult PLUGIN_API queryInterface(const TUID id, void **out) override {
     *out = nullptr;
@@ -458,10 +478,9 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
       failed = true;
       return kResultFalse;
     }
-    // A latency notification is a request to update delay compensation, not
-    // invalid audio. The device pauses at a block boundary; the control thread
-    // reactivates the processor and rebuilds delays before rendering resumes.
-    if (flags & kLatencyChanged) latencyChanged.store(true, std::memory_order_release);
+    // Announce a compensation change without resetting the live processor.
+    // The host queries on the control owner, then acknowledges after adoption.
+    if (flags & kLatencyChanged) latencySerial.fetch_add(1,std::memory_order_release);
     if (controller && values && (flags & kParamValuesChanged))
       for (size_t i = 0; i < metadata.size(); ++i) {
         auto value = controller->getParamNormalized(metadata[i].id);
@@ -471,11 +490,33 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     return kResultOk;
   }
   tresult PLUGIN_API resizeView(IPlugView *v, ViewRect *rect) override {
-    if (v != view || !rect || rect->getWidth() < 1 || rect->getHeight() < 1 || rect->getWidth() > 8192 ||
-        rect->getHeight() > 8192)
-      return kInvalidArgument;
-    [window setContentSize:NSMakeSize(rect->getWidth(), rect->getHeight())];
-    return view->onSize(rect);
+    if(!rect)return kInvalidArgument;
+    // Widen before subtracting untrusted vendor coordinates. NSView sizes are
+    // logical points, and our owned parent always starts at (0,0).
+    const int64_t width=int64_t(rect->right)-rect->left,height=int64_t(rect->bottom)-rect->top;
+    if(width<1||height<1||width>8192||height>8192)return kInvalidArgument;
+    tresult result=kInvalidArgument;
+    pluginMainCall([&]{
+      if(v!=view||!window||editorClosing)return;
+      ViewRect normalized{0,0,int32(width),int32(height)};
+      if(editorSized&&editorRect.right==width&&editorRect.bottom==height){result=kResultOk;return;}
+      const auto previousRect=editorRect;
+      const auto previousSize=window.contentView.frame.size;
+      const bool previouslySized=editorSized;
+      const auto acceptedBefore=editorAcceptedResize;
+      RSResizePluginEditorWindow(window,NSMakeSize(width,height));
+      // Expose this in-flight size to stop onSize -> resizeView recursion, but
+      // only retain it if the vendor accepts. A nested accepted resize wins.
+      editorRect=normalized;editorSized=true;
+      result=view->onSize(&normalized);
+      if(result==kResultOk)++editorAcceptedResize;
+      else if(editorAcceptedResize==acceptedBefore){
+        editorRect=previousRect;editorSized=previouslySized;
+        RSResizePluginEditorWindow(window,previousSize);
+      }
+      traceEditorGeometry(descriptor.name,"resizeView/onSize",result,normalized,container);
+    });
+    return result;
   }
   ~Impl() {
     close();
@@ -506,6 +547,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
   }
   void close() {
+    if(editorClosing)return;
+    editorClosing=true;
     window.delegate = nil;
     windowDelegate.onClose = nil;
     windowDelegate = nil;
@@ -519,6 +562,9 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     [window close];
     window = nil;
     container = nil;
+    editorSized = false;
+    editorAcceptedResize = 0;
+    editorClosing = false;
   }
   void create(const PluginState &state, double sr, bool isOffline) {
     descriptor = state.descriptor;
@@ -593,46 +639,30 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
       throw std::runtime_error("Unsupported VST3 audio bus layout");
     SpeakerArrangement stereo = SpeakerArr::kStereo;
     std::vector<SpeakerArrangement> inputArrangements(inputBuses, stereo), outputArrangements(outputBuses, stereo);
-    for (int i = 1; i < inputBuses; ++i)
+    for (int i = 0; i < inputBuses; ++i)
       require(processor->getBusArrangement(kInput, i, inputArrangements[i]), "Cannot read VST3 input layout");
-    for (int i = 1; i < outputBuses; ++i)
+    for (int i = 0; i < outputBuses; ++i)
       require(processor->getBusArrangement(kOutput, i, outputArrangements[i]), "Cannot read VST3 output layout");
     require(processor->setBusArrangements(inputArrangements.data(), inputBuses, outputArrangements.data(), outputBuses),
             "VST3 requires an unsupported speaker layout");
-    for (int dir = 0; dir < 2; ++dir) {
-      auto &buffers = dir == kInput ? inputBuffers : outputBuffers;
-      auto &channels = dir == kInput ? inputChannels : outputChannels;
-      auto &storage = dir == kInput ? inputStorage : outputStorage;
-      const auto &enabled = dir == kInput ? state.auxiliaryInputs : state.auxiliaryOutputs;
-      const auto count = dir == kInput ? inputBuses : outputBuses;
-      if (component->getBusCount(kAudio, dir) != count)
-        throw std::runtime_error("VST3 changed its bus count during setup");
-      buffers.resize(count);
-      channels.resize(count);
-      storage.resize(count);
-      for (auto index : enabled)
-        if (!index || index >= uint32_t(count)) throw std::runtime_error("VST3 auxiliary bus does not exist");
-      for (int i = 0; i < count; ++i) {
-        BusInfo info{};
-        require(component->getBusInfo(kAudio, dir, i, info), "Cannot read VST3 audio bus");
-        if (info.channelCount < 1 || info.channelCount > 64 || (i == 0 && info.channelCount != 2))
-          throw std::runtime_error("VST3 requires an unsupported channel layout");
-        channels[i].resize(info.channelCount, nullptr);
-        buffers[i].numChannels = info.channelCount;
-        buffers[i].channelBuffers32 = channels[i].data();
-        const bool activeBus = i == 0 || std::find(enabled.begin(), enabled.end(), uint32_t(i)) != enabled.end();
-        const bool supported = info.channelCount <= 2;
-        if (activeBus && !supported) throw std::runtime_error("VST3 auxiliary bus requires more than two channels");
-        buses.push_back({uint32_t(i), uint32_t(info.channelCount), utf8(info.name), dir == kInput, activeBus, supported});
-        if (i == 0) {
-          channels[i][0] = dir == kInput ? left.data() : outLeft.data();
-          channels[i][1] = dir == kInput ? right.data() : outRight.data();
-        } else if (activeBus) {
-          storage[i] = std::make_unique<PluginAudioStorage>();
-          channels[i][0] = storage[i]->left.data();
-          if (info.channelCount == 2) channels[i][1] = storage[i]->right.data();
-        }
-        require(component->activateBus(kAudio, dir, i, activeBus), "Cannot activate VST3 audio bus");
+    std::vector<PluginPhysicalBus> physicalInputs,physicalOutputs;
+    for(int dir=0;dir<2;++dir){
+      auto &physical=dir==kInput?physicalInputs:physicalOutputs;
+      const auto count=dir==kInput?inputBuses:outputBuses;
+      if(component->getBusCount(kAudio,dir)!=count)throw std::runtime_error("VST3 changed its bus count during setup");
+      for(int i=0;i<count;++i){BusInfo info{};require(component->getBusInfo(kAudio,dir,i,info),"Cannot read VST3 audio bus");
+        if(info.channelCount<1||info.channelCount>64)throw std::runtime_error("Unsupported VST3 channel layout");
+        physical.push_back({uint32_t(info.channelCount),utf8(info.name)});
+      }
+    }
+    audio=std::make_unique<PluginAudioBufferPlan>(physicalInputs,physicalOutputs,state.auxiliaryInputs,state.auxiliaryOutputs);
+    buses=audio->buses();validatePluginAudioLayout(state.audioLayout,buses);
+    for(int dir=0;dir<2;++dir){auto &buffers=dir==kInput?inputBuffers:outputBuffers;auto &physical=dir==kInput?audio->inputs():audio->outputs();
+      buffers.resize(physical.size());
+      for(size_t i=0;i<physical.size();++i){buffers[i].numChannels=int32(physical[i].channels.size());buffers[i].channelBuffers32=physical[i].channels.data();
+        // Activation is immutable capacity. Logical cables select the prepared
+        // planes at render time, including a first live auxiliary connection.
+        require(component->activateBus(kAudio,dir,int32(i),true),"Cannot activate VST3 audio bus");
       }
     }
     for (int dir = 0; dir < 2; ++dir)
@@ -685,7 +715,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
       throw std::runtime_error("VST3 latency exceeds two seconds");
     // Latency announced while restoring state, configuring or activating is not
     // a change: the host reads the settled value only after create() returns.
-    latencyChanged.store(false, std::memory_order_release);
+    acknowledgedLatency.store(latencySerial.load(std::memory_order_acquire),std::memory_order_release);
   }
   // Render owner. Editor values never fail rendering; a full change list defers
   // the remainder to the next block unless a newer value arrives first.
@@ -823,23 +853,7 @@ bool VST3Plugin::process(float *buffer, uint32_t frames, uint64_t position, cons
   if (frames > 4096 || s.failed)
     return false;
   s.applyPendingEdits();
-  for (uint32_t i = 0; i < frames; ++i) {
-    s.left[i] = buffer[i * 2];
-    s.right[i] = buffer[i * 2 + 1];
-  }
-  s.outLeft.fill(0);
-  s.outRight.fill(0);
-  for (size_t bus = 1; bus < s.inputStorage.size(); ++bus) if (s.inputStorage[bus]) {
-    auto &audio = *s.inputStorage[bus]; const float *source = inputs ? inputs[bus] : nullptr;
-    for (uint32_t i = 0; i < frames; ++i) {
-      const float l = source ? source[(offset + i) * 2] : 0, r = source ? source[(offset + i) * 2 + 1] : 0;
-      audio.left[i] = s.inputBuffers[bus].numChannels == 1 ? (l + r) * .5f : l;
-      audio.right[i] = r;
-    }
-  }
-  for (auto &audio : s.outputStorage) if (audio) {
-    std::fill_n(audio->left.data(), frames, 0); std::fill_n(audio->right.data(), frames, 0);
-  }
+  s.audio->gather(buffer,inputs,offset,frames);
   ProcessContext context{};
   context.sampleRate = s.rate;
   context.projectTimeSamples = position;
@@ -874,30 +888,16 @@ bool VST3Plugin::process(float *buffer, uint32_t frames, uint64_t position, cons
   s.outputChanges.count = 0;
   if (result != kResultOk)
     return false;
-  for (size_t bus = 1; bus < s.outputStorage.size(); ++bus) if (s.outputStorage[bus]) {
-    auto &audio = *s.outputStorage[bus];
-    for (uint32_t i = 0; i < frames; ++i) {
-      // A plugin may signal silence without writing every output sample.
-      const auto flags = s.outputBuffers[bus].silenceFlags;
-      const float l = flags & 1 ? 0 : audio.left[i];
-      const float r = s.outputBuffers[bus].numChannels == 1 ? l : (flags & 2 ? 0 : audio.right[i]);
-      if (!std::isfinite(l) || !std::isfinite(r)) return false;
-      audio.interleaved[i * 2] = l; audio.interleaved[i * 2 + 1] = r;
-    }
-  }
-  for (uint32_t i = 0; i < frames; ++i) {
-    if (!std::isfinite(s.outLeft[i]) || !std::isfinite(s.outRight[i]))
-      return false;
-    buffer[i * 2] = s.outputBuffers[0].silenceFlags & 1 ? 0 : s.outLeft[i];
-    buffer[i * 2 + 1] = s.outputBuffers[0].silenceFlags & 2 ? 0 : s.outRight[i];
-  }
+  std::array<uint64_t,64> silence{};
+  for(size_t bus=0;bus<s.outputBuffers.size();++bus)silence[bus]=s.outputBuffers[bus].silenceFlags;
+  if(!s.audio->scatter(buffer,frames,{silence.data(),s.outputBuffers.size()}))return false;
   return true;
 }
 const std::vector<PluginAudioBus> &VST3Plugin::buses() const { return impl_->buses; }
-const float *VST3Plugin::auxiliaryOutput(uint32_t bus) const noexcept {
-  return bus < impl_->outputStorage.size() && impl_->outputStorage[bus]
-    ? impl_->outputStorage[bus]->interleaved.data() : nullptr;
-}
+uint64_t VST3Plugin::preparedAuxiliaryInputs() const noexcept {return impl_->audio->preparedInputs();}
+uint64_t VST3Plugin::preparedAuxiliaryOutputs() const noexcept {return impl_->audio->preparedOutputs();}
+size_t VST3Plugin::preparedStorageBytes() const noexcept {return sizeof(Impl)+impl_->audio->storageBytes()+(impl_->inputBuffers.capacity()+impl_->outputBuffers.capacity())*sizeof(AudioBusBuffers);}
+const float *VST3Plugin::auxiliaryOutput(uint32_t bus) const noexcept {return impl_->audio->output(bus);}
 std::vector<PluginParameter> VST3Plugin::parameters() const {
   auto result = impl_->metadata;
   for (size_t i = 0; i < result.size(); ++i)
@@ -955,6 +955,7 @@ PluginState VST3Plugin::state() const {
     auto p = static_cast<const std::byte *>(data.bytes);
     result.state.assign(p, p + data.length);
   });
+  result.audioLayout=pluginAudioLayoutSignature(impl_->buses);
   return result;
 }
 double VST3Plugin::latency() const {
@@ -967,26 +968,26 @@ uint64_t VST3Plugin::droppedEdits() const noexcept {
   return impl_->droppedEdits.load(std::memory_order_relaxed);
 }
 bool VST3Plugin::latencyChangePending() const noexcept {
-  return impl_->latencyChanged.load(std::memory_order_acquire);
+  return impl_->latencySerial.load(std::memory_order_acquire)>impl_->acknowledgedLatency.load(std::memory_order_acquire);
+}
+std::optional<PluginLatencySnapshot> VST3Plugin::pendingLatency() {
+  std::optional<PluginLatencySnapshot> result;
+  pluginMainCall([&]{auto &s=*impl_;const auto serial=s.latencySerial.load(std::memory_order_acquire);
+    if(serial<=s.acknowledgedLatency.load(std::memory_order_acquire))return;
+    const auto samples=s.processor->getLatencySamples();const auto tail=std::min(30.,s.processor->getTailSamples()/s.rate);
+    if(samples>s.rate*2)throw std::runtime_error("VST3 latency exceeds two seconds");
+    if(s.latencySerial.load(std::memory_order_acquire)==serial)result=PluginLatencySnapshot{serial,samples,tail};
+  });return result;
+}
+void VST3Plugin::acknowledgeLatency(uint64_t serial) noexcept {
+  auto &s=*impl_;if(serial>s.latencySerial.load(std::memory_order_acquire))return;
+  auto previous=s.acknowledgedLatency.load(std::memory_order_relaxed);
+  while(previous<serial&&!s.acknowledgedLatency.compare_exchange_weak(previous,serial,std::memory_order_release,std::memory_order_relaxed)){}
 }
 void VST3Plugin::refreshLatency() {
-  pluginMainCall([&] {
-    auto &s = *impl_;
-    if (!s.latencyChanged.exchange(false, std::memory_order_acq_rel)) return;
-    require(s.processor->setProcessing(false), "Cannot pause VST3 for latency update");
-    s.processing = false;
-    require(s.component->setActive(false), "Cannot deactivate VST3 for latency update");
-    s.active = false;
-    require(s.component->setActive(true), "Cannot reactivate VST3 after latency update");
-    s.active = true;
-    if (s.processor->getLatencySamples() > s.rate * 2)
-      throw std::runtime_error("VST3 latency exceeds two seconds");
-    require(s.processor->setProcessing(true), "Cannot resume VST3 after latency update");
-    s.processing = true;
-    // A plugin may repeat its notification while being reactivated. The host
-    // reads the settled latency after this call, so that is not a new change.
-    s.latencyChanged.store(false, std::memory_order_release);
-  });
+  if(auto value=pendingLatency()){
+    acknowledgeLatency(value->serial);
+  }
 }
 double VST3Plugin::tail() const {
   return std::min(30.0, impl_->processor->getTailSamples() / impl_->rate);
@@ -1016,31 +1017,46 @@ void VST3Plugin::showEditor() {
       s.view = nullptr;
       throw std::runtime_error("This VST3 has no macOS custom interface.");
     }
-    ViewRect rect{0, 0, 640, 480};
-    s.view->getSize(&rect);
-    if (rect.getWidth() < 1 || rect.getHeight() < 1 || rect.getWidth() > 8192 || rect.getHeight() > 8192) {
-      s.view->release();
-      s.view = nullptr;
-      throw std::runtime_error("Invalid VST3 editor dimensions");
-    }
-    s.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, rect.getWidth(), rect.getHeight())
-                                           styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-                                             backing:NSBackingStoreBuffered
-                                               defer:NO];
-    s.window.releasedWhenClosed = NO;
+    ViewRect rect{};
+    const auto sizeResult=s.view->getSize(&rect);
+    traceEditorGeometry(s.descriptor.name,"before attached/getSize",sizeResult,rect,nil);
+    // Some editors cannot report a size until attached; others populate the
+    // rectangle but return false. Only the dimensions determine whether it is
+    // usable. An unavailable initial size must not prevent native attachment.
+    NSSize initialSize=NSMakeSize(640,480);
+    editorSize(rect,initialSize);
+    s.window=RSCreatePluginEditorWindow(initialSize,@(s.descriptor.name.c_str()));
     s.windowDelegate = [RSPluginWindowDelegate new];
     s.windowDelegate.onClose = ^{
       s.close();
     };
     s.window.delegate = s.windowDelegate;
-    s.window.title = @(s.descriptor.name.c_str());
     s.container = s.window.contentView;
     s.view->setFrame(&s);
-    if (s.view->attached((__bridge void *)s.container, kPlatformTypeNSView) != kResultOk) {
+    const auto attachResult=s.view->attached((__bridge void *)s.container,kPlatformTypeNSView);
+    traceEditorGeometry(s.descriptor.name,"attached",attachResult,s.editorSized?s.editorRect:rect,s.container);
+    if (attachResult != kResultOk) {
       s.close();
       throw std::runtime_error("Cannot attach VST3 custom interface");
     }
-    s.view->onSize(&rect);
+    // attached() may call resizeView synchronously. Its accepted size wins;
+    // replaying the earlier getSize rectangle clips/offsets the plugin view.
+    ViewRect attachedRect{};
+    const auto attachedSizeResult=s.view->getSize(&attachedRect);
+    traceEditorGeometry(s.descriptor.name,"after attached/getSize",attachedSizeResult,attachedRect,s.container);
+    if(!s.editorSized){
+      NSSize size=initialSize;
+      if(!editorSize(attachedRect,size)&&s.container.subviews.count==1){
+        const auto nativeSize=s.container.subviews[0].frame.size;
+        if(RSValidPluginEditorSize(nativeSize))size=nativeSize;
+      }
+      ViewRect normalized{0,0,int32(size.width),int32(size.height)};
+      // A non-resizable editor may implement onSize as a no-op/false result.
+      // Keep its successfully attached native view available in that case.
+      if(s.resizeView(s.view,&normalized)!=kResultOk)
+        RSResizePluginEditorWindow(s.window,size);
+    }
+    traceEditorGeometry(s.descriptor.name,"ready",kResultOk,s.editorRect,s.container);
     [s.window center];
     [s.window makeKeyAndOrderFront:nil];
   });

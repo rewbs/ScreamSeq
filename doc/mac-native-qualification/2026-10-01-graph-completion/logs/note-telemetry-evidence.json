@@ -1,0 +1,18 @@
+{
+  "timestampUTC": "2026-10-01T22:28:38.713471+00:00",
+  "scope": "macOS native/shared and Mac-hosted Windows adapter tests. Actual native Windows worker/controller execution awaits CI; Windows desktop/device qualification is explicitly deferred by user.",
+  "result": "10/10 passed in 11.12 seconds",
+  "binaries": {
+    "note-routing-tests": "e68093004f8387db41c93c79c6ca2663ed20557b0660be9f8deefef18a996ac2",
+    "recorded-automation-tests": "e9b48f62bb62331702d9efb65d4ed9431efcde64091f7d2e71c31d5e9db551a5",
+    "native-note-routing-tests": "c5b212fa097f9cc746adc4ee9e7d9f9cb75b1d852f456c0ec7187c669c2ea5b7",
+    "pattern-pitch-tests": "d787577b88358d110b9a2cc9914fba3b505cfc59a9a3d3064be77c8dbee0034d",
+    "native-mixer-tests": "1f31b362857b8974855d4dbfaaf426a34165b5544486e94d06bbe190f22efccb",
+    "native-signal-graph-tests": "f6a7f04fc3586b4606cdce4227c4438ed3a5cbb1ee06121480c1cb5cc7c901c8",
+    "signal-graph-session-tests": "509807726f0164a41048a2f3e9188779926369d52fe3d27d565cec8cddbd410c",
+    "windows-graph-document-tests": "2079752419337f8f66170fd51d1b8b6928adb41bd897b99b5548c62dab3d0acd",
+    "windows-native-metadata-tests": "804084c168944542df2c2a9e9b64013c69c5aa7c2f8b4c95c14f9b9dcd1d9f35",
+    "graph-editing-tests": "e0894017592f8467a3048faa8d6aa18ed4881dce508739cea1aa5522148a1a9b"
+  },
+  "buildNote": "All listed binaries rebuilt successfully. The subsequent opt-in commercial-graph-qualification target was not found pending CMake regeneration, and was not tested in this batch."
+}

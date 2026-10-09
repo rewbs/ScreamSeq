@@ -1,4 +1,5 @@
 #include "DocumentOperations.hpp"
+#include "windows/Project/NativePatternJSON.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Api/PipeServer.hpp"
 #include "editor/TrackerDocument.hpp"
@@ -230,7 +231,7 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
   }
   if(method=="pattern.commands") {
     keys(p,{});
-    Json catalog={{"effect",Json::array()},{"volume",Json::array()}};
+    Json catalog={{"effect",Json::array()},{"volume",Json::array()},{"native",PatternJSON::catalog()}};
     if(!document_.editable()) return catalog;
     for(bool volume:{false,true}) for(const auto &c:patternCommands(document_.song().GetType(),volume))
       catalog[volume ? "volume" : "effect"].push_back({{"command",c.command},{"parameterMask",c.mask},{"displayCode",c.command==0?"..":c.mask?c.label.substr(0,2):"0"+c.label.substr(0,1)},

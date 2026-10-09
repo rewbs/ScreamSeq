@@ -1,0 +1,15 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start  65: plugin-latency
+1/5 Test  #65: plugin-latency ...................   Passed    0.87 sec
+    Start  83: signal-graph-session
+2/5 Test  #83: signal-graph-session .............   Passed    0.94 sec
+    Start  96: windows-mixer-document
+3/5 Test  #96: windows-mixer-document ...........   Passed    0.40 sec
+    Start 101: song-group-runtime
+4/5 Test #101: song-group-runtime ...............   Passed    0.31 sec
+    Start 102: mixer-plugin-routing
+5/5 Test #102: mixer-plugin-routing .............   Passed    0.34 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   2.86 sec

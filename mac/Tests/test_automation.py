@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILD = Path(os.environ.get("RESONANCE_BUILD_DIR", str(ROOT / "bin/mac-native"))).resolve()
 sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, drum_roll, endpoints
+from test_audio_fanout import audio_fanout
+from test_scratch_gestures import scratch_gestures
 import plistlib
 
 
@@ -198,6 +200,32 @@ def detach_insert(client):
     print("PASS detach socket: one stable processor, healed main path, saved layout, scalar state, no-op, dry-run, strict/stale rejection and unified Undo")
 
 
+def audio_port_trims(client):
+    def write(method, **params):
+        params["expectedRevision"] = client.call("document.get")["revision"]
+        return client.call(method, params)
+    graph = write("graph.create", name="Socket trim fixture")["data"]["graph"]
+    node = write("graph.node.add", graph=graph, kind="plugin", plugin={"format":"Built-in", "classID":"resonance.gainer.v1"})["data"]["node"]
+    target = {"graph":graph, "node":node}
+    initial = client.call("graph.trim.get", target)
+    edit = dict(target, port="i:0", gainDB=-12, linkTo="o:0")
+    assert not write("graph.trim.set", **edit, dryRun=True)["changed"]
+    paired = write("graph.trim.set", **edit)
+    ports = client.call("graph.trim.get", target)["data"]["ports"]
+    assert [p["gainDB"] for p in ports] == [-12, 12]
+    assert not write("graph.trim.set", **edit)["changed"]
+    expect_error(-32001, lambda:client.call("graph.trim.set",dict(edit,expectedRevision=initial["revision"])))
+    expect_error(-32602, lambda:write("graph.trim.set",**dict(edit,gainDB=True)))
+    assert client.call("graph.trim.get",target)["revision"] == paired["revision"]
+    write("history.undo")
+    assert client.call("graph.trim.get",target)["data"] == initial["data"]
+    write("history.redo")
+    source=write("graph.node.add",graph=graph,kind="automation",name="Trim drive")["data"]["node"]
+    write("graph.trim.set",**target,port="i:0",modulation=[{"source":source,"minimumDB":0,"maximumDB":6}])
+    assert client.call("graph.trim.get",target)["data"]["ports"][0]["modulation"][0]["source"] == source
+    print("PASS port trims socket: inverse links, dry run, no-op, strict/stale rejection, Undo/Redo and source modulation")
+
+
 def processing_groups(client):
     def write(method, **params):
         return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
@@ -269,6 +297,26 @@ def song_processing_groups(client):
     assert read() == before
     write("history.redo")
     assert read() == grouped
+    arguments = {"parent":group, "source":{"kind":"lfo", "name":"Inside rack group"},
+                 "connect":{"plugin":plugin, "parameter":1}}
+    revision = client.call("document.get")["revision"]
+    assert write("graph.song.source.add", **arguments, dryRun=True)["data"]["wouldChange"]
+    assert read() == grouped and client.call("document.get")["revision"] == revision
+    source = write("graph.song.source.add", **arguments)["data"]["node"]
+    with_source = read()
+    assert "source:"+source in next(g for g in with_source["groups"] if g["id"] == group)["nodes"]
+    assert any(e["source"] == source and e["plugin"] == plugin for e in with_source["songModulation"])
+    write("history.undo")
+    assert read() == grouped
+    write("history.redo")
+    assert read() == with_source
+    for parent in [None, True, "n999999999", plugin]:
+        expect_error(-32602, lambda: write("graph.song.source.add", **{**arguments, "parent":parent}))
+        assert read() == with_source
+    expect_error(-32001, lambda: client.call("graph.song.source.add", {**arguments, "expectedRevision":revision}))
+    assert read() == with_source
+    write("graph.song.source.remove", nodes=[source])
+    assert read() == grouped
     for bad in [[], [key,key], [True], ["plugin:missing"]]:
         expect_error(-32602, lambda: write("graph.song.group.create", nodes=bad))
         assert read() == grouped
@@ -290,7 +338,7 @@ def song_processing_groups(client):
     write("graph.song.group.remove", group=group)
     assert read()["groups"] == before["groups"]
     write("plugin.remove", slot=len(read()["plugins"])-1)
-    print("PASS song groups socket: rack identity, dry run, strict/rejected edits, grouped movement, independent export, Undo/Redo")
+    print("PASS song groups socket: rack identity, atomic grouped-source insertion, dry run, strict/rejected edits, grouped movement, independent export, Undo/Redo")
 
 
 def parameter_activity(client):
@@ -1899,6 +1947,191 @@ def plugin_presets(client):
     print("PASS preset socket: native files, dry runs, baseline state, atomic overwrite, independent file/song revisions, retry/read freshness, type/decoder rejection and Undo/Redo")
 
 
+
+def note_routing_tools(client):
+    """Exercise the actual socket, including trigger-only instruments and atomic cuts."""
+    def write(method, **params):
+        return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
+    def graph(): return client.call("graph.get")["data"]
+    def notes(): return graph()["noteRouting"]
+    descriptor={"type":0,"subtype":0,"manufacturer":0,"name":"Resonance Test Instrument","format":"VST3","path":str(BUILD/"test-plugins/ResonanceFixture.vst3"),"classID":"5245534F4E414E43494E535452550001","isInstrument":True}
+    slot=write("instrument.create",empty=True)["data"]["instrument"]
+    instrument=next(i["id"] for i in client.call("document.get")["data"]["instruments"] if i["index"]==slot)
+    write("plugin.add",descriptor=descriptor)
+    original=client.call("document.get")["data"]["nativePlugins"][-1]["instanceID"]
+    write("plugin.add",descriptor=descriptor)
+    destination=client.call("document.get")["data"]["nativePlugins"][-1]["instanceID"]
+    write("instrument.plugin.set",instrument=slot,plugin=original,channel=5)
+    before=graph()
+    cable={"sourceKind":"instrument","source":instrument,"plugin":destination,"midiChannel":9,"suppressAssignment":True}
+    preview=write("graph.note.connect",**cable,dryRun=True)
+    assert not preview["changed"] and preview["data"]["wouldChange"] and graph()==before
+    request={"expectedRevision":client.call("document.get")["revision"],**cable}
+    result=client.call("graph.note.connect",request,"note-route-once")
+    assert client.call("graph.note.connect",request,"note-route-once")==result
+    route=result["data"]["route"]
+    expect_error(-32001,lambda:client.call("graph.note.connect",request))
+    assert notes()["suppressedAssignments"]==[instrument]
+    assert notes()["routes"][-1]=={"id":route,"sourceKind":"instrument","source":instrument,"plugin":destination,"midiChannel":9,"enabled":True}
+    unchanged=graph()
+    assert not write("graph.note.update",id=route,midiChannel=9,enabled=True)["changed"]
+    for bad in [{"midiChannel":True},{"midiChannel":17},{"plugin":"missing"},{"sourceKind":"sample"},{"unknown":1}]:
+        expect_error(-32602,lambda:write("graph.note.update",id=route,**bad))
+        assert graph()==unchanged
+    write("graph.note.update",id=route,enabled=False)
+    assert not notes()["routes"][-1]["enabled"]
+    write("history.undo");assert graph()==unchanged
+    write("plugin.remove",plugins=[original])
+    assert notes()["triggerSources"]==[{"instrument":instrument,"midiChannel":5}]
+    assert notes()["routes"][-1]["plugin"]==destination
+    write("history.undo");assert not notes()["triggerSources"]
+    write("history.redo");assert notes()["triggerSources"][0]["instrument"]==instrument
+    # Source identity and channel are serialized even with no assigned vendor.
+    with tempfile.TemporaryDirectory() as temp:
+        path=Path(temp)/"note-trigger.screamseq"
+        write("document.save",path=str(path))
+        stored=plistlib.loads(path.read_bytes())["native"]["signalGraph"]["noteRouting"]
+        assert stored==notes()
+    write("instrument.plugin.set",instrument=slot,plugin="")
+    assert not notes()["triggerSources"] and notes()["routes"][-1]["id"]==route
+    write("history.undo");assert notes()["triggerSources"]
+    before=graph()
+    expect_error(-32602,lambda:write("graph.connections.remove",connections=[{"kind":"note","route":route},{"kind":"note","route":"n99999999"}]))
+    assert graph()==before
+    write("graph.connections.remove",connections=[{"kind":"note","route":route}])
+    assert all(r["id"]!=route for r in notes()["routes"])
+    write("history.undo");assert graph()==before
+    activity=client.call("graph.note.activity")
+    assert not activity["changed"] and graph()==before
+    expect_error(-32602,lambda:client.call("graph.note.activity",{"unknown":True}))
+    write("graph.note.disconnect",id=route)
+    write("instrument.plugin.set",instrument=slot,plugin="")
+    write("plugin.remove",plugins=[destination])
+    print("PASS note routing socket: strict/stale/dry-run/idempotent edits, exact MIDI mapping, implicit suppression, orphan source persistence, atomic cuts and unified Undo")
+
+
+def graph_stage_routing(client, directory):
+    """Typed outer-stage cables over the actual guarded socket and native save."""
+    def read():
+        return client.call("graph.get", {"includeImplicitMixer": True})["data"]
+    def write(method, **params):
+        return client.call(method, {"expectedRevision": client.call("document.get")["revision"], **params})
+    def rejected(method, params, code=-32602):
+        before = read()
+        revision = client.call("document.get")["revision"]
+        expect_error(code, lambda: write(method, **params))
+        assert read() == before and client.call("document.get")["revision"] == revision
+
+    graph = write("graph.create", name="Socket detector stage")["data"]["graph"]
+    node = write("graph.node.add", graph=graph, kind="plugin",
+                 plugin={"format": "Built-in", "classID": "resonance.compressor.v1", "inputs": [1]}, insertEdge=0)["data"]["node"]
+    definition = next(d for d in read()["library"] if d["id"] == graph)
+    source = next(n["id"] for n in definition["nodes"] if n["kind"] == "input")
+    target = next(n["id"] for n in definition["nodes"] if n["kind"] == "output")
+    # Main audio crosses the compressor; outer input 1 drives its detector,
+    # and output 2 exposes its processed main signal as an auxiliary port.
+    definition["audio"] += [
+        {"source": source, "target": node, "output": 1, "input": 1, "gain": 1},
+        {"source": node, "target": target, "output": 0, "input": 2, "gain": 1},
+    ]
+    write("graph.update", definition=definition)
+    inventory = read()
+    assigned = {a["target"] for a in inventory["assignments"]}
+    bus = next(b["id"] for b in inventory["mixer"]["buses"] if b["kind"] == "track" and b["id"] not in assigned)
+    write("graph.assign", target=bus, graph=graph)
+    descriptor = {"format": "Built-in", "classID": "resonance.gainer.v1", "name": "Gainer", "type": 0, "subtype": 0, "manufacturer": 0}
+    plugins = []
+    for _ in range(2):
+        reply = write("plugin.add", descriptor=descriptor, detached=True)
+        plugins.append(next(p["id"] for p in read()["plugins"] if p["slot"] == reply["data"]["slot"]))
+    a, b = plugins
+    incoming = {"source": {"plugin": a}, "output": 0, "target": {"stage": bus}, "input": 1, "gainDB": -6, "enabled": False}
+    outgoing = {"source": {"stage": bus}, "output": 2, "target": {"plugin": b}, "input": 0}
+    before = read()
+    revision = client.call("document.get")["revision"]
+    assert not write("graph.audio.connection.set", **incoming, dryRun=True)["changed"]
+    assert read() == before and client.call("document.get")["revision"] == revision
+    request = {"expectedRevision": revision, **incoming}
+    applied = client.call("graph.audio.connection.set", request, "stage-cable-retry")
+    assert applied["changed"] and client.call("graph.audio.connection.set", request, "stage-cable-retry") == applied
+    connected = read()
+    assert not write("graph.audio.connection.set", **incoming)["changed"]
+    assert read() == connected and client.call("document.get")["revision"] == applied["revision"]
+    write("history.undo")
+    assert read() == before
+    write("history.redo")
+    assert read() == connected
+    expect_error(-32001, lambda: client.call("graph.audio.connection.set", request))
+    assert read() == connected
+
+    for delta in [{"input": 0}, {"input": 3}, {"input": True},
+                  {"source": {"plugin": a, "stage": bus}}, {"source": {"plugin": "missing"}},
+                  {"target": {"stage": "n999999999"}}, {"gainDB": 13}]:
+        rejected("graph.audio.connection.set", {**incoming, **delta})
+    write("graph.audio.connection.set", **outgoing)
+    both = read()
+    # Disabled contributions still constrain the DAG, including mixed API writes.
+    rejected("graph.audio.connection.set", {"source": {"plugin": b}, "output": 0, "target": {"stage": bus}, "input": 1, "dryRun": True})
+    rejected("mixer.plugin.connection.set", {"source": b, "output": 0, "target": a, "input": 0, "dryRun": True})
+    rejected("mixer.enable", {"enabled": False, "dryRun": True})
+    key = {k: incoming[k] for k in ("source", "output", "target", "input")}
+    write("graph.audio.connection.set", **key, enabled=True)
+    enabled = read()
+    edge = next(e for e in enabled["stageConnections"] if e["source"] == incoming["source"])
+    assert edge["enabled"] and edge["gainDB"] == -6
+    assert enabled["mixer"] == both["mixer"]
+    assert [e for e in enabled["stageConnections"] if e["source"] != incoming["source"]] == [e for e in both["stageConnections"] if e["source"] != incoming["source"]]
+    write("history.undo")
+    assert read() == both
+    write("history.redo")
+    assert read() == enabled
+    cut = {"kind": "stage-connection", **outgoing}
+    rejected("graph.connections.remove", {"connections": [cut, {**cut, "output": 3}]})
+    write("graph.connections.remove", connections=[cut])
+    after_cut = read()
+    assert after_cut["mixer"] == enabled["mixer"]
+    assert after_cut["stageConnections"] == [e for e in enabled["stageConnections"] if e["target"] != outgoing["target"]]
+    write("history.undo")
+    assert read() == enabled
+    follower = write("graph.song.source.add", source={"kind": "follower", "audioStage": bus, "output": 2},
+                     connect={"plugin": b, "parameter": 1})["data"]["node"]
+    followed = read()
+    source_record = next(s for s in followed["songSources"] if s["id"] == follower)
+    assert source_record["audioStage"] == bus and not source_record["audioBus"] and not source_record["audioPlugin"]
+    modulation = next(e for e in followed["songModulation"] if e["source"] == follower)
+    assert modulation["minimum"] == modulation["maximum"] == 0
+    write("history.undo")
+    assert read() == enabled
+    write("history.redo")
+    assert read() == followed
+    for patch in [{"audioBus": bus}, {"audioPlugin": a}, {"output": 0}, {"output": 3}, {"preFader": True}]:
+        rejected("graph.song.source.update", {"node": follower, "source": patch})
+    follower_cut = {"kind": "follower-input", "node": follower, "stage": bus, "output": 2}
+    rejected("graph.connections.remove", {"connections": [{**follower_cut, "output": 1}]})
+    write("graph.connections.remove", connections=[follower_cut])
+    disconnected = next(s for s in read()["songSources"] if s["id"] == follower)
+    assert not disconnected["audioStage"] and disconnected["output"] == 0
+    assert read()["stageConnections"] == followed["stageConnections"]
+    write("history.undo")
+    assert read() == followed
+    enabled = followed
+    path = directory / "typed-stage-routes.screamseq"
+    assert not write("document.save", path=str(path), dryRun=True)["changed"] and not path.exists()
+    write("document.save", path=str(path))
+    saved = plistlib.loads(path.read_bytes())["native"]["signalGraph"]
+    assert saved["stageConnections"] == enabled["stageConnections"]
+    assert next(s for s in saved["songSources"] if s["id"] == follower) == source_record
+    assert next(d for d in saved["library"] if d["id"] == graph)["audio"] == definition["audio"]
+    assert read() == enabled
+    write("graph.song.source.remove", nodes=[follower])
+    write("graph.connections.remove", connections=[cut, {"kind": "stage-connection", **key}])
+    assert read()["stageConnections"] == before["stageConnections"]
+    write("graph.assign", target=bus, graph=None)
+    write("graph.remove", graph=graph)
+    write("plugin.remove", plugins=plugins)
+    print("PASS stage routing socket: built-in detector recipe, typed rack/stage ports, dry-run/no-op/retry/stale guards, mixed-cycle rejection, unrelated-route preservation, atomic cut/Undo, auxiliary follower conversion and native save")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="resonance-api-tests-") as tmp:
         directory = Path(tmp)
@@ -2067,12 +2300,17 @@ def main():
                 plugin_bypass(client)
                 detach_insert(client)
                 parameter_activity(client)
+                audio_port_trims(client)
                 processing_groups(client)
                 song_processing_groups(client)
                 song_modulation(client)
                 follower_conversion(client)
                 graph_provenance(client)
                 navigation_pattern(client)
+                note_routing_tools(client)
+                graph_stage_routing(client, directory)
+                audio_fanout(client, directory)
+                scratch_gestures(client, directory)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

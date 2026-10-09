@@ -867,7 +867,7 @@ Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t 
 		song_->SetCurrentOrder(ORDERINDEX(order));
 		song_->m_PlayState.m_nNextRow = ROWINDEX(region_.cursorRow);
 		song_->m_PlayState.m_nTickCount = CSoundFile::TICKS_ROW_FINISHED;
-		auto target = song_->GetLength(eAdjustSamplePositions, GetLengthTarget(ORDERINDEX(order), ROWINDEX(region_.cursorRow)));
+		auto target = song_->GetLength(region_.seekSamplePositions ? eAdjustSamplePositions : eAdjustOnSuccess, GetLengthTarget(ORDERINDEX(order), ROWINDEX(region_.cursorRow)));
 		if(!target.empty()) frames_.store(uint64_t(target.back().duration * rate));
 	}
 	song_->InitPlayer(true);
@@ -900,11 +900,14 @@ Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t 
 	song_->nativePrepareMix=[](void *context,uint32_t count) noexcept {
 		auto &renderer=*static_cast<Renderer *>(context);auto &song=*renderer.song_;
 		if(renderer.preciseNotes_)count=renderer.preciseNotes_->prepare(song,count);
+		if(renderer.scratches_)count=renderer.scratches_->limit(song,count);
+		if(renderer.nativePatterns_)count=renderer.nativePatterns_->prepare(song,count);
+		if(renderer.scratches_)count=renderer.scratches_->prepare(song,count);
 		if(renderer.recordNudges_)renderer.recordNudges_->prepare(song,count);
 		const auto &state=song.m_PlayState;
 		if(renderer.renderHostTime_&&renderer.hostTicksPerSample_>0&&!state.m_flags[SONG_PAUSED|SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow()) {
-			const double units=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
-			const double position=double(state.m_nRow)*performanceUnitsPerRow+double(state.m_nTickCount)*performanceUnitsPerRow/state.TicksOnRow()+state.SamplesIntoTick()*units;
+			const double units=state.NativeRowStep(performanceUnitsPerRow);
+			const double position=state.NativeRowPosition(performanceUnitsPerRow);
 			const auto start=renderer.renderHostTime_+uint64_t(std::llround(renderer.renderOffset_*renderer.hostTicksPerSample_));
 			const auto end=renderer.renderHostTime_+uint64_t(std::llround((renderer.renderOffset_+count)*renderer.hostTicksPerSample_));
 			renderer.recordingClock_->publish(start,end,{song.Order.GetCurrentSequenceIndex(),state.m_nCurrentOrder,state.m_nPattern,0},position,units/renderer.hostTicksPerSample_);

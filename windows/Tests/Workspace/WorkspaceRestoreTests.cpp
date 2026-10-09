@@ -287,15 +287,15 @@ void firstRestoreMatchesOrdinaryOpen() {
     for(const auto &[kind,code]:std::array<std::pair<const char *,const char *>,2>{{{"nudge-forward","NF"},{"nudge-reverse","NR"}}})
         for(const bool saved:{false,true})withRestoreFixture([&](RestoreApplication &app) {
             if(saved)app.edit("pattern.effect.set",{{"pattern",0},{"row",2},{"channel",0},{"column",0},
-                {"command",{{"kind",kind},{"value",.375},{"offset",32768},{"duration",123456}}}});
+                {"command",{{"kind",kind},{"value",.375},{"offset",32768},{"durationBeats",123456.0/(65536*4)}}}});
             auto cursor=app.position();cursor["pattern"]=0;cursor["row"]=2;cursor["channel"]=0;cursor["column"]=3;cursor["following"]=false;app.navigate(cursor);
             const auto before=songState(app),position=app.position();
             if(saved)app.restoreLayoutConfiguration(layoutFor(app,"effects"));
             else app.adoptInitialEffects(app.prepareInitialEffects(code));
             const auto restored=effectsState(app);
             restoreCheck(app.effectChoices.at(app.effectSelected).at("kind").get<std::string>()==kind,"Staged nudge selected the wrong command");
-            restoreCheck(app.effectField(effectValue)==(saved?L"0.375":L"0.75")&&app.effectField(effectOffset)==(saved?L"32768":L"0")&&
-                app.effectField(effectDuration)==(saved?L"123456":L"65536"),"Staged nudge lost saved timing or new-command defaults");
+            restoreCheck(app.effectField(effectValue)==(saved?L"0.375":L"0.75")&&app.effectField(effectOffset)==(saved?L"0.125":L"0")&&
+                std::stod(app.effectField(effectDuration))==(saved?123456.0/(65536*4):1.0),"Staged nudge lost saved timing or new-command defaults");
             app.openEffectEditor(saved?"":code,true);
             restoreCheck(effectsState(app)==restored,"Staged nudge values/catalogue differ from ordinary opening");
             restoreCheck(songState(app)==before&&app.position()==position,"Nudge restore/open changed song/history or cursor");

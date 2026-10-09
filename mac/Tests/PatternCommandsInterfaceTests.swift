@@ -1,6 +1,16 @@
 import AppKit
 extension InterfaceTests {
   static func patternCommandsChecks() throws -> PatternCommandPicker {
+    let suppliedCodes:[[String:Any]]=[
+      ["command":1,"displayCode":"0J","label":"Jxx","name":"Arpeggio"],
+      ["command":2,"displayCode":"0F","label":"Fxx","name":"Portamento Up"]]
+    let codeModel=PatternModel(["commandCatalog":["effect":suppliedCodes]])
+    let codePicker=PatternCommandPicker(frame:.zero);codePicker.onContext={(codeModel,0,0,3)};codePicker.capture()
+    for (row,expected) in ["0J","0F"].enumerated() {
+      let label=codePicker.tableView(codePicker.table,viewFor:codePicker.table.tableColumns[0],row:row) as? NSTextField
+      try require(label?.stringValue==expected && codePicker.filtered[row].label==(suppliedCodes[row]["label"] as? String),"Finder preserves supplied legacy display codes without prepending another zero or losing the raw label")
+    }
+    try require(PatternCommand(["kind":"native","displayCode":"VB","label":"legacy alias"]).displayCode=="VB","Native commands retain their supplied display code")
     let clear: [String: Any] = ["command":0,"label":"...","name":"Clear command","description":"Clear the chosen command.","maximum":0]
     let delay: [String: Any] = ["command":20,"parameterMask":240,"parameterValue":208,"suggestedParameter":208,"minimum":208,"maximum":223,"label":"SDx","name":"Note Delay","family":"timing","description":"Delay in ticks, not rows."]
     let pitch: [String: Any] = ["command":5,"label":"Hxx","name":"Vibrato","family":"pitch","description":"Speed and depth."]
@@ -53,12 +63,12 @@ extension InterfaceTests {
     try require(searches==1,"Question mark in an effect cell opens search without entering a note")
     key(grid,44,"/",flags:.shift);try require(searches==2,"Shift slash also works when the keyboard source supplies an unshifted character")
     grid.column=3;grid.model=model
-    var typed="",typedEdits=0
-    grid.onTypedNativeEffect={typed=$0};grid.onTrackerEffect={_,_,_,_,_ in typedEdits+=1}
+    var typedEdits=0
+    grid.onTypedNativeEffect={_ in typedEdits += 1};grid.onTrackerEffect={_,_,_,_,_ in typedEdits+=1}
     key(grid,35,"p");try require(grid.effectPrefix=="P" && typedEdits==0,"First letter waits without writing a stray P command")
-    key(grid,1,"s");try require(typed=="parameter-set" && typedEdits==0,"PS opens parameter set directly")
-    key(grid,35,"p");key(grid,37,"l");try require(typed=="parameter-slide" && typedEdits==0,"PL opens parameter slide directly")
-    key(grid,11,"b");key(grid,37,"l");try require(typed=="pitch-slide","BL opens pitch slide directly")
+    key(grid,1,"s");try require(grid.nudgeEditor?.kind=="parameter-set" && typedEdits==0,"PS opens parameter set directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
+    key(grid,35,"p");key(grid,37,"l");try require(grid.nudgeEditor?.kind=="parameter-slide" && typedEdits==0,"PL opens parameter slide directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
+    key(grid,11,"b");key(grid,37,"l");try require(grid.nudgeEditor?.kind=="pitch-slide","BL opens pitch slide directly inline");grid.nudgeEditor?.onFinish?(false);grid.column=3
     var changedCell=[UInt8]();grid.onTrackerEffect={row,ch,_,effect,parameter in changedCell=grid.model.cell(row,ch);changedCell[4]=UInt8(effect);changedCell[5]=UInt8(parameter)}
     key(grid,1,"s");key(grid,2,"d");try require(changedCell[4]==20 && changedCell[5]==211 && grid.column==4,"SD keeps its parameter low nibble and selects the value field")
     var scModel=PatternModel(["format":"IT","commandCatalog":["effect":[clear,delay,pitch,["command":20,"parameterMask":240,"parameterValue":192,"label":"SCx","name":"Note Cut"]]]])
@@ -77,7 +87,7 @@ extension InterfaceTests {
     for fx in 0..<8 {
       grid.column=3+2*fx;key(grid,1,"s");key(grid,8,"c");key(grid,19,"2")
       try require(editsByColumn[fx]==0xC2 && grid.column==4+2*fx,"SC and its tick work in every equal FX column")
-      grid.column=3+2*fx;key(grid,35,"p");key(grid,37,"l");try require(typed=="parameter-slide","PL is available in every FX column")
+      grid.column=3+2*fx;key(grid,35,"p");key(grid,37,"l");try require(grid.nudgeEditor?.kind=="parameter-slide","PL is inline in every FX column");grid.nudgeEditor?.onFinish?(false)
     }
     grid.column=18;grid.deferringEffectKeys=true
     key(grid,20,"3");key(grid,21,"4")
@@ -95,7 +105,7 @@ extension InterfaceTests {
     grid.finishEffectKeys(success:true)
     try require(grid.column==4 && deferredCommit==1,"Navigation after a pending effect survives its asynchronous save exactly once")
     grid.canEdit={true};grid.onTrackerEffect={_,_,_,_,_ in}
-    grid.column=3;key(grid,45,"n");key(grid,8,"c");try require(typed=="note-cut","NC opens the precise cut editor")
+    grid.column=3;key(grid,45,"n");key(grid,8,"c");try require(grid.nudgeEditor?.kind=="note-cut","NC opens the precise cut inline editor");grid.nudgeEditor?.onFinish?(false);grid.column=3
     key(grid,45,"n");key(grid,3,"f");try require(grid.nudgeEditor?.kind=="nudge-forward" && grid.column==4,"NF enters strength directly inside the pattern");grid.nudgeEditor?.onFinish?(false)
     grid.column=3;key(grid,45,"n");key(grid,15,"r");try require(grid.nudgeEditor?.kind=="nudge-reverse","NR enters reverse scratch values inside the pattern");grid.nudgeEditor?.onFinish?(false)
     grid.column=3;key(grid,35,"p");key(grid,53,"\u{1b}");try require(grid.effectPrefix.isEmpty,"Escape cancels incomplete command entry")
@@ -104,6 +114,10 @@ extension InterfaceTests {
     grid.cyclePositionMode();try require(grid.positionLabels[4]=="00:00.480","Pattern time uses measured row positions")
     grid.cyclePositionMode();try require(grid.positionLabels[4]=="00:12.480","Song time includes the order occurrence offset")
     grid.cyclePositionMode();try require(grid.positionMode == .rows && grid.gutterWidth==52,"Ruler cycles back without changing note columns")
+    let aliases=PatternCommandPicker(frame:.zero)
+    let aliasModel=PatternModel(["commandCatalog":["native":[["kind":"native","native":"gain-slide","displayCode":"GL","name":"Gain slide","family":"volume","equivalents":"fine volume slide, global volume slide"]]]])
+    aliases.onContext={(aliasModel,0,0,3)};aliases.capture()
+    for query in ["global volume","fine volume"] {aliases.search.stringValue=query;aliases.reload(selectCurrent:false);try require(aliases.filtered.count==1 && aliases.filtered[0].nativeName=="gain-slide","Legacy family names find their precise native equivalent")}
     let floating=EffectFinderPanel(picker:picker);floating.contentView?.layoutSubtreeIfNeeded()
     try require(floating.canBecomeKey && !floating.canBecomeMain && floating.contentView!.bounds.width>=600,"Finder accepts search focus without replacing the document main window or shrinking its list")
 

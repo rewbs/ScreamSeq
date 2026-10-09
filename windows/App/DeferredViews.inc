@@ -8,20 +8,21 @@
         switch(id){
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:
         case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
-        case curveBank:case curveReference:case graphCommandsCommand:
+        case curveBank:case curveReference:case graphCommandsCommand:case graphTrimsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
         case openGraphCurveCommand:case dockGraphCurveCommand:case graphEditingWorkspaceCommand:case editorGraphCurveTab:
         case dockPreciseNotesCommand:case editorPreciseNotesTab:
         case connectedWorkspaceCommand:case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
-        case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
+        case sampleRecordCommand:case patternRenderOptionsCommand:case scratchGesturesCommand:case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
         default:return false;
         }
     }
     Json viewCommandTarget(int id)const {
-        if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==audioSettingsCommand)return Json::array();
+        if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==sampleRecordCommand||id==audioSettingsCommand)return Json::array();
         if(id==curveBank)return graphCurveOperationGuard();
         if(id==notesCommand||id==dockPreciseNotesCommand||id==editorPreciseNotesTab)return preciseNoteSelectionGuard();
         if(id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});
+        if(id==patternRenderOptionsCommand)return Json::array({view->session.revision,patternIndex,selection()});
         if(id==graphCommand)return Json::array({graphID,graphNode,graphGeneration});
         if(id==mixerCommand)return Json::array({mixerTarget});
         return Json::array({patternIndex,row,channel,column,selectedSample(),typingSoundId,selectedPlugin,selectedParameter});

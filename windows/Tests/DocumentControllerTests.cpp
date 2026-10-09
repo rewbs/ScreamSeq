@@ -207,6 +207,40 @@ void patternPerformanceTests(const std::filesystem::path &directory) {
   const auto path=directory/"pattern-performance.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()}});invoke(c,"document.open",{{"path",path.generic_string()}});
   need(c.view()->effect(0,0,0,7)->effect==speed&&c.view()->effectColumns[0]==8,"Reopen lost grid performance cache");
+  const auto beforeNative=call(c,"pattern.effects.get",{{"pattern",0}});
+  Json nativeCommand={{"kind","native"},{"native","vibrato"},{"parameters",{{"depth",.123456789012345},{"rate",2.3456789012345},{"rateMode","beat"},{"shape","triangle"},{"phase",.125},{"reset",true}}},{"offset",1234},{"duration",70001}};
+  Json nativeEdit={{"pattern",0},{"row",3},{"channel",1},{"column",0},{"command",nativeCommand}};
+  auto preview=nativeEdit;preview["dryRun"]=true;invoke(c,"pattern.effect.set",preview);need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNative,"Native dry run changed commands");
+  invoke(c,"pattern.effect.set",nativeEdit);const auto nativeAccepted=call(c,"pattern.effects.get",{{"pattern",0}});const auto nativeView=c.view();
+  invoke(c,"pattern.effect.set",nativeEdit);need(c.view()==nativeView,"Native no-op created a revision/view");
+  for(const auto &parameters:std::vector<Json>{{{"depth",true}},{{"shape",0}},{{"rateMode","unknown"}},{{"reset",1}},{{"typo",1}}}){
+    auto bad=nativeEdit;bad["command"]["parameters"]=parameters;bool rejected=false;
+    try{invoke(c,"pattern.effect.set",bad);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native parameter rejection changed commands or returned the wrong error");
+  }
+  invoke(c,"history.undo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNative,"Native Undo changed unrelated FX");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native Redo lost precision");
+  const auto nativePath=directory/"native-pattern.screamseq";invoke(c,"document.save",{{"path",nativePath.generic_string()}});invoke(c,"document.open",{{"path",nativePath.generic_string()}});
+  need(call(c,"pattern.effects.get",{{"pattern",0}})==nativeAccepted,"Native project lost parameter payloads");
+  const auto nativeClipboard=parsePatternClipboard(patternClipboardText(*c.view(),0,3,3,1,1));
+  need(nativeClipboard.at("effects").at(0).at("native")=="vibrato"&&nativeClipboard.at("effects").at(0).at("parameters").at("depth")==.123456789012345,"Native clipboard lost exact parameter fields");
+  const auto beforeNudge=call(c,"pattern.effects.get",{{"pattern",0}});
+  Json nudgeEdit={{"pattern",0},{"row",4},{"channel",1},{"column",0},{"command",{{"kind","nudge-forward"},{"value",.75},{"durationBeats",.123456789012345},{"offset",12345}}}};
+  invoke(c,"pattern.effect.set",nudgeEdit);const auto acceptedNudge=call(c,"pattern.effects.get",{{"pattern",0}});auto nudgeView=c.view();
+  need(nudgeView->effect(0,4,1,0)->duration==0&&nudgeView->effect(0,4,1,0)->durationBeats==.123456789012345,"NF duration must retain exact beats without row conversion");
+  invoke(c,"pattern.effect.set",nudgeEdit);need(c.view()==nudgeView,"Beat nudge no-op created history");
+  for(const auto &invalid:std::vector<Json>{{{"kind","nudge-forward"},{"value",.75},{"duration",65536}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",0}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",true}},{{"kind","nudge-forward"},{"value",.75},{"durationBeats",65536}},{{"kind","pitch-set"},{"value",0},{"durationBeats",0}}}){
+    auto bad=nudgeEdit;bad["command"]=invalid;bool rejected=false;try{invoke(c,"pattern.effect.set",bad);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&call(c,"pattern.effects.get",{{"pattern",0}})==acceptedNudge,"Invalid or legacy nudge duration partially changed the document");
+  }
+  invoke(c,"history.undo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==beforeNudge,"Beat nudge Undo changed unrelated FX");
+  invoke(c,"history.redo",{{"domain","document"}});need(call(c,"pattern.effects.get",{{"pattern",0}})==acceptedNudge,"Beat nudge Redo lost precision");
+  auto nudgeClipboard=parsePatternClipboard(patternClipboardText(*c.view(),0,4,4,1,1));
+  need(nudgeClipboard.at("effects")[0].at("durationBeats")==.123456789012345&&!nudgeClipboard.at("effects")[0].contains("duration"),"Clipboard exposes only beat duration for nudges");
+  nudgeClipboard["pattern"]=0;nudgeClipboard["startRow"]=8;nudgeClipboard["startChannel"]=2;invoke(c,"pattern.paste",nudgeClipboard);
+  need(c.view()->effect(0,8,2,0)->durationBeats==.123456789012345,"Pasting a nudge must preserve beat duration");
+  const auto savedNudges=call(c,"pattern.effects.get",{{"pattern",0}});const auto nudgePath=directory/"beat-nudges.screamseq";
+  invoke(c,"document.save",{{"path",nudgePath.generic_string()}});invoke(c,"document.open",{{"path",nudgePath.generic_string()}});need(call(c,"pattern.effects.get",{{"pattern",0}})==savedNudges,"Native reopen lost nudge beat duration");
   // A valid but large note list must be rejected before music or transport is
   // changed if its immutable view cannot fit the configured aggregate budget.
   DocumentController limited({},"pattern-budget",[&]{++stops;},[](const auto &){},{},2u*1024u*1024u);
@@ -261,6 +295,19 @@ void patternClipboardTests(const std::filesystem::path &directory) {
   need(snapshot->notesAt(0,10,2).empty(),"Note cache mutated an older view");
   const auto path=directory/"pattern2-worker.screamseq";invoke(c,"document.save",{{"path",path.generic_string()}});
   invoke(c,"document.open",{{"path",path.generic_string()}});need(c.view()->notesAt(0,10,2).size()==2&&c.view()->effect(0,10,2,7)->position==10*65536+16384,"Native reopen lost clipboard FX or precise-note indexes");
+  invoke(c,"scratch.gestures.set",{{"preset","chirp"}});
+  invoke(c,"pattern.effect.set",{{"pattern",0},{"row",20},{"channel",1},{"column",0},{"command",{{"kind","native"},{"native","scratch"},{"parameters",{{"gesture",1}}}}}});
+  const auto scratchView=c.view();auto scratchPayload=parsePatternClipboard(patternClipboardText(*scratchView,0,20,20,1,1));
+  need(scratchPayload.at("scratchGestures").size()==1&&scratchPayload.at("scratchGestures")[0]["name"]=="Chirp","Scratch clipboard omitted its used phrase");
+  invoke(c,"scratch.gestures.set",{{"id",1},{"name","Source renamed"}});need(scratchView->nativePattern->scratchGestures.at(1).name=="Chirp","Scratch library update mutated an immutable clipboard view");
+  DocumentController target({},"scratch-clipboard",[]{},[](const auto &){});invoke(target,"scratch.gestures.set",{{"id",1},{"preset","baby"}});
+  scratchPayload["pattern"]=0;scratchPayload["startRow"]=5;scratchPayload["startChannel"]=0;
+  invoke(target,"pattern.paste",scratchPayload);
+  need(target.view()->nativePattern->scratchGestures.at(1).name=="Baby"&&target.view()->nativePattern->scratchGestures.at(2).name=="Chirp"&&target.view()->effect(0,5,0,0)->arguments[0]==2,"Cross-song scratch paste retargeted a colliding gesture slot");
+  invoke(target,"history.undo",{{"domain","document"}});need(target.view()->nativePattern->scratchGestures.size()==1&&!target.view()->effect(0,5,0,0),"Paste Undo retained a cloned phrase or scratch command");
+  invoke(target,"history.redo",{{"domain","document"}});const auto scratchPath=directory/"scratch-clipboard-worker.screamseq";
+  invoke(target,"document.save",{{"path",scratchPath.generic_string()}});invoke(target,"document.open",{{"path",scratchPath.generic_string()}});
+  need(target.view()->effect(0,5,0,0)->arguments[0]==2&&target.view()->nativePattern->scratchGestures.at(2).name=="Chirp","Scratch clipboard native reopen lost slot remapping");
   std::cout<<"PASS Mac Pattern 2 text, CRLF, stable bindings, legacy hex, malformed/oversized rejection, sparse note boundaries and native reopen\n";
 }
 
@@ -292,6 +339,7 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 }
 
 #include "MixerIntegrationTests.inc"
+#include "LiveGraphPublicationTests.inc"
 void graphRecipeRenderTests(const std::filesystem::path &directory) {
   {
     bool running=false,audition=false;unsigned stops=0;PlaybackHooks hooks;
@@ -299,20 +347,22 @@ void graphRecipeRenderTests(const std::filesystem::path &directory) {
     DocumentController guarded({},"recipe-bypass",[&]{++stops;running=audition=false;},[](const auto &){},{},64u*1024u*1024u,{},std::move(hooks));
     const auto graph=invoke(guarded,"graph.create",Json::object()).at("graph");
     const auto node=invoke(guarded,"graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",{{"format","Built-in"},{"classID","resonance.gainer.v1"}}},{"insertEdge",0}}).at("node");
+    const auto bus=call(guarded,"graph.get",{{"includeImplicitMixer",true}}).at("mixer").at("buses")[0].at("id");
+    invoke(guarded,"graph.assign",{{"graph",graph},{"target",bus}});
     const auto before=guarded.view();const auto beforeStops=stops;running=true;
     invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true},{"dryRun",true}});
     need(guarded.view()==before&&running&&stops==beforeStops,"Bypass preview stopped playback or changed history");
     bool rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&running&&stops==beforeStops&&guarded.view()==before,"Windows bypass must reject unsupported live edit without stopping or committing");
+    need(rejected&&running&&stops==beforeStops&&guarded.view()==before,"An active graph without a prepared playback instance must reject bypass without stopping or committing");
     running=false;audition=true;rejected=false;try{invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&audition&&stops==beforeStops,"Independent audition has the same explicit bypass limitation");
+    need(rejected&&audition&&stops==beforeStops,"Independent audition without a prepared graph has the same publication guard");
     audition=false;invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
     need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Recipe metadata lost requested host bypass");
     const auto changed=guarded.view();const auto afterStops=stops;running=true;
     invoke(guarded,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});
     need(guarded.view()==changed&&stops==afterStops&&running,"Identical bypass is a live no-op");
     rejected=false;try{invoke(guarded,"history.undo",Json::object());}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-    need(rejected&&guarded.view()==changed&&running&&stops==afterStops,"Unsupported live bypass Undo must preserve history and transport");
+    need(rejected&&guarded.view()==changed&&running&&stops==afterStops,"Unprepared live bypass Undo must preserve history and transport");
     running=false;invoke(guarded,"history.undo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==false,"Stopped bypass Undo lost baseline");
     invoke(guarded,"history.redo",Json::object());need(call(guarded,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true,"Stopped bypass Redo lost flag");
   }
@@ -367,7 +417,46 @@ void graphPatternViewTests() {
 #include "ArrangementControllerTests.inc"
 #include "AnnotationControllerTests.inc"
 #include "MatrixControllerTests.inc"
+void groupedPluginInsertionTests(const std::filesystem::path &directory) {
+  // Explicit saved dry maps must follow an insertion at their old boundary,
+  // including the targetless rack's implicit Master chain.
+  for(unsigned scenario=0;scenario<4;++scenario) {
+    DocumentController c({},"grouped-plugin-insertion",[]{},[](const auto &){});
+    const auto catalogue=call(c,"plugin.discover",{{"format","Built-in"}});
+    const auto found=std::find_if(catalogue.begin(),catalogue.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});
+    need(found!=catalogue.end(),"Grouped insertion gain fixture missing");const auto gain=*found;
+    auto graph=[&]{return call(c,"graph.get",{{"includeState",false},{"includeImplicitMixer",true}});};
+    auto rack=[&]{return c.view()->session.document.at("nativePlugins");};
+    const auto target=graph().at("mixer").at("buses")[0].at("id");
+    Json placement=Json::object();if(scenario!=3)placement["target"]=target;
+    auto add=[&](Json extra){extra["descriptor"]=gain;return invoke(c,"plugin.add",std::move(extra));};
+    add(placement);const auto first=rack().at(0).at("instanceID").get<std::string>();
+    const auto group=invoke(c,"graph.song.group.create",{{"nodes",Json::array({"plugin:"+first})}}).at("group");
+    const auto boundary=call(c,"graph.group.boundary",{{"graph",nullptr},{"group",group}});
+    need(!boundary.at("needsMapping").get<bool>()&&boundary.at("dryRoutes").size()==1,"Single grouped gain needs one unambiguous dry map");
+    invoke(c,"graph.group.bypass",{{"graph",nullptr},{"group",group},{"bypass",false},{"dryRoutes",boundary.at("dryRoutes")}});
+    const auto before=graph(),beforeRack=rack();const auto beforeView=c.view();
+    if(scenario==1||scenario==2)placement["before"]=first;
+    if(scenario==2)placement["parent"]=group;
+    auto preview=placement;preview["dryRun"]=true;add(preview);
+    need(c.view()==beforeView&&graph()==before&&rack()==beforeRack,"Grouped insertion dry run published part of its rack or boundary");
+    add(placement);const auto after=graph(),afterRack=rack();
+    const auto resolved=call(c,"graph.group.boundary",{{"graph",nullptr},{"group",group}});
+    need(!resolved.at("needsMapping").get<bool>()&&resolved.at("dryRoutes").size()==1,"Insertion lost the chosen group dry map");
+    need(after.at("groups")[0].at("dryRoutes")==resolved.at("dryRoutes"),"Saved insertion map differs from the actual group boundary");
+    need(after.at("groups")[0].at("nodes").size()==(scenario==2?2:1),"Insertion changed unrelated group membership");
+    if(scenario==0||scenario==3)need(resolved.at("dryRoutes")[0].at("input")==boundary.at("dryRoutes")[0].at("input"),"Appending an effect changed the selected dry input");
+    invoke(c,"history.undo",{{"domain","all"}});need(graph()==before&&rack()==beforeRack,"Grouped insertion Undo failed to restore exact routing and rack state");
+    invoke(c,"history.redo",{{"domain","all"}});need(graph()==after&&rack()==afterRack,"Grouped insertion Redo failed to restore exact boundary and plugin identity");
+    const auto path=directory/("grouped-plugin-insertion-"+std::to_string(scenario)+".screamseq");
+    invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
+    invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
+    need(graph()==after&&rack()==afterRack,"Inserted group boundary did not survive native save/reopen");
+  }
+  std::cout<<"PASS grouped plugin insertion: append, prepend, parent membership, implicit Master, dry-run, exact Undo/Redo and native save/reopen\n";
+}
 void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
+  groupedPluginInsertionTests(directory);
   unsigned stops=0;bool rejectStop=false;
   DocumentController c({},"unified-plugin-history",[&]{if(rejectStop)throw std::runtime_error("controlled stop rejection");++stops;},[](const auto &){});
   const auto catalogue=call(c,"plugin.discover",{{"format","Built-in"}});
@@ -425,13 +514,15 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   // when two earlier rack slots disappear together.
   add();const auto third=plugin(2);
   invoke(c,"automation.replaceLane",{{"slot",2},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6}}})}});
+  const auto groupSource=invoke(c,"graph.song.source.add",{{"source",{{"kind","lfo"},{"name","Grouped motion"}}}}).at("node");
+  invoke(c,"graph.song.group.create",{{"nodes",Json::array({"source:"+groupSource.get<std::string>()})},{"groups",Json::array({group})}});
   const auto beforeRemove=graph();const auto beforeRemoveView=c.view();
-  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"dryRun",true}});
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"sources",Json::array({groupSource})},{"dryRun",true}});
   need(c.view()==beforeRemoveView&&graph()==beforeRemove,"Batch removal dry run changed native history");
   rejected=false;try{invoke(c,"plugin.remove",{{"plugins",Json::array({first,"absent"})}});}catch(const Api::ApiError &){rejected=true;}
   need(rejected&&c.view()==beforeRemoveView,"Invalid batch removal deleted an earlier valid member");
-  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})}});
-  auto removed=graph();need(rack().size()==1&&plugin(0)==third&&removed.at("groups").empty()&&removed.at("mixer").at("buses")[0].at("inserts").empty(),"Batch removal retained dead insert or empty group references");
+  invoke(c,"plugin.remove",{{"plugins",Json::array({first,second})},{"sources",Json::array({groupSource})}});
+  auto removed=graph();need(removed.at("songSources").empty(),"Mixed group removal retained a selected control source");need(rack().size()==1&&plugin(0)==third&&removed.at("groups").empty()&&removed.at("mixer").at("buses")[0].at("inserts").empty(),"Batch removal retained dead insert or empty group references");
   need(call(c,"automation.get",Json::object()).at("points")[0].at("slot")==0,"Batch removal lost/remapped the retained plugin's recorded automation incorrectly");
   undo("document");need(rack().size()==3&&graph()==beforeRemove,"Grouped removal Undo failed to restore exact routing and plugin identities");
   redo("plugins");need(rack().size()==1&&graph()==removed,"Grouped removal Redo did not restore the exact disconnected native state");
@@ -468,10 +559,26 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
   }
   operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
   need(document->native()==originalNative&&project.preserved.at("plugins").empty(),"History could not be used after a postcommit callback failure");
+  const auto beforeDuplicate=c.view();const auto duplicateBeforeGraph=graph();
+  const auto originalState=call(c,"plugin.state.get",{{"slot",2}});
+  invoke(c,"plugin.duplicate",{{"plugin",third},{"position",{{"x",520},{"y",240}}},{"dryRun",true}});
+  need(c.view()==beforeDuplicate&&graph()==duplicateBeforeGraph,"Duplicate dry run changed history or graph");
+  stale("plugin.duplicate",{{"plugin",third}});
+  const auto duplicated=invoke(c,"plugin.duplicate",{{"plugin",third},{"position",{{"x",520},{"y",240}}}});
+  const auto duplicateID=duplicated.at("plugin");need(rack().size()==4&&duplicateID!=third&&plugin(3)==duplicateID,"Duplicate did not allocate a fresh stable processor");
+  need(call(c,"plugin.state.get",{{"slot",3}}).at("data")==originalState.at("data"),"Duplicate changed saved opaque manual state");
+  const auto duplicateGraph=graph();need(std::find(duplicateGraph.at("mixer").at("detached").begin(),duplicateGraph.at("mixer").at("detached").end(),duplicateID)!=duplicateGraph.at("mixer").at("detached").end(),"Effect duplicate is not detached");
+  need(call(c,"automation.recorded.get",{{"plugin",duplicateID},{"parameter",1}}).at("points").empty(),"Duplicate copied recorded automation");
+  undo();need(rack().size()==3&&graph()==duplicateBeforeGraph,"Duplicate requires more than one Undo");
+  redo();need(rack().size()==4&&plugin(3)==duplicateID&&graph()==duplicateGraph,"Duplicate Redo did not retain identity");
+  const auto duplicatePath=directory/"duplicated-plugin.screamseq";invoke(c,"document.save",{{"path",duplicatePath.generic_string()},{"overwrite",true}});
+  invoke(c,"document.open",{{"path",duplicatePath.generic_string()},{"discard",true}});
+  need(plugin(3)==duplicateID&&graph()==duplicateGraph,"Duplicate did not persist");
   std::cout<<"PASS chronological aliases, targeted/grouped plugin add/remove, dry-run/stale/stop/postcommit rejection, cache guard, interleaved edits, recorded-lane remapping, redo forks and persistence\n";
 }
 #include "ParameterActivityControllerTests.inc"
 #include "LiveNativeControllerTests.inc"
+#include "SamplingOperationsChecks.inc"
 int main(int argc,char **argv) {
   try {
     if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
@@ -482,6 +589,10 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--recording") {recordingControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--recovery") {recoveryControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==5 && std::string(argv[1])=="--recovery-manual") {recoveryManualEditorTests(std::filesystem::u8path(argv[2]),std::filesystem::u8path(argv[3]),std::filesystem::u8path(argv[4]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--sampling") {samplingOperationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-rack-publication") {liveRackPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-graph-publication") {liveGraphPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}

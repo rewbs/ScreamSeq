@@ -54,8 +54,14 @@ public:
     std::vector<PluginState> states;
     std::vector<ParameterChange> automation;
   };
-  std::unique_ptr<LiveRackPlan> prepareLiveRack(const std::vector<PluginState> &,const std::vector<ParameterChange> &,const NativeSong &);
+  std::unique_ptr<LiveRackPlan> prepareLiveRack(const std::vector<PluginState> &,const std::vector<ParameterChange> &,const NativeSong &,std::span<const std::string> presets={});
   bool publishLiveRack(std::unique_ptr<LiveRackPlan> &) noexcept;
+  struct LiveRecordedPlan {
+    std::unique_ptr<RecordedAutomationPlan> hosted;
+    std::vector<ParameterChange> points;
+  };
+  std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &);
+  bool publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan>);
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }
   std::vector<PluginAudioBus> pluginBuses(size_t slot) const { return plugins_ ? plugins_->buses(slot) : std::vector<PluginAudioBus>{}; }
@@ -81,6 +87,7 @@ public:
   }
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
+  NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}
   std::vector<SignalActivity> graphActivity() const {return active()&&plugins_?plugins_->graphActivity():std::vector<SignalActivity>{};}
   void watchParameterActivity(const std::string &key,uint32_t parameter,double baseline,bool clear) {
@@ -92,7 +99,13 @@ public:
   SignalObservation *signalObservation() {return plugins_?&plugins_->signalObservation():nullptr;}
   bool pluginFailed() const { return plugins_ && plugins_->failed(); }
   bool pluginLatencyChanged() const noexcept { return plugins_ && plugins_->latencyChangePending(); }
-  void refreshPluginLatencies();
+  void refreshPluginLatencies(const NativeSong &);
+  std::unique_ptr<ScratchGestureLibrary> prepareScratchUpdate(const NativeSong &native) const {
+    return playing()&&renderer_?renderer_->prepareScratchUpdate(native):nullptr;
+  }
+  bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &plan) noexcept {
+    return renderer_&&renderer_->publishScratchUpdate(plan);
+  }
   void updateMusicalAutomation(const NativeSong &native) {if(active()&&plugins_)plugins_->updateMusicalAutomation(native);}
 
   bool mixerControls(const std::vector<MixerControls> &controls) { return !active() || (plugins_ && plugins_->mixerControls(controls)); }

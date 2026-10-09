@@ -8,8 +8,14 @@ extension SignalGraphEditor {
   }
   var selectedInstrument:[String:Any]?{instrumentForSongNode(selectedID)}
   func inspectSampleInstrument(){
+    guard !hasDraft else{status.stringValue="Finish the current graph edit before inspecting an instrument";return}
     guard let raw=chosen(instrumentPicker),let instrument=sampleInstruments.first(where:{$0["id"] as? String==raw})else{status.stringValue="Create a sample instrument first";return}
-    graphID=nil;selectedID="instrument:\(instrument["id"] as? String ?? "")";update(data)
+    rememberPanelReturn()
+    graphID=nil;processingGroupID=nil;graphOrigin=nil;graphTarget=nil
+    filterID=nil;nodeSearch.stringValue="";nodeCategory.selectItem(at:0)
+    selectedID="instrument:\(instrument["id"] as? String ?? "")";canvas.selected=selectedID;canvas.selectedEdge=nil
+    update(data);revealAddedNode()
+    if let node=canvas.nodes.first(where:{$0.id==selectedID}){frameCanvas(node.rect.insetBy(dx:-24,dy:-24),maximumScale:scroll.magnification)}
   }
   func assignSampleInstrument(_ instrument:[String:Any]){
     guard let index=instrument["index"] as? Int,let amount=Double(assignAmount.stringValue),let wet=Double(assignWet.stringValue)else{return}

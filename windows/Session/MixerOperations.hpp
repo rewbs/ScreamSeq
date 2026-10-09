@@ -26,6 +26,7 @@ struct MixerHostHooks {
   std::function<bool(const std::vector<Tracker::MixerControls> &)> controls;
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
   std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate;
+  std::function<std::function<void()>(const Tracker::NativeSong &)> preparePublication;
 };
 class MixerOperations {
   Tracker::Document &document_;

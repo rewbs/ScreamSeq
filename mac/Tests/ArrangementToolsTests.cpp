@@ -101,6 +101,39 @@ void overlapAndAliases() {
   auto plan=prepareArrangementCopy(*d,{0,1,0,0});check(plan.clone,"Inactive-sequence alias was missed");
   applyArrangementCopy(*d,plan);check(d->song().Order(1)[0]==1&&d->cell(1,0,0)==Cell{},"Inactive alias changed");
 }
+void scratchAndBeatNudgeCopy() {
+  auto d=fixture();
+  d->annotate([&](NativeSong &n){
+    n.scratchGestures[7]=scratchPresets()[2].gesture;
+    const auto track=n.tracks.at(0).id;
+    n.performance.columns[track]=3;
+    PatternCommand scratch;
+    scratch.pattern=n.patterns.at(0).id;scratch.track=track;scratch.position=12345;scratch.column=2;
+    scratch.kind=PatternCommandKind::Native;scratch.native=NativePatternOp::Scratch;
+    scratch.arguments={7,.375,83.25,3,1};
+    n.performance.commands.push_back(scratch);
+    PatternCommand nudge;
+    nudge.pattern=scratch.pattern;nudge.track=track;nudge.position=performanceUnitsPerRow+5432;
+    nudge.kind=PatternCommandKind::NudgeReverse;nudge.value=.625;nudge.durationBeats=.3125;
+    n.performance.commands.push_back(nudge);
+  });
+  const auto before=d->native();
+  auto plan=prepareArrangementCopy(*d,{0,1,0,1});
+  check(plan.clone&&plan.changed()&&plan.edits.empty(),"Native scratch block did not create an independent pattern");
+  applyArrangementCopy(*d,plan);
+  const auto targetPattern=d->native().patterns.at(plan.targetPattern).id,targetTrack=d->native().tracks.at(1).id;
+  for(const auto &source:before.performance.commands) {
+    auto expected=source;expected.pattern=targetPattern;expected.track=targetTrack;
+    const auto actual=findFx(*d,plan.targetPattern,1,source.position/performanceUnitsPerRow,source.column);
+    check(actual&&*actual==expected,"Arrangement copy lost scratch arguments or fractional beat nudge duration");
+  }
+  check(d->native().scratchGestures==before.scratchGestures&&d->native().performance.columns.at(targetTrack)==3,
+    "Arrangement copy lost the shared phrase library or additional FX slots");
+  const auto after=d->native();roundtrip(*d);d->undo();
+  auto undone=before;undone.nextID=after.nextID;
+  check(d->native()==undone,"Scratch arrangement copy was not one Undo");
+  d->redo();check(d->native()==after,"Scratch arrangement Redo changed phrase references");
+}
 void clippingAndSentinels() {
   auto d=fixture(16,8);
   d->annotate([&](NativeSong &n){
@@ -260,4 +293,4 @@ void densityBounds() {
   check(block.preciseEvents==65536&&block.events==65539&&block.notes==65537&&block.trackerEvents==1&&block.nativeFxEvents==2&&block.bins==expected,"Dense native events overflowed/truncated a uint16 count");
 }
 }
-int main(){unsigned failed=0;for(const auto &[name,test]:std::vector<std::pair<const char*,void(*)()>>{{"preciseModes",preciseModes},{"fxModes",fxModes},{"overlapAndAliases",overlapAndAliases},{"clippingAndSentinels",clippingAndSentinels},{"noOpAndAdmission",noOpAndAdmission},{"clonePropertiesAndLimits",clonePropertiesAndLimits},{"renderedNativeCopy",renderedNativeCopy},{"densitySummaries",densitySummaries},{"densityBounds",densityBounds}}){try{test();std::cout<<"PASS "<<name<<'\n';}catch(const std::exception &e){++failed;std::cerr<<"FAIL "<<name<<": "<<e.what()<<'\n';}}return failed?1:0;}
+int main(){unsigned failed=0;for(const auto &[name,test]:std::vector<std::pair<const char*,void(*)()>>{{"preciseModes",preciseModes},{"fxModes",fxModes},{"overlapAndAliases",overlapAndAliases},{"scratchAndBeatNudgeCopy",scratchAndBeatNudgeCopy},{"clippingAndSentinels",clippingAndSentinels},{"noOpAndAdmission",noOpAndAdmission},{"clonePropertiesAndLimits",clonePropertiesAndLimits},{"renderedNativeCopy",renderedNativeCopy},{"densitySummaries",densitySummaries},{"densityBounds",densityBounds}}){try{test();std::cout<<"PASS "<<name<<'\n';}catch(const std::exception &e){++failed;std::cerr<<"FAIL "<<name<<": "<<e.what()<<'\n';}}return failed?1:0;}

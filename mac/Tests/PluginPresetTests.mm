@@ -22,8 +22,10 @@ int main() {
       NSData *state = [NSData dataWithBytes:"\0\1\2\377" length:4];
       auto preview = PluginPreset::write(path, plugin, state, @"Warm 🎹", false, true);
       check(![preview[@"written"] boolValue] && ![NSFileManager.defaultManager fileExistsAtPath:path], "Preview creates no preset file");
-      auto saved = PluginPreset::write(path, plugin, state, @"Warm 🎹", false, false);
+      auto saved = PluginPreset::write(path, plugin, state, @"Warm 🎹", false, false, @"pairs-v1;o0=0:0:2:8;o1=0:2:2:8");
       auto loaded = PluginPreset::read(path);
+      check([loaded[@"audioLayout"] isEqual:@"pairs-v1;o0=0:0:2:8;o1=0:2:2:8"] && [PluginPreset::summary(loaded)[@"audioLayout"] isEqual:loaded[@"audioLayout"]], "Preset audio-layout fingerprint survives portable storage and inspection");
+      rejects([&]{PluginPreset::write(path,plugin,state,@"Oversized",true,true,[@"x" stringByPaddingToLength:8193 withString:@"x" startingAtIndex:0]);}, "Oversized audio-layout fingerprint rejected");
       check([loaded[@"state"] isEqual:state] && [loaded[@"name"] isEqual:@"Warm 🎹"] && [loaded[@"presetRevision"] isEqual:saved[@"presetRevision"]], "Preset bytes, Unicode name and content revision roundtrip");
       check(PluginPreset::summary(loaded)[@"state"] == nil && [PluginPreset::summary(loaded)[@"stateBytes"] intValue] == 4, "Summary never exposes opaque plugin bytes");
       struct stat info{}; check(stat(path.fileSystemRepresentation, &info) == 0 && (info.st_mode & 0777) == 0600, "Published preset is private to the account");

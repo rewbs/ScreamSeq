@@ -1,0 +1,29 @@
+{
+  "startedUTC": "2026-10-02T02:49:05.736404+00:00",
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app",
+  "binarySHA256": "cddc584a4aaae152b83d13818053c137bbf5fa97bcded4ac141ee606066ff221",
+  "build": {
+    "baseRevision": "e426395580c907e62ddf4fbd93bf52996a6e4a14",
+    "builtAtUTC": "2026-10-02T02:38:34.806583+00:00",
+    "sourceFingerprint": "ca9e8d499a41fdfc51dec27ac501ebabc0707526d9196e6ccac827952536bdc6"
+  },
+  "finishedUTC": "2026-10-02T02:52:53.425521+00:00",
+  "binarySHA256After": "cddc584a4aaae152b83d13818053c137bbf5fa97bcded4ac141ee606066ff221",
+  "sourceOrBinaryWrites": false,
+  "audioDeviceOpened": false,
+  "uiDisplayed": false,
+  "tests": [
+    {
+      "command": "RESONANCE_BUILD_DIR=bin/mac-graph-fluency python3 mac/Tests/test_automation.py --app",
+      "exitCode": 0,
+      "log": "followup-socket-app.log",
+      "logSHA256": "2bc76bbe8c0881532c5d939fd9c789e62f2d58c14902d00bdec062ee23853010"
+    },
+    {
+      "command": "RESONANCE_BUILD_DIR=bin/mac-graph-fluency python3 mac/Tests/test_workspace.py",
+      "exitCode": 0,
+      "log": "followup-workspace.log",
+      "logSHA256": "4ad22d58c60e43fc3a9b0587e156ccb57816be5ad3a6f13ddc087aab9bd0176f"
+    }
+  ]
+}

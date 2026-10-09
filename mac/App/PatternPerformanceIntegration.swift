@@ -6,7 +6,24 @@ extension AppController {
   }
   func openPatternPerformance(context:(PatternModel,Int,Int,Int)?=nil,kind:String?=nil,target:(plugin:String,parameter:Int)?=nil) {
     guard !busy,model.editable else{return}
+    let cursor=context ?? (model,patternView.cursorRow,patternView.cursorChannel,patternView.column)
+    if target==nil,kind==nil,cursor.0.nativeCommand(cursor.1,cursor.2,max(0,(cursor.3-3)/2))?.native=="scratch" {showScratchGestures();return}
+    if target==nil,kind==nil,cursor.0.nativeCommand(cursor.1,cursor.2,max(0,(cursor.3-3)/2))?.kind=="native" {
+      guard session.automationRevision==cursor.0.revisionToken,patternView.model.pattern==cursor.0.pattern else {
+        statusLabel.stringValue="The pattern changed. Select the effect again to edit its current parameters.";return
+      }
+      window.makeKeyAndOrderFront(nil);patternView.cursorRow=cursor.1;patternView.cursorChannel=cursor.2;patternView.column=max(3,cursor.3)
+      if !patternView.beginNudgeEdit(allParameters:true) {statusLabel.stringValue="This effect's parameter catalogue is unavailable. Reload the song view before editing."}
+      return
+    }
     let editor=PatternPerformanceEditor(frame:.zero)
+    editor.onInlineEdit = {[weak self,weak editor] pattern,row,channel,column,revision in
+      guard let self else{return}
+      guard self.session.automationRevision==revision,self.patternView.model.pattern==pattern else {editor?.status.stringValue="The pattern changed. Use current cursor to reload before editing.";return}
+      self.patternPerformanceWindow?.close();self.window.makeKeyAndOrderFront(nil)
+      self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=column
+      if !self.patternView.beginNudgeEdit(allParameters:true) {self.statusLabel.stringValue="This effect's parameter catalogue is unavailable. Reload the song view before editing."}
+    }
     editor.requestedKind=kind;editor.requestedTarget=target
     var initial=context
     editor.onContext = {[weak self] in

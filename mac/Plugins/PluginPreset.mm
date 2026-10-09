@@ -42,8 +42,9 @@ NSDictionary *descriptor(id raw) {
 }
 NSDictionary *decode(NSData *bytes) {
   auto root = object([NSPropertyListSerialization propertyListWithData:bytes options:0 format:nil error:nil]);
-  keys(root, @[@"format", @"version", @"name", @"plugin", @"state"]);
+  keys(root, @[@"format", @"version", @"name", @"plugin", @"state", @"audioLayout"]);
   require([@[@"ScreamSeq plugin preset", @"Resonance plugin preset"] containsObject:root[@"format"]], "Not a ScreamSeq plugin preset");
+  string(root[@"audioLayout"] ?: @"",8192);
   integer(root[@"version"], 1, 1); string(root[@"name"], 200); descriptor(root[@"plugin"]);
   require([root[@"state"] isKindOfClass:NSData.class] && [root[@"state"] length] <= PluginPreset::maximumStateBytes,
           "Preset state exceeds 16 MiB or has an invalid type");
@@ -73,7 +74,7 @@ NSDictionary *PluginPreset::read(NSString *path) {
 }
 NSDictionary *PluginPreset::summary(NSDictionary *preset) {
   return @{@"name": preset[@"name"], @"descriptor": preset[@"plugin"],
-           @"presetRevision": preset[@"presetRevision"], @"stateBytes": @([preset[@"state"] length]), @"presetVersion": @1};
+           @"audioLayout": preset[@"audioLayout"] ?: @"", @"presetRevision": preset[@"presetRevision"], @"stateBytes": @([preset[@"state"] length]), @"presetVersion": @1};
 }
 bool PluginPreset::matches(NSDictionary *a, NSDictionary *b) {
   a = descriptor(a); b = descriptor(b);
@@ -84,8 +85,8 @@ bool PluginPreset::matches(NSDictionary *a, NSDictionary *b) {
   if ([a[@"format"] isEqual:@"VST3"]) return [[a[@"classID"] uppercaseString] isEqual:[b[@"classID"] uppercaseString]];
   return [a[@"classID"] isEqual:b[@"classID"]];
 }
-NSDictionary *PluginPreset::write(NSString *path, NSDictionary *plugin, NSData *state, NSString *name, bool overwrite, bool dryRun) {
-  pathCheck(path); descriptor(plugin); string(name, 200);
+NSDictionary *PluginPreset::write(NSString *path, NSDictionary *plugin, NSData *state, NSString *name, bool overwrite, bool dryRun, NSString *audioLayout) {
+  pathCheck(path); descriptor(plugin); string(name, 200); string(audioLayout,8192);
   require([state isKindOfClass:NSData.class] && state.length <= maximumStateBytes, "Preset state exceeds 16 MiB");
   BOOL isDirectory = NO;
   require([NSFileManager.defaultManager fileExistsAtPath:path.stringByDeletingLastPathComponent isDirectory:&isDirectory] && isDirectory,
@@ -96,7 +97,7 @@ NSDictionary *PluginPreset::write(NSString *path, NSDictionary *plugin, NSData *
     require(S_ISREG(existing.st_mode), "Existing preset destination must be a regular file");
   } else require(errno == ENOENT, "Cannot inspect preset destination");
   NSData *bytes = [NSPropertyListSerialization dataWithPropertyList:@{@"format": @"Resonance plugin preset", @"version": @1,
-    @"name": name, @"plugin": plugin, @"state": state} format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+    @"name": name, @"plugin": plugin, @"state": state, @"audioLayout": audioLayout} format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
   require(bytes && bytes.length <= maximumFileBytes, "Cannot encode preset within the size limit");
   NSMutableDictionary *result = [summary(decode(bytes)) mutableCopy]; result[@"path"] = path; result[@"written"] = @(!dryRun);
   if (dryRun) return result;

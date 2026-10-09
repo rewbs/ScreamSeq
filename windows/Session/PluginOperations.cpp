@@ -1,5 +1,8 @@
 #include "PluginOperations.hpp"
 #include "editor/ParameterBaseline.hpp"
+#include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/PluginNoteSources.hpp"
+#include "editor/SignalGroupBypass.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/PluginPreset.hpp"
@@ -35,10 +38,11 @@ PluginDescriptor descriptor(const Json &v){keys(v,{"type","subtype","manufacture
   if(d.format=="Built-in"){auto all=NativePlugin::builtins();auto found=std::find_if(all.begin(),all.end(),[&](const auto &x){return x.classID==d.classID;});need(found!=all.end()&&!d.type&&!d.subtype&&!d.manufacturer&&!d.instrument&&d.path.empty(),"Invalid built-in descriptor");d=*found;}
   return d;
 }
-Json record(const PluginState &s){auto j=descriptor(s.descriptor);j["instanceID"]=s.instanceID;j["state"]=blob(s.state);j["instrument"]=s.instrument;j["bypass"]=s.bypass;j["instrumentAssignments"]=Json::array();for(auto a:pluginAssignments(s))j["instrumentAssignments"].push_back({{"instrument",a.instrument},{"channel",a.channel}});j["auxiliaryInputs"]=s.auxiliaryInputs;j["auxiliaryOutputs"]=s.auxiliaryOutputs;return j;}
+Json record(const PluginState &s){auto j=descriptor(s.descriptor);j["instanceID"]=s.instanceID;j["state"]=blob(s.state);j["audioLayout"]=s.audioLayout;j["instrument"]=s.instrument;j["bypass"]=s.bypass;j["instrumentAssignments"]=Json::array();for(auto a:pluginAssignments(s))j["instrumentAssignments"].push_back({{"instrument",a.instrument},{"channel",a.channel}});j["auxiliaryInputs"]=s.auxiliaryInputs;j["auxiliaryOutputs"]=s.auxiliaryOutputs;return j;}
 Json parameters(const NativePlugin &plugin){Json j=Json::array();for(const auto &p:plugin.parameters())j.push_back({{"id",p.id},{"name",p.name},{"min",p.min},{"max",p.max},{"value",p.value},{"manualValue",p.manualValue.value_or(p.value)},{"effectiveValue",nullptr},{"valueRole","manual-editor"},{"unit",p.unit},{"unitLabel",p.unitLabel},{"choices",p.choices},{"displayScale",p.logarithmic?"logarithmic":"linear"},{"step",p.step},{"canSlide",p.continuous},{"writable",p.writable}});return j;}
-Json buses(const NativePlugin &plugin){Json j=Json::array();for(const auto &b:plugin.buses())j.push_back({{"index",b.index},{"direction",b.input?"input":"output"},{"name",b.name},{"channels",b.channels},{"active",b.active},{"supported",b.supported}});return j;}
-size_t stateBytes(const Json &plugins,const Json &automation){size_t n=automation.size()*128;for(const auto &p:plugins)n+=4096+p.at("state").get_binary().size();return n;}
+Json buses(const std::vector<PluginAudioBus> &catalog){Json j=Json::array();for(const auto &b:catalog)j.push_back({{"index",b.index},{"direction",b.input?"input":"output"},{"name",b.name},{"channels",b.channels},{"physicalBus",b.physicalChannels?b.physicalBus:b.index},{"firstChannel",b.firstChannel},{"physicalChannels",b.physicalChannels?b.physicalChannels:b.channels},{"active",b.active},{"supported",b.supported}});return j;}
+Json buses(const NativePlugin &plugin){return buses(plugin.buses());}
+size_t stateBytes(const Json &plugins,const Json &automation){size_t n=automation.size()*128;for(const auto &p:plugins)n+=4096+p.at("state").get_binary().size()+p.value("audioLayout",std::string{}).size();return n;}
 std::string hashText(const std::string &s){std::array<UCHAR,32> digest{};if(BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,reinterpret_cast<PUCHAR>(const_cast<char*>(s.data())),ULONG(s.size()),digest.data(),ULONG(digest.size()))<0)throw std::runtime_error("Cannot hash plugin program catalog");std::string out;for(auto b:digest){out+="0123456789abcdef"[b>>4];out+="0123456789abcdef"[b&15];}return out;}
 }
 PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p,std::function<void()> stop,
@@ -47,7 +51,7 @@ PluginOperations::PluginOperations(Tracker::Document &d,Project::ProjectState &p
 PluginOperations::~PluginOperations()=default;
 std::vector<GraphRackRecord> PluginOperations::graphRack() const {
   std::vector<GraphRackRecord> result;const auto states=projectPluginStates(project_,false);
-  for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};for(auto a:pluginAssignments(s))item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
+  for(size_t i=0;i<states.size();++i){const auto &s=states[i];GraphRackRecord item{descriptor(s.descriptor),s.instanceID,uint32_t(i),s.bypass};item.audioLayout=s.audioLayout;item.assignments=pluginAssignments(s);for(auto a:item.assignments)item.instruments.push_back(uint16_t(a.instrument));result.push_back(std::move(item));}
   return result;
 }
 GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
@@ -55,16 +59,29 @@ GraphRackClone PluginOperations::cloneRackSlot(uint32_t index) {
   (void)editor(index); // Availability is real; never fabricate a missing recipe.
   const auto &s=states[index];const auto &d=s.descriptor;GraphRackClone result;
   result.recipe={d.format,d.name,d.path,d.classID,d.type,d.subtype,d.manufacturer,s.state,s.auxiliaryInputs,s.auxiliaryOutputs};
-  result.recipe.bypass=s.bypass;result.instrument=d.instrument||d.type==audioUnitMusicDeviceType;for(auto a:pluginAssignments(s))result.instruments.push_back(uint16_t(a.instrument));return result;
+  result.recipe.bypass=s.bypass;result.recipe.audioLayout=s.audioLayout;result.instrument=d.instrument||d.type==audioUnitMusicDeviceType;for(auto a:pluginAssignments(s))result.instruments.push_back(uint16_t(a.instrument));return result;
 }
 std::vector<PluginAudioBus> PluginOperations::audioBuses(size_t index,bool required) {
-  try{return editor(index).buses();}catch(const std::exception &){if(required)throw;return {};}
+  try{if(liveBuses_){const auto states=projectPluginStates(project_,false);need(index<states.size(),"Plugin rack slot no longer exists");if(auto current=liveBuses_(states[index].instanceID))return std::move(*current);}return editor(index).buses();}
+  catch(const std::exception &){if(required)throw;return {};}
+}
+std::vector<PluginAudioBus> PluginOperations::audioBusMetadata(const std::string &identity) {
+  return audioBuses(slot({{"plugin",identity}}),true);
 }
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }
 std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","automation.recorded.edit","plugin.add","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","automation.recorded.edit","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+void PluginOperations::prepareRecipe(Tracker::GraphPluginRecipe &recipe) {
+  Tracker::PluginState state;state.descriptor={recipe.type,recipe.subtype,recipe.manufacturer,recipe.name,recipe.format,recipe.path,recipe.classID,false};
+  state.state=recipe.state;state.audioLayout=recipe.audioLayout;state.auxiliaryInputs=recipe.inputs;state.auxiliaryOutputs=recipe.outputs;
+  Tracker::NativePlugin probe(state,48000,true);need(!probe.isInstrument(),"Graph nodes require effect plugins");
+  const auto catalog=probe.parameters();for(const auto &[id,value]:recipe.parameters){const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==id;});
+    need(found!=catalog.end()&&found->writable&&std::isfinite(value)&&value>=found->min&&value<=found->max,"Graph parameter baseline is unavailable or outside its range");
+  }
+  recipe.audioLayout=probe.audioLayout();
+}
 #include "GraphPluginOperations.inc"
 size_t PluginOperations::slot(const Json &p) const {
   const auto &rack=project_.preserved.at("plugins");
@@ -114,20 +131,24 @@ void PluginOperations::trimHistory() {
   std::erase_if(historyGroups_,[&](const auto &group){return group.second<=historyFloor_;});
 }
 void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool parameterOnly,std::span<const ParameterChange> changes,const NativeSong *native) {
-  if(plugins==project_.preserved.at("plugins")&&automation==project_.preserved.at("automation"))return;
-  synchronizeHistory();
-  const bool nativeChange=native&&*native!=document_.native();
   auto candidate=project_;candidate.preserved["plugins"]=plugins;candidate.preserved["automation"]=automation;
+  auto sourceNative=native?*native:document_.native();reconcilePluginNoteSources(sourceNative,projectPluginStates(project_),projectPluginStates(candidate));native=&sourceNative;
+  const bool nativeChange=*native!=document_.native();
+  if(!nativeChange&&plugins==project_.preserved.at("plugins")&&automation==project_.preserved.at("automation"))return;
+  synchronizeHistory();
   Project::invalidateRecoveryTake(candidate);
   validatePluginCapacity(projectPluginStates(candidate),(nativeChange?*native:document_.native()).mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
   if(nativeChange){native->validate(document_.song());historyGroups_.reserve(historyGroups_.size()+1);}
   auto before=snapshot();need(before.bytes<=128u*1024u*1024u,"Plugin Undo state exceeds 128 MiB");
   const auto bypass=nativeChange?std::optional<std::pair<size_t,bool>>{}:bypassOnly(plugins,automation);
+  const bool recordedOnly=!nativeChange&&plugins==project_.preserved.at("plugins")&&automation!=project_.preserved.at("automation");
+  auto recorded=recordedOnly&&prepareRecordedPublication_?prepareRecordedPublication_(projectAbsoluteAutomation(candidate)):std::function<void()>{};
+  auto rackPublication=!recorded&&!bypass&&!(parameterOnly&&liveParameters_)&&prepareRackPublication_?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),nativeChange?*native:document_.native()):std::function<void()>{};
   const auto first=document_.historySequence()+1;
   undo_.push_back(std::move(before)); // Allocate history before stopping or publishing.
   auto publish=[&]{
-    if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(stop_)stop_();
-    if(!keepEditors&&!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+    if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(rackPublication)rackPublication();else if(stop_)stop_();
+    if(!keepEditors&&!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
     project_.preserved.swap(candidate.preserved);
     ++project_.pluginRevision;redo_.clear();
     undo_.back().sequence=document_.externalHistoryEdit();knownHistorySequence_=document_.historySequence();
@@ -137,6 +158,17 @@ void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool
   if(nativeChange){historyGroups_.emplace_back(first,document_.historySequence());knownHistorySequence_=document_.historySequence();}
   trimHistory();
 }
+std::optional<std::vector<ParameterChange>> PluginOperations::parameterOnlyChanges(const Json &plugins,const Json &automation) {
+  if(!liveParameters_||automation!=project_.preserved.at("automation")||plugins.size()!=project_.preserved.at("plugins").size())return {};
+  auto candidate=project_;candidate.preserved["plugins"]=plugins;const auto before=projectPluginStates(project_),after=projectPluginStates(candidate);std::vector<ParameterChange> changes;
+  try{for(size_t i=0;i<before.size();++i){auto comparable=before[i];comparable.state=after[i].state;if(comparable!=after[i])return {};if(before[i].state==after[i].state)continue;
+    NativePlugin probe(before[i],48000),target(after[i],48000);const auto current=probe.parameters();
+    for(const auto &p:target.parameters()){const auto old=std::find_if(current.begin(),current.end(),[&](const auto &v){return v.id==p.id;});if(old==current.end())return {};if(p.value==old->value)continue;
+      if(!p.writable||!old->writable||!probe.parameter(p.id,p.value))return {};changes.push_back({uint32_t(i),p.id,p.value,0});}
+    if(probe.state().state!=after[i].state)return {};
+  }}catch(const std::exception &){return {};}
+  return changes;
+}
 void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
   auto &from=redo?redo_:undo_;auto &to=redo?undo_:redo_;
   if(from.empty())return;
@@ -145,14 +177,19 @@ void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
   validatePluginCapacity(projectPluginStates(candidate),document_.native().mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
   auto before=snapshot();before.sequence=from.back().sequence;
   const auto bypass=alreadyStopped?std::optional<std::pair<size_t,bool>>{}:bypassOnly(from.back().plugins,from.back().automation);
+  const bool recordedOnly=from.back().plugins==project_.preserved.at("plugins")&&from.back().automation!=project_.preserved.at("automation");
+  auto recorded=!alreadyStopped&&recordedOnly&&prepareRecordedPublication_?prepareRecordedPublication_(projectAbsoluteAutomation(candidate)):std::function<void()>{};
+  auto parameters=!alreadyStopped&&!recorded&&!bypass?parameterOnlyChanges(from.back().plugins,from.back().automation):std::optional<std::vector<ParameterChange>>{};
+  auto rackPublication=!alreadyStopped&&!recorded&&!bypass&&!parameters&&prepareRackPublication_?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),document_.native()):std::function<void()>{};
   to.push_back(std::move(before));
-  try{if(bypass)liveBypass_(bypass->first,bypass->second);else if(!alreadyStopped&&stop_)stop_();}catch(...){to.pop_back();throw;}
-  if(!bypass){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+  try{if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameters)liveParameters_(*parameters);else if(rackPublication)rackPublication();else if(!alreadyStopped&&stop_)stop_();}catch(...){to.pop_back();throw;}
+  if(!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
   project_.preserved.swap(candidate.preserved);
   from.pop_back();++project_.pluginRevision;
 }
 void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &documentHistory,
-    const std::function<void(const NativeSong &)> &validateNative) {
+    const std::function<void(const NativeSong &)> &validateNative,
+    const std::function<void(bool,const std::function<void()> &)> &liveDocumentHistory) {
   synchronizeHistory();const auto first=historyHead(redo);if(!first)return;
   auto range=std::pair{first,first};for(const auto &group:historyGroups_)if(first>=group.first&&first<=group.second){range=group;break;}
   const bool grouped=range.first!=range.second;
@@ -164,6 +201,7 @@ void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &d
     auto candidate=project_;candidate.preserved["plugins"]=plugins.back().plugins;candidate.preserved["automation"]=plugins.back().automation;
     validatePluginCapacity(projectPluginStates(candidate),native.mixer.buses.size());(void)projectAbsoluteAutomation(candidate);
     Project::invalidateRecoveryTake(candidate);
+    auto rackPublication=prepareRackPublication_&&liveDocumentHistory?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),native):std::function<void()>{};
     auto before=snapshot();before.sequence=plugins.back().sequence;destination.push_back(std::move(before));
     const auto beforeRevision=document_.revision;
     std::exception_ptr completionFailure;
@@ -171,7 +209,7 @@ void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &d
     // Native history is applied first in BOTH directions; Document stages its
     // own allocations before mutation. The remaining rack publication is a
     // no-throw swap, so a failed stop/native restore cannot leave half an edit.
-    try{if(stop_)stop_();documentHistory(redo,true);}catch(...){
+    try{if(rackPublication)liveDocumentHistory(redo,rackPublication);else {if(stop_)stop_();documentHistory(redo,true);}}catch(...){
       if(document_.revision==beforeRevision){destination.pop_back();throw;}
       // Defensive contract for other host callers: once native history moved,
       // finish the prepared rack publication even if their completion failed.
@@ -247,11 +285,11 @@ bool PluginOperations::flushEditors(bool force) {
   lastStateCapture_=now;Json next;bool changed=false;std::vector<std::string> closed;
   for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
     if(postponed.contains(key))continue;
-    Json state;bool open=true;
-    try{state=blob(found->second->state().state);open=found->second->editorOpen();}
+    Json state;std::string layout;bool open=true;
+    try{const auto captured=found->second->state();state=blob(captured.state);layout=captured.audioLayout;open=found->second->editorOpen();}
     catch(const WindowsVST3::UiOwnerBusy &){postponed.insert(key);continue;} // Capture this editor next round.
     catch(const std::exception &e){unusable.emplace_back(key,e.what());continue;}
-    if(state!=p.at("state")){if(!changed)next=rack;next[slot]["state"]=state;changed=true;}
+    if(state!=p.at("state")||p.value("audioLayout",Json(""))!=layout){if(!changed)next=rack;next[slot]["state"]=state;next[slot]["audioLayout"]=layout;changed=true;}
     if(!open)closed.push_back(key);
   }
   if(changed){
@@ -300,6 +338,21 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     // The document owner dispatches both domain aliases through history().
     throw Api::ApiError(-32601,"Use the unified document history owner");
   }
+  if(method=="plugin.duplicate") {
+    keys(p,{"plugin","position","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");
+    const auto index=slot(p);auto state=projectPluginStates(project_).at(index);
+    state.instanceID=identity();setPluginAssignments(state,{});
+    auto next=document_.native();
+    if(!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType)next.mixer.detached.push_back(state.instanceID);
+    if(p.contains("position")){const auto &position=p.at("position");keys(position,{"x","y"});next.signal.layout["plugin:"+state.instanceID]={number(field(position,"x"),0,100000),number(field(position,"y"),0,100000)};}
+    // The saved editor baseline excludes playback automation and already owns
+    // the configured manual values. Never capture a playing processor here.
+    NativePlugin probe(state,48000);
+    const auto captured=probe.state();state.state=captured.state;state.audioLayout=captured.audioLayout;next.validate(document_.song());const auto destination=rack.size();rack.push_back(record(state));
+    auto candidate=project_;candidate.preserved["plugins"]=rack;validatePluginCapacity(projectPluginStates(candidate),next.mixer.buses.size());
+    if(!dry)commit(std::move(rack),std::move(automation),false,false,{},&next);
+    return {{"slot",destination},{"plugin",state.instanceID},{"detached",!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType},{"dryRun",dry}};
+  }
   if(method=="plugin.add") {
     keys(p,{"descriptor","target","before","position","parent","detached","dryRun"});need(rack.size()<maximumNativePlugins,"Plugin rack is full");
     const bool detached=flag(p,"detached");
@@ -318,21 +371,32 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
       }
       if(p.contains("parent")){const auto parent=nativeIdentity(p.at("parent"));auto group=std::find_if(next.signal.groups.begin(),next.signal.groups.end(),[&](const auto &g){return g.id==parent;});need(group!=next.signal.groups.end(),"Song processing group no longer exists");group->nodes.push_back("plugin:"+state.instanceID);}
       if(p.contains("position")){const auto &position=p.at("position");keys(position,{"x","y"});next.signal.layout["plugin:"+state.instanceID]={number(field(position,"x"),0,100000),number(field(position,"y"),0,100000)};}
-      next.validate(document_.song());
     }
+    if(!state.descriptor.instrument&&state.descriptor.type!=audioUnitMusicDeviceType&&!next.signal.groups.empty()) {
+      auto previous=document_.native(),projected=next;
+      if(!previous.mixer.active())previous.ensureMixer();
+      if(!projected.mixer.active())projected.ensureMixer();
+      std::vector<std::string> before,after;
+      for(const auto &entry:projectPluginStates(project_))if(!entry.descriptor.instrument&&entry.descriptor.type!=audioUnitMusicDeviceType)before.push_back(entry.instanceID);
+      after=before;after.push_back(state.instanceID);
+      preserveSongGroupInsertion(next.signal,previous.signal,previous.mixer,projected.mixer,before,after,state.instanceID);
+    }
+    next.validate(document_.song());
     // Construct a disposable candidate before any song/history/transport change.
-    NativePlugin probe(state,48000);state.state=probe.state().state;
+    NativePlugin probe(state,48000);const auto captured=probe.state();state.state=captured.state;state.audioLayout=captured.audioLayout;
     const auto index=rack.size();rack.push_back(record(state));
     auto candidate=project_;candidate.preserved["plugins"]=rack;validatePluginCapacity(projectPluginStates(candidate),next.mixer.buses.size());
     if(!dry)commit(std::move(rack),std::move(automation),false,false,{},&next);return {{"slot",index},{"dryRun",dry}};
   }
   if(method=="plugin.remove") {
-    keys(p,{"slot","plugins","dryRun"});need(p.contains("slot")!=p.contains("plugins"),"Specify a slot or a list of plugin identities");
+    keys(p,{"slot","plugins","sources","dryRun"});need(p.contains("slot")!=p.contains("plugins"),"Specify a slot or a list of plugin identities");
     std::set<std::string> removed;
     if(p.contains("slot")){need(!rack.empty(),"Plugin rack is empty");removed.insert(rack.at(integer(p.at("slot"),0,rack.size()-1)).at("instanceID").get<std::string>());}
     else{const auto &ids=p.at("plugins");need(ids.is_array()&&!ids.empty()&&ids.size()<=maximumNativePlugins,"Select at least one plugin");
       for(const auto &raw:ids){const auto id=text(raw,128);need(removed.insert(id).second&&std::any_of(rack.begin(),rack.end(),[&](const auto &entry){return entry.at("instanceID")==id;}),"Select distinct existing plugins");}}
-    auto next=document_.native();for(const auto &id:removed)next.removePluginRoutes(id);next.validate(document_.song());
+    auto next=document_.native();std::vector<uint64_t> sources;
+    if(p.contains("sources")){const auto &ids=p.at("sources");need(ids.is_array()&&ids.size()<=64,"Select at most 64 modulation sources");for(const auto &raw:ids)sources.push_back(nativeIdentity(raw));}
+    next.removeSongSources(sources);for(const auto &id:removed)next.removePluginRoutes(id);next.validate(document_.song());
     std::vector<size_t> slots(rack.size(),SIZE_MAX);Json remaining=Json::array();
     for(size_t i=0;i<rack.size();++i)if(!removed.contains(rack[i].at("instanceID").get<std::string>())){slots[i]=remaining.size();remaining.push_back(std::move(rack[i]));}
     rack=std::move(remaining);remaining=Json::array();
@@ -352,29 +416,31 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     }
     need(found,"Plugin instance no longer exists");validatePluginCapacity(states,document_.native().mixer.buses.size());
     }catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
-    if(changed&&!dry)commit(std::move(rack),std::move(automation));return {{"instrument",instrument},{"plugin",id},{"channel",channel},{"wouldChange",changed},{"dryRun",dry}};
+    auto sourceNative=document_.native();reconcilePluginNoteSources(sourceNative,projectPluginStates(project_),states,id.empty()?sourceNative.instruments.at(uint16_t(instrument)).id:0);changed|=sourceNative!=document_.native();
+    if(changed&&!dry)commit(std::move(rack),std::move(automation),false,false,{},&sourceNative);return {{"instrument",instrument},{"plugin",id},{"channel",channel},{"wouldChange",changed},{"dryRun",dry}};
   }
   const auto index=slot(p);auto states=projectPluginStates(project_);const auto &state=states.at(index);
   if(method=="plugin.preset.save") {
     keys(p,{"plugin","path","name","overwrite","dryRun"});
     return Plugins::PluginPreset::write(text(field(p,"path")),descriptor(state.descriptor),state.state,
-      text(field(p,"name"),200),flag(p,"overwrite"),dry);
+      text(field(p,"name"),200),flag(p,"overwrite"),dry,state.audioLayout);
   }
   if(method=="plugin.preset.load") {
     keys(p,{"plugin","path","expectedPresetRevision","dryRun"});
     const auto preset=Plugins::PluginPreset::read(text(field(p,"path")));
     if(text(field(p,"expectedPresetRevision"),80)!=preset.at("presetRevision").get<std::string>())throw Api::ApiError(-32001,"Preset file changed; inspect it again");
     need(Plugins::PluginPreset::matches(descriptor(state.descriptor),preset.at("plugin")),"Preset belongs to a different plugin");
+    const auto savedLayout=text(preset.value("audioLayout",Json("")),8192);need(state.audioLayout.empty()||savedLayout.empty()||state.audioLayout==savedLayout,"Preset audio layout differs from the connected plugin; review routing before loading");
     const Json result={{"preset",Plugins::PluginPreset::summary(preset)},{"plugin",state.instanceID},{"loaded",!dry},{"dryRun",dry}};
     if(dry)return result; // Inspection validates identity, never executes vendor state.
-    auto candidate=state;const auto &data=preset.at("state").get_binary();candidate.state.resize(data.size());
+    auto candidate=state;if(candidate.audioLayout.empty())candidate.audioLayout=savedLayout;const auto &data=preset.at("state").get_binary();candidate.state.resize(data.size());
     if(!data.empty())std::memcpy(candidate.state.data(),data.data(),data.size());
-    NativePlugin probe(candidate,48000);rack[index]["state"]=blob(probe.state().state);
+    NativePlugin probe(candidate,48000);const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;
     commit(std::move(rack),std::move(automation));return result;
   }
   if(method=="plugin.parameters.get"){keys(p,{"slot","plugin"});return parameters(editor(index));}
-  if(method=="plugin.state.get"){keys(p,{"slot"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"kind","saved-baseline"}};}
-  if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});return {{"plugin",state.instanceID},{"buses",buses(editor(index))}};}
+  if(method=="plugin.state.get"){keys(p,{"slot","plugin"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"audioLayout",state.audioLayout},{"kind","saved-baseline"}};}
+  if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});const auto catalog=audioBuses(index,true);return {{"plugin",state.instanceID},{"buses",buses(catalog)},{"audioLayout",pluginAudioLayoutSignature(catalog)}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
     keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
   }
@@ -423,7 +489,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
       for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
       for(auto [id,value]:prepared){need(probe.parameter(id,value),"Plugin rejected parameter");liveChanges.push_back({uint32_t(index),id,value,0});}if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
     }
-    rack[index]["state"]=blob(probe.state().state);
+    const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;
   } else if(method=="plugin.buses.set") {
     keys(p,{"slot","plugin","inputs","outputs","dryRun"});need(p.contains("inputs")||p.contains("outputs"),"Specify auxiliary ports");auto available=editor(index).buses();
     for(const auto *direction:{"inputs","outputs"})if(p.contains(direction)){const bool input=std::string(direction)=="inputs";const auto &values=p.at(direction);need(values.is_array()&&values.size()<=63,"Invalid auxiliary ports");std::set<uint32_t> ports;for(const auto &v:values){auto i=uint32_t(integer(v,1,63));need(ports.insert(i).second,"Duplicate auxiliary port");need(std::any_of(available.begin(),available.end(),[&](const auto &b){return b.input==input&&b.index==i&&b.supported;}),"Unsupported auxiliary port");}rack[index][input?"auxiliaryInputs":"auxiliaryOutputs"]=ports;}
@@ -439,7 +505,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     const Json result={{"plugin",state.instanceID},{"program",*selected},{"catalogRevision",token},{"validated",true},{"loaded",!dry},{"dryRun",dry}};
     if(dry)return result; // Catalog validation never loads a vendor program.
     NativePlugin probe(state,48000);if("programs:"+hashText(programs(probe).dump())!=token)throw Api::ApiError(-32001,"Saved plugin state exposes a different program catalog");
-    probe.loadProgram(id);rack[index]["state"]=blob(probe.state().state);commit(std::move(rack),std::move(automation));return result;
+    probe.loadProgram(id);const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;commit(std::move(rack),std::move(automation));return result;
   } else throw Api::ApiError(-32601,"Unknown plugin operation");
   const bool changed=rack!=project_.preserved.at("plugins")||automation!=project_.preserved.at("automation");
   if(!dry){commit(std::move(rack),std::move(automation),false,method=="plugin.parameters.set",liveChanges);if(!touch.is_null()){lastTouched_=std::move(touch);++touchSequence_;}}return {{"wouldChange",changed},{"dryRun",dry}};

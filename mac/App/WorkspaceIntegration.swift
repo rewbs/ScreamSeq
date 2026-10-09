@@ -29,12 +29,12 @@ extension AppController {
       guard let self else{return};self.openParameterSource(source)
       let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":"graph"
       self.workspace?.panels[panel]?.onBack={[weak self] in self?.signalGraphEditor.returnToProvenance()}
-      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph source"}
+      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph"}
     }
     signalGraphEditor.onAddSongEffect = { [weak self] target in self?.addPlugin(target: target) }
     signalGraphEditor.rackControls.onGesture={[weak self] active in self?.session.parameterGesture(active)}
-    signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.automateParameter(plugin:id,parameter:Int(parameter))}
-    signalGraphEditor.rackControls.onActivity={[weak self] id,parameter in self?.showParameterActivity(plugin:id,parameter:Int(parameter))}
+    signalGraphEditor.rackControls.onAutomate={[weak self] id,parameter in self?.prepareGraphReturn(to:"automation");self?.automateParameter(plugin:id,parameter:Int(parameter))}
+    signalGraphEditor.rackControls.onActivity={[weak self] id,parameter in self?.prepareGraphReturn(to:"parameterActivity");self?.showParameterActivity(plugin:id,parameter:Int(parameter))}
     signalGraphEditor.onPlugin = {[weak self] id in self?.openWorkspacePlugin(id)}
     signalGraphEditor.onShowPattern = {[weak self] id in
       guard let self else{return}
@@ -77,8 +77,17 @@ extension AppController {
       if id=="samples" {self.editorMode=1} else if id=="instruments" {self.editorMode=2} else if id=="plugins" {self.editorMode=3}
       self.followWorkspacePanel(id,force:false,opening:true)
     }
+    // Observe menus before the first user event, including the interval between
+    // choosing an item and AppKit dispatching its action after menu dismissal.
+    KeyboardSettings.installInputContext()
     workspaceInputMonitor=NSEvent.addLocalMonitorForEvents(matching:[.keyDown,.keyUp]){[weak self] event in
       guard let self else{return event}
+      // The menu owns type-selection and activation until its action is sent.
+      // Keep key-up delivery and explicit modifier shortcuts on their usual paths.
+      if KeyboardSettings.menuFocus.ownsUnmodifiedKey(event) {
+        KeyboardSettings.traceInput("workspace.key.menu-owned",event:event)
+        return event
+      }
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.sequences.handle(event){return nil}
       if self.commandPalette.window?.isKeyWindow != true && self.commandPalette.handleAdditionalShortcut(event) { return nil }
       if self.handlePlaybackKey(event) || self.handleInspectorNote(event) { return nil }
@@ -105,7 +114,8 @@ extension AppController {
         let menu = ContextActions.controls(in: panel.content, title: panel.title)
         ContextActions.appendMenu(panel.actionMenu(), to: menu)
         return menu
-      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")]
+      } + [ContextActions.controls(in: self.orderEditor, title: "Arrangement")] + (self.scratchGestureWindow?.isVisible==true ? self.scratchGestureWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Scratch phrases")]} ?? []:[])
+        + (self.sampleRecordingWindow?.isVisible==true ? self.sampleRecordingWindow?.contentView.map{[ContextActions.controls(in:$0,title:"Record sample")]} ?? []:[])
     }
     commandPalette.collect()
     for tabs in [dock.right,dock.bottom,dock.secondary] {
@@ -144,6 +154,17 @@ extension AppController {
     }
   }
   func followWorkspacePanel(_ id:String,force:Bool,opening:Bool=false){
+    // Explicit Follow must survive an unrelated inspector read or document
+    // operation. Hidden panels will not receive the periodic visible refresh.
+    if force && (busy || sessionReading) {
+      let document=model.revisionToken.split(separator:":").first,pinned=workspace?.panels[id]?.pinned
+      deferUntilIdle { [weak self] in
+        guard let self,self.model.revisionToken.split(separator:":").first==document,
+          self.workspace?.panels[id]?.pinned==pinned else{return}
+        self.followWorkspacePanel(id,force:true,opening:opening)
+      }
+      return
+    }
     guard !busy,let dock=workspace,let panel=dock.panels[id],id=="graph" || force || workspaceContextTokens[id] == nil || (!panel.pinned && (opening || !dock.containsFocus(id))) else{return}
     let position=patternView.navigation
     if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=position}
@@ -158,8 +179,13 @@ extension AppController {
       if !force && (id=="samples" ? sampleEditor.hasDraft : instrumentEditor.hasDraft) {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let cell=model.cell(position.row,position.channel),instrument=cell[1]>0 ? Int(cell[1]) : patternView.instrument
       let sample=instrument
-      let token="asset:\(position.pattern):\(position.row):\(position.channel)"
-      guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token
+      let token=WorkspaceAssetContext.token(panel:id,model:model,row:position.row,channel:position.channel,input:patternView.instrument)
+      guard force || workspaceContextTokens[id] != token else{
+        // Reopening is an explicit request to inspect fresh data. Keep a picker-
+        // selected target when the writing cursor has not moved.
+        if opening {refreshWorkspaceAsset(id)}
+        return
+      };workspaceContextTokens[id]=token
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in
@@ -267,6 +293,15 @@ extension AppController {
       guard Set(params.keys).isSubset(of:["panel","placement","pinned","focus","follow","return"]),let id=params["panel"] as? String,let panel=workspace?.panels[id] else{fail("Choose a known workspace panel");return true}
       if let raw=params["placement"] {guard let place=raw as? String,["right","bottom","secondary","float","hide"].contains(place) else{fail("Invalid panel placement");return true}}
       for key in ["pinned","focus","follow","return"] where params[key] != nil {guard let number=params[key] as? NSNumber,CFGetTypeID(number)==CFBooleanGetTypeID() else{fail("\(key) must be boolean");return true}}
+      if params["follow"] as? Bool==true && (busy || sessionReading) {
+        let document=model.revisionToken.split(separator:":").first
+        deferUntilIdle({ [weak self] in
+          guard let self else{reply(AutomationServer.error(-32002,"The application is shutting down"));return}
+          guard self.model.revisionToken.split(separator:":").first==document else{reply(AutomationServer.error(-32001,"The song changed; request panel Follow again"));return}
+          _=self.handleWorkspaceAutomation(method,params:params,reply:reply)
+        },cancel:{reply(AutomationServer.error(-32002,"The application is shutting down"))})
+        return true
+      }
       if let place=params["placement"] as? String{workspace?.place(id,at:place,select:false)}
       if let pin=params["pinned"] as? Bool{panel.pinned=pin};if params["follow"] as? Bool==true{panel.pinned=false;panel.onFollow?()};if params["return"] as? Bool==true{panel.onReturn?()};if params["focus"] as? Bool==true{workspace?.show(id,focus:true)}
     } else if method=="workspace.layout" {

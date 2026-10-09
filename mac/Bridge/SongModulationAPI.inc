@@ -28,14 +28,19 @@
             return id==next.masterID||std::any_of(next.tracks.begin(),next.tracks.end(),[&](const auto &t){return t.second.id==id;});
           };
           require(!s.audioBus||exists(s.audioBus),"Follower input channel or bus does not exist");
+          require(!s.audioStage||exists(s.audioStage),"Follower graph stage does not exist");
           require(!s.noteTarget||exists(s.noteTarget),"Note source channel or bus does not exist");
           if(!s.audioPlugin.empty())require(std::any_of(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==s.audioPlugin;}),"Follower input plugin does not exist");
         };
         if([method isEqual:@"graph.song.source.add"]) {
-          allowed(@[@"source",@"connect",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
+          allowed(@[@"source",@"connect",@"parent",@"dryRun"]);auto spec=[object(p[@"source"]) mutableCopy];
           require(!spec[@"id"],"Source identities are allocated by the document");nodeID=next.makeEntity().id;spec[@"id"]=nativeID(nodeID);
           auto s=decodeSongSource(spec);require(s.node.kind>=SignalNodeKind::LFO,"Choose a modulation source kind");validateScope(s);
           graph.songSources.push_back(std::move(s));
+          if(p[@"parent"]) {
+            try { assignSongSourceToGroup(next,nodeID,decodeNativeID(p[@"parent"])); }
+            catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
+          }
           if(p[@"connect"]) {auto c=object(p[@"connect"]);keys(c,@[@"plugin",@"parameter",@"quantized"]);const bool quantized=c[@"quantized"]?boolean(c[@"quantized"]):false;
             auto [plugin,parameter]=target(c[@"plugin"],c[@"parameter"],quantized);graph.songModulation.push_back({nodeID,std::move(plugin),parameter,0,0,true,quantized});}
         } else if([method isEqual:@"graph.song.source.update"]) {
@@ -45,9 +50,7 @@
         } else if([method isEqual:@"graph.song.source.remove"]) {
           allowed(@[@"nodes",@"dryRun"]);std::set<uint64_t> removed;
           for(id raw:array(p[@"nodes"],64))require(removed.insert(source(raw).node.id).second,"Duplicate source identity");
-          std::erase_if(graph.songSources,[&](const auto &s){return removed.contains(s.node.id);});
-          std::erase_if(graph.songModulation,[&](const auto &e){return removed.contains(e.source);});
-          for(auto id:removed){const auto key="source:"+std::string(nativeID(id).UTF8String);graph.layout.erase(key);removeSignalPresentationNode(graph.presentation,key);}
+          next.removeSongSources(std::vector<uint64_t>(removed.begin(),removed.end()));
         } else if([method isEqual:@"graph.song.modulation.set"]) {
           allowed(@[@"source",@"plugin",@"parameter",@"minimum",@"maximum",@"enabled",@"quantized",@"replace",@"dryRun"]);nodeID=source(p[@"source"]).node.id;
           const auto plugin=std::string(string(p[@"plugin"],256).UTF8String);const auto parameter=uint32_t(integer(p[@"parameter"],0,UINT32_MAX));

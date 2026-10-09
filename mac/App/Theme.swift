@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 enum Theme {
   static let bg = NSColor(srgbRed: 0.055, green: 0.069, blue: 0.088, alpha: 1)
@@ -83,6 +84,9 @@ final class ActionButton: NSButton {
   required init?(coder: NSCoder) { fatalError() }
   @objc func invoke() { handler?() }
   override func draw(_ dirtyRect: NSRect) {
+    let trace=QualificationButtonDrawTrace.enabled ? UIWorkTrace.active?.buttonDrawTrace:nil
+    let started=trace == nil ? 0:CACurrentMediaTime()
+    defer{if let trace{let ended=CACurrentMediaTime();trace.record(self,start:started,end:ended)}}
     super.draw(dirtyRect)
     if selectionIndicator {
       Theme.selectionMark.setFill()
@@ -163,6 +167,7 @@ struct PatternModel {
   var effectLetters = [String](), volumeLetters = [String]()
   var commands = PatternCommandCatalog.empty
   var issues = [String]()
+  var loadWarnings = [String](), loadSourcePath = "", requiresSaveAs = false
   var nativePlugins = [[String: Any]](), pluginError = "", automationPoints = 0
   var canUndoEffect = false, canRedoEffect = false
   var editable = true, hasNativeMetadata = false
@@ -176,14 +181,40 @@ struct PatternModel {
   var preciseNoteEffects = [[String:Any]]()
   func notes(_ row:Int,_ channel:Int)->[PreciseNote] {preciseNotes[row*channels+channel] ?? []}
   var effectColumns = [Int](), performanceCommands = [Int: NativePatternCommand]()
+  var scratchGestures = [[String:Any]]()
   var channelOffsets: [Float] = []
+  var effectLayouts=[[PatternEffectColumnLayout]]()
   func effectCount(_ channel: Int) -> Int { effectColumns.indices.contains(channel) ? effectColumns[channel] : 1 }
   func lastField(_ channel:Int) -> Int { 2 + effectCount(channel)*2 }
   var effectBindings=[[String:Any]]()
   func nativeCommand(_ row:Int,_ channel:Int,_ column:Int)->NativePatternCommand? {performanceCommands[(row*channels+channel)*8+column]}
   func channelOffset(_ channel: Int) -> Float { channelOffsets.indices.contains(channel) ? channelOffsets[channel] : Float(channel) * (104+Self.effectWidth) }
-  static let effectWidth:Float = 160
-  func channelWidth(_ channel: Int) -> Float { 104 + Float(effectCount(channel)) * Self.effectWidth }
+  static let effectWidth:Float = 74
+  func effectLayout(_ channel:Int,_ fx:Int)->PatternEffectColumnLayout {effectLayouts.indices.contains(channel) && effectLayouts[channel].indices.contains(fx) ? effectLayouts[channel][fx] : PatternEffectColumnLayout()}
+  func effectOffset(_ channel:Int,_ fx:Int)->Float {104+(0..<max(0,fx)).reduce(Float(0)){$0+effectLayout(channel,$1).width}}
+  func channelWidth(_ channel: Int) -> Float {effectOffset(channel,effectCount(channel))}
+  mutating func rebuildEffectLayout() {
+    effectLayouts=(0..<channels).map{ch in Array(repeating:PatternEffectColumnLayout(),count:effectCount(ch))}
+    for command in performanceCommands.values {
+      guard effectLayouts.indices.contains(command.channel),effectLayouts[command.channel].indices.contains(command.column),
+        let schema=commands.schema(kind:command.kind,native:command.native) else {continue}
+      includeEffectFields(channel:command.channel,fx:command.column,fields:schema.inlineFields,updateOffsets:false)
+    }
+    updateChannelOffsets()
+  }
+  mutating func includeEffectFields(channel:Int,fx:Int,fields:[PatternEffectField],updateOffsets:Bool=true) {
+    guard effectLayouts.indices.contains(channel),effectLayouts[channel].indices.contains(fx) else{return}
+    for (index,field) in fields.enumerated() {
+      while effectLayouts[channel][fx].slotWidths.count<=index {effectLayouts[channel][fx].slotWidths.append(44)}
+      effectLayouts[channel][fx].slotWidths[index]=max(effectLayouts[channel][fx].slotWidths[index],field.width)
+    }
+    if updateOffsets {updateChannelOffsets()}
+  }
+  private mutating func updateChannelOffsets() {
+    channelOffsets=[];var x:Float=0
+    for ch in 0..<channels {channelOffsets.append(x);x += channelWidth(ch)}
+    channelOffsets.append(x)
+  }
   var revisionToken = ""
   var sequence = 0, sequences = [[String: Any]]()
   var cells = [UInt8](repeating: 0, count: 64 * 8 * 6)
@@ -208,6 +239,9 @@ struct PatternModel {
     revisionToken = dictionary["revisionToken"] as? String ?? ""
     hasNativeMetadata = dictionary["hasNativeMetadata"] as? Bool ?? false
     issues = dictionary["issues"] as? [String] ?? []
+    loadWarnings = dictionary["loadWarnings"] as? [String] ?? []
+    loadSourcePath = dictionary["loadSourcePath"] as? String ?? ""
+    requiresSaveAs = dictionary["requiresSaveAs"] as? Bool ?? false
     nativePlugins = dictionary["nativePlugins"] as? [[String: Any]] ?? []
     pluginError = dictionary["pluginError"] as? String ?? ""
     automationPoints = dictionary["automationPoints"] as? Int ?? 0
@@ -228,9 +262,7 @@ struct PatternModel {
     rows = max(0, dictionary["rows"] as? Int ?? rows)
     effectBindings=dictionary["effectBindings"] as? [[String:Any]] ?? []
     effectColumns = (dictionary["effectColumns"] as? [Int] ?? []).map { max(1,min(8,$0)) }
-    var x: Float = 0
-    for channel in 0..<max(0, channels) { channelOffsets.append(x); x += channelWidth(channel) }
-    channelOffsets.append(x)
+    scratchGestures=dictionary["scratchGestures"] as? [[String:Any]] ?? []
     for raw in dictionary["performanceCommands"] as? [[String: Any]] ?? [] {
       let command = NativePatternCommand(raw)
       guard command.row >= 0, command.row < rows, command.channel >= 0, command.channel < channels, command.column >= 0, command.column < effectCount(command.channel) else { continue }
@@ -252,6 +284,7 @@ struct PatternModel {
     for row in 0..<max(0, rows) {for channel in 0..<max(0, channels) {let key=(row*channels+channel)*8,c=drawCell(row,channel)
       if performanceCommands[key]==nil && (c.effect != 0 || c.parameter != 0) {performanceCommands[key]=NativePatternCommand(["channel":channel,"position":row*65536,"column":0,"kind":"tracker","effect":Int(c.effect),"parameter":Int(c.parameter)])}
     }}
+    rebuildEffectLayout()
     orders = dictionary["orders"] as? [Int] ?? [0]
     patterns = dictionary["patterns"] as? [[String: Any]] ?? []
     samples = dictionary["samples"] as? [[String: Any]] ?? []

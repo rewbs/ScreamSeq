@@ -1,5 +1,6 @@
 // Extracted from mac/Audio/AudioUnitHost.mm; shared by all platform hosts.
 #include "HostedAudio.hpp"
+#include "PluginAudioLayout.hpp"
 #include "mac/Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include <algorithm>
@@ -40,37 +41,62 @@ NativePlugin::NativePlugin(const PluginState &state, double rate, bool offline)
     descriptor_.name = builtin_->definition().name;
     latency_ = builtin_->latency();
     tail_ = builtin_->tail();
-    buses_ = {{0, 2, "Stereo input", true, true, true}, {0, 2, "Stereo output", false, true, true}};
-    if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true});
+    buses_ = {{0, 2, "Stereo input", true, true, true,0,0,2}, {0, 2, "Stereo output", false, true, true,0,0,2}};
+    if (sidechain) buses_.push_back({1,2,"Detector sidechain",true,!auxiliaryInputs_.empty(),true,1,0,2});
+    validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
     bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),false,state.bypass);
+    for(const auto &bus:buses_)if(bus.input&&bus.index&&bus.supported)trimmedInputs_[bus.index]=std::make_unique<PluginAudioStorage>();
+    {std::vector<std::string> keys;for(uint32_t i=0;i<128;++i)keys.push_back(audioTrimPort(i>=64,i%64));portTrims_=AudioTrimRuntime(std::move(keys),neutralPortTrims_,rate);}
     prepareBaselines();
     return;
   }
   backend_ = platformPluginBackendFactory().create(state, rate, offline);
   if (!backend_) throw std::runtime_error("Platform plugin factory returned no processor");
-  latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();preparedInputs_=backend_->preparedAuxiliaryInputs();
-  for (auto bus : auxiliaryOutputs_) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
-  if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+  latency_ = backend_->latency(); tail_ = backend_->tail(); buses_ = backend_->buses();preparedInputs_=backend_->preparedAuxiliaryInputs();preparedOutputs_=backend_->preparedAuxiliaryOutputs();
+  validatePluginAudioLayout(state.audioLayout,buses_);audioLayout_=pluginAudioLayoutSignature(buses_);
+  for (uint32_t bus=1;bus<64;++bus)if(preparedOutputs_&(uint64_t(1)<<bus))auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
+  const auto initialLatency=latency_.load(std::memory_order_relaxed);
+  if(!std::isfinite(initialLatency)||initialLatency<0||initialLatency>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
   bypassControl_.prepare(rate,uint32_t(std::llround(latency_*rate)),isInstrument(),state.bypass);
+  for(const auto &bus:buses_)if(bus.input&&bus.index&&bus.supported)trimmedInputs_[bus.index]=std::make_unique<PluginAudioStorage>();
+  {std::vector<std::string> keys;for(uint32_t i=0;i<128;++i)keys.push_back(audioTrimPort(i>=64,i%64));portTrims_=AudioTrimRuntime(std::move(keys),neutralPortTrims_,rate);}
   prepareBaselines();
 }
 NativePlugin::~NativePlugin() = default;
-bool NativePlugin::latencyChangePending() const noexcept { return backend_ && backend_->latencyChangePending(); }
+void NativePlugin::portTrims(const AudioPortTrims &spec) noexcept {requestedPortTrims_=&spec;if(!trimsStarted_)portTrims_.initial(spec);}
+
+bool NativePlugin::latencyChangePending() const noexcept {const auto *p=publishedVendor();return p->backend_ && p->backend_->latencyChangePending();}
+std::shared_ptr<NativePlugin::LatencyUpdate> NativePlugin::prepareLatency() {
+  if(!presetSettled_.load(std::memory_order_acquire))throw std::runtime_error("A preset is still fading; retry latency preparation");
+  const auto *vendor=publishedVendor();if(!vendor->backend_)return {};
+  const auto pending=vendor->backend_->pendingLatency();if(!pending)return {};
+  if(!pending->serial||pending->samples>rate_*10||!std::isfinite(pending->tail)||pending->tail<0)
+    throw std::invalid_argument("Plugin announced an invalid latency or tail");
+  auto result=std::make_shared<LatencyUpdate>();result->snapshot=*pending;
+  result->bypass=bypassControl_.prepareLatency(pending->samples);return result;
+}
+void NativePlugin::adoptLatency(LatencyUpdate &next) noexcept {
+  bypassControl_.adoptLatency(*next.bypass);latency_.store(next.snapshot.samples/rate_,std::memory_order_release);
+  tail_.store(next.snapshot.tail,std::memory_order_release);
+  renderBackend()->acknowledgeLatency(next.snapshot.serial);
+}
 void NativePlugin::refreshLatency() {
-  if (backend_ && backend_->latencyChangePending()) {
-    backend_->refreshLatency(); latency_ = backend_->latency(); tail_ = backend_->tail();
-    if(!std::isfinite(latency_)||latency_<0||latency_>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
+  auto *backend=renderBackend();
+  if (backend && backend->latencyChangePending()) {
+    backend->refreshLatency(); latency_ = backend->latency(); tail_ = backend->tail();
+    const auto initialLatency=latency_.load(std::memory_order_relaxed);
+    if(!std::isfinite(initialLatency)||initialLatency<0||initialLatency>10)throw std::invalid_argument("Plugin latency exceeds 10 seconds");
     bypassControl_.latency(uint32_t(std::llround(latency_*rate_)));
   }
 }
-bool NativePlugin::processBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset) noexcept {
+bool NativePlugin::processVendorBlock(float *buffer, uint32_t frames, uint64_t position, uint32_t offset,const NativePlugin &host) noexcept {
   if (builtin_) {
-    const float *detector=inputSources_[1]?inputSources_[1]+offset*2:nullptr;
-    if(autoDetectorSource_&&builtin_->value(9)==2){for(uint32_t i=0;i<frames*2;++i)(*autoDetectorBuffer_)[i]=(detector?detector[i]:0)+autoDetectorSource_[offset*2+i];detector=autoDetectorBuffer_->data();}
+    const float *detector=host.inputSources_[1]?host.inputSources_[1]+offset*2:nullptr;
+    if(host.autoDetectorSource_&&builtin_->value(9)==2){for(uint32_t i=0;i<frames*2;++i)(*autoDetectorBuffer_)[i]=(detector?detector[i]:0)+host.autoDetectorSource_[offset*2+i]*host.portTrims_.gain(1,host.trimFrame_+offset+i/2);detector=autoDetectorBuffer_->data();}
     return builtin_->process(buffer,frames,detector);
   }
-  if (!backend_->process(buffer, frames, position, inputSources_.data(), offset, transport_)) return false;
-  for (auto bus : auxiliaryOutputs_) {
+  if (!backend_->process(buffer, frames, position, host.inputSources_.data(), offset, host.transport_)) return false;
+  for (uint32_t bus=1;bus<64;++bus)if(auxiliaryOutputBuffers_[bus]) {
     const auto *source = backend_->auxiliaryOutput(bus);
     if (!source) return false;
     std::copy_n(source, frames * 2, auxiliaryOutputBuffers_[bus]->interleaved.data() + offset * 2);
@@ -86,7 +112,9 @@ bool NativePlugin::appliedParameter(uint32_t id,double value,uint64_t frame,Para
   return effectiveParameter(id,value,frame,source,offset);
 }
 bool NativePlugin::effectiveParameter(uint32_t id,double value,uint64_t frame,ParameterSource source,uint32_t offset) noexcept {
-  const bool accepted=builtin_ ? !offset && builtin_->parameter(id,float(value)) : backend_->parameter(id,value,offset);
+  const auto send=[&](NativePlugin *p){return p->builtin_ ? !offset && p->builtin_->parameter(id,float(value)) : p->backend_->parameter(id,value,offset);};
+  const bool accepted=send(renderVendor_);
+  if(activePreset_&&!send(activePreset_->expected))return false;
   if(accepted&&activity_)activity_->value(activityProcessor_,id,value,frame,source,activityAudible_&&!bypassed());
   return accepted;
 }
@@ -107,13 +135,15 @@ void NativePlugin::editorParameter(uint32_t id,double value,uint64_t frame) noex
   bool overlaid=false;for(auto &p:baselines_)if(p.id==id){p.value=value;p.source={ParameterOrigin::PluginEditor};overlaid=p.overlaid;break;}
   if(activity_ && !overlaid)activity_->value(activityProcessor_,id,value,frame,{ParameterOrigin::PluginEditor},activityAudible_&&!bypassed());
 }
-std::vector<PluginProgram> NativePlugin::programs() const { return builtin_ ? std::vector<PluginProgram>{} : backend_->programs(); }
+std::vector<PluginProgram> NativePlugin::programs() const {const auto *p=publishedVendor();return p->builtin_ ? std::vector<PluginProgram>{} : p->backend_->programs();}
 void NativePlugin::loadProgram(const std::string &id) {
-  if (builtin_) throw std::invalid_argument("Factory preset no longer exists or cannot be loaded");
-  backend_->loadProgram(id);
+  auto *p=publishedVendor();
+  if (p->builtin_) throw std::invalid_argument("Factory preset no longer exists or cannot be loaded");
+  p->backend_->loadProgram(id);
   const auto catalog=parameters();for(auto &p:baselines_)for(const auto &next:catalog)if(next.id==p.id)p.value=next.value;
 }
 std::vector<PluginParameter> NativePlugin::parameters() const {
+  if(const auto *p=publishedVendor();p!=this)return p->parameters();
   if (builtin_) {
     std::vector<PluginParameter> result;
     for (const auto &p : builtin_->definition().parameters) {
@@ -143,12 +173,13 @@ void NativePlugin::observedBaseline(uint32_t id,double value) noexcept {
   for(auto &p:activity_->processors[activityProcessor_-1].parameters)if(p.id==id){p.value=float(value);return;}
 }
 PluginState NativePlugin::state() const {
-  auto state = backend_ ? backend_->state() : PluginState{descriptor_};
+  const auto *p=publishedVendor();
+  auto state = p->backend_ ? p->backend_->state() : PluginState{descriptor_};
   state.instanceID = instanceID_;
   state.bypass=bypassed();
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
-  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
-  if (builtin_) state.state = builtin_->state();
+  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=audioLayout_;
+  if (p->builtin_) state.state = p->builtin_->state();
   return state;
 }
 std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
@@ -157,19 +188,24 @@ std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
   result.insert(result.end(), aliases_.begin(), aliases_.end());
   return result;
 }
-double NativePlugin::tail() const { return builtin_ ? builtin_->tail() : tail_; }
-uint64_t NativePlugin::tailRevision() const noexcept { return builtin_ ? builtin_->tailRevision() : 0; }
+double NativePlugin::tail() const {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->tail() : tail_.load(std::memory_order_acquire);}
+uint64_t NativePlugin::tailRevision() const noexcept {const auto *p=publishedVendor();return presetTailEpoch_.load(std::memory_order_acquire)+(p->builtin_ ? p->builtin_->tailRevision() : 0);}
 void NativePlugin::includeParameterRange(uint32_t id, float minimum, float maximum) noexcept {
-  if (builtin_) builtin_->includeParameterRange(id, minimum, maximum);
+  auto *p=publishedVendor();if(p->builtin_)p->builtin_->includeParameterRange(id,minimum,maximum);
 }
 std::vector<PluginDescriptor> NativePlugin::discover() { return platformPluginBackendFactory().discover(); }
 std::vector<PluginDescriptor> NativePlugin::discoverVST3(const std::string &path) { return platformPluginBackendFactory().discoverVST3(path); }
-bool NativePlugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept { return backend_ && backend_->midi(status, a, b); }
-void NativePlugin::showEditor() {
-  if (builtin_) throw std::runtime_error("This built-in effect uses the parameter controls in the Plugins panel.");
-  backend_->showEditor();
+bool NativePlugin::midi(uint8_t status, uint8_t a, uint8_t b) noexcept {
+  const bool okay=renderBackend()&&renderBackend()->midi(status,a,b);
+  if(activePreset_&&activePreset_->expected->backend_)return activePreset_->expected->backend_->midi(status,a,b)&&okay;
+  return okay;
 }
-void NativePlugin::closeEditor() { if (backend_) backend_->closeEditor(); }
-bool NativePlugin::editorOpen() const { return backend_ && backend_->editorOpen(); }
-bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept { return backend_ && backend_->popEdit(id, value); }
+void NativePlugin::showEditor() {
+  auto *p=publishedVendor();
+  if (p->builtin_) throw std::runtime_error("This built-in effect uses the parameter controls in the Plugins panel.");
+  p->backend_->showEditor();
+}
+void NativePlugin::closeEditor() {auto *p=publishedVendor();if(p->backend_)p->backend_->closeEditor();}
+bool NativePlugin::editorOpen() const {const auto *p=publishedVendor();return p->backend_&&p->backend_->editorOpen();}
+bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept {auto *p=publishedVendor();return p->backend_&&p->backend_->popEdit(id,value);}
 } // namespace Tracker

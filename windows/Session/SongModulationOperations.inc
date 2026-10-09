@@ -18,7 +18,7 @@
       };
       // Source scope is a read of the implicit routing projection, not a mixer edit.
       auto validateScope=[&](const Json &spec) {
-        for(auto key:{"audioBus","noteTarget"})if(spec.contains(key)&&text(spec.at(key),32)!="") {
+        for(auto key:{"audioBus","audioStage","noteTarget"})if(spec.contains(key)&&text(spec.at(key),32)!="") {
           const auto wanted=identity(spec.at(key));
           const bool exists=next.mixer.active() ? std::any_of(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &b){return b.id==wanted;}) :
             wanted==next.masterID||std::any_of(next.tracks.begin(),next.tracks.end(),[&](const auto &t){return t.second.id==wanted;});
@@ -27,12 +27,13 @@
         if(spec.contains("audioPlugin")) {const auto plugin=text(spec.at("audioPlugin"),256);require(plugin.empty()||pluginExists(plugin),"Follower input plugin does not exist");}
       };
       if(method=="graph.song.source.add") {
-        keys(p,{"source","connect","dryRun"});auto spec=field(p,"source");strictSongSource(spec);
+        keys(p,{"source","connect","parent","dryRun"});auto spec=field(p,"source");strictSongSource(spec);
         require(!spec.contains("id"),"Source identities are allocated by the document");nodeID=allocate(next);spec["id"]=id(nodeID);
         validateScope(spec);patchModel(next,[&](Json &m){m["signalGraph"]["songSources"].push_back(spec);});
         require(songSource(next,id(nodeID)).node.kind>=SignalNodeKind::LFO,"Choose a modulation source kind");
         if(p.contains("connect")) {const auto &c=p.at("connect");keys(c,{"plugin","parameter","quantized"});const bool quantized=c.contains("quantized")?boolean(c.at("quantized")):false;
           auto [plugin,parameter]=target(field(c,"plugin"),field(c,"parameter"),quantized);graph.songModulation.push_back({nodeID,std::move(plugin),parameter,0,0,true,quantized});}
+        if(p.contains("parent"))assignSongSourceToGroup(next,nodeID,identity(p.at("parent")));
       } else if(method=="graph.song.source.update") {
         keys(p,{"node","source","dryRun"});nodeID=songSource(next,field(p,"node")).node.id;auto patch=field(p,"source");strictSongSource(patch);
         require(!patch.contains("id")&&!patch.contains("kind")&&!patch.contains("envelopes"),"Source identity and kind cannot change; use graph.automation.set for pattern curves");
@@ -41,9 +42,7 @@
       } else if(method=="graph.song.source.remove") {
         keys(p,{"nodes","dryRun"});std::set<uint64_t> removed;
         for(const auto &raw:array(field(p,"nodes"),64))require(removed.insert(songSource(next,raw).node.id).second,"Duplicate source identity");
-        std::erase_if(graph.songSources,[&](const auto &s){return removed.contains(s.node.id);});
-        std::erase_if(graph.songModulation,[&](const auto &e){return removed.contains(e.source);});
-        for(auto source:removed){const auto key="source:"+id(source);graph.layout.erase(key);removeSignalPresentationNode(graph.presentation,key);}
+        next.removeSongSources(std::vector<uint64_t>(removed.begin(),removed.end()));
       } else if(method=="graph.song.modulation.set") {
         keys(p,{"source","plugin","parameter","minimum","maximum","enabled","quantized","replace","dryRun"});nodeID=songSource(next,field(p,"source")).node.id;
         const auto plugin=text(field(p,"plugin"),256);const auto parameter=uint32_t(integer(field(p,"parameter"),0,UINT32_MAX));

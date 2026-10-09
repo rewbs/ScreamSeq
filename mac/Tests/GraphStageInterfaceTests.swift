@@ -1,6 +1,8 @@
 import AppKit
 extension InterfaceTests {
   static func graphStageChecks() throws {
+    try graphStageRoutingChecks()
+    try graphCopyObservationChecks()
     let stage=SignalStagePresentation()
     func copy(_ graph:String,_ role:String,_ x:Double,_ y:Double)->SignalCanvasNode {var n=SignalCanvasNode(id:"graph:track:\(role):\(graph)",title:graph,detail:role,kind:"audio",x:x,y:y);n.role=role;return n}
     let nodes=[copy("A","Persistent",500,60),copy("B","Persistent",100,200),copy("A","Row",50,450),copy("C","Ordinary",850,70)]
@@ -40,6 +42,107 @@ extension InterfaceTests {
     editor.showActivity(initial,playing:true)
     try require(editor.canvas.stages.count==1 && editor.canvas.stages[0].audible==[nodes[1].id,nodes[0].id] && writes==0,"Host activity projects only occupied visible stages without a song or API mutation")
     try require(editor.canvas.nodes.count==saved.count && zip(editor.canvas.nodes,saved).allSatisfy{$0.0.id==$0.1.0 && $0.0.rect==$0.1.1} && editor.canvas.edges.map{$0.source+"→"+$0.target}==edges && editor.selectedID==nodes[0].id,"Audible order presentation preserves saved layout, editable endpoints and current selection")
+  }
+}
+
+extension InterfaceTests {
+  static func graphCopyObservationChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1000,height:650));editor.graphID="n10";editor.graphTarget="n100"
+    func port(_ target:String,_ level:Double,_ kind:String="audio")->[String:Any] {
+      ["key":"copy/\(target)/\(kind)","node":"node:n13","name":"Gain output","direction":"output","port":0,"kind":kind,"value":level,"channels":2,"peak":[level,level],"rms":[level,level],"through":128,"measured":true,"available":true,"fresh":true,"copy":["graph":"n10","target":target,"role":"ordinary"]]
+    }
+    editor.showSignals(["active":true,"ports":[port("n100",0.2),port("n101",0.8),port("n100",0.35,"control")]])
+    try require(editor.signalReadings.ports.count==2 && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"A recipe observes one context-selected copy; it must neither average nor take another copy's meter")
+    try require(editor.signalReadings.port("n13",output:true,modulation:true)?.value==0.35,"Control outputs retain normalized scalar readings without masquerading as audio ports")
+    let selected=editor.copyObservation.selected!
+    editor.showSignals(["active":true,"ports":[port("n101",0.8)]])
+    try require(editor.copyObservation.selected==selected && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("unavailable"),"Retired selected copy remains unavailable until explicitly changed")
+    editor.copyObservation.select(editor.copyObservation.copies[0].key)
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"Selecting a different copy updates readings immediately without a document mutation")
+    editor.graphID=nil;editor.applyCopyObservation()
+    try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.isHidden,"Recipe ports do not leak into song-node aggregate readings")
+    // A root-only bridge poll deliberately contains no recipe catalogue.
+    // Re-entering a recipe must retain its saved exact selection until the
+    // complete recipe poll arrives, never borrow another copy in the meantime.
+    var rootPort=port("n100",0.45);rootPort.removeValue(forKey:"copy")
+    rootPort["key"]="root/out/0";rootPort["node"]="n100"
+    editor.showSignals(["active":true,"ports":[rootPort]])
+    try require(editor.signalReadings.primaryPort("n100",output:true)?.peak==0.45 && editor.copyObservation.isHidden,"Root-only telemetry retains aggregate measurements without a copy picker")
+    editor.graphID="n10";editor.applyCopyObservation()
+    try require(editor.copyObservation.selected=="n10/n101/ordinary//inspector" && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("unavailable"),"Returning from a root-only poll must retain the saved selected copy while full telemetry is pending")
+    editor.showSignals(["active":true,"ports":[rootPort,port("n100",0.2)]])
+    try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.selected=="n10/n101/ordinary//inspector","A retired saved copy cannot silently fall back when another full copy is available")
+    editor.showSignals(["active":true,"ports":[rootPort,port("n100",0.2),port("n101",0.8)]])
+    try require(editor.copyObservation.copies.count==2 && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"The first complete recipe poll restores its full menu and exact selected reading")
+    editor.graphID=nil;editor.showSignals(["active":true,"ports":[rootPort]])
+    try require(editor.signalReadings.ports.count==1 && editor.copyObservation.isHidden,"Returning to root discards recipe readings without retaining another copy as an aggregate")
+    // Opening a particular shared use is an explicit observation-context choice.
+    let song:[String:Any]=["library":[["id":"n10","name":"Shared","nodes":[["id":"n12","kind":"input"],["id":"n13","kind":"output"]],"audio":[]]],"assignments":[["target":"n100","graph":"n10"],["target":"n101","graph":"n10"]],"mixer":["buses":[["id":"n100","kind":"track","name":"Track 5","output":"n102"],["id":"n101","kind":"track","name":"Track 6","output":"n102"],["id":"n102","kind":"master","name":"Master"]]]]
+    editor.update(song);editor.showSignals(["active":true,"ports":[port("n100",0.2),port("n101",0.8)]])
+    editor.openSongNode("graph:n100:Ordinary:n10")
+    try require(editor.graphTarget=="n100" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"Entering Track 5 selects its exact ordinary copy even when Track 6 was observed previously")
+    editor.navigate(graph:nil);editor.openSongNode("graph:n101:Ordinary:n10")
+    try require(editor.graphOrigin?.contains("Track 6")==true && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"Entering another instance preselects its actual target and role rather than retaining the definition's last meter")
+    editor.navigate(graph:nil);editor.showSignals(["active":true,"ports":[port("n100",0.2)]])
+    editor.openSongNode("graph:n101:Ordinary:n10")
+    try require(editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("unavailable"),"An entered copy awaiting preparation never borrows another channel's readings")
+    editor.showSignals(["active":true,"ports":[port("n100",0.2),port("n101",0.8)]])
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.8,"Delayed telemetry selects the requested exact copy without another user step")
+    editor.copyObservation.update(graph:"n10",ports:[port("n100",0.2),port("n101",0.8)],preferred:nil,buses:[["id":"n100","name":"Duplicate"],["id":"n101","name":"Duplicate"]],instruments:[])
+    try require(editor.copyObservation.picker.numberOfItems==2 && Set(editor.copyObservation.picker.itemTitles).count==2 && editor.copyObservation.picker.selectedItem?.representedObject as? String==editor.copyObservation.selected,"Duplicate channel names retain separate exact-copy choices and a correct selection")
+    editor.copyObservation.resetDocument();editor.graphID=nil;editor.applyCopyObservation()
+    try require(editor.copyObservation.selected==nil,"Changing songs clears observation identity memory")
+    var control=port("n101",0.4,"control");control.removeValue(forKey:"copy");control["node"]="control";editor.showSignals(["active":true,"ports":[control]])
+    try require(editor.signalReadings.primaryPort("control",output:true)==nil && editor.signalReadings.ports[0].summary(active:true).contains("0.4"),"Control values cannot be offered as Listen/Scope audio or described in dBFS")
+    control["noteGate"]=["scope":"aggregate-envelope-gate","held":true,"on":2,"off":1,"retrigger":3,"lastFrame":112]
+    editor.showSignals(["active":true,"ports":[control]])
+    let gate=editor.signalReadings.ports[0]
+    try require(gate.noteGate?.held==true && gate.summary(active:true).contains("2 opens / 1 closes / 3 retriggers") && gate.summary(active:true).contains("envelope gate"),"Note-envelope telemetry labels aggregate gate counts instead of implying MIDI voice counts")
+    control["fresh"]=false;editor.showSignals(["active":true,"ports":[control]])
+    try require(!editor.signalReadings.ports[0].summary(active:true).contains("retriggers"),"Retired measurements cannot advertise old gate activity as current")
+    try graphInstrumentNavigationChecks()
+  }
+
+  static func graphInstrumentNavigationChecks() throws {
+    let editor=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700))
+    let host=NSWindow(contentRect:editor.frame,styleMask:[.borderless],backing:.buffered,defer:false);host.contentView=editor
+    let song:[String:Any]=["library":[["id":"n10","name":"Shared","nodes":[["id":"n12","kind":"input"],["id":"n13","kind":"output"]],"audio":[]]],"assignments":[["target":"n100","graph":"n10"]],"instruments":[["id":"n80","index":1,"name":"Warm pulse","plugin":false],["id":"n81","index":2,"name":"Other","plugin":false]],"instrumentAssignments":[["target":"n80","graph":"n10"],["target":"n81","graph":"n10"]],"layout":[["node":"n100","x":40.0,"y":60.0],["node":"instrument:n80","x":4000.0,"y":800.0]],"mixer":["buses":[["id":"n100","kind":"track","name":"Track 5","output":"n102"],["id":"n101","kind":"track","name":"Track 6","output":"n102"],["id":"n102","kind":"master","name":"Master"]]]]
+    editor.update(song);editor.filterID="n100";editor.nodeSearch.stringValue="Track 5";editor.selectedID="n100";editor.canvas.selected="n100";editor.update(song)
+    editor.layoutSubtreeIfNeeded();editor.scroll.magnification=1;editor.canvas.scroll(.zero)
+    var writes=[String]();editor.onRequest={method,_,_ in if !method.hasSuffix(".get"){writes.append(method)}}
+    func actions(_ menu:NSMenu)->[ContextAction]{menu.items.flatMap{item in if let child=item.submenu{return actions(child)};return (item as? ContextAction).map{[$0]} ?? []}}
+    let entry=actions(editor.actionMenu()).first{$0.commandID?.hasPrefix("graph.instrument/")==true && $0.commandID?.hasSuffix("/n80")==true}!
+    NSApp.sendAction(entry.action!,to:entry.target,from:entry)
+    try require(editor.graphID==nil && editor.selectedID=="instrument:n80" && editor.filterID==nil && editor.filter.indexOfSelectedItem==0 && editor.nodeSearch.stringValue.isEmpty,"The instrument catalog command reveals its root bus through existing channel and text filters")
+    let selected=editor.canvas.nodes.first{$0.id=="instrument:n80"}!
+    try require(selected.x==4000 && selected.y==800 && selected.rect.intersects(editor.scroll.documentVisibleRect) && writes.isEmpty,"Instrument navigation frames the actual saved card without creating a graph or changing layout/history")
+    editor.restorePanelReturn()
+    try require(editor.selectedID=="n100" && editor.filterID=="n100" && editor.nodeSearch.stringValue=="Track 5","Back restores the instrument command's exact graph filter and selection context")
+    editor.hasDraft=true;editor.instrumentPicker.selectItem(at:0);editor.inspectSampleInstrument()
+    try require(editor.selectedID=="n100" && editor.nodeSearch.stringValue=="Track 5","Instrument navigation preserves an unfinished graph edit")
+    editor.hasDraft=false;editor.filterID=nil;editor.nodeSearch.stringValue="";editor.update(song)
+    func port(_ instrument:String?,_ channel:Int?,_ value:Double)->[String:Any]{
+      var copy:[String:Any]=["graph":"n10","role":instrument==nil ? "ordinary":"instrument"]
+      if let instrument{copy["instrument"]=instrument;if let channel{copy["channel"]=channel}}else{copy["target"]="n100"}
+      return ["key":"observed/\(instrument ?? "ordinary")/\(channel ?? -1)","node":"node:n13","direction":"output","port":0,"channels":2,"peak":[value,value],"rms":[value,value],"through":128,"measured":true,"fresh":true,"available":true,"copy":copy]
+    }
+    let ordinary=port(nil,nil,0.2),first=port("n80",0,0.4),second=port("n80",1,0.6),other=port("n81",0,0.9)
+    editor.showSignals(["active":true,"ports":[ordinary,other]])
+    editor.openSongNode("graph:n100:Ordinary:n10");editor.navigate(graph:nil);editor.openSongNode("instrument:n80")
+    try require(editor.graphID=="n10" && editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"Entering an instrument never retains an ordinary or another instrument's readings while its copy is pending")
+    editor.showSignals(["active":true,"ports":[ordinary,other,second,first]])
+    try require(editor.copyObservation.selected=="n10//instrument/n80/0" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.4,"Delayed instrument telemetry selects an actual matching channel copy and labels it explicitly")
+    editor.copyObservation.select("n10/n100/ordinary//inspector");editor.showSignals(["active":true,"ports":[ordinary,first,second]])
+    try require(editor.signalReadings.primaryPort("n13",output:true)?.peak==0.2,"Passive instrument telemetry preserves a subsequent explicit observation choice")
+    editor.navigate(graph:nil);editor.openSongNode("instrument-graph:n80:n101")
+    try require(editor.copyObservation.selected=="n10//instrument/n80/1" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"Opening an individual instrument processing card observes that exact channel copy")
+    editor.navigate(graph:nil);editor.showSignals(["active":true,"ports":[]]);editor.openSongNode("instrument-graph:n80:n101")
+    try require(editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"Root-only telemetry leaves an explicitly entered instrument channel pending until its actual copy is prepared")
+    editor.showSignals(["active":true,"ports":[ordinary,first]])
+    try require(editor.copyObservation.selected==nil && editor.signalReadings.ports.isEmpty && editor.copyObservation.detail.stringValue.contains("Instrument copy unavailable"),"A pending individual instrument copy does not borrow a different channel's signal")
+    editor.showSignals(["active":true,"ports":[ordinary,first,second]])
+    try require(editor.copyObservation.selected=="n10//instrument/n80/1" && editor.signalReadings.primaryPort("n13",output:true)?.peak==0.6,"An instrument card's exact captured channel observation resolves when its telemetry arrives")
+    editor.onRequest=nil
   }
 }
 

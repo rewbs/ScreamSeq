@@ -5,23 +5,25 @@ import AppKit
 struct GraphPortChoice {
   let key:GraphBoundaryPort,node:SignalCanvasNode,port:SignalCanvasPort
   var owner:String? = nil
+  var patchHelp:String? = nil
   var id:String {"\(key.node.utf8.count):\(key.node):\(key.output):\(key.modulation):\(key.number)"}
   var title:String {node.title+" · "+port.label}
   var detail:String {
     let type:String
     switch port.signalType {case .audio:type="Audio";case .sidechain:type="Sidechain audio";case .control:type="Control";case .parameter:type="Parameter";case .events:type="Note events"}
     let context=[owner,node.detail.trimmingCharacters(in:.whitespacesAndNewlines)].compactMap{$0}.filter{!$0.isEmpty && $0 != node.title}
-    let socket=key.modulation ? "\(type) \(key.output ? "output":"input")":"\(type) \(key.output ? "output":"input") \(key.number)"
-    return (context+[socket]+(port.channels.map{["\($0) ch"]} ?? [])).joined(separator:" · ")
+    let socket=(key.modulation || port.signalType == .events) ? "\(type) \(key.output ? "output":"input")":"\(type) \(key.output ? "output":"input") \(key.number)"
+    return (context+[socket]+(patchHelp==nil ? []:["New cables: post-insert bus tap"])+(port.channels.map{["\($0) ch"]} ?? [])).joined(separator:" · ")
   }
   var keywords:String {"\(node.title) \(node.detail) \(detail) \(key.node) \(key.number)"}
-  var toolTip:String {"\(title)\n\(detail)\nStable socket: \(key.node) / \(key.number)"}
+  var toolTip:String {"\(title)\n\(detail)"+(patchHelp.map{"\n"+$0} ?? "")+"\nStable socket: \(key.node) / \(key.number)"}
   func entry(unavailable:String?=nil)->GraphAddMenu.Entry {
     .init(id:id,title:title,detail:detail,keywords:keywords,unavailable:unavailable,toolTip:toolTip)
   }
 }
 struct GraphCableLocation:Equatable {
   let source:String,target:String,output:UInt32,input:UInt32,modulation:Bool
+  var connection=""
 }
 struct GraphPortReturn {
   let document:String,graph:String?,group:String?,view:GraphViewState,revealed:Set<String>,cable:GraphCableLocation?
@@ -52,27 +54,35 @@ extension SignalGraphEditor {
       }
     }
     return inventory.flatMap{node in [false,true].flatMap{output in (output ? node.outputs:node.inputs).map{port in
-      GraphPortChoice(key:.init(node:node.id,number:port.number,output:output,modulation:port.modulation),node:node,port:port,owner:songNodeBus[node.id].flatMap{busLabels[$0]})
+      GraphPortChoice(key:.init(node:node.id,number:port.number,output:output,modulation:port.modulation),node:node,port:port,owner:songNodeBus[node.id].flatMap{busLabels[$0]},patchHelp:socketPatchHelp(.init(node:node.id,number:port.number,output:output,modulation:port.modulation)))
     }}}
   }
   func portChoice(_ key:GraphBoundaryPort)->GraphPortChoice? {portChoices.first{$0.key==key}}
   func portUnavailable(_ choice:GraphPortChoice)->String? {
     if let reason=choice.port.unavailable{return reason}
     if choice.node.kind=="provenance" {return "Reference source: edit its existing pattern or automation lane"}
-    if choice.port.signalType == .events{return "Note-event routing is not available yet"}
+    if choice.port.signalType == .events,graphID != nil{return "Plugin-instrument note routing lives in the Song graph"}
     return nil
   }
   func portPairUnavailable(_ first:GraphPortChoice,_ second:GraphPortChoice)->String? {
     if let reason=portUnavailable(first) ?? portUnavailable(second){return reason}
     guard first.key.output != second.key.output else{return "Choose an input and an output"}
     let a=first.key.output ? first:second,b=first.key.output ? second:first
+    if a.port.signalType == .events || b.port.signalType == .events {
+      guard a.port.signalType == .events,b.port.signalType == .events else{return "Notes connect only to Notes sockets; audio and control remain separate"}
+      return noteSource(canonicalPort(a.key).node) != nil && noteTarget(canonicalPort(b.key).node) != nil ? nil:"Choose a channel or plugin-instrument note source and a plugin instrument destination"
+    }
     if canonicalPort(a.key).node==canonicalPort(b.key).node{return "A processor cannot connect to itself"}
     if a.key.modulation==b.key.modulation{
       if graphID==nil,!a.key.modulation {
         let from=canonicalPort(a.key),to=canonicalPort(b.key)
+        if let reason=songFollowerAddUnavailable(to.node){return reason}
         if [from.node,to.node].contains(where:{$0.hasPrefix("instrument:") || $0.hasPrefix("instrument-graph:")}) {return "Assign an instrument graph; its output follows the note’s channel"}
+        if songNodeGraph[from.node] != nil {return "Use the channel output or combined graph-stage sockets; open this copy to patch its internal nodes"}
         if songNodeGraph[to.node] != nil,to.number==0 {return "Assign this reusable channel copy; open it to edit its internal inputs"}
-        if to.number>0,!canSumSongInput(from){return "Sidechain inputs require a channel/return output or its final insert; use a subgraph for direct processor patching"}
+        if stageTarget(from.node) != nil || stageTarget(to.node) != nil,stageEndpoint(from.node) != nil,stageEndpoint(to.node) != nil{return nil}
+        if songNodePlugin[to.node] != nil,let reason=songBusInputFeedback(from.node,to.node,out:from.number,input:to.number){return reason}
+        if to.number>0,!(songNodePlugin[from.node] != nil && songNodePlugin[to.node] != nil),!canSumSongInput(from){return "Sidechain inputs require a channel/return output or its final insert; use a subgraph for direct processor patching"}
       }
       return nil
     }
@@ -93,7 +103,7 @@ extension SignalGraphEditor {
     let all=portChoices.filter{output==nil || $0.key.output==output},local=all.filter{$0.key.node==selected}
     let choices=local.isEmpty ? all:local,context=portActionContext
     let lookup=Dictionary(choices.map{($0.id,($0.key,canonicalPort($0.key)))},uniquingKeysWith:{a,_ in a})
-    chooseTarget(title:title,entries:choices.map{$0.entry(unavailable:editing ? portUnavailable($0):nil)}){[weak self] id in
+    chooseTarget(title:local.isEmpty ? title:title+" · selected "+(local.first?.node.title ?? "node"),entries:choices.map{$0.entry(unavailable:editing ? portUnavailable($0):nil)}){[weak self] id in
       guard let self,self.portActionContext==context,let (key,real)=lookup[id],self.socketStillMatches(key,real) else{return}
       action(key)
     }
@@ -115,25 +125,44 @@ extension SignalGraphEditor {
     guard let a=portChoice(first),let b=portChoice(second)else{status.stringValue="The sockets changed; choose them again";return}
     if let reason=portPairUnavailable(a,b){status.stringValue=reason;return}
     let output=first.output ? first:second,input=first.output ? second:first
-    let from=canonicalPort(output),to=canonicalPort(input),context=portActionContext
-    let commit:(Bool)->Void={[weak self] sum in
-      guard let self,self.portActionContext==context,self.socketStillMatches(output,from),self.socketStillMatches(input,to) else{return}
-      self.revealPorts([output,input]);self.framePortEndpoints([from,to])
-      if !from.modulation,to.modulation {
-        self.offerAudioFollower(from.node,to.node,output:from.number,parameter:to.number,position:NSPoint(x:self.scroll.documentVisibleRect.midX,y:self.scroll.documentVisibleRect.midY));return
-      }
-      let previous=self.canvas.addingMainInput;self.canvas.addingMainInput=sum
-      self.connectPorts(from.node,to.node,out:from.number,input:to.number,modulation:from.modulation)
-      self.canvas.addingMainInput=previous
+    let from=canonicalPort(output),to=canonicalPort(input)
+    revealPorts([output,input]);framePortEndpoints([from,to])
+    if !from.modulation,to.modulation {
+      offerAudioFollower(from.node,to.node,output:from.number,parameter:to.number,position:NSPoint(x:scroll.documentVisibleRect.midX,y:scroll.documentVisibleRect.midY));return
     }
-    if graphID==nil,!from.modulation,!to.modulation,to.number==0,songNodePlugin[to.node] != nil {
-      let move=from.number==0 ? insertMove(from.node,to.node):nil
-      let sum=canSumSongInput(from)
-      chooseTarget(title:"How should this Main input connect?",entries:[
-        .init(id:"move",title:"Move chain here",detail:"Move this effect and its following inserts to the source channel · one Undo",keywords:"move insert ownership",unavailable:move==nil ? "This output cannot own the selected effect chain":nil),
-        .init(id:"sum",title:"Add / sum input",detail:"Keep the effect chain in place and mix another channel into Main in · Option-drag equivalent",keywords:"mix add sum input",unavailable:sum ? nil:"Summing requires a channel/return output or the final insert on that bus")
-      ]){id in commit(id=="sum")}
-    }else{commit(false)}
+    connectPorts(from.node,to.node,out:from.number,input:to.number,modulation:from.modulation)
+  }
+  func chainMoveUnavailable(_ socket:GraphBoundaryPort?)->String? {
+    guard graphID==nil else{return "Move recipe processors by dropping them onto a cable"}
+    guard let socket else{return nil}
+    let real=canonicalPort(socket)
+    guard !real.modulation,real.number==0 else{return "Choose an effect’s Main input or its destination’s Main output"}
+    if real.output{return songNodeBus[real.node].flatMap{insertChain($0)}==nil ? "Choose a channel or insert Main output to move a chain here":nil}
+    guard let plugin=songNodePlugin[real.node],rackPlugins.first(where:{$0["id"] as? String==plugin})?["isInstrument"] as? Bool != true else{return "Choose an effect’s Main input"}
+    return nil
+  }
+  func moveInsertChain(at socket:GraphBoundaryPort?=nil) {
+    guard !hasDraft else{status.stringValue="Finish the current edit before moving a chain";return}
+    if let reason=chainMoveUnavailable(socket){status.stringValue=reason;return}
+    guard let socket else {
+      let choices=portChoices.filter{!$0.key.output && chainMoveUnavailable($0.key)==nil},context=portActionContext
+      let lookup=Dictionary(choices.map{($0.id,($0.key,canonicalPort($0.key)))},uniquingKeysWith:{a,_ in a})
+      chooseTarget(title:"Move insert chain · choose its first effect",entries:choices.map{$0.entry()}){[weak self] id in
+        guard let self,self.portActionContext==context,let (key,real)=lookup[id],self.socketStillMatches(key,real)else{return};self.moveInsertChain(at:key)
+      };return
+    }
+    let start=canonicalPort(socket),context=portActionContext
+    let choices=portChoices.filter{choice in
+      let end=canonicalPort(choice.key)
+      return end.output != start.output && !end.modulation && end.number==0 && self.insertMove(start.output ? start.node:end.node,start.output ? end.node:start.node) != nil
+    }
+    let lookup=Dictionary(choices.map{($0.id,($0.key,canonicalPort($0.key)))},uniquingKeysWith:{a,_ in a})
+    chooseTarget(title:socket.output ? "Move insert chain here · choose its first effect":"Move insert chain · choose its new position",entries:choices.map{choice in
+      var entry=choice.entry();entry.detail += " · moves this effect and its following inserts · one Undo";return entry
+    }){[weak self] id in
+      guard let self,self.portActionContext==context,let (key,end)=lookup[id],self.socketStillMatches(socket,start),self.socketStillMatches(key,end),let move=self.insertMove(start.output ? start.node:end.node,start.output ? end.node:start.node)else{return}
+      self.revealPorts([socket,key]);self.framePortEndpoints([start,end]);self.mutate("mixer.inserts.move",move)
+    }
   }
   func connectedAddDestination(_ connection:GraphAddConnection)->(target:String?,before:String?,edge:Int?)? {
     guard graphID==nil,connection.output,!connection.port.modulation,connection.port.number==0,
@@ -146,12 +175,14 @@ extension SignalGraphEditor {
   func addAtSocket(_ key:GraphBoundaryPort) {
     guard let choice=portChoice(key)else{return}
     if let reason=addSocketUnavailable(choice){status.stringValue=reason;return}
+    if choice.port.signalType == .events{connectFromSocket(key);return}
     let real=canonicalPort(key);revealPorts([key]);selectedID=key.node;canvas.selected=key.node;canvas.selectedEdge=nil
     var port=choice.port;port.number=real.number
     showAdd(connecting:GraphAddConnection(node:real.node,port:port,output:key.output))
   }
   func addSocketUnavailable(_ choice:GraphPortChoice)->String? {
     if let reason=portUnavailable(choice){return reason}
+    if choice.port.signalType == .events{return nil}
     if choice.key.modulation && choice.key.output{return "Expose a processor parameter and choose Connect to…"}
     if graphID==nil,!choice.key.modulation,!choice.key.output{return "Add from the upstream audio output, or open a reusable subgraph to insert before this socket"}
     if graphID==nil,!choice.key.modulation,choice.key.output,choice.key.number>0{return nil} // A follower accepts an auxiliary tap.
@@ -160,7 +191,12 @@ extension SignalGraphEditor {
   func appendPortCommands(to menu:NSMenu,socket:GraphBoundaryPort?=nil) {
     let reason=socket.flatMap{portChoice($0)}.flatMap{portUnavailable($0)}
     menu.addItem(GraphCommand.patch.item(socket==nil ? "Patch by keyboard…":"Connect to…",reason:reason){[weak self] in guard let self else{return};if let socket{self.connectFromSocket(socket)}else{self.patchByKeyboard()}})
-    menu.addItem(GraphCommand.portAdd.item("Add compatible node…",reason:socket.flatMap{portChoice($0)}.flatMap{addSocketUnavailable($0)}){[weak self] in guard let self else{return};if let socket{self.addAtSocket(socket)}else{self.chooseSocket(title:"Choose the socket for a new node"){[weak self] in self?.addAtSocket($0)}}})
+    menu.items.last?.toolTip=reason ?? "Add another cable from either socket. Existing cables stay; input audio is mixed and output audio can feed several destinations."
+    menu.addItem(GraphCommand.moveInsertChain.item("Move insert chain…",reason:chainMoveUnavailable(socket)){[weak self] in self?.moveInsertChain(at:socket)})
+    let addReason=socket.flatMap{portChoice($0)}.flatMap{addSocketUnavailable($0)}
+    let add=GraphCommand.portAdd.item(graphID==nil ? "Add compatible node / quiet send…":"Add compatible node…",reason:addReason){[weak self] in guard let self else{return};if let socket{self.addAtSocket(socket)}else{self.chooseSocket(title:"Choose the socket for a new node"){[weak self] in self?.addAtSocket($0)}}}
+    if addReason==nil,graphID==nil{add.toolTip="For a quiet send, choose a channel output and then Return bus. The new send starts disabled at −96 dB; raise its cable gain to hear it."}
+    menu.addItem(add)
     for (output,title,command) in [(false,"Show sources…",GraphCommand.portSources),(true,"Show targets…",.portTargets)] {
       let wrong=socket.map{$0.output != output} ?? false
       menu.addItem(command.item(title,reason:wrong ? (output ? "Choose an output to show its destinations":"Choose an input to show its sources"):nil){[weak self] in
@@ -174,7 +210,7 @@ extension SignalGraphEditor {
   }
   func cableLocation(_ edge:SignalCanvasEdge)->GraphCableLocation {
     let a=realPort(edge.source,edge.output,output:true,modulation:edge.modulation),b=realPort(edge.target,edge.input,output:false,modulation:edge.modulation)
-    return .init(source:a.node,target:b.node,output:a.number,input:b.number,modulation:edge.modulation)
+    return .init(source:a.node,target:b.node,output:a.number,input:b.number,modulation:edge.modulation,connection:edge.connection)
   }
   func rememberPortReturn() {
     portReturn=GraphPortReturn(document:projectionDocument,graph:graphID,group:processingGroupID,view:GraphViewState(origin:scroll.contentView.bounds.origin,scale:scroll.magnification,selection:selectedID,filter:filterID,search:nodeSearch.stringValue,category:nodeCategory.indexOfSelectedItem),revealed:graphFilterState.revealed,cable:canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? cableLocation(canvas.edges[$0]):nil})

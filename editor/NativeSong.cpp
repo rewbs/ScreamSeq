@@ -1,4 +1,5 @@
 #include "NativeSong.hpp"
+#include "NativeTimingRuntime.hpp"
 #include "soundlib/NativeNoteEffects.h"
 #include "soundlib/mod_specifications.h"
 #include <set>
@@ -6,6 +7,30 @@
 #include <tuple>
 
 namespace Tracker {
+uint16_t cloneScratchGesture(NativeSong &native, uint16_t source,
+                            const std::optional<std::string> &name,
+                            const std::optional<ScratchPatternCell> &target) {
+  const auto phrase=native.scratchGestures.find(source);
+  if(phrase==native.scratchGestures.end())throw std::invalid_argument("Scratch phrase no longer exists");
+  auto command=native.performance.commands.end();
+  if(target) {
+    const auto pattern=native.patterns.find(target->pattern),track=native.tracks.find(target->channel);
+    if(pattern==native.patterns.end()||track==native.tracks.end()||target->column>=maximumEffectColumns)
+      throw std::invalid_argument("Scratch pattern destination no longer exists");
+    command=std::find_if(native.performance.commands.begin(),native.performance.commands.end(),[&](const auto &c){
+      return c.pattern==pattern->second.id&&c.track==track->second.id&&c.position/performanceUnitsPerRow==target->row&&c.column==target->column;
+    });
+    if(command==native.performance.commands.end()||command->kind!=PatternCommandKind::Native||command->native!=NativePatternOp::Scratch||command->arguments[0]!=source)
+      throw std::invalid_argument("The captured FX cell no longer uses this scratch phrase");
+  }
+  uint16_t id=0;
+  for(uint16_t candidate=1;candidate<=255;++candidate)if(!native.scratchGestures.contains(candidate)){id=candidate;break;}
+  if(!id)throw std::invalid_argument("The song holds at most 255 scratch phrases");
+  auto copy=phrase->second;if(name)copy.name=*name;validateScratchGesture(copy);
+  native.scratchGestures.emplace(id,std::move(copy));
+  if(target)command->arguments[0]=id;
+  return id;
+}
 size_t PatternPerformance::bytes() const {
   size_t result=sizeof(*this)+columns.size()*(sizeof(uint64_t)+sizeof(uint8_t))+commands.size()*sizeof(PatternCommand);
   for(const auto &[id,binding]:bindings)result+=sizeof(binding)+sizeof(id)+binding.plugin.size()+binding.name.size();
@@ -31,9 +56,14 @@ void NativeSong::ensureMixer() {
   mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
 }
 void NativeSong::removePluginRoutes(const std::string &instance) {
-  std::erase(mixer.detached,instance);
+  std::erase_if(signal.noteRouting.routes,[&](const auto &route){return route.plugin==instance;});
+  std::erase(mixer.detached,instance);std::erase(mixer.disconnectedMainInputs,instance);
+  for(auto &chain:mixer.detachedChains)std::erase(chain.plugins,instance);
+  std::erase_if(mixer.detachedChains,[](const auto &chain){return chain.plugins.empty();});for(const auto &chain:mixer.detachedChains)std::erase(mixer.disconnectedMainInputs,chain.plugins.front());
   for(auto &bus:mixer.buses)std::erase(bus.inserts,instance);
   std::erase_if(mixer.instruments,[&](const auto &route){return route.plugin==instance;});
+  std::erase_if(signal.stageConnections,[&](const auto &r){return r.source.plugin==instance||r.target.plugin==instance;});
+  std::erase_if(mixer.pluginConnections,[&](const auto &route){return route.source==instance||route.target==instance;});
   std::erase_if(mixer.sidechains,[&](const auto &route){return route.plugin==instance;});
   const auto node="plugin:"+instance;
   signal.layout.erase(node);
@@ -43,19 +73,57 @@ void NativeSong::removePluginRoutes(const std::string &instance) {
     if(member!=node)remaining.push_back(member);
   pruneSongSignalGroups(signal,remaining);
 }
+void NativeSong::removeSongSources(const std::vector<uint64_t> &sources) {
+  std::set<uint64_t> removed;
+  for(auto id:sources)if(!removed.insert(id).second||std::none_of(signal.songSources.begin(),signal.songSources.end(),[&](const auto &s){return s.node.id==id;}))throw std::invalid_argument("Select distinct existing modulation sources");
+  std::erase_if(signal.songSources,[&](const auto &s){return removed.contains(s.node.id);});
+  std::erase_if(signal.songModulation,[&](const auto &e){return removed.contains(e.source);});
+  auto prune=[&](AudioPortTrims &trims){for(auto &[key,edges]:trims.modulation)std::erase_if(edges,[&](const auto &e){return removed.contains(e.source);});std::erase_if(trims.modulation,[](const auto &p){return p.second.empty();});};
+  for(auto &[key,trims]:signal.trims)prune(trims);for(auto &g:signal.groups)prune(g.trims);for(auto &s:signal.songSources)prune(s.node.trims);
+
+  std::erase_if(envelopeLinks,[&](const auto &link){return link.target.kind==EnvelopeTargetKind::Graph&&removed.contains(link.target.owner);});
+  std::set<std::string> keys;for(auto id:removed){auto key="source:n"+std::to_string(id);keys.insert(key);signal.layout.erase(key);removeSignalPresentationNode(signal.presentation,key);}
+  std::vector<std::string> remaining;for(const auto &g:signal.groups)for(const auto &key:g.nodes)if(!keys.contains(key))remaining.push_back(key);
+  pruneSongSignalGroups(signal,remaining);
+}
 void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef> &connections,
-                           const std::vector<std::string> &instrumentPlugins) {
+                           const std::vector<std::string> &instrumentPlugins,const std::vector<std::string> &effectRack) {
   if(connections.empty())return;
   if(connections.size()>512)throw std::invalid_argument("At most 512 song cables can be removed at once");
-  auto next=song;if(std::any_of(connections.begin(),connections.end(),[](const auto &c){return c.kind!=SongConnectionKind::FollowerInput&&c.kind!=SongConnectionKind::Modulation;}))next.ensureMixer();
+  auto next=song;if(std::any_of(connections.begin(),connections.end(),[](const auto &c){return c.kind!=SongConnectionKind::FollowerInput&&c.kind!=SongConnectionKind::Modulation&&c.kind!=SongConnectionKind::Note;}))next.ensureMixer();
   auto require=[](bool valid,const char *message){if(!valid)throw std::invalid_argument(message);};
-  std::set<std::tuple<SongConnectionKind,uint64_t,uint64_t,std::string,uint32_t,bool>> seen;
+  std::set<std::tuple<SongConnectionKind,uint64_t,uint64_t,std::string,uint32_t,bool,std::string,uint32_t,uint64_t>> seen;
   auto remove=[&](auto &routes,auto predicate){const auto count=std::erase_if(routes,predicate);require(count==1,"Song cable no longer exists; refresh the graph");};
   for(const auto &c:connections) {
-    require(seen.emplace(c.kind,c.source,c.target,c.plugin,c.port,c.preFader).second,"The cable removal batch contains a duplicate");
+    require(seen.emplace(c.kind,c.source,c.target,c.plugin,c.port,c.preFader,c.sourcePlugin,c.output,c.stage).second,"The cable removal batch contains a duplicate");
     require(c.kind==SongConnectionKind::Modulation||c.port<=63,"Cable port is outside 0…63");
+    require(c.kind==SongConnectionKind::FollowerInput||!c.stage,"Only follower identities accept a stage");
     require(c.kind==SongConnectionKind::FollowerInput||!c.preFader,"Only follower tap identities accept preFader");
+    require(c.kind==SongConnectionKind::PluginConnection||c.kind==SongConnectionKind::StageConnection||(c.sourcePlugin.empty()&&!c.output),"Only direct plugin cables accept a plugin source/output");
     switch(c.kind) {
+    case SongConnectionKind::StageConnection:
+      removeSignalStageConnection(next.signal,{{c.sourcePlugin,c.source},{c.plugin,c.target},c.output,c.port});break;
+    case SongConnectionKind::PluginConnection:
+      require(!c.source&&!c.target&&!c.plugin.empty()&&!c.sourcePlugin.empty()&&c.output<64,"Invalid direct plugin cable identity");
+      remove(next.mixer.pluginConnections,[&](const auto &r){return r.source==c.sourcePlugin&&r.target==c.plugin&&r.output==c.output&&r.input==c.port;});
+      std::erase_if(next.signal.presentation.cables,[&](const auto &p){return p.source=="plugin:"+c.sourcePlugin&&p.target=="plugin:"+c.plugin&&p.output==c.output&&p.input==c.port&&!p.modulation;});break;
+    case SongConnectionKind::Insert:
+      require(c.source&&!c.target&&!c.plugin.empty()&&!c.port,"Invalid insert cable identity");
+      disconnectMixerInsert(next.mixer,effectRack,c.source,c.plugin);break;
+    case SongConnectionKind::MasterOutput:
+      require(c.source==next.masterID&&!c.target&&c.plugin.empty()&&!c.port&&!next.mixer.masterOutputDisconnected,"Master output cable no longer exists");
+      next.mixer.masterOutputDisconnected=true;break;
+    case SongConnectionKind::Note: {
+      require(bool(c.source)!=bool(c.target)&&c.plugin.empty()&&!c.port,"Choose an explicit note route or implicit instrument assignment");
+      const auto connection=c.source?"note:n"+std::to_string(c.source):"note-assignment:n"+std::to_string(c.target);
+      if(c.source)remove(next.signal.noteRouting.routes,[&](const auto &route){return route.id==c.source;});
+      else {
+        require(std::any_of(next.instruments.begin(),next.instruments.end(),[&](const auto &i){return i.second.id==c.target;}),"Note instrument no longer exists");
+        auto &suppressed=next.signal.noteRouting.suppressedAssignments;
+        require(std::find(suppressed.begin(),suppressed.end(),c.target)==suppressed.end(),"Implicit note cable is already disconnected");suppressed.push_back(c.target);
+      }
+      std::erase_if(next.signal.presentation.cables,[&](const auto &path){return path.connection==connection;});break;
+    }
     case SongConnectionKind::Output: {
       require(c.source&&c.target&&c.plugin.empty()&&!c.port,"Invalid main-output cable identity");
       auto b=std::find_if(next.mixer.buses.begin(),next.mixer.buses.end(),[&](const auto &v){return v.id==c.source;});
@@ -88,11 +156,11 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
       break;
     }
     case SongConnectionKind::FollowerInput: {
-      require(c.target&&((c.source&&!c.port&&c.plugin.empty())||(!c.source&&!c.plugin.empty()&&!c.preFader)),"Invalid follower input identity");
+      require(c.target&&((c.source&&!c.stage&&!c.port&&c.plugin.empty())||(!c.source&&!c.stage&&!c.plugin.empty()&&!c.preFader)||(!c.source&&c.stage&&c.port&&c.plugin.empty()&&!c.preFader)),"Invalid follower input identity");
       auto s=std::find_if(next.signal.songSources.begin(),next.signal.songSources.end(),[&](const auto &v){return v.node.id==c.target&&v.node.kind==SignalNodeKind::Follower;});
-      require(s!=next.signal.songSources.end()&&s->audioBus==c.source&&s->audioPlugin==c.plugin&&s->output==c.port&&s->preFader==c.preFader,"Follower input no longer exists; refresh the graph");
+      require(s!=next.signal.songSources.end()&&s->audioBus==c.source&&s->audioStage==c.stage&&s->audioPlugin==c.plugin&&s->output==c.port&&s->preFader==c.preFader,"Follower input no longer exists; refresh the graph");
       std::erase_if(next.signal.presentation.cables,[&](const auto &path){return path.target=="source:n"+std::to_string(c.target)&&!path.modulation;});
-      s->audioBus=0;s->audioPlugin.clear();s->output=0;s->preFader=false;break;
+      s->audioBus=0;s->audioStage=0;s->audioPlugin.clear();s->output=0;s->preFader=false;break;
     }
     case SongConnectionKind::Modulation:
       require(c.source&&!c.target&&!c.plugin.empty(),"Invalid modulation cable identity");
@@ -106,6 +174,9 @@ void removeSongConnections(NativeSong &song,const std::vector<SongConnectionRef>
   song=std::move(next);
 }
 void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
+  for(const auto &[index,instrument]:instruments)if(!index||index>s.GetNumInstruments()||!s.Instruments[index]) {
+    const auto key="note-instrument:n"+std::to_string(instrument.id);signal.layout.erase(key);removeSignalPresentationNode(signal.presentation,key);
+  }
   auto sync = [&](auto &items, int begin, int end, auto valid) {
     for (auto i = items.begin(); i != items.end();) {
       if (i->first < begin || i->first >= end || !valid(i->first)) i = items.erase(i);
@@ -144,7 +215,16 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     if(pattern==patterns.end()||!performanceTracks.contains(command.track))return true;
     const uint64_t end=uint64_t(s.Patterns[pattern->first].GetNumRows())*performanceUnitsPerRow;
     if(command.position>=end)return true;
-    command.duration=uint32_t(std::min<uint64_t>(command.duration,end-command.position));return false;
+    command.duration=uint32_t(std::min<uint64_t>(command.duration,end-command.position));
+    if(isNudge(command.kind) || (command.kind==PatternCommandKind::Native && command.native==NativePatternOp::Scratch)){
+      const auto &p=s.Patterns[pattern->first];
+      const auto rowsPerBeat=std::max(1u,p.GetOverrideSignature()?unsigned(p.GetRowsPerBeat()):s.m_nDefaultRowsPerBeat?unsigned(s.m_nDefaultRowsPerBeat):4u);
+      const double remaining=double(end-command.position)/(performanceUnitsPerRow*double(rowsPerBeat));
+      if(remaining<1.0/performanceUnitsPerRow)return true;
+      if(isNudge(command.kind))command.durationBeats=std::min(command.durationBeats,remaining);
+      else command.arguments[1]=std::min(command.arguments[1],remaining);
+    }
+    return false;
   });
   std::erase_if(preciseNotes,[&](const auto &note){
     const auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==note.pattern;});
@@ -157,6 +237,11 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     std::set<uint64_t> removed;
     std::erase_if(mixer.buses, [&](const auto &bus) {
       if (bus.kind != MixerBusKind::Track || trackIDs.count(bus.id)) return false;
+      // A removed channel must not move a disconnected insert into Master
+      // and silence the entire song. Keep its ordered chain on a silent root.
+      if(!bus.inserts.empty()&&std::any_of(bus.inserts.begin(),bus.inserts.end(),[&](const auto &id){return std::find(mixer.disconnectedMainInputs.begin(),mixer.disconnectedMainInputs.end(),id)!=mixer.disconnectedMainInputs.end();})) {
+        mixer.detachedChains.push_back({makeEntity().id,bus.inserts});std::erase(mixer.disconnectedMainInputs,bus.inserts.front());
+      }
       removed.insert(bus.id); return true;
     });
     std::erase_if(mixer.sidechains, [&](const auto &side) { return removed.count(side.source); });
@@ -175,10 +260,16 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     for(const auto &[index,track]:tracks)graphTargets.insert(track.id);
     if(masterID)graphTargets.insert(masterID);
   }
+  const auto instrumentExists=[&](uint64_t id){return std::any_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==id;});};
+  std::erase_if(signal.noteRouting.suppressedAssignments,[&](uint64_t id){return !instrumentExists(id);});
+  std::erase_if(signal.noteRouting.triggerSources,[&](const auto &source){return !instrumentExists(source.instrument);});
+  std::erase_if(signal.noteRouting.routes,[&](const auto &route){return route.sourceKind==NoteSourceKind::Instrument?!instrumentExists(route.source):std::none_of(tracks.begin(),tracks.end(),[&](const auto &t){return t.second.id==route.source;});});
+  reconcileNoteCableGeometry(signal.presentation,signal.noteRouting);
   std::erase_if(signal.instrumentAssignments,[&](const auto &a){return std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==a.target;});});
   std::erase_if(signal.assignments,[&](const auto &a){return !graphTargets.contains(a.target);});
   std::erase_if(signal.inputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
   std::erase_if(signal.outputs,[&](const auto &r){return !graphTargets.contains(r.source)||!graphTargets.contains(r.target);});
+  std::erase_if(signal.stageConnections,[&](const auto &r){return (r.source.stage&&!graphTargets.contains(r.source.stage))||(r.target.stage&&!graphTargets.contains(r.target.stage));});
   std::erase_if(signal.lanes,[&](const auto &a){return !graphTargets.contains(a.first);});
   std::erase_if(signal.commands,[&](const auto &c){
     auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==c.pattern;});
@@ -189,10 +280,15 @@ void NativeSong::reconcile(const OpenMPT::CSoundFile &s) {
     if((source.noteTarget&&!graphTargets.contains(source.noteTarget)) ||
       (source.noteInstrument&&std::none_of(instruments.begin(),instruments.end(),[&](const auto &i){return i.second.id==source.noteInstrument;}))){removedSongSources.insert(source.node.id);return true;}
     if(source.audioBus&&!graphTargets.contains(source.audioBus)){source.audioBus=0;source.preFader=false;}
+    if(source.audioStage&&!graphTargets.contains(source.audioStage)){source.audioStage=0;source.output=0;source.preFader=false;}
     return false;
   });
   std::erase_if(signal.songModulation,[&](const auto &edge){return removedSongSources.contains(edge.source);});
-  for(auto id:removedSongSources)removeSignalPresentationNode(signal.presentation,"source:n"+std::to_string(id));
+  for(auto id:removedSongSources){const auto key="source:n"+std::to_string(id);signal.layout.erase(key);removeSignalPresentationNode(signal.presentation,key);}
+  if(!removedSongSources.empty()) {
+    std::vector<std::string> remaining;for(const auto &g:signal.groups)for(const auto &key:g.nodes)if(!key.starts_with("source:")||std::any_of(signal.songSources.begin(),signal.songSources.end(),[&](const auto &source){return key=="source:n"+std::to_string(source.node.id);}))remaining.push_back(key);
+    pruneSongSignalGroups(signal,remaining);
+  }
   auto trimGraphEnvelope=[&](SignalNode &node){std::erase_if(node.envelopes,[&](auto &lane){
     const auto pattern=std::find_if(patterns.begin(),patterns.end(),[&](const auto &p){return p.second.id==lane.pattern;});
     if(pattern==patterns.end())return true;
@@ -257,6 +353,7 @@ void NativeSong::prepareEffects(OpenMPT::CSoundFile &song) const {
     auto &e=song.nativePatternEffects[{patternIndices.at(c.pattern),OpenMPT::ROWINDEX(c.position/performanceUnitsPerRow),trackIndices.at(c.track)}][c.column-1];
     e.command=OpenMPT::EffectCommand(c.effect); e.param=c.parameter;
   }
+  prepareNativeTiming(song,*this);
 }
 
 void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
@@ -323,6 +420,10 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   }
   if(performance.bindings.size()>255||performance.commands.size()>maximumPatternCommands)
     throw std::invalid_argument("Pattern performance exceeds binding or command limits");
+  for(const auto &[slot,gesture]:scratchGestures) {
+    if(!slot || slot>255)throw std::invalid_argument("Scratch gesture slot must be 1..255");
+    validateScratchGesture(gesture);
+  }
   for(const auto &[track,count]:performance.columns)if(!count||count>maximumEffectColumns)
     throw std::invalid_argument("Use between one and eight FX columns");
   for(const auto &[id,binding]:performance.bindings)if(!id||id>255||binding.plugin.empty()||binding.plugin.size()>128||
@@ -330,18 +431,25 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
     throw std::invalid_argument("Invalid stable plugin parameter binding");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,uint8_t>> cells;
   std::set<uint64_t> pitchTracks;
+  std::set<uint64_t> scratchTracks;
   for(const auto &command:performance.commands){
     const auto columns=performance.columns.find(command.track);
     const bool parameter=command.kind==PatternCommandKind::ParameterSet||command.kind==PatternCommandKind::ParameterSlide;
     const bool nudge=isNudge(command.kind);
-    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide||nudge;
+    const bool slide=command.kind==PatternCommandKind::ParameterSlide||command.kind==PatternCommandKind::PitchSlide;
     const bool cut=command.kind==PatternCommandKind::NoteCut;
     const bool tracker=command.kind==PatternCommandKind::TrackerEffect;
-    if(!parameter&&!cut&&!tracker)pitchTracks.insert(command.track);
-    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::NudgeReverse)||command.column>=(columns==performance.columns.end()?1:columns->second)||
+    const bool native=command.kind==PatternCommandKind::Native;
+    validateNativePatternCommand(command);
+    if(native && command.native==NativePatternOp::Scratch) {
+      if(!scratchGestures.contains(uint16_t(command.arguments[0])))throw std::invalid_argument("Scratch command references a missing gesture; remove or change its uses first");
+      scratchTracks.insert(command.track);
+    }
+    if(!parameter&&!cut&&!tracker&&!native)pitchTracks.insert(command.track);
+    if(uint8_t(command.kind)>uint8_t(PatternCommandKind::Native)||command.column>=(columns==performance.columns.end()?1:columns->second)||
        !cells.emplace(command.pattern,command.track,command.position/performanceUnitsPerRow,command.column).second||
        !std::isfinite(command.value)||(parameter?(command.value<0||command.value>1||!performance.bindings.contains(command.binding)):
-       (command.value< -96||command.value>96||command.binding!=0))||(slide?!command.duration:command.duration!=0)||
+       (command.value< -96||command.value>96||command.binding!=0))||(!native&&(slide?!command.duration:command.duration!=0))||
        command.pitchRange<1||command.pitchRange>96||((parameter||cut||nudge)&&command.pitchRange!=2)||(nudge&&(command.value<0||command.value>1))||
        ((cut||tracker)&&(command.value!=0||command.binding!=0)) ||
        (tracker && (!command.column || command.position%performanceUnitsPerRow || command.effect>=OpenMPT::MAX_EFFECTS || !s.GetModSpecifications().HasCommand(OpenMPT::EffectCommand(command.effect)))) ||
@@ -349,6 +457,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
       throw std::invalid_argument("Invalid or duplicate FX-column command");
   }
   if(pitchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with native pitch commands");
+  if(scratchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with scratch gestures");
   if(preciseNotes.size()>maximumPreciseNotes)throw std::invalid_argument("Use at most 65536 precise note events");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,bool>> notePositions;
   for(const auto &note:preciseNotes) {
@@ -370,6 +479,9 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   for(const auto &[index,pattern]:patterns)graphPatterns[pattern.id]=s.Patterns[index].GetNumRows();
   std::vector<uint64_t> graphInstruments;for(const auto &[index,instrument]:instruments)graphInstruments.push_back(instrument.id);
   signal.validate(graphTargets,graphPatterns,graphInstruments);
+  signal.noteRouting.validate(trackIDs,graphInstruments);
+  for(const auto &route:signal.noteRouting.routes)check({route.id,{},{},0});
+  for(const auto &chain:mixer.detachedChains)check({chain.id,{},{},0});
   for(const auto &group:signal.groups)check({group.id,{},{},0});
   for(const auto &source:signal.songSources)check({source.node.id,{},{},0});
   signalRoutingGraph(mixer,signal).validate(trackIDs);
@@ -379,7 +491,8 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   if (bytes() > 16 * 1024 * 1024) throw std::invalid_argument("Native song metadata exceeds 16 MB");
 }
 bool NativeSong::hasAnnotations() const {
-  if (!envelopeBank.empty() || !envelopeLinks.empty() || !signal.empty() || !preciseNotes.empty() || !performance.empty() || !automation.empty() || mixer.active() || !mixer.detached.empty() || !noteTracks.empty() || !columnMutes.empty()) return true;
+  if(!scratchGestures.empty())return true;
+  if (!envelopeBank.empty() || !envelopeLinks.empty() || !signal.empty() || !preciseNotes.empty() || !performance.empty() || !automation.empty() || mixer.active() || !mixer.detached.empty() || !mixer.detachedChains.empty() || !mixer.disconnectedMainInputs.empty() || mixer.masterOutputDisconnected || !noteTracks.empty() || !columnMutes.empty()) return true;
   auto has = [](const NativeEntity &e) { return !e.name.empty() || !e.annotation.empty() || e.color; };
   for (const auto *items : {&patterns, &tracks, &samples, &instruments})
     for (const auto &[index, item] : *items) if (has(item)) return true;
@@ -391,6 +504,7 @@ bool NativeSong::hasAnnotations() const {
 }
 size_t NativeSong::bytes() const {
   size_t n = sizeof(NativeSong) + signal.bytes() + preciseNotes.size()*sizeof(PreciseNote) + performance.bytes() + mixer.bytes() + columnMutes.size() * (sizeof(uint64_t) + sizeof(bool));
+  for(const auto &[slot,gesture]:scratchGestures)n+=sizeof(slot)+scratchGestureBytes(gesture);
   for (const auto &track : noteTracks) n += sizeof(track) + track.columns.size() * sizeof(uint64_t);
   auto add = [&](const NativeEntity &e) { n += sizeof(e) + e.name.size() + e.annotation.size(); };
   for (const auto *items : {&patterns, &tracks, &samples, &instruments})

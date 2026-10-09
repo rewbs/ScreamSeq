@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "684a5023acda1a1823341d2387ee1a8040e2ef91",
+  "sourceFingerprint": "f7af1f6a02d2ddbe38c31e1761ca48c4aaf5beac52c158bad76f5b287d691116",
+  "inputCount": 943,
+  "sourcesUnchangedDuringBuild": true,
+  "bundle": "/Users/rewbs/code/openmpt/bin/mac-graph-fluency/ScreamSeq.app",
+  "executableSHA256": "2f45a8fbc5c6ee85e095e4b0ef5a8d936fbc615ac2c415f39aa5a13d568f9e95",
+  "strictSignatureVerified": true,
+  "verifiedUTC": "2026-10-02T03:28:48.602707+00:00",
+  "scope": "Signed background development bundle; no native visual walkthrough is claimed for this final executable.",
+  "appSocketTests": "PASS",
+  "workspaceTests": "PASS",
+  "apiChecksFinishedUTC": "2026-10-02T03:30:34.812017+00:00",
+  "executableUnchangedAfterAPITests": true,
+  "ctest": {
+    "passed": 102,
+    "failed": 0,
+    "seconds": 138.9,
+    "log": "paused-ctest.log"
+  },
+  "musicalAndNativeSourcesUnchangedAfterTests": true,
+  "matchedSourceFilesAfterTests": 941
+}

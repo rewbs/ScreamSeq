@@ -27,6 +27,36 @@ jobs:
         shell: pwsh
         run: |
           ./windows/build.ps1 -Architecture x64 -BuildDirectory bin/windows-ci -Jobs 2 -Test *>&1 | Tee-Object screamseq-windows.log
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Scratch editor on an owned private desktop
+        shell: pwsh
+        run: |
+          $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-scratch-ui'
+          New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          python -m unittest discover -s windows/Tests -p test_scratch_editor.py -v *>&1 | Tee-Object screamseq-scratch-ui.log
+          if ($LASTEXITCODE -ne 0) { throw 'Scratch private-desktop checks failed.' }
+      - name: Retained editors and merged command paths on private desktops
+        shell: pwsh
+        run: |
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -R '^(workspace-restore-tests|precise-note-window-tests|graph-curve-window-tests)$' *>&1 | Tee-Object screamseq-retained-editors.log
+          if ($LASTEXITCODE -ne 0) { throw 'Retained native editor checks failed.' }
+          $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
+          New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          $integrationLog = Join-Path $env:GITHUB_WORKSPACE 'screamseq-integration-ui.log'
+          Push-Location windows/Tests
+          try {
+            python -m unittest -v `
+              test_workspace_shortcuts.WorkspaceShortcutTests.test_api_catalogue_validation_conflicts_and_atomic_presentation_only_edits `
+              test_pattern_performance.PatternPerformanceTests.test_typed_native_inline_slots_and_musical_unit_draft `
+              test_pattern_performance.PatternPerformanceTests.test_inline_nudge_decimal_fields_commit_once_history_and_persistence `
+              test_precise_note_host.PreciseNoteHostTests.test_simultaneous_hosts_compact_focus_and_saved_layout_retain_native_drafts `
+              test_graph_curve_host.GraphCurveHostTests.test_routing_and_curve_keep_independent_raw_drafts_and_targets *>&1 | Tee-Object $integrationLog
+            if ($LASTEXITCODE -ne 0) { throw 'Merged command and editor paths failed.' }
+          } finally { Pop-Location }
       - name: Preserve qualification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -34,6 +64,9 @@ jobs:
           name: screamseq-windows-logs
           path: |
             screamseq-windows.log
+            screamseq-scratch-ui.log
+            screamseq-retained-editors.log
+            screamseq-integration-ui.log
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

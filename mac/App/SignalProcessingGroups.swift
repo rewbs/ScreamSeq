@@ -12,7 +12,7 @@ extension SignalGraphEditor {
     boundaryPorts[GraphBoundaryPort(node:node,number:number,output:output,modulation:modulation)] ?? GraphRealPort(node:node,number:number)
   }
   func expandedProcessingSelection(_ ids:Set<String>)->Set<String> {
-    let candidates=graphID==nil ? rackPlugins.compactMap{($0["id"] as? String).map{"plugin:"+$0}}:nodes.compactMap{$0["id"] as? String}
+    let candidates=graphID==nil ? (rackPlugins.compactMap{($0["id"] as? String).map{"plugin:"+$0}}+(data["songSources"] as? [[String:Any]] ?? []).compactMap{($0["id"] as? String).map{"source:"+$0}}):nodes.compactMap{$0["id"] as? String}
     var groups=ids,result=Set(candidates.filter{ids.contains($0)})
     for _ in processingGroups.indices {for group in processingGroups where groups.contains(group["parent"] as? String ?? "") {if let id=group["id"] as? String{groups.insert(id)}}}
     for group in processingGroups where groups.contains(group["id"] as? String ?? ""){result.formUnion(group["nodes"] as? [String] ?? [])}
@@ -35,7 +35,7 @@ extension SignalGraphEditor {
     var params:[String:Any]=["nodes":ids,"parent":processingGroupID as Any? ?? NSNull(),"name":"Group"]
     if let graphID{params["graph"]=graphID}else{
       let groups=ids.filter{id in processingGroups.contains{$0["id"] as? String==id}},processors=ids.filter{!groups.contains($0)}
-      guard processors.allSatisfy({id in songNodePlugin[id] != nil && rackPlugins.first{$0["id"] as? String==songNodePlugin[id]}?["isInstrument"] as? Bool != true})else{status.stringValue="Select rack effects or processing groups; channels, instruments and mixer buses remain outside the boundary";return}
+      guard processors.allSatisfy({id in songSource(id) != nil || (songNodePlugin[id] != nil && rackPlugins.first{$0["id"] as? String==songNodePlugin[id]}?["isInstrument"] as? Bool != true)})else{status.stringValue="Select rack effects, modulation sources or processing groups; channels, instruments and mixer buses remain outside the boundary";return}
       params["nodes"]=processors;params["groups"]=groups
       params["positions"]=canvas.nodes.filter{processors.contains($0.id)}.map{["node":$0.id,"x":$0.x,"y":$0.y] as [String:Any]}
     }
@@ -97,7 +97,7 @@ extension SignalGraphEditor {
       guard let id=group["id"] as? String,parent(id)==processingGroupID else{continue}
       let contents=members[id] ?? []
       if graphID==nil,filterID != nil,contents.isEmpty{continue}
-      var card=SignalCanvasNode(id:id,title:group["name"] as? String ?? "Group",detail:"Processing group · \(contents.count) nodes",kind:"group",x:group["x"] as? Double ?? 0,y:group["y"] as? Double ?? 0,inputs:[],outputs:[])
+      var card=SignalCanvasNode(id:id,title:group["name"] as? String ?? "Group",detail:(group["bypass"] as? Bool==true ? "Bypassed boundary · ":"Processing group · ")+"\(contents.count) nodes",kind:"group",x:group["x"] as? Double ?? 0,y:group["y"] as? Double ?? 0,inputs:[],outputs:[])
       for node in contents {for output in [false,true] {for port in output ? node.outputs:node.inputs {
         // Connected internal-only sockets stay inside. Free and external
         // sockets remain available on the group boundary for new patching.

@@ -1,0 +1,818 @@
+ScreamSeq: x64 / Release -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.20348.
+-- The C compiler identification is MSVC 19.44.35229.0
+-- The CXX compiler identification is MSVC 19.44.35229.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Windows tests are functional only: Darwin realtime audit and sanitizers are NOT enabled
+-- native-project-tests is built but not registered: set SCREAMSEQ_REFERENCE_PROJECT to the Mac reference project
+-- Configuring done (15.8s)
+-- Generating done (0.7s)
+-- Build files have been written to: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+MSBuild version 17.14.60+43b635718 for .NET Framework
+
+  Checking File Globs
+  1>Checking Build System
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  FixtureVST3.cpp
+  funknown.cpp
+  coreiids.cpp
+  vstinitiids.cpp
+     Creating library D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/ScreamSeqVST3Fixture.lib and object D:/a/ScreamSeq/ScreamSeq/bin/windows-ci/Release/ScreamSeqVST3Fixture.exp
+  ScreamSeqVST3Fixture.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeqVST3Fixture.vst3
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  WasapiDevice.cpp
+  bitmath.c
+  bitreader.c
+  bitwriter.c
+  cpu.c
+  crc.c
+  fixed.c
+  fixed_intrin_avx2.c
+  fixed_intrin_sse2.c
+  fixed_intrin_sse42.c
+  fixed_intrin_ssse3.c
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  float.c
+  format.c
+  lpc.c
+  lpc_intrin_avx2.c
+  lpc_intrin_fma.c
+  lpc_intrin_neon.c
+  lpc_intrin_sse2.c
+  lpc_intrin_sse41.c
+  md5.c
+  memory.c
+  metadata_iterators.c
+  metadata_object.c
+  stream_decoder.c
+  stream_encoder.c
+  stream_encoder_framing.c
+  stream_encoder_intrin_avx2.c
+  stream_encoder_intrin_sse2.c
+  stream_encoder_intrin_ssse3.c
+  window.c
+  win_utf8_io.c
+  ScannerMain.cpp
+  TrackerFLAC.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\TrackerFLAC.lib
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  ScreamSeqAudio.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeqAudio.lib
+  ComponentManager.cpp
+  Logging.cpp
+  Profiler.cpp
+  mptFileType.cpp
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  mptPathString.cpp
+  mptRandom.cpp
+  mptStringBuffer.cpp
+  mptTime.cpp
+  Module.cpp
+  serialization_utils.cpp
+  version.cpp
+  NativeControlTests.cpp
+  AGC.cpp
+  DSP.cpp
+  funknown.cpp
+  coreiids.cpp
+  vstinitiids.cpp
+D:\a\ScreamSeq\ScreamSeq\common\version.cpp(150): warning : SVN revision unknown. Please check your build system. [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\OpenMPTCore.vcxproj]
+  Generating Code...
+  EQ.cpp
+  Reverb.cpp
+  AudioCriticalSection.cpp
+  ContainerMMCMP.cpp
+  ScreamSeqVST3Scanner.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeqVST3Scanner.exe
+  native-control-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\native-control-tests.exe
+  ContainerPP20.cpp
+  ContainerUMX.cpp
+  ContainerXPK.cpp
+  Dlsbank.cpp
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Fastmix.cpp
+  ITCompression.cpp
+  ITTools.cpp
+  InstrumentExtensions.cpp
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  PluginAudioLayoutTests.cpp
+  InstrumentSynth.cpp
+  Load_667.cpp
+  Load_669.cpp
+  Load_amf.cpp
+  PreservationTests.cpp
+  plugin-audio-layout-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\plugin-audio-layout-tests.exe
+  Load_ams.cpp
+  Load_c67.cpp
+  Load_cba.cpp
+  Load_dbm.cpp
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Load_digi.cpp
+  Load_dmf.cpp
+  Load_dsm.cpp
+  Load_dsym.cpp
+  Load_dtm.cpp
+  RenderProbe.cpp
+  Load_etx.cpp
+  Load_far.cpp
+  project-preservation-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\project-preservation-tests.exe
+  Load_fc.cpp
+  Load_fmt.cpp
+  Load_ftm.cpp
+  Load_gdm.cpp
+  renderer-probe.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\renderer-probe.exe
+  Load_gmc.cpp
+  Load_gt2.cpp
+  Load_ice.cpp
+  Load_imf.cpp
+  Load_ims.cpp
+  Load_it.cpp
+  Load_itp.cpp
+  Load_kris.cpp
+  Load_mdl.cpp
+  Load_med.cpp
+  Load_mid.cpp
+  Load_mo3.cpp
+  Load_mod.cpp
+  Load_mt2.cpp
+  Load_mtm.cpp
+  Load_mus_km.cpp
+  Load_nru.cpp
+  Load_okt.cpp
+  Load_plm.cpp
+  Load_psm.cpp
+  Load_pt36.cpp
+  Load_ptm.cpp
+  Load_puma.cpp
+  Load_rtm.cpp
+  Load_s3m.cpp
+  Load_sfx.cpp
+  Load_ss.cpp
+  Load_stk.cpp
+  Load_stm.cpp
+  Load_stp.cpp
+  Load_symmod.cpp
+  Load_tcb.cpp
+  Load_uax.cpp
+  Load_ult.cpp
+  Load_unic.cpp
+  Load_wav.cpp
+  Load_xm.cpp
+  Load_xmf.cpp
+  MIDIEvents.cpp
+  MIDIMacroParser.cpp
+  MIDIMacros.cpp
+  MODTools.cpp
+  MPEGFrame.cpp
+  Message.cpp
+  MixFuncTable.cpp
+  MixerLoops.cpp
+  MixerSettings.cpp
+  ModChannel.cpp
+  ModInstrument.cpp
+  ModSample.cpp
+  ModSequence.cpp
+  OPL.cpp
+  OggStream.cpp
+  Paula.cpp
+  PlayState.cpp
+  PlaybackTest.cpp
+  RowVisitor.cpp
+  S3MTools.cpp
+  SampleFormatBRR.cpp
+  SampleFormatFLAC.cpp
+  SampleFormatMP3.cpp
+  SampleFormatMediaFoundation.cpp
+  SampleFormatOpus.cpp
+  SampleFormatSFZ.cpp
+  SampleFormatVorbis.cpp
+  SampleFormats.cpp
+  SampleIO.cpp
+  Snd_flt.cpp
+  Snd_fx.cpp
+  Sndfile.cpp
+  Sndmix.cpp
+  SoundFilePlayConfig.cpp
+  Tables.cpp
+  Tagging.cpp
+  TinyFFT.cpp
+  UMXTools.cpp
+  UpgradeModule.cpp
+  WAVTools.cpp
+  WindowedFIR.cpp
+  XMTools.cpp
+  load_j2b.cpp
+  mod_specifications.cpp
+  modcommand.cpp
+  modsmp_ctrl.cpp
+  pattern.cpp
+  patternContainer.cpp
+  DigiBoosterEcho.cpp
+  LFOPlugin.cpp
+  PlugInterface.cpp
+  PluginManager.cpp
+  SymMODEcho.cpp
+  Chorus.cpp
+  Compressor.cpp
+  DMOPlugin.cpp
+  DMOUtils.cpp
+  Distortion.cpp
+  Echo.cpp
+  Flanger.cpp
+  Gargle.cpp
+  I3DL2Reverb.cpp
+  ParamEq.cpp
+  WavesReverb.cpp
+  tuning.cpp
+  tuningCollection.cpp
+  Assert.cpp
+  wav_write.cpp
+  miniz.c
+  minimp3.c
+  stb_vorbis.c
+  OpenMPTCore.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\OpenMPTCore.lib
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  TrackLayout.cpp
+  PatternCommands.cpp
+  AutomationTools.cpp
+  TrackerDocument.cpp
+  PatternTools.cpp
+  NativeSong.cpp
+  ArrangementTools.cpp
+  MixerGraph.cpp
+  MixerRuntime.cpp
+  MixerTransition.cpp
+  MixerDryBridge.cpp
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244: '=': conversion from 'const _Ty' to '_Ty', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\TrackerEditor.vcxproj]
+  (compiling source file '../../editor/MixerRuntime.cpp')
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27):
+      the template instantiation context (the oldest one first) is
+          D:\a\ScreamSeq\ScreamSeq\editor\MixerRuntime.cpp(178,36):
+          see reference to function template instantiation '_OutIt *std::fill_n<_Ty*,uint32_t,int>(_OutIt,const _Diff,const int &)' being compiled
+          with
+          [
+              _OutIt=float *,
+              _Ty=float,
+              _Diff=uint32_t
+          ]
+
+  MixerPluginRouting.cpp
+  NativeEffects.cpp
+  SampleImport.cpp
+  SongTiming.cpp
+  PreciseNoteRuntime.cpp
+  RecordNudgeRuntime.cpp
+  NoteRecording.cpp
+  InstrumentEnvelopeTools.cpp
+  EnvelopeBank.cpp
+  StateVariableFilter.cpp
+  FractionalDelay.cpp
+  Distortion.cpp
+  LofiMat.cpp
+  CabinetVoicing.cpp
+  CabinetSimulator.cpp
+  Dynamics.cpp
+  Maximizer.cpp
+  SampleProcessing.cpp
+  SampleWaveform.cpp
+  SampleDocument.cpp
+  SampleArchive.cpp
+  SampleClipboard.cpp
+  SampleSplice.cpp
+  SampleCopy.cpp
+  SampleDrawing.cpp
+  SampleSnap.cpp
+  SampleLoopCrossfade.cpp
+  SignalGraph.cpp
+  SignalGroupBypass.cpp
+  NoteRouting.cpp
+  GraphEditing.cpp
+  GraphClipboard.cpp
+  SignalRuntime.cpp
+  SignalGroupRuntime.cpp
+  SongGroupRuntime.cpp
+  SongModulation.cpp
+  GraphPresentation.cpp
+  ParameterProvenance.cpp
+  SampleEdit.cpp
+  TrackerEditor.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\TrackerEditor.lib
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/editor/hosted/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  SaveTests.cpp
+  UnifiedEffectsTests.cpp
+  PluginNoteSourcesTests.cpp
+  PluginAssignments.cpp
+  plugin-note-sources-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\plugin-note-sources-tests.exe
+  unified-effects-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\unified-effects-tests.exe
+  CoreTests.cpp
+  HostedAudio.cpp
+  RackPreset.cpp
+  PluginScheduling.cpp
+  PluginChain.cpp
+  windows-save-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\windows-save-tests.exe
+  SongTimingTests.cpp
+  InstrumentSources.cpp
+  tracker-core-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\tracker-core-tests.exe
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244: '=': conversion from 'const _Ty' to '_Ty', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\TrackerHosted.vcxproj]
+  (compiling source file '../../../editor/hosted/PluginChain.cpp')
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27):
+      the template instantiation context (the oldest one first) is
+          D:\a\ScreamSeq\ScreamSeq\editor\hosted\PluginChain.cpp(916,64):
+          see reference to function template instantiation '_OutIt *std::fill_n<_Ty*,uint32_t,int>(_OutIt,const _Diff,const int &)' being compiled
+          with
+          [
+              _OutIt=float *,
+              _Ty=float,
+              _Diff=uint32_t
+          ]
+
+  SongModulationTests.cpp
+  RecordedAutomation.cpp
+  NoteRoutingHost.cpp
+  song-timing-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\song-timing-tests.exe
+  SongGroupRuntimeTests.cpp
+  PatternPitchRouting.cpp
+  SongModulationHost.cpp
+  song-modulation-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\song-modulation-tests.exe
+  SignalGroupRuntimeTests.cpp
+  LatencyPublication.cpp
+  song-group-runtime-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\song-group-runtime-tests.exe
+  SignalGroupBypassTests.cpp
+  SampleGraphSources.cpp
+  signal-group-runtime-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\signal-group-runtime-tests.exe
+  SignalGraphTests.cpp
+  GraphPluginEndpoint.cpp
+  PluginAssignments.cpp
+  signal-group-bypass-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\signal-group-bypass-tests.exe
+  SidechainTests.cpp
+  NativeInstrument.cpp
+  NativeSignalGraph.cpp
+  signal-graph-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\signal-graph-tests.exe
+  PatternCommandRuntime.cpp
+  sidechain-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sidechain-tests.exe
+  PatternPitchRuntime.cpp
+  SampleSnapTests.cpp
+  SampleProcessingTests.cpp
+  WindowsVST3.cpp
+  Registry.cpp
+  sample-snap-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-snap-tests.exe
+  Module.cpp
+  Scanner.cpp
+  funknown.cpp
+  coreiids.cpp
+  vstinitiids.cpp
+  sample-processing-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-processing-tests.exe
+  BinaryPlist.cpp
+  SampleDrawingTests.cpp
+  SampleCrossfadeTests.cpp
+  SampleCopyTests.cpp
+  sample-drawing-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-drawing-tests.exe
+  SampleClipboardTests.cpp
+  sample-crossfade-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-crossfade-tests.exe
+  SampleArchiveTests.cpp
+  sample-copy-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-copy-tests.exe
+  RoutingPrototypeTests.cpp
+  sample-archive-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-archive-tests.exe
+  PlaybackRegionTests.cpp
+  sample-clipboard-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-clipboard-tests.exe
+  PlaybackDisplayTests.cpp
+  routing-prototype-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\routing-prototype-tests.exe
+  PatternToolsTests.cpp
+  playback-region-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\playback-region-tests.exe
+  PatternCommandsTests.cpp
+  playback-display-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\playback-display-tests.exe
+  ParameterProvenanceTests.cpp
+  pattern-tools-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\pattern-tools-tests.exe
+  OversamplingTests.cpp
+  pattern-commands-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\pattern-commands-tests.exe
+  oversampling-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\oversampling-tests.exe
+  TrackerHosted.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\hosted\Release\TrackerHosted.lib
+  NoteRoutingTests.cpp
+  NativeReverseLoopTests.cpp
+  note-routing-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\note-routing-tests.exe
+  MixerRuntimeTests.cpp
+  parameter-provenance-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\parameter-provenance-tests.exe
+  MixerPluginRoutingTests.cpp
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244: '=': conversion from 'const _Ty' to '_Ty', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:             _Ty=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+  (compiling source file '../../mac/Tests/MixerRuntimeTests.cpp')
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\xutility(5354,27):
+      the template instantiation context (the oldest one first) is
+          D:\a\ScreamSeq\ScreamSeq\mac\Tests\MixerRuntimeTests.cpp(354,84):
+          see reference to function template instantiation '_OutIt *std::fill_n<_Ty*,unsigned int,int>(_OutIt,const _Diff,const int &)' being compiled
+          with
+          [
+              _OutIt=float *,
+              _Ty=float,
+              _Diff=uint32_t
+          ]
+
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:             _Ty2=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\mixer-runtime-tests.vcxproj]
+  (compiling source file '../../mac/Tests/MixerRuntimeTests.cpp')
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54):
+      the template instantiation context (the oldest one first) is
+          D:\a\ScreamSeq\ScreamSeq\mac\Tests\MixerRuntimeTests.cpp(531,74):
+          see reference to function template instantiation 'std::pair<size_t,float>::pair<uint32_t,int,0>(_Other1 &&,_Other2 &&) noexcept' being compiled
+          with
+          [
+              _Other1=uint32_t,
+              _Other2=int
+          ]
+              D:\a\ScreamSeq\ScreamSeq\mac\Tests\MixerRuntimeTests.cpp(531,14):
+              see the first reference to 'std::pair<size_t,float>::pair' in 'main'
+
+  mixer-plugin-routing-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\mixer-plugin-routing-tests.exe
+  MixerGraphTests.cpp
+  mixer-runtime-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\mixer-runtime-tests.exe
+  InstrumentEnvelopeTests.cpp
+  native-reverse-loop-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\native-reverse-loop-tests.exe
+  GraphSignalObservationTests.cpp
+  mixer-graph-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\mixer-graph-tests.exe
+  FilterTests.cpp
+  filter-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\filter-tests.exe
+  EffectAuxiliaryTests.cpp
+  effect-auxiliary-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\effect-auxiliary-tests.exe
+  DocumentHistoryAllocationTests.cpp
+  graph-signal-observation-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\graph-signal-observation-tests.exe
+  CurveFormulaTests.cpp
+  instrument-envelope-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\instrument-envelope-tests.exe
+  AutomationToolsTests.cpp
+  curve-formula-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\curve-formula-tests.exe
+  BinaryPlist.cpp
+  NativeMetadata.cpp
+  NativeProject.cpp
+  PluginPreset.cpp
+  PluginLibrary.cpp
+  pugixml.cpp
+  document-history-allocation-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\document-history-allocation-tests.exe
+  automation-tools-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\automation-tools-tests.exe
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  HostedProject.cpp
+  RecordedAutomationTests.cpp
+  CallbackAudit.cpp
+  ScreamSeqProject.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeqProject.lib
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  NativeProjectTests.cpp
+  GraphOperationsTests.cpp
+  GraphOperations.cpp
+  native-project-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\native-project-tests.exe
+  recorded-automation-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\recorded-automation-tests.exe
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  AudioBusTests.cpp
+  CallbackAudit.cpp
+  ScreamSeqPlayback.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeqPlayback.lib
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244: 'initializing': conversion from '_Ty' to '_Ty1', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:             _Ty1=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+  (compiling source file '../../windows/Tests/GraphOperations/GraphOperationsTests.cpp')
+      C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,16):
+      the template instantiation context (the oldest one first) is
+          D:\a\ScreamSeq\ScreamSeq\windows\Tests\GraphOperations\GraphOperationsTests.cpp(537,60):
+          see reference to function template instantiation 'std::pair<float,float>::pair<int,int,0>(_Other1 &&,_Other2 &&) noexcept' being compiled
+          with
+          [
+              _Other1=int,
+              _Other2=int
+          ]
+              D:\a\ScreamSeq\ScreamSeq\windows\Tests\GraphOperations\GraphOperationsTests.cpp(537,59):
+              see the first reference to 'std::pair<float,float>::pair' in 'songModulationSources'
+
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         with [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:             _Ty=int [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         and [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         [ [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:             _Ty2=float [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.44.35207\include\utility(274,54): warning C4244:         ] [D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\graph-document-tests.vcxproj]
+  (compiling source file '../../windows/Tests/GraphOperations/GraphOperationsTests.cpp')
+
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  MixerOperationsTests.cpp
+  MixerOperations.cpp
+  native-audio-bus-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\native-audio-bus-tests.exe
+  LiveParameterTests.cpp
+  CallbackAudit.cpp
+  graph-document-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\graph-document-tests.exe
+  HostedProjectTests.cpp
+  CallbackAudit.cpp
+  mixer-document-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\mixer-document-tests.exe
+  DocumentControllerTests.cpp
+  DocumentController.cpp
+  DocumentOperations.cpp
+  TimelineOperations.cpp
+  live-parameter-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\live-parameter-tests.exe
+  AssetOperations.cpp
+  PluginOperations.cpp
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  hosted-project-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\hosted-project-tests.exe
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+  PatternOperations.cpp
+  GraphOperations.cpp
+  PreviewTests.cpp
+  CallbackAudit.cpp
+  Preview.cpp
+  LibraryIndex.cpp
+  Main.cpp
+  Library.cpp
+  LibraryIndex.cpp
+  Preview.cpp
+  MixerOperations.cpp
+  DocumentController.cpp
+  DocumentOperations.cpp
+  EnvelopeOperations.cpp
+  TimelineOperations.cpp
+  sample-preview-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\sample-preview-tests.exe
+  AssetOperations.cpp
+  PluginOperations.cpp
+  document-controller-tests.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\document-controller-tests.exe
+  PatternOperations.cpp
+  GraphOperations.cpp
+  MixerOperations.cpp
+  EnvelopeOperations.cpp
+  PipeServer.cpp
+  ScreamSeq.vcxproj -> D:\a\ScreamSeq\ScreamSeq\bin\windows-ci\Release\ScreamSeq.exe
+  Building Custom Rule D:/a/ScreamSeq/ScreamSeq/windows/CMakeLists.txt
+Internal ctest changing into directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+Test project D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+      Start  3: tracker-core
+ 1/36 Test  #3: tracker-core .....................   Passed    0.42 sec
+      Start  4: instrument-envelopes
+ 2/36 Test  #4: instrument-envelopes .............   Passed    0.07 sec
+      Start  5: sample-crossfade
+ 3/36 Test  #5: sample-crossfade .................   Passed    0.39 sec
+      Start  6: sample-snap
+ 4/36 Test  #6: sample-snap ......................   Passed    0.09 sec
+      Start  7: sample-drawing
+ 5/36 Test  #7: sample-drawing ...................   Passed    0.10 sec
+      Start  8: sample-copy
+ 6/36 Test  #8: sample-copy ......................   Passed    0.45 sec
+      Start  9: sample-clipboard
+ 7/36 Test  #9: sample-clipboard .................   Passed    0.26 sec
+      Start 10: sample-archive
+ 8/36 Test #10: sample-archive ...................   Passed    0.34 sec
+      Start 11: sample-processing
+ 9/36 Test #11: sample-processing ................   Passed    0.52 sec
+      Start 12: automation-tools
+10/36 Test #12: automation-tools .................   Passed    0.04 sec
+      Start 13: pattern-tools
+11/36 Test #13: pattern-tools ....................   Passed    0.87 sec
+      Start 14: pattern-commands
+12/36 Test #14: pattern-commands .................   Passed    0.01 sec
+      Start 15: mixer-graph
+13/36 Test #15: mixer-graph ......................   Passed    0.01 sec
+      Start 16: signal-graph
+14/36 Test #16: signal-graph .....................   Passed    0.03 sec
+      Start 17: song-timing
+15/36 Test #17: song-timing ......................   Passed    1.17 sec
+      Start 18: native-reverse-loops
+16/36 Test #18: native-reverse-loops .............   Passed    6.73 sec
+      Start 19: filters
+17/36 Test #19: filters ..........................   Passed    0.26 sec
+      Start 20: oversampling
+18/36 Test #20: oversampling .....................   Passed    0.14 sec
+      Start 21: routing-prototype
+19/36 Test #21: routing-prototype ................   Passed    0.29 sec
+      Start 22: mixer-runtime
+20/36 Test #22: mixer-runtime ....................   Passed    0.22 sec
+      Start 23: sidechains
+21/36 Test #23: sidechains .......................   Passed    0.04 sec
+      Start 24: effect-auxiliary
+22/36 Test #24: effect-auxiliary .................   Passed    0.01 sec
+      Start 25: playback-regions
+23/36 Test #25: playback-regions .................   Passed    0.34 sec
+      Start 26: curve-formulas
+24/36 Test #26: curve-formulas ...................   Passed    0.01 sec
+      Start 27: document-history-allocation
+25/36 Test #27: document-history-allocation ......   Passed    0.32 sec
+      Start 28: note-routing
+26/36 Test #28: note-routing .....................   Passed    0.01 sec
+      Start 29: plugin-note-sources
+27/36 Test #29: plugin-note-sources ..............   Passed    0.01 sec
+      Start 30: graph-signal-observation
+28/36 Test #30: graph-signal-observation .........   Passed    0.03 sec
+      Start 31: song-modulation
+29/36 Test #31: song-modulation ..................   Passed    0.02 sec
+      Start 32: signal-group-bypass
+30/36 Test #32: signal-group-bypass ..............   Passed    0.01 sec
+      Start 33: signal-group-runtime
+31/36 Test #33: signal-group-runtime .............   Passed    0.01 sec
+      Start 34: song-group-runtime
+32/36 Test #34: song-group-runtime ...............   Passed    0.07 sec
+      Start 35: mixer-plugin-routing
+33/36 Test #35: mixer-plugin-routing .............   Passed    0.05 sec
+      Start 37: unified-effects
+34/36 Test #37: unified-effects ..................   Passed    4.08 sec
+      Start 38: playback-display
+35/36 Test #38: playback-display .................   Passed    0.04 sec
+      Start 39: plugin-audio-layout
+36/36 Test #39: plugin-audio-layout ..............   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 36
+
+Label Time Summary:
+allocation-failure    =   0.32 sec*proc (1 test)
+functional            =  17.41 sec*proc (32 tests)
+no-realtime-audit     =  13.50 sec*proc (17 tests)
+portable              =  17.46 sec*proc (36 tests)
+
+Total Test time (real) =  17.52 sec
+Portable functional tests passed. Realtime allocation/lock auditing and sanitizers were not run.
+Internal ctest changing into directory: D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+Test project D:/a/ScreamSeq/ScreamSeq/bin/windows-ci
+      Start 40: native-audio-bus
+ 1/47 Test #40: native-audio-bus ..................................   Passed    6.44 sec
+      Start 41: recorded-automation-tests
+ 2/47 Test #41: recorded-automation-tests .........................   Passed    0.07 sec
+      Start 42: live-parameter-tests
+ 3/47 Test #42: live-parameter-tests ..............................   Passed    0.24 sec
+      Start 43: hosted-project-tests
+ 4/47 Test #43: hosted-project-tests ..............................   Passed    1.13 sec
+      Start 44: project-preservation-tests
+ 5/47 Test #44: project-preservation-tests ........................   Passed    0.01 sec
+      Start 45: graph-document-stageConnectionOperations
+ 6/47 Test #45: graph-document-stageConnectionOperations ..........   Passed    0.04 sec
+      Start 46: graph-document-noteRoutingOperations
+ 7/47 Test #46: graph-document-noteRoutingOperations ..............   Passed    0.03 sec
+      Start 47: graph-document-graphEditingOperations
+ 8/47 Test #47: graph-document-graphEditingOperations .............   Passed    0.03 sec
+      Start 48: graph-document-groupBypassOperations
+ 9/47 Test #48: graph-document-groupBypassOperations ..............   Passed    0.03 sec
+      Start 49: graph-document-graphProvenance
+10/47 Test #49: graph-document-graphProvenance ....................   Passed    0.02 sec
+      Start 50: graph-document-graphPresentation
+11/47 Test #50: graph-document-graphPresentation ..................   Passed    0.03 sec
+      Start 51: graph-document-songModulationSources
+12/47 Test #51: graph-document-songModulationSources ..............   Passed    0.03 sec
+      Start 52: graph-document-songAutomationAndBanks
+13/47 Test #52: graph-document-songAutomationAndBanks .............   Passed    0.03 sec
+      Start 53: graph-document-stableImplicitMaster
+14/47 Test #53: graph-document-stableImplicitMaster ...............   Passed    0.03 sec
+      Start 54: graph-document-songCableCuts
+15/47 Test #54: graph-document-songCableCuts ......................   Passed    0.03 sec
+      Start 55: graph-document-createReadHistory
+16/47 Test #55: graph-document-createReadHistory ..................   Passed    0.02 sec
+      Start 56: graph-document-nodesAndCloning
+17/47 Test #56: graph-document-nodesAndCloning ....................   Passed    0.04 sec
+      Start 57: graph-document-automationAndBanks
+18/47 Test #57: graph-document-automationAndBanks .................   Passed    0.04 sec
+      Start 58: graph-document-assignmentsRoutesLayoutCommands
+19/47 Test #58: graph-document-assignmentsRoutesLayoutCommands ....   Passed    0.04 sec
+      Start 59: graph-document-hostHooks
+20/47 Test #59: graph-document-hostHooks ..........................   Passed    0.03 sec
+      Start 60: graph-document-automationOrderAndRedo
+21/47 Test #60: graph-document-automationOrderAndRedo .............   Passed    0.03 sec
+      Start 61: graph-document-cableInsertionAndDetachment
+22/47 Test #61: graph-document-cableInsertionAndDetachment ........   Passed    0.03 sec
+      Start 62: graph-document-songProcessingGroups
+23/47 Test #62: graph-document-songProcessingGroups ...............   Passed    0.02 sec
+      Start 63: graph-document-processingGroups
+24/47 Test #63: graph-document-processingGroups ...................   Passed    0.03 sec
+      Start 64: graph-document-strictValidation
+25/47 Test #64: graph-document-strictValidation ...................   Passed    0.19 sec
+      Start 65: graph-document-dryRunsAndRedo
+26/47 Test #65: graph-document-dryRunsAndRedo .....................   Passed    0.03 sec
+      Start 66: graph-document-callbackOrderingAndUnrelatedData
+27/47 Test #66: graph-document-callbackOrderingAndUnrelatedData ...   Passed    0.02 sec
+      Start 67: mixer-document-tests
+28/47 Test #67: mixer-document-tests ..............................   Passed    0.04 sec
+      Start 68: windows-save-scratch
+29/47 Test #68: windows-save-scratch ..............................   Passed    0.02 sec
+      Start 69: windows-save-tests
+30/47 Test #69: windows-save-tests ................................   Passed    0.03 sec
+      Start 70: document-controller-scratch
+31/47 Test #70: document-controller-scratch .......................   Passed    0.02 sec
+      Start 71: document-controller-fixtures
+32/47 Test #71: document-controller-fixtures ......................   Passed    0.03 sec
+      Start 72: document-controller-large-fixture
+33/47 Test #72: document-controller-large-fixture .................   Passed    0.15 sec
+      Start 73: document-controller-publication
+34/47 Test #73: document-controller-publication ...................   Passed    0.15 sec
+      Start 74: document-controller-cache
+35/47 Test #74: document-controller-cache .........................   Passed    0.14 sec
+      Start 75: document-controller-assets
+36/47 Test #75: document-controller-assets ........................   Passed    0.11 sec
+      Start 76: document-controller-live-parameters
+37/47 Test #76: document-controller-live-parameters ...............   Passed    0.18 sec
+      Start 77: document-controller-live-rack-publication
+38/47 Test #77: document-controller-live-rack-publication .........   Passed    0.48 sec
+      Start 78: document-controller-live-graph-publication
+39/47 Test #78: document-controller-live-graph-publication ........   Passed    0.72 sec
+      Start 79: document-controller-live-recorded-publication
+40/47 Test #79: document-controller-live-recorded-publication .....   Passed    0.28 sec
+      Start 80: document-controller-trigger-instruments
+41/47 Test #80: document-controller-trigger-instruments ...........   Passed    0.37 sec
+      Start 81: document-controller-pattern-performance
+42/47 Test #81: document-controller-pattern-performance ...........   Passed    1.13 sec
+      Start 82: document-controller-pattern-clipboard
+43/47 Test #82: document-controller-pattern-clipboard .............   Passed    0.08 sec
+      Start 83: document-controller-graph-recipes
+44/47 Test #83: document-controller-graph-recipes .................   Passed    1.74 sec
+      Start 84: document-controller-mixer-integration
+45/47 Test #84: document-controller-mixer-integration .............   Passed    1.67 sec
+      Start 85: document-controller-unified-plugin-history
+46/47 Test #85: document-controller-unified-plugin-history ........   Passed    0.44 sec
+      Start 86: document-controller-graph-pattern-view
+47/47 Test #86: document-controller-graph-pattern-view ............   Passed    0.11 sec
+
+100% tests passed, 0 tests failed out of 47
+
+Label Time Summary:
+cxx-allocation-audit    =   7.87 sec*proc (4 tests)
+functional              =   8.72 sec*proc (42 tests)
+hosted                  =   7.87 sec*proc (4 tests)
+live-parameters         =   0.24 sec*proc (1 test)
+native-vst3             =   6.44 sec*proc (1 test)
+no-realtime-audit       =   8.72 sec*proc (42 tests)
+project-native          =   0.01 sec*proc (1 test)
+worker                  =  16.60 sec*proc (47 tests)
+
+Total Test time (real) =  16.65 sec
+Worker tests passed, including native VST3 channel-pair rendering. Desktop and audio-device checks were not run.

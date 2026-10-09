@@ -16,11 +16,11 @@ extension InterfaceTests {
     try require(field.returnFocus === rack.table && field.control(field,textView:text,doCommandBy:#selector(NSResponder.insertNewline(_:))) && host.firstResponder === rack.table,"Return commits a graph parameter and leaves text-only Undo focus for global song history")
     let standalone=ParameterValueField()
     try require(!standalone.control(standalone,textView:text,doCommandBy:#selector(NSResponder.insertNewline(_:))),"Other parameter fields retain their established text editing behavior unless they opt in")
-    try require(field.stringValue=="80" && abs(slider.doubleValue-(80-20)/19980)<1e-8 && effective.stringValue=="Effective 1079","Editable control uses manual base while a separate label shows effective host snapshot")
+    try require(field.stringValue=="80" && abs(slider.doubleValue-(80-20)/19980)<1e-8 && effective.stringValue=="Last read 1079","Editable control uses manual base while a separate label shows effective host snapshot")
     rack.set(7,value:80)
     try require(requests.isEmpty,"Setting the unchanged manual base is a no-op even when modulation changes effective output")
     rack.context(["id":"filter"],revision:"song:2");p["effectiveValue"]=3000.0;p["value"]=3000.0;reply("song:2")
-    try require(rack.table.view(atColumn:0,row:0,makeIfNecessary:true) === first && effective.stringValue=="Effective 3000" && field.stringValue=="80","Effective-only refresh retains native controls and updates only the snapshot readout")
+    try require(rack.table.view(atColumn:0,row:0,makeIfNecessary:true) === first && effective.stringValue=="Last read 3000" && field.stringValue=="80","Effective-only refresh retains native controls and updates only the snapshot readout")
     rack.context(["id":"filter"],revision:"song:3");reply("song:3")
     try require(rack.table.view(atColumn:0,row:0,makeIfNecessary:true) === first,"Unrelated document revisions with identical catalogue do not recreate parameter controls")
     rack.context(["id":"filter"],revision:"song:4");slider.gesture?(true);p["manualValue"]=120.0;reply("song:4")
@@ -33,6 +33,9 @@ extension InterfaceTests {
     let editedField=descendants(changed,ParameterValueField.self).first!
     editedField.commit?("140");requests.removeFirst().2(["result":["revision":"song:4-edit","data":[:]]])
     try require(editedField.stringValue=="140" && GraphRackControls.manualValue(rack.values[0])==140,"A direct field edit displays and confirms its manual scalar")
+    try require(requests.first?.0=="plugin.parameters.get","An accepted direct edit requests a fresh effective snapshot, without inventing its value")
+    p["manualValue"]=140.0;p["effectiveValue"]=321.0;reply("song:4-edit")
+    try require(rack.values[0]["effectiveValue"] as? Double==321,"Effective read comes from the host rather than the manual base")
     rack.context(["id":"filter"],revision:"song:4-undo");p["manualValue"]=120.0;p["effectiveValue"]=147.5;reply("song:4-undo")
     let undone=rack.table.view(atColumn:0,row:0,makeIfNecessary:true)!
     let undoneField=descendants(undone,ParameterValueField.self).first!
@@ -53,6 +56,8 @@ extension InterfaceTests {
     try require((requests.first?.1["values"] as? [[String:Any]])?.first?["value"] as? Double==180,"Manual writes queued during a pending transaction preserve the latest musician value")
     requests.removeFirst().2(["result":["revision":"song:7","data":[:]]])
     try require(GraphRackControls.manualValue(rack.values[0])==180 && rack.values[0]["effectiveValue"] as? Double==3000,"Queued manual edit updates the editable base without inventing a new effective sample")
+    try require(requests.count==1 && requests[0].0=="plugin.parameters.get","A queued gesture refreshes only after its final accepted value")
+    p["manualValue"]=180.0;reply("song:7")
     rack.context(["id":"another"]);p["manualValue"]=200.0;reply("song:8")
     try require(GraphRackControls.manualValue(rack.values[0])==200,"Changing stable processor identity loads its own manual catalogue")
     let recipe=GraphPluginControls(frame:.zero)

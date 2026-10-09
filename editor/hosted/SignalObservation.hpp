@@ -1,6 +1,8 @@
 #pragma once
 #include "SignalScope.hpp"
 #include "SignalListen.hpp"
+#include "editor/SignalRouteIdentity.hpp"
+#include "editor/SignalRuntimeObserver.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -14,16 +16,15 @@
 #include <vector>
 
 namespace Tracker {
-struct SignalRouteIdentity {
-  std::string kind,source,target,plugin,tap="post-gain";
-  uint32_t input=0,output=0;
-};
+struct SignalCopyIdentity {uint64_t graph=0,target=0;uint8_t role=0;uint64_t instrument=0;uint16_t channel=UINT16_MAX;};
 struct SignalPortIdentity {
   std::string key, node, name;
   bool output = false;
   uint32_t port = 0, channels = 2;
   int64_t processorLatency = -1, compensation = -1;
   std::optional<SignalRouteIdentity> route;
+  std::optional<SignalCopyIdentity> copy;
+  std::string kind="audio";
 };
 struct SignalPortConfiguration {uint32_t token=0;int64_t processorLatency=-1,compensation=-1;double routeGain=1;bool preFader=false;};
 struct SignalPortReading {
@@ -32,6 +33,8 @@ struct SignalPortReading {
   bool available=false,fresh=false,measured = false, clipped = false, nonFinite = false;
   int64_t processorLatency=-1,compensation=-1;
   double routeGain=1;bool preFader=false;
+  double value=0,first=0;
+  std::optional<SignalNoteGate> noteGate;
 };
 // Immutable identities are prepared by the control owner. Each meter has one
 // audio writer; readers touch atomics only. No vendor callbacks or allocations
@@ -59,18 +62,39 @@ private:
     std::atomic<bool> measured{false}, clip{false}, nonFinite{false};
     std::atomic<uint32_t> clear{0};
     uint32_t cleared = 0;
+    std::atomic<double> value{0},first{0};
+    std::atomic<uint64_t> noteVersion{0},noteGeneration{0},noteOn{0},noteOff{0},noteRetrigger{0},noteFrame{0};
+    std::atomic<bool> noteHeld{false},noteHasEvent{false};
   };
+  // The audio owner resets history before the first write in an adopted
+  // generation. Explicit Clear only resets diagnostic latches, as before.
+  static void beginMeasurement(Meter &m,uint64_t generation) noexcept {
+    if(m.generation.load(std::memory_order_relaxed)!=generation) {
+      m.measured.store(false,std::memory_order_release);
+      m.left.store(0,std::memory_order_relaxed);m.right.store(0,std::memory_order_relaxed);
+      m.rmsLeft.store(0,std::memory_order_relaxed);m.rmsRight.store(0,std::memory_order_relaxed);
+      m.through.store(0,std::memory_order_relaxed);m.lastSignal.store(0,std::memory_order_relaxed);
+      m.first.store(0,std::memory_order_relaxed);m.value.store(0,std::memory_order_relaxed);
+      m.clip.store(false,std::memory_order_relaxed);m.nonFinite.store(false,std::memory_order_relaxed);
+    }
+    const auto clear=m.clear.load(std::memory_order_relaxed);
+    if(clear!=m.cleared){m.clip.store(false,std::memory_order_relaxed);m.nonFinite.store(false,std::memory_order_relaxed);m.cleared=clear;}
+  }
   struct Configuration {
     std::atomic<uint64_t> generation{0};
     std::atomic<int64_t> processorLatency{-1},compensation{-1};
     std::atomic<double> routeGain{1};
     std::atomic<bool> preFader{false};
+    std::atomic<uint32_t> domain{0};
   };
   // Independent of meter publication: a queued audio plan can adopt before
   // the producer finishes appending newly allocated catalogue slots.
   std::unique_ptr<std::array<Configuration,maximumPorts>> configuration_=std::make_unique<std::array<Configuration,maximumPorts>>();
   std::atomic<uint64_t> generation_{0},through_{0};
   uint64_t nextGeneration_=0,audioThrough_=0; // Audio owner; quiescent preparation may initialize.
+  static constexpr size_t maximumDomains=4096;
+  std::array<std::atomic<uint64_t>,maximumDomains> domains_{};
+  uint32_t nextDomain_=0; // Single control owner, prepared before publication.
   double rate_;
   // Stable slots permit new bus observations to be prepared while old ports
   // are being rendered. Publishing a slot never relocates an audio-reader's
@@ -122,28 +146,44 @@ public:
   }
   // Prepared numeric metadata only. Called at actual plan adoption, including
   // rollback, or while stopped; neither allocations nor catalogue mutation.
-  void activate(std::span<const SignalPortConfiguration> ports) noexcept {
+  uint32_t domainCount() const noexcept {return nextDomain_;} // Control owner only.
+  uint32_t prepareDomain(uint32_t offset) const {
+    if(offset>=maximumDomains-nextDomain_-1)throw std::invalid_argument("Signal copy observation capacity exceeded");
+    return nextDomain_+offset+1;
+  }
+  bool canPublishDomains(uint32_t base,uint32_t count) const noexcept {return base==nextDomain_&&count<maximumDomains-base;}
+  void publishDomains(uint32_t base,uint32_t count) noexcept {nextDomain_=base+count;}
+  uint32_t newDomain() {if(nextDomain_+1>=maximumDomains)throw std::invalid_argument("Signal copy observation capacity exceeded");return ++nextDomain_;}
+  uint64_t domainGeneration(uint32_t domain) const noexcept {return domain<maximumDomains?domains_[domain].load(std::memory_order_acquire):0;}
+  void activate(std::span<const SignalPortConfiguration> ports) noexcept {activateDomain(0,ports);}
+  void activateDomain(uint32_t domain,std::span<const SignalPortConfiguration> ports) noexcept {
+    if(domain>=maximumDomains)return;
     const auto generation=++nextGeneration_;
     for(const auto &p:ports)if(p.token && p.token<=maximumPorts){auto &c=(*configuration_)[p.token-1];
       // Invalidate before changing metadata; acquiring a new field also observes
       // this invalidation, so a concurrent reader cannot report mixed plans.
       c.generation.store(0,std::memory_order_release);
+      c.domain.store(domain,std::memory_order_release);
       c.processorLatency.store(p.processorLatency,std::memory_order_release);c.compensation.store(p.compensation,std::memory_order_release);
       c.routeGain.store(p.routeGain,std::memory_order_release);c.preFader.store(p.preFader,std::memory_order_release);
       c.generation.store(generation,std::memory_order_release);
     }
-    scope.route(generation);generation_.store(generation,std::memory_order_release);
+    domains_[domain].store(generation,std::memory_order_release);
+    const auto watched=scope.watchedToken();
+    if(watched&&watched<=maximumPorts&&(*configuration_)[watched-1].domain.load(std::memory_order_acquire)==domain)scope.route(generation);
+    if(!domain)generation_.store(generation,std::memory_order_release);
   }
   bool available(uint32_t token) const noexcept {
     if(!token||token>ports.size())return false;
-    const auto generation=generation_.load(std::memory_order_acquire);
-    return !generation||(*configuration_)[token-1].generation.load(std::memory_order_acquire)==generation;
+    const auto domain=(*configuration_)[token-1].domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    return (generation||!ports[token-1].copy)&&(!generation||(*configuration_)[token-1].generation.load(std::memory_order_acquire)==generation);
   }
   void observe(uint32_t token,const float *samples,uint32_t frames,uint64_t position) noexcept {
     if(!available(token) || !frames || frames>4096 || position>UINT64_MAX-frames)return;
-    const auto generation=generation_.load(std::memory_order_relaxed);
-    auto &meter=*meters_[token-1];const auto clear=meter.clear.load(std::memory_order_relaxed);
-    if(clear!=meter.cleared){meter.clip.store(false,std::memory_order_relaxed);meter.nonFinite.store(false,std::memory_order_relaxed);meter.cleared=clear;}
+    const auto domain=(*configuration_)[token-1].domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    auto &meter=*meters_[token-1];beginMeasurement(meter,generation);
     float peaks[2]{};double sum[2]{};bool invalid=false;uint64_t signal=0;
     for(uint32_t i=0;i<frames;++i)for(size_t c=0;c<2;++c) {
       const float sample=samples?samples[i*2+c]:0;
@@ -161,13 +201,37 @@ public:
     if(signal)meter.lastSignal.store(signal,std::memory_order_relaxed);
     meter.through.store(position+frames,std::memory_order_release);meter.generation.store(generation,std::memory_order_release);meter.measured.store(true,std::memory_order_release);
     audioThrough_=std::max(audioThrough_,position+frames);through_.store(audioThrough_,std::memory_order_release);
+    if(scope.watchedToken()==token)scope.route(generation);
     scope.capture(token,samples,frames,position);
     listen.capture(token,samples,frames,position);
   }
+  void routeGain(uint32_t token,double gain) noexcept {if(token&&token<=maximumPorts)(*configuration_)[token-1].routeGain.store(gain,std::memory_order_release);}
+  void observeControl(uint32_t token,double first,double last,uint32_t frames,uint64_t position) noexcept {
+    if(!available(token)||!frames||frames>4096||position>UINT64_MAX-frames)return;
+    const auto domain=(*configuration_)[token-1].domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    auto &m=*meters_[token-1];beginMeasurement(m,generation);
+    const bool finite=std::isfinite(first)&&std::isfinite(last);
+    if(!finite)m.nonFinite.store(true,std::memory_order_relaxed);
+    m.first.store(finite?first:0,std::memory_order_relaxed);m.value.store(finite?last:0,std::memory_order_relaxed);
+    m.through.store(position+frames,std::memory_order_release);m.generation.store(generation,std::memory_order_release);m.measured.store(true,std::memory_order_release);
+    audioThrough_=std::max(audioThrough_,position+frames);through_.store(audioThrough_,std::memory_order_release);
+  }
+  void observeNoteGate(uint32_t token,const SignalNoteGate &gate) noexcept {
+    if(!available(token))return;
+    const auto domain=(*configuration_)[token-1].domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    auto &m=*meters_[token-1];m.noteVersion.fetch_add(1,std::memory_order_acq_rel);
+    m.noteHeld.store(gate.held,std::memory_order_release);m.noteHasEvent.store(gate.hasEvent,std::memory_order_release);
+    m.noteOn.store(gate.on,std::memory_order_release);m.noteOff.store(gate.off,std::memory_order_release);
+    m.noteRetrigger.store(gate.retrigger,std::memory_order_release);m.noteFrame.store(gate.lastFrame,std::memory_order_release);
+    m.noteGeneration.store(generation,std::memory_order_release);m.noteVersion.fetch_add(1,std::memory_order_release);
+  }
   SignalPortReading read(uint32_t token) const noexcept {
     if(!token || token>ports.size())return {};
-    const auto generation=generation_.load(std::memory_order_acquire);const auto &config=(*configuration_)[token-1];
-    SignalPortReading result;result.generation=generation;result.available=!generation||config.generation.load(std::memory_order_acquire)==generation;if(!result.available)return result;
+    const auto &config=(*configuration_)[token-1];const auto domain=config.domain.load(std::memory_order_acquire);
+    const auto generation=domains_[domain].load(std::memory_order_acquire);
+    SignalPortReading result;result.generation=generation;result.available=(generation||!ports[token-1].copy)&&(!generation||config.generation.load(std::memory_order_acquire)==generation);if(!result.available)return result;
     result.processorLatency=generation?config.processorLatency.load(std::memory_order_acquire):ports[token-1].processorLatency;
     result.compensation=generation?config.compensation.load(std::memory_order_acquire):ports[token-1].compensation;
     if(generation){result.routeGain=config.routeGain.load(std::memory_order_acquire);result.preFader=config.preFader.load(std::memory_order_acquire);}
@@ -179,7 +243,25 @@ public:
     result.peakLeft=m.left.load(std::memory_order_relaxed);result.peakRight=m.right.load(std::memory_order_relaxed);
     result.rmsLeft=m.rmsLeft.load(std::memory_order_relaxed);result.rmsRight=m.rmsRight.load(std::memory_order_relaxed);
     result.lastSignal=m.lastSignal.load(std::memory_order_relaxed);result.clipped=m.clip.load(std::memory_order_relaxed);result.nonFinite=m.nonFinite.load(std::memory_order_relaxed);
-    if(generation_.load(std::memory_order_acquire)!=generation || (generation&&config.generation.load(std::memory_order_acquire)!=generation))return {};
+    result.value=m.value.load(std::memory_order_relaxed);result.first=m.first.load(std::memory_order_relaxed);
+    // Bounded read: a simultaneous render can omit this one diagnostic sample,
+    // but cannot expose counters from different events or a retired generation.
+    const auto noteVersion=m.noteVersion.load(std::memory_order_acquire);
+    if(noteVersion&&!(noteVersion&1)&&m.noteGeneration.load(std::memory_order_acquire)==generation){
+      SignalNoteGate gate;gate.held=m.noteHeld.load(std::memory_order_acquire);gate.hasEvent=m.noteHasEvent.load(std::memory_order_acquire);
+      gate.on=m.noteOn.load(std::memory_order_acquire);gate.off=m.noteOff.load(std::memory_order_acquire);
+      gate.retrigger=m.noteRetrigger.load(std::memory_order_acquire);gate.lastFrame=m.noteFrame.load(std::memory_order_acquire);
+      if(m.noteVersion.load(std::memory_order_acquire)==noteVersion)result.noteGate=gate;
+    }
+    // An adopted but not-yet-rendered generation has no measurements. Retained
+    // slots must not expose its predecessor's overload or last-signal history.
+    if(!measured||measuredGeneration!=generation){
+      result.peakLeft=result.peakRight=result.rmsLeft=result.rmsRight=0;
+      result.through=result.lastSignal=0;result.clipped=result.nonFinite=false;
+      result.value=result.first=0;
+      result.noteGate.reset();
+    }
+    if(domains_[domain].load(std::memory_order_acquire)!=generation || config.domain.load(std::memory_order_acquire)!=domain || (generation&&config.generation.load(std::memory_order_acquire)!=generation))return {};
     return result;
   }
   void clear(uint32_t token) noexcept {

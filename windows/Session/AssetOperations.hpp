@@ -2,6 +2,8 @@
 #include <nlohmann/json.hpp>
 #include "editor/SampleClipboard.hpp"
 #include <functional>
+#include <span>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,6 +37,7 @@ public:
   AssetOperations &operator=(const AssetOperations &)=delete;
   void sampleLoops(std::function<std::function<void()>(unsigned,const Tracker::SampleEditGeometry &)> callback) {prepareSampleLoops_=std::move(callback);}
   Json invoke(const std::string &method,const Json &params);
+  Json appendCapturedAudio(std::span<const float>,uint32_t rate,uint32_t channels,const std::string &name,bool instrument,bool dryRun);
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();
 };

@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 55: native-mixer
+1/4 Test #55: native-mixer .....................   Passed   10.13 sec
+    Start 59: multi-bus
+2/4 Test #59: multi-bus ........................   Passed    3.13 sec
+    Start 75: native-note-routing
+3/4 Test #75: native-note-routing ..............   Passed    0.65 sec
+    Start 76: native-source-migration
+4/4 Test #76: native-source-migration ..........   Passed    1.59 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  15.50 sec

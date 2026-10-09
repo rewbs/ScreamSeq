@@ -54,7 +54,7 @@
         allowed(@[@"enabled", @"dryRun"]);
         bool enabled = p[@"enabled"] ? boolean(p[@"enabled"]) : true;
         if (enabled) candidate.ensureMixer();
-        else { auto detached=std::move(graph.detached); graph = {}; graph.detached=std::move(detached); candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
+        else { require(graph.detachedChains.empty()&&graph.disconnectedMainInputs.empty()&&graph.pluginConnections.empty()&&candidate.signal.stageConnections.empty()&&std::none_of(candidate.signal.songSources.begin(),candidate.signal.songSources.end(),[](const auto &s){return s.audioStage!=0;})&&!graph.masterOutputDisconnected,"Reconnect cut cables and place detached chains before disabling routing"); auto detached=std::move(graph.detached); graph = {}; graph.detached=std::move(detached); candidate.noteTracks.clear(); candidate.signal.assignments.clear(); candidate.signal.commands.clear(); candidate.signal.lanes.clear();candidate.signal.inputs.clear();candidate.signal.outputs.clear(); }
       } else if ([method isEqual:@"mixer.bus.add"]) {
         allowed(@[@"kind", @"name", @"output", @"sendFrom", @"position", @"dryRun"]);
         const auto kind = decodeMixerKind(p[@"kind"]);
@@ -65,8 +65,9 @@
         if(p[@"sendFrom"]) {require(kind==MixerBusKind::Return,"An automatic send requires a return bus");auto &source=findBus(p[@"sendFrom"]);require(source.kind!=MixerBusKind::Master,"Master cannot send upstream");source.sends.push_back({affected,-96,false,false});}
         if(p[@"position"]) {auto position=object(p[@"position"]);keys(position,@[@"x",@"y"]);candidate.signal.layout[std::string(nativeID(affected).UTF8String)]={number(position[@"x"],0,100000),number(position[@"y"],0,100000)};}
       } else if ([method isEqual:@"mixer.bus.set"]) {
-        allowed(@[@"bus", @"name", @"color", @"output", @"preGainDB", @"prePan", @"gainDB", @"pan", @"width", @"timingMS", @"mute", @"solo", @"inserts", @"dryRun", @"preview"]);
+        allowed(@[@"bus", @"name", @"color", @"output", @"preGainDB", @"prePan", @"gainDB", @"pan", @"width", @"timingMS", @"mute", @"solo", @"inserts", @"mainOutputConnected", @"dryRun", @"preview"]);
         auto &bus = findBus(p[@"bus"]); affected = bus.id;
+        if(p[@"mainOutputConnected"]){require(bus.kind==MixerBusKind::Master,"Only Master has the final output cable");graph.masterOutputDisconnected=!boolean(p[@"mainOutputConnected"]);}
         if (p[@"name"]) bus.name = string(p[@"name"], 256).UTF8String;
         if (p[@"color"]) bus.color = uint32_t(integer(p[@"color"], 0, 0xffffff));
         if (p[@"output"]) bus.output = p[@"output"] == NSNull.null ? 0 : decodeNativeID(p[@"output"]);
@@ -80,7 +81,8 @@
         if (p[@"solo"]) bus.solo = boolean(p[@"solo"]);
         if (p[@"inserts"]) {
           bus.inserts.clear();
-          for (id insert in array(p[@"inserts"], 32)) {auto id=plugin(insert,false);bus.inserts.push_back(id);std::erase(graph.detached,id);}
+          for (id insert in array(p[@"inserts"], 32)) {auto id=plugin(insert,false);bus.inserts.push_back(id);std::erase(graph.detached,id);for(auto &chain:graph.detachedChains)std::erase(chain.plugins,id);std::erase(graph.disconnectedMainInputs,id);}
+          std::erase_if(graph.detachedChains,[](const auto &c){return c.plugins.empty();});for(const auto &chain:graph.detachedChains)std::erase(graph.disconnectedMainInputs,chain.plugins.front());
         }
       } else if ([method isEqual:@"mixer.inserts.move"] || [method isEqual:@"mixer.inserts.detach"]) {
         const bool detach=[method isEqual:@"mixer.inserts.detach"];
@@ -88,13 +90,18 @@
         std::vector<std::string> rack, moving;
         for(const auto &item : _plugins) if(!item.descriptor.instrument && item.descriptor.type != kAudioUnitType_MusicDevice) rack.push_back(item.instanceID);
         for(id raw : array(p[@"plugins"],32)) moving.push_back(plugin(raw,false));
-        require(!detach || moving.size()==1,"Detach one rack effect at a time; loose chains are not supported yet");
+        require(!moving.empty(),"Select an effect chain");
         if(detach && std::find(graph.detached.begin(),graph.detached.end(),moving.front())==graph.detached.end())candidate.ensureMixer();
-        if(!detach)affected = findBus(p[@"target"]).id;
+        if(!detach)affected = decodeNativeID(p[@"target"]);
         const std::string before = p[@"before"] && p[@"before"] != NSNull.null ? string(p[@"before"],128).UTF8String : "";
-        try { if(detach)detachMixerInsert(graph,rack,moving.front());else moveMixerInserts(graph,rack,moving,affected,before); }
+        try { if(detach){const auto previousMixer=graph;const auto previousSignal=candidate.signal;
+            detachMixerInserts(graph,rack,moving,[&]{return candidate.makeEntity().id;});
+            preserveSongGroupDetachment(candidate.signal,previousSignal,previousMixer,graph,rack);
+          }else moveMixerInserts(graph,rack,moving,affected,before); }
         catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
-        for(id raw:array(p[@"positions"]?:@[],detach?1:32)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;require(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");candidate.signal.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}
+        for(id raw:array(p[@"positions"]?:@[],64)){auto v=object(raw);keys(v,@[@"node",@"x",@"y"]);const std::string key=string(v[@"node"],256).UTF8String;auto group=std::find_if(candidate.signal.groups.begin(),candidate.signal.groups.end(),[&](const auto &g){return key=="n"+std::to_string(g.id);});
+          if(group!=candidate.signal.groups.end()){const auto members=songSignalGroupNodes(candidate.signal,group->id);require(std::any_of(members.begin(),members.end(),[](const auto &m){return m.starts_with("plugin:");})&&std::all_of(members.begin(),members.end(),[&](const auto &m){return !m.starts_with("plugin:")||std::find(moving.begin(),moving.end(),m.substr(7))!=moving.end();}),"Move every group processor together");moveSongSignalGroup(candidate.signal,group->id,number(v[@"x"],0,100000),number(v[@"y"],0,100000));}
+          else {require(std::any_of(moving.begin(),moving.end(),[&](const auto &id){return key=="plugin:"+id;}),"Position must belong to a moved insert");candidate.signal.layout[key]={number(v[@"x"],0,100000),number(v[@"y"],0,100000)};}}
 
       } else if ([method isEqual:@"mixer.bus.remove"]) {
         allowed(@[@"bus", @"dryRun"]);
@@ -104,6 +111,8 @@
         std::erase_if(candidate.signal.assignments,[&](const auto &a){return a.target==affected;});
         std::erase_if(candidate.signal.commands,[&](const auto &c){return c.target==affected;});candidate.signal.lanes.erase(affected);
         std::erase_if(candidate.signal.inputs,[&](const auto &r){return r.source==affected||r.target==affected;});
+        std::erase_if(candidate.signal.stageConnections,[&](const auto &r){return r.source.stage==affected||r.target.stage==affected;});
+        for(auto &s:candidate.signal.songSources)if(s.audioStage==affected){s.audioStage=0;s.output=0;s.preFader=false;}
         std::erase_if(candidate.signal.outputs,[&](const auto &r){return r.source==affected||r.target==affected;});
         std::erase_if(graph.buses, [&](const auto &item) { return item.id == affected; });
         for (auto &item : graph.buses) {
@@ -123,13 +132,30 @@
           bus.sends.push_back({decodeNativeID(send[@"target"]), number(send[@"gainDB"] ?: @(-12), -96, 12),
             send[@"preFader"] ? boolean(send[@"preFader"]) : false, send[@"enabled"] ? boolean(send[@"enabled"]) : true});
         }
+      } else if ([method isEqual:@"mixer.plugin.connection.set"]) {
+        allowed(@[@"source",@"output",@"target",@"input",@"gainDB",@"enabled",@"replace",@"dryRun"]);
+        auto endpoint=[&](NSDictionary *v){MixerPluginConnection r;r.source=string(v[@"source"],128).UTF8String;r.output=uint32_t(integer(v[@"output"],0,63));r.target=string(v[@"target"],128).UTF8String;r.input=uint32_t(integer(v[@"input"],0,63));return r;};
+        auto value=endpoint(p);std::optional<MixerPluginConnection> old;
+        if(p[@"replace"]){auto v=object(p[@"replace"]);keys(v,@[@"source",@"output",@"target",@"input"]);old=endpoint(v);}
+        auto previous=std::find_if(graph.pluginConnections.begin(),graph.pluginConnections.end(),[&](const auto &r){const auto &key=old?*old:value;return r.source==key.source&&r.output==key.output&&r.target==key.target&&r.input==key.input;});
+        if(previous!=graph.pluginConnections.end()){value.gainDB=previous->gainDB;value.enabled=previous->enabled;}
+        if(p[@"gainDB"])value.gainDB=number(p[@"gainDB"],-96,12);if(p[@"enabled"])value.enabled=boolean(p[@"enabled"]);
+        for(bool input:{false,true}){const auto &id=input?value.target:value.source;auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==id;});require(found!=_plugins.end(),"Plugin endpoint no longer exists");
+          const bool instrument=found->descriptor.instrument||found->descriptor.type==kAudioUnitType_MusicDevice;
+          const auto ports=_audio->pluginBuses(size_t(found-_plugins.begin()));const auto port=input?value.input:value.output;require(std::any_of(ports.begin(),ports.end(),[&](const auto &b){return b.input==input&&b.index==port&&b.supported;}),"Choose an available physical plugin audio port");
+          if(!instrument)rootDetachedMixerPlugin(graph,id,[&]{return candidate.makeEntity().id;});
+        }
+        setMixerPluginConnection(graph,value,old?&*old:nullptr);
+        if(old){const SignalRouteIdentity before{"plugin-connection","plugin:"+old->source,"plugin:"+old->target,{},"post-gain",old->input,old->output},after{"plugin-connection","plugin:"+value.source,"plugin:"+value.target,{},"post-gain",value.input,value.output};for(auto &g:candidate.signal.groups)for(auto &r:g.dryRoutes){if(r.input==before)r.input=after;if(r.output==before)r.output=after;}}
+        if(old)for(auto &path:candidate.signal.presentation.cables)if(!path.modulation&&path.source=="plugin:"+old->source&&path.target=="plugin:"+old->target&&path.output==old->output&&path.input==old->input){path.source="plugin:"+value.source;path.target="plugin:"+value.target;path.output=value.output;path.input=value.input;}
       } else if ([method isEqual:@"mixer.sidechains.set"]) {
         allowed(@[@"plugin", @"input", @"sources", @"dryRun"]);
         std::string targetPlugin = string(p[@"plugin"], 128).UTF8String;
         const auto input = uint32_t(integer(p[@"input"], 0, 63));
         const auto sources = array(p[@"sources"], 128);
         if (sources.count) {
-          targetPlugin = plugin(p[@"plugin"], false);
+          auto known=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==targetPlugin;});require(known!=_plugins.end(),"Plugin endpoint no longer exists");
+          if(!known->descriptor.instrument&&known->descriptor.type!=kAudioUnitType_MusicDevice)rootDetachedMixerPlugin(graph,targetPlugin,[&]{return candidate.makeEntity().id;});
           auto found = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &p) { return p.instanceID == targetPlugin; });
           const auto available = _audio->pluginBuses(size_t(found - _plugins.begin()));
           require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return b.input && b.index == input && b.supported; }),
@@ -158,31 +184,60 @@
           const bool instrument=descriptor->descriptor.instrument||descriptor->descriptor.type==kAudioUnitType_MusicDevice;
           id = plugin(p[@"plugin"], instrument);
 
-          if(!instrument)require(std::any_of(graph.buses.begin(),graph.buses.end(),[&](const auto &b){return std::find(b.inserts.begin(),b.inserts.end(),id)!=b.inserts.end();}),"Assign the effect to a bus before routing its auxiliary output");
+          if(!instrument){rootDetachedMixerPlugin(graph,id,[&]{return candidate.makeEntity().id;});const auto projected=projectMixerDetachedChains(graph);require(std::any_of(projected.buses.begin(),projected.buses.end(),[&](const auto &b){return std::find(b.inserts.begin(),b.inserts.end(),id)!=b.inserts.end();}),"Effect has no processing owner");}
           auto found = std::find_if(_plugins.begin(), _plugins.end(), [&](const auto &p) { return p.instanceID == id; });
           const auto available = _audio->pluginBuses(size_t(found - _plugins.begin()));
           require(std::any_of(available.begin(), available.end(), [&](const auto &b) { return !b.input && b.index == output && b.supported; }),
                   "Select an available plugin output; connected auxiliary ports enable on playback");
         }
-        std::erase_if(graph.instruments, [&](const auto &source) { return source.plugin == id && source.output == output; });
-        if(p[@"targets"]&&!targets.empty())for(auto bus:targets)graph.instruments.push_back({id,bus,output});
-        else if (!remove) graph.instruments.push_back({std::move(id), target, output});
+        // Keep unchanged destinations in place. Repeating a target set (even
+        // in another order) must not reorder unrelated cables or create Undo.
+        if(!p[@"targets"] || targets.empty()) {
+          targets.clear();
+          if(!remove) targets.push_back(target);
+        }
+        std::erase_if(graph.instruments, [&](const auto &source) {
+          return source.plugin == id && source.output == output
+            && std::find(targets.begin(), targets.end(), source.target) == targets.end();
+        });
+        for(auto bus : targets) {
+          const auto existing = std::find_if(graph.instruments.begin(), graph.instruments.end(), [&](const auto &source) {
+            return source.plugin == id && source.output == output && source.target == bus;
+          });
+          if(existing == graph.instruments.end()) graph.instruments.push_back({id, bus, output});
+        }
       } else throw Error(-32601, "Unknown mixer method");
       std::vector<uint64_t> tracks; for (const auto &[index, track] : _document->native().tracks) tracks.push_back(track.id);
+      // Validate the complete projected DAG, including channel graph stages.
+      // A routing preview retains the current signal graph without copying its envelopes.
+      const auto &signal = preview ? _document->native().signal : candidate.signal;
+      const auto routingGraph = signalRoutingGraph(graph, signal);
       std::vector<MixerProcessorInfo> processors;
       for (size_t slot = 0; slot < _plugins.size(); ++slot) {
         const auto &p = _plugins[slot]; uint32_t count = 1; uint64_t enabled = 1, inputs = 0;
-        for (const auto &b : _audio->pluginBuses(slot)) if (!b.input) { count = std::max(count, b.index + 1); if (b.active) enabled |= uint64_t(1) << b.index; }
-        for (const auto &b : _audio->pluginBuses(slot)) if (b.input && b.index && b.active) inputs |= uint64_t(1) << b.index;
-        for(const auto &r:graph.sidechains)if(r.plugin==p.instanceID&&r.enabled)inputs|=uint64_t(1)<<r.input;
-        for(const auto &r:graph.instruments)if(r.plugin==p.instanceID&&r.target)enabled|=uint64_t(1)<<r.output;
-        processors.push_back({p.instanceID, 0, 0, p.descriptor.instrument || p.descriptor.type == kAudioUnitType_MusicDevice, p.bypass, count, enabled, inputs});
+        for (const auto &b : _audio->pluginBuses(slot)) if (b.supported) {
+          if (b.input) inputs |= uint64_t(1) << b.index;
+          else { count = std::max(count, b.index + 1); enabled |= uint64_t(1) << b.index; }
+        }
+        // Host bypass retains and clocks the processor; it is not a missing endpoint.
+        processors.push_back({p.instanceID, 0, 0, p.descriptor.instrument || p.descriptor.type == kAudioUnitType_MusicDevice, false, count, enabled, inputs});
+        processors.back().scheduledSource = processors.back().instrument;
+      }
+      for (const auto &bus : graph.buses) {
+        const auto in = signalStagePorts(signal, bus.id, true), out = signalStagePorts(signal, bus.id, false);
+        const bool used = std::any_of(signal.assignments.begin(), signal.assignments.end(), [&](const auto &a) { return a.target == bus.id; }) ||
+          std::any_of(signal.commands.begin(), signal.commands.end(), [&](const auto &c) { return c.target == bus.id && (c.kind == SignalCommandKind::Row || c.kind == SignalCommandKind::Start); });
+        if (in.empty() && out.empty() && !used) continue;
+        uint64_t inputs = 0, outputs = 1; uint32_t count = 1;
+        for (auto p : in) inputs |= uint64_t(1) << p;
+        for (auto p : out) { outputs |= uint64_t(1) << p; count = std::max(count, p + 1); }
+        processors.push_back({signalBusIdentity(bus.id), 0, 0, false, false, count, outputs, inputs});
       }
       MixerPlan plan;
       try {
         validatePluginCapacity(_plugins, graph.buses.size());
         if (!preview) candidate.validate(song);
-        plan = compileMixer(graph, tracks, processors, uint32_t(_audio->sampleRate()));
+        plan = compileMixer(routingGraph, tracks, processors, uint32_t(_audio->sampleRate()));
       } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
       auto structural = graph;
       if (structural.buses.size() == original.buses.size()) for (size_t i = 0; i < structural.buses.size(); ++i) {
@@ -198,8 +253,9 @@
         std::unique_ptr<MixerTransition::Plan> routing;
         if (controlsOnly && graph.active()) {
           std::vector<MixerControls> controls;
-          for (size_t i = 0; i < graph.buses.size(); ++i) {
-            const auto &bus = graph.buses[i]; controls.push_back({bus.preGainDB, bus.gainDB, bus.pan, bus.width, plan.nodes[i].audible, bus.prePan});
+          const auto projected=projectMixerDetachedChains(graph);
+          for (size_t i = 0; i < projected.buses.size(); ++i) {
+            const auto &bus = projected.buses[i]; controls.push_back({bus.preGainDB, bus.gainDB, bus.pan, bus.width, plan.nodes[i].audible, bus.prePan});
           }
           if (!_audio->mixerControls(controls)) throw Error(-32002, "Mixer control queue is busy; retry the same revision");
         } else if(!controlsOnly) {

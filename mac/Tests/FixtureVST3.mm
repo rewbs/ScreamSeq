@@ -43,12 +43,19 @@ extern "C" __attribute__((visibility("default"))) int ResonanceFixtureLatency(ui
   return accepted;
 }
 static std::atomic<bool> fixtureChannelWeights{false};
-static bool fixturePitchMode=false;
+static bool fixturePitchMode=false,fixtureVelocityMode=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureVelocityMode(bool enabled){fixtureVelocityMode=enabled;}
 static bool fixtureLargeCatalog=false,fixtureStepped=false;
 static std::atomic<uint64_t> fixtureSingleSampleCalls{0};
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStepped(bool enabled){fixtureStepped=enabled;fixtureSingleSampleCalls=0;}
 extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureSingleSampleCalls(){return fixtureSingleSampleCalls.load();}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
+static uint64_t fixtureActivationCalls=0;
+extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureActivationCalls(){return fixtureActivationCalls;}
+static bool fixtureInstrumentInputs=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureInstrumentInputs(bool enabled){fixtureInstrumentInputs=enabled;}
+static bool fixtureWideBuses=false;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureWideBuses(bool enabled){fixtureWideBuses=enabled;}
 static bool fixtureEffectDelay=false;
 static bool fixtureEffectAuxiliary=false;
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEffectAuxiliary(bool enabled){fixtureEffectAuxiliary=enabled;}
@@ -108,12 +115,28 @@ static bool same(const TUID a, const FUID &b) {
   }
 }
 @end
+static bool fixtureEditorResize=false;
+static int fixtureEditorSizeMode=0;
+static bool fixtureEditorRejectResize=false;
+static bool fixtureEditorRemovalResizeRejected=false;
+static IPlugFrame *fixtureEditorFrame=nullptr;
+static IPlugView *fixtureEditorView=nullptr;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorResizeMode(bool value){fixtureEditorResize=value;}
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorSizeMode(int value){fixtureEditorSizeMode=value;}
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureEditorRejectResize(bool value){fixtureEditorRejectResize=value;}
+extern "C" __attribute__((visibility("default"))) bool ResonanceFixtureEditorRemovalResizeRejected(){return fixtureEditorRemovalResizeRejected;}
+extern "C" __attribute__((visibility("default"))) bool ResonanceFixtureEditorResize(int width,int height){
+  ViewRect requested{31,47,31+width,47+height};
+  return fixtureEditorFrame&&fixtureEditorView&&fixtureEditorFrame->resizeView(fixtureEditorView,&requested)==kResultOk;
+}
 class View final : public IPlugView {
   std::atomic<uint32> refs{1};
   NSView *view = nil;
   ResonanceFixtureControl *control = nil;
   IComponentHandler *handler;
   double initial;
+  const int sizeMode=fixtureEditorSizeMode;
+  ViewRect size=sizeMode?ViewRect{17,29,597,269}:fixtureEditorResize?ViewRect{17,29,477,209}:ViewRect{0,0,460,180};
 
 public:
   explicit View(IComponentHandler *h, double value) : handler(h), initial(value) { ++liveViews; }
@@ -140,7 +163,8 @@ public:
   tresult PLUGIN_API attached(void *parent, FIDString type) override {
     if (isPlatformTypeSupported(type) != kResultOk)
       return kResultFalse;
-    view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 460, 180)];
+    fixtureEditorRemovalResizeRejected=false;
+    view = [[NSView alloc] initWithFrame:sizeMode?NSMakeRect(0,0,580,240):NSMakeRect(0,0,460,180)];
     view.wantsLayer = YES;
     view.layer.backgroundColor = [NSColor colorWithCalibratedRed:0.08 green:0.10 blue:0.14 alpha:1].CGColor;
     NSTextField *title = [NSTextField labelWithString:@"Resonance · VST3 Test Interface"];
@@ -163,9 +187,14 @@ public:
     slider.accessibilityLabel = @"Fixture gain";
     [view addSubview:slider];
     [(__bridge NSView *)parent addSubview:view];
+    if(fixtureEditorResize){ViewRect requested{31,47,611,287};if(!fixtureEditorFrame||fixtureEditorFrame->resizeView(this,&requested)!=kResultOk)return kResultFalse;}
     return kResultOk;
   }
   tresult PLUGIN_API removed() override {
+    if(fixtureEditorFrame&&fixtureEditorView==this){
+      ViewRect requested{0,0,620,280};
+      fixtureEditorRemovalResizeRejected=fixtureEditorFrame->resizeView(this,&requested)!=kResultOk;
+    }
     [view removeFromSuperview];
     control.handler = nullptr;
     control = nil;
@@ -176,18 +205,33 @@ public:
   tresult PLUGIN_API onKeyDown(char16, int16, int16) override { return kResultFalse; }
   tresult PLUGIN_API onKeyUp(char16, int16, int16) override { return kResultFalse; }
   tresult PLUGIN_API getSize(ViewRect *r) override {
-    *r = {0, 0, 460, 180};
+    if((sizeMode==1&&!view)||sizeMode==3){*r=ViewRect{};return kResultFalse;}
+    *r = size;
+    return sizeMode==2?kResultFalse:kResultOk;
+  }
+  tresult PLUGIN_API onSize(ViewRect *r) override {
+    if(fixtureEditorRejectResize)return kResultFalse;
+    if(sizeMode==5&&fixtureEditorFrame&&fixtureEditorFrame->resizeView(this,r)!=kResultOk)return kResultFalse;
+    size=*r;
+    [view setFrame:NSMakeRect(r->left,r->top,r->getWidth(),r->getHeight())];
+    return sizeMode==4?kResultFalse:kResultOk;
+  }
+  tresult PLUGIN_API onFocus(TBool) override { return kResultOk; }
+  tresult PLUGIN_API setFrame(IPlugFrame *frame) override {
+    if(frame){fixtureEditorFrame=frame;fixtureEditorView=this;}
+    else if(fixtureEditorView==this){fixtureEditorFrame=nullptr;fixtureEditorView=nullptr;}
     return kResultOk;
   }
-  tresult PLUGIN_API onSize(ViewRect *) override { return kResultOk; }
-  tresult PLUGIN_API onFocus(TBool) override { return kResultOk; }
-  tresult PLUGIN_API setFrame(IPlugFrame *) override { return kResultOk; }
   tresult PLUGIN_API canResize() override { return kResultFalse; }
   tresult PLUGIN_API checkSizeConstraint(ViewRect *r) override { return getSize(r); }
 };
 class Fixture final : public IComponent, public IAudioProcessor, public IEditController, public IUnitInfo, public IMidiMapping, public IConnectionPoint {
   std::atomic<uint32> refs{1};
   bool instrument, delayed, programs;
+  const bool wideBuses=fixtureWideBuses;
+  const bool instrumentInputs=fixtureInstrumentInputs;
+  int audioChannels(int bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
+  SpeakerArrangement arrangement(int bus)const{return wideBuses?SpeakerArrangement((uint64_t(1)<<audioChannels(bus))-1):(bus%2?SpeakerArr::kMono:SpeakerArr::kStereo);}
   const bool effectAuxiliary=fixtureEffectAuxiliary;
   bool initialized = false, active = false, processing = false;
   std::array<float,2> programValues{}, unitGains{.25f,.25f};
@@ -202,6 +246,7 @@ class Fixture final : public IComponent, public IAudioProcessor, public IEditCon
   float hiddenGain=fixtureHiddenGain;
   IComponentHandler *handler = nullptr;
   std::array<uint16_t, 16 * 128> notes{};
+  float lastVelocity=1;
   std::array<float,16> pitchWheels{};
 
 public:
@@ -243,7 +288,7 @@ public:
   tresult PLUGIN_API getControllerClassId(TUID) override { return kResultFalse; }
   tresult PLUGIN_API setIoMode(IoMode) override { return kResultOk; }
   int32 PLUGIN_API getBusCount(MediaType type, BusDirection dir) override {
-    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : effectAuxiliary ? 2 : 1) : (instrument ? 0 : 2))
+    return type == kAudio ? (dir == kOutput ? (instrument ? 32 : (wideBuses||effectAuxiliary) ? 2 : 1) : (instrument&&!instrumentInputs ? 0 : 2))
                           : (instrument && dir == kInput ? 1 : 0);
   }
   tresult PLUGIN_API getBusInfo(MediaType type, BusDirection dir, int32 index, BusInfo &b) override {
@@ -252,13 +297,14 @@ public:
     b = {};
     b.mediaType = type;
     b.direction = dir;
-    b.channelCount = type == kAudio ? (index % 2 ? 1 : 2) : 16;
+    b.channelCount = type == kAudio ? audioChannels(index) : 16;
     b.busType = index ? kAux : kMain;
     b.flags = BusInfo::kDefaultActive;
     return kResultOk;
   }
   tresult PLUGIN_API getRoutingInfo(RoutingInfo &, RoutingInfo &) override { return kNotImplemented; }
   tresult PLUGIN_API activateBus(MediaType type, BusDirection dir, int32 index, TBool active) override {
+    if(processing)return kResultFalse; // Any first live cable must use prepared activation.
     if (index < 0 || index >= getBusCount(type, dir))
       return kInvalidArgument;
     if (type == kAudio && dir == kOutput)
@@ -270,6 +316,7 @@ public:
   tresult PLUGIN_API disconnect(IConnectionPoint *) override { return kResultOk; }
   tresult PLUGIN_API notify(IMessage *) override { return kResultOk; }
   tresult PLUGIN_API setActive(TBool value) override {
+    ++fixtureActivationCalls;
     if (value && fixtureAnnounceLatency && handler) handler->restartComponent(kLatencyChanged);
     if (value && appliedLatency != fixtureLatency.load()) {
       appliedLatency = fixtureLatency.load(); dynamicDelay.fill(0); dynamicPosition = 0;
@@ -295,38 +342,32 @@ public:
     if(s->write(&hiddenGain,4)!=kResultOk)return kResultFalse;
     return kResultOk;
   }
-  tresult PLUGIN_API setBusArrangements(SpeakerArrangement *in, int32 ni, SpeakerArrangement *out, int32 no) override {
-    if (no != getBusCount(kAudio, kOutput))
-      return kResultFalse;
-    for (int i = 1; i < no; ++i)
-      if (out[i] != (i % 2 ? SpeakerArr::kMono : SpeakerArr::kStereo))
-        return kResultFalse;
-    return ni == (instrument ? 0 : 2) && out[0] == SpeakerArr::kStereo && (!ni || (in[0] == SpeakerArr::kStereo && in[1] == SpeakerArr::kMono))
-               ? kResultOk
-               : kResultFalse;
-  }
-  tresult PLUGIN_API getBusArrangement(BusDirection, int32 index, SpeakerArrangement &a) override {
-    a = index % 2 ? SpeakerArr::kMono : SpeakerArr::kStereo;
+  tresult PLUGIN_API setBusArrangements(SpeakerArrangement *in,int32 ni,SpeakerArrangement *out,int32 no)override {
+    if(ni!=getBusCount(kAudio,kInput)||no!=getBusCount(kAudio,kOutput))return kResultFalse;
+    for(int i=0;i<ni;++i)if(in[i]!=arrangement(i))return kResultFalse;
+    for(int i=0;i<no;++i)if(out[i]!=arrangement(i))return kResultFalse;
     return kResultOk;
   }
+  tresult PLUGIN_API getBusArrangement(BusDirection,int32 index,SpeakerArrangement &a)override {a=arrangement(index);return kResultOk;}
   tresult PLUGIN_API canProcessSampleSize(int32 size) override { return size == kSample32 ? kResultOk : kResultFalse; }
   uint32 PLUGIN_API getLatencySamples() override { return (delayed ? 32 : 0) + fixtureLatency.load(); }
   tresult PLUGIN_API setupProcessing(ProcessSetup &setup) override {rate=setup.sampleRate; return kResultOk; }
   tresult PLUGIN_API setProcessing(TBool value) override { processing = value; return kResultOk; }
   uint32 PLUGIN_API getTailSamples() override { return delayed&&!instrument?32:0; }
   tresult PLUGIN_API process(ProcessData &d) override {
+    if(appliedLatency!=fixtureLatency.load()){appliedLatency=fixtureLatency.load();dynamicDelay.fill(0);dynamicPosition=0;}
     if(d.numSamples==1)fixtureSingleSampleCalls.fetch_add(1,std::memory_order_relaxed);
     if (d.numOutputs != getBusCount(kAudio, kOutput) || d.numInputs != getBusCount(kAudio, kInput) || !outputsActive[0])
       return kResultFalse;
     for (int i = 1; i < d.numOutputs; ++i) {
       auto &bus = d.outputs[i];
-      if (bus.numChannels != (i % 2 ? 1 : 2) || !bus.channelBuffers32)
+      if (bus.numChannels != audioChannels(i) || !bus.channelBuffers32)
         return kResultFalse;
       for (int ch = 0; ch < bus.numChannels; ++ch)
         if (bool(bus.channelBuffers32[ch]) != outputsActive[i])
           return kResultFalse;
     }
-    if (!instrument && (d.inputs[1].numChannels != 1 || !d.inputs[1].channelBuffers32 ||
+    if ((!instrument||instrumentInputs) && (d.inputs[1].numChannels != audioChannels(1) || !d.inputs[1].channelBuffers32 ||
         bool(d.inputs[1].channelBuffers32[0]) != inputsActive[1])) return kResultFalse;
     if(fixtureObserve&&d.numSamples){fixtureObservedFrames.fetch_add(d.numSamples,std::memory_order_relaxed);if(!d.processContext||std::abs(d.processContext->projectTimeMusic-double(d.processContext->projectTimeSamples)*2/rate)>1e-8)fixtureClockErrors.fetch_add(1,std::memory_order_relaxed);}
     const float beginningGain=gain.load();IParamValueQueue *gainQueue=nullptr;
@@ -350,6 +391,7 @@ public:
       for (int32 i = 0; i < d.inputEvents->getEventCount(); ++i) {
         Event e{};
         d.inputEvents->getEvent(i, e);
+        if(e.type==Event::kNoteOnEvent)lastVelocity=e.noteOn.velocity;
         if (fixtureSingleVoice && e.type == Event::kNoteOnEvent) notes[(e.noteOn.channel & 15) * 128 + (e.noteOn.pitch & 127)] = 1;
         else if (fixtureSingleVoice && e.type == Event::kNoteOffEvent) notes[(e.noteOff.channel & 15) * 128 + (e.noteOff.pitch & 127)] = 0;
         else if (e.type == Event::kNoteOnEvent)
@@ -365,7 +407,7 @@ public:
       for (size_t note = 0; note < 128; ++note) active |= notes[channel * 128 + note] != 0;
       any |= active; if (active) channels += float(channel + 1) / 16;
     }
-    float scale=1;
+    float scale=fixtureVelocityMode?lastVelocity:1;
     scale *= hiddenGain;
     if (programs) scale *= unitGains[0]*unitGains[1];
     if (instrument && fixturePitchMode) scale *= 1 + (std::lround(pitchWheels[0]*16383)-8192)/8192.f;
@@ -376,13 +418,15 @@ public:
     for (int32 i = 0; i < d.numSamples; ++i) {
       while(point<pointCount&&i>nextOffset){previousOffset=nextOffset;previousValue=nextValue;++point;if(point<pointCount)gainQueue->getPoint(point,nextOffset,nextValue);}
       const float g=float(pointCount?(point<pointCount?previousValue+(nextValue-previousValue)*double(i-previousOffset)/std::max(1,nextOffset-previousOffset):previousValue):double(gain.load()))*scale;
+      if(wideBuses){for(int bus=0;bus<d.numOutputs;++bus)for(int channel=0;channel<d.outputs[bus].numChannels;++channel)
+        d.outputs[bus].channelBuffers32[channel][i]=d.inputs[bus].channelBuffers32[channel][i]*g;continue;}
       float value = any ? 0.2f * g : 0;
       if (delayed) {
         std::swap(value, delay[delayPosition]);
         delayPosition = (delayPosition + 1) % delay.size();
       }
       for (int ch = 0; ch < 2; ++ch)
-        d.outputs[0].channelBuffers32[ch][i] = instrument ? value : d.inputs[0].channelBuffers32[ch][i] * g *
+        d.outputs[0].channelBuffers32[ch][i] = instrument ? value+(instrumentInputs?(d.inputs[0].channelBuffers32[ch][i]+d.inputs[1].channelBuffers32[0][i])*g:0) : d.inputs[0].channelBuffers32[ch][i] * g *
           (inputsActive[1] ? 1 + d.inputs[1].channelBuffers32[0][i] : 1);
       if(delayed&&!instrument)for(int ch=0;ch<2;++ch){std::swap(d.outputs[0].channelBuffers32[ch][i],effectDelay[effectDelayPosition]);effectDelayPosition=(effectDelayPosition+1)%effectDelay.size();}
       if (appliedLatency && appliedLatency <= 128) for (int ch = 0; ch < 2; ++ch) {
@@ -391,7 +435,7 @@ public:
       }
       for (int bus = 1; bus < d.numOutputs; ++bus) if (outputsActive[bus])
         for (int ch = 0; ch < d.outputs[bus].numChannels; ++ch)
-          d.outputs[bus].channelBuffers32[ch][i] = (instrument ? value : d.outputs[0].channelBuffers32[ch][i]) * float(bus + 1) * float(ch ? -.5 : 1);
+          d.outputs[bus].channelBuffers32[ch][i] = (instrument&&!instrumentInputs ? value : d.outputs[0].channelBuffers32[ch][i]) * float(bus + 1) * float(ch ? -.5 : 1);
     }
     return kResultOk;
   }

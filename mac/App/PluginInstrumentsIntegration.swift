@@ -11,7 +11,7 @@ extension AppController {
       self.instrumentEditor.index=index;self.patternView.instrument=index
       // An explicit creation acts like selecting an instrument in its picker:
       // keep it visible until the editing cursor moves, without changing pin state.
-      self.workspaceContextTokens["instruments"]="asset:\(self.model.pattern):\(self.patternView.cursorRow):\(self.patternView.cursorChannel)"
+      self.workspaceContextTokens["instruments"]=WorkspaceAssetContext.token(panel:"instruments",model:self.model,row:self.patternView.cursorRow,channel:self.patternView.cursorChannel,input:self.patternView.instrument)
       self.workspace?.panels["instruments"]?.target.stringValue="Instrument \(index)"
       self.refreshAll();self.workspace?.show("instruments",focus:true);self.refreshWorkspaceAsset("instruments")
       editor?.status.stringValue="Instrument \(index) is ready. Enter notes using instrument \(index), or play Z–M / Q–U in the instrument inspector."

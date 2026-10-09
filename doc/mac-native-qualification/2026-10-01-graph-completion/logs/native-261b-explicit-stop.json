@@ -1,0 +1,172 @@
+{
+  "before": {
+    "changed": false,
+    "data": {
+      "audioActive": true,
+      "audition": false,
+      "callbacks": 123644,
+      "fault": false,
+      "frames": 63305728,
+      "graphActivity": [
+        {
+          "graph": "n25",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n31",
+          "instrument": "",
+          "order": 1,
+          "role": "ordinary",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n2"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n3"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n4"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n5"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n6"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n7"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n8"
+        },
+        {
+          "graph": "n25",
+          "instrument": "n18",
+          "order": 1,
+          "role": "instrument",
+          "tail": false,
+          "target": "n9"
+        }
+      ],
+      "left": 0.6109354496002197,
+      "loop": true,
+      "maxMicros": 5702.458,
+      "order": 0,
+      "overruns": 0,
+      "p999Micros": 4570,
+      "pattern": 0,
+      "patternPosition": 7940.677007928301,
+      "playing": true,
+      "pluginFailure": false,
+      "pluginLatency": 0,
+      "region": {
+        "cursorRow": 0,
+        "loop": true,
+        "order": 0
+      },
+      "right": 0.6110585927963257,
+      "routing": {
+        "active": true,
+        "available": true,
+        "failedPlan": 0,
+        "latencyPending": false,
+        "renderedPlan": 21,
+        "requestedPlan": 21,
+        "state": "stable"
+      },
+      "row": 31,
+      "voicePositions": [
+        {
+          "channel": 0,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 3412,
+          "instrument": 1,
+          "sample": 1,
+          "sampleFrame": 33
+        },
+        {
+          "channel": 1,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 682,
+          "instrument": 2,
+          "sample": 2,
+          "sampleFrame": 214
+        },
+        {
+          "channel": 3,
+          "envelopeTicks": [
+            0,
+            0,
+            0
+          ],
+          "generation": 2728,
+          "instrument": 4,
+          "sample": 4,
+          "sampleFrame": 2954
+        }
+      ],
+      "voices": 3
+    },
+    "documentId": "99206600-A771-499F-AA15-8D1C7FDF36B8",
+    "playbackStopped": false,
+    "revision": "99206600-A771-499F-AA15-8D1C7FDF36B8:30:11:0"
+  },
+  "explicitStop": {
+    "changed": false,
+    "data": {
+      "playing": false
+    },
+    "documentId": "99206600-A771-499F-AA15-8D1C7FDF36B8",
+    "playbackStopped": true,
+    "revision": "99206600-A771-499F-AA15-8D1C7FDF36B8:30:11:0"
+  }
+}

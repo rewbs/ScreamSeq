@@ -2,7 +2,7 @@
 #include "soundlib/ModInstrument.h"
 namespace Tracker {
 PatternPitchRuntime::PatternPitchRuntime(const NativeSong &native,OpenMPT::CSoundFile &song,
- const std::vector<std::shared_ptr<NativePlugin>> &plugins,const std::vector<bool> &bypass) {
+ const std::vector<std::shared_ptr<NativePlugin>> &plugins,const std::vector<bool> &bypass,PluginChain *noteHost):noteHost_(noteHost) {
   std::map<uint16_t,size_t> targets;
   for(const auto &command:native.performance.commands) {
     if(command.kind!=PatternCommandKind::PitchSet&&command.kind!=PatternCommandKind::PitchSlide)continue;
@@ -26,44 +26,56 @@ PatternPitchRuntime::PatternPitchRuntime(const NativeSong &native,OpenMPT::CSoun
 }
 bool PatternPitchRuntime::render(OpenMPT::CSoundFile &song,uint32_t count,uint64_t absoluteFrame) noexcept {
   using namespace OpenMPT;
-  song.nativePitchRatios.fill(nullptr);
+  song.nativePitchRatios.fill(nullptr);song.nativePitchUnitsPerFrame=0;
   const auto &state=song.m_PlayState;
   if(!count||state.m_flags[SONG_PAUSED|SONG_FADINGSONG]||!state.m_nSamplesPerTick||!state.TicksOnRow())return true;
   if(count>4096)return false;
-  const double unitsPerSample=double(performanceUnitsPerRow)/(double(state.TicksOnRow())*state.m_nSamplesPerTick);
-  const double tick=double(state.m_nRow)*performanceUnitsPerRow+double(state.m_nTickCount)*performanceUnitsPerRow/state.TicksOnRow();
-  auto musical=[&](uint32_t offset){return tick+double(state.SamplesIntoTick()+offset)*unitsPerSample;};
-  const auto begin=musical(0);
+  const double unitsPerSample=state.NativeRowStep(performanceUnitsPerRow);
+  const double start=state.NativeRowPosition(performanceUnitsPerRow);
+  auto musical=[&](uint32_t offset){return start+double(offset)*unitsPerSample;};
+  const auto begin=musical(0);song.nativePitchUnitsPerFrame=unitsPerSample;
   const bool entering=pattern_!=state.m_nPattern||order_!=state.m_nCurrentOrder||begin<=previousPosition_;
   pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;previousPosition_=begin;
+  if(entering)for(auto &voice:song.m_PlayState.Chn)voice.nativeSamplePitch.Freeze();
   for(auto &target:targets_) {
-    const auto &channel=state.Chn[target.channel];
+    auto &channel=song.m_PlayState.Chn[target.channel];
+    auto &samplePitch=channel.nativeSamplePitch;const bool samplePlaying=channel.IsSamplePlaying()&&!channel.isPreviewNote;
     if(entering){const auto found=target.patterns.find(pattern_);target.events=found==target.patterns.end()?nullptr:&found->second;
       target.next=0;target.curve={target.current,target.current,begin,begin};}
     const bool muted=channel.dwFlags[CHN_MUTE|CHN_SYNCMUTE];
-    if(muted){target.current=target.curve.at(begin);target.curve={target.current,target.current,begin,begin};}
+    if(muted){samplePitch.Freeze();target.current=target.curve.at(begin);target.curve={target.current,target.current,begin,begin};}
     const auto instrument=std::find_if(instruments_.begin(),instruments_.end(),[&](const auto &v){return v.instrument==channel.pModInstrument;});
+    NoteSource routedSource;uint8_t routedChannel=0;
+    const bool routed=noteHost_&&noteHost_->patternPitchSource(song,target.channel,routedSource,routedChannel);
     int previousWheel=-1;
     for(uint32_t frame=0;frame<count;++frame) {
       const auto position=musical(frame);
       while(target.events&&target.next<target.events->size()&&(*target.events)[target.next].position<=position+1e-8) {
         const auto &event=(*target.events)[target.next++];if(muted)continue;
         target.curve={target.curve.at(event.position),event.value,double(event.position),double(event.position)+event.duration};target.used=true;target.pitchRange=event.pitchRange;
+        // Earlier commands skipped by a seek must not prime its new sample.
+        // A command quantized to the same onset frame still applies.
+        if(samplePlaying&&(!entering||event.position>begin-unitsPerSample-1e-8)){
+          const double from=samplePitch.Value(double(event.position)-position);
+          samplePitch={from,event.value,position-event.position,double(event.duration),true};
+        }
       }
       const auto semitones=target.curve.at(position);
-      target.ratios[frame]=std::exp2(semitones/12.);
-      if(target.used&&!muted&&instrument!=instruments_.end()) {
+      target.ratios[frame]=std::exp2(samplePitch.Value()/12.);
+      if(samplePlaying)samplePitch.Advance(unitsPerSample);
+      if(target.used&&!muted&&(noteHost_?routed:instrument!=instruments_.end())) {
         const auto depth=target.pitchRange;
         const int wheel=int(std::lround(std::clamp(semitones/depth,-1.,1.)*8192))+8192;
         if(wheel!=previousWheel) {
           const auto value=std::clamp(wheel,0,16383);
-          if(!instrument->plugin->scheduleMIDI(uint8_t(0xe0|instrument->midiChannel),uint8_t(value&127),uint8_t(value>>7),absoluteFrame+frame))return false;
+          if(noteHost_){if(!noteHost_->schedulePitchMIDI(routedSource,routedChannel,uint16_t(value),absoluteFrame+frame))return false;}
+          else if(!instrument->plugin->scheduleMIDI(uint8_t(0xe0|instrument->midiChannel),uint8_t(value&127),uint8_t(value>>7),absoluteFrame+frame))return false;
           previousWheel=wheel;
         }
       }
     }
     target.current=target.curve.at(musical(count));
-    if(target.used&&!muted)song.nativePitchRatios[target.channel]=target.ratios.data();
+    if(samplePlaying&&samplePitch.active&&!muted)song.nativePitchRatios[target.channel]=target.ratios.data();
   }
   return true;
 }

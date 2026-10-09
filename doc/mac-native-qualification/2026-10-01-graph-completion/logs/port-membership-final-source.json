@@ -1,0 +1,23 @@
+{
+  "baseCommit": "684a5023acda1a1823341d2387ee1a8040e2ef91",
+  "sourceHashes": {
+    "editor/hosted/HostedAudio.hpp": "e31e9bef160689b28fc0991b43ac4af01d180f36a9b87249f4a33afadea1e87b",
+    "editor/hosted/PluginChain.cpp": "6957c394a39ba237b34e4c38ff5a03e8ae816a5ace95c2ec25fea70d37316d7c",
+    "editor/hosted/SongModulationHost.cpp": "7593303ad4fa6370ed558022fa6a2406ccdcb3520ee4f0329cd17d311c19115c",
+    "mac/Tests/MultiBusTests.mm": "a0679f21bbc02f48ebf5170041021257d55b4354f0a41b43a5ddcf45fcfdacce"
+  },
+  "tests": [
+    "native-mixer",
+    "multi-bus",
+    "native-note-routing",
+    "native-source-migration"
+  ],
+  "result": "4/4 PASS, 15.50 seconds",
+  "testLog": "port-membership-final-tests.log",
+  "scope": "Offline actual AU/VST hosted rendering plus production API acceptance/Undo/Redo. No device, UI or timing qualification. First-use metadata fixture: 48000 Hz, 512-frame outer blocks. Existing suites retain their broader rate/partition matrix.",
+  "notes": [
+    "Physical capacity remains distinct from active connected membership. Metadata updates after a completed routing handoff, not on queueing.",
+    "Validated silent instrument/retained-plan follower taps use already allocated zero PCM, preserving envelope clocks without waking an instrument.",
+    "Windows stable-ID active bus hook requires follow-up native worker CI; this local pass does not establish Windows execution."
+  ]
+}

@@ -3,7 +3,8 @@
 # Mac paths to keep the extraction diff narrow; no algorithms are forked.
 get_filename_component(HOSTED_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 add_library(TrackerHosted STATIC
-  HostedAudio.cpp PluginScheduling.cpp PluginChain.cpp SongModulationHost.cpp GraphPluginEndpoint.cpp
+  HostedAudio.cpp RackPreset.cpp PluginScheduling.cpp PluginChain.cpp InstrumentSources.cpp RecordedAutomation.cpp NoteRoutingHost.cpp PatternPitchRouting.cpp SongModulationHost.cpp LatencyPublication.cpp SelectionRender.cpp
+  ${CMAKE_CURRENT_LIST_DIR}/SampleGraphSources.cpp GraphPluginEndpoint.cpp
   "${HOSTED_ROOT}/mac/Audio/PluginAssignments.cpp"
   "${HOSTED_ROOT}/mac/Audio/NativeInstrument.cpp"
   "${HOSTED_ROOT}/mac/Audio/NativeSignalGraph.cpp"

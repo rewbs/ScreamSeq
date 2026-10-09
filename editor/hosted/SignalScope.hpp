@@ -73,6 +73,7 @@ public:
     history_.clear();selection_.store(requested_,std::memory_order_release);
   }
   uint32_t token() const {return uint32_t(requested_);}
+  uint32_t watchedToken() const noexcept {return uint32_t(selection_.load(std::memory_order_acquire));}
   void route(uint64_t generation) noexcept {routeGeneration_.store(generation,std::memory_order_release);}
   void capture(uint32_t token,const float *samples,uint32_t frames,uint64_t position) noexcept {
     const auto selection=selection_.load(std::memory_order_acquire),route=routeGeneration_.load(std::memory_order_relaxed);

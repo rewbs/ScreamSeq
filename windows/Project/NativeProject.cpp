@@ -9,6 +9,8 @@
 #include <set>
 #include <string_view>
 #include <cstring>
+#include <cwctype>
+#include <map>
 #include <objbase.h>
 
 namespace ScreamSeq::Project {
@@ -49,6 +51,7 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 		(void)data(plugin.at("state"),16u*1024u*1024u);
 		if(plugin.contains("name")) (void)text(plugin.at("name"),1024);
 		if(plugin.contains("bypass")) (void)flag(plugin.at("bypass"));
+		if(plugin.contains("audioLayout")) (void)text(plugin.at("audioLayout"),8192);
 		// AUComponent.h defines kAudioUnitType_MusicDevice as the stored FourCC aumu.
 		constexpr uint32_t musicDevice=(uint32_t('a')<<24)|(uint32_t('u')<<16)|(uint32_t('m')<<8)|uint32_t('u');
 		const bool declaredInstrument=plugin.contains("isInstrument") ? flag(plugin.at("isInstrument")) : false;
@@ -80,6 +83,8 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 			}
 		}
 	}
+	for(const auto &route:native.signal.stageConnections)for(const auto &endpoint:{route.source,route.target})
+		need(endpoint.plugin.empty()||ids.contains(endpoint.plugin),"Graph stage cable refers to a missing rack plugin");
 	need(native.mixer.buses.size()+assignedPlugins<=250,"Mixer buses and assigned instruments exceed the shared adapter budget");
     // Native references are stable identities. Removing a rack entry retains
     // unresolved lanes/routes/bindings for plugin Undo, exactly as on Mac.
@@ -92,9 +97,9 @@ void validateRecords(Json &root,const Tracker::NativeSong &native) {
 	}
 }
 }
-OpenedProject openNativeProject(const std::filesystem::path &path) {
-	auto result=openNativeProjectBytes(readProjectBytes(path));result.state.path=path;return result;
-}
+// Explicit recovery restores captured immutable bytes. Keep its strict admission
+// separate from best-effort user file opening below: a malformed recovery take
+// must not replace the musician's currently retained take.
 OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
 	need(!bytes.empty() && bytes.size()<=maximumProjectBytes,"Native project exceeds the read limit or is empty");
 	auto root=decodePlist(bytes);
@@ -140,6 +145,7 @@ OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes) {
 	if(requiresHostedPlayback(*result.document,result.state)) result.state.issues.push_back("Project requires hosted routing/effects; do not substitute dry playback");
 	return result;
 }
+#include "NativeProjectRecovery.inc"
 ProjectState newProjectState(const Tracker::Document &document) {
 	ProjectState result;
 	result.preserved={{"version",6},{"plugins",Json::array()},{"automation",Json::array()}};
@@ -192,11 +198,21 @@ Json nativeProjectTree(Tracker::Document &document,const ProjectState &state) {
 std::vector<std::byte> serializeNativeProject(Tracker::Document &document,const ProjectState &state) {
 	return encodePlist(nativeProjectTree(document,state));
 }
+void validateProjectSaveDestination(const ProjectState &state,const std::filesystem::path &path) {
+	if(!state.requiresSaveAs||state.loadSourcePath.empty())return;
+	std::error_code error;
+	if(std::filesystem::equivalent(path,state.loadSourcePath,error)&&!error)
+		throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
+	auto normalized=[](const std::filesystem::path &p){std::error_code ec;auto value=std::filesystem::weakly_canonical(p,ec);if(ec)value=std::filesystem::absolute(p).lexically_normal();auto name=value.wstring();std::transform(name.begin(),name.end(),name.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});return name;};
+	if(normalized(path)==normalized(state.loadSourcePath))throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
+}
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite) {
+	validateProjectSaveDestination(state,path);
 	auto tree=nativeProjectTree(document,state);auto bytes=encodePlist(tree);
 	// Compute every allocating state update before publishing the destination.
 	ProjectState saved=state;saved.preserved=std::move(tree);saved.metadataBaseline=encodeNativeMetadata(document.native());
-	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;saved.recoveredUnsaved=false;
+	saved.savedRevision=document.revision;saved.savedPluginRevision=state.pluginRevision;saved.path=path;
+	saved.recoveredUnsaved=false;saved.requiresSaveAs=false;
 	writeProjectFile(path,bytes,overwrite);
 	state=std::move(saved);
 }

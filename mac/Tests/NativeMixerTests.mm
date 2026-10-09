@@ -3,12 +3,14 @@
 #include "../Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/GraphPluginEndpoint.hpp"
+#include "editor/SongGroupRuntime.hpp"
 #include "soundlib/ModInstrument.h"
 #import "../Bridge/TrackerSession.h"
 #include <iostream>
 #include <dlfcn.h>
 std::vector<Tracker::PluginDescriptor> registerFixtureAUs();
 void setFixtureAUHiddenGain(float);
+void setFixtureAUInstrumentInputs(bool);
 uint64_t fixtureAUCreatedCount();
 using namespace Tracker;
 using namespace OpenMPT;
@@ -26,6 +28,20 @@ static void enable(Document &doc) {
     for (const auto &[channel, track] : n.tracks) n.mixer.buses.push_back({track.id, master, MixerBusKind::Track, "Track"});
     n.mixer.buses.push_back({master, 0, MixerBusKind::Master, "Master"});
   });
+}
+static void projectedAdapterCapacity() {
+  for(bool bounded:{false,true}){
+    auto document=Document::demo();auto native=document->native();
+    if(bounded){native.ensureMixer();for(unsigned i=0;i<50;++i)native.mixer.buses.push_back({native.makeEntity().id,native.masterID,MixerBusKind::Return,"Empty return"});}
+    // Unresolved saved endpoints still own silent roots. With 64 chains the
+    // host must shrink its sample reserve to stay inside the adapter limit.
+    const unsigned count=bounded?64:1;for(unsigned i=0;i<count;++i)native.mixer.detachedChains.push_back({native.makeEntity().id,{"unavailable-"+std::to_string(i)}});
+    Renderer renderer(document->snapshotData(),48000);auto host=std::make_unique<PluginChain>(std::vector<PluginState>{},48000,true);host->attachInstruments(renderer,&native);
+    size_t adapters=0;for(const auto &slot:renderer.song().m_MixPlugins)adapters+=slot.pMixPlugin!=nullptr;
+    check(adapters<=250&&adapters>=native.tracks.size()+1+count+(bounded?50:0)&&host->mixerRoutingReady(),"Projected roots must count against the prepared adapter budget");
+    for(const auto &[channel,track]:native.tracks)check(renderer.song().ChnSettings[channel].nMixPlugin&&renderer.song().ChnSettings[channel].nMixPlugin<=adapters,"Projected chain roots must never replace a channel's exact adapter identity");
+    std::array<float,1024> samples{};renderer.render(samples.data(),512);check(host->process(samples.data(),512),"Implicit detached chains retain normal channel routing");
+  }
 }
 static void liveRouting(const PluginState &effect,uint32_t block,bool graphCopies=false,bool newBus=false,bool changedInput=false) {
   auto doc=Document::demo();
@@ -107,15 +123,15 @@ static void liveRouting(const PluginState &effect,uint32_t block,bool graphCopie
   }
   check(changedAudio && liveChain.mixerRoutingReady(),"Live fixture has an audible routing difference and completed handoffs");
   auto affected=after;affected.mixer.buses[0].output=before.mixer.buses[2].id;
-  check(bool(liveChain.prepareMixerRouting(affected))!=graphCopies,"Retained VST input can morph while note-dependent graph membership still requires preparation");
+  check(bool(liveChain.prepareMixerRouting(affected)),"Retained VST inputs and note-dependent membership have a complete prepared handoff");
   if(graphCopies) {
     auto controls=before;controls.signal.library[0].nodes[1].plugin.parameters[7]=.7;
     auto plan=liveChain.prepareGraphControls(controls);
     check(plan && liveChain.publishGraphControls(std::move(plan)),"Publish controls before an unrelated route edit");
     check(bool(liveChain.prepareMixerRouting(controls)),"Route preparation compares the latest published graph controls, not stale construction values");
-    check(!liveChain.prepareMixerRouting(before),"A combined control/routing Undo must not silently omit changed graph parameters");
+    check(bool(liveChain.prepareMixerRouting(before)),"A combined control/routing Undo prepares the changed graph parameters atomically");
     auto topology=controls;topology.signal.instrumentAssignments.clear();
-    check(!liveChain.prepareMixerRouting(topology),"Removing a sample-graph source still requires a separately prepared plan");
+    check(bool(liveChain.prepareMixerRouting(topology)),"Removing a sample-graph source prepares its binding and audio handoff");
   }
 }
 static void liveRouteObservations(const PluginState &effect,uint32_t block) {
@@ -235,7 +251,54 @@ static void liveRecipeParameters(const PluginState &effect,uint32_t block) {
   if(probe.parameters().size()>512){auto excessive=next;for(uint32_t id=20001;id<=20129;++id)excessive.signal.library[0].nodes[1].plugin.parameters[id]=.8;
     bool rejected=false;try{live.prepareGraphControls(excessive);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Oversized live VST3 parameter batch is rejected before publication");
   }
-  auto structural=next;structural.signal.library[0].audio[0].target=output;check(!live.prepareGraphControls(structural),"Audio routing cannot be misclassified as a parameter-only edit");
+  auto structural=next;structural.signal.library[0].audio[0].target=output;auto prepared=live.prepareGraphControls(structural);check(prepared&&std::all_of(prepared->runtimeOwners.begin(),prepared->runtimeOwners.end(),[](const auto &owner){return owner.structural;}),"Audio routing must use an explicit dry transition, not a parameter-only adoption");
+}
+static void liveRecipeStructure(const PluginState &effect,uint32_t block) {
+  auto doc=Document::demo();enable(*doc);auto native=doc->native();
+  auto &definition=native.signal.library.emplace_back();definition.id=native.makeEntity().id;definition.number=1;definition.name="Live topology";
+  const auto input=native.makeEntity().id,node=native.makeEntity().id,output=native.makeEntity().id,offset=native.makeEntity().id;
+  definition.nodes={{input,SignalNodeKind::Input,"Input"},{node,SignalNodeKind::Plugin,"Gain"},{output,SignalNodeKind::Output,"Output"}};
+  const auto &d=effect.descriptor;definition.nodes[1].plugin={d.format,d.name,d.path,d.classID,d.type,d.subtype,d.manufacturer,effect.state};definition.audio={{input,node},{node,output}};
+  native.signal.assignments={{native.mixer.buses.back().id,definition.id,1,1}};
+  SignalNode dc{offset,SignalNodeKind::Plugin,"Offset"};dc.plugin.classID="resonance.dc-offset.v1";dc.plugin.name="DC Offset";dc.plugin.parameters={{1,10},{2,0}};
+  Renderer reference(doc->serialize(),48000),renderer(doc->serialize(),48000);PluginChain dry({},48000,true),live({},48000,true);dry.attachInstruments(reference,&doc->native());live.attachInstruments(renderer,&native);
+  const auto originalObservations=live.parameterActivity().processors.size();std::array<float,8192> a{},b{};GraphPluginEndpoint *retainedOffset=nullptr;
+  auto curve=[](double t){return t*t*(3-2*t);};
+  auto sample=[](unsigned layout,double dry){return layout==0?dry*.5:layout==1?dry*.5+.1:(dry+.1)*.5;};
+  for(uint32_t at=0;at<8192;){
+    if(at==1024||at==3072||at==5120||at==7168){
+      auto next=native;auto &graph=next.signal.library[0];
+      if(at==1024||at==7168){graph.nodes.push_back(dc);graph.audio={{input,node},{node,offset},{offset,output}};}
+      else if(at==3072)graph.audio={{input,offset},{offset,node},{node,output}};
+      else {std::erase_if(graph.nodes,[&](const auto &n){return n.id==offset;});graph.audio={{input,node},{node,output}};}
+      const auto count=live.parameterActivity().processors.size();auto plan=live.prepareGraphControls(next);
+      check(plan&&live.parameterActivity().processors.size()==count,"Preparing new recipe processors must not publish orphan observation IDs");
+      if(at==1024)retainedOffset=plan->processorOwners[0].state->find(offset)->endpoint.get();
+      if(at==7168)check(plan->processorOwners[0].state->find(offset)->endpoint.get()==retainedOffset,"Undo of recipe removal must reuse the retained vendor, including its opaque state");
+      check(live.publishGraphControls(std::move(plan)),"Structural recipe publication failed while source audio advances");
+      check(live.parameterActivity().processors.size()==originalObservations+1,"Recipe reinsert must reuse stable observation identity");native=std::move(next);
+    }else if(at==2048||at==4096||at==6144){
+      auto invalid=native;invalid.signal.library[0].audio.push_back({output,node});const auto count=live.parameterActivity().processors.size();bool rejected=false;
+      try{live.prepareGraphControls(invalid);}catch(const std::invalid_argument &){rejected=true;}check(rejected&&count==live.parameterActivity().processors.size(),"Rejected topology must preserve accepted plan and parameter catalogue");
+      // Cycle the retained publication slots, so a transition cannot borrow
+      // storage accidentally kept alive by a test-owned candidate vector.
+      auto plan=live.prepareGraphControls(native);check(plan&&live.publishGraphControls(std::move(plan)),"Settled recipe control snapshot failed");
+    }
+    auto count=std::min(block,8192-at);for(auto boundary:{1024u,2048u,3072u,4096u,5120u,6144u,7168u})if(boundary>at)count=std::min(count,boundary-at);
+    uint64_t allocations,frees,locks;tracker_audit_begin();dry.beginRenderBlock();live.beginRenderBlock();dry.syncTransport(reference);live.syncTransport(renderer);reference.render(a.data(),count);renderer.render(b.data(),count);const bool okay=dry.process(a.data(),count)&&live.process(b.data(),count);tracker_audit_end(&allocations,&frees,&locks);
+    check(okay&&allocations+frees+locks==0,"Published recipe topology and retired plan ownership violate realtime rendering");
+    for(uint32_t i=0;i<count*2;++i){const auto frame=at+i/2;double expected;
+      if(frame<1024)expected=sample(0,a[i]);else {
+        const auto change=frame<3072?1024u:frame<5120?3072u:frame<7168?5120u:7168u;
+        const auto elapsed=frame-change,before=change==1024?0u:change==3072?1u:change==5120?2u:0u,after=change==1024?1u:change==3072?2u:change==5120?0u:1u;
+        if(elapsed<240){const auto wet=1-curve(double(elapsed)/240);expected=sample(before,a[i])*wet+a[i]*(1-wet);}
+        else if(elapsed<480){const auto wet=curve(double(elapsed-240)/240);expected=sample(after,a[i])*wet+a[i]*(1-wet);}
+        else expected=sample(after,a[i]);
+      }
+      check(std::abs(b[i]-expected)<2e-6,"Published structural recipe differs from independent per-sample dry bridge");
+    }
+    check(reference.telemetry().frames==renderer.telemetry().frames,"Structural recipe edit restarts or loses source audio time");at+=count;
+  }
 }
 static void livePreparedSidechain(PluginState effect,uint32_t block,bool builtin,bool automatic=true,bool timedMode=false) {
   auto doc=Document::demo(),detectorDoc=Document::demo();enable(*doc);
@@ -363,7 +426,7 @@ static void liveRecipeSources(const PluginState &effect,uint32_t block,SignalNod
     check(actualRenderer.telemetry().frames==referenceRenderer.telemetry().frames,"Source edits preserve the held-note playback clock");at+=frames;
   }
   check(sounding,"Source fixture rendered audible sample voices");
-  auto note=native;note.signal.library[0].nodes.push_back({native.nextID,SignalNodeKind::NoteEnvelope,"Unprepared scope"});check(!live.prepareGraphControls(note),"Adding a new note scope remains explicitly unsupported");
+  auto note=native;note.signal.library[0].nodes.push_back({native.nextID,SignalNodeKind::NoteEnvelope,"Prepared note scope"});check(bool(live.prepareGraphControls(note)),"Adding a note source uses prepared channel membership");
   auto external=native;external.signal.library[0].nodes.push_back({source,SignalNodeKind::Follower,"External source"});external.signal.library[0].audio.push_back({input,source,1,0});bool refused=false;try{live.prepareGraphControls(external);}catch(const std::invalid_argument &){refused=true;}check(refused,"Sources cannot activate unprepared external graph inputs");
 }
 static void graphTailBudget(uint32_t block) {
@@ -604,13 +667,23 @@ static void monitorWhileRendering(bool testBypass=false) {
     check(different&&signal&&!observed.listen.pending(),"Channel listen isolates real rendered audio and restores the original mix");
   }
 }
+#include "SongGroupHostChecks.inc"
+#include "DirectPluginHostChecks.inc"
+#include "InstrumentInputChecks.inc"
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool { try {
     check(argc == 2, "Fixture bundle path required");
+    projectedAdapterCapacity();
     auto descriptions = NativePlugin::discoverVST3(argv[1]);
     PluginState gain{descriptions.at(0)}, synth{descriptions.at(1)}, delayed{descriptions.at(2)};
     gain.instanceID = "gain"; synth.instanceID = "synth"; delayed.instanceID = "delayed";
-    for(auto block:{17u,512u,4096u}){songModulationHost(gain,block);liveRack(gain,block);liveRouteObservations(gain,block);liveRouting(gain,block);liveRouting(gain,block,false,false,true);liveRouting(gain,block,true);liveRouting(gain,block,false,true);liveRouting(gain,block,true,true);liveRecipeParameters(gain,block);}
+    for(auto block:{17u,512u,4096u}){
+      const auto run=[&](const char *name,auto &&test){try{test();}catch(const std::exception &error){throw std::runtime_error(std::string(name)+" block="+std::to_string(block)+": "+error.what());}};
+      run("songModulationHost",[&]{songModulationHost(gain,block);});run("liveRack",[&]{liveRack(gain,block);});run("liveRouteObservations",[&]{liveRouteObservations(gain,block);});
+      run("liveRouting",[&]{liveRouting(gain,block);});run("liveRouting output",[&]{liveRouting(gain,block,false,false,true);});run("liveRouting new bus",[&]{liveRouting(gain,block,true);});
+      run("liveRouting graph copies",[&]{liveRouting(gain,block,false,true);});run("liveRouting new bus graph copies",[&]{liveRouting(gain,block,true,true);});
+      run("liveRecipeParameters",[&]{liveRecipeParameters(gain,block);});run("liveRecipeStructure",[&]{liveRecipeStructure(gain,block);});
+    }
     for(auto block:{17u,512u,4096u})for(unsigned scope=0;scope<5;++scope)songNoteScope(gain,block,scope);
     for(auto block:{17u,512u,4096u}){combinedSongAutomation(gain,block);combinedRecipeAutomation(gain,block);detachedHost(gain,block);songBusFollower(gain,block);}
     {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);
@@ -620,10 +693,13 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       for(auto kind:{SignalNodeKind::Follower,SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::MIDI,SignalNodeKind::Amount,SignalNodeKind::Automation})for(auto block:{17u,512u,4096u})liveRecipeSources(gain,block,kind,hidden,created);
       liveRecipeSources(gain,512,SignalNodeKind::Follower,hidden,created,true);dlclose(bundle);
     }
+    {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);auto latency=reinterpret_cast<int(*)(uint32_t)>(dlsym(bundle,"ResonanceFixtureLatency"));check(latency,"Delayed group fixture exists");for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool bypass:{false,true})for(bool refresh:{false,true})delayedSongGroup(gain,rate,block,bypass,refresh,latency);latency(0);dlclose(bundle);}
     for(auto block:{17u,512u,4096u})graphTailBudget(block);
-    PluginState au{registerFixtureAUs().at(0)};au.instanceID="prepared-au";
+    const auto auDescriptions=registerFixtureAUs();PluginState au{auDescriptions.at(0)};au.instanceID="prepared-au";
+    for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){liveSongGroup(gain,rate,block);liveSongGroup(au,rate,block);liveDirectPluginCables(gain,rate,block);liveDirectPluginCables(au,rate,block);}
+    {auto bundle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);auto mode=reinterpret_cast<void(*)(bool)>(dlsym(bundle,"ResonanceFixtureInstrumentInputs"));check(mode,"Instrument audio input fixture exists");PluginState auSynth{auDescriptions.at(1)};for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,512u,4096u}){liveInstrumentInputs(gain,synth,rate,block,mode);liveInstrumentInputs(au,auSynth,rate,block,setFixtureAUInstrumentInputs);}dlclose(bundle);}
     PluginState compressor;for(const auto &d:NativePlugin::builtins())if(d.classID=="resonance.compressor.v1")compressor.descriptor=d;compressor.instanceID="prepared-compressor";
-    for(auto block:{17u,512u,4096u}){liveRecipePreset(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeBypass(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);livePreparedSidechain(au,block,false);livePreparedSidechain(compressor,block,true);livePreparedSidechain(compressor,block,true,false);livePreparedSidechain(compressor,block,true,true,true);}
+    for(auto block:{17u,512u,4096u}){liveRecipePreset(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeBypass(au,block,setFixtureAUHiddenGain,fixtureAUCreatedCount);liveRecipeStructure(au,block);livePreparedSidechain(au,block,false);livePreparedSidechain(compressor,block,true);livePreparedSidechain(compressor,block,true,false);livePreparedSidechain(compressor,block,true,true,true);}
     for(auto kind:{SignalNodeKind::Follower,SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::MIDI,SignalNodeKind::Amount,SignalNodeKind::Automation})for(auto block:{17u,512u,4096u})liveRecipeSources(au,block,kind,setFixtureAUHiddenGain,fixtureAUCreatedCount);
     synth.instrument = delayed.instrument = 1;
     {
@@ -780,10 +856,11 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
     NSString *badPath = [path stringByAppendingString:@".invalid.resonance"];
     [[NSPropertyListSerialization dataWithPropertyList:encoded format:NSPropertyListBinaryFormat_v1_0 options:0 error:&problem] writeToFile:badPath atomically:YES];
     revision = session.automationRevision;
-    check(![session openPath:badPath error:&problem] && [revision isEqual:session.automationRevision], "Legacy metadata with input balance is rejected without replacing the song");
+    check([session openPath:badPath error:&problem] && [[session snapshot:0][@"loadWarnings"] count]>0 && [[session snapshot:0][@"requiresSaveAs"] boolValue], "Legacy metadata with known input balance recovers with a Save As warning");
+    check([saved[@"buses"] isEqual:call(@"mixer.get", @{})[@"data"][@"buses"]], "Historical version alone does not discard valid routing or input balance");
     encoded[@"native"][@"version"] = @17; [encoded[@"native"][@"mixer"][@"buses"][0] removeObjectForKey:@"prePan"];
     [[NSPropertyListSerialization dataWithPropertyList:encoded format:NSPropertyListBinaryFormat_v1_0 options:0 error:&problem] writeToFile:badPath atomically:YES];
-    check(![session openPath:badPath error:&problem] && [revision isEqual:session.automationRevision], "Version 6 requires an explicit valid input balance on every bus");
+    check([session openPath:badPath error:&problem] && [[session snapshot:0][@"loadWarnings"] count]>0 && [[session snapshot:0][@"requiresSaveAs"] boolValue], "Malformed optional routing recovers the embedded song with explicit warnings");
     [[NSFileManager defaultManager] removeItemAtPath:badPath error:nil];
     check([session openPath:path error:&problem], "Mixer project reopens");
     auto loaded = call(@"mixer.get", @{})[@"data"];

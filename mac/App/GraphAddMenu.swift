@@ -18,9 +18,10 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
   private weak var responder: NSResponder?
   var onChoose: ((Entry) -> Void)?
   private var keyMonitor: Any?
-  private var verb="adds"
+  private var verb="adds",filteredQuery=""
 
   func show(in view: NSView, at point: NSPoint, title: String, entries: [Entry], verb:String="adds", choose: @escaping (Entry) -> Void) {
+    KeyboardSettings.traceInput("graph-search.show.begin",detail:title)
     close(); owner = view.window; responder = view.window?.firstResponder; onChoose = choose
     self.verb=verb
     if panel == nil {
@@ -44,9 +45,13 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       let screen = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? parent.frame
       panel.setFrameOrigin(NSPoint(x: max(screen.minX, min(screen.maxX-panel.frame.width, anchor.x)), y: max(screen.minY, min(screen.maxY-panel.frame.height, anchor.y-panel.frame.height))))
       parent.addChildWindow(panel, ordered: .above); panel.makeKeyAndOrderFront(nil); panel.makeFirstResponder(search)
+      KeyboardSettings.traceInput("graph-search.show.focus",detail:"panel=\(panel.windowNumber) owner=\(parent.windowNumber)")
     }
     keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, event.window === self.panel else { return event }
+      guard let self else { return event }
+      let event = Self.eventForFocusedSearch(event, keyWindow: NSApp.keyWindow, owner: self.owner, panel: self.panel, search: self.search)
+      KeyboardSettings.traceInput("graph-search.key",event:event,detail:"panel=\(self.panel?.windowNumber ?? 0) owner=\(self.owner?.windowNumber ?? 0)")
+      guard event.window === self.panel else { return event }
       if event.keyCode == 53 { self.close(); return nil }
       if event.keyCode == 36 { self.choose(); return nil }
       if event.keyCode == 125 || event.keyCode == 126 {
@@ -56,12 +61,37 @@ final class GraphAddMenu: NSObject, NSSearchFieldDelegate, NSTableViewDelegate, 
       }
       return event
     }
+    KeyboardSettings.traceInput("graph-search.show.end",detail:title)
+  }
+  /// Keep typing queued during a graph chooser's activation in its focused search.
+  /// Returning a retargeted key event uses AppKit's normal text-input path; it does
+  /// not recursively dispatch events or synthesize text/marked-text operations.
+  static func eventForFocusedSearch(_ event: NSEvent, keyWindow: NSWindow?, owner: NSWindow?, panel: NSPanel?, search: NSSearchField) -> NSEvent {
+    guard event.type == .keyDown, let owner, let panel, owner !== panel,
+      keyWindow === panel, event.window === owner, search.window === panel,
+      let focus = panel.firstResponder, focus === search || focus === search.currentEditor(),
+      KeyboardSettings.isDataTyping(event), let characters = event.characters, !characters.isEmpty,
+      characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value) })
+    else { return event }
+    return NSEvent.keyEvent(with: .keyDown, location: event.locationInWindow,
+      modifierFlags: event.modifierFlags, timestamp: event.timestamp, windowNumber: panel.windowNumber,
+      context: nil, characters: characters, charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? characters,
+      isARepeat: event.isARepeat, keyCode: event.keyCode) ?? event
   }
   func replace(_ values: [Entry]) { entries = values; filter() }
   func filter() {
-    let selected = filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
-    let terms = search.stringValue.lowercased().split(whereSeparator: \.isWhitespace)
-    filtered = entries.filter { entry in terms.allSatisfy { (entry.title + " " + entry.detail + " " + entry.keywords).lowercased().contains($0) } }
+    let query=search.stringValue.lowercased().trimmingCharacters(in:.whitespacesAndNewlines)
+    let selected = query==filteredQuery && filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
+    filteredQuery=query
+    let terms=query.split(whereSeparator: \.isWhitespace)
+    // A musician searching "Track 2" means the visible channel label first.
+    // Stable IDs remain searchable, but n2 must not outrank the title Track 2.
+    filtered=entries.enumerated().compactMap { index,entry -> (Int,Int,Entry)? in
+      let title=entry.title.lowercased(),visible=title+" "+entry.detail.lowercased(),all=visible+" "+entry.keywords.lowercased()
+      guard terms.allSatisfy({all.contains($0)})else{return nil}
+      let rank=terms.allSatisfy({title.contains($0)}) ? 0:terms.allSatisfy({visible.contains($0)}) ? 1:2
+      return (rank,index,entry)
+    }.sorted{a,b in if (a.2.unavailable==nil) != (b.2.unavailable==nil){return a.2.unavailable==nil};return a.0==b.0 ? a.1<b.1:a.0<b.0}.map{$0.2}
     table.reloadData()
     if !filtered.isEmpty { table.selectRowIndexes(IndexSet(integer: filtered.firstIndex { $0.id == selected } ?? 0), byExtendingSelection: false) }
     hint.stringValue = filtered.isEmpty ? "No matching targets · Escape returns to the graph" : "↑↓ choose · Return \(verb) · Esc cancels"

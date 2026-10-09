@@ -39,15 +39,33 @@ extension InterfaceTests {
     let host=NSWindow(contentRect:NSRect(x:0,y:0,width:1000,height:740),styleMask:[.titled],backing:.buffered,defer:false)
     host.isReleasedWhenClosed=false;host.contentView=editor;editor.frame=NSRect(x:0,y:0,width:1000,height:740);editor.layoutSubtreeIfNeeded()
     try require(editor.trace.bounds.height>=180 && editor.table.bounds.width>400,"Parameter trace and source table remain usable in the full panel")
+    host.setContentSize(NSSize(width:370,height:860));editor.frame=NSRect(x:0,y:0,width:370,height:860);editor.layoutSubtreeIfNeeded()
+    try require(editor.viewMode.bounds.width>=editor.viewMode.intrinsicContentSize.width-1 && editor.detailMode.bounds.width>=editor.detailMode.intrinsicContentSize.width-1 && editor.reading.bounds.width>=340,"A docked parameter panel keeps its mode labels and effective value readable without competing transport buttons")
+    host.setContentSize(NSSize(width:1000,height:740));editor.frame=NSRect(x:0,y:0,width:1000,height:740);editor.layoutSubtreeIfNeeded()
     if let index=CommandLine.arguments.firstIndex(of:"--snapshots"),index+1<CommandLine.arguments.count,let bitmap=editor.bitmapImageRepForCachingDisplay(in:editor.bounds){editor.cacheDisplay(in:editor.bounds,to:bitmap);if let png=bitmap.representation(using:.png,properties:[:]){let folder=URL(fileURLWithPath:CommandLine.arguments[index+1]);try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true);try png.write(to:folder.appendingPathComponent("ParameterActivityEditor.png"))}}
     editor.detailMode.selectedSegment=2;editor.changeDetail();answer(["points":[["frame":48000,"value":-40]],"total":1])
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    try require(editor.status.stringValue.contains("during playback") && !editor.status.stringValue.contains("Stop playback"),"Recorded editor explains its supported live-edit behavior")
     editor.editRecordedCell(row:0,column:1)
     try require(editor.table.editedRow==0 && editor.table.editedColumn==1,"Recorded values must open a real inline field editor")
     (host.firstResponder as? NSTextView)?.string="-30"
     host.makeFirstResponder(nil)
     try require(requests.last?.0=="automation.recorded.edit" && requests.last?.1["frame"] as? Int==48000 && requests.last?.1["value"] as? Double == -30,"Committing an inline recorded value preserves its time and edits the exact parameter")
     answer([:]);answer(["points":[["frame":48000,"value":-30]],"total":1])
+    try require(editor.table.selectedRow==0 && editor.pointTime.doubleValue==1 && editor.pointValue.doubleValue == -30,"Inline recorded edits refresh the selected point form even when its table row stays selected")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-40]],"total":1])
+    try require(editor.pointValue.doubleValue == -40,"Recorded Undo refresh restores the selected form alongside the table")
+    editor.loadRecorded();answer(["points":[["frame":48000,"value":-30],["frame":96000,"value":-20]],"total":2])
+    editor.tableView(editor.table,setObjectValue:"3",for:editor.table.tableColumns[0],row:0)
+    answer([:]);answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-30]],"total":2])
+    try require(editor.table.selectedRow==1 && editor.pointTime.doubleValue==3 && editor.pointValue.doubleValue == -30,"Editing recorded time follows that exact point through table reordering")
+    host.makeFirstResponder(editor.pointValue);(host.firstResponder as? NSTextView)?.string="-12.5"
+    editor.loadRecorded();answer(["points":[["frame":96000,"value":-20],["frame":144000,"value":-31]],"total":2])
+    try require((host.firstResponder as? NSTextView)?.string=="-12.5","Passive recorded refresh preserves an in-progress point-form text draft")
+    host.makeFirstResponder(nil)
+    editor.loadRecorded();editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
+    answer(["points":[["frame":96000,"value":-21],["frame":144000,"value":-31]],"total":2])
+    try require(editor.table.selectedRow==0 && editor.pointTime.doubleValue==2 && editor.pointValue.doubleValue == -21,"A pending recorded read respects a newer selected point instead of restoring the old row")
     // Song-level contributors use stable source IDs, not recipe edge indices.
     editor.detailMode.selectedSegment=0
     editor.loadSources();answer(["sources":[
@@ -76,6 +94,32 @@ extension InterfaceTests {
     try require(editor.tableView(editor.table,objectValueFor:editor.table.tableColumns[1],row:2) as? String=="Inactive","Disabled sources never display an old active contribution")
     editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false);link=nil;editor.openSelectedMapping()
     try require(link==nil && editor.status.stringValue.contains("contribution"),"The base has no modulation cable to edit")
+    let copies=ParameterActivityEditor(frame:.zero)
+    var copyRequests=[(String,[String:Any])](),copyReplies=[([String:Any])->Void]()
+    copies.onRequest={method,p,reply in copyRequests.append((method,p));copyReplies.append(reply)}
+    func copyAnswer(_ data:[String:Any]){copyReplies.removeFirst()(["result":["revision":"copy-r1","data":data]])}
+    let duplicateTargets:[[String:Any]]=[
+      ["key":"rack/first","name":"Compressor","plugin":"first","graph":"n0"],
+      ["key":"rack/second","name":"Compressor","plugin":"second","graph":"n0"],
+      ["key":"graph/5","name":"Channel · Compressor","graph":"n25","node":"n28","target":"n6","role":2,"instrument":"n0","channel":65535],
+      ["key":"graph/6","name":"Channel · Compressor","graph":"n25","node":"n28","target":"n7","role":2,"instrument":"n0","channel":65535]
+    ]
+    copies.inspect(graph:"n25",node:"n28",parameter:1,copy:"n25/n7/ordinary//inspector")
+    copyAnswer(["engine":1,"targets":duplicateTargets])
+    try require(copies.processor.numberOfItems==4 && copies.processor.indexOfSelectedItem==3 && copies.targetKey=="graph/6","Repeated plugin and channel names preserve every stable target, and graph Inspect follows the exact observed copy")
+    copyAnswer(["parameters":[["id":1,"name":"Threshold","min":-96,"max":0]]]);copyAnswer(["token":"copy:1"]);copyAnswer(["sources":[]])
+    copies.processor.selectItem(at:1);copies.selectProcessor()
+    try require(copyRequests.last?.1["target"] as? String=="rack/second","Selecting a duplicate-name menu item addresses its own stable processor identity")
+    copyAnswer(["parameters":[["id":1,"name":"Threshold","min":-96,"max":0]]]);copyAnswer(["token":"copy:2"]);copyAnswer(["sources":[]])
+    copies.request("parameter.activity.get"){_ in fatalError("Old processor capture survived a new explicit inspection")}
+    copies.detailMode.selectedSegment=2
+    copies.inspect(graph:"n25",node:"n28",parameter:1,copy:"n25/n99/ordinary//inspector")
+    copyAnswer(["target":["key":"rack/second"],"parameter":1,"points":[]])
+    try require(copies.targetKey.isEmpty && copies.parameters.isEmpty && copies.sources.isEmpty && copies.detailMode.selectedSegment==0,"A new graph inspection retires stale catalog/source replies and leaves rack-only recorded editing")
+    copies.reloadTargets()
+    copyAnswer(["engine":1,"targets":duplicateTargets])
+    try require(copies.processor.indexOfSelectedItem == -1 && copies.reading.stringValue.contains("unavailable") && copyRequests.last?.0=="parameter.activity.targets","An unavailable explicitly observed copy cannot silently fall back to a different channel")
+    try require(ParameterActivityEditor.copyKey(["graph":"n25","target":"n0","role":3,"instrument":"n9","channel":4])=="n25//instrument/n9/4","Instrument observation preserves instrument identity and raw channel")
     print("PASS parameter activity UI: stable target selection, source links, retired replies and trace zoom")
   }
 }

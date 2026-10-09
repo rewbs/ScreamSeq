@@ -16,6 +16,9 @@ OpenMPT release.
 - **Shape samples and instruments.** Waveform drawing, range processing,
   clipboard editing, loop crossfades, sample libraries, multi-sample mappings,
   and volume, pan, pitch and filter envelopes.
+- **Record and resample.** Capture microphone/interface input, or turn selected
+  pattern rows and channels into a new sample or instrument with one Undo.
+  See [recording samples](doc/SCREAMSEQ_SAMPLING.md).
 - **Host effects and instruments.** Built-in processors and native plugin
   interfaces, searchable parameters, presets, shared instrument assignments
   and MIDI channels. macOS hosts AU and VST3; Windows hosts VST3.
@@ -24,6 +27,8 @@ OpenMPT release.
   parameter links and signal inspection.
 - **Automate the music.** Pattern parameter envelopes, recorded automation,
   reusable envelope shapes, compiled curve formulas and precise graph commands.
+- **Compose sample scratches.** Sequence reusable paired motion/fader envelopes,
+  scripted curves and independent variations with inline pattern controls.
 - **Edit through a local API.** External tools and agents can inspect and change
   songs through guarded JSON operations. Musical edits use stable identities,
   revision checks, Undo and native project persistence.
@@ -31,8 +36,9 @@ OpenMPT release.
   engine-supported formats, save native projects and export modules with checks
   for native-feature loss. The macOS app also exports rendered stereo WAV.
 
-The [macOS guide](mac/README.md), [graph guide](mac/GRAPH_WORKFLOW.md) and
-[precise-note guide](mac/PRECISE_NOTES.md) describe the most developed interface.
+The [macOS guide](mac/README.md), [graph guide](mac/GRAPH_WORKFLOW.md),
+[precise-note guide](mac/PRECISE_NOTES.md) and [scratch guide](doc/SCREAMSEQ_SCRATCH_PHRASES.md)
+describe the most developed interface.
 Platform coverage differs; Windows is an implemented editing frontend with
 parity work still in progress.
 
@@ -88,9 +94,13 @@ Use a fresh build directory when another development instance is already running
 ## Projects and automation
 
 New projects use `.screamseq`. The current native format is container 6 /
-metadata 17; earlier native formats are rejected. OpenMPT module import remains
-supported. Platform-specific plugins must be available on the destination
-platform: AU state is preserved on Windows, but AU processors cannot run there.
+metadata 17. Incompatible native files load best effort: understood data is
+validated and recovered, with warnings for conversions or skipped content.
+Recovered files that require conversion or lose data must be saved as a new copy
+to protect the original. Files without a readable embedded song still cannot be
+opened. OpenMPT module import remains supported. Platform-specific plugins must
+be available on the destination platform: AU state is preserved on Windows, but
+AU processors cannot run there.
 The current sample engine uses 8/16-bit sample storage.
 
 The local API exposes capabilities through `api.describe`; clients must query

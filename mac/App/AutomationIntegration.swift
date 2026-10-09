@@ -109,6 +109,8 @@ extension AppController {
           if method == "document.save", let saved = result["data"] as? [String: Any],
             saved["written"] as? Bool == true, let path = saved["path"] as? String {
             self.documentURL = URL(fileURLWithPath: path)
+            self.documentLoadReport.didSave()
+            self.updateDocumentLoadReport()
             self.dirty = false
             self.window.isDocumentEdited = false
             self.clearRecovery()

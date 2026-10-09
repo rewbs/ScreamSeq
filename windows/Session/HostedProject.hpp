@@ -13,6 +13,7 @@ struct HostedPlaybackSettings {
   uint32_t order=0;
   Tracker::PlaybackRegion region{};
   bool audition=false;
+  bool liveEditing=false; // Document/device playback prepares implicit routing.
 };
 // Construct/destroy on the stopped document/control owner. The callback may use
 // the prepared renderer/chain only; no Document or project tree is retained.
@@ -28,14 +29,15 @@ public:
   // Owns all preparation until the document's beforeCommit callback publishes
   // it. Rendering never owns this wrapper and no live Document is retained.
   struct PreparedNativeUpdate {
-    enum class Kind { GraphControls, Routing };
-    Kind kind() const noexcept {return controls_?Kind::GraphControls:Kind::Routing;}
+    enum class Kind { GraphControls, Routing, Scratch };
+    Kind kind() const noexcept {return scratch_?Kind::Scratch:controls_?Kind::GraphControls:Kind::Routing;}
   private:
     friend class HostedProjectPlayback;
     HostedProjectPlayback *owner_=nullptr;
     uint64_t generation_=0;
     bool published_=false;
     std::unique_ptr<Tracker::GraphControlPlan> controls_;
+    std::unique_ptr<Tracker::ScratchGestureLibrary> scratch_;
     std::unique_ptr<Tracker::MixerTransition::Plan> routing_;
   };
   HostedProjectPlayback(Tracker::Document &,const Project::ProjectState &,uint32_t rate,

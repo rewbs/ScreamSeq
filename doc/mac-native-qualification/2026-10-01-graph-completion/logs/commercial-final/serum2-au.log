@@ -1,0 +1,12 @@
+Command: ["/Users/rewbs/code/openmpt/bin/mac-graph-fluency/commercial-graph-qualification", "/Library/Audio/Plug-Ins/Components/Serum2.component"]
+stage=0 rms=0.0823632 peak=0.283682 max_render_us=1848.25
+stage=1 rms=0.00556063 peak=0.185977 max_render_us=157
+stage=2 rms=0.0357461 peak=0.283681 max_render_us=177.709
+stage=3 rms=0.0826028 peak=0.289655 max_render_us=352.459
+stage=4 rms=0.0467862 peak=0.283668 max_render_us=191.291
+stage=5 rms=0.0826418 peak=0.283682 max_render_us=189.458
+stage=6 rms=0.0826754 peak=0.283678 max_render_us=182.5
+stage=7 rms=0.0824678 peak=0.283681 max_render_us=185.375
+stage=8 rms=0.00538472 peak=0.22814 max_render_us=154.125
+stage=9 rms=0.0823765 peak=0.283675 max_render_us=182.208
+PASS AU Xfer Records: Serum 2 at 48000 Hz / 512 frames: 10 seconds, route edits, failed-preparation retention, note ownership, bypass; no device opened. Vendor-private realtime behavior and speakers not qualified.

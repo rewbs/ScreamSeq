@@ -20,6 +20,7 @@ struct EnvelopeHostHooks {
   // Full candidate admission, including metadata-only changes and dry runs.
   // Refusal precedes audio publication, history and document mutation.
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
+  std::function<std::function<void()>(const Tracker::NativeSong &)> preparePublication;
 };
 // Control-thread only. Caller checks/removes expectedRevision; invoke returns
 // result.data. Read hooks must not mutate Document; stopPlayback must not throw

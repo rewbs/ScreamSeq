@@ -462,7 +462,7 @@ Json EnvelopeOperations::invoke(const std::string &method,const Json &p) {
         const auto &before=document_.native();
         const bool audible=!sameSignalProcessing(before.signal,next.signal)||before.automation!=next.automation;
         std::function<void()> publish;
-        if(audible)publish=host_.prepareNativeUpdate?host_.prepareNativeUpdate(before,next):stopPlayback_;
+        if(audible)publish=host_.prepareNativeUpdate?host_.prepareNativeUpdate(before,next):host_.preparePublication?host_.preparePublication(next):stopPlayback_;
         document_.annotate([&](NativeSong &n){n=next;},publish);
       } else {
         if(stopPlayback_)stopPlayback_();

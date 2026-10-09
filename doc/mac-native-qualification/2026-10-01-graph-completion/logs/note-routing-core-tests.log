@@ -1,0 +1,5 @@
+PASS atomic edits, grouped undo, sample processing/rollback, pattern/order undo, exact native roundtrip, bounded queue, loop termination at 44.1/48/96 kHz; max callback 117.584 us
+PASS fixture test.mod
+PASS fixture test.xm
+PASS fixture test.s3m
+PASS fixture test.mptm

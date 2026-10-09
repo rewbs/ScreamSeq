@@ -1,4 +1,4 @@
-# Native ARM64 Windows VST3 provider
+# Native Windows VST3 provider
 
 See [current installed-plugin qualification](../UPSTREAM_PLUGIN_QUALIFICATION.md)
 for Contourtonist/OrbitCab evidence, dynamic latency support, initial JUCE mapping
@@ -27,8 +27,8 @@ add_dependencies(YourApp ScreamSeqVST3Scanner)
 
 `Provider.cmake` compiles the private sources plus the unchanged vendored SDK
 identifier sources and existing `windows/Project/BinaryPlist.cpp`. It supplies
-private SDK/JSON include paths and user32/ole32/bcrypt linkage. Build ARM64 with
-MSVC C++20. Package `ScreamSeqVST3Scanner.exe` beside the app and package
+private SDK/JSON include paths and user32/ole32/bcrypt linkage. Build ARM64 or
+x64 with MSVC C++20; plugins must match the application process architecture. Package `ScreamSeqVST3Scanner.exe` beside the app and package
 `VST3-NOTICES/` with its license and revision pins. Never package/install the test
 fixture modules into user plugin folders. There is exactly one
 `Tracker::platformPluginBackendFactory()`; both rack and independent graph
@@ -41,7 +41,8 @@ instances reach it through the same shared `NativePlugin` facade.
 - `configure(scannerExecutable, cacheFile)`: optional absolute UTF-8 paths,
   before using the factory, on the single stopped/control owner. Default scanner
   is beside the executable; default cache is
-  `%LOCALAPPDATA%/ScreamSeq/vst3-arm64-cache.json`.
+  `%LOCALAPPDATA%/ScreamSeq/vst3-arm64-cache.json` for ARM64, or
+  `vst3-x64-cache.json` in the same directory for x64. The caches remain separate.
 - `factory.discover()` reads **only the persistent cache**. An absent cache is
   empty. A malformed cache is an error, not a reason to execute installed code.
   Do not invoke `discoverVST3` on startup to populate a menu.
@@ -54,7 +55,7 @@ instances reach it through the same shared `NativePlugin` facade.
   leaves previous cache records intact. A parent bulk-rescan UI should retain
   individual errors and honor cancellation between modules.
 
-A scan record binds canonical Windows binary path, PE ARM64 machine, SHA-256,
+A scan record binds canonical Windows binary path, native PE machine, SHA-256,
 canonical SDK FUID string, name and instrument classification. Creation checks
 all identity fields against the cache and current binary. Exact 32-character
 hexadecimal validation happens **before** `FUID::fromString`. FUID strings are
@@ -65,8 +66,10 @@ changes the source recipe. AU creation throws and the document must retain its
 entire recipe and opaque state.
 
 Accepts an absolute DLL-style `.vst3` file, or a bundle with exactly one binary
-under `Contents/arm64-win`. AMD64/x64 and ARM64EC binaries are rejected; there is
-**no x64 bridge**. The loaded binary is pinned against writes/deletion. Loading
+under `Contents/arm64-win` for ARM64 or `Contents/x86_64-win` for x64. The process
+architecture selects both the bundle directory and required PE machine; an
+opposite-architecture binary is rejected. ARM64EC is unsupported, and there is
+no cross-architecture bridge. The loaded binary is pinned against writes/deletion. Loading
 uses `LoadLibraryExW(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
 LOAD_LIBRARY_SEARCH_SYSTEM32)`, never the current-directory DLL search.
 UTF-8 paths are validated and converted to UTF-16, including file/hash reads.
@@ -91,9 +94,11 @@ Host application, handler/frame, streams, event lists and parameter queues honor
 SDK queryInterface/addRef/release ownership. Separate controllers connect in both
 directions; partial failures unwind initialized/active/processing objects.
 
-**The caller must stop and join rendering before state/program changes or
-instance destruction.** Do not call the synchronous UI-owner bridge on an audio
-callback. State export flushes pending offset-zero control edits. Rendering,
+**The caller must stop and join that instance's rendering before changing its
+opaque state/program or destroying it.** The shared host can prepare a separate
+compatible effect instance and publish a live replacement; this does not permit
+mutating the rendering vendor in place. Do not call the synchronous UI-owner
+bridge on an audio callback. State export flushes pending offset-zero control edits. Rendering,
 parameter queues, MIDI, transport and `popEdit` do not marshal to the STA.
 Editor gestures have independent fixed-capacity audio and commit-value SPSC
 queues. The editor's UI timer synchronizes atomic values back to its controller.
@@ -109,8 +114,11 @@ The shared README remains the authoritative provider contract. This adapter:
 - consumes/resets input and output queues each slice, accepts frames <=4096,
   copies sidechain inputs at the whole-block input offset, returns auxiliary
   outputs starting at zero, and uses the Mac mono/stereo conversion rules;
-- requires stereo main buses, supports mono/stereo enabled auxiliaries 1..63,
-  retains inactive bus metadata and rejects nonexistent/duplicate activations;
+- preserves native N-channel buses as explicit stereo/odd-mono logical ports,
+  retains first-pair IDs and prepares all physical buses before activation;
+  the first live cable uses existing buffers, and disconnected inputs get silence;
+- pins captured physical/channel mappings in `audioLayout` and rejects a changed
+  saved layout before activation, rather than retargeting numeric pair ports;
 - publishes current transport before MIDI, supplies current VST process context,
   emits note on/off/poly pressure and mapped CC/bend/aftertouch, tracks channels
   for all-notes/all-sound-off, and does not invent another musical clock;
@@ -123,9 +131,10 @@ The shared README remains the authoritative provider contract. This adapter:
   stays immutable. Count/identity, step, flags or unit-group changes require a
   stopped rebuild and still fault; a default-value change is harmless because
   the facade does not cache default values;
-- handles latency notifications through stopped latency maintenance; bus/reload
-  and other unsupported structural restarts still latch a fault. Stop and
-  recreate on the control owner; continuing with stale buffers is unsupported;
+- exposes serial-guarded latency snapshots on the control owner and callback-safe
+  exact-generation acknowledgment for prepared PDC adoption, without deactivating
+  the vendor; stopped compatibility refresh uses the same query/ack path;
+  bus/reload and unsupported structural restarts still latch a separate fault;
 - faults/silences on queue overflow, invalid output and processing failure.
   A lock-free first-failure record retains a static reason and numeric detail;
   control-thread diagnostics can inspect it without invoking vendor code.
@@ -151,8 +160,10 @@ See `../Tests/Plugins/README.md` for actual DLL/PCM/HWND tests and commands.
 These tests do not qualify commercial plugins, full AU/Mac parity, integrated
 application UI/API/persistence, WASAPI/system audio, sanitizer coverage, or a
 complete malloc/free/lock realtime audit. No zero-allocation claim is inferred
-from the deterministic fixture. The parent must finish app integration and its
-own native UI qualification without replacing a musician's running session.
+from the deterministic fixture. Native worker CI exercises the integrated shared host separately from desktop
+and device checks. Consult the run's actual results before claiming a pass;
+source availability is not execution evidence. Desktop/device qualification
+must use a separate session without replacing a musician's running session.
 
 ## Provenance and licensing
 

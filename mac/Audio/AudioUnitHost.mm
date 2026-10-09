@@ -1,4 +1,5 @@
 #include "AudioUnitHost.hpp"
+#include "editor/hosted/PluginAudioLayout.hpp"
 #include "NativeSignalGraph.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
@@ -18,6 +19,54 @@
     self.onClose();
 }
 @end
+bool RSValidPluginEditorSize(NSSize size) {
+  return std::isfinite(size.width)&&std::isfinite(size.height)&&size.width>=1&&size.height>=1&&size.width<=8192&&size.height<=8192;
+}
+void RSResizePluginEditorWindow(NSWindow *window,NSSize size) {
+  if(!window||!RSValidPluginEditorSize(size)||NSEqualSizes(window.contentView.frame.size,size))return;
+  const auto previous=window.frame;
+  auto frame=[window frameRectForContentRect:NSMakeRect(0,0,size.width,size.height)];
+  frame.origin=NSMakePoint(NSMinX(previous),NSMaxY(previous)-frame.size.height);
+  [window setFrame:frame display:NO];
+}
+NSWindow *RSCreatePluginEditorWindow(NSSize size,NSString *title) {
+  if(!RSValidPluginEditorSize(size))throw std::runtime_error("Invalid plugin editor dimensions");
+  NSWindow *window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,size.width,size.height)
+    styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
+  window.releasedWhenClosed=NO;window.title=title;
+  window.contentView=[[NSView alloc] initWithFrame:NSMakeRect(0,0,size.width,size.height)];
+  return window;
+}
+@implementation RSPluginEditorContainer {
+  __weak NSView *_pluginView;
+  BOOL _synchronizing;
+}
+- (instancetype)initWithPluginView:(NSView *)view {
+  self=[super initWithFrame:NSMakeRect(0,0,view.frame.size.width,view.frame.size.height)];
+  if(self){
+    _pluginView=view;
+    // Vendor-driven frame changes resize the container. Letting AppKit also
+    // stretch this child would apply that same resize twice.
+    view.autoresizingMask=NSViewNotSizable;
+    [view setFrameOrigin:NSZeroPoint];
+    view.postsFrameChangedNotifications=YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(pluginFrameChanged:) name:NSViewFrameDidChangeNotification object:view];
+    [self addSubview:view];
+  }
+  return self;
+}
+- (void)pluginFrameChanged:(NSNotification *)notification { [self synchronizePluginFrame]; }
+- (void)synchronizePluginFrame {
+  NSView *view=_pluginView;
+  if(_synchronizing||!view||!RSValidPluginEditorSize(view.frame.size))return;
+  _synchronizing=YES;
+  const auto size=view.frame.size;
+  [view setFrameOrigin:NSZeroPoint];
+  if(self.window)RSResizePluginEditorWindow(self.window,size);else [self setFrameSize:size];
+  _synchronizing=NO;
+}
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+@end
 namespace Tracker {
 static_assert(audioUnitMusicDeviceType == kAudioUnitType_MusicDevice);
 static_assert(kAudioUnitParameterUnit_Generic == 0 && kAudioUnitParameterUnit_Indexed == 1 &&
@@ -29,8 +78,7 @@ static_assert(kAudioUnitParameterUnit_Generic == 0 && kAudioUnitParameterUnit_In
 class MacPluginBackend final : public PluginBackend {
   static constexpr uint32_t maximumFrames = 4096;
   AudioUnit unit_ = nullptr;
-  std::array<float, maximumFrames> inputLeft_{}, inputRight_{}, outputLeft_{}, outputRight_{};
-  struct StereoBuffers { UInt32 count; AudioBuffer buffers[2]; };
+  struct NativeBuffers { UInt32 count; AudioBuffer buffers[64]; };
   static OSStatus input(void *, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32, UInt32, AudioBufferList *);
   double latency_ = 0, tail_ = 0;
   PluginDescriptor descriptor_;
@@ -43,8 +91,7 @@ class MacPluginBackend final : public PluginBackend {
   std::unique_ptr<VST3Plugin> vst_;
   std::vector<PluginAudioBus> buses_;
   std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
-  std::array<std::unique_ptr<PluginAudioStorage>, 64> auInputs_, auxiliaryOutputBuffers_;
-  std::array<const float *, 64> inputSources_{};
+  std::unique_ptr<PluginAudioBufferPlan> audio_;
   void *editorWindow_ = nullptr, *editorDelegate_ = nullptr, *parameterListener_ = nullptr;
 public:
   MacPluginBackend(const PluginState &, double rate, bool offline);
@@ -55,10 +102,10 @@ public:
   void transport(const PluginTransport &t) noexcept override { transport_ = t; }
   bool midi(uint8_t, uint8_t, uint8_t) noexcept override;
   const std::vector<PluginAudioBus> &buses() const override { return buses_; }
-  uint64_t preparedAuxiliaryInputs() const override {if(vst_)return PluginBackend::preparedAuxiliaryInputs();uint64_t mask=0;for(size_t i=1;i<auInputs_.size();++i)if(auInputs_[i])mask|=uint64_t(1)<<i;return mask;}
-  const float *auxiliaryOutput(uint32_t bus) const noexcept override {
-    return bus < auxiliaryOutputBuffers_.size() && auxiliaryOutputBuffers_[bus] ? auxiliaryOutputBuffers_[bus]->interleaved.data() : nullptr;
-  }
+  uint64_t preparedAuxiliaryInputs() const override {return vst_?vst_->preparedAuxiliaryInputs():audio_->preparedInputs();}
+  uint64_t preparedAuxiliaryOutputs() const override {return vst_?vst_->preparedAuxiliaryOutputs():audio_->preparedOutputs();}
+  size_t preparedStorageBytes()const noexcept override{return sizeof(*this)+(vst_?vst_->preparedStorageBytes():audio_->storageBytes());}
+  const float *auxiliaryOutput(uint32_t bus) const noexcept override {return vst_?vst_->auxiliaryOutput(bus):audio_->output(bus);}
   std::vector<PluginParameter> parameters() const override;
   std::vector<PluginProgram> programs() const override;
   void loadProgram(const std::string &) override;
@@ -66,6 +113,8 @@ public:
   double latency() const override { return latency_; }
   double tail() const override { return tail_; }
   bool latencyChangePending() const noexcept override { return vst_ && vst_->latencyChangePending(); }
+  std::optional<PluginLatencySnapshot> pendingLatency()override{return vst_?vst_->pendingLatency():std::nullopt;}
+  void acknowledgeLatency(uint64_t serial)noexcept override{if(vst_)vst_->acknowledgeLatency(serial);}
   void refreshLatency() override {
     if (vst_ && vst_->latencyChangePending()) {
       vst_->refreshLatency(); latency_ = vst_->latency(); tail_ = vst_->tail();
@@ -143,13 +192,12 @@ MacPluginBackend::MacPluginBackend(const PluginState &state, double rate, bool o
     latency_ = vst_->latency();
     tail_ = vst_->tail();
     buses_ = vst_->buses();
-    for (auto bus : auxiliaryOutputs_) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
     return;
   }
   pluginMainCall([&] {
     AudioComponentDescription description{descriptor_.type, descriptor_.subtype, descriptor_.manufacturer, 0, 0};
     if (description.componentType != kAudioUnitType_Effect && description.componentType != kAudioUnitType_MusicDevice)
-      throw std::runtime_error("Select a stereo Audio Unit effect.");
+      throw std::runtime_error("Select an Audio Unit effect or instrument.");
     auto component = AudioComponentFindNext(nullptr, &description);
     if (!component)
       throw std::runtime_error("Audio Unit is missing: " + descriptor_.name);
@@ -183,39 +231,29 @@ MacPluginBackend::MacPluginBackend(const PluginState &state, double rate, bool o
       format.mBytesPerFrame = 4;
       format.mChannelsPerFrame = 2;
       format.mBitsPerChannel = 32;
-      AURenderCallbackStruct callback{input, this};
-      for (bool isInput : {true, false}) {
-        const auto scope = isInput ? kAudioUnitScope_Input : kAudioUnitScope_Output;
-        const auto &enabled = isInput ? auxiliaryInputs_ : auxiliaryOutputs_;
-        UInt32 count = 0, size = sizeof(count);
-        checkAU(AudioUnitGetProperty(unit_, kAudioUnitProperty_ElementCount, scope, 0, &count, &size), "Cannot read Audio Unit buses");
-        if (count > 64 || (!isInput && !count)) throw std::runtime_error("Unsupported Audio Unit bus count");
-        for (auto index : enabled) if (index >= count) throw std::runtime_error("Audio Unit auxiliary bus does not exist");
-        for (UInt32 bus = 0; bus < count; ++bus) {
-          AudioStreamBasicDescription existing{}; size = sizeof(existing);
-          checkAU(AudioUnitGetProperty(unit_, kAudioUnitProperty_StreamFormat, scope, bus, &existing, &size), "Cannot read Audio Unit bus format");
-          // Main stereo behavior stays compatible with existing projects. Auxiliaries
-          // keep their advertised mono/stereo layouts; surround is listed but unavailable.
-          const auto channels = bus == 0 ? 2u : existing.mChannelsPerFrame;
-          const bool supported = channels >= 1 && channels <= 2;
-          const bool active = bus == 0 || std::find(enabled.begin(), enabled.end(), bus) != enabled.end();
-          if (active && !supported) throw std::runtime_error("Audio Unit auxiliary bus requires an unsupported layout");
-          std::string name = (isInput ? "Input " : "Output ") + std::to_string(bus + 1);
-          CFStringRef label = nullptr; size = sizeof(label);
-          if (!AudioUnitGetProperty(unit_, kAudioUnitProperty_ElementName, scope, bus, &label, &size) && label) {
-            name = string(label); CFRelease(label);
-          }
-          buses_.push_back({bus, channels, std::move(name), isInput, active, supported});
-          // AU has no general activateBus contract. Configure all supported inputs
-          // and feed inactive ones silence, while rendering only enabled outputs.
-          if (supported && (isInput || active)) {
-            format.mChannelsPerFrame = channels;
-            checkAU(AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat, scope, bus, &format, sizeof(format)), "Audio Unit rejects bus format");
-            if (isInput) {
-              if (bus) auInputs_[bus] = std::make_unique<PluginAudioStorage>();
-              checkAU(AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, bus, &callback, sizeof(callback)), "Cannot connect Audio Unit input");
-            } else if (bus) auxiliaryOutputBuffers_[bus] = std::make_unique<PluginAudioStorage>();
-          }
+      AURenderCallbackStruct callback{input,this};
+      std::vector<PluginPhysicalBus> physicalInputs,physicalOutputs;
+      for(bool isInput:{true,false}){
+        const auto scope=isInput?kAudioUnitScope_Input:kAudioUnitScope_Output;
+        auto &physical=isInput?physicalInputs:physicalOutputs;
+        UInt32 count=0,size=sizeof(count);
+        checkAU(AudioUnitGetProperty(unit_,kAudioUnitProperty_ElementCount,scope,0,&count,&size),"Cannot read Audio Unit buses");
+        if(count>64||(!isInput&&!count))throw std::runtime_error("Unsupported Audio Unit bus count");
+        for(UInt32 bus=0;bus<count;++bus){AudioStreamBasicDescription existing{};size=sizeof(existing);
+          checkAU(AudioUnitGetProperty(unit_,kAudioUnitProperty_StreamFormat,scope,bus,&existing,&size),"Cannot read Audio Unit bus format");
+          std::string name=(isInput?"Input ":"Output ")+std::to_string(bus+1);
+          CFStringRef label=nullptr;size=sizeof(label);
+          if(!AudioUnitGetProperty(unit_,kAudioUnitProperty_ElementName,scope,bus,&label,&size)&&label){name=string(label);CFRelease(label);}
+          physical.push_back({existing.mChannelsPerFrame,std::move(name)});
+        }
+      }
+      audio_=std::make_unique<PluginAudioBufferPlan>(physicalInputs,physicalOutputs,auxiliaryInputs_,auxiliaryOutputs_);
+      buses_=audio_->buses();validatePluginAudioLayout(state.audioLayout,buses_);
+      for(bool isInput:{true,false}){const auto scope=isInput?kAudioUnitScope_Input:kAudioUnitScope_Output;
+        const auto &physical=isInput?physicalInputs:physicalOutputs;
+        for(UInt32 bus=0;bus<physical.size();++bus){format.mChannelsPerFrame=physical[bus].channels;
+          checkAU(AudioUnitSetProperty(unit_,kAudioUnitProperty_StreamFormat,scope,bus,&format,sizeof(format)),"Audio Unit rejects bus format");
+          if(isInput)checkAU(AudioUnitSetProperty(unit_,kAudioUnitProperty_SetRenderCallback,kAudioUnitScope_Input,bus,&callback,sizeof(callback)),"Cannot connect Audio Unit input");
         }
       }
       UInt32 maximum = maximumFrames;
@@ -291,73 +329,37 @@ MacPluginBackend::~MacPluginBackend() {
     });
 }
 OSStatus MacPluginBackend::input(void *reference, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32 bus,
-                             UInt32 frames, AudioBufferList *buffers) {
-  auto &self = *static_cast<MacPluginBackend *>(reference);
-  if (frames > maximumFrames || bus >= 64 || (bus && !self.auInputs_[bus]) || buffers->mNumberBuffers < 1 || buffers->mNumberBuffers > 2)
-    return kAudioUnitErr_FormatNotSupported;
-  for (UInt32 channel = 0; channel < buffers->mNumberBuffers; ++channel) {
-    auto *source = bus ? (channel ? self.auInputs_[bus]->right.data() : self.auInputs_[bus]->left.data())
-                       : (channel ? self.inputRight_.data() : self.inputLeft_.data());
-    auto &buffer = buffers->mBuffers[channel];
-    if (buffer.mData) {
-      if (buffer.mDataByteSize < frames * sizeof(float))
-        return kAudioUnitErr_TooManyFramesToProcess;
-      std::memcpy(buffer.mData, source, frames * sizeof(float));
-    } else
-      buffer.mData = source;
-    buffer.mDataByteSize = frames * sizeof(float);
-    buffer.mNumberChannels = 1;
+                                UInt32 frames, AudioBufferList *buffers) {
+  auto &self=*static_cast<MacPluginBackend *>(reference);
+  if(frames>maximumFrames||!self.audio_||bus>=self.audio_->inputs().size()||!buffers)return kAudio_ParamError;
+  const auto &physical=self.audio_->inputs()[bus];
+  if(buffers->mNumberBuffers!=physical.channels.size())return kAudio_ParamError;
+  for(UInt32 channel=0;channel<buffers->mNumberBuffers;++channel){auto &buffer=buffers->mBuffers[channel];
+    if(buffer.mData){if(buffer.mDataByteSize<frames*sizeof(float))return kAudio_ParamError;std::memcpy(buffer.mData,physical.channels[channel],frames*sizeof(float));}
+    else buffer.mData=physical.channels[channel];
+    buffer.mDataByteSize=frames*sizeof(float);buffer.mNumberChannels=1;
   }
   return noErr;
 }
-bool MacPluginBackend::process(float *buffer, uint32_t frames, uint64_t position, const float *const *inputs, uint32_t offset, const PluginTransport &transport) noexcept {
-  transport_ = transport;
-  std::copy_n(inputs, inputSources_.size(), inputSources_.begin());
-  renderPosition_ = position;
-  if (vst_) {
-    vst_->transport(transport_);
-    if (!vst_->process(buffer, frames, position, inputSources_.data(), offset)) return false;
-    for (auto bus : auxiliaryOutputs_)
-      std::copy_n(vst_->auxiliaryOutput(bus), frames * 2, auxiliaryOutputBuffers_[bus]->interleaved.data());
-    return true;
-  }
-  if (frames > maximumFrames)
-    return false;
-  for (uint32_t i = 0; i < frames; ++i) {
-    inputLeft_[i] = buffer[i * 2];
-    inputRight_[i] = buffer[i * 2 + 1];
-  }
-  for (const auto &bus : buses_) if (bus.input && bus.index && auInputs_[bus.index]) {
-    auto &audio = *auInputs_[bus.index]; const float *source = inputSources_[bus.index];
-    for (uint32_t i = 0; i < frames; ++i) {
-      const float l = source ? source[(offset + i) * 2] : 0, r = source ? source[(offset + i) * 2 + 1] : 0;
-      audio.left[i] = bus.channels == 1 ? (l + r) * .5f : l; audio.right[i] = r;
+bool MacPluginBackend::process(float *buffer,uint32_t frames,uint64_t position,const float *const *inputs,uint32_t offset,const PluginTransport &transport)noexcept {
+  transport_=transport;renderPosition_=position;
+  if(frames>maximumFrames||offset>maximumFrames||frames>maximumFrames-offset)return false;
+  if(vst_){vst_->transport(transport_);return vst_->process(buffer,frames,position,inputs,offset);}
+  audio_->gather(buffer,inputs,offset,frames);
+  AudioTimeStamp time{};time.mSampleTime=double(position);time.mFlags=kAudioTimeStampSampleTimeValid;
+  std::array<uint64_t,64> silence{};
+  for(size_t bus=0;bus<audio_->outputs().size();++bus){auto &physical=audio_->outputs()[bus];NativeBuffers output{};output.count=UInt32(physical.channels.size());
+    for(UInt32 channel=0;channel<output.count;++channel)output.buffers[channel]={1,frames*UInt32(sizeof(float)),physical.channels[channel]};
+    AudioUnitRenderActionFlags flags=0;
+    if(AudioUnitRender(unit_,&flags,&time,UInt32(bus),frames,reinterpret_cast<AudioBufferList *>(&output)))return false;
+    if(output.count!=physical.channels.size())return false;
+    for(UInt32 channel=0;channel<output.count;++channel){const auto &returned=output.buffers[channel];
+      if(!returned.mData||returned.mNumberChannels!=1||returned.mDataByteSize<frames*sizeof(float))return false;
+      if(returned.mData!=physical.channels[channel])std::memcpy(physical.channels[channel],returned.mData,frames*sizeof(float));
     }
+    if(flags&kAudioUnitRenderAction_OutputIsSilence)silence[bus]=~uint64_t(0);
   }
-  AudioTimeStamp time{};
-  time.mSampleTime = double(position); time.mFlags = kAudioTimeStampSampleTimeValid;
-  for (const auto &bus : buses_) if (!bus.input && bus.active) {
-    auto *left = bus.index ? auxiliaryOutputBuffers_[bus.index]->left.data() : outputLeft_.data();
-    auto *right = bus.index ? auxiliaryOutputBuffers_[bus.index]->right.data() : outputRight_.data();
-    std::fill_n(left, frames, 0); std::fill_n(right, frames, 0);
-    StereoBuffers output{bus.channels, {{1, frames * 4, left}, {1, frames * 4, right}}};
-    AudioUnitRenderActionFlags flags = 0;
-    if (AudioUnitRender(unit_, &flags, &time, bus.index, frames, reinterpret_cast<AudioBufferList *>(&output))) return false;
-    // An AU may return its own buffers even when supplied host storage.
-    if (output.count != bus.channels) return false;
-    for (uint32_t ch = 0; ch < bus.channels; ++ch)
-      if (!output.buffers[ch].mData || output.buffers[ch].mDataByteSize < frames * sizeof(float)) return false;
-    left = static_cast<float *>(output.buffers[0].mData);
-    right = static_cast<float *>(output.buffers[bus.channels == 1 ? 0 : 1].mData);
-    auto *destination = bus.index ? auxiliaryOutputBuffers_[bus.index]->interleaved.data() : buffer;
-    for (uint32_t i = 0; i < frames; ++i) {
-      const float l = flags & kAudioUnitRenderAction_OutputIsSilence ? 0 : left[i];
-      const float r = flags & kAudioUnitRenderAction_OutputIsSilence ? 0 : right[i];
-      if (!std::isfinite(l) || !std::isfinite(r)) return false;
-      destination[i * 2] = l; destination[i * 2 + 1] = r;
-    }
-  }
-  return true;
+  return audio_->scatter(buffer,frames,{silence.data(),audio_->outputs().size()});
 }
 bool MacPluginBackend::parameter(uint32_t id, double value, uint32_t offset) noexcept {
   if (vst_)
@@ -435,13 +437,13 @@ PluginState MacPluginBackend::state() const {
     auto state = vst_->state();
     state.instanceID = instanceID_;
     state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
-    state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
+    state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=pluginAudioLayoutSignature(buses_);
     return state;
   }
   PluginState state{descriptor_};
   state.instanceID = instanceID_;
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
-  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;
+  state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=pluginAudioLayoutSignature(buses_);
   pluginMainCall([&] {
     CFPropertyListRef value = nullptr;
     UInt32 size = sizeof(value);
@@ -514,13 +516,10 @@ void MacPluginBackend::showEditor() {
       CFRelease(info->mCocoaAUViewClass[i]);
   if (!view)
     throw std::runtime_error("Audio Unit custom interface could not be created");
-  NSWindow *window = [[NSWindow alloc] initWithContentRect:view.bounds
-                                                 styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-                                                   backing:NSBackingStoreBuffered
-                                                     defer:NO];
-  window.releasedWhenClosed = NO;
-  window.title = @(descriptor_.name.c_str());
-  window.contentView = view;
+  NSWindow *window=RSCreatePluginEditorWindow(view.frame.size,@(descriptor_.name.c_str()));
+  RSPluginEditorContainer *container=[[RSPluginEditorContainer alloc] initWithPluginView:view];
+  window.contentView=container;
+  [container synchronizePluginFrame];
   auto observer = std::make_unique<AUEditObserver>();
   checkAU(AUEventListenerCreate(AUEditObserver::callback, observer.get(), CFRunLoopGetMain(), kCFRunLoopCommonModes,
                                 0.01, 0.01, &observer->listener),

@@ -1,0 +1,13 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-sanitized
+    Start 56: rack-preset
+1/4 Test #56: rack-preset ......................   Passed    4.88 sec
+    Start 59: multi-bus
+2/4 Test #59: multi-bus ........................   Passed   15.15 sec
+    Start 65: plugin-latency
+3/4 Test #65: plugin-latency ...................   Passed    2.57 sec
+    Start 75: native-note-routing
+4/4 Test #75: native-note-routing ..............   Passed    2.43 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  25.04 sec

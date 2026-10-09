@@ -1,0 +1,26 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 55: native-mixer
+1/4 Test #55: native-mixer .....................   Passed   10.89 sec
+    Start 59: multi-bus
+2/4 Test #59: multi-bus ........................***Failed    1.80 sec
+Aux graph sums 44100: 30469.9 / 3046.99 ratio 10 sum residual -0.00177751
+Hosted VST3 sidechain at 44100 Hz, reference difference 1.49012e-08
+Aux graph sums 48000: 33168.7 / 3316.87 ratio 10 sum residual -0.0019411
+Hosted VST3 sidechain at 48000 Hz, reference difference 1.49012e-08
+Aux graph sums 96000: 66341.5 / 6634.15 ratio 10 sum residual -0.00386533
+Hosted VST3 sidechain at 96000 Hz, reference difference 1.49012e-08
+VST3 membership render frame=10752 direct=0 stage=0 followers=0
+FAIL Membership fixture callback failed
+
+    Start 75: native-note-routing
+3/4 Test #75: native-note-routing ..............   Passed    1.01 sec
+    Start 76: native-source-migration
+4/4 Test #76: native-source-migration ..........   Passed    1.62 sec
+
+75% tests passed, 1 tests failed out of 4
+
+Total Test time (real) =  15.33 sec
+
+The following tests FAILED:
+	 59 - multi-bus (Failed)
+Errors while running CTest

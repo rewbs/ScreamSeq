@@ -131,8 +131,7 @@ static void liveHistory() {
   call(@"history.undo",@{});settled();check([recipeWithFollower isEqual:currentRecipe()],"Undo live control-cable cut restores stable source identities");
   call(@"history.redo",@{});settled();check([currentRecipe()[@"modulation"] count]==0,"Redo live control-cable cut preserves transport");
   call(@"graph.node.remove",@{@"graph":recipe,@"node":follower});settled();call(@"history.undo",@{});settled();call(@"history.redo",@{});settled();
-  const auto sourceRevision=session.automationRevision;
-  check(![session automationMethod:@"graph.node.add" params:@{@"graph":recipe,@"kind":@"note-envelope",@"expectedRevision":sourceRevision} error:&error]&&[sourceRevision isEqual:session.automationRevision],"Unprepared note scope rejects before document/history mutation");settled();
+  call(@"graph.node.add",@{@"graph":recipe,@"kind":@"note-envelope"});settled();call(@"history.undo",@{});settled();call(@"history.redo",@{});settled();
   call(@"graph.update",@{@"definition":recipeBeforeSource});settled();
   Tracker::PluginState presetState;for(const auto &d:Tracker::NativePlugin::builtins())if(d.classID=="resonance.gainer.v1")presetState.descriptor=d;
   Tracker::NativePlugin presetPlugin(presetState,48000,true);check(presetPlugin.parameter(1,-12),"Prepare full builtin vendor state");const auto saved=presetPlugin.state().state;

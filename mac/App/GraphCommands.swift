@@ -3,14 +3,15 @@ import AppKit
 /// Persisted shortcut/API identities must not depend on a menu's label, parent,
 /// current selection, or the common ContextAction.invoke selector.
 enum GraphCommand:String,CaseIterable {
-  case add,parent,fit,traceSilence,findOverload,clearOverloads,scope,spectrum
+  case add,parent,fit,traceSilence,findOverload,clearOverloads,scope,spectrum,observeCopy
   case openPlugin,bypass,listen,stopListening,frameSelection,showPattern,newGroup,cloneGroup
   case sourceAutomation,sourceLFO,sourceFollower,sourceRandom,sourceNote,sourceMIDI,sourceAmount
-  case patch,advancedPatch,portAdd,portSources,portTargets,cableSource,cableTarget,backToCable,cut,detach,deleteHeal,arrange,zoomIn,zoomOut,reload
-  case groupSelection,ungroup,exportGroup,revealHidden
+  case patch,advancedPatch,portAdd,portSources,portTargets,moveInsertChain,cableSource,cableTarget,backToCable,cut,detach,deleteHeal,arrange,zoomIn,zoomOut,reload
+  case groupSelection,ungroup,exportGroup,groupDryPaths,revealHidden,makeIndependent,restoreNoteAssignment,noteSampleMapping,noteAssignPlugin
   case parameterAutomate,parameterActivity,parameterExpose,parameterValue,parameterSources,parameterLastTouched,returnFromLastTouched,editProvenance,hideProvenance,returnFromSource,nextProvenancePage
   case visualFrame,visualComment,visualReroute,visualCollapse,visualRemove
-  case findNode,openNode,removeNode,arrangeSelection
+  case copySelection,cutSelection,pasteSelection,duplicateSelection,presetSave,presetLoad
+  case findNode,openNode,removeNode,arrangeSelection,reconnectMain,cutMasterOutput
   var id:String {"graph."+rawValue}
   // Canvas-only defaults must yield to the same persisted overrides used by
   // the command palette. Otherwise removing/remapping M still bypasses audio.

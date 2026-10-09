@@ -4,7 +4,7 @@ namespace Tracker {
 double RecordNudgeCurve::at(double position) const noexcept {
   const double t=(position-start)/duration;
   if(t<=0)return from;
-  if(t>=1)return 0;
+  if(t>=1-1e-12)return 0;
   if(t<attack)return from+(peak-from)*smooth(t/attack);
   const double x=(t-attack)/(1-attack);
   // Rounded release with a small shoulder, like elastic finger/platter drag.
@@ -22,7 +22,7 @@ RecordNudgeRuntime::RecordNudgeRuntime(const NativeSong &native) {
     if(p==native.patterns.end()||t==native.tracks.end())throw std::invalid_argument("Nudge has an unresolved pattern or track");
     auto [found,inserted]=targets.emplace(t->first,targets_.size());
     if(inserted){targets_.emplace_back();targets_.back().channel=t->first;}
-    targets_[found->second].patterns[p->first].push_back({c.position,c.duration,c.column,c.value,c.kind==PatternCommandKind::NudgeReverse});
+    targets_[found->second].patterns[p->first].push_back({c.position,c.durationBeats,c.column,c.value,c.kind==PatternCommandKind::NudgeReverse});
   }
   if(targets_.size()>16)throw std::invalid_argument("Use at most 16 tracks with record nudges");
   for(auto &t:targets_)for(auto &[p,events]:t.patterns)
@@ -33,19 +33,22 @@ void RecordNudgeRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) noexc
   song.nativeNudgeForces.fill(nullptr);
   const auto &s=song.m_PlayState;
   if(!count||count>4096||s.m_flags[SONG_PAUSED|SONG_FADINGSONG]||!s.m_nSamplesPerTick||!s.TicksOnRow())return;
-  const double units=double(performanceUnitsPerRow)/(double(s.TicksOnRow())*s.m_nSamplesPerTick);
-  const double begin=double(s.m_nRow)*performanceUnitsPerRow+double(s.m_nTickCount)*performanceUnitsPerRow/s.TicksOnRow()+s.SamplesIntoTick()*units;
+  const double units=s.NativeRowStep(performanceUnitsPerRow);
+  const double begin=s.NativeRowPosition(performanceUnitsPerRow),beatStep=s.NativeBeatStep();
+  if(units<=0||beatStep<=0)return;
   const bool entering=pattern_!=s.m_nPattern||order_!=s.m_nCurrentOrder||begin<=previous_;
   pattern_=s.m_nPattern;order_=s.m_nCurrentOrder;previous_=begin;
+  if(entering)beatPosition_=0;
   for(auto &t:targets_) {
     if(entering){const auto found=t.patterns.find(uint16_t(pattern_));t.events=found==t.patterns.end()?nullptr:&found->second;t.curve={};
       t.next=t.events?size_t(std::lower_bound(t.events->begin(),t.events->end(),begin-1e-8,[](const auto &e,double p){return e.position<p;})-t.events->begin()):0;}
     bool active=false;
-    for(uint32_t f=0;f<count;++f){const double p=begin+f*units;
-      while(t.events&&t.next<t.events->size()&&(*t.events)[t.next].position<=p+1e-8){const auto &e=(*t.events)[t.next++];t.curve.trigger(e.position,e.duration,e.strength,e.reverse);}
-      t.forces[f]=t.curve.at(p);active|=t.forces[f]!=0;
+    for(uint32_t f=0;f<count;++f){const double p=begin+f*units,beat=beatPosition_+f*beatStep;
+      while(t.events&&t.next<t.events->size()&&(*t.events)[t.next].position<=p+1e-8){const auto &e=(*t.events)[t.next++];t.curve.trigger(beat-(p-e.position)*beatStep/units,e.durationBeats,e.strength,e.reverse);}
+      t.forces[f]=t.curve.at(beat);active|=t.forces[f]!=0;
     }
     if(active&&!s.Chn[t.channel].dwFlags[CHN_MUTE|CHN_SYNCMUTE])song.nativeNudgeForces[t.channel]=t.forces.data();
   }
+  beatPosition_+=count*beatStep;
 }
 }

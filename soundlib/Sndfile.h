@@ -1028,12 +1028,20 @@ public:
 	bool (*nativeTransportRow)(void *) noexcept = nullptr;
 	void *nativePrepareContext = nullptr;
 	uint32 (*nativePrepareMix)(void *, uint32) noexcept = nullptr;
-	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0, bool releasePlugin = false);
+	// Immutable event plan, prepared off the audio thread. Tick and length walks
+	// keep their independent musical state in PlayState.
+	std::shared_ptr<void> nativeTimingOwner;
+	void *nativeTimingContext = nullptr;
+	uint32 (*nativeTimingTick)(void *, PlayState &, uint32) noexcept = nullptr;
+	uint32 (*nativeTimingPrepare)(void *, PlayState &, uint32) noexcept = nullptr;
+	uint32 (*nativeTimingRow)(void *, PlayState &, uint32) noexcept = nullptr;
+	void TriggerNativeNote(CHANNELINDEX channel, uint8 note, uint16 instrument, uint8 velocity, uint8 effect = 0, uint8 parameter = 0, bool releasePlugin = false, const ModCommand *rowNote = nullptr);
 	void ApplyNativeNoteEffect(CHANNELINDEX channel, uint8 effect, uint8 parameter);
 	// Sparse, immutable during playback; assembled on the control thread.
 	using NativeEffectKey = std::tuple<PATTERNINDEX, ROWINDEX, CHANNELINDEX>;
 	std::map<NativeEffectKey, std::array<ModCommand, 7>> nativePatternEffects;
-	mutable uint8 nativeEffectColumn = 0;
+	std::map<NativeEffectKey, bool> nativeDelayedPatternRows;
+ mutable uint8 nativeEffectColumn = 0;
 	struct NativeEffectScope {
 		const CSoundFile &song; ModChannel &channel; ModCommand saved; uint8 previous; bool enabled;
 		NativeEffectScope(const CSoundFile &s, ModChannel &c, uint8 column, const ModCommand &effect, bool active = true)
@@ -1060,11 +1068,23 @@ public:
 	PLUGINDEX (*nativeSamplePlugin)(void *, const ModChannel &, CHANNELINDEX) noexcept = nullptr;
 	void *nativeMixContext = nullptr;
 	void (*nativeMixObserver)(void *, const PlayState &, uint32) noexcept = nullptr;
+	// Host topology handoffs must occur before either samples or plugin sources
+	// for the next chunk are generated. Absent hook preserves the stock chunk.
+	uint32 (*nativeMixLimit)(void *, uint32) noexcept = nullptr;
 	// Prepared host pitch curves for this mix chunk. Only explicitly controlled
 	// channels use the per-sample path; legacy songs keep their normal mixer.
 	std::array<const double *, MAX_BASECHANNELS> nativePitchRatios{};
+	std::array<mixsample_t,MIXBUFFERSIZE*2> nativePatternMixScratch{};
+ NativePatternCurve nativePatternMasterGain;
+ std::array<NativePatternCurve,MAX_BASECHANNELS> nativePatternChannelGains{};
+ double nativePatternRowsPerFrame=0,nativePatternBeatsPerFrame=0,nativePatternTicksPerFrame=0;
+ double nativePitchUnitsPerFrame = 0; // NNA sample curves advance on the same musical clock.
 	// Signed physical speed added to the nominal sample direction; never sent to plugins.
 	std::array<const double *, MAX_BASECHANNELS> nativeNudgeForces{};
+	// SK controls the current main sample voice only. Each prepared trajectory
+	// includes one lookahead position; held/edge samples remain alive at zero speed.
+	std::array<const double *, MAX_BASECHANNELS> nativeScratchPositions{}, nativeScratchGains{};
+	std::array<uint64, MAX_BASECHANNELS> nativeScratchGenerations{};
 	void PrepareRealtime() { m_visitedRows.PrepareRealtime(); m_PlayState.m_midiMacroScratchSpace.reserve(65536); }
 	bool RealtimeCapacityExceeded() const noexcept { return m_visitedRows.RealtimeExhausted(); }
 #endif
@@ -1081,6 +1101,7 @@ public:
 	);
 	bool ProcessRow();
 	bool ProcessEffects();
+	void ProcessVolumeColumn(CHANNELINDEX channel, ModCommand::VOLCMD &volumeCommand, ModCommand::VOL &volume, ModCommand::COMMAND &command, uint32 parameter, uint32 startTick, bool triggerNote);
 	std::pair<bool, bool> NextRow(PlayState &playState, const bool breakRow) const;
 	void SetupNextRow(PlayState &playState, const bool patternLoop) const;
 	CHANNELINDEX GetNNAChannel(CHANNELINDEX nChn) const;

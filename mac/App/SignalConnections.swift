@@ -14,6 +14,7 @@ extension SignalGraphEditor {
       for p in catalog where p["direction"] as? String==(output ? "output" : "input"){numbers.insert((p["index"] as? NSNumber)?.uint32Value ?? 0)}
       return numbers.sorted().map{Self.audioPort($0,output:output,catalog:catalog)}
     }
+    if node["muted"] as? Bool==true{result.detail="Muted · "+kind}
     result.inputs=["plugin","output","follower"].contains(kind) ? ports(output:false) : []
     result.outputs=["plugin","input"].contains(kind) ? ports(output:true) : kind=="output" ? [] : [SignalCanvasPort(label:"Signal",modulation:true)]
     if kind=="plugin"{
@@ -31,6 +32,7 @@ extension SignalGraphEditor {
     guard canvas.edges.indices.contains(index)else{return}
     selectedID=nil;canvas.selected=nil;canvas.selectedEdge=index;connection.selectItem(at:index)
     let edge=canvas.edges[index]
+    if selectedNoteRoute != nil{inspect();configureConnectionInspector();return}
     if edge.readOnlyReason != nil {inspect();configureConnectionInspector();return}
     picker(source,canvas.nodes.map{($0.title,$0.id)},select:edge.source)
     picker(destination,canvas.nodes.map{($0.title,$0.id)},select:edge.target)
@@ -105,6 +107,8 @@ extension SignalGraphEditor {
     if kind=="modulation",let m=songModulation.first(where:{$0["source"] as? String==action["source"] as? String && $0["plugin"] as? String==action["plugin"] as? String && ($0["parameter"] as? NSNumber)?.uint32Value==(action["parameter"] as? NSNumber)?.uint32Value}) {
       connectionKind.selectItem(withTitle:"Modulation");parameter.stringValue=String((m["parameter"] as? NSNumber)?.uint32Value ?? 0);minimum.doubleValue=m["minimum"] as? Double ?? 0;maximum.doubleValue=m["maximum"] as? Double ?? 0;connectionEnabled.state=m["enabled"] as? Bool==false ? .off:.on;connectionQuantized.state=m["quantized"] as? Bool==true ? .on:.off;return
     }
+    if kind=="stage-connection",let i=action["index"] as? Int,stageConnections.indices.contains(i){connectionKind.selectItem(withTitle:"Stage audio");connectionGain.doubleValue=stageConnections[i]["gainDB"] as? Double ?? 0;connectionEnabled.state=stageConnections[i]["enabled"] as? Bool==false ? .off:.on;return}
+    if kind=="plugin-connection",let i=action["index"] as? Int,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i){connectionKind.selectItem(withTitle:"Direct plugin audio");connectionGain.doubleValue=all[i]["gainDB"] as? Double ?? 0;connectionEnabled.state=all[i]["enabled"] as? Bool==false ? .off:.on;return}
     if kind=="follower-input"{connectionKind.selectItem(withTitle:"Follower input");return}
     connectionKind.selectItem(withTitle:["output":"Main output","send":"Send","graph-input":"Graph sidechain","graph-output":"Graph auxiliary","plugin-input":"Plugin sidechain","plugin-output":"Plugin auxiliary"][kind] ?? "Main output")
     if kind=="send",let bus=buses.first(where:{$0["id"] as? String==action["source"] as? String}),let i=action["index"] as? Int,let sends=bus["sends"] as? [[String:Any]],sends.indices.contains(i){connectionGain.doubleValue=sends[i]["gainDB"] as? Double ?? -12}
@@ -117,6 +121,15 @@ extension SignalGraphEditor {
     let sourcePort=realPort(a,rawOutput,output:true,modulation:false),targetPort=realPort(b,rawInput,output:false,modulation:false)
     let a=sourcePort.node,b=targetPort.node,output=Int(sourcePort.number),input=Int(targetPort.number)
     let action=songConnections[index],from=songNodeBus[a] ?? a,to=songNodeBus[b] ?? b
+    let kind=action["kind"] as? String ?? ""
+    if ["output","send","plugin-output","graph-output"].contains(kind) {
+      guard input==0,songNodePlugin[b]==nil,songNodeGraph[b]==nil,stageTarget(b)==nil,buses.contains(where:{$0["id"] as? String==to}) else {
+        status.stringValue="This cable targets a bus Main input. Add a separate socket connection for a processor or auxiliary input.";return
+      }
+    }
+    if ["output","send"].contains(kind),!validateBusInputSource(a,port:output){return}
+    if kind=="graph-output",stageTarget(a)==nil{status.stringValue="This cable starts at a combined graph output. Add a separate connection for another source type.";return}
+    if kind=="graph-input",stageTarget(b)==nil{status.stringValue="This cable targets a combined graph input. Add a separate connection for another target type.";return}
     if ["graph-input","plugin-input"].contains(action["kind"] as? String ?? ""),!validateBusInputSource(a,port:output){return}
     switch action["kind"] as? String {
     case "output":
@@ -129,6 +142,14 @@ extension SignalGraphEditor {
       guard let i=action["index"] as? Int,case let port=input,let gain=Double(connectionGain.stringValue),gain.isFinite else{return};var list=data["inputs"] as? [[String:Any]] ?? [];guard list.indices.contains(i)else{return};list[i].merge(["source":from,"target":to,"input":port,"gainDB":gain]){_,new in new};mutate("graph.routes.set",["inputs":list])
     case "graph-output":
       guard let i=action["index"] as? Int,case let port=output else{return};var list=data["outputs"] as? [[String:Any]] ?? [];guard list.indices.contains(i)else{return};list[i]=["source":from,"target":to,"output":port];mutate("graph.routes.set",["outputs":list])
+    case "stage-connection":
+      guard let i=action["index"] as? Int,let gain=Double(connectionGain.stringValue),gain.isFinite,stageConnections.indices.contains(i)else{return}
+      var old=[String:Any]();for key in ["source","output","target","input"]{old[key]=stageConnections[i][key]}
+      connectStage(a,b,output:UInt32(output),input:UInt32(input),gain:gain,enabled:connectionEnabled.state == .on,replacing:old)
+    case "plugin-connection":
+      guard let i=action["index"] as? Int,let gain=Double(connectionGain.stringValue),gain.isFinite,let all=mixer["pluginConnections"] as? [[String:Any]],all.indices.contains(i) else{return}
+      var old=[String:Any]();for key in ["source","output","target","input"]{old[key]=all[i][key]}
+      connectSongPlugins(a,b,output:UInt32(output),input:UInt32(input),gain:gain,enabled:connectionEnabled.state == .on,replacing:old)
     case "plugin-output":
       guard let plugin=songNodePlugin[a],plugin==action["plugin"] as? String,case let port=output,port==action["output"] as? Int else{status.stringValue="Remove and reconnect to change an auxiliary output port";return};var targets=pluginOutputTargets(plugin,port:port);if let old=action["target"] as? String,let i=targets.firstIndex(of:old){targets[i]=to};mutate("mixer.plugin.route",["plugin":plugin,"targets":targets,"output":port])
     case "plugin-input":
@@ -142,22 +163,30 @@ extension SignalGraphEditor {
 extension SignalGraphEditor {
   var selectedConnectionIsEditable:Bool {
     guard let i=canvas.selectedEdge,canvas.edges.indices.contains(i) else{return false}
-    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","modulation","follower-input"].contains(songConnections[i]["kind"] as? String ?? ""))
+    return graphID != nil || (songConnections.indices.contains(i) && ["output","send","graph-input","graph-output","plugin-input","plugin-output","plugin-connection","stage-connection","modulation","follower-input","note"].contains(songConnections[i]["kind"] as? String ?? ""))
   }
   func configureConnectionInspector() {
     guard connectionSection != nil else{return}
+    noteControls.isHidden=selectedNoteRoute==nil
     if selectedProvenance != nil{connectionSection.isHidden=true;inspectorScroll.isHidden=false;inspectParameterProvenance();return}
     let selected=canvas.selectedEdge != nil,editable=selectedConnectionIsEditable
+    let cuttable=editable || (graphID==nil && canvas.selectedEdge.flatMap{songCableReference($0)} != nil)
     connectionSection.isHidden = !selected && !manualConnection
     inspectorScroll.isHidden = !selected && selectedID == nil && graphID == nil && !manualConnection
     connectionHeading.stringValue=selected ? "SELECTED CONNECTION" : "NEW CONNECTION"
-    connectButton.isEnabled = !selected;updateConnectionButton.isEnabled=editable;removeConnectionButton.isEnabled=editable
-    connectButton.isHidden=selected;updateConnectionButton.isHidden = true;removeConnectionButton.isHidden = !editable
+    connectButton.isEnabled = !selected;updateConnectionButton.isEnabled=editable;removeConnectionButton.isEnabled=cuttable
+    connectButton.isHidden=selected;updateConnectionButton.isHidden = true;removeConnectionButton.isHidden = !cuttable
     connectionForm.isHidden=selected && !editable;openConnectionOwnerButton.isHidden = !selected || editable
     connectionKind.isEnabled = !selected
     source.isEnabled=true;destination.isEnabled=true
+    if let route=selectedNoteRoute {
+      connectionForm.isHidden=true;noteControls.configure(enabled:route["enabled"] as? Bool ?? true,channel:route["midiChannel"] as? Int ?? 0)
+      refreshNoteActivity(force:true)
+      connectionHint.stringValue=route["implicit"] as? Bool==true ? "Assigned instrument cable. Editing creates an explicit replacement in one Undo; disconnect keeps the assignment suppressed.":"Note events are separate from audio. Drag an endpoint to reroute; changes commit immediately."
+      return
+    }
     if selected && !editable {
-      connectionHint.stringValue="Drag an insert’s input to another channel’s output to move that insert and the rest of its chain. Open a subgraph to edit its internal wires."
+      connectionHint.stringValue=cuttable ? "Delete cuts exactly this cable and keeps every other branch. Drag an insert input to move its chain; use Reconnect cut main input/output to restore a cut." : "Open this assigned graph to edit its internal wires."
       openConnectionOwnerButton.title=connectionOwnerGraphNode==nil ? "Open mixer / assignment…" : "Open subgraph…"
     } else {
       connectionHint.stringValue=selected ? "Drag the round endpoint handles to reroute, or edit these values; changes commit immediately." : graphID != nil ? "Choose nodes and named ports. Multiple cables into an input are summed. Sockets add cables; handles reroute. Hollow ports enable automatically when connected." : "Choose nodes and named ports. Main in inserts an effect chain; Sidechain feeds its detector. Sockets add cables; handles reroute. Mix into main sums an extra channel."
@@ -175,7 +204,7 @@ extension SignalGraphEditor {
   }
   func newConnection() {
     manualConnection=true;canvas.selectedEdge=nil;selectedID=nil;canvas.selected=nil;hasDraft=false
-    connectionGain.doubleValue=graphID==nil ? 0 : 1
+    connectionGain.doubleValue=graphID==nil ? 0 : 1;connectionEnabled.state = .on
     inspect();connectionModeChanged();configureConnectionInspector();connectionHeading.scrollToVisible(connectionHeading.bounds)
     window?.makeFirstResponder(source)
   }
@@ -184,6 +213,7 @@ extension SignalGraphEditor {
     guard canvas.selectedEdge != nil else{return}
     layoutSubtreeIfNeeded()
     connectionHeading.scrollToVisible(connectionHeading.bounds)
+    if selectedNoteRoute != nil{window?.makeFirstResponder(noteControls.channel);return}
     if !selectedConnectionIsEditable {window?.makeFirstResponder(openConnectionOwnerButton);return}
     let target:NSView=connectionKind.titleOfSelectedItem=="Modulation" ? minimum : connectionGain.isEnabled && connectionKind.titleOfSelectedItem != "Main output" ? connectionGain : destination
     window?.makeFirstResponder(target);(target as? NSTextField)?.selectText(nil)

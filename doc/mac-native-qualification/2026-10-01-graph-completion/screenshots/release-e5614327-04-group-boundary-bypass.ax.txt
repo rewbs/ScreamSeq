@@ -1,0 +1,45 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 pop up button Description: Graph channel filter, Value: Track 3
+	6 button Add…
+	7 button More…, Help: Secondary actions · also available with ⌘K
+	8 text Channels → row graphs → persistent graphs → ordinary graphs → inserts → outputs
+	9 search text field (settable) Description: Filter graph nodes, Placeholder: Filter nodes…
+		10 button Search
+	11 pop up button Description: Graph node type filter, Value: All node types
+	12 button Clear filters
+	13 text 5 / 5 nodes · 2 hidden branches
+	14 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Sidechain 1; Track 3 → ; Apple: AUMatrixReverb → Output; Master → ; Sidechain dynamics → ; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 1 other output  › · Reveal Compressor
+		16 scroll bar (settable, float) 0.7259380097879282
+			17 value indicator (settable, float) 0.7259380097879282
+			18 increment arrow button
+			19 decrement arrow button
+			20 increment page button
+			21 decrement page button
+		22 scroll bar (disabled, settable, float) 0
+	23 scroll area Secondary Actions: Scroll Up, Scroll Down
+		24 text Processing group · double-click to enter
+		25 text field (settable) Description: Node or bus name, Value: Sidechain dynamics
+		26 text Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		27 scroll bar (disabled, settable, float) 0
+	28 text Configured routes · live stack order appears on playing copies
+	29 close button
+	30 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	31 minimize button
+	32 text Audio & modulation graph
+33 menu bar
+	34 ScreamSeq Final QA
+	35 File
+	36 Edit
+	37 Automation
+	38 Playback
+	39 Pattern
+	40 Workspace
+	41 Window
+
+The focused UI element is 15 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Output, Sidechain 1; Track 3 → ; Apple: AUMatrixReverb → Output; Master → ; Sidechain dynamics → ; 9 other inputs  › · Reveal 1 · Sidechain dynamics, 2 · Sidechain dynamics, Apple: AUMatrixReverb, Compressor, Compressor, Resonance Test Instrument, Resonance Test Instrument, Return, Track 7; 1 other output  › · Reveal Compressor

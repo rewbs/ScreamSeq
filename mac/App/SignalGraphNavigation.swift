@@ -6,14 +6,37 @@ struct GraphAddConnection {
 struct GraphViewState {
   var origin:NSPoint, scale:CGFloat, selection:String?, filter:String?, search:String, category:Int
 }
+struct GraphPanelReturn {
+  var document:String,graph:String?,group:String?,origin:String?,target:String?
+  var view:GraphViewState,selection:Set<String>,edge:SignalCanvasEdge?
+}
 
 extension SignalGraphEditor {
+  func rememberPanelReturn() {
+    rememberGraphView()
+    guard let view=graphViewStates[graphViewKey] else{return}
+    panelReturn=GraphPanelReturn(document:projectionDocument,graph:graphID,group:processingGroupID,origin:graphOrigin,target:graphTarget,view:view,selection:canvas.selection,edge:canvas.selectedEdge.flatMap{canvas.edges.indices.contains($0) ? canvas.edges[$0]:nil})
+    provenance.hasReturn=true
+  }
+  func restorePanelReturn() {
+    guard let saved=panelReturn,saved.document==projectionDocument else{return}
+    guard !hasDraft else{status.stringValue="Finish the current graph edit before returning";return}
+    graphID=saved.graph;processingGroupID=saved.group;graphOrigin=saved.origin;graphTarget=saved.target
+    filterID=saved.view.filter;nodeSearch.stringValue=saved.view.search;nodeCategory.selectItem(at:saved.view.category)
+    selectedID=saved.view.selection;canvas.selected=selectedID;canvas.selectedEdge=nil;update(data)
+    let retained=saved.selection.intersection(Set(canvas.nodes.map(\.id)))
+    canvas.selectNodes(retained,primary:retained.contains(saved.view.selection ?? "") ? saved.view.selection:nil);selectedID=canvas.selected
+    if let edge=saved.edge,let index=canvas.edges.firstIndex(where:{$0.source==edge.source&&$0.target==edge.target&&$0.output==edge.output&&$0.input==edge.input&&$0.modulation==edge.modulation&&$0.connection==edge.connection}){selectConnection(index)}
+    else{inspect();configureConnectionInspector()}
+    layoutSubtreeIfNeeded();scroll.magnification=saved.view.scale;canvas.scroll(saved.view.origin)
+  }
   var graphViewKey:String { (graphID ?? "song")+(processingGroupID.map{"/"+$0} ?? "") }
   func rememberGraphView() {
     graphViewStates[graphViewKey]=GraphViewState(origin:scroll.contentView.bounds.origin,scale:scroll.magnification,selection:selectedID,filter:filterID,search:nodeSearch.stringValue,category:nodeCategory.indexOfSelectedItem)
   }
-  func navigate(graph:String?, origin:String?=nil,target:String?=nil) {
+  func navigate(graph:String?, origin:String?=nil,target:String?=nil,observedCopy:GraphObservedCopy?=nil) {
     guard !hasDraft else { status.stringValue="Finish or cancel the current edit before leaving this group";return }
+    if let observedCopy {copyObservation.enter(observedCopy)}
     rememberGraphView();graphID=graph;processingGroupID=nil;graphOrigin=origin;graphTarget=target;selectedID=nil;canvas.selected=nil;canvas.selectedEdge=nil
     nodeSearch.stringValue="";nodeCategory.selectItem(at:0)
     let saved=graphViewStates[graphViewKey]
@@ -105,8 +128,8 @@ extension SignalGraphEditor {
     }
     return(filterID,nil,nil)
   }
-  func freePosition(near point:NSPoint)->NSPoint {
-    let origin=NSPoint(x:max(8,point.x),y:max(8,point.y))
+  func freePosition(near point:NSPoint,minimumX:CGFloat=8)->NSPoint {
+    let left=max(8,minimumX),origin=NSPoint(x:max(left,point.x),y:max(8,point.y))
     // Search nearby columns as well as rows. A vertical-only search sends a
     // new processor past every channel in a dense song.
     for radius in 0...canvas.nodes.count+1 {
@@ -115,7 +138,7 @@ extension SignalGraphEditor {
         let dy=radius-abs(dx)
         for sign in (dy==0 ? [1]:[-1,1]) {
           let p=NSPoint(x:origin.x+CGFloat(dx)*210,y:origin.y+CGFloat(dy*sign)*125)
-          if p.x>=8 && p.y>=8 {candidates.append(p)}
+          if p.x>=left && p.y>=8 {candidates.append(p)}
         }
       }
       for p in candidates.sorted(by:{hypot($0.x-origin.x,$0.y-origin.y)<hypot($1.x-origin.x,$1.y-origin.y)}) {
@@ -124,6 +147,19 @@ extension SignalGraphEditor {
       }
     }
     return origin
+  }
+  func appendedEffectPosition(target:String?)->NSPoint? {
+    guard let target,let plugin=insertChain(target)?.last else{return nil}
+    let id="plugin:"+plugin
+    let visible=canvas.nodes.first{$0.id==id}
+    let saved=(data["layout"] as? [[String:Any]] ?? []).last{$0["node"] as? String==id}
+    let cached=provisionalLayouts[filterID ?? "all"]?[id]
+    guard let x=visible?.x ?? (saved?["x"] as? Double) ?? cached.map({Double($0.x)}),
+          let y=visible?.y ?? (saved?["y"] as? Double) ?? cached.map({Double($0.y)}) else{return nil}
+    let right=x+(visible?.rect.width ?? 180)+30
+    // Only position the new card. Collision avoidance must not send an
+    // appended effect back upstream of its actual predecessor.
+    return freePosition(near:NSPoint(x:right,y:y),minimumX:right)
   }
   func revealAddedNode() {
     guard let id=selectedID else{return}
@@ -182,13 +218,15 @@ extension SignalGraphEditor {
     onReveal?()
     let position=freePosition(near:point ?? canvas.nodes.first(where:{$0.id==selectedID}).map{NSPoint(x:$0.rect.maxX+30,y:$0.y)} ?? NSPoint(x:canvas.visibleRect.midX,y:canvas.visibleRect.midY))
     let insertion=connection.flatMap{connectedAddDestination($0)} ?? addDestination,target=insertion.target
+    let effectPosition=graphID==nil && point==nil && connection==nil && canvas.selectedEdge==nil && insertion.before==nil ? appendedEffectPosition(target:target) ?? position:position
     var title=definition.map{"\($0["name"] ?? "Group") · shared definition, all uses"} ?? buses.first{$0["id"] as? String==target}.map{"\($0["name"] ?? "Channel") › inserts"} ?? "Song · unconnected effect"
     if let connection {title=(canvas.nodes.first{$0.id==connection.node}?.title ?? "Node")+" / "+connection.port.label+(connection.output ? " → new node":" ← new node")}
     let capturedGraph=graphID,capturedRevision=revision,capturedNode=selectedID,capturedGroup=processingGroupID
     addGeneration+=1;let generation=addGeneration
     addMenu.show(in:canvas,at:position,title:title,entries:addEntries(connecting:connection)){[weak self] item in
       guard let self,self.graphID==capturedGraph,self.processingGroupID==capturedGroup,self.revision==capturedRevision else{self?.status.stringValue="The graph changed while Add was open. Reopen Add to use the current graph.";return}
-      self.addEntry(item,graph:capturedGraph,target:target,node:capturedNode,position:position,before:insertion.before,edge:connection==nil ? insertion.edge:nil,connecting:connection)
+      let isEffect=item.payload["kind"] as? String=="plugin" && (item.payload["descriptor"] as? [String:Any])?["isInstrument"] as? Bool != true
+      self.addEntry(item,graph:capturedGraph,target:target,node:capturedNode,position:isEffect ? effectPosition:position,before:insertion.before,edge:connection==nil ? insertion.edge:nil,connecting:connection)
     }
     if !addCatalogLoaded {
       onRequest?("plugin.discover",["rescan":false]){[weak self] response in

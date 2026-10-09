@@ -1,5 +1,6 @@
 #pragma once
 #include "WorkspaceState.hpp"
+#include "GraphCableEdits.hpp"
 #include <set>
 #include <map>
 #include <cfloat>
@@ -60,6 +61,8 @@ struct GraphCanvas {
       for(size_t segment=1;segment<anchors.size();++segment){const auto points=curve(anchors[segment-1],anchors[segment]);w.points.insert(w.points.end(),points.begin()+(segment>1?1:0),points.end());}
       float left=w.points[0].x,right=left,top=w.points[0].y,bottom=top;for(auto p:w.points){left=std::min(left,p.x);right=std::max(right,p.x);top=std::min(top,p.y);bottom=std::max(bottom,p.y);}w.bounds={left-7,top-7,right-left+14,bottom-top+14};wires.push_back(std::move(w));}}
   }
+  const Wire *selectedWire(int index,bool modulation) const {for(const auto &w:wires)if(int(w.index)==index&&w.modulation==modulation)return &w;return nullptr;}
+  int handleAt(float x,float y,int index,bool modulation) const {if(const auto *w=selectedWire(index,modulation))for(int side=0;side<2;++side){const auto p=w->points[side?28:4];if(std::hypot(x-p.x,y-p.y)<=7)return side;}return -1;}
   int socketAt(float x,float y) const {for(size_t i=0;i<sockets.size();++i){const auto &p=sockets[i].at;if(std::hypot(x-p.x,y-p.y)<=7)return int(i);}return -1;}
   int nodeAt(float x,float y) const {for(size_t i=nodes.size();i>0;--i)if(nodes[i-1].rect.contains(x,y))return int(i-1);return -1;}
   static float distance(Point p,Point a,Point b){const auto dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;const auto t=length?std::clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/length,0.0f,1.0f):0;return std::hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}

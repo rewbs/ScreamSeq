@@ -1,0 +1,23 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start  53: mixer-publication
+1/9 Test  #53: mixer-publication ................   Passed    0.53 sec
+    Start  81: song-modulation
+2/9 Test  #81: song-modulation ..................   Passed    0.01 sec
+    Start  83: signal-graph-session
+3/9 Test  #83: signal-graph-session .............   Passed    0.89 sec
+    Start  94: windows-graph-document
+4/9 Test  #94: windows-graph-document ...........   Passed    0.42 sec
+    Start  95: windows-native-metadata
+5/9 Test  #95: windows-native-metadata ..........   Passed    0.86 sec
+    Start  96: windows-mixer-document
+6/9 Test  #96: windows-mixer-document ...........   Passed    0.37 sec
+    Start  98: graph-editing
+7/9 Test  #98: graph-editing ....................   Passed    0.32 sec
+    Start 101: song-group-runtime
+8/9 Test #101: song-group-runtime ...............   Passed    0.28 sec
+    Start 102: mixer-plugin-routing
+9/9 Test #102: mixer-plugin-routing .............   Passed    0.27 sec
+
+100% tests passed, 0 tests failed out of 9
+
+Total Test time (real) =   3.95 sec

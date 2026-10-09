@@ -1,6 +1,8 @@
 #include "../Audio/NativeSignalGraph.hpp"
 #include "FixtureTrust.hpp"
 #include "editor/NativeEffects.hpp"
+#include "editor/TrackerDocument.hpp"
+#include "soundlib/ModInstrument.h"
 #include "editor/hosted/GraphPluginEndpoint.hpp"
 #include <iostream>
 #include <cmath>
@@ -8,6 +10,8 @@
 using namespace Tracker;
 std::vector<PluginDescriptor> registerFixtureAUs();
 void setFixtureAUStepped(bool);
+void setFixtureAUHiddenGain(float);
+uint64_t fixtureAUCreatedCount();
 struct FixturePlayState : OpenMPT::PlayState { using PlayState::m_nBufferCount; };
 #include "GraphRealtimeAudit.hpp"
 static void check(bool b,const char *message){if(!b)throw std::runtime_error(message);}
@@ -158,13 +162,130 @@ static void sourcePreparationFailure(const PluginDescriptor &descriptor) {
   audio.fill(1);graph.begin(clock,512,512,{120,0,0,4,true},64);const bool okay=graph.process(0,audio.data(),512,512,{});uint64_t allocations,frees,locks;tracker_audit_end(&allocations,&frees,&locks);
   check(okay&&allocations+frees+locks==0,"Prepared first-use source/queue adoption requires no callback allocation/free/lock");for(float value:audio)check(std::abs(value-.6)<1e-6,"Successful retry delivers the newly prepared source to the retained vendor");
 }
+static void newlyWatchedNotes(const PluginDescriptor &descriptor) {
+  for(uint32_t block:{17u,512u,4096u})for(unsigned scope=0;scope<4;++scope) {
+    NativeSong native;native.patterns[0].id=3;native.tracks[0].id=1;native.mixer.buses={{1,2,MixerBusKind::Track,"Track"},{2,0,MixerBusKind::Master,"Master"}};
+    native.signal.library={definition(100,descriptor,false)};native.signal.library[0].nodes[1].plugin.parameters[7]=.2;native.signal.assignments={{1,100}};
+    OpenMPT::ModInstrument instrument;
+    std::vector<SignalSampleSource> sources;if(scope>=2)sources.push_back({1,&instrument,uint16_t(scope==3?UINT16_MAX:0),1,99});
+    NativeSignalGraph live(native,48000,true,sources);
+    auto next=native;next.signal.library[0].nodes.push_back({104,SignalNodeKind::NoteEnvelope,"Newly watched notes"});next.signal.library[0].nodes.back().attack=.003;next.signal.library[0].nodes.back().release=.007;next.signal.library[0].modulation={{104,102,7,0,.6,.2,true}};
+    GraphControlPlan prepared;live.prepareParameters(next.signal,prepared);
+    NativeSignalGraph reference(next,48000,true,sources);
+    FixturePlayState state;state.m_nMusicSpeed=1;state.m_nSamplesPerTick=8192;state.m_nBufferCount=8192;state.m_nTickCount=0;state.m_nPattern=0;state.m_nCurrentOrder=0;state.m_nRow=0;state.m_nCurrentRowsPerBeat=4;
+    const auto voiceIndex=scope==0?0:20;auto &voice=state.Chn[voiceIndex];voice.nNote=60;voice.increment.Set(1);voice.nativeNoteGeneration=1;voice.nMasterChn=scope==3?0:1;voice.isPreviewNote=scope==3;voice.pModInstrument=scope>=2?&instrument:nullptr;
+    std::array<float,8192> actual{},expected{};actual.fill(1);live.begin(state,256,0,{120,0,0,4,true},64);check(live.process(0,actual.data(),256,0,{}),"Pre-source graph keeps processing held voices");
+    tracker_audit_begin();for(const auto &queue:prepared.scheduling)queue.state->plugin->adoptScheduling(queue.queue.get());for(const auto &owner:prepared.runtimeOwners){owner.state->inheritState(**owner.target);*owner.target=owner.state.get();}for(const auto &[runtime,controls]:prepared.runtimes)runtime->controls(*controls);uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(a+f+l==0,"Adding note watch must only adopt prepared state");
+    bool opened=false,released=false;
+    for(uint32_t at=256;at<3200;){auto count=std::min(block,3200-at);for(auto boundary:{1024u,2048u})if(boundary>at)count=std::min(count,boundary-at);
+      if(at==1024)voice.dwFlags.set(OpenMPT::CHN_KEYOFF);if(at==2048){voice.dwFlags.reset(OpenMPT::CHN_KEYOFF);++voice.nativeNoteGeneration;}
+      state.m_nBufferCount=8192-at;actual.fill(1);expected.fill(1);
+      tracker_audit_begin();live.begin(state,count,at,{120,double(at)/24000,0,4,true},64);reference.begin(state,count,at,{120,double(at)/24000,0,4,true},64);const bool okay=live.process(0,actual.data(),count,at,{})&&reference.process(0,expected.data(),count,at,{});tracker_audit_end(&a,&f,&l);
+      check(okay&&a+f+l==0,"New held-note watch processing must allocate/free/lock nothing");
+      for(uint32_t i=0;i<count*2;++i){check(std::abs(actual[i]-expected[i])<2e-7,"New note watch misses a current held voice, NNA or sample-inspector scope");if(at+i/2<1024&&actual[i]>.6)opened=true;if(at+i/2>1700&&at+i/2<2048&&actual[i]<.3)released=true;}at+=count;
+    }
+    check(opened&&released,"New note source must both attack for a held note and release on its real note-off");
+  }
+}
+static void adoptGraphPlan(GraphControlPlan &plan,uint64_t position) {
+  for(const auto &queue:plan.scheduling)queue.state->plugin->adoptScheduling(queue.queue.get());
+  for(const auto &owner:plan.runtimeOwners){if(owner.adopt)owner.adopt(owner.context,owner.state.get(),owner.processors,owner.structural);else {owner.state->inheritState(**owner.target);*owner.target=owner.state.get();}}
+  for(const auto &preset:plan.presets)preset.endpoint->adopt(*preset.state);
+  for(const auto &[endpoint,bypass]:plan.bypasses)endpoint->bypass(bypass);
+  for(const auto &[runtime,controls]:plan.runtimes)runtime->controls(*controls);
+  for(const auto &change:plan.updates){if(change.runtime)change.runtime->parameterBase(change.node,change.parameter,change.value);else if(change.endpoint){check(change.endpoint->parameter(change.parameter,change.value,position),"Prepared graph baseline rejected");if(change.appliedBaseline)*change.appliedBaseline=change.value;}}
+}
+static void compoundHeldNote(const PluginDescriptor &descriptor) {
+  NativeSong native;native.patterns[0].id=3;native.tracks[0].id=1;native.mixer.buses={{1,2,MixerBusKind::Track,"Track"},{2,0,MixerBusKind::Master,"Master"}};native.signal.library={definition(100,descriptor,false)};native.signal.assignments={{1,100}};
+  NativeSignalGraph graph(native,48000,true);auto next=native;auto &d=next.signal.library[0];
+  d.nodes.push_back({104,SignalNodeKind::NoteEnvelope,"New note envelope"});d.nodes.back().attack=.001;d.modulation={{104,102,7,0,.6,.2,true}};
+  d.nodes.push_back({105,SignalNodeKind::Plugin,"Unity"});d.nodes.back().plugin.classID="resonance.gainer.v1";d.audio={{101,102},{102,105},{105,103}};
+  FixturePlayState state;state.m_nMusicSpeed=1;state.m_nSamplesPerTick=8192;state.m_nBufferCount=8192;state.m_nTickCount=0;state.m_nPattern=0;state.m_nCurrentOrder=0;state.m_nRow=0;state.m_nCurrentRowsPerBeat=4;
+  auto &voice=state.Chn[0];voice.nNote=60;voice.increment.Set(1);voice.nativeNoteGeneration=1;
+  std::array<float,8192> audio;audio.fill(1);graph.begin(state,64,0,{120,0,0,4,true},64);check(graph.process(0,audio.data(),64,0,{}),"Initial held voice processing failed");
+  GraphControlPlan plan;graph.prepareParameters(next.signal,plan);check(plan.runtimeOwners[0].structural,"Compound note fixture requires a real audio topology transition");audio.fill(1);
+  tracker_audit_begin();adoptGraphPlan(plan,64);graph.begin(state,4096,64,{120,64./24000,0,4,true},64);const bool okay=graph.process(0,audio.data(),4096,64,{});uint64_t a,f,l;tracker_audit_end(&a,&f,&l);
+  check(okay&&a+f+l==0,"Compound source/topology adoption violates realtime ownership");
+  check(audio[8190]>.79f&&audio[8190]<.81f,"A pending note envelope must capture held voices before the mid-buffer topology handoff");
+}
+static void structuralRecipes(const PluginDescriptor &descriptor,const char *path,bool au) {
+  auto bundle=dlopen((std::string(path)+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);
+  auto delayed=reinterpret_cast<void(*)(bool)>(dlsym(bundle,"ResonanceFixtureEffectDelay"));
+  auto hidden=reinterpret_cast<void(*)(float)>(dlsym(bundle,"ResonanceFixtureHiddenGain"));
+  auto created=reinterpret_cast<uint64_t(*)()>(dlsym(bundle,"ResonanceFixtureCreated"));
+  auto observe=reinterpret_cast<void(*)(bool)>(dlsym(bundle,"ResonanceFixtureObserve"));
+  auto observed=reinterpret_cast<uint64_t(*)()>(dlsym(bundle,"ResonanceFixtureObservedFrames"));
+  auto clockErrors=reinterpret_cast<uint64_t(*)()>(dlsym(bundle,"ResonanceFixtureClockErrors"));
+  check(delayed&&hidden&&created&&observe&&observed&&clockErrors,"Structural fixture hooks unavailable");
+  const auto builtins=NativePlugin::builtins();const auto dc=std::find_if(builtins.begin(),builtins.end(),[](const auto &p){return p.classID=="resonance.dc-offset.v1";});
+  for(bool latent:{false,true}){if(au&&latent)continue;delayed(latent);
+    for(uint32_t rate:{44100u,48000u,96000u}){
+      std::vector<float> reference;
+      for(uint32_t block:{17u,512u,4096u}){
+        if(au)setFixtureAUHiddenGain(.73f);else hidden(.73f);
+        NativeSong native;native.patterns[0].id=3;native.tracks[0].id=1;native.mixer.buses={{1,2,MixerBusKind::Track,"Track"},{2,0,MixerBusKind::Master,"Master"}};
+        auto d=definition(100,descriptor,false);auto offset=definition(200,*dc,false).nodes[1];offset.id=105;offset.plugin.parameters={{1,10},{2,0}};d.nodes.push_back(offset);d.audio={{101,102},{102,105},{105,103}};native.signal.library={d};native.signal.assignments={{1,100}};
+        NativeSignalGraph live(native,rate,true);const auto constructionCount=au?fixtureAUCreatedCount():created();if(au)setFixtureAUHiddenGain(.12f);else hidden(.12f);
+        if(!au)observe(true);
+        FixturePlayState clock;clock.m_nMusicSpeed=1;clock.m_nSamplesPerTick=8192;clock.m_nBufferCount=8192;clock.m_nTickCount=0;clock.m_nPattern=0;clock.m_nCurrentOrder=0;clock.m_nRow=0;clock.m_nCurrentRowsPerBeat=4;
+        std::vector<std::unique_ptr<GraphControlPlan>> plans;std::vector<float> output(7000*2);GraphControlPlan *last=nullptr;
+        const uint32_t fade=uint32_t(std::ceil(rate*.005)),latency=latent?32:0;
+        auto shape=[](double t){return t*t*(3-2*t);};
+        auto value=[](unsigned variant,float input){const float gain=.5f*.73f;return variant==0?float(input*gain+.1):variant==1?float((input+.1)*gain):float(input*gain);};
+        for(uint32_t at=0;at<7000;){
+          if(at==1000||at==3000||at==5000){
+            auto next=native;
+            if(at==1000)next.signal.library[0].audio={{101,105},{105,102},{102,103}};
+            if(at==3000){std::erase_if(next.signal.library[0].nodes,[](const auto &n){return n.id==105;});next.signal.library[0].audio={{101,102},{102,103}};}
+            if(at==5000){next.signal.library[0].nodes.push_back(offset);next.signal.library[0].audio={{101,102},{102,105},{105,103}};}
+            auto prepared=std::make_unique<GraphControlPlan>();live.prepareParameters(next.signal,*prepared,last);
+            check(prepared->runtimeOwners.size()==1&&prepared->runtimeOwners[0].structural,"Audio topology changes need an explicit prepared transition");
+            if(last){const auto *before=last->processorOwners[0].state->find(102),*after=prepared->processorOwners[0].state->find(102);check(before&&after&&before->endpoint==after->endpoint,"Retained vendor endpoint was recreated during routing");}
+            check((au?fixtureAUCreatedCount():created())==constructionCount,"Structural edit serialized/cloned the existing vendor");
+            tracker_audit_begin();adoptGraphPlan(*prepared,at);uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(a+f+l==0,"Structural graph adoption allocates/frees/locks");
+            last=prepared.get();plans.push_back(std::move(prepared));native=std::move(next);
+            bool rejected=false;try{GraphControlPlan pending;live.prepareParameters(native.signal,pending,last);}catch(const std::runtime_error &){rejected=true;}check(rejected,"A fading topology must retain its audible predecessors until settled");
+          }
+          auto count=std::min(block,7000-at);for(auto boundary:{1000u,3000u,5000u})if(boundary>at)count=std::min(count,boundary-at);
+          for(uint32_t i=0;i<count;++i)output[(at+i)*2]=output[(at+i)*2+1]=float(.4+.12*std::sin((at+i)*.003));
+          clock.m_nBufferCount=8192-at;
+          tracker_audit_begin();live.begin(clock,count,at,{120,double(at)*2/rate,0,4,true},64);const bool okay=live.process(0,output.data()+at*2,count,at,{});uint64_t a,f,l;tracker_audit_end(&a,&f,&l);check(okay&&a+f+l==0,"Structural dry bridge processing allocates/frees/locks or faults");
+          for(uint32_t i=0;i<count;++i){const auto frame=at+i;if(frame<1000)continue;const auto change=frame<3000?1000u:frame<5000?3000u:5000u,elapsed=frame-change;
+            const auto before=change==1000?0u:change==3000?1u:2u,after=change==1000?1u:change==3000?2u:0u;
+            const float dry=float(.4+.12*std::sin((frame-latency)*.003));double expected;
+            if(elapsed<fade){const auto wet=1-shape(double(elapsed)/fade);expected=value(before,dry)*wet+dry*(1-wet);}
+            else if(elapsed<fade+latency)expected=dry;
+            else if(elapsed<2*fade+latency){const auto wet=shape(double(elapsed-fade-latency)/fade);expected=value(after,dry)*wet+dry*(1-wet);}
+            else expected=value(after,dry);
+            if(std::abs(output[frame*2]-expected)>3e-7||std::abs(output[frame*2+1]-expected)>3e-7){std::cerr<<"structural frame "<<frame<<" rate "<<rate<<" block "<<block<<" latent "<<latent<<" actual "<<output[frame*2]<<" expected "<<expected<<'\n';throw std::runtime_error("Recipe dry transition differs from independent latency-aligned PCM reference");}
+          }
+          at+=count;
+        }
+        if(!au){check(observed()==7000&&clockErrors()==0,"Retained VST processes each frame once with uninterrupted transport through cyclic reorder");observe(false);}
+        if(reference.empty())reference=output;else check(reference==output,"Structural transition depends on callback partition");
+        // Preparation failure is audible-state neutral even after several
+        // layouts replaced the initial processor lookup.
+        auto invalid=native;invalid.signal.library[0].audio.push_back({105,102});bool rejected=false;
+        try{GraphControlPlan candidate;live.prepareParameters(invalid.signal,candidate,last);}catch(const std::invalid_argument &){rejected=true;}check(rejected,"Cyclic recipe must reject before publication");
+        std::array<float,512> tail;tail.fill(.4f);check(live.process(0,tail.data(),256,7000,{}),"Rejected recipe damaged the accepted plan");
+      }
+    }
+  }
+  delayed(false);hidden(1);setFixtureAUHiddenGain(1);
+}
+#include "GraphCopyObservationChecks.inc"
+#include "GraphCopyMigrationChecks.inc"
+#include "editor/Tests/HostedCopyMigrationChecks.hpp"
+#include "editor/Tests/HostedStageRoutingChecks.hpp"
 int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepool{try{
   check(argc==2,"Pass VST3 fixture");auto plugins=NativePlugin::discoverVST3(argv[1]);
   recipeBypassEndpoint(plugins[0],argv[1]);
   sourcePreparationFailure(plugins[0]);
+  newlyWatchedNotes(plugins[0]);compoundHeldNote(plugins[0]);
+  auto fixtureAUs=registerFixtureAUs();for(const auto &descriptor:{plugins[0],fixtureAUs.at(0)})for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u}){hostedStageRouting(descriptor,rate,block);hostedStageFollower(descriptor,rate,block);}preparedCopyMigration(plugins[0]);preparedCopyMigration(fixtureAUs.at(0));for(const auto &descriptor:{plugins[0],fixtureAUs.at(0)})for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(bool sample:{false,true})hostedCopyMigration(descriptor,rate,block,sample);exactCopyObservation(plugins[0]);exactCopyObservation(fixtureAUs.at(0));structuralRecipes(plugins[0],argv[1],false);structuralRecipes(fixtureAUs.at(0),argv[1],true);
   discreteHosted(plugins[0],argv[1]);
   auto gain=definition(100,plugins[0],true);
-  setFixtureAUStepped(true);scalarDiscreteHosted(registerFixtureAUs().at(0),7);setFixtureAUStepped(false);
+  setFixtureAUStepped(true);scalarDiscreteHosted(fixtureAUs.at(0),7);setFixtureAUStepped(false);
   auto builtin=NativePlugin::builtins();auto gainer=std::find_if(builtin.begin(),builtin.end(),[](const auto &p){return p.classID=="resonance.gainer.v1";});check(gainer!=builtin.end(),"Gainer fixture available");scalarDiscreteHosted(*gainer,3);auto dc=std::find_if(builtin.begin(),builtin.end(),[](const auto &p){return p.classID=="resonance.dc-offset.v1";});check(dc!=builtin.end(),"DC fixture available");
   auto add=definition(200,*dc,false);NativeEffect effect(dc->classID,48000);effect.parameter(2,0);effect.parameter(1,25);add.nodes[1].plugin.state=effect.state();
   NativeSong native;native.patterns[0].id=3;native.tracks[0].id=1;native.mixer.buses={{1,2,MixerBusKind::Track,"Track"},{2,0,MixerBusKind::Master,"Master"}};

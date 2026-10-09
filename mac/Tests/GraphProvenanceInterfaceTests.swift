@@ -45,6 +45,13 @@ extension InterfaceTests {
     var returns=0;editor.onReveal={returns+=1};editor.returnToProvenance();try require(returns==1,"Back reveals the retained graph context")
     editor.hideParameterProvenance();try require(!editor.canvas.nodes.contains{$0.kind=="provenance"},"Source projections can be hidden without removing any underlying song edits")
     editor.returnToProvenance();try require(returns==2,"A retained panel Back button still opens the graph after its transient source view was hidden")
+    let bookmark=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700));bookmark.update(data)
+    bookmark.filterID="track";bookmark.nodeSearch.stringValue="Gain";bookmark.selectedID="plugin:stable";bookmark.canvas.selected=bookmark.selectedID;bookmark.rebuild();bookmark.rememberPanelReturn()
+    bookmark.filterID=nil;bookmark.nodeSearch.stringValue="Master";bookmark.selectedID="master";bookmark.canvas.selected="master";bookmark.rebuild();bookmark.restorePanelReturn()
+    try require(bookmark.filterID=="track" && bookmark.nodeSearch.stringValue=="Gain" && bookmark.selectedID=="plugin:stable" && bookmark.canvas.selection==["plugin:stable"],"Back from parameter activity restores the captured channel filter, search and stable processor selection")
+    bookmark.onRequest={method,_,reply in if method=="graph.get"{reply(["result":["revision":"new-document:1","data":data]])}}
+    bookmark.load()
+    try require(bookmark.panelReturn==nil,"Opening another document discards graph return targets even if local IDs happen to match")
     let reveal=SignalGraphEditor(frame:NSRect(x:0,y:0,width:1100,height:700))
     var saved=data;saved["layout"]=[["node":"plugin:stable","x":400.0,"y":1400.0],["node":"provenance:envelope:n23","x":150.0,"y":2300.0]]
     reveal.update(saved);reveal.nodeCategory.selectItem(at:2);reveal.changeNodeFilter()
@@ -105,7 +112,7 @@ extension InterfaceTests {
     activity.inspectRecorded(plugin:"unloaded-stable",parameter:Int(UInt32.max))
     try require(activityRequests.last?.0=="automation.recorded.get" && activityRequests.last?.1["plugin"] as? String=="unloaded-stable" && activity.detailMode.selectedSegment==2,"Recorded source bridge reads song data directly while stopped or unloaded, without a live processor target")
     activityReply?(["result":["revision":"document:3","data":["points":[["frame":48000,"value":0.5]],"total":1]]])
-    try require(activity.processor.titleOfSelectedItem=="EQ 5 · recorded song data" && activity.parameter.titleOfSelectedItem=="Band 1 gain" && activity.status.stringValue.contains("Stop playback") && !activity.status.stringValue.contains("plugin Undo"),"Recorded provenance uses opportunistic friendly names and accurately explains the stopped-edit requirement")
+    try require(activity.processor.titleOfSelectedItem=="EQ 5 · recorded song data" && activity.parameter.titleOfSelectedItem=="Band 1 gain" && activity.status.stringValue.contains("during playback") && activity.status.stringValue.contains("support Undo") && !activity.status.stringValue.contains("Stop playback"),"Recorded provenance uses opportunistic friendly names and accurately explains live edits with unified Undo")
     activity.selectProcessor();activity.poll();try require(!activity.processor.isEnabled && activity.target?["plugin"] as? String=="unloaded-stable","Recorded-only metadata cannot silently retarget to an old live processor catalogue")
     try require(activity.recorded.count==1 && activityRequests.count==1 && activity.trace.samples.isEmpty,"Recorded metadata mode does not start a trace, take over capture, or claim a live rendered value")
     activity.inspect(plugin:"loaded",parameter:2)

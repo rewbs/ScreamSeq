@@ -1,0 +1,310 @@
+Window: "Midnight Circuit — ScreamSeq", App: ScreamSeq Final QA.
+0 standard window Midnight Circuit — ScreamSeq, Secondary Actions: Raise
+	1 text Midnight Circuit MPTM   /   8 channels   /   4 samples
+	2 button Commands ⌘K
+	3 button Live keys, Help: Keep musical keyboard input active while using other panels (⌘⌥L)
+	4 button Play from beginning
+	5 button Stop
+	6 button Stop playback
+	7 text 000 : 02 PLAY · ORDER : ROW
+	8 text field (settable) Description: Tempo in BPM, Help: Click to edit tempo (32–512 BPM). Return saves; Escape cancels., Value: 124
+	9 text BPM
+	10 scroll area Secondary Actions: Scroll Up, Scroll Down
+		11 text SCREAMSEQ PROJECT
+		12 button Open module…
+		13 button Save
+		14 button Export audio…
+		15 text SAMPLES   4
+		16 button 01  Warm pulse
+		17 button 02  Sub bass
+		18 button 03  Soft kick
+		19 button 04  Closed hat
+		20 button Import sample…
+		21 button Song settings…
+		22 text WORKSPACE
+		23 button Audio settings…
+		24 button MIDI input…
+		25 button Keyboard settings…
+		26 button Import report…
+		27 text OpenMPT audio engine
+		28 scroll bar (disabled, settable, float) 0
+	29 text Pattern 00   ·   64 rows
+	30 pop up button Octave 4
+	31 pop up button Step 1
+	32 button Follow on, Description: Follow, Help: Follow playback through patterns. Turn off to browse and edit independently., Value: On
+	33 button Loop on, Description: Loop playback, Help: Repeat the playing selection, pattern or song. Changes take effect at the next boundary., Value: On
+	34 scroll area Secondary Actions: Scroll Left, Scroll Right
+		35 button Arrange…
+		36 button 00   00
+		37 button + Pattern
+		38 button Duplicate
+		39 button Remove
+		40 scroll bar (disabled, settable, float) 0
+	41 split group
+		42 table Description: Pattern editor, Value: Row 12, channel 2, column 3, Help: Arrow keys navigate. Z through M and Q through U enter notes. Tab changes channel. Space starts or stops playback.
+		43 splitter (disabled, settable, float) 812
+		44 scroll area Description: Inspector tabs, Secondary Actions: Scroll Left, Scroll Right
+			45 toggle button Notes, Description: Note inspector · ⌃⌥1, Help: Note inspector · ⌃⌥1 · Scroll for more inspectors, Value: Selected
+			46 toggle button Samples, Description: Sample & loops · ⌃⌥2, Help: Sample & loops · ⌃⌥2 · Scroll for more inspectors, Value: Not selected
+			47 toggle button Instruments, Description: Instrument & envelopes · ⌃⌥3, Help: Instrument & envelopes · ⌃⌥3 · Scroll for more inspectors, Value: Not selected
+			48 toggle button Plugins, Description: Plugin controls · ⌃⌥4, Help: Plugin controls · ⌃⌥4 · Scroll for more inspectors, Value: Not selected
+			49 toggle button FX library, Description: Graph effect browser · ⌃⌥7, Help: Graph effect browser · ⌃⌥7 · Scroll for more inspectors, Value: Not selected
+			50 toggle button Graph lanes, Description: Pattern graph commands · ⌃⌥8, Help: Pattern graph commands · ⌃⌥8 · Scroll for more inspectors, Value: Not selected
+			51 scroll bar (settable, float) 0.02395209580838323
+				52 value indicator (settable, float) 0.02395209580838323
+				53 increment arrow button
+				54 decrement arrow button
+				55 increment page button
+				56 decrement page button
+		57 text Note inspector P0 · R12 · CH2
+		58 button Description: Pin Note inspector, Help: Pin this panel's target independently of other panels
+		59 button …, Description: Note inspector panel actions, Help: Secondary actions · also available with ⌘K
+		60 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+			61 text Precise notes
+			62 button Use current cursor
+			63 text Pattern 0 · Row 12 · Channel 2 · 4 rows/beat Snap
+			64 pop up button Description: Timeline snap, Value: Free
+			65 text Drag timing / volume
+			66 container Description: Precise note timeline, Value: Row 12, 0 events, 0.25 beats long, Help: Drag a hit left or right for timing, up or down for volume. Shift keeps its volume. Option bypasses snap. Double-click to add a hit. Arrow keys adjust the selected hit; Delete removes it.
+			67 text Type in cells · Z–M notes · Tab / arrows navigate · edits save automatically
+			68 table Description: Precise notes in this row, Help: Arrows select cells. Type to edit; Tab moves to the next cell. In Note, use normal note keys (1 = off). Return or double-click edits text. Delete removes the hit. Changes save automatically.
+				69 container
+					70 sort button Beat offset
+					71 sort button Row offset
+					72 sort button Note
+					73 sort button Ins
+					74 sort button Vol
+					75 sort button FX
+					76 sort button Value
+			77 scroll bar (settable, float) 0
+				78 value indicator (settable, float) 0
+				79 increment arrow button
+				80 decrement arrow button
+				81 increment page button
+				82 decrement page button
+			83 scroll bar (disabled, settable, float) 0
+			84 button Add hit
+			85 button (disabled) Remove
+			86 button Selected hit details, Value: Collapsed
+			87 text Retriggers
+			88 text field (settable) Description: Retrigger count, Value: 4
+			89 text End volume
+			90 text field (settable) Description: Last retrigger volume, Value: 127
+			91 button (disabled) Fill to row end
+			92 text 0 hits · changes save automatically · Undo restores each edit.
+			93 scroll bar (disabled, settable, float) 0
+			94 scroll bar (settable, float) 0
+				95 value indicator (settable, float) 0
+				96 increment arrow button
+				97 decrement arrow button
+				98 increment page button
+				99 decrement page button
+		100 splitter (disabled, settable, float) 294
+		101 scroll area Inspector tabs
+			102 toggle button Mixer, Description: Mixer · ⌃⌥5, Help: Mixer · ⌃⌥5 · Scroll for more inspectors, Value: Selected
+		103 text Mixer
+		104 button Description: Pin Mixer, Help: Pin this panel's target independently of other panels
+		105 button …, Description: Mixer panel actions, Help: Secondary actions · also available with ⌘K
+		106 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+			107 text Track 1
+			108 radio button Description: Strips, Value: 1
+			109 radio button Description: Routing, Value: 0
+			110 button More…, Help: Secondary actions · also available with ⌘K
+			111 container Mixer strip overview
+				112 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down (showing 0-100 of 110 items)
+					113 text Track 1 Track -28.3 dB
+					114 slider (settable, float) Description: Track 1 fader in dB, Value: 0
+						115 value indicator (settable, float) 0
+					116 text field (settable) Description: Track 1 fader value in dB, Value: 0.0
+					117 text dB
+					118 checkbox Mute, Description: Mute Track 1, Value: 0
+					119 checkbox Solo, Description: Solo Track 1, Value: 0
+					120 text Balance
+					121 slider (settable, float) Description: Track 1 balance, Value: 0
+						122 value indicator (settable, float) 0
+					123 text Width
+					124 slider (settable, float) Description: Track 1 stereo width, Value: 1
+						125 value indicator (settable, float) 1
+					126 text Pre · dB
+					127 text field (settable) Description: Track 1 pre gain in dB, Value: 0.0
+					128 text Pre balance
+					129 slider (settable, float) Description: Track 1 balance before effects, Value: 0
+						130 value indicator (settable, float) 0
+					131 text 1 effects · 1 sends
+					132 button Routing / effects
+					133 text Track 2 Track -21.9 dB
+					134 slider (settable, float) Description: Track 2 fader in dB, Value: 0
+						135 value indicator (settable, float) 0
+					136 text field (settable) Description: Track 2 fader value in dB, Value: 0.0
+					137 text dB
+					138 checkbox Mute, Description: Mute Track 2, Value: 0
+					139 checkbox Solo, Description: Solo Track 2, Value: 0
+					140 text Balance
+					141 slider (settable, float) Description: Track 2 balance, Value: 0
+						142 value indicator (settable, float) 0
+					143 text Width
+					144 slider (settable, float) Description: Track 2 stereo width, Value: 1
+						145 value indicator (settable, float) 1
+					146 text Pre · dB
+					147 text field (settable) Description: Track 2 pre gain in dB, Value: 0.0
+					148 text Pre balance
+					149 slider (settable, float) Description: Track 2 balance before effects, Value: 0
+						150 value indicator (settable, float) 0
+					151 text 0 effects · 0 sends
+					152 button Routing / effects
+					153 text Track 3 Track -44.9 dB
+					154 slider (settable, float) Description: Track 3 fader in dB, Value: 0
+						155 value indicator (settable, float) 0
+					156 text field (settable) Description: Track 3 fader value in dB, Value: 0.0
+					157 text dB
+					158 checkbox Mute, Description: Mute Track 3, Value: 0
+					159 checkbox Solo, Description: Solo Track 3, Value: 0
+					160 text Balance
+					161 slider (settable, float) Description: Track 3 balance, Value: 0
+						162 value indicator (settable, float) 0
+					163 text Width
+					164 slider (settable, float) Description: Track 3 stereo width, Value: 1
+						165 value indicator (settable, float) 1
+					166 text Pre · dB
+					167 text field (settable) Description: Track 3 pre gain in dB, Value: 0.0
+					168 text Pre balance
+					169 slider (settable, float) Description: Track 3 balance before effects, Value: 0
+						170 value indicator (settable, float) 0
+					171 text 2 effects · 0 sends
+					172 button Routing / effects
+					173 text Track 4 Track -36.4 dB
+					174 slider (settable, float) Description: Track 4 fader in dB, Value: 0
+						175 value indicator (settable, float) 0
+					176 text field (settable) Description: Track 4 fader value in dB, Value: 0.0
+					177 text dB
+					178 checkbox Mute, Description: Mute Track 4, Value: 0
+					179 checkbox Solo, Description: Solo Track 4, Value: 0
+					180 text Balance
+					181 slider (settable, float) Description: Track 4 balance, Value: 0
+						182 value indicator (settable, float) 0
+					183 text Width
+					184 slider (settable, float) Description: Track 4 stereo width, Value: 1
+						185 value indicator (settable, float) 1
+					186 text Pre · dB
+					187 text field (settable) Description: Track 4 pre gain in dB, Value: 0.0
+					188 text Pre balance
+					189 slider (settable, float) Description: Track 4 balance before effects, Value: 0
+						190 value indicator (settable, float) 0
+					191 text 3 effects · 0 sends
+					192 button Routing / effects
+					193 text Track 5 Track −∞ dB
+					194 slider (settable, float) Description: Track 5 fader in dB, Value: 0
+						195 value indicator (settable, float) 0
+					196 text field (settable) Description: Track 5 fader value in dB, Value: 0.0
+					197 text dB
+					198 checkbox Mute, Description: Mute Track 5, Value: 0
+					199 checkbox Solo, Description: Solo Track 5, Value: 0
+					200 text Balance
+					201 slider (settable, float) Description: Track 5 balance, Value: 0
+						202 value indicator (settable, float) 0
+					203 text Width
+					204 slider (settable, float) Description: Track 5 stereo width, Value: 1
+						205 value indicator (settable, float) 1
+					206 text Pre · dB
+					207 text field (settable) Description: Track 5 pre gain in dB, Value: 0.0
+					208 text Pre balance
+					209 slider (settable, float) Description: Track 5 balance before effects, Value: 0
+						210 value indicator (settable, float) 0
+					211 text 0 effects · 0 sends
+					212 button Routing / effects
+					213 text Track 6 Track −∞ dB
+					214 slider (settable, float) Description: Track 6 fader in dB, Value: 0
+						215 value indicator (settable, float) 0
+					216 text field (settable) Description: Track 6 fader value in dB, Value: 0.0
+					217 text dB
+					218 checkbox Mute, Description: Mute Track 6, Value: 0
+					219 checkbox Solo, Description: Solo Track 6, Value: 0
+					220 text Balance
+					221 slider (settable, float) Description: Track 6 balance, Value: 0
+						222 value indicator (settable, float) 0
+			223 text 10 buses · choose a track, group or return Faders audition smoothly · one Undo per gesture. Edit connections in Graph.
+			224 scroll bar (disabled, settable, float) 0
+			225 scroll bar (settable, float) 0
+				226 value indicator (settable, float) 0
+				227 increment arrow button
+				228 decrement arrow button
+				229 increment page button
+				230 decrement page button
+		231 splitter (disabled, settable, float) 823
+		232 scroll area Inspector tabs
+			233 toggle button Param activity, Description: Parameter activity · ⌃⌥0, Help: Parameter activity · ⌃⌥0 · Scroll for more inspectors, Value: Selected
+			234 toggle button Automation, Description: Pattern automation · ⌃⌥9, Help: Pattern automation · ⌃⌥9 · Scroll for more inspectors, Value: Not selected
+		235 text Parameter activity
+		236 button Back to graph
+		237 button Description: Pin Parameter activity, Help: Pin this panel's target independently of other panels
+		238 button …, Description: Parameter activity panel actions, Help: Secondary actions · also available with ⌘K
+		239 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+			240 button Last touched
+			241 button Refresh copies
+			242 pop up button Description: Parameter activity processor copy, Value: Compressor · rack 1
+			243 search text field (settable) Description: Search activity parameters, Placeholder: Find parameter
+				244 button Search
+			245 pop up button Description: Parameter activity parameter, Value: Threshold · 1
+			246 text -30 dB · Recorded automation
+			247 button Freeze view
+			248 button Clear capture
+			249 radio button Description: Pattern pass, Value: 1
+			250 radio button Description: Recent time, Value: 0
+			251 pop up button Description: Captured pattern pass, Value: Latest pass
+			252 button Play / capture pattern
+			253 button −
+			254 button +
+			255 button Fit
+			256 container Description: Rendered parameter value trace, Help: Click the trace to inspect its source. Pinch or Option-scroll to zoom; scroll to pan. Gaps and faded lines indicate uncaptured or inaudible data.
+			257 radio button Description: Sources, Value: 0
+			258 radio button Description: Recent changes, Value: 0
+			259 radio button Description: Recorded points, Value: 1
+			260 button Edit mapping…
+			261 button Open source…
+			262 table Parameter sources and recent changes
+				263 row (selectable)
+					264 text field (settable) 0.0000000
+					265 text field (settable) -18
+				266 row (selected)
+					267 text field (settable) 2.0000000
+					268 text field (settable) -30
+				269 container
+					270 sort button Source / recorded time (seconds)
+					271 sort button Value / contribution
+			272 scroll bar (disabled, settable, float) 0
+			273 text Seconds
+			274 text field (settable) Description: Recorded point seconds, Value: 2.0000000
+			275 text Value
+			276 text field (settable) Description: Recorded point value, Value: -27
+			277 button Add / update
+			278 button Delete point
+			279 button (disabled) 1…2 / 2 · Next
+			280 text Enabled envelopes, parameter pattern commands and recorded automation are mutually exclusive base controls. Song modulation adds its contributions to that base, then clamps to 0…1 and rounds discrete targets. Manual edits may be overwritten by base automation. Plugin-internal modulation is not exposed. Capturing · about 1 ms detail with min/max · 2190 trace points
+			281 scroll bar (disabled, settable, float) 0
+			282 scroll bar (settable, float) 0.6648822269807281
+				283 value indicator (settable, float) 0.6648822269807281
+				284 increment arrow button
+				285 decrement arrow button
+				286 increment page button
+				287 decrement page button
+	288 text EDIT P00 · R012 · CH02 INS 01 Warm pulse · OCT 4 Playing · 4 voices · 0 audio overruns ? finds effects · Right-click for effect columns and pattern tools
+	289 button Autosave on, Description: Autosave status and recovery copies, Help: Recovery copies every 10 seconds after changes. Click to recover a song.
+	290 text 60 fps   CORE AUDIO  48.0 kHz / 512 MASTER
+	291 close button
+	292 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	293 minimize button
+	294 text Midnight Circuit — ScreamSeq
+295 menu bar
+	296 ScreamSeq Final QA
+	297 File
+	298 Edit
+	299 Automation
+	300 Playback
+	301 Pattern
+	302 Workspace
+	303 Window
+
+Selected:
+	266 row (selected)
+
+Note: Pay special attention to the content selected by the user. If the user asks a question or refers to the content they are looking at on-screen, they might be referring to the selected content (but they might be referring to something else that's visible, too).

@@ -224,7 +224,7 @@ int main() {
           check(clipboardFrames == frames && clipboardAudio.peek() == std::char_traits<char>::eof(),
                 "Clipboard audio duration is unchanged and complete");
         }
-        // Bad version/container combinations and truncated sample archives never replace a live document.
+        // Wrapper versions recover with warnings; truncated sample archives still fail atomically.
         auto revision = session.automationRevision;
         NSMutableDictionary *bad = [root mutableCopy];
         for (id version : @[ @YES, @0, @1.5, @7, @3 ]) {
@@ -234,8 +234,9 @@ int main() {
                                                                       options:0
                                                                         error:nil];
           [invalid writeToFile:path atomically:YES];
-          check(![session openPath:path error:&error] && [revision isEqual:session.automationRevision],
-                "Reject malformed project version without replacement");
+          check([session openPath:path error:&error] && [[session snapshot:0][@"requiresSaveAs"] boolValue] && [[session snapshot:0][@"loadWarnings"] count],
+                "Recover incompatible project wrapper with warnings and source protection");
+          revision=session.automationRevision;
         }
         bad[@"version"] = @6;
         auto broken = packSongSnapshot(parts.module, parts.samples.first(parts.samples.size() - 1));

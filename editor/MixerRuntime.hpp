@@ -18,8 +18,9 @@ public:
   static constexpr size_t maximumFrames = 4096, maximumBuses = 240;
   using Process = bool (*)(void *, size_t, float *, uint32_t, uint64_t) noexcept;
   using Observe = void (*)(void *,size_t,bool,const float *,uint32_t,uint64_t) noexcept;
-  enum class RouteKind:uint8_t {Connection,Sidechain,Instrument,Insert,MasterInput};
+  enum class RouteKind:uint8_t {Connection,Sidechain,Instrument,Insert,MasterInput,PluginConnection};
   using ObserveRoute = void (*)(void *,RouteKind,size_t,const float *,uint32_t,uint64_t) noexcept;
+  using TransformRoute = void (*)(void *,RouteKind,size_t,float *,uint32_t,uint64_t) noexcept;
 private:
   class Delay {
     struct State {
@@ -43,6 +44,8 @@ private:
   struct Node {
     std::array<float, maximumFrames * 2> input{}, work{};
     Delay direct;
+    AudioTrimRuntime trims;
+    const AudioPortTrims *trimSpec=nullptr;
     Values current, target, rampStart;
     uint32_t ramp = 0;
     size_t processor = 0;
@@ -54,7 +57,7 @@ private:
   double rate_;
   std::vector<std::unique_ptr<Node>> nodes_;
   std::vector<Delay> edges_, instruments_;
-  std::array<float, maximumFrames*2> auxiliaryScratch_{};
+  std::array<float, maximumFrames*2> auxiliaryScratch_{}, masterSilence_{};
   struct Auxiliary {
     size_t processor = 0;
     std::vector<MixerAudioInput> inputs;
@@ -64,6 +67,10 @@ private:
   std::vector<Auxiliary> auxiliaries_;
   std::vector<Delay> sideDelays_;
   std::vector<float *> sideTargets_;
+  struct ProcessorStage {std::array<float,maximumFrames*2> work{};Delay main;bool complete=false,prepared=false;explicit ProcessorStage(uint32_t delay):main(delay){}};
+  std::vector<std::unique_ptr<ProcessorStage>> processorStages_;
+  std::vector<Delay> pluginDelays_;
+  std::vector<float *> pluginTargets_;
   std::unique_ptr<std::atomic<float>[]> meters_;
   struct ControlFrame { std::array<MixerControls, maximumBuses> values{}; };
   std::array<ControlFrame, 8> controls_{};
@@ -79,6 +86,8 @@ private:
   Observe observer_=nullptr;
   ObserveRoute routeObserver_=nullptr;
   void *routeObserverContext_=nullptr;
+  TransformRoute routeTransform_=nullptr;void *routeTransformContext_=nullptr;
+  bool addRoute(Delay &,const float *,float *,float,RouteKind,size_t) noexcept;
   // Each route is observed synchronously before scratch is reused; no buffer
   // per cable and no alteration of the existing destination summing order.
   std::array<float,maximumFrames*2> routeScratch_{};
@@ -94,6 +103,7 @@ public:
   const MixerGraph &graph() const { return graph_; }
   void observer(Observe callback,void *context) {observer_=callback;observerContext_=context;} // Before rendering.
   void routeObserver(ObserveRoute callback,void *context) {routeObserver_=callback;routeObserverContext_=context;}
+  void routeTransform(TransformRoute callback,void *context) {routeTransform_=callback;routeTransformContext_=context;}
   void updateLatencyPlan(MixerPlan); // Control thread; topology is unchanged.
   // Control thread, before publication. The source's ownership/bindings must be
   // stable (its delay contents may be rendering). Retain source until activate.
@@ -103,6 +113,8 @@ public:
   bool activateHistory(bool audioStopped=false) noexcept;
   size_t historyStorageBytes() const noexcept;
   size_t storageBytes() const noexcept; // Prepared host-owned audio/control storage.
+  void trimSourceReader(AudioTrimSourceReader reader,void *context) noexcept {for(auto &n:nodes_)n->trims.sourceReader(reader,context);}
+  void portTrims(size_t bus,const AudioPortTrims &spec,uint64_t frame) noexcept {if(bus<nodes_.size()){nodes_[bus]->trimSpec=&spec;nodes_[bus]->trims.begin(spec,frame);}}
   bool controls(const std::vector<MixerControls> &) noexcept; // Single control-thread producer.
   bool canQueueControls() const noexcept {return write_.load(std::memory_order_relaxed)-read_.load(std::memory_order_acquire)<controls_.size();}
   void begin(uint32_t frames, uint64_t position) noexcept;
@@ -118,8 +130,12 @@ public:
   float *processorInput(size_t,size_t) noexcept;
   bool finishProcessor(size_t,size_t) noexcept;
   const float *finishBus(size_t) noexcept;
+  const float *processorOutput(size_t processor) const noexcept {return processor<processorStages_.size()&&processorStages_[processor]&&processorStages_[processor]->complete?processorStages_[processor]->work.data():nullptr;}
   const float *busOutput(size_t bus) const noexcept {return bus<nodes_.size()?nodes_[bus]->work.data():nullptr;}
+  const float *masterOutput() const noexcept {return graph_.masterOutputDisconnected?masterSilence_.data():busOutput(plan_.master);}
   const float *busPreFader(size_t bus) const noexcept {return bus<nodes_.size() && nodes_[bus]->stage==3?nodes_[bus]->input.data():nullptr;}
+  void dryBusGain(size_t bus,bool pre,uint32_t frame,float &left,float &right,bool outputTrim=true) const noexcept;
+  void dryRouteGain(RouteKind,size_t,uint32_t frame,float &left,float &right) const noexcept;
   void complete() noexcept;
   uint64_t through() const { return through_; }
   uint32_t currentFrames() const {return frames_;}

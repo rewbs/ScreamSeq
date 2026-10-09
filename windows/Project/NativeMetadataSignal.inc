@@ -1,4 +1,13 @@
+Json trimModulation(const std::vector<AudioTrimModulation> &edges){Json result=Json::array();for(const auto &e:edges)result.push_back({{"source",nativeID(e.source)},{"minimumDB",e.minimumDB},{"maximumDB",e.maximumDB}});return result;}
+Json audioTrims(const AudioPortTrims &t){Json g=Json::array(),l=Json::array(),m=Json::array();for(const auto &[key,value]:t.gains)g.push_back({{"port",key},{"gainDB",value}});for(const auto &[a,b]:t.links)l.push_back({{"input",a},{"output",b}});for(const auto &[key,edges]:t.modulation)m.push_back({{"port",key},{"sources",trimModulation(edges)}});return {{"gains",g},{"links",l},{"modulation",m}};}
+AudioPortTrims decodeAudioTrims(const Json &v){AudioPortTrims t;
+  for(const auto &g:items(v,"gains",512,true))need(t.gains.emplace(text(field(g,"port"),2048),number(field(g,"gainDB"),-48,48)).second,"Duplicate audio trim port");
+  for(const auto &l:items(v,"links",256,true))need(t.links.emplace(text(field(l,"input"),2048),text(field(l,"output"),2048)).second,"Duplicate audio trim link");
+  for(const auto &m:items(v,"modulation",256,true)){std::vector<AudioTrimModulation> edges;for(const auto &e:items(m,"sources",256))edges.push_back({decodeID(field(e,"source")),number(field(e,"minimumDB"),-96,96),number(field(e,"maximumDB"),-96,96)});need(t.modulation.emplace(text(field(m,"port"),2048),std::move(edges)).second,"Duplicate trim modulation port");}
+  t.validate();return t;
+}
 #include "NativeMetadataPresentation.inc"
+#include "NativeMetadataGroupBypass.inc"
 std::string base64(const std::vector<std::byte> &data) {
   static constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   std::string result; result.reserve((data.size()+2)/3*4);
@@ -26,10 +35,10 @@ std::vector<std::byte> decodeBase64(const Json &v) {
   }
   need(data.size() <= 8*1024*1024,"Graph plugin state exceeds 8 MiB"); return data;
 }
-Json recipe(const GraphPluginRecipe &p) { Json parameters=Json::array();for(const auto &[id,value]:p.parameters)parameters.push_back({{"id",id},{"value",value}});return {{"parameters",parameters},{"format",p.format},{"name",p.name},{"path",p.path},{"classID",p.classID},{"type",p.type},{"subtype",p.subtype},{"manufacturer",p.manufacturer},{"state",base64(p.state)},{"inputs",p.inputs},{"outputs",p.outputs},{"bypass",p.bypass}}; }
+Json recipe(const GraphPluginRecipe &p) { Json parameters=Json::array();for(const auto &[id,value]:p.parameters)parameters.push_back({{"id",id},{"value",value}});return {{"parameters",parameters},{"format",p.format},{"name",p.name},{"path",p.path},{"classID",p.classID},{"type",p.type},{"subtype",p.subtype},{"manufacturer",p.manufacturer},{"state",base64(p.state)},{"inputs",p.inputs},{"outputs",p.outputs},{"bypass",p.bypass},{"audioLayout",p.audioLayout}}; }
 GraphPluginRecipe decodeRecipe(const Json &v) {
   GraphPluginRecipe r; r.format = text(field(v,"format"),16); r.name = text(optional(v,"name",""),256); r.path = text(optional(v,"path",""),4096); r.classID = text(optional(v,"classID",""),256);
-  r.type = uint32_t(integer(optional(v,"type",0),0,UINT32_MAX)); r.subtype = uint32_t(integer(optional(v,"subtype",0),0,UINT32_MAX)); r.manufacturer = uint32_t(integer(optional(v,"manufacturer",0),0,UINT32_MAX)); r.state = decodeBase64(optional(v,"state",""));r.bypass=boolean(optional(v,"bypass",false));
+  r.type = uint32_t(integer(optional(v,"type",0),0,UINT32_MAX)); r.subtype = uint32_t(integer(optional(v,"subtype",0),0,UINT32_MAX)); r.manufacturer = uint32_t(integer(optional(v,"manufacturer",0),0,UINT32_MAX)); r.state = decodeBase64(optional(v,"state",""));r.bypass=boolean(optional(v,"bypass",false));r.audioLayout=text(optional(v,"audioLayout",""),8192);
   for(const auto &p:items(v,"parameters",4096,true))need(r.parameters.emplace(uint32_t(integer(field(p,"id"),0,UINT32_MAX)),number(field(p,"value"),-std::numeric_limits<float>::max(),std::numeric_limits<float>::max())).second,"Duplicate graph parameter baseline");
   for (const auto &p : items(v,"inputs",63,true)) r.inputs.push_back(uint32_t(integer(p,1,63)));
   for (const auto &p : items(v,"outputs",63,true)) r.outputs.push_back(uint32_t(integer(p,1,63))); return r;
@@ -37,7 +46,7 @@ GraphPluginRecipe decodeRecipe(const Json &v) {
 #define NODE_NAMES {"input","output","plugin","lfo","follower","random","note-envelope","midi","amount","automation"}
 #define SIGNAL_COMMAND_NAMES {"row","start","stop","clear","amount","wet"}
 Json signalNode(const SignalNode &n) {
-    Json j{{"id",nativeID(n.id)},{"kind",enumName(size_t(n.kind),NODE_NAMES)},{"name",n.name},{"x",n.x},{"y",n.y},{"rate",n.rate},{"phase",n.phase},{"attack",n.attack},{"release",n.release},{"controller",n.controller}};
+    Json j{{"id",nativeID(n.id)},{"kind",enumName(size_t(n.kind),NODE_NAMES)},{"name",n.name},{"x",n.x},{"y",n.y},{"rate",n.rate},{"phase",n.phase},{"attack",n.attack},{"release",n.release},{"controller",n.controller},{"trims",audioTrims(n.trims)},{"muted",n.muted}};
     if (n.kind == SignalNodeKind::Plugin) j["plugin"] = recipe(n.plugin);
     if (n.kind == SignalNodeKind::Automation) { Json envelopes = Json::array(); for (const auto &e : n.envelopes) { Json points = Json::array(); for (const auto &p : e.points) points.push_back(point(p)); envelopes.push_back({{"pattern",nativeID(e.pattern)},{"enabled",e.enabled},{"points",points}}); } j["envelopes"] = std::move(envelopes); }
   return j;
@@ -47,15 +56,15 @@ Json definition(const SignalDefinition &d) {
   for (const auto &n : d.nodes) nodes.push_back(signalNode(n));
   for (const auto &e : d.audio) audio.push_back({{"source",nativeID(e.source)},{"target",nativeID(e.target)},{"output",e.output},{"input",e.input},{"gain",e.gain}});
   for (const auto &e : d.modulation) modulation.push_back({{"source",nativeID(e.source)},{"target",nativeID(e.target)},{"parameter",e.parameter},{"minimum",e.minimum},{"maximum",e.maximum},{"base",e.base},{"enabled",e.enabled},{"quantized",e.quantized}});
-  for(const auto &g:d.groups){Json members=Json::array();for(auto id:g.nodes)members.push_back(nativeID(id));groups.push_back({{"id",nativeID(g.id)},{"parent",g.parent?nativeID(g.parent):""},{"name",g.name},{"x",g.x},{"y",g.y},{"nodes",members}});}
+  for(const auto &g:d.groups){Json members=Json::array();for(auto id:g.nodes)members.push_back(nativeID(id));groups.push_back({{"id",nativeID(g.id)},{"parent",g.parent?nativeID(g.parent):""},{"name",g.name},{"x",g.x},{"y",g.y},{"nodes",members},{"bypass",g.bypass},{"trims",audioTrims(g.trims)},{"dryRoutes",groupDryRoutes(g.dryRoutes)}});}
   return {{"id",nativeID(d.id)},{"number",d.number},{"name",d.name},{"nodes",nodes},{"audio",audio},{"modulation",modulation},{"groups",groups},{"presentation",presentation(d.presentation)}};
 }
 SignalNode decodeSignalNode(const Json &n,unsigned version) {
-    SignalNode node; node.id = decodeID(field(n,"id")); node.kind = SignalNodeKind(enumIndex(field(n,"kind"),NODE_NAMES));
+    SignalNode node; if(n.contains("trims"))node.trims=decodeAudioTrims(n.at("trims"));node.id = decodeID(field(n,"id")); node.kind = SignalNodeKind(enumIndex(field(n,"kind"),NODE_NAMES));
     need(version >= 13 || node.kind != SignalNodeKind::Automation,"Legacy metadata cannot contain graph automation");
     node.name = text(optional(n,"name",""),256); node.x = number(optional(n,"x",0),-100000,100000); node.y = number(optional(n,"y",0),-100000,100000);
     node.rate = number(optional(n,"rate",1),.0001,1024); node.phase = number(optional(n,"phase",0),0,1);
-    node.attack = number(optional(n,"attack",.01),.00001,60); node.release = number(optional(n,"release",.1),.00001,60); node.controller = uint32_t(integer(optional(n,"controller",1),0,127));
+    node.attack = number(optional(n,"attack",.01),.00001,60); node.release = number(optional(n,"release",.1),.00001,60); node.controller = uint32_t(integer(optional(n,"controller",1),0,127));node.muted=boolean(optional(n,"muted",false));
     if (node.kind == SignalNodeKind::Plugin) node.plugin = decodeRecipe(field(n,"plugin")); else need(!n.contains("plugin"),"Only plugin nodes may have a plugin recipe");
     if (node.kind == SignalNodeKind::Automation) for (const auto &e : items(n,"envelopes",1024,true)) {
       SignalPatternEnvelope envelope; envelope.pattern = decodeID(field(e,"pattern")); envelope.enabled = boolean(optional(e,"enabled",true));
@@ -69,21 +78,46 @@ SignalDefinition decodeDefinition(const Json &v, unsigned version) {
   for (const auto &e : items(v,"audio",256)) d.audio.push_back({decodeID(field(e,"source")),decodeID(field(e,"target")),uint32_t(integer(optional(e,"output",0),0,63)),uint32_t(integer(optional(e,"input",0),0,63)),number(optional(e,"gain",1),-16,16)});
   for (const auto &e : items(v,"modulation",256)) d.modulation.push_back({decodeID(field(e,"source")),decodeID(field(e,"target")),u32(e,"parameter"),number(optional(e,"minimum",0),-1,1),number(optional(e,"maximum",1),-1,1),number(optional(e,"base",0),0,1),boolean(optional(e,"enabled",true)),boolean(optional(e,"quantized",false))});
   for(const auto &g:items(v,"groups",64,true)) {
-    SignalGroup group;group.id=decodeID(field(g,"id"));const auto parent=optional(g,"parent","");group.parent=parent==""?0:decodeID(parent);
+    SignalGroup group;if(g.contains("trims"))group.trims=decodeAudioTrims(g.at("trims"));group.id=decodeID(field(g,"id"));const auto parent=optional(g,"parent","");group.parent=parent==""?0:decodeID(parent);
     group.name=text(field(g,"name"),256);group.x=number(optional(g,"x",0),-100000,100000);group.y=number(optional(g,"y",0),-100000,100000);
-    for(const auto &member:items(g,"nodes",64))group.nodes.push_back(decodeID(member));d.groups.push_back(std::move(group));
+    for(const auto &member:items(g,"nodes",64))group.nodes.push_back(decodeID(member));group.bypass=boolean(optional(g,"bypass",false));group.dryRoutes=decodeGroupDryRoutes(optional(g,"dryRoutes",Json::array()));d.groups.push_back(std::move(group));
   }
   if(v.contains("presentation"))d.presentation=decodePresentation(v.at("presentation"));
   compileSignal(d); return d;
 }
-Json songSource(const SignalSongSource &s){auto v=signalNode(s.node);v["audioBus"]=s.audioBus?nativeID(s.audioBus):"";v["audioPlugin"]=s.audioPlugin;v["output"]=s.output;v["preFader"]=s.preFader;v["noteTarget"]=s.noteTarget?nativeID(s.noteTarget):"";v["noteInstrument"]=s.noteInstrument?nativeID(s.noteInstrument):"";v["amount"]=s.amount;return v;}
-SignalSongSource decodeSongSource(const Json &v,unsigned version){SignalSongSource s;s.node=decodeSignalNode(v,version);s.audioBus=optional(v,"audioBus","")==""?0:decodeID(v.at("audioBus"));s.audioPlugin=text(optional(v,"audioPlugin",""),256);s.output=uint32_t(integer(optional(v,"output",0),0,63));s.preFader=boolean(optional(v,"preFader",false));s.noteTarget=optional(v,"noteTarget","")==""?0:decodeID(v.at("noteTarget"));s.noteInstrument=optional(v,"noteInstrument","")==""?0:decodeID(v.at("noteInstrument"));s.amount=number(optional(v,"amount",1),0,1);return s;}
+Json songSource(const SignalSongSource &s){auto v=signalNode(s.node);v["audioBus"]=s.audioBus?nativeID(s.audioBus):"";v["audioStage"]=s.audioStage?nativeID(s.audioStage):"";v["audioPlugin"]=s.audioPlugin;v["output"]=s.output;v["preFader"]=s.preFader;v["noteTarget"]=s.noteTarget?nativeID(s.noteTarget):"";v["noteInstrument"]=s.noteInstrument?nativeID(s.noteInstrument):"";v["amount"]=s.amount;return v;}
+SignalSongSource decodeSongSource(const Json &v,unsigned version){SignalSongSource s;s.node=decodeSignalNode(v,version);s.audioBus=optional(v,"audioBus","")==""?0:decodeID(v.at("audioBus"));s.audioPlugin=text(optional(v,"audioPlugin",""),256);s.audioStage=optional(v,"audioStage","")==""?0:decodeID(v.at("audioStage"));s.output=uint32_t(integer(optional(v,"output",0),0,63));s.preFader=boolean(optional(v,"preFader",false));s.noteTarget=optional(v,"noteTarget","")==""?0:decodeID(v.at("noteTarget"));s.noteInstrument=optional(v,"noteInstrument","")==""?0:decodeID(v.at("noteInstrument"));s.amount=number(optional(v,"amount",1),0,1);return s;}
+Json noteRouting(const NoteRouting &routing) {
+  Json routes=Json::array(),suppressed=Json::array(),sources=Json::array();
+  for(const auto &r:routing.routes)routes.push_back({{"id",nativeID(r.id)},{"sourceKind",r.sourceKind==NoteSourceKind::Channel?"channel":"instrument"},{"source",nativeID(r.source)},{"plugin",r.plugin},{"midiChannel",r.midiChannel},{"enabled",r.enabled}});
+  for(auto id:routing.suppressedAssignments)suppressed.push_back(nativeID(id));
+  for(const auto &s:routing.triggerSources)sources.push_back({{"instrument",nativeID(s.instrument)},{"midiChannel",s.midiChannel}});
+  return {{"routes",routes},{"suppressedAssignments",suppressed},{"triggerSources",sources}};
+}
+NoteRouting decodeNoteRouting(const Json &v) {
+  NoteRouting routing;
+  object(v); // Project metadata tolerates unknown keys for forward compatibility.
+  for(const auto &r:items(v,"routes",512,true)) {
+    object(r);
+    const auto kind=text(field(r,"sourceKind"),16);need(kind=="channel"||kind=="instrument","Invalid note cable source kind");
+    routing.routes.push_back({decodeID(field(r,"id")),kind=="channel"?NoteSourceKind::Channel:NoteSourceKind::Instrument,decodeID(field(r,"source")),text(field(r,"plugin"),256),uint8_t(integer(optional(r,"midiChannel",0),0,16)),boolean(optional(r,"enabled",true))});
+  }
+  for(const auto &id:items(v,"suppressedAssignments",255,true))routing.suppressedAssignments.push_back(decodeID(id));
+  for(const auto &source:items(v,"triggerSources",255,true))routing.triggerSources.push_back({decodeID(field(source,"instrument")),uint8_t(integer(field(source,"midiChannel"),1,16))});
+  return routing;
+}
+Json stageEndpoint(const SignalStageEndpoint &e) {return e.stage?Json{{"stage",nativeID(e.stage)}}:Json{{"plugin",e.plugin}};}
+SignalStageEndpoint decodeStageEndpoint(const Json &v) {
+  object(v);need(v.size()==1&&(v.contains("plugin")!=v.contains("stage")),"Choose one plugin or graph stage endpoint");
+  return {v.contains("plugin")?text(v.at("plugin"),128):std::string{},v.contains("stage")?decodeID(v.at("stage")):0};
+}
 Json signal(const SignalGraph &g) {
   Json library = Json::array(), assignments = Json::array(), instrumentAssignments = Json::array(), commands = Json::array(), lanes = Json::array(), inputs = Json::array(), outputs = Json::array(), layout = Json::array(), groups = Json::array();
-  Json songSources=Json::array(),songModulation=Json::array();
+  Json songSources=Json::array(),songModulation=Json::array(),stageConnections=Json::array();
+  for(const auto &r:g.stageConnections)stageConnections.push_back({{"source",stageEndpoint(r.source)},{"target",stageEndpoint(r.target)},{"output",r.output},{"input",r.input},{"gainDB",r.gainDB},{"enabled",r.enabled}});
   for(const auto &s:g.songSources)songSources.push_back(songSource(s));
   for(const auto &m:g.songModulation)songModulation.push_back({{"source",nativeID(m.source)},{"plugin",m.plugin},{"parameter",m.parameter},{"minimum",m.minimum},{"maximum",m.maximum},{"enabled",m.enabled},{"quantized",m.quantized}});
-  for(const auto &v:g.groups)groups.push_back({{"id",nativeID(v.id)},{"parent",v.parent?nativeID(v.parent):""},{"name",v.name},{"x",v.x},{"y",v.y},{"nodes",v.nodes}});
+  for(const auto &v:g.groups)groups.push_back({{"id",nativeID(v.id)},{"parent",v.parent?nativeID(v.parent):""},{"name",v.name},{"x",v.x},{"y",v.y},{"nodes",v.nodes},{"bypass",v.bypass},{"trims",audioTrims(v.trims)},{"dryRoutes",songGroupDryRoutes(v.dryRoutes)}});
   for (const auto &d : g.library) library.push_back(definition(d));
   auto encodeAssignments = [](const auto &source, Json &out) { for (const auto &a : source) out.push_back({{"target",nativeID(a.target)},{"graph",nativeID(a.graph)},{"amount",a.amount},{"wet",a.wet}}); };
   encodeAssignments(g.assignments,assignments); encodeAssignments(g.instrumentAssignments,instrumentAssignments);
@@ -92,13 +126,17 @@ Json signal(const SignalGraph &g) {
   for (const auto &r : g.inputs) inputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"input",r.input},{"gainDB",r.gainDB},{"preFader",r.preFader}});
   for (const auto &r : g.outputs) outputs.push_back({{"source",nativeID(r.source)},{"target",nativeID(r.target)},{"output",r.output}});
   for (const auto &[key,p] : g.layout) layout.push_back({{"node",key},{"x",p[0]},{"y",p[1]}});
-  return {{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout},{"groups",groups},{"songSources",songSources},{"songModulation",songModulation},{"presentation",presentation(g.presentation)}};
+  Json trims=Json::array();for(const auto &[node,t]:g.trims)trims.push_back({{"node",node},{"trims",audioTrims(t)}});
+  return {{"trims",trims},{"stageConnections",stageConnections},{"library",library},{"assignments",assignments},{"instrumentAssignments",instrumentAssignments},{"commands",commands},{"lanes",lanes},{"inputs",inputs},{"outputs",outputs},{"layout",layout},{"groups",groups},{"songSources",songSources},{"songModulation",songModulation},{"noteRouting",noteRouting(g.noteRouting)},{"presentation",presentation(g.presentation)}};
 }
 SignalGraph decodeSignal(const Json &v, unsigned version) {
-  SignalGraph g;if(v.contains("presentation"))g.presentation=decodePresentation(v.at("presentation"));
+  SignalGraph g;for(const auto &t:items(v,"trims",512,true))need(g.trims.emplace(text(field(t,"node"),256),decodeAudioTrims(field(t,"trims"))).second,"Duplicate audio trim owner");
+  for(const auto &r:items(v,"stageConnections",256,true))g.stageConnections.push_back({decodeStageEndpoint(field(r,"source")),decodeStageEndpoint(field(r,"target")),u32(r,"output",0,63),u32(r,"input",0,63),number(optional(r,"gainDB",0),-96,12),boolean(optional(r,"enabled",true))});
+  if(v.contains("presentation"))g.presentation=decodePresentation(v.at("presentation"));
+  if(v.contains("noteRouting"))g.noteRouting=decodeNoteRouting(v.at("noteRouting"));
   for(const auto &s:items(v,"songSources",64,true))g.songSources.push_back(decodeSongSource(s,version));
   for(const auto &e:items(v,"songModulation",256,true))g.songModulation.push_back({decodeID(field(e,"source")),text(field(e,"plugin"),256),u32(e,"parameter"),number(optional(e,"minimum",0),-1,1),number(optional(e,"maximum",0),-1,1),boolean(optional(e,"enabled",true)),boolean(optional(e,"quantized",false))});
-  for(const auto &entry:items(v,"groups",128,true)) {SignalSongGroup group;group.id=decodeID(field(entry,"id"));group.parent=optional(entry,"parent","")==""?0:decodeID(entry.at("parent"));group.name=text(field(entry,"name"),256);group.x=real(entry,"x",0,100000);group.y=real(entry,"y",0,100000);for(const auto &key:items(entry,"nodes",240))group.nodes.push_back(text(key,256));g.groups.push_back(std::move(group));}
+  for(const auto &entry:items(v,"groups",128,true)) {SignalSongGroup group;if(entry.contains("trims"))group.trims=decodeAudioTrims(entry.at("trims"));group.id=decodeID(field(entry,"id"));group.parent=optional(entry,"parent","")==""?0:decodeID(entry.at("parent"));group.name=text(field(entry,"name"),256);group.x=real(entry,"x",0,100000);group.y=real(entry,"y",0,100000);for(const auto &key:items(entry,"nodes",240))group.nodes.push_back(text(key,256));group.bypass=boolean(optional(entry,"bypass",false));group.dryRoutes=decodeSongGroupDryRoutes(optional(entry,"dryRoutes",Json::array()));g.groups.push_back(std::move(group));}
   for (const auto &d : items(v,"library",128)) g.library.push_back(decodeDefinition(d,version));
   auto assignments = [&](const char *key, auto &out, size_t maximum, bool optionalField) { for (const auto &a : items(v,key,maximum,optionalField)) out.push_back({decodeID(field(a,"target")),decodeID(field(a,"graph")),number(optional(a,"amount",1),0,1),number(optional(a,"wet",1),0,1)}); };
   assignments("assignments",g.assignments,240,false); assignments("instrumentAssignments",g.instrumentAssignments,128,true);

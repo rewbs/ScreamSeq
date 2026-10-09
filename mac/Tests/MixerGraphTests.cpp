@@ -183,6 +183,18 @@ int main() {
     check(loose.detached.empty()&&loose.buses[0].inserts==std::vector<std::string>{"compressor"}&&loose.buses.back().inserts==std::vector<std::string>({"distortion","limiter"}),"Detached insertion changes only its ownership and retains unrelated fallback effects");
     loose.detached={"compressor"};rejects([&]{loose.validate({1,2});},"Owned effects cannot also be marked unconnected");
     loose=disconnected;loose.detached.push_back("compressor");rejects([&]{loose.validate({1,2});},"Duplicate detached references reject before preparation");
+    auto chains=moved;uint64_t freshID=90;
+    detachMixerInserts(chains,rack,{"compressor","distortion"},[&]{return freshID++;});
+    check(chains.buses[2].inserts==std::vector<std::string>{"limiter"}&&chains.detachedChains.size()==1&&chains.detachedChains[0].plugins==std::vector<std::string>({"compressor","distortion"}),"Detach retains a consecutive internal chain and heals its original neighbors");
+    const auto chainSaved=chains;detachMixerInserts(chains,rack,{"compressor","distortion"},[&]{return freshID++;});check(chains==chainSaved&&freshID==91,"Whole detached chain detach is a no-op without identity churn");
+    const auto projected=projectMixerDetachedChains(chains);check(projected.buses.size()==4&&projected.buses.back().id==90&&projected.buses.back().output==0&&chains.buses.size()==3,"Detached root projection is silent and never persists a fake user bus");
+    disconnectMixerInsert(chains,rack,90,"distortion");check(chains.disconnectedMainInputs==std::vector<std::string>{"distortion"}&&chains.detachedChains==chainSaved.detachedChains,"Cut preserves processor ownership/order and marks only the exact implicit input");
+    const auto cutChain=chains;rejects([&]{disconnectMixerInsert(chains,rack,90,"compressor");},"A silent detached root has no cable to cut");check(chains==cutChain,"Invalid silent-head cut is atomic");
+    moveMixerInserts(chains,rack,{"distortion"},90,"distortion");check(chains==chainSaved,"Repatch same input restores only that cable");
+    moveMixerInserts(chains,rack,{"compressor","distortion"},1);check(chains.detachedChains.empty()&&chains.buses[0].inserts==std::vector<std::string>({"compressor","distortion"}),"Moving the complete loose chain adopts one bus and prunes its empty internal root");
+    auto routed=moved;routed.sidechains={{1,"compressor",1}};routed.instruments={{"compressor",2,1}};
+    const auto routes=routed;detachMixerInserts(routed,rack,{"compressor","distortion"},[&]{return freshID++;});
+    check(routed.sidechains==routes.sidechains&&routed.instruments==routes.instruments&&routed.detachedChains.size()==1,"Detach preserves exact incoming detector and outgoing auxiliary branches");routed.validate({1,2});
     std::cout << "PASS mixer graph validation, deterministic topology, insert ownership, sends/groups, solo paths, latency and intentional timing offsets\n";
     return 0;
   } catch (const std::exception &e) { std::cerr << "FAIL " << e.what() << '\n'; return 1; }

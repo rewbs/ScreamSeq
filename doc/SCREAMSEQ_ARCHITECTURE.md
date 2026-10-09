@@ -32,6 +32,22 @@ Sample-instrument graphs are prepared independently per instrument/raw channel a
 
 The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
 
+## Typed native pattern commands
+
+`NativePatternCommands` defines stable native operation IDs and an ordered field catalog with types, units, ranges, defaults and scope. `PatternCommandKind::Native` stores one operation plus eight bounded numeric argument slots; both APIs and metadata expose named parameters, including string choices and boolean switches. The existing seven precise command kinds and tracker byte commands retain their representation. Metadata stays at version 17 during this unreleased extension; readers that do not know the new kind reject it.
+
+`NativePatternRuntime` prepares sample-voice controls and precise note actions; `NativeTimingRuntime` prepares tempo and row-length events against the shared musical clock. Native fields do not reuse tracker effect memory. Numeric sample controls do not write opaque plugin polyphonic state. Plugin parameter/bend commands retain their existing host protocols, and note actions use normal instrument note delivery. The complete legacy-family mapping and discrete/import boundaries are in [Native pattern precision map](NATIVE_PATTERN_PRECISION.md).
+
+Both native grids consume the descriptor catalog. Multiple visible parameter slots share the same draw/hit/focus geometry, with column widths calculated from the current pattern. Raw common onset/duration values remain 65536 units per row; beats are the default display and rows are optional, converted with the pattern's actual rows-per-beat signature. A field edit preserves untouched raw values and the captured cell/revision, so formatting and unit switching cannot silently change another parameter.
+
+## Scratch phrase playback
+
+`editor/ScratchGesture.*` defines the bounded, song-local paired motion/fader library and factory starting gestures. `NativePatternOp::Scratch` (SK) and `ScratchStop` (SX) append to the existing numeric operation enum. The named-parameter catalog drives inline editing on both platforms. `ScratchRuntime` compiles stable pattern/track lookups on the control owner, captures the main sample voice's note generation and cue, and publishes absolute sample positions and fader gains through fixed arrays. Guarded `soundlib/Fastmix.cpp` code uses the retained resampler and physical sample bounds. NNA/preview/plugin voices do not inherit the state.
+
+The native metadata17 `scratchGestures` array is optional on read and canonical on save. A missing old array is an empty library, not data loss. File recovery isolates malformed phrases before dependent pattern commands; canonical saves and mutations remain strict. Pattern clipboard payloads carry used definitions and remap collisions atomically. Mac and Windows implement `scratch.gestures.get/set/remove` with revision guards, no-op detection and unified history. A prepared `ScratchGestureLibrary` handoff uses `RealtimeTransition`, preserves active phase/cue, and retires old storage on the control owner. Phrase curve changes and their Undo/Redo can run during playback; structural pattern-event edits retain the existing transport behavior.
+
+The native Mac scratch editor shares `AutomationCanvas` and the formula workbench; the Windows editor uses Win32 controls and Direct2D paired curves. Optional canvas units/endpoint limits preserve the normal automation editor's defaults. Scratch formula previews use `scratchBeats` so formula beat variables match the runtime cycle duration. `scratch.gestures.clone` optionally replaces one captured SK reference in the same history transaction. Captured navigation uses stable pattern/track identities; resolving Return or Preview does not rebase a guarded pattern mutation. See [Scratch phrases](SCREAMSEQ_SCRATCH_PHRASES.md) for musical semantics and boundaries.
+
 ## Build and qualification
 
 Windows: `./windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-dev -Test`.
@@ -92,10 +108,13 @@ UI creation then assigns the new slot as the next edit in unified chronological 
 
 ## Unified pattern FX (current native format)
 
-The sole native project format is outer plist version 6 / native metadata 17.
-Historical native wrapper, metadata and RSONGS1 migrations are removed. Original
-OpenMPT module loading remains. Earlier version references in this document are
-feature history, not accepted alternative encodings.
+Canonical saves use outer plist version 6 / native metadata 17. File opening
+recovers incompatible wrappers and metadata best effort, warns about converted,
+ignored or omitted data, and protects the original with Save a copy. Required
+embedded song/snapshot decoding remains bounded and atomic; a corrupt core
+cannot be recovered by inventing song data. Mutation and canonical-save
+validators remain strict. Legacy NF/NR row-unit durations convert to beats using
+the embedded pattern signature. Original OpenMPT module loading remains.
 
 Every channel exposes 1–8 equal FX columns. `PatternCommandKind::TrackerEffect`
 is kind 5, with source-format `effect` / `parameter` bytes. Columns are zero-based;
@@ -150,9 +169,12 @@ vendor-internal DSP modulation.
 The macOS Parameter activity inspector/API supplies source navigation and a
 revision-guarded recorded-point editor. Recorded point mutations reuse existing
 absolute automation storage and the plugin-state portion of unified chronological
-Undo; no metadata version is added. These recorded-point mutations require stopped
-playback and reject without stopping an active transport. Viewing and navigating
-existing points does not require a live processor or stop playback.
+Undo; no metadata version is added. Mac and Windows publish a bounded immutable
+recorded timeline at a render boundary. The worker prepares device-rate points
+and baseline catch-up before history changes; queue refusal leaves transport and
+both histories intact. A manual-queue fence orders earlier controls before the
+new timeline and later controls after it. Removed lanes restore their saved
+manual baseline. Viewing points does not require a prepared processor.
 Monitor identities are document scoped externally and distinguish graph roles,
 bus uses, sample-instrument channels and the independent inspector copy.
 The shared monitor is available to Windows hosting; a Windows-native panel/API
@@ -167,27 +189,41 @@ render thread releases it. Requested, rendered and failed revisions are distinct
 Superseded pending candidates are reclaimed off the callback. `commitStopped`
 requires a quiescent device and is not a concurrent publication shortcut.
 
-`MixerTransition` compiles the union of old/new dependencies. Retained vendors
-advance once per interval, with changed inputs interpolated before processing;
-changed outputs use a 10 ms sample-clock linear fade. Equivalent delay/fader
-histories retain state, including a prepared per-chunk cache so a delay cannot
-advance twice. `reusableMixerProcessors` and `MixerTransitionReuse` compare input
-expressions, stable identities, taps, gains, ports, latency and upstream state;
-identity alone does not prove two processing paths equivalent. The combined host
-storage is bounded. A cycle in the transition union, incompatible latency or an
-unprepared source/port change rejects before the document or transport changes.
+`MixerTransition` uses the union of old/new dependencies when retained vendors
+can advance once per interval while their changed inputs interpolate. Changed
+outputs use a 10 ms sample-clock linear fade. A union cycle or changed latency
+instead selects a prepared, latency-aligned dry bridge: old wet fades out,
+prepared audio bindings switch at a render-chunk boundary, and new wet fades in.
+Each accepted graph must still be acyclic. Equivalent delay/fader histories
+retain state; per-chunk caches prevent a retained processor or delay from
+advancing twice. `reusableMixerProcessors` and `MixerTransitionReuse` compare
+input expressions, stable identities, taps, gains, ports, latency and upstream
+state. Identity alone does not prove two paths equivalent. Preparation and all
+retained plans share a bounded storage budget.
 
-The Mac host enables this path for supported effect Add/Remove, reorder,
-detach/insert and bus routing, including grouped Undo/Redo. Fixed OpenMPT source
-adapter slots and held instrument state remain stable while effect catalogs
-change. Disconnected effects continue processing silence. Prepared built-in
-detector inputs and AU input storage allow live auxiliary-input connection;
-unprepared VST3 bus activation and new outputs still require stopped preparation.
-Arbitrary latency changes, new instrument adapters and instrument-assignment
-changes have no seamless handoff yet. A rejected live edit leaves the previous
-audible plan playing and reports the reason; it does not silently stop/restart.
-Windows shares the executor, model and storage, but its structural-edit adapter
-still uses stopped preparation. Portable tests are not a Windows app qualification.
+Both native session adapters prepare effect and instrument Add/Remove, reorder,
+detach/insert, routing, assignment and native-only Undo/Redo before committing
+history. Retained vendors preserve DSP state. Prepared source binding tables
+release notes owned by removed assignments; new destinations wait for the next
+note-on. Sample-graph adapters use reserved slots and prepared copy tables.
+Disconnected effects continue processing silence. Native AU/VST3 providers
+prepare supported physical buses and expose every channel through stereo or
+odd-mono logical ports; a first live cable uses this capacity without vendor
+activation. Saved `audioLayout` fingerprints prevent a changed physical layout
+from silently retargeting a logical port. Unsupported layout, capacity or
+preparation changes reject while the accepted plan and transport continue.
+
+Serial-guarded vendor latency snapshots prepare new mixer and bypass delays;
+audio adoption acknowledges only the accepted snapshot. Compatible effect rack
+presets prepare replacement vendors and crossfade through the stable facade,
+retaining scheduled automation. Instrument presets, changed physical layouts,
+latency-changing presets and incompatible parameter catalogs require stopped
+playback. Ordinary routing edits never reload saved opaque state. Grouped
+rack/routing Undo stages both domains before publishing. Windows uses the same
+prepared plans through native-only document/history commit callbacks.
+Windows-native worker CI is the execution gate for that platform; Mac-hosted
+adapter tests establish neither Windows-native execution nor desktop/device
+behavior. Current results and pending qualification belong in dated reports.
 
 Per-plan meter maps and the bounded append-only signal-port catalog publish
 stable identities and meter slots together. Failed preparation cannot publish
@@ -210,9 +246,21 @@ every affected copy, validates matching descriptor, ports, latency and parameter
 catalogs, then adopts all at one boundary with a 10 ms old/new vendor-output fade.
 Unchanged node vendors stay intact. Parameter ramps feed both sides during the
 fade, and producer-owned snapshots retain old instances until safe retirement.
-This handles hidden preset state as well as exposed values; it does not enable
-arbitrary recipe node/edge topology or incompatible vendor state changes. Recipe
-storage, replacement buffers and conservative tails remain budgeted off-thread.
+This handles hidden preset state as well as exposed values. Structural recipe
+edits take a separate prepared copy-set path: retained graph/node/role identities
+reuse their endpoints and runtime histories, new copies and ports prepare off
+thread, and removed copy observation domains retire at audio handoff. Copy
+membership and source bindings switch with mixer routing through the dry bridge.
+Producer-owned snapshots retain inactive copies needed for reuse and Undo;
+transient copy tables and retained vendor storage are accounted separately.
+Recipe storage, replacement buffers and conservative tails remain budgeted off
+thread. Incompatible opaque vendor state still rejects before commit.
+
+Typed outer stage routes address the aggregate channel/bus recipe stack:
+Row, persistent and ordinary copies share its auxiliary input, and audible
+outputs sum with their active/tail gains and latency alignment. Instrument
+copies are separate. An aggregate stage endpoint does not identify one selected
+copy; arbitrary outer audio routing to a specific copy is not supported.
 
 `hosted/SongModulationHost` evaluates song-level LFO, envelope, random, MIDI,
 amount, scoped note-envelope and current-block audio-follower sources against
@@ -238,15 +286,19 @@ belong in the dated qualification record; source support is not a claim that
 every third-party plugin or machine has passed live UI/audio qualification.
 
 
-### Pulling out a rack processor
+### Detached effect chains and exact main cable cuts
 
-`mixer.inserts.detach` uses the shared `detachMixerInsert` transaction to remove
-one existing effect from its serial owner, heal that main path and retain the
-processor as explicitly disconnected. The existing `MixerGraph.detached` storage
-clocks it on silence; it cannot fall back onto Master. State, parameter bindings
-and identity survive, and optional dragged position belongs to the same Undo.
-Mac and Windows adapters expose the same strict guarded operation. Explicit
-auxiliary input/output routes reject without dropping branches. A disconnected
-multi-processor chain still needs a representation for its internal cables; this
-operation therefore accepts exactly one processor rather than silently splitting
-a selected chain. Recipe `graph.nodes.detach` remains the chain-capable path.
+`mixer.inserts.detach` uses shared `detachMixerInserts` to remove a consecutive
+segment, heal its old serial path, and retain internal order and auxiliary
+branches. Isolated effects use `MixerGraph.detached`; connected loose segments
+use stable `detachedChains` records. `projectMixerDetachedChains` adds neutral
+silent scheduler roots only to the prepared graph; no fake buses enter song data.
+The projected head has no implicit main cable, while explicit input0 fan-in
+remains available. Moving a whole chain back into a bus prunes its empty root.
+
+Cut is separate from detach/heal. `disconnectedMainInputs` suppresses only the
+implicit serial contribution immediately before explicit main-input fan-in;
+`masterOutputDisconnected` masks only the final output. Upstream processors and
+raw observations remain warm. Stable semantic cable removal, reconnection and
+optional dragged/group positions share guarded API transactions and one Undo.
+Current rendered/adapter evidence belongs in the dated qualification report.

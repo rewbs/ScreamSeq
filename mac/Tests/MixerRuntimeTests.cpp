@@ -70,6 +70,35 @@ std::vector<float> render(MixerGraph graph, uint32_t block, uint32_t rate) {
   check(mixer->meters().size() == 5 && mixer->meters()[4].left > 0, "Meters are independently readable after rendering");
   return output;
 }
+void detachedAndCutRoutes() {
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,4096u})for(unsigned scenario=0;scenario<5;++scenario){
+    MixerGraph graph;graph.buses={{1,10,MixerBusKind::Track,"Track"},{2,10,MixerBusKind::Track,"Detector"},{10,0,MixerBusKind::Master,"Main"}};
+    graph.buses[0].inserts={"a","b"};
+    if(scenario==1||scenario==2)graph.disconnectedMainInputs={"b"};
+    if(scenario==2)graph.sidechains={{2,"b",0,0,false,true}};
+    if(scenario>=3){graph.buses[0].inserts.clear();graph.detachedChains={{20,{"a","b"}}};graph.sidechains={{2,"a",0,0,false,true}};graph.instruments={{"b",10,0}};}
+    if(scenario==4)graph.masterOutputDisconnected=true;
+    const std::vector<MixerProcessorInfo> catalog{{"a",0,0},{"b",0,0}};
+    auto runtime=std::make_unique<MixerRuntime>(graph,compileMixer(graph,{1,2},catalog,rate),rate);
+    struct State {std::array<uint64_t,2> through{};bool fault=false;} state;
+    const auto process=[](void *p,size_t index,float *audio,uint32_t frames,uint64_t position)noexcept{
+      auto &s=*static_cast<State *>(p);if(index>=2||s.through[index]!=position){s.fault=true;return false;}
+      s.through[index]=position+frames;for(uint32_t i=0;i<frames*2;++i)audio[i]*=index?3.f:2.f;return true;
+    };
+    std::array<float,4096> left{},right{};uint64_t allocations=0,frees=0,locks=0;
+    const float expected=scenario==0?1.625f:scenario==1?.125f:scenario==2?.5f:1.125f;
+    for(uint32_t position=0;position<5000;){const auto count=std::min(block,5000-position);
+      tracker_audit_begin();runtime->begin(count,position);
+      for(auto bus:runtime->plan().order){const float direct=bus==0?.25f:bus==1?.125f:0.f;std::fill_n(left.data(),count,direct);std::fill_n(right.data(),count,direct);runtime->process(bus,left.data(),right.data(),process,&state);}
+      runtime->complete();tracker_audit_end(&allocations,&frees,&locks);
+      check(allocations+frees+locks==0&&!runtime->failed()&&!state.fault,"Detached/cut rendering must remain allocation-free and clock every vendor once");
+      for(uint32_t i=0;i<count*2;++i){check(runtime->busOutput(runtime->plan().master)[i]==expected,"A main cut must not heal or discard explicit summed input; detached chains retain order and branches");check(runtime->masterOutput()[i]==(scenario==4?0.f:expected),"Master cut must silence only terminal output");}
+      position+=count;
+    }
+    check(state.through[0]==5000&&state.through[1]==5000,"Cut and detached processors remain continuously warm");
+    if(scenario==4)check(runtime->meters()[runtime->plan().master].left>0,"Disconnected Master keeps meaningful wet meters");
+  }
+}
 void liveMeterRegistration() {
   auto observation=std::make_unique<SignalObservation>(48000);
   const auto first=observation->add({"first","first","First",true});
@@ -315,6 +344,25 @@ void processorBypass() {
   for(auto rate:{44100u,48000u,96000u})check(render(17,rate)==render(512,rate)&&render(512,rate)==render(4096,rate),"Bypass fade is callback-partition invariant");
   ProcessorBypass source;source.prepare(48000,0,true,true);std::array<float,1024> audio{};audio.fill(.5f);source.begin(audio.data(),512);source.finish(audio.data(),512);check(audio[0]==0&&audio.back()==0,"An initially bypassed instrument is silent, not dry sample pass-through");
   source.set(false);source.begin(audio.data(),512);audio.fill(.5f);source.finish(audio.data(),512);check(audio[0]==0&&audio[480]==.5f,"An instrument fades back to its continuously running processor output");
+  auto liveDelay=[](uint32_t block,uint32_t rate){
+    ProcessorBypass bypass;bypass.prepare(rate,13,false,true);
+    auto next=bypass.prepareLatency(71);std::vector<float> result(2200*2);std::array<float,8192> samples{};
+    const auto fade=uint32_t(std::round(rate*.005));
+    for(uint32_t at=0;at<2200;){auto count=std::min(block,2200-at);if(at<1000)count=std::min(count,1000-at);
+      if(at==1000)bypass.adoptLatency(*next);
+      for(uint32_t i=0;i<count*2;++i)samples[i]=float(.25+.1*std::sin((at*2+i)*.013));
+      uint64_t a,f,l;tracker_audit_begin();bypass.begin(samples.data(),count);std::fill_n(samples.data(),count*2,0);bypass.finish(samples.data(),count);tracker_audit_end(&a,&f,&l);
+      check(a+f+l==0,"Prepared bypass latency growth performs no allocation, disposal or lock");std::copy_n(samples.data(),count*2,result.data()+at*2);at+=count;
+    }
+    for(uint32_t frame=71;frame<2200;++frame)for(uint32_t channel=0;channel<2;++channel){
+      const auto input=[&](uint32_t delay){return float(.25+.1*std::sin(((frame-delay)*2+channel)*.013));};
+      const auto t=std::clamp((double(frame)-1071)/fade,0.,1.);const auto mix=t*t*(3-2*t);
+      const auto expected=float(input(13)+(input(71)-input(13))*mix);
+      check(std::abs(result[frame*2+channel]-expected)<1e-7,"Latency adoption retains old audible dry history while the new ring warms and crossfades");
+    }
+    check(bypass.latencyReady(),"Prepared dry-delay transition settled");return result;
+  };
+  for(auto rate:{44100u,48000u,96000u})check(liveDelay(17,rate)==liveDelay(512,rate)&&liveDelay(512,rate)==liveDelay(4096,rate),"Live dry latency transitions are callback-partition invariant");
 }
 void impulse(const std::vector<float> &out, std::vector<std::pair<size_t, float>> expected) {
   for (size_t i = 0; i < out.size() / 2; ++i) {
@@ -517,6 +565,7 @@ int main() {
       [](void *, size_t, float *data, uint32_t frames, uint64_t) noexcept { std::fill_n(data, frames * 2, std::numeric_limits<float>::max()); return true; }, nullptr);
     guard->complete();
     check(guard->failed() && silenced[0] == 0 && silenced[1] == 0, "Post-fader overflow is silenced before reaching the integer output mixer");
+    detachedAndCutRoutes();
     liveMeterRegistration();
     currentPlanMeters();
     exactRouteTaps();

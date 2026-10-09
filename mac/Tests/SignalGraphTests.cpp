@@ -58,6 +58,15 @@ static void discreteModulation() {
   auto continuous=sum;for(auto &m:continuous.modulation)m.quantized=false;
   SignalRuntime switchable(continuous,compileSignal(continuous),48000,metadata);SignalControls controls(sum,48000);switchable.controls(controls);check(switchable.render(audio.data(),32,0,{},fixture.callbacks())&&fixture.values[0]==.5,"Prepared parameter steps support live mode-only changes");
 }
+static void sourceMute() {
+  auto d=graph();d.nodes.push_back({4,SignalNodeKind::NoteEnvelope,"Note"});d.modulation={{4,2,0,.2,.6,.1,true}};
+  SignalRuntime runtime(d,compileSignal(d),48000),reference(d,compileSignal(d),48000);runtime.note(true);reference.note(true);
+  auto muted=d;muted.nodes.back().muted=true;SignalControls quiet(muted,48000),audible(d,48000);runtime.controls(quiet);Fixture a,b;std::array<float,1024> x{},y{};
+  check(runtime.render(x.data(),512,0,{},a.callbacks())&&reference.render(y.data(),512,0,{},b.callbacks()),"Muted source render failed");
+  for(unsigned i=0;i<512;++i)check(a.values[i]==.1,"Recipe mute must suppress its nonzero minimum as well as its variable contribution");
+  runtime.controls(audible);check(runtime.render(x.data(),512,512,{},a.callbacks())&&reference.render(y.data(),512,512,{},b.callbacks()),"Unmuted source render failed");
+  for(unsigned i=512;i<1024;++i)check(a.values[i]==b.values[i],"Muted recipe source history must continue advancing");
+}
 static void sourceRuntimeTransfer() {
   auto before=graph();before.audio.push_back({1,3});
   before.nodes.push_back({4,SignalNodeKind::Follower,"Follower"});before.nodes.back().attack=.003;before.nodes.back().release=.007;
@@ -68,14 +77,13 @@ static void sourceRuntimeTransfer() {
   after.modulation.push_back({5,2,0,0,.2,.1,true});after.modulation.push_back({6,2,0,0,.1,.1,true});
   SignalGraph a,b;a.library={before};a.assignments={{10,before.id}};b=a;b.library={after};
   check(sameSignalSourceLayout(a,b)&&!sameSignalControlLayout(a,b),"Source topology is a distinct prepared operation");
-  for(auto kind:{SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::Automation}){auto candidate=b;candidate.library[0].nodes[1].kind=kind;check(sameSignalSourceLayout(a,candidate),"Stateless and scripted sources can be prepared independently of vendors");}
-  for(unsigned changed=0;changed<5;++changed){auto candidate=b;
-    if(changed==0)candidate.library[0].nodes.push_back({7,SignalNodeKind::NoteEnvelope,"New note scope"});
+  for(auto kind:{SignalNodeKind::LFO,SignalNodeKind::Random,SignalNodeKind::Automation,SignalNodeKind::NoteEnvelope}){auto candidate=b;candidate.library[0].nodes[1].kind=kind;check(sameSignalSourceLayout(a,candidate),"Stateless and scripted sources can be prepared independently of vendors");}
+  for(unsigned changed=1;changed<5;++changed){auto candidate=b;
     if(changed==1)candidate.library[0].audio[0].target=3;
     if(changed==2)candidate.library[0].nodes[2].plugin.inputs={1};
     if(changed==3)candidate.assignments[0].target=11;
     if(changed==4)candidate.library[0].nodes[2].id=88;
-    check(!sameSignalSourceLayout(a,candidate),"Live sources must not relax processors, audio paths, ports, assignments or note scope");
+    check(!sameSignalSourceLayout(a,candidate),"Live sources must not relax processors, audio paths, ports or assignments");
   }
   const std::vector<SignalProcessorInfo> metadata{{2,13,1,1}};
   for(uint32_t block:{1u,17u,512u}){
@@ -98,6 +106,7 @@ static void sourceRuntimeTransfer() {
 int main(){try{
   discreteModulation();
   sourceRuntimeTransfer();
+  sourceMute();
   auto patch=graph();patch.nodes.push_back({4,SignalNodeKind::Plugin,"Insert A"});patch.nodes.push_back({5,SignalNodeKind::Plugin,"Insert B"});patch.nodes.push_back({6,SignalNodeKind::LFO,"Mod"});patch.modulation={{6,4,7,.1,.8,.2,true}};
   patch.audio.push_back({4,5,0,0,.7});auto originalPatch=patch;
   insertSignalNodes(patch,{5,4},0);
@@ -118,7 +127,9 @@ int main(){try{
   check(grouped.nodes==patch.nodes&&grouped.audio==patch.audio&&grouped.modulation==patch.modulation,"Grouping preserves processor state, automation identities and every boundary cable");
   SignalGraph beforeGroup,afterGroup;beforeGroup.library={patch};afterGroup.library={grouped};
   beforeGroup.assignments={{10,patch.id}};afterGroup.assignments=beforeGroup.assignments;
-  check(sameSignalProcessing(beforeGroup,afterGroup),"A processing boundary never restarts or recompiles DSP");
+  check(!sameSignalProcessing(beforeGroup,afterGroup)&&!sameSignalControlLayout(beforeGroup,afterGroup),"A new processing boundary prepares dry-path buffers while retaining hosted processor identities");
+  auto renamedGroup=afterGroup;renamedGroup.library[0].groups[0].name="Renamed";renamedGroup.library[0].groups[0].x+=10;check(sameSignalProcessing(afterGroup,renamedGroup),"Group labels and movement remain presentation-only");
+  auto bypassedGroup=afterGroup;bypassedGroup.library[0].groups[0].bypass=true;check(!sameSignalProcessing(afterGroup,bypassedGroup)&&sameSignalControlLayout(afterGroup,bypassedGroup),"Existing group bypass uses prepared controls without recompiling the boundary");
   groupSignalNodes(grouped,{4},201,200,"Nested");
   check(grouped.groups[0].nodes==std::vector<uint64_t>{5}&&grouped.groups[1].nodes==std::vector<uint64_t>{4}&&grouped.groups[1].parent==200,"Nested groups own only their immediate members");
   const auto groupedBefore=grouped;
@@ -149,7 +160,8 @@ int main(){try{
   groupSongSignalNodes(songGroups,{"plugin:a","plugin:b"},{},501,0,"Rack pair");
   groupSongSignalNodes(songGroups,{"plugin:c"},{501},502,0,"Nested rack");
   check(songGroups.groups.size()==2&&songGroups.groups[0].parent==502,"Song groups keep rack identities and support nesting");
-  check(sameSignalProcessing(songGroups,ungroupedSong),"Presentation grouping must not rebuild or change audio processing");
+  check(!sameSignalProcessing(songGroups,ungroupedSong)&&!sameSignalControlLayout(songGroups,ungroupedSong),"A song processing boundary prepares its exact-route wrapper without replacing rack identities");
+  auto movedSongGroup=songGroups;moveSongSignalGroup(movedSongGroup,502,350,180);check(sameSignalProcessing(songGroups,movedSongGroup),"Moving song group presentation does not recompile DSP");
   const auto beforeBadGroup=songGroups;rejects([&]{groupSongSignalNodes(songGroups,{"plugin:a"},{},503,0,"Wrong depth");});check(songGroups==beforeBadGroup,"Rejected song grouping is atomic");
   rejects([&]{groupSongSignalNodes(songGroups,{"plugin:a","plugin:a"},{},503,501,"Duplicate");});
   moveSongSignalGroup(songGroups,502,250,150);check(songGroups.layout.at("plugin:a")==std::array<double,2>{250,150}&&songGroups.layout.at("plugin:c")==std::array<double,2>{750,150},"Song group drag moves every descendant");

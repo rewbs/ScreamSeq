@@ -103,7 +103,7 @@
       at(nameLabel,14,76,36,22);at(sampleName,54,72,w-730,26);const float p=w-668;
       at(rateLabel,p,76,50,22);at(sampleRate,p+54,72,74,26);at(volumeLabel,p+138,76,28,22);at(sampleVolume,p+170,72,46,26);at(panLabel,p+224,76,28,22);at(samplePan,p+258,72,52,26);at(applySettings,p+320,72,122,26);at(discardSettings,p+450,72,88,26);at(replaceSample,p+546,72,108,26);
       float x=14;for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{fit,50.f},{zoomIn,38.f},{zoomOut,38.f},{zoomSelection,116.f},{panLeft,56.f},{panRight,56.f},{channels,120.f},{drawMode,84.f},{audition,92.f},{createInstrument,154.f}}){at(id,x,110,width,id==channels?180:28);x+=width+6;}
-      at(viewLabel,14,150,48,20);at(viewStart,66,146,88,26);at(viewEnd,160,146,88,26);at(setView,254,146,84,26);at(helpLabel,350,148,w-364,24);
+      at(viewLabel,14,150,48,20);at(viewStart,66,146,88,26);at(viewEnd,160,146,88,26);at(setView,254,146,84,26);at(helpLabel,350,148,w-(record_?512:364),24);at(recordSample,w-148,146,134,26,bool(record_));
       const auto selectionY=h-334;at(rangeLabel,14,selectionY+3,64,22);at(rangeStart,82,selectionY,88,26);at(rangeEnd,176,selectionY,88,26);at(setRange,270,selectionY,86,26);at(all,362,selectionY,52,26);
       at(copy,434,selectionY,66,26);at(cut,506,selectionY,60,26);at(erase,572,selectionY,70,26);at(copyNew,648,selectionY,118,26);
       const auto tabsY=h-296;const auto tabWidth=(w-52)/5;for(int index=0;index<5;++index)at(pageDraw+index,14+index*(tabWidth+6),tabsY,tabWidth,30);

@@ -1,5 +1,34 @@
 import AppKit
 
+struct AssetCatalogueEntry: Equatable {
+  let index: Int, identity: String, name: String
+  init(_ value: [String: Any], fallback: String) {
+    index=value["index"] as? Int ?? 1
+    identity=value["id"] as? String ?? ""
+    name=value["name"] as? String ?? fallback
+  }
+}
+
+// Following an asset depends on the musical target, not every song revision.
+// In particular, changing the input instrument on an empty row must refresh it.
+enum WorkspaceAssetContext {
+  // A pinned panel still permits an explicit picker selection. Its caption
+  // describes the loaded editor, independently of cursor-following policy.
+  static func updateCaption(_ panel: WorkspacePanel?, index: Int, hasDraft: Bool) {
+    guard let panel, panel.id == "samples" || panel.id == "instruments" else { return }
+    let caption = (hasDraft ? "Draft held · " : "") + "\(panel.id == "samples" ? "Sample" : "Instrument") \(index)"
+    if panel.target.stringValue != caption { panel.target.stringValue = caption }
+  }
+  static func token(panel: String, model: PatternModel, row: Int, channel: Int, input: Int) -> String {
+    let cell=model.cell(row,channel),instrument=cell[1]>0 ? Int(cell[1]):input
+    let instrumentMode = !model.instruments.isEmpty
+    let catalogue=instrumentMode ? model.instruments:model.samples
+    let identity=catalogue.first{$0["index"] as? Int==instrument}?["id"] as? String ?? ""
+    let key=panel=="samples" && instrumentMode ? Int(cell[0]):0
+    return "asset:\(model.pattern):\(row):\(channel):\(instrumentMode):\(instrument):\(identity):\(key)"
+  }
+}
+
 // Compare against displayed values rather than focus: a musician can leave a
 // text field to edit the pattern without losing its uncommitted contents.
 final class AssetFieldDraft {
@@ -56,6 +85,7 @@ func labeled(_ label: String, _ control: NSView) -> NSStackView {
 }
 
 final class SampleEditor: NSView, NSTextFieldDelegate {
+  private var catalogue: [AssetCatalogueEntry] = []
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
@@ -143,6 +173,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     didSet { if index != oldValue { sampleGeneration += 1; loopSaveWork?.cancel();loopSaveWork=nil;waveform.selectedLoopMarker=nil;waveform.draggingLoop=false; loopDraftBaseline=nil;loopDraftRevision=nil;loopPreviewSignature=nil;loopPreviewRevision=nil;savedLoopInfo=[:]; retireWaveform(); waveform.setViewport(nil, notify: false); waveform.selection = nil; previewSignature = nil; previewRevision = nil; resetPastePreview();crossfadePreviewSignature=nil;crossfadePreviewRevision=nil } }
   }
   var onMessage: ((String) -> Void)?
+  var onRecord: (() -> Void)?
   var onSelect: ((Int) -> Void)?, onImport: (() -> Void)?, onReplace: (() -> Void)?,
     onPreview: ((Int) -> Void)?,
     onSettings: (([String: Any]) -> Void)?,
@@ -154,14 +185,17 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     picker.target = self
     picker.action = #selector(selectSample)
     picker.fixed(width: 180)
-    let top = stack(
-      .horizontal,
-      [
-        heading, NSView(), picker,
-        ActionButton("Browse…", symbol: "square.and.arrow.down") { [weak self] in self?.onImport?()
-        }, ActionButton("Replace…") { [weak self] in self?.onReplace?() },
-        ActionButton("Audition", symbol: "play.fill") { [weak self] in self?.onPreview?(61) },
-      ], spacing: 8)
+    // Keep recording visible in a narrow dock instead of pushing it beyond the
+    // sample picker into the inspector's horizontal scroll area.
+    let top = stack(.vertical, [
+      stack(.horizontal, [heading, picker, NSView()], spacing: 8),
+      stack(.horizontal, [
+        ActionButton("Record…", symbol: "mic") { [weak self] in self?.onRecord?() },
+        ActionButton("Browse…") { [weak self] in self?.onImport?() },
+        ActionButton("Replace…") { [weak self] in self?.onReplace?() },
+        ActionButton("Audition") { [weak self] in self?.onPreview?(61) },
+      ], spacing: 8),
+    ], spacing: 8)
     heading.lineBreakMode = .byTruncatingTail
     heading.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     name.setAccessibilityLabel("Sample name")
@@ -325,15 +359,20 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       self.previewRevision = dryRun ? result["revision"] as? String : nil
     }
   }
+  func updateCatalogue(_ samples: [[String: Any]]) {
+    let next=samples.map{AssetCatalogueEntry($0,fallback:"Sample")}
+    if next != catalogue {
+      catalogue=next;picker.removeAllItems()
+      for entry in next {
+        picker.addItem(withTitle:String(format:"%02d  ",entry.index)+entry.name)
+        picker.lastItem?.tag=entry.index
+      }
+    }
+    if picker.selectedItem !== picker.menu?.item(withTag:index) {picker.select(picker.menu?.item(withTag:index))}
+  }
   func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil) {
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
-    picker.removeAllItems()
-    for s in samples {
-      let i = s["index"] as? Int ?? 1
-      picker.addItem(withTitle: String(format: "%02d  ", i) + (s["name"] as? String ?? "Sample"))
-      picker.lastItem?.tag = i
-    }
-    picker.selectItem(withTag: index)
+    updateCatalogue(samples)
     heading.stringValue = "Sample"
     name.stringValue = info["name"] as? String ?? ""
     let frames = info["frames"] as? Int ?? 0
@@ -557,6 +596,7 @@ final class EnvelopeView: NSView {
 }
 
 final class InstrumentEditor: NSView, NSTextFieldDelegate {
+  private var catalogue: [AssetCatalogueEntry] = [], sampleCatalogue: [AssetCatalogueEntry] = []
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
@@ -587,6 +627,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   var onEnvelopeTools: ((Int) -> Void)?
   var onEnvelopeBank: ((Int) -> Void)?
   var onPluginAssignment: (() -> Void)?
+  var onRecord: (() -> Void)?
   var onNewPluginInstrument:(()->Void)?
   let pluginSummary = Theme.label("Sample instrument", size: 12, color: Theme.muted)
   var envelopeToolsButton: ActionButton!
@@ -673,7 +714,8 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
         top,
         stack(.horizontal,[ActionButton("New sample instrument",prominent:true){[weak self] in self?.onCreate?()},
           ActionButton("New plugin instrument…",prominent:true){[weak self] in self?.onNewPluginInstrument?()},
-          ActionButton("Import…"){[weak self] in self?.onImport?()},NSView()],spacing:8),
+          ActionButton("Import…"){[weak self] in self?.onImport?()},
+          ActionButton("Record…",symbol:"mic"){[weak self] in self?.onRecord?()},NSView()],spacing:8),
         stack(.horizontal, [ActionButton("Play instrument with keys") { [weak self] in guard let self else{return};self.window?.makeFirstResponder(self) }, pluginSummary, NSView(), ActionButton("Assign instrument plugin…") { [weak self] in self?.onPluginAssignment?() }], spacing: 8),
         Theme.label("Z–M / Q–U preview this instrument with its keymap and enabled envelopes. Sample inspector previews raw samples.", size: 11, color: Theme.muted),
         stack(.horizontal, [envelopeType, envelopeToolsButton!, ActionButton("Envelope bank…"){[weak self] in guard let self,self.envelope.canEdit() else{return};self.onEnvelopeBank?(self.envelopeType.indexOfSelectedItem)}, NSView(), filter], spacing: 8),
@@ -759,26 +801,36 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     guard !values.isEmpty else { return }
     values["envelope"] = envelopeType.indexOfSelectedItem; onApply?(values)
   }
-  func update(_ info: [AnyHashable: Any], model: PatternModel) {
-    let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
-    picker.removeAllItems()
-    for i in model.instruments {
-      let n = i["index"] as? Int ?? 1
-      picker.addItem(withTitle: "\(n)  \(i["name"] ?? "Instrument")")
-      picker.lastItem?.tag = n
+  func updateCatalogue(_ model: PatternModel) {
+    let next=model.instruments.map{AssetCatalogueEntry($0,fallback:"Instrument")}
+    if next != catalogue {
+      catalogue=next;picker.removeAllItems()
+      for entry in next {
+        picker.addItem(withTitle:"\(entry.index)  \(entry.name)")
+        picker.lastItem?.tag=entry.index
+      }
     }
-    picker.selectItem(withTag: index)
+    if picker.selectedItem !== picker.menu?.item(withTag:index) {picker.select(picker.menu?.item(withTag:index))}
     let owner = model.nativePlugins.first { plugin in
       (plugin["instrument"] as? Int == index) || (plugin["instrumentAssignments"] as? [[String:Any]] ?? []).contains { $0["instrument"] as? Int == index }
     }
-    pluginSummary.stringValue = owner.map { "Plugin: \($0["name"] as? String ?? "Instrument")" } ?? (model.instruments.isEmpty ? "No instrument yet · choose New" : "Sample instrument")
-    mapSample.removeAllItems()
-    mapSample.addItem(withTitle: "None")
-    mapSample.lastItem?.tag = 0
-    for s in model.samples {
-      mapSample.addItem(withTitle: "\(s["index"] ?? 0) \(s["name"] ?? "Sample")")
-      mapSample.lastItem?.tag = s["index"] as? Int ?? 0
+    let summary=owner.map { "Plugin: \($0["name"] as? String ?? "Instrument")" } ?? (model.instruments.isEmpty ? "No instrument yet · choose New" : "Sample instrument")
+    if pluginSummary.stringValue != summary {pluginSummary.stringValue=summary}
+    let samples=model.samples.map{AssetCatalogueEntry($0,fallback:"Sample")}
+    if samples != sampleCatalogue || mapSample.numberOfItems==0 {
+      let selected=mapSample.selectedItem?.tag ?? 0
+      sampleCatalogue=samples;mapSample.removeAllItems()
+      mapSample.addItem(withTitle:"None");mapSample.lastItem?.tag=0
+      for entry in samples {
+        mapSample.addItem(withTitle:"\(entry.index) \(entry.name)")
+        mapSample.lastItem?.tag=entry.index
+      }
+      mapSample.select(mapSample.menu?.item(withTag:selected))
     }
+  }
+  func update(_ info: [AnyHashable: Any], model: PatternModel) {
+    let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
+    updateCatalogue(model)
     name.stringValue = info["name"] as? String ?? ""
     volume.integerValue = info["volume"] as? Int ?? 64
     pan.integerValue = info["pan"] as? Int ?? 128

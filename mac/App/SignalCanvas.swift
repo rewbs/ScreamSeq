@@ -46,6 +46,7 @@ struct SignalCanvasEdge {
   var amountUnit=""
   var waypoints=[NSPoint]()
   var readOnlyReason:String?=nil
+  var connection=""
 }
 // View-only summaries: these are neither audio nodes nor editable cables.
 struct SignalCanvasBoundary {
@@ -129,7 +130,8 @@ final class SignalCanvas: NSView {
     var rects=[NSRect]()
     let overview=(enclosingScrollView?.magnification ?? 1)<0.65
     for node in nodes where node.kind != "frame" && node.kind != "comment" {
-      let oldOutputs=previous.nodePorts(node.id,output:true),newOutputs=signalReadings.nodePorts(node.id,output:true)
+      let oldOutputs=previous.nodePorts(node.id,output:true).filter{$0.kind=="audio"},newOutputs=signalReadings.nodePorts(node.id,output:true).filter{$0.kind=="audio"}
+      if previous.port(node.id,output:true,modulation:true)?.value != signalReadings.port(node.id,output:true,modulation:true)?.value || previous.active != signalReadings.active || previous.port(node.id,output:true,modulation:true)?.measured != signalReadings.port(node.id,output:true,modulation:true)?.measured {rects.append(NSRect(x:node.x+10,y:node.y+32,width:160,height:21))}
       if oldOutputs.map(\.key) != newOutputs.map(\.key){rects.append(NSRect(x:node.x+8,y:node.y+4,width:166,height:52))}
       if !overview {for output in [false,true] where meterPaint(previous,node:node.id,output:output) != meterPaint(signalReadings,node:node.id,output:output) {
         rects.append(NSRect(x:node.x+(output ? 92:10),y:node.meterY,width:76,height:3).insetBy(dx:-2,dy:-2))
@@ -142,6 +144,10 @@ final class SignalCanvas: NSView {
   var selection=Set<String>()
   var selected: String? {didSet{if let selected {selectedBoundary=nil;if !selection.contains(selected){selection=[selected]}}else{selection=[]};needsDisplay=true}}
   func selectNodes(_ ids:Set<String>,primary:String?=nil) {selection=ids;selected=primary ?? nodes.first{ids.contains($0.id)}?.id}
+  var onClipboard:((String)->Void)?
+  @objc func copy(_ sender:Any?){onClipboard?("copy")}
+  @objc func cut(_ sender:Any?){onClipboard?("cut")}
+  @objc func paste(_ sender:Any?){onClipboard?("paste")}
   var onMoveNodes: (([(String,Double,Double)])->Void)?
   var onInsertNodes: (([String],Int,[(String,Double,Double)])->Void)?
   var onDetachNodes: (([String],[(String,Double,Double)],Bool)->Void)?
@@ -149,7 +155,6 @@ final class SignalCanvas: NSView {
   var cutTool=false {didSet{needsDisplay=true}}
   private var cutStroke=[NSPoint](),cutEdges=Set<Int>(),detachDragging=false
   var insertionHint: (([String],Int)->String?)?
-  var addingMainInput=false
   var selectedEdge: Int? {didSet{if selectedEdge != oldValue{selectedReroute=nil};if selectedEdge != nil{selectedBoundary=nil};needsDisplay=true}}
   var onSelect: ((String)->Void)?, onMove: ((String,Double,Double)->Void)?, onConnect: ((String,String)->Void)?
   var onConnectPorts: ((String,String,UInt32,UInt32,Bool)->Void)?
@@ -174,6 +179,7 @@ final class SignalCanvas: NSView {
   var cableOrigin:((GraphBoundaryPort)->GraphCableOrigin?)?
   var validateCable:((GraphBoundaryPort,GraphBoundaryPort,Int?)->String?)?
   var describeCable: ((String,String,UInt32,UInt32,Bool)->String)?
+  var describeSocket: ((GraphBoundaryPort)->String?)?
   private struct Wire {var path:NSBezierPath;var samples:[NSPoint];var from:NSPoint;var to:NSPoint;var bounds:NSRect}
   private var wires=[Wire]()
   private var nudges=[(String,Double,Double)](),nudgeWork:DispatchWorkItem?
@@ -230,7 +236,7 @@ final class SignalCanvas: NSView {
     let to=GraphBoundaryPort(node:node,number:port.number,output:!cable.output,modulation:port.modulation)
     if let reason=cableOriginRejection(cable){return reason}
     if let reason=cable.port.unavailable ?? port.unavailable{return reason}
-    if cable.port.signalType == .events || port.signalType == .events{return "Note-event routing is not available yet"}
+    if (cable.port.signalType == .events) != (port.signalType == .events){return "Notes connect only to Notes sockets; audio and control remain separate"}
     if cable.node==node{return "A processor cannot connect to itself"}
     if port.modulation != cable.port.modulation && !permitsFollowerDrop(from:cable.port,to:port,output:cable.output,rewiring:cable.edge != nil) {
       return cable.edge==nil ? "Audio sockets accept audio; parameter sockets accept control sources or an envelope follower":"Rewiring preserves the cable type; create a new cable to insert a follower"
@@ -247,6 +253,9 @@ final class SignalCanvas: NSView {
     return NSPoint(x:p.x+(source ? 12:-12)/scale,y:p.y+(source ? -14:14)/scale)
   }
   override var isFlipped: Bool {true}
+  // draw(_:) covers each dirty region with the opaque theme background before
+  // compositing translucent cables, frames and labels over it.
+  override var isOpaque: Bool {true}
   override var acceptsFirstResponder: Bool {true}
   override init(frame: NSRect) {
     super.init(frame:frame);wantsLayer=true;setAccessibilityElement(true);setAccessibilityRole(.group);setAccessibilityLabel("Audio and modulation graph")
@@ -263,13 +272,15 @@ final class SignalCanvas: NSView {
     if let stub=boundaries.first(where:{boundaryRect($0.id)?.contains(point)==true}) {toolTip=stub.help}
     else if let node=nodes.reversed().first(where:{$0.canCollapse && $0.disclosureRect.contains(point)}) {toolTip=(node.collapsed ? "Expand":"Collapse")+" node · H · connected sockets remain available"}
     else if let socket=socket(at:point) {
-      let port=socket.port.modulation ? nil:signalReadings.port(socket.node,output:socket.output,number:socket.port.number)
-      toolTip=port?.summary(active:signalReadings.active) ?? (signalReadings.active ? "Measurement unavailable for this port":"Stopped")
+      let port=signalReadings.port(socket.node,output:socket.output,number:socket.port.number,modulation:socket.port.modulation)
+      let count=edges.filter{(socket.output ? $0.source:$0.target)==socket.node && (socket.output ? $0.output:$0.input)==socket.port.number && $0.modulation==socket.port.modulation}.count
+      let help=describeSocket?(.init(node:socket.node,number:socket.port.number,output:socket.output,modulation:socket.port.modulation))
+      toolTip="\(socket.port.label) · \(count) visible cable\(count==1 ? "":"s")\nDrag to add another connection. Select a cable’s round handle to reroute only that cable."+(help.map{"\n"+$0} ?? "")+"\n"+(port?.summary(active:signalReadings.active) ?? (signalReadings.active ? "Measurement unavailable for this port":"Stopped"))
     }else if let node=nodes.last(where:{$0.hitRect.contains(point)}) {
       let values=signalReadings.nodePorts(node.id)
       toolTip=values.isEmpty ? "Measurement unavailable for this node":values.map{$0.summary(active:signalReadings.active)}.joined(separator:"\n")
-    }else if let index=edge(at:point),!edges[index].modulation {
-      toolTip=observedEdgePort?(index).map{$0.summary(active:signalReadings.active)+" · hold Q for scope, ⇧Q for spectrum"} ?? "Measurement unavailable for this cable in the adopted route"
+    }else if let index=edge(at:point) {
+      toolTip=observedEdgePort?(index).map{$0.summary(active:signalReadings.active)+($0.kind=="audio" ? " · hold Q for scope, ⇧Q for spectrum":"")} ?? "Measurement unavailable for this cable in the adopted route"
     }
     else{toolTip=nil}
   }
@@ -297,7 +308,7 @@ final class SignalCanvas: NSView {
     // mouse-down can replace/reorder them even while new reads are deferred.
     // Live values, badges and labels do not change connection identity.
     if isEditing && (self.edges.count != edges.count || !zip(self.edges,edges).allSatisfy({a,b in
-      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
+      a.source==b.source && a.target==b.target && a.modulation==b.modulation && a.output==b.output && a.input==b.input && a.connection==b.connection && (a.readOnlyReason==nil)==(b.readOnlyReason==nil)
     })) {
       cancelGesture()
       onInvalidatedGesture?("Graph connections changed · unfinished gesture cancelled; retry on the current graph")
@@ -307,7 +318,7 @@ final class SignalCanvas: NSView {
     if let selectedEdge,!edges.indices.contains(selectedEdge){self.selectedEdge=nil}
     selection.formIntersection(Set(nodes.map(\.id)))
     resizeCanvas()
-    setAccessibilityValue((nodes.map{node in node.title+(node.role.map{" · "+$0} ?? "")+" → "+edges.filter{$0.source==node.id}.map{$0.label}.joined(separator:", ")}+boundaries.map{$0.label+" · "+$0.help}).joined(separator:"; "))
+    setAccessibilityValue((nodes.map{node in node.title+(node.role.map{" · "+$0} ?? "")+(node.bypassed ? " · bypassed":node.detail.contains("Muted") ? " · muted":"")+" → "+edges.filter{$0.source==node.id}.map{$0.label}.joined(separator:", ")}+boundaries.map{$0.label+" · "+$0.help}).joined(separator:"; "))
     needsDisplay=true
   }
   private func resizeCanvas(){let content=contentRect;frame.size=NSSize(width:max(900,(content?.maxX ?? 0)+100),height:max(500,(content?.maxY ?? 0)+100))}
@@ -460,7 +471,7 @@ final class SignalCanvas: NSView {
       if node.kind=="comment" {let color=NSColor(calibratedRed:Double((node.visualColor>>16)&255)/255,green:Double((node.visualColor>>8)&255)/255,blue:Double(node.visualColor&255)/255,alpha:1);color.withAlphaComponent(0.12).setFill();NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7).fill();(selection.contains(node.id) ? Theme.accent:color).setStroke();NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7).stroke();label(node.title,NSRect(x:node.x+10,y:node.y+8,width:node.rect.width-20,height:22),color,12,.semibold);label(node.detail,NSRect(x:node.x+10,y:node.y+33,width:node.rect.width-20,height:node.rect.height-40),Theme.text,11);continue}
       let path=NSBezierPath(roundedRect:node.rect,xRadius:7,yRadius:7);Theme.raised.setFill();path.fill();(selection.contains(node.id) ? Theme.accent : Theme.border).setStroke();path.lineWidth=selection.contains(node.id) ? 2 : 1;path.stroke()
       let scale=max(0.3,enclosingScrollView?.magnification ?? 1),overview=scale<0.65
-      let outputs=signalReadings.nodePorts(node.id,output:true)
+      let outputs=signalReadings.nodePorts(node.id,output:true).filter{$0.kind=="audio"}
       if node.canCollapse {label(node.collapsed ? "▸":"▾",node.disclosureRect,Theme.muted,12,.semibold)}
       label(node.title,NSRect(x:node.x+(node.canCollapse ? 24:10),y:node.y+9,width:(outputs.isEmpty ? 160:142)-(node.canCollapse ? 14:0),height:overview && node.role==nil && !node.collapsed ? 42:23),inactiveStageCopies.contains(node.id) ? Theme.muted:Theme.text,max(13,9/scale),.semibold)
       if !outputs.isEmpty {
@@ -472,7 +483,7 @@ final class SignalCanvas: NSView {
       if node.bypassed {
         let pass=NSBezierPath();pass.move(to:NSPoint(x:node.rect.minX+6,y:node.rect.maxY-6));pass.line(to:NSPoint(x:node.rect.maxX-6,y:node.rect.maxY-6));pass.lineWidth=2;pass.setLineDash([4,3],count:2,phase:0);Theme.gold.withAlphaComponent(0.7).setStroke();pass.stroke()
       }
-      if !overview && !node.collapsed {label(node.detail,NSRect(x:node.x+13,y:node.y+35,width:154,height:16),Theme.muted,10)}
+      if !overview && !node.collapsed {let control=signalReadings.port(node.id,output:true,modulation:true);let text=signalReadings.active && control?.measured==true ? control?.value.map{String(format:"Current value: %.5g",$0)} ?? node.detail:node.detail;label(text,NSRect(x:node.x+13,y:node.y+35,width:154,height:16),Theme.muted,10)}
       else if let role=node.role {label(role,NSRect(x:node.x+10,y:node.y+35,width:160,height:24),Theme.muted,max(10,8/scale))}
       if !overview {
         for output in [false,true] {
@@ -538,7 +549,7 @@ final class SignalCanvas: NSView {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);onCollapse?();return
     }
     if cutTool {cutStroke=[point];cutEdges=[];return}
-    if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).isEmpty,
+    if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}),!signalReadings.nodePorts(node.id,output:true).filter({$0.kind=="audio"}).isEmpty,
        listenBadge(node).contains(point) || event.modifierFlags.intersection([.control,.shift,.command,.option]) == [.control,.shift] {
       selectNodes([node.id]);selectedEdge=nil;onSelect?(node.id);if let port=signalReadings.primaryPort(node.id,output:true){onListen?(port.key)}else{onChooseListen?()};return
     }
@@ -550,17 +561,15 @@ final class SignalCanvas: NSView {
         amountDrag=(index,point,value,value);onCableHint?("Drag amount · Shift for precision · double-click for exact entry · Esc cancels");return
       }
       for source in [true,false] {if let handle=wireHandle(index,source:source),hypot(handle.x-point.x,handle.y-point.y)<8/max(0.3,enclosingScrollView?.magnification ?? 1) {
-        let edge=edges[index];beginCable(node:source ? edge.target:edge.source,port:SignalCanvasPort(number:source ? edge.input:edge.output,modulation:edge.modulation),output:!source,edge:index)
-        onCableHint?("Drag to a matching socket · Esc or empty space cancels");return
+        let edge=edges[index];beginCable(node:source ? edge.target:edge.source,port:SignalCanvasPort(number:source ? edge.input:edge.output,modulation:edge.modulation,signal:edgeSignal(edge)),output:!source,edge:index)
+        onCableHint?("Reroute only the selected cable · other cables stay · Esc or empty space cancels");return
       }}
     }
     if let hit=socket(at:point) {
       let id=hit.node,port=hit.port,output=hit.output
       if let reason=port.unavailable {onCableHint?(reason);return}
-      if port.signalType == .events{onCableHint?("Note-event routing is not available yet");return}
-      addingMainInput=event.modifierFlags.contains(.option)
       selected=id;selectedEdge=nil;onSelect?(id)
-      beginCable(node:id,port:port,output:output,edge:nil);onCableHint?("Drag to add a connection · Option-drag an effect’s Main in to sum another channel · Esc cancels");return
+      beginCable(node:id,port:port,output:output,edge:nil);onCableHint?("Drag to add a connection · existing cables stay · Esc cancels");return
     }
 
     if let node=nodes.reversed().first(where:{$0.hitRect.contains(point)}) {
@@ -603,7 +612,7 @@ final class SignalCanvas: NSView {
         dropReason=cableRejection(cable,id,port)
         let a=cable.output ? cable.node:id,b=cable.output ? id:cable.node,out=cable.output ? cable.port.number:port.number,input=cable.output ? port.number:cable.port.number
         let converting=port.modulation != cable.port.modulation
-        onCableHint?(dropReason ?? (converting ? "Release to insert an envelope follower · starts at zero modulation depth":describeCable?(a,b,out,input,cable.port.modulation) ?? "Release to connect"))
+        onCableHint?(dropReason ?? (converting ? "Release to insert an envelope follower · starts at zero modulation depth":cable.edge != nil ? "Release to reroute only the selected cable · other cables stay":describeCable?(a,b,out,input,cable.port.modulation) ?? "Release to connect"))
       }else{onCableHint?(cable.edge==nil ? "Drag to a compatible socket, or release on empty space to add a node":"Drop on a compatible socket · empty space cancels the reroute")}
     }
     if let start=marqueeStart {
@@ -671,6 +680,7 @@ final class SignalCanvas: NSView {
     if ![123,124,125,126].contains(event.keyCode){commitNudge()}
     if !isEditing {
       let flags=event.modifierFlags.intersection([.command,.control,.option,.shift])
+      if flags == .command,event.charactersIgnoringModifiers?.lowercased()=="d",GraphCommand.duplicateSelection.usesCanvasDefault(){onClipboard?("duplicate");return}
       if (flags == .control || flags == [.control,.option]),event.charactersIgnoringModifiers?.lowercased()=="g",(flags == .control ? GraphCommand.groupSelection:GraphCommand.ungroup).usesCanvasDefault(){onGroup?(flags.contains(.option));return}
       if (flags.isEmpty || flags == .shift),event.charactersIgnoringModifiers?.lowercased()=="q",(flags == .shift ? GraphCommand.spectrum:GraphCommand.scope).usesCanvasDefault() {
         if !event.isARepeat {if let port=scopeTarget(at:hoverPoint){scopeHeld=true;onScope?(port,flags == .shift)}else{onCableHint?("Measurement unavailable here · select a host audio port")}};return

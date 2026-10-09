@@ -56,7 +56,7 @@
     }
     Json workspaceMenuTarget(const std::string &surfaceName) {
         if(surfaceName=="pattern")return {{"position",position()},{"selection",selection()},{"selecting",selecting},
-            {"anchorRow",anchorRow},{"anchorChannel",anchorChannel},{"preciseNotes",preciseNoteOperationGuard()},{"preciseSource",preciseNoteSelectionGuard()},{"effectPrefix",effectPrefix},{"effectPrefixRevision",effectPrefixRevision}};
+            {"anchorRow",anchorRow},{"anchorChannel",anchorChannel},{"preciseNotes",preciseNoteOperationGuard()},{"preciseSource",preciseNoteSelectionGuard()},{"effectPrefix",effectPrefix},{"effectPrefixRevision",effectPrefixRevision},{"effectField",effectFieldIndex}};
         if(surfaceName=="sample") {
             const auto range=sampleRange();
             return {{"sample",selectedSample()},{"id",selectedSampleId()},{"start",range.first},{"end",range.last},{"frames",range.frames},
@@ -72,11 +72,13 @@
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
             {copyCommand,L"&Copy selection\tCtrl+C",enabled},{cutFocusedCommand,L"Cu&t selection\tCtrl+X",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
             {0,L"Paste special",enabled,false,{{patternPasteMix,L"Mix into empty fields",enabled},{patternPasteMerge,L"Merge nonempty fields",enabled}}},
-            {clearCommand,L"&Clear selection\tDelete",enabled},{0,L""},
+            {clearCommand,L"&Clear selection\tDelete",enabled},{patternClearField,L"Clear current field\t.",enabled},{patternDeleteChannelRow,L"Delete channel row\tShift+Delete",enabled},{0,L""},
             {0,L"Transform selection",enabled,false,{{patternReverse,L"Reverse rows",enabled},{patternRotate,L"Rotate rows down",enabled},
                 {patternExpand,L"Expand 2x",enabled},{patternShrink,L"Shrink 2x",enabled},{0,L""},
                 {patternTransposeUp,L"Transpose up a semitone",enabled},{patternTransposeDown,L"Transpose down a semitone",enabled},
                 {0,L""},{patternInsertRows,L"Insert rows",enabled},{patternDeleteRows,L"Delete rows",enabled}}},
+            {0,L"Record selection",enabled,false,{{patternRenderSampleCommand,selecting?L"To sample":L"Current row to sample",enabled},{patternRenderInstrumentCommand,selecting?L"To instrument":L"Current row to instrument",enabled},{patternRenderOptionsCommand,L"Render options…",enabled}}},
+            {scratchGesturesCommand,L"Scratch phrases…",enabled},
             {0,L"Inspect",enabled,false,{{notesCommand,L"Precise notes",enabled},{effectsCommand,L"Effects and parameter bindings",enabled},
                 {parameterAutomationCommand,L"Parameter automation…",enabled},{instrumentEnvelopeCommand,L"Instrument…",enabled}}},
             {0,L""},{undoCommand,L"&Undo\tCtrl+Z",enabled&&view->session.document.value("canUndo",false)},
@@ -90,7 +92,7 @@
         // validate and apply them when the chosen action actually needs a range.
         const bool hasRange=valid&&(sampleDraft||range.first<range.last);
         const auto info=view->samples.contains(selectedSample())?view->samples.at(selectedSample()):Json::object();
-        return {{0,L"Sample selection"},{sampleAllCommand,L"Select &all\tCtrl+A",!busy&&!selectedSampleId().empty()},
+        return {{0,L"Sample selection"},{sampleRecordCommand,L"Record a sample…",!busy},{sampleBrowseCommand,L"Browse samples…",!busy},{sampleImportCommand,L"Import audio files…",!busy},{0,L""},{sampleAllCommand,L"Select &all\tCtrl+A",!busy&&!selectedSampleId().empty()},
             {sampleRangeCommand,L"Apply range fields",valid&&sampleDraft},{0,L""},
             {sampleCopyCommand,L"&Copy\tCtrl+C",hasRange},{samplePasteCommand,L"&Paste at selection start\tCtrl+V",valid},
             {sampleCutCommand,L"Cu&t\tCtrl+X",hasRange},{sampleClearCommand,L"&Delete selection\tDelete",hasRange},{0,L""},
@@ -125,6 +127,7 @@
             items.push_back({0,L""});
         }
         items.push_back({graphWorkflowCommand,L"Groups, visual layout and signal tools…",idle});
+        items.push_back({graphTrimsCommand,L"Audio port trims…",idle});
         items.push_back({graphAddSource,L"Add selected source kind",clean&&!graphID.empty()});
         items.push_back({graphAddEffect,L"Add selected rack effect",clean&&!graphID.empty()&&SendMessageW(controls.at(graphRack),CB_GETCURSEL,0,0)>=0});
         items.push_back({graphFit,L"Fit graph\tHome",idle&&!graphID.empty()});
@@ -152,7 +155,7 @@
         const float scale=GetDpiForWindow(window)/96.0f;
         POINT client=screen;
         std::string surfaceName;
-        unsigned hitRow=row,hitChannel=channel,hitColumn=column;
+        unsigned hitRow=row,hitChannel=channel,hitColumn=column;size_t hitField=effectFieldIndex;
         int hitNode=-1,hitWire=-1;
         if(keyboard) {
             ScreamSeq::WorkspaceRect target=patternGridRect();
@@ -189,7 +192,11 @@
                 hitChannel=firstChannel();while(hitChannel<view->channels&&channelStart(hitChannel+1)<=content)++hitChannel;
                 hitRow=firstRow+line;if(hitRow>=patternRows()||hitChannel>=view->channels)return false;
                 const float field=content-channelStart(hitChannel);if(field>=channelWidth(hitChannel)-4)return false;
-                hitColumn=field<28.8f?0:field<50.4f?1:field<fxStart?2:3+2*unsigned((field-fxStart)/fxWidth)+(std::fmod(field-fxStart,fxWidth)>=21.6f?1:0);
+                if(field<fxStart)hitColumn=field<28.8f?0:field<50.4f?1:2;
+                else {unsigned fx=0;while(fx+1<view->effectColumns.at(hitChannel)&&field>=effectColumnStart(hitChannel,fx+1))++fx;
+                    const auto local=field-effectColumnStart(hitChannel,fx);hitColumn=3+2*fx+(local>=21.6f?1:0);
+                    if(hitColumn%2==0)hitField=effectColumnLayout(hitChannel,fx).hit(local);
+                }
                 surfaceName="pattern";
             }
         }
@@ -200,7 +207,7 @@
                 hitChannel>=selected.at("startChannel").get<unsigned>()&&hitChannel<=selected.at("endChannel").get<unsigned>();
             if(!keyboard&&!inside) {
                 auto next=position();next["row"]=hitRow;next["channel"]=hitChannel;next["column"]=hitColumn;next["following"]=false;
-                navigate(next);selecting=false;anchorRow=hitRow;anchorChannel=hitChannel;
+                navigate(next);effectFieldIndex=hitField;selecting=false;anchorRow=hitRow;anchorChannel=hitChannel;
             }
             workspaceState.focus="pattern";
         } else if(surfaceName=="sample")setWorkspaceCanvasFocus("samples");

@@ -1,4 +1,5 @@
 #pragma once
+#include "NativePatternCommands.hpp"
 #include <cstdint>
 #include <map>
 #include <string>
@@ -7,7 +8,7 @@ namespace Tracker {
 inline constexpr uint32_t performanceUnitsPerRow = 65536;
 inline constexpr uint8_t maximumEffectColumns = 8;
 inline constexpr size_t maximumPatternCommands = 65536;
-enum class PatternCommandKind : uint8_t { ParameterSet, ParameterSlide, PitchSet, PitchSlide, NoteCut, TrackerEffect, NudgeForward, NudgeReverse };
+enum class PatternCommandKind : uint8_t { ParameterSet, ParameterSlide, PitchSet, PitchSlide, NoteCut, TrackerEffect, NudgeForward, NudgeReverse, Native };
 inline bool isNudge(PatternCommandKind kind) { return kind == PatternCommandKind::NudgeForward || kind == PatternCommandKind::NudgeReverse; }
 struct ParameterBinding {
   std::string plugin; // Persistent plugin instance UUID, never a rack slot.
@@ -24,6 +25,9 @@ struct PatternCommand {
   double value = 0; // Normalized parameter [0,1], semitones [-96,96], or nudge strength [0,1].
   uint8_t pitchRange = 2; // Match a plugin instrument's configured MIDI wheel range.
   uint8_t effect = 0, parameter = 0; // Tracker command; its original musical range is preserved.
+  NativePatternOp native = NativePatternOp::None;
+  std::array<double,maximumNativePatternParameters> arguments{}; // Catalog order; unused entries are zero.
+  double durationBeats = 0; // NF/NR only; independent of rows, speed and pattern signature.
   bool operator==(const PatternCommand &) const = default;
 };
 struct PatternPerformance {

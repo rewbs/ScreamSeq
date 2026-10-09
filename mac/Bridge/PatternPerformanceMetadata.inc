@@ -1,11 +1,6 @@
-NSString *patternCommandName(PatternCommandKind kind) {
-  return @[@"parameter-set", @"parameter-slide", @"pitch-set", @"pitch-slide", @"note-cut", @"tracker", @"nudge-forward", @"nudge-reverse"][uint8_t(kind)];
-}
-PatternCommandKind decodePatternCommandName(id value) {
-  const auto index = [@[@"parameter-set", @"parameter-slide", @"pitch-set", @"pitch-slide", @"note-cut", @"tracker", @"nudge-forward", @"nudge-reverse"] indexOfObject:Automation::string(value,32)];
-  Automation::require(index != NSNotFound, "Unknown pattern effect");
-  return PatternCommandKind(index);
-}
+#include "NativePatternMetadata.inc"
+NSString *patternCommandName(PatternCommandKind kind) { return @(std::string(patternCommandKindName(kind)).c_str()); }
+PatternCommandKind decodePatternCommandName(id value) { try{return patternCommandKind(Automation::string(value,32).UTF8String);}catch(const std::invalid_argument &e){throw Automation::Error(-32602,e.what());} }
 NSDictionary *encodePatternPerformance(const PatternPerformance &performance) {
   NSMutableArray *columns=[NSMutableArray array],*bindings=[NSMutableArray array],*commands=[NSMutableArray array];
   for(const auto &[track,count]:performance.columns)[columns addObject:@[nativeID(track),@(count)]];
@@ -14,7 +9,7 @@ NSDictionary *encodePatternPerformance(const PatternPerformance &performance) {
     NSMutableDictionary *item=[@{@"pattern":nativeID(command.pattern),@"track":nativeID(command.track),@"position":@(command.position),
       @"duration":@(command.duration),@"column":@(command.column),@"kind":@(uint8_t(command.kind)),@"binding":@(command.binding),@"value":@(command.value),@"effect":@(command.effect),@"parameter":@(command.parameter)} mutableCopy];
     if(command.kind==PatternCommandKind::PitchSet||command.kind==PatternCommandKind::PitchSlide)item[@"pitchRange"]=@(command.pitchRange);
-    [commands addObject:item];
+    appendNativePattern(item,command);[commands addObject:item];
   }
   return @{@"columns":columns,@"bindings":bindings,@"commands":commands};
 }
@@ -24,15 +19,15 @@ PatternPerformance decodePatternPerformance(id raw) {
     require(result.columns.emplace(decodeNativeID(pair[0]),uint8_t(integer(pair[1],1,maximumEffectColumns))).second,"Duplicate effect-column configuration");}
   for(id rawBinding:array(value[@"bindings"],255)) {auto binding=object(rawBinding);keys(binding,@[@"id",@"plugin",@"parameter",@"name"]);
     require(result.bindings.emplace(uint16_t(integer(binding[@"id"],1,255)),ParameterBinding{string(binding[@"plugin"],128).UTF8String,uint32_t(integer(binding[@"parameter"],0,UINT32_MAX)),string(binding[@"name"],256).UTF8String}).second,"Duplicate parameter binding");}
-  for(id rawCommand:array(value[@"commands"],maximumPatternCommands)) {auto c=object(rawCommand);keys(c,@[@"pattern",@"track",@"position",@"duration",@"column",@"kind",@"binding",@"value",@"pitchRange",@"effect",@"parameter"]);
-    result.commands.push_back({decodeNativeID(c[@"pattern"]),decodeNativeID(c[@"track"]),uint32_t(integer(c[@"position"],0,UINT32_MAX)),uint32_t(integer(c[@"duration"],0,UINT32_MAX)),
-      uint8_t(integer(c[@"column"],0,maximumEffectColumns-1)),PatternCommandKind(integer(c[@"kind"],0,7)),uint16_t(integer(c[@"binding"],0,255)),number(c[@"value"],-96,96),uint8_t(integer(c[@"pitchRange"]?:@2,1,96)),uint8_t(integer(c[@"effect"],0,255)),uint8_t(integer(c[@"parameter"],0,255))});}
+  for(id rawCommand:array(value[@"commands"],maximumPatternCommands)) {auto c=object(rawCommand);keys(c,@[@"pattern",@"track",@"position",@"duration",@"durationBeats",@"column",@"kind",@"binding",@"value",@"pitchRange",@"effect",@"parameter",@"native",@"parameters"]);
+    result.commands.push_back({decodeNativeID(c[@"pattern"]),decodeNativeID(c[@"track"]),uint32_t(integer(c[@"position"],0,UINT32_MAX)),uint32_t(integer(c[@"duration"]?:@0,0,UINT32_MAX)),
+      uint8_t(integer(c[@"column"],0,maximumEffectColumns-1)),PatternCommandKind(integer(c[@"kind"],0,8)),uint16_t(integer(c[@"binding"],0,255)),number(c[@"value"],-96,96),uint8_t(integer(c[@"pitchRange"]?:@2,1,96)),uint8_t(integer(c[@"effect"],0,255)),uint8_t(integer(c[@"parameter"],0,255))});decodeNativePattern(result.commands.back(),c);validateNativePatternCommand(result.commands.back());}
   return result;
 }
 
 NSDictionary *patternEffectObject(const PatternCommand &c, uint16_t channel) {
-  return @{@"channel":@(channel),@"position":@(c.position),@"duration":@(c.duration),@"column":@(c.column),
-    @"kind":patternCommandName(c.kind),@"binding":@(c.binding),@"value":@(c.value),@"pitchRange":@(c.pitchRange),@"effect":@(c.effect),@"parameter":@(c.parameter)};
+  NSMutableDictionary *result=[@{@"channel":@(channel),@"position":@(c.position),@"duration":@(c.duration),@"column":@(c.column),
+    @"kind":patternCommandName(c.kind),@"binding":@(c.binding),@"value":@(c.value),@"pitchRange":@(c.pitchRange),@"effect":@(c.effect),@"parameter":@(c.parameter)} mutableCopy];appendNativePattern(result,c);return result;
 }
 NSArray *patternEffectObjects(const NativeSong &native, const CSoundFile &song, uint16_t pattern) {
   NSMutableArray *result=[NSMutableArray array];

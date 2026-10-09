@@ -1,7 +1,13 @@
 #include "NativeMetadata.hpp"
+#include "NativePatternJSON.hpp"
+#include "ScratchGestureJSON.hpp"
+#include "ProjectPreservation.hpp"
+#include "editor/TrackerDocument.hpp"
 #include "soundlib/NativeNoteEffects.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <map>
 #include <set>
 #include <stdexcept>
 
@@ -64,6 +70,8 @@ Tracker::NativeSong decodeNativeMetadata(const Json &v) {
   if (gate(5,"noteTracks")) for (const auto &t : items(v,"noteTracks",127)) { NativeNoteTrack track{decodeID(field(t,"bus")),{}}; for (const auto &c : items(t,"columns",127)) track.columns.push_back(decodeID(c)); n.noteTracks.push_back(std::move(track)); }
   if (gate(5,"columnMutes")) for (const auto &m : items(v,"columnMutes",127)) { array(m,2); need(m.size() == 2,"Invalid column mute override"); need(n.columnMutes.emplace(decodeID(m[0]),boolean(m[1])).second,"Duplicate column mute override"); }
   if (gate(7,"performance")) n.performance = decodePerformance(field(v,"performance"));
+  for(const auto &entry:items(v,"scratchGestures",255,true))
+    need(n.scratchGestures.emplace(uint16_t(ScratchJSON::integer(field(entry,"id"),1,255)),ScratchJSON::decode(entry)).second,"Duplicate scratch gesture slot");
   if (gate(9,"preciseNotes")) for (const auto &p : items(v,"preciseNotes",maximumPreciseNotes)) {
     need(version >= 12 || (!p.contains("effect") && !p.contains("parameter")),"Legacy metadata cannot contain per-note effects");
     n.preciseNotes.push_back({decodeID(field(p,"pattern")),decodeID(field(p,"track")),u32(p,"position"),uint16_t(u32(p,"instrument",0,255)),uint8_t(u32(p,"note",1,255)),uint8_t(u32(p,"velocity",1,127)),uint8_t(integer(optional(p,"effect",0),0,255)),uint8_t(integer(optional(p,"parameter",0),0,255))});
@@ -83,7 +91,8 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   for (const auto &t : n.noteTracks) { Json columns = Json::array(); for (auto id : t.columns) columns.push_back(nativeID(id)); tracks.push_back({{"bus",nativeID(t.bus)},{"columns",columns}}); }
   for (auto [id,muted] : n.columnMutes) mutes.push_back(Json::array({nativeID(id),muted}));
   for (const auto &p : n.preciseNotes) { Json j{{"pattern",nativeID(p.pattern)},{"track",nativeID(p.track)},{"position",p.position},{"instrument",p.instrument},{"note",p.note},{"velocity",p.velocity}}; if (p.effect || p.parameter) { j["effect"] = p.effect; j["parameter"] = p.parameter; } notes.push_back(std::move(j)); }
-  Json encoded{{"version",17},{"nextID",n.nextID},{"masterID",nativeID(n.masterID)},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},
+  Json gestures=Json::array();for(const auto &[id,value]:n.scratchGestures){auto entry=ScratchJSON::gesture(value);entry["id"]=id;gestures.push_back(std::move(entry));}
+  Json encoded{{"version",17},{"nextID",n.nextID},{"masterID",nativeID(n.masterID)},{"patterns",map(n.patterns)},{"tracks",map(n.tracks)},{"samples",map(n.samples)},{"instruments",map(n.instruments)},{"sequences",sequences},{"scratchGestures",gestures},
     {"automation",automation},{"mixer",mixer(n.mixer)},{"noteTracks",tracks},{"columnMutes",mutes},{"preciseNotes",notes},{"performance",performance(n.performance)},{"signalGraph",signal(n.signal)},{"envelopeBank",bank(n)}};
   // Never silently discard non-default data in conditionally encoded members,
   // or serialize a model the reader cannot accept. Snapshot validation remains
@@ -92,5 +101,8 @@ Json encodeNativeMetadata(const Tracker::NativeSong &n) {
   return encoded;
 }
 std::string validatedNativeText(const Json &value,size_t maximum) {return text(value,maximum);}
+Json encodeSignalDefinitionMetadata(const Tracker::SignalDefinition &d) {return definition(d);}
+Tracker::SignalDefinition decodeSignalDefinitionMetadata(const Json &value) {auto d=decodeDefinition(value,17);Tracker::compileSignal(d);return d;}
 Json encodeMixerMetadata(const Tracker::MixerGraph &graph) {return mixer(graph);}
+#include "NativeMetadataRecovery.inc"
 } // namespace ScreamSeq::Project

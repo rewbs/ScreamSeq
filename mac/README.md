@@ -32,6 +32,7 @@ MIDI-device and sustained display/audio checks still need a separate session.
 - **Command help:** Pattern → Command Picker… (Shift-Command-K) searches the current format's effect and volume commands, including extended subcommands. Choose a command, enter its value and apply to the displayed cell. **Use cursor** explicitly refreshes the target; stale edits reject. Pitch, volume, panning, timing and sound commands have distinct colors, and the bottom status bar explains the command at the edit cursor. Agents read the same catalog with `pattern.commands` and apply it with `pattern.apply`.
 - **Independent editing:** turn Follow off to browse and edit while another pattern plays. Scrolling also turns it off, and the button immediately reflects that state. The footer labels the edit pattern/row/channel separately from the playback position above. Agents can read both through `context.get` and use `context.set` to navigate or toggle following with a check against concurrent cursor/selection changes; navigation leaves the song and transport intact.
 - **Selection:** drag or use Shift with arrows. Command-X/C/V cuts/copies/pastes rectangular cells, including precise-note hits and extra FX. Delete clears a selection. The Pattern menu provides transpose and row operations. Command-Z / Shift-Command-Z undo and redo module edits.
+- **Cursor edits:** `.` clears only the field under the pattern cursor, even with a selection. On an FX code it removes that command; on an FX value it resets the value while retaining its code, binding and duration. Nudge strength resets to zero without changing its duration; note-cut timing resets to the row start. Shift-Delete removes the current channel's row and shifts its following notes, all FX and channel graph commands up, clearing the last row. Other channels and pattern-wide envelopes stay put. Both commands are in the Pattern menu, grid context menu and Command-K catalog, and use document Undo. Decimal points in open numeric editors remain ordinary text entry.
 - **Pattern tools:** Pattern → Pattern Tools… (Shift-Command-T) provides interpolation, humanization, seeded randomization, scaling/fill, transpose, instrument remapping, reverse/rotate, expand/shrink and masked clearing. Choose selection/channel/pattern/all-pattern scope, preview the exact changes, then apply in one undo step. Expand/shrink and row insertion/deletion reject discarded data unless explicitly allowed. Row tools shift masked fields within the selected bounds and keep pattern length and separate plugin envelopes unchanged. Pattern → Insert Row protects nonempty data at the end; Delete Row explicitly removes the cursor row across all columns. Pattern → Mix Paste fills empty destination fields; Merge Paste skips empty source fields. The same commands are available to agents through `pattern.transform` and `pattern.paste`.
 - **Orders:** use Arrange to see the complete order list, assign/reuse patterns, insert before/after, move or remove orders, and select a song sequence. The main strip shows a window around the selected order. Click the BPM value in the header to edit tempo directly (Return saves, Escape cancels). Song Settings changes title, tempo, speed and channel count.
 - **Samples:** import or replace WAV, AIFF, MP3, FLAC and formats supported by the embedded engine. Drag the waveform or enter exact frame bounds; click to place a paste cursor. Zoom to a selection or use +/−, Option-scroll or pinch; pan with arrows or horizontal/Shift-scroll. At individual-frame zoom, enable **Draw** and drag a waveform stroke; release applies one Undo step and Escape cancels. **Snap selection** and **Snap loop** find zero crossings or exact frame-grid boundaries; **Snap after selecting** applies this to each completed selection. Copy/Cut/Paste (Command-C/X/V with waveform focus) use the session's sample clipboard. Paste offers Insert, Overwrite, Mix and Replace, rate conversion, independent mix levels and a clipping preview. Deletion and structural paste adjust loops/cues with exact Undo/Redo. **Copy to new** creates a separate sample from the range and selected channels, retaining source settings and adjusted loops, then selects its new slot. Range/channel processing includes reverse, normalize, curved fades, gain, phase inversion, silence, trim, DC removal, smoothing and stereo operations. Loop crossfades offer linear/equal-power curves, preserved duration using pre-loop audio, or overlap with an explicit shorter loop period. PCM and loop geometry undo together. All these edits, drawing, crossfades and clipboard controls share the agent API. Edit rate, volume and pan; preview/apply normal and sustain forward/ping-pong/reverse loops together with compact undo through the native controls or `sample.loops.set`; native projects preserve exact sample data and settings.
@@ -42,7 +43,8 @@ MIDI-device and sustained display/audio checks still need a separate session.
 - **Plugin interfaces:** **Open interface** opens the plugin’s own macOS window. Searchable native parameter controls remain available, with recycled rows for plugins containing thousands of parameters. Windows close cleanly and reopen across playback restarts. Plugins without a compatible custom interface use the native controls.
 - **Pattern automation:** the envelope window edits pattern-relative plugin/built-in parameters with searchable targets, exact points, snapping and curved segments. **Use last touched** selects the last native/plugin-editor/API parameter change and loads any existing lane without discarding a draft or creating points. Agents use `automation.target.get` for the same stable target. Range tools copy points, repeat or insert a paste, shift/flip/scale, generate ramps/sines and humanize with a repeatable seed. Preview a tool, then Apply in one Undo step; Reload discards the preview. Copied points stay in the envelope editor's own clipboard. Envelopes repeat with the pattern. All tools also have agent API access.
 - **Automation:** enable **Record automation** during playback and change a native parameter control or a plugin-provided control. Recorded values replay at their sample positions, including during WAV export and at other device sample rates. Initial parameter state remains separate from the recorded values. Document, plugin and recorded-automation edits share one chronological Undo/Redo history.
-- **Saving:** Save, Save As and recovery use the current native format, container 6 / metadata 17; new projects use `.screamseq`. It preserves exact native song/sample data, mappings and envelopes, stable song identities, arrangement annotations, mixer routing, automation, built-in/AU/VST3 state, bus activation, instrument assignments and selected sequence. Historical native formats are rejected. OpenMPT module import remains supported. Export Module separately writes MOD/XM/S3M/IT/MPTM and rejects native feature/sample loss. Agents can use `document.save` and `document.exportModule`, including dry runs and explicit overwrite control. See [sample snapshots](SAMPLE_SNAPSHOTS.md) for sample storage details and [the architecture](../doc/SCREAMSEQ_ARCHITECTURE.md) for the current format contract.
+- **Saving:** Save, Save As and recovery use the current native format, container 6 / metadata 17; new projects use `.screamseq`. It preserves exact native song/sample data, mappings and envelopes, stable song identities, arrangement annotations, mixer routing, automation, built-in/AU/VST3 state, bus activation, instrument assignments and selected sequence. Incompatible native files load validated known data best effort and report conversions or skipped content; recovery that converts or loses data requires Save As to protect the source. A readable embedded song is still required. OpenMPT module import remains supported. Export Module separately writes MOD/XM/S3M/IT/MPTM and rejects native feature/sample loss. Agents can use `document.save` and `document.exportModule`, including dry runs and explicit overwrite control. See [sample snapshots](SAMPLE_SNAPSHOTS.md) for sample storage details and [the architecture](../doc/SCREAMSEQ_ARCHITECTURE.md) for the current format contract.
+- **Record and resample:** **Record…** in Samples or Instruments opens input capture: choose a device and mono channel or stereo pair, then **Record**, **Stop** and **Add to song**. Choose a 60-second or five-minute limit, subject to the frame-capacity bound. Pattern selection commands render selected rows and channels directly into a sample or instrument. Each import is one Undo step. See [recording samples](../doc/SCREAMSEQ_SAMPLING.md) for routing, limits and agent access.
 - **Export:** export float32 stereo WAV at 48 kHz. Native effect latency is removed from the beginning, and effect tails are rendered. The one-hour export limit fails explicitly and retains the original destination file.
 - **Recovery:** dirty editable songs receive recovery copies every 10 seconds while the document is available, retaining ten copies per session. File → Recover a Song… opens the recovery browser; copies reopen as unsaved songs for review.
 - **External applications and agents:** Automation → Enable Local API exposes the open song and cursor through a private local JSON interface. Read and patch patterns, samples, instruments, plugins and automation, with revision checks and undo. The bundled Python client includes a working crescendo drum-roll example. See [the automation guide](AUTOMATION.md).
@@ -205,8 +207,10 @@ Pattern → **Tempo and Groove** edits fractional BPM, ticks per row, musical be
 Autosave protects unsaved editable songs every 10 seconds while the document is
 available, retaining ten recovery copies per session. Click the footer's
 **Autosave** status or use **File → Recover a Song…** to choose a dated copy.
-Recoveries open as unsaved songs; use Save As to keep them. Unfinished recording
-takes are included and reopen stopped for review. Write failures remain visible
+Recoveries open as unsaved songs; use Save As to keep them. Unfinished note/MIDI
+recording takes are included and reopen stopped for review. Microphone takes are
+session-only until **Add to song**; they are not included in crash recovery.
+Write failures remain visible
 in the footer without interrupting work with repeated dialogs. Run
 `RESONANCE_BUILD_DIR="$PWD/bin/mac-background" python3 mac/Tests/test_recovery.py`
 to qualify the real timer, abrupt process death, restart, recovery, and error
@@ -241,23 +245,34 @@ The connected workspace, reusable audio/modulation graphs, dedicated pattern gra
 lanes and their agent API are described in [GRAPH_WORKFLOW.md](GRAPH_WORKFLOW.md).
 
 Record scratching: type **NF** or **NR** in any FX command column (or search
-“nudge” with `?`). Set **Nudge strength (%)**, **Offset** and **Duration (rows)**.
-Try NR at 25% for a slowdown and 75% for a reverse scratch, with duration 1 row;
+“nudge” with `?`). Set **Nudge strength (%)**, **Offset** and **Duration (beats)**.
+Try NR at 25% for a slowdown and 75% for a reverse scratch, with duration 0.25 beats;
 NF pushes forward. The duration includes the return to normal speed. These are
 sample-playback effects; they do not reverse a plugin instrument's output.
 
 ### In-pattern scratch values
 
 Type `NF` or `NR` in any FX command field to enter strength (%) and duration
-(rows) on that pattern row. Tab or Shift-Tab switches between the two numbers;
+(beats by default; rows are available from the effect timing units menu) on that
+pattern row. Tab or Shift-Tab switches between the aligned parameter slots;
 Return saves both in one Undo step and advances by the edit step. Escape cancels.
-The grid shows `strength/duration`, e.g. `75/0.5` means 75% strength for half a
-row, including recovery. Return or double-click edits an existing command;
+For example, strength `75` and duration `0.5` mean a 75% nudge lasting half a
+beat, including recovery. Return or double-click edits an existing command;
 typing a number in its value field replaces the strength directly. Fractional
-values retain 1/65536-row timing, and editing preserves the command's onset.
+beat durations are retained, and editing preserves the command's precise onset.
 The detailed effect editor remains available for changing onset and other effects.
 
-The graph's selected connection inspector is at the top of its sidebar. Click a
-wire or its label; double-click or Return focuses its values. Update connection
-saves, Delete removes, and New… creates another route. Fixed insert-order wires
-link to their subgraph or mixer instead of showing ineffective routing fields.
+For composed scratch arrangements, **SK** selects a reusable phrase with separate
+record-motion and fader envelopes; **SX** releases it early. Open **Pattern →
+Scratch phrases…**, choose a starting technique, and use it in the captured FX
+cell. Phrase number, beat duration, sample travel and repeats are editable in the
+pattern. Curves save immediately; **Make unique** creates a variation with one
+Undo step. See [Scratch phrases](../doc/SCREAMSEQ_SCRATCH_PHRASES.md) for scripted
+curves, linked uses and an example arrangement.
+
+Drag between matching graph sockets to add a cable without removing existing
+routes. Select a cable and drag either endpoint handle to reroute it; Delete
+disconnects it. Click its label to inspect the connection, then edit endpoints,
+ports or gain directly—changes commit immediately with Undo. Right-click a
+socket for **Connect to…** or **Add compatible node…**; fixed insert-order wires
+link to their editable subgraph or mixer.

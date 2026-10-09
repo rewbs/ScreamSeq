@@ -1,0 +1,12 @@
+Command: ["/Users/rewbs/code/openmpt/bin/mac-graph-fluency/commercial-graph-qualification", "/Library/Audio/Plug-Ins/Components/Replika.component"]
+stage=0 rms=0.0722568 peak=0.200214 max_render_us=4667.58
+stage=1 rms=0.0714025 peak=0.220414 max_render_us=262.959
+stage=2 rms=0.0690933 peak=0.204938 max_render_us=639.416
+stage=3 rms=0.0716311 peak=0.213736 max_render_us=268.25
+stage=4 rms=0.0718298 peak=0.196257 max_render_us=308.583
+stage=5 rms=0.0712113 peak=0.185845 max_render_us=318.666
+stage=6 rms=0.0666891 peak=0.142309 max_render_us=244.25
+stage=7 rms=0.0711382 peak=0.21565 max_render_us=259.084
+stage=8 rms=0.0691542 peak=0.177536 max_render_us=349.375
+stage=9 rms=0.0708491 peak=0.22004 max_render_us=595
+PASS AU Native Instruments: Replika at 48000 Hz / 512 frames: 10 seconds, route edits, failed-preparation retention, rack removal/restoration, bypass; no device opened. Vendor-private realtime behavior and speakers not qualified.

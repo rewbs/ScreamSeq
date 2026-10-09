@@ -23,6 +23,9 @@ struct ProjectState {
 	bool recoveredUnsaved=false; // Session-only: recovery must be saved explicitly.
 	std::filesystem::path path;
 	std::vector<std::string> issues;
+	std::vector<std::string> loadWarnings;
+	bool requiresSaveAs=false,recoveryLossy=false;
+	std::filesystem::path loadSourcePath;
 };
 struct OpenedProject {
 	std::unique_ptr<Tracker::Document> document;
@@ -31,8 +34,9 @@ struct OpenedProject {
 // Control/worker-thread operations only. Open fully restores the shared song
 // snapshot and validates metadata against that actual song before publishing it.
 OpenedProject openNativeProject(const std::filesystem::path &path);
-// The same strict native decoder, without a filesystem destination. Recovery
-// supplies bounded immutable bytes and prepares a candidate before publication.
+// Strict admission for recovery's bounded immutable bytes, without a filesystem
+// destination. Unlike best-effort file opening, it rejects malformed known data
+// before replacing the current song or recording take.
 OpenedProject openNativeProjectBytes(std::span<const std::byte> bytes);
 ProjectState newProjectState(const Tracker::Document &document);
 // Hook for musical changes outside Document::revision (future plugin/capture
@@ -40,6 +44,8 @@ ProjectState newProjectState(const Tracker::Document &document);
 void invalidateRecoveryTake(ProjectState &state);
 nlohmann::json nativeProjectTree(Tracker::Document &document,const ProjectState &state);
 std::vector<std::byte> serializeNativeProject(Tracker::Document &document,const ProjectState &state);
+// Also used by API dry runs: overwrite:true never bypasses source protection.
+void validateProjectSaveDestination(const ProjectState &state,const std::filesystem::path &path);
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite);
 bool requiresHostedPlayback(const Tracker::Document &document,const ProjectState &state);
 }

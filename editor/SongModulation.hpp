@@ -17,7 +17,7 @@ struct SongModulationTarget {
   uint32_t parameter = 0;
   double normalizedStep = 0;
   bool quantized = false;
-  struct Contribution { size_t source = 0; double minimum = 0, maximum = 0; };
+  struct Contribution { size_t source = 0; double minimum = 0, maximum = 0; size_t target=0; };
   std::vector<Contribution> contributions;
 };
 // Prepared, bounded song controls. renderSource/note/controller/amount/overlay
@@ -35,6 +35,8 @@ private:
     uint32_t held = 0, frames = 0;
     uint64_t frame = 0;
   };
+  using ContributionGain=double(*)(void *,uint64_t,const std::string &,uint64_t) noexcept;
+  ContributionGain contributionGain_=nullptr;void *contributionContext_=nullptr;
   double sampleRate_;
   std::vector<Source> sources_;
   std::vector<SongModulationTarget> targets_;
@@ -47,6 +49,7 @@ public:
   SongModulationRuntime(const SignalGraph &,std::span<const SongModulationParameter>,double sampleRate);
   SongModulationRuntime(const SongModulationRuntime &) = delete;
   SongModulationRuntime &operator=(const SongModulationRuntime &) = delete;
+  void contributionGain(ContributionGain gain,void *context) noexcept {contributionGain_=gain;contributionContext_=context;}
   size_t sourceCount() const noexcept { return sources_.size(); }
   const SignalSongSource &source(size_t index) const noexcept { return sources_[index].spec; }
   std::span<const SongModulationTarget> targets() const noexcept { return targets_; }
@@ -61,6 +64,7 @@ public:
   // is written, allowing the host to fail safely instead of reusing old audio.
   bool overlay(size_t target,uint64_t absoluteFrame,double baseline,double &result) const noexcept;
   bool contribution(size_t source,uint64_t absoluteFrame,double &value) const noexcept;
+  bool scaledContribution(const SongModulationTarget::Contribution &,uint64_t absoluteFrame,double &value) const noexcept;
   // Limits linear host ramp segments at the absolute grid, random changes and
   // automation step/point boundaries. Quantized targets always use one sample.
   uint32_t rampFrames(size_t target,uint64_t absoluteFrame,uint32_t maximum,SignalClock) const noexcept;

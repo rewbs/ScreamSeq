@@ -8,9 +8,13 @@
 #include <algorithm>
 #include <utility>
 #include <functional>
+#include <optional>
 #include "MixerGraph.hpp"
+#include "NoteRouting.hpp"
 #include "GraphPresentation.hpp"
+#include "SignalGroupBypass.hpp"
 #include "MusicalAutomation.hpp"
+#include "AudioPortTrim.hpp"
 
 namespace Tracker {
 // Graph recipes belong to the document, never to a mutable rack slot. Each use
@@ -26,6 +30,8 @@ struct GraphPluginRecipe {
   // Host bypass belongs to the shared recipe. Every use keeps processing and
   // reveals latency-aligned dry audio; it never replaces the vendor preset.
   bool bypass = false;
+  // Logical port identities are pinned to physical bus/channel slices.
+  std::string audioLayout;
   bool operator==(const GraphPluginRecipe &) const = default;
 };
 enum class SignalNodeKind : uint8_t { Input, Output, Plugin, LFO, Follower, Random, NoteEnvelope, MIDI, Amount, Automation };
@@ -54,6 +60,9 @@ struct SignalNode {
   double rate = 1, phase = 0, attack = .01, release = .1;
   uint32_t controller = 1;
   std::vector<SignalPatternEnvelope> envelopes;
+  // Suppress every outgoing contribution while clocks, gates and history advance.
+  bool muted = false;
+  AudioPortTrims trims;
   bool operator==(const SignalNode &) const = default;
 };
 struct SignalAudioEdge {
@@ -80,6 +89,9 @@ struct SignalGroup {
   std::string name;
   double x=0,y=0;
   std::vector<uint64_t> nodes;
+  bool bypass=false;
+  std::vector<SignalGroupDryRoute> dryRoutes;
+  AudioPortTrims trims;
   bool operator==(const SignalGroup &) const = default;
 };
 struct SignalDefinition {
@@ -117,6 +129,21 @@ struct SignalOutputRoute {
   uint64_t source=0,target=0;uint32_t output=1;
   bool operator==(const SignalOutputRoute &) const = default;
 };
+// Typed outer-stage routes address a bus aggregate, never an individual copy.
+// Stage inputs feed all prepared row/persistent/ordinary copies; outputs sum
+// their audible wet/tail contributions. Main serial ports are not exposed here.
+struct SignalStageEndpoint {
+  std::string plugin;
+  uint64_t stage=0;
+  bool operator==(const SignalStageEndpoint &) const = default;
+};
+struct SignalStageConnection {
+  SignalStageEndpoint source,target;
+  uint32_t output=0,input=0;
+  double gainDB=0;
+  bool enabled=true;
+  bool operator==(const SignalStageConnection &) const = default;
+};
 // Read-only playback observation. Order is one-based across the active stack;
 // role is row=0, persistent=1, ordinary=2. Inactive tails have order zero.
 struct SignalActivity { uint64_t target=0,graph=0; uint8_t role=0; uint16_t order=0; bool tail=false; uint64_t instrument=0; };
@@ -126,7 +153,10 @@ struct SignalSongGroup {
   uint64_t id=0,parent=0;
   std::string name;
   double x=0,y=0;
-  std::vector<std::string> nodes; // canonical "plugin:<instance ID>" keys
+  std::vector<std::string> nodes; // canonical "plugin:<instance ID>" or "source:n<ID>" keys
+  bool bypass=false;
+  std::vector<SignalSongGroupDryRoute> dryRoutes;
+  AudioPortTrims trims;
   bool operator==(const SignalSongGroup &) const = default;
 };
 // Song-level controls target existing rack instances; they never turn a rack
@@ -143,6 +173,7 @@ struct SignalSongSource {
   // notes. These are stable document identities, never mutable slot numbers.
   uint64_t noteTarget=0,noteInstrument=0;
   double amount=1;
+  uint64_t audioStage=0; // Aggregate channel graph auxiliary output; exclusive with bus/plugin taps.
   bool operator==(const SignalSongSource &) const = default;
 };
 struct SignalSongModulation {
@@ -156,6 +187,8 @@ struct SignalSongModulation {
   bool operator==(const SignalSongModulation &) const = default;
 };
 struct SignalGraph {
+  std::map<std::string,AudioPortTrims> trims; // Stable song node keys.
+  NoteRouting noteRouting;
   std::vector<SignalDefinition> library;
   std::vector<SignalAssignment> assignments;
   std::vector<SignalAssignment> instrumentAssignments; // target is stable instrument identity.
@@ -164,12 +197,13 @@ struct SignalGraph {
   std::map<std::string,std::array<double,2>> layout;
   std::vector<SignalInputRoute> inputs;
   std::vector<SignalOutputRoute> outputs;
+  std::vector<SignalStageConnection> stageConnections;
   std::vector<SignalSongGroup> groups;
   std::vector<SignalSongSource> songSources;
   std::vector<SignalSongModulation> songModulation;
   SignalPresentation presentation;
   bool operator==(const SignalGraph &) const = default;
-  bool empty() const { return library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
+  bool empty() const { return trims.empty() && noteRouting.empty() && library.empty() && instrumentAssignments.empty() && assignments.empty() && commands.empty() && lanes.empty() && layout.empty() && inputs.empty() && outputs.empty() && stageConnections.empty() && groups.empty() && songSources.empty() && songModulation.empty() && presentation.empty(); }
   size_t bytes() const;
   // Callers supply stable song identities, not slot numbers.
   void validate(const std::vector<uint64_t> &targets,
@@ -179,6 +213,7 @@ void validateSongSignalGroups(const SignalGraph &);
 void groupSongSignalNodes(SignalGraph &,const std::vector<std::string> &nodes,const std::vector<uint64_t> &groups,uint64_t id,uint64_t parent,std::string name);
 void ungroupSongSignalNodes(SignalGraph &,uint64_t id);
 void moveSongSignalGroup(SignalGraph &,uint64_t id,double x,double y);
+std::vector<std::string> songSignalGroupNodes(const SignalGraph &,uint64_t id);
 void pruneSongSignalGroups(SignalGraph &,const std::vector<std::string> &available);
 // Save a contiguous rack chain as an independent recipe. Active auxiliary
 // ports are exposed explicitly; the original rack/group remains untouched.
@@ -191,7 +226,8 @@ void insertSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, size_t
 // Pull a serial main path out, joining its sole predecessor and successor.
 // Auxiliary/modulation cables survive detachment; remove also deletes nodes
 // and all of their remaining connections. Ambiguity leaves the model intact.
-void detachSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, bool remove = false);
+struct SignalHealPath {std::optional<size_t> incoming,outgoing;};
+void detachSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, bool remove = false,std::optional<SignalHealPath> heal = {});
 // Selection consists of sibling nodes and/or nested boundaries. Both edits
 // preserve every processor, edge and binding and are atomic on rejection.
 void groupSignalNodes(SignalDefinition &, const std::vector<uint64_t> &, uint64_t id, uint64_t parent, std::string name);
@@ -213,6 +249,11 @@ bool sameSignalControlLayout(SignalGraph, SignalGraph);
 // follower-tap and modulation changes without rebuilding vendor processors.
 bool sameSignalSourceLayout(SignalGraph, SignalGraph);
 std::string signalBusIdentity(uint64_t);
+std::string signalStageEndpointKey(const SignalStageEndpoint &);
+SignalRouteIdentity signalStageRouteIdentity(const SignalStageConnection &);
+std::vector<uint32_t> signalStagePorts(const SignalGraph &,uint64_t target,bool input);
+void setSignalStageConnection(SignalGraph &,const SignalStageConnection &,const SignalStageConnection *replace=nullptr);
+void removeSignalStageConnection(SignalGraph &,const SignalStageConnection &);
 MixerGraph signalRoutingGraph(MixerGraph,const SignalGraph &);
 struct SignalProcessorInfo {
   uint64_t node = 0;

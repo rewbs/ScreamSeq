@@ -4,6 +4,1079 @@
   "description": "Newline-delimited JSON-RPC subset on a private Unix socket: one request/reply per connection, string ids, no batch envelopes/notifications. Format-specific limits are enforced by the host.",
   "oneOf": [
     {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.audio.connection.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "plugin"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$"
+                    }
+                  },
+                  "required": [
+                    "stage"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "plugin": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "plugin"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "stage": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$"
+                    }
+                  },
+                  "required": [
+                    "stage"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "gainDB": {
+              "type": "number",
+              "minimum": -96,
+              "maximum": 12
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "replace": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "plugin": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": [
+                        "plugin"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "stage": {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$"
+                        }
+                      },
+                      "required": [
+                        "stage"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "target": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "plugin": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": [
+                        "plugin"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "stage": {
+                          "type": "string",
+                          "pattern": "^n[1-9][0-9]*$"
+                        }
+                      },
+                      "required": [
+                        "stage"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "input": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              },
+              "required": [
+                "source",
+                "output",
+                "target",
+                "input"
+              ],
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "properties": {
+                    "source": {
+                      "required": [
+                        "stage"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "properties": {
+                    "target": {
+                      "required": [
+                        "stage"
+                      ]
+                    }
+                  }
+                }
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "source": {
+                        "required": [
+                          "stage"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "output": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "target": {
+                        "required": [
+                          "stage"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "input": {
+                        "minimum": 1
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "source",
+            "output",
+            "target",
+            "input",
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "properties": {
+                "source": {
+                  "required": [
+                    "stage"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "target": {
+                  "required": [
+                    "stage"
+                  ]
+                }
+              }
+            }
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source": {
+                    "required": [
+                      "stage"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "output": {
+                    "minimum": 1
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "target": {
+                    "required": [
+                      "stage"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "input": {
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Atomic typed rack\u2194outer graph-stage auxiliary contribution. A stage is the combined row/persistent/ordinary bus stage, not one selected copy. Its auxiliary inputs feed every prepared copy; outputs sum audible wet/tail contributions. Input/output zero belongs to the main serial path and cannot address a stage. Omitted gain/enabled preserve the replaced connection."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.note.activity"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read exact adopted note-route counters, delivery incarnation, held ownership and pending generation; never infer current silence from a retired route."
+    },
+    {
+      "title": "plugin.duplicate",
+      "description": "Create an independent plugin instance from its saved manual baseline. Effects start detached. Assignments, automation and cables are not copied. One Undo; dryRun leaves the document unchanged.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.duplicate"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugin"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.selection.copy"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "nodes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              }
+            }
+          },
+          "required": [
+            "graph",
+            "nodes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read selected recipe nodes/groups and internal cables as a portable fragment. External boundary cables are not copied. Includes opaque plugin baseline state; no mutation."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.selection.cut"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "nodes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              }
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "nodes",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Return the exact copied fragment and disconnect/remove original selected nodes in one Undo. Input/output boundaries cannot be cut."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.selection.duplicate"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "nodes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              }
+            },
+            "parent": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "nodes",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Duplicate recipe nodes/groups with fresh identities, internal cables, independent envelope curves and presentation metadata. Same-song pattern lanes remain on their existing patterns. External cables are not duplicated. One Undo."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.selection.paste"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "fragment": {
+              "$ref": "#/$defs/signalDefinition"
+            },
+            "parent": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "patternMap": {
+              "type": "array",
+              "maxItems": 1024,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^n[1-9][0-9]*$",
+                    "maxLength": 32
+                  },
+                  "target": {
+                    "type": "string",
+                    "pattern": "^n[1-9][0-9]*$",
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "source",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "fragment",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Paste a recipe fragment with fresh node/group identities and internal cables in one Undo. Every copied pattern envelope needs an explicit source-to-target patternMap, even for same-song copies; unrelated coincident IDs never bind automatically."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preset.save"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "overwrite": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "path",
+            "name",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Save configured recipe manual baselines into a portable plugin preset using an isolated instance. Never saves transient modulation, routing or bypass. Does not create song history."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preset.load"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "expectedPresetRevision": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "path",
+            "expectedPresetRevision",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Load a validated portable plugin preset into a shared recipe in one Undo. Preserve audio ports, routing, bypass and modulation ranges; update all target manual modulation baselines from the loaded preset. All uses update together through prepared publication."
+    },
+    {
+      "description": "Add a plugin-instrument note cable. New destinations wait for the next note-on. suppressAssignment atomically replaces an instrument\u2019s implicit cable.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.note.connect"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sourceKind": {
+              "enum": [
+                "channel",
+                "instrument"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "midiChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "suppressAssignment": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sourceKind",
+            "source",
+            "plugin",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Edit one note cable by stable ID. Removed destinations release owned notes; retained destinations continue. MIDI channel 0 preserves the source channel.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.note.update"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sourceKind": {
+              "enum": [
+                "channel",
+                "instrument"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "midiChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Remove an explicit note cable by id, or suppress an implicit assignment by stable instrument identity. Specify exactly one. Releases cable-owned notes without stopping playback.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.note.disconnect"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "instrument": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "id"
+              ],
+              "not": {
+                "required": [
+                  "instrument"
+                ]
+              }
+            },
+            {
+              "required": [
+                "instrument"
+              ],
+              "not": {
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Restore an instrument\u2019s implicit assigned-plugin note cable for future notes; existing held notes are not restarted.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.note.restoreAssignment"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "instrument": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "instrument",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "description": "Discover capabilities, indexing conventions and limits.",
       "type": "object",
       "properties": {
@@ -1553,6 +2626,19 @@
             "expectedRevision": {
               "type": "string",
               "description": "Opaque revision from the last read. Mandatory for every mutation."
+            },
+            "sources": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "description": "Optional song modulation sources removed atomically with the selected rack processors."
+            },
+            "dryRun": {
+              "type": "boolean"
             },
             "plugins": {
               "type": "array",
@@ -6575,7 +7661,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -6591,7 +7678,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -6620,6 +7708,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -6751,8 +7877,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -6760,14 +7885,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -6859,6 +8023,14 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "scratchGestures": {
+              "type": "array",
+              "maxItems": 255,
+              "items": {
+                "$ref": "#/$defs/scratchGesture"
+              },
+              "description": "Required phrase definitions for copied SK effects; remapped without replacing target-song phrases."
             }
           },
           "required": [
@@ -7622,6 +8794,10 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "mainOutputConnected": {
+              "type": "boolean",
+              "description": "Master only: connect or cut its final output cable. Processing and taps stay active."
             }
           },
           "required": [
@@ -11142,7 +12318,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -11158,7 +12335,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -11187,6 +12365,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -11318,8 +12534,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -11327,14 +12542,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -12855,424 +14109,7 @@
           "type": "object",
           "properties": {
             "definition": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "pattern": "^n[1-9][0-9]*$",
-                  "maxLength": 32
-                },
-                "number": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "maximum": 999
-                },
-                "name": {
-                  "type": "string",
-                  "maxLength": 256
-                },
-                "nodes": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "kind": {
-                        "enum": [
-                          "input",
-                          "output",
-                          "plugin",
-                          "lfo",
-                          "follower",
-                          "random",
-                          "note-envelope",
-                          "midi",
-                          "amount",
-                          "automation"
-                        ]
-                      },
-                      "name": {
-                        "type": "string",
-                        "maxLength": 256
-                      },
-                      "x": {
-                        "type": "number",
-                        "minimum": -100000,
-                        "maximum": 100000
-                      },
-                      "y": {
-                        "type": "number",
-                        "minimum": -100000,
-                        "maximum": 100000
-                      },
-                      "plugin": {
-                        "type": "object",
-                        "properties": {
-                          "format": {
-                            "enum": [
-                              "AU",
-                              "VST3",
-                              "Built-in"
-                            ]
-                          },
-                          "name": {
-                            "type": "string",
-                            "maxLength": 256
-                          },
-                          "path": {
-                            "type": "string",
-                            "maxLength": 4096
-                          },
-                          "classID": {
-                            "type": "string",
-                            "maxLength": 256
-                          },
-                          "type": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 4294967295
-                          },
-                          "subtype": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 4294967295
-                          },
-                          "manufacturer": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 4294967295
-                          },
-                          "state": {
-                            "type": "string",
-                            "maxLength": 12582912
-                          },
-                          "inputs": {
-                            "type": "array",
-                            "items": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 63
-                            },
-                            "maxItems": 63
-                          },
-                          "outputs": {
-                            "type": "array",
-                            "items": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 63
-                            },
-                            "maxItems": 63
-                          },
-                          "parameters": {
-                            "type": "array",
-                            "maxItems": 4096,
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "integer",
-                                  "minimum": 0,
-                                  "maximum": 4294967295
-                                },
-                                "value": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "bypass": {
-                            "type": "boolean",
-                            "default": false,
-                            "description": "Host bypass for this processor in all copies; not a vendor parameter."
-                          }
-                        },
-                        "required": [
-                          "format"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "rate": {
-                        "type": "number",
-                        "minimum": 0.0001,
-                        "maximum": 1024
-                      },
-                      "phase": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1
-                      },
-                      "attack": {
-                        "type": "number",
-                        "minimum": 1e-05,
-                        "maximum": 60
-                      },
-                      "release": {
-                        "type": "number",
-                        "minimum": 1e-05,
-                        "maximum": 60
-                      },
-                      "controller": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 127
-                      },
-                      "envelopes": {
-                        "type": "array",
-                        "maxItems": 1024,
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "pattern": {
-                              "type": "string",
-                              "pattern": "^n[1-9][0-9]*$",
-                              "maxLength": 32
-                            },
-                            "enabled": {
-                              "type": "boolean"
-                            },
-                            "points": {
-                              "type": "array",
-                              "minItems": 1,
-                              "maxItems": 4096,
-                              "items": {
-                                "type": "object",
-                                "properties": {
-                                  "position": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 1048575
-                                  },
-                                  "value": {
-                                    "type": "number",
-                                    "minimum": 0,
-                                    "maximum": 1
-                                  },
-                                  "curve": {
-                                    "enum": [
-                                      "step",
-                                      "linear",
-                                      "smooth",
-                                      "exponential",
-                                      "logarithmic",
-                                      "step-next",
-                                      "exponential-reverse",
-                                      "logarithmic-reverse",
-                                      "scripted"
-                                    ]
-                                  },
-                                  "formula": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 2048,
-                                    "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
-                                  }
-                                },
-                                "required": [
-                                  "position",
-                                  "value"
-                                ],
-                                "additionalProperties": false,
-                                "allOf": [
-                                  {
-                                    "if": {
-                                      "properties": {
-                                        "curve": {
-                                          "const": "scripted"
-                                        }
-                                      },
-                                      "required": [
-                                        "curve"
-                                      ]
-                                    },
-                                    "then": {
-                                      "required": [
-                                        "formula"
-                                      ]
-                                    }
-                                  }
-                                ]
-                              }
-                            }
-                          },
-                          "required": [
-                            "pattern",
-                            "points"
-                          ],
-                          "additionalProperties": false
-                        }
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "kind"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "maxItems": 64
-                },
-                "audio": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "source": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "target": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "input": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 63
-                      },
-                      "output": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 63
-                      },
-                      "gain": {
-                        "type": "number",
-                        "minimum": -16,
-                        "maximum": 16
-                      }
-                    },
-                    "required": [
-                      "source",
-                      "target"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "maxItems": 256
-                },
-                "modulation": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "source": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "target": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "parameter": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 4294967295
-                      },
-                      "minimum": {
-                        "type": "number",
-                        "minimum": -1,
-                        "maximum": 1
-                      },
-                      "maximum": {
-                        "type": "number",
-                        "minimum": -1,
-                        "maximum": 1
-                      },
-                      "base": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1
-                      },
-                      "enabled": {
-                        "type": "boolean"
-                      },
-                      "quantized": {
-                        "type": "boolean",
-                        "description": "Explicit target-step mode. Required true for discrete targets; all enabled sources of one parameter share the same mode."
-                      }
-                    },
-                    "required": [
-                      "source",
-                      "target",
-                      "parameter"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "maxItems": 256
-                },
-                "groups": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "pattern": "^n[1-9][0-9]*$",
-                        "maxLength": 32
-                      },
-                      "parent": {
-                        "type": "string",
-                        "pattern": "^(|n[1-9][0-9]*)$",
-                        "maxLength": 32
-                      },
-                      "name": {
-                        "type": "string",
-                        "maxLength": 256
-                      },
-                      "x": {
-                        "type": "number",
-                        "minimum": -100000,
-                        "maximum": 100000
-                      },
-                      "y": {
-                        "type": "number",
-                        "minimum": -100000,
-                        "maximum": 100000
-                      },
-                      "nodes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "pattern": "^n[1-9][0-9]*$",
-                          "maxLength": 32
-                        },
-                        "maxItems": 64,
-                        "uniqueItems": true
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "nodes"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "maxItems": 64
-                },
-                "presentation": {
-                  "$ref": "#/$defs/graphPresentation"
-                }
-              },
-              "required": [
-                "id",
-                "number",
-                "name",
-                "nodes",
-                "audio",
-                "modulation"
-              ],
-              "additionalProperties": false
+              "$ref": "#/$defs/signalDefinition"
             },
             "expectedRevision": {
               "type": "string",
@@ -13482,6 +14319,11 @@
                   "type": "boolean",
                   "default": false,
                   "description": "Host bypass for this processor in all copies; not a vendor parameter."
+                },
+                "audioLayout": {
+                  "type": "string",
+                  "maxLength": 8192,
+                  "description": "Host-captured logical-port to physical-channel fingerprint. A nonempty mismatch is rejected before processing; never clear it to silently retarget saved routing."
                 }
               },
               "required": [
@@ -13869,6 +14711,9 @@
               "minimum": 0,
               "maximum": 127
             },
+            "muted": {
+              "type": "boolean"
+            },
             "value": {
               "type": "integer",
               "minimum": 0,
@@ -14150,6 +14995,137 @@
       ],
       "additionalProperties": false,
       "description": "Inspect a library plugin recipe in an isolated instance; returns parameter and audio-port metadata."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.source.mute"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "muted": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "muted",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Mute every contribution of a modulation source while its clocks, gates and history keep advancing. graph:null selects a song source; a definition ID updates all its uses. One Undo; dry-run and identical values add no history."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.makeIndependent"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "scope": {
+              "enum": [
+                "channel",
+                "instrument"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "graph",
+            "target",
+            "scope",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Clone a shared definition with fresh identities and rebind this use in one Undo. Channel scope moves all ordinary assignments and all pattern commands for that target, keeping Start/Stop/Amount/Wet paired. Instrument scope moves only that instrument assignment. Other targets retain the original definition."
     },
     {
       "type": "object",
@@ -14752,13 +15728,44 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 16777216
+            },
+            "scratchBeats": {
+              "type": "number",
+              "minimum": 1.1920928955078125e-07,
+              "maximum": 256,
+              "description": "Use the scratch phrase evaluator with this per-cycle duration, rows 257, span 65537 and endpoints 0/65536."
             }
           },
           "required": [
             "points",
             "rows"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "scratchBeats"
+                ]
+              },
+              "then": {
+                "required": [
+                  "span"
+                ],
+                "properties": {
+                  "rows": {
+                    "const": 257
+                  },
+                  "span": {
+                    "const": 65537
+                  },
+                  "points": {
+                    "$ref": "#/$defs/scratchCurve"
+                  }
+                }
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -16399,7 +17406,8 @@
                   "duration": {
                     "type": "integer",
                     "minimum": 0,
-                    "maximum": 4294967295
+                    "maximum": 4294967295,
+                    "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                   },
                   "column": {
                     "type": "integer",
@@ -16415,7 +17423,8 @@
                       "note-cut",
                       "tracker",
                       "nudge-forward",
-                      "nudge-reverse"
+                      "nudge-reverse",
+                      "native"
                     ]
                   },
                   "binding": {
@@ -16444,6 +17453,44 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 255
+                  },
+                  "native": {
+                    "type": "string",
+                    "enum": [
+                      "gain-set",
+                      "gain-slide",
+                      "pan-set",
+                      "pan-slide",
+                      "pitch-relative",
+                      "tone-portamento",
+                      "vibrato",
+                      "tremolo",
+                      "panbrello",
+                      "arpeggio",
+                      "tremor",
+                      "retrigger",
+                      "note-release",
+                      "note-delay",
+                      "sample-offset",
+                      "sample-direction",
+                      "envelope-position",
+                      "envelope-enable",
+                      "tempo-set",
+                      "tempo-slide",
+                      "row-length",
+                      "scratch",
+                      "scratch-stop"
+                    ]
+                  },
+                  "parameters": {
+                    "type": "object"
+                  },
+                  "durationBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 65536,
+                    "default": 1,
+                    "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                   }
                 },
                 "required": [
@@ -16575,8 +17622,7 @@
                     },
                     "then": {
                       "required": [
-                        "value",
-                        "duration"
+                        "value"
                       ],
                       "properties": {
                         "value": {
@@ -16584,14 +17630,53 @@
                           "maximum": 1
                         },
                         "duration": {
-                          "minimum": 1
+                          "const": 0
                         },
                         "binding": {
                           "const": 0
                         },
                         "pitchRange": {
                           "const": 2
+                        },
+                        "durationBeats": {
+                          "minimum": 1.52587890625e-05,
+                          "maximum": 65536
                         }
+                      }
+                    },
+                    "else": {
+                      "not": {
+                        "required": [
+                          "durationBeats"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "native"
+                        }
+                      }
+                    },
+                    "then": {
+                      "$ref": "#/$defs/nativePatternCommand"
+                    },
+                    "else": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "native"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "parameters"
+                            ]
+                          }
+                        ]
                       }
                     }
                   }
@@ -16672,7 +17757,8 @@
                     "duration": {
                       "type": "integer",
                       "minimum": 0,
-                      "maximum": 4294967295
+                      "maximum": 4294967295,
+                      "description": "Row-unit duration (65536 units/row) for slides/native operations. NF/NR use durationBeats and must omit duration or set it to zero."
                     },
                     "kind": {
                       "enum": [
@@ -16683,7 +17769,8 @@
                         "note-cut",
                         "tracker",
                         "nudge-forward",
-                        "nudge-reverse"
+                        "nudge-reverse",
+                        "native"
                       ]
                     },
                     "binding": {
@@ -16717,6 +17804,44 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 65535
+                    },
+                    "native": {
+                      "type": "string",
+                      "enum": [
+                        "gain-set",
+                        "gain-slide",
+                        "pan-set",
+                        "pan-slide",
+                        "pitch-relative",
+                        "tone-portamento",
+                        "vibrato",
+                        "tremolo",
+                        "panbrello",
+                        "arpeggio",
+                        "tremor",
+                        "retrigger",
+                        "note-release",
+                        "note-delay",
+                        "sample-offset",
+                        "sample-direction",
+                        "envelope-position",
+                        "envelope-enable",
+                        "tempo-set",
+                        "tempo-slide",
+                        "row-length",
+                        "scratch",
+                        "scratch-stop"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object"
+                    },
+                    "durationBeats": {
+                      "type": "number",
+                      "minimum": 1.52587890625e-05,
+                      "maximum": 65536,
+                      "default": 1,
+                      "description": "NF/NR only: push and recovery duration in beats. Row display is a view conversion; old row-unit nudge durations are rejected."
                     }
                   },
                   "required": [
@@ -16845,8 +17970,7 @@
                       },
                       "then": {
                         "required": [
-                          "value",
-                          "duration"
+                          "value"
                         ],
                         "properties": {
                           "value": {
@@ -16854,14 +17978,53 @@
                             "maximum": 1
                           },
                           "duration": {
-                            "minimum": 1
+                            "const": 0
                           },
                           "binding": {
                             "const": 0
                           },
                           "pitchRange": {
                             "const": 2
+                          },
+                          "durationBeats": {
+                            "minimum": 1.52587890625e-05,
+                            "maximum": 65536
                           }
+                        }
+                      },
+                      "else": {
+                        "not": {
+                          "required": [
+                            "durationBeats"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "native"
+                          }
+                        }
+                      },
+                      "then": {
+                        "$ref": "#/$defs/nativePatternCommand"
+                      },
+                      "else": {
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "native"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "parameters"
+                              ]
+                            }
+                          ]
                         }
                       }
                     }
@@ -17167,7 +18330,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Pull one effect out of its serial main path and heal that path. Retains plugin identity/state/bindings and clocks the disconnected effect on silence. Explicit auxiliary cables must be disconnected first; loose multi-effect chains are not yet supported. One unified Undo includes supplied layout. Compatible live transitions preserve playback; dryRun validates only.",
+      "description": "Detach an ordered consecutive effect chain, healing its old serial main path. Preserves processor identity/state, internal order, existing auxiliary branches and grouped sources. The detached chain is clocked from a silent root; explicit inputs can still feed it. One Undo includes supplied positions.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -17192,7 +18355,7 @@
             "plugins": {
               "type": "array",
               "minItems": 1,
-              "maxItems": 1,
+              "maxItems": 32,
               "uniqueItems": true,
               "items": {
                 "type": "string",
@@ -17231,7 +18394,7 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 1
+              "maxItems": 64
             }
           },
           "required": [
@@ -17599,7 +18762,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Upsert, move or remove a recorded point by stable plugin identity. Stops playback, preserves other points and supports plugin Undo; dryRun is non-mutating.",
+      "description": "Upsert, move or remove a recorded point by stable plugin identity. Prepared live edits preserve playback and other points, with unified Undo; dryRun is non-mutating.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -17685,6 +18848,29 @@
         "params": {
           "type": "object",
           "properties": {
+            "heal": {
+              "type": "object",
+              "properties": {
+                "incoming": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "outgoing": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 255
+                }
+              },
+              "additionalProperties": false,
+              "description": "Explicit boundary edge indices for one connected processing subgraph, including branches and modulators, guarded by expectedRevision. Chosen edge gains multiply; unchosen branches remain when detaching. No implicit cross-product."
+            },
             "graph": {
               "type": "string",
               "pattern": "^n[1-9][0-9]*$",
@@ -17700,7 +18886,7 @@
             "nodes": {
               "type": "array",
               "minItems": 1,
-              "maxItems": 32,
+              "maxItems": 64,
               "uniqueItems": true,
               "items": {
                 "type": "string",
@@ -17736,7 +18922,7 @@
                 ],
                 "additionalProperties": false
               },
-              "maxItems": 32
+              "maxItems": 64
             },
             "remove": {
               "type": "boolean",
@@ -17761,7 +18947,7 @@
       "description": "Detach a serial effect chain and heal its main path atomically. Preserve auxiliary/modulation routes unless remove is true. Ambiguous branches fail unchanged. Optional positions share one Undo."
     },
     {
-      "description": "Read host physical ports and exact gained/delayed route contributions from the adopted plan. Optional route descriptors identify kind/source/target/plugin/input/output, tap, adopted gainDB and preFader; use returned opaque keys for scope/listen. Measured false differs from silence. Stopped values are historical; reusable graph internals are not yet observed.",
+      "description": "Read host physical ports, exact reusable graph copies and gained/delayed cable contributions from the adopted plan. Optional copy identifies graph/target/role/instrument/channel; route identifies the precise cable. Control records expose quantum endpoint values; Note Envelope sources additionally expose noteGate aggregate held/on/off/retrigger counters and lastFrame, not a raw MIDI event log. Use opaque audio keys for scope/listen. Measured false differs from silence; stopped values are historical.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -18275,7 +19461,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^plugin:.+",
+                "pattern": "^(plugin:.+|source:n[1-9][0-9]*)$",
                 "maxLength": 256
               },
               "maxItems": 240,
@@ -18321,7 +19507,7 @@
                 "properties": {
                   "node": {
                     "type": "string",
-                    "pattern": "^plugin:.+",
+                    "pattern": "^(plugin:.+|source:n[1-9][0-9]*)$",
                     "maxLength": 256
                   },
                   "x": {
@@ -18769,6 +19955,11 @@
                       },
                       "preFader": {
                         "type": "boolean"
+                      },
+                      "stage": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
                       }
                     },
                     "required": [
@@ -18781,8 +19972,17 @@
                           "source"
                         ],
                         "not": {
-                          "required": [
-                            "plugin"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "plugin"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "stage"
+                              ]
+                            }
                           ]
                         }
                       },
@@ -18791,13 +19991,323 @@
                           "plugin"
                         ],
                         "not": {
-                          "required": [
-                            "source"
+                          "anyOf": [
+                            {
+                              "required": [
+                                "source"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "required": [
+                          "stage"
+                        ],
+                        "not": {
+                          "anyOf": [
+                            {
+                              "required": [
+                                "source"
+                              ]
+                            },
+                            {
+                              "required": [
+                                "plugin"
+                              ]
+                            }
                           ]
                         }
                       }
                     ],
+                    "additionalProperties": false,
+                    "allOf": [
+                      {
+                        "if": {
+                          "required": [
+                            "stage"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "output"
+                          ],
+                          "properties": {
+                            "output": {
+                              "minimum": 1
+                            },
+                            "preFader": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "note"
+                      },
+                      "route": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "route"
+                    ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "note"
+                      },
+                      "instrument": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "instrument"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "source",
+                      "plugin"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "insert"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      },
+                      "plugin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "source"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "master-output"
+                      },
+                      "source": {
+                        "type": "string",
+                        "pattern": "^n[1-9][0-9]*$",
+                        "maxLength": 32
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "plugin-connection"
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "output",
+                      "target",
+                      "input"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "plugin": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "plugin"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "stage": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$"
+                              }
+                            },
+                            "required": [
+                              "stage"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "target": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "plugin": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "plugin"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "stage": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$"
+                              }
+                            },
+                            "required": [
+                              "stage"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "input": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "kind": {
+                        "const": "stage-connection"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "output",
+                      "target",
+                      "input",
+                      "kind"
+                    ],
+                    "additionalProperties": false,
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "source": {
+                            "required": [
+                              "stage"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "target": {
+                            "required": [
+                              "stage"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "source": {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "output": {
+                              "minimum": 1
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "if": {
+                          "properties": {
+                            "target": {
+                              "required": [
+                                "stage"
+                              ]
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "input": {
+                              "minimum": 1
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -18824,7 +20334,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Atomically cut explicit song routes by stable semantic endpoints. One Undo; dryRun validates without changing history. Empty batches are no-ops. Cutting an instrument\u2019s last destination preserves an explicit disconnected output; fixed rack-chain wires are rejected."
+      "description": "Atomically cut song cables by stable semantic endpoints. One Undo; dryRun leaves history unchanged. Cutting an implicit insert input or Master terminal never heals another route. Auxiliary branches remain intact."
     },
     {
       "type": "object",
@@ -18895,6 +20405,9 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 127
+                },
+                "muted": {
+                  "type": "boolean"
                 },
                 "envelopes": {
                   "type": "array",
@@ -19033,6 +20546,22 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "audioStage": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ],
+                  "description": "Typed channel graph-stage auxiliary tap; exclusive with audioBus/audioPlugin. Use a declared output >=1 and preFader=false."
+                },
+                "trims": {
+                  "$ref": "#/$defs/audioPortTrims"
                 }
               },
               "required": [
@@ -19069,6 +20598,12 @@
             },
             "dryRun": {
               "type": "boolean"
+            },
+            "parent": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32,
+              "description": "Existing song processing group. Source, optional edge and membership share one Undo; omitted creates at song root."
             }
           },
           "required": [
@@ -19085,7 +20620,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth, in one Undo. No processor is replaced."
+      "description": "Allocate a song-level control source, optionally connect to a stable rack parameter at zero depth and add to a processing group, in one Undo. No processor is replaced."
     },
     {
       "type": "object",
@@ -19151,6 +20686,9 @@
                   "minimum": 0,
                   "maximum": 127
                 },
+                "muted": {
+                  "type": "boolean"
+                },
                 "audioBus": {
                   "oneOf": [
                     {
@@ -19203,6 +20741,19 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1
+                },
+                "audioStage": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    {
+                      "const": ""
+                    }
+                  ],
+                  "description": "Typed channel graph-stage auxiliary tap; exclusive with audioBus/audioPlugin. Use a declared output >=1 and preFader=false."
                 }
               },
               "required": [],
@@ -19600,9 +21151,1827 @@
       ],
       "additionalProperties": false,
       "description": "Read existing envelope, pattern FX column and recorded automation provenance for a stable plugin parameter. Available stopped or unloaded; no DSP, revision or history mutation. Paginated bounded references retain original base-control semantics."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.group.boundary"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "graph",
+            "group"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read exact group audio ingress and egress identities, current/inferred dry routes, requested bypass and needsMapping without preparing plugins."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.group.bypass"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "group": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "bypass": {
+              "type": "boolean"
+            },
+            "dryRoutes": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "source": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$",
+                                "maxLength": 32
+                              },
+                              "target": {
+                                "type": "string",
+                                "pattern": "^n[1-9][0-9]*$",
+                                "maxLength": 32
+                              },
+                              "output": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              },
+                              "input": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              }
+                            },
+                            "required": [
+                              "source",
+                              "target"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "enum": [
+                              "",
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "object",
+                        "properties": {
+                          "node": {
+                            "type": "string",
+                            "pattern": "^n[1-9][0-9]*$",
+                            "maxLength": 32
+                          },
+                          "port": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          }
+                        },
+                        "required": [
+                          "node"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "insert",
+                                  "output",
+                                  "master-output",
+                                  "send",
+                                  "plugin-input",
+                                  "plugin-output",
+                                  "graph-input",
+                                  "follower-input",
+                                  "plugin-connection"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "target": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "plugin": {
+                                "type": "string",
+                                "maxLength": 256
+                              },
+                              "tap": {
+                                "enum": [
+                                  "post-gain",
+                                  "main-path",
+                                  "pre-master-fader"
+                                ]
+                              },
+                              "input": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              },
+                              "output": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 63
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "enum": [
+                              "",
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "output": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "insert",
+                              "output",
+                              "master-output",
+                              "send",
+                              "plugin-input",
+                              "plugin-output",
+                              "graph-input",
+                              "follower-input",
+                              "plugin-connection"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "target": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "plugin": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "tap": {
+                            "enum": [
+                              "post-gain",
+                              "main-path",
+                              "pre-master-fader"
+                            ]
+                          },
+                          "input": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          },
+                          "output": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 63
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "input",
+                      "output"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "graph",
+            "group",
+            "bypass",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Bypass a real processing boundary while its contents keep running. A unique input/output dry path is inferred; ambiguous boundaries require an explicit dryRoutes map covering each outgoing boundary. graph:null selects a song group. One Undo; no per-member bypass substitution."
+    },
+    {
+      "description": "Replace sources mixed into a plugin input. 0 sums into Main in; 1\u201363 select named auxiliary/sidechain buses. Connected supported auxiliary ports enable automatically on playback; one document Undo.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "mixer.plugin.connection.set"
+        },
+        "params": {
+          "type": "object",
+          "description": "Atomic direct plugin output to effect input upsert or exact endpoint replacement. Fan-in/out preserves serial ownership; input 0 sums into Main. Supported logical bus/channel slices only. Plugin instruments with supported physical audio inputs accept these routes and process after their audio dependencies. Disabled routes remain cycle-validated.",
+          "properties": {
+            "expectedRevision": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "gainDB": {
+              "type": "number",
+              "minimum": -96,
+              "maximum": 12
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "replace": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "output": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "input": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              },
+              "required": [
+                "source",
+                "output",
+                "target",
+                "input"
+              ],
+              "additionalProperties": false
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "source",
+            "output",
+            "target",
+            "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "description": "Nonempty UTF-8 name, at most 256 bytes."
+            },
+            "motion": {
+              "$ref": "#/$defs/scratchCurve"
+            },
+            "fader": {
+              "$ref": "#/$defs/scratchCurve"
+            },
+            "preset": {
+              "enum": [
+                "baby",
+                "chirp",
+                "transform",
+                "one-click-flare",
+                "two-click-flare",
+                "crab",
+                "scribble"
+              ]
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "not": {
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "preset"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "name",
+                      "motion",
+                      "fader"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "scratch.gestures.clone"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "target": {
+              "type": "object",
+              "description": "Optional SK cell currently referencing id; clone and reassignment form one Undo step.",
+              "properties": {
+                "pattern": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "row": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "channel": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 126
+                },
+                "column": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 7
+                }
+              },
+              "required": [
+                "pattern",
+                "row",
+                "channel",
+                "column"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.devices"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.start"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "device": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 512
+            },
+            "firstChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "channels": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2
+            },
+            "maxSeconds": {
+              "type": "number",
+              "minimum": 0.001,
+              "maximum": 300
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.stop"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.discard"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.recording.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "createInstrument": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "take",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "sample.renderSelection"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "firstRow": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "lastRow": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "firstChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "lastChannel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "createInstrument": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "tailSeconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "pattern",
+            "firstRow",
+            "lastRow",
+            "firstChannel",
+            "lastChannel",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.trim.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Read available stable audio ports, current trims, inverse links and control sources."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.trim.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "node": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "port": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 2048,
+              "pattern": "^[io]:"
+            },
+            "gainDB": {
+              "type": "number",
+              "minimum": -48,
+              "maximum": 48
+            },
+            "linkTo": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 2048,
+                  "pattern": "^[io]:"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "modulation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "pattern": "^n[1-9][0-9]*$",
+                    "maxLength": 32
+                  },
+                  "minimumDB": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96
+                  },
+                  "maximumDB": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96
+                  }
+                },
+                "required": [
+                  "source",
+                  "minimumDB",
+                  "maximumDB"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 256
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "graph",
+            "node",
+            "port",
+            "expectedRevision"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "gainDB"
+              ]
+            },
+            {
+              "required": [
+                "linkTo"
+              ]
+            },
+            {
+              "required": [
+                "modulation"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "Atomically edit one audio port trim in dB, inverse compensation link or replacement modulation source list. Link edits preserve the sum of both manual gains. One Undo, revision checked; dryRun validates without changing audio or history."
     }
   ],
   "$defs": {
+    "signalDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^n[1-9][0-9]*$",
+          "maxLength": 32
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "kind": {
+                "enum": [
+                  "input",
+                  "output",
+                  "plugin",
+                  "lfo",
+                  "follower",
+                  "random",
+                  "note-envelope",
+                  "midi",
+                  "amount",
+                  "automation"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "plugin": {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "enum": [
+                      "AU",
+                      "VST3",
+                      "Built-in"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "path": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "classID": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "type": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "subtype": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "manufacturer": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "state": {
+                    "type": "string",
+                    "maxLength": 12582912
+                  },
+                  "inputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 63
+                    },
+                    "maxItems": 63
+                  },
+                  "outputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 63
+                    },
+                    "maxItems": 63
+                  },
+                  "parameters": {
+                    "type": "array",
+                    "maxItems": 4096,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 4294967295
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "bypass": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Host bypass for this processor in all copies; not a vendor parameter."
+                  },
+                  "audioLayout": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "Host-captured logical-port to physical-channel fingerprint. A nonempty mismatch is rejected before processing; never clear it to silently retarget saved routing."
+                  }
+                },
+                "required": [
+                  "format"
+                ],
+                "additionalProperties": false
+              },
+              "rate": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 1024
+              },
+              "phase": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "attack": {
+                "type": "number",
+                "minimum": 1e-05,
+                "maximum": 60
+              },
+              "release": {
+                "type": "number",
+                "minimum": 1e-05,
+                "maximum": 60
+              },
+              "controller": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "muted": {
+                "type": "boolean"
+              },
+              "envelopes": {
+                "type": "array",
+                "maxItems": 1024,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "pattern": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "points": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 4096,
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1048575
+                          },
+                          "value": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "curve": {
+                            "enum": [
+                              "step",
+                              "linear",
+                              "smooth",
+                              "exponential",
+                              "logarithmic",
+                              "step-next",
+                              "exponential-reverse",
+                              "logarithmic-reverse",
+                              "scripted"
+                            ]
+                          },
+                          "formula": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2048,
+                            "description": "Bounded math expression. Required with scripted curve. start/end are normalized, t or beatOffset is segment progress, beat is pattern position in beats, beats is elapsed segment beats. Terminal segments extend to pattern end and end equals start."
+                          }
+                        },
+                        "required": [
+                          "position",
+                          "value"
+                        ],
+                        "additionalProperties": false,
+                        "allOf": [
+                          {
+                            "if": {
+                              "properties": {
+                                "curve": {
+                                  "const": "scripted"
+                                }
+                              },
+                              "required": [
+                                "curve"
+                              ]
+                            },
+                            "then": {
+                              "required": [
+                                "formula"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "pattern",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "trims": {
+                "$ref": "#/$defs/audioPortTrims"
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "audio": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "input": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "output": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "gain": {
+                "type": "number",
+                "minimum": -16,
+                "maximum": 16
+              }
+            },
+            "required": [
+              "source",
+              "target"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        },
+        "modulation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "parameter": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              },
+              "minimum": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "maximum": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "base": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "quantized": {
+                "type": "boolean",
+                "description": "Explicit target-step mode. Required true for discrete targets; all enabled sources of one parameter share the same mode."
+              }
+            },
+            "required": [
+              "source",
+              "target",
+              "parameter"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$",
+                "maxLength": 32
+              },
+              "parent": {
+                "type": "string",
+                "pattern": "^(|n[1-9][0-9]*)$",
+                "maxLength": 32
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^n[1-9][0-9]*$",
+                  "maxLength": 32
+                },
+                "maxItems": 64,
+                "uniqueItems": true
+              },
+              "bypass": {
+                "type": "boolean"
+              },
+              "dryRoutes": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "pattern": "^n[1-9][0-9]*$",
+                                  "maxLength": 32
+                                },
+                                "target": {
+                                  "type": "string",
+                                  "pattern": "^n[1-9][0-9]*$",
+                                  "maxLength": 32
+                                },
+                                "output": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                },
+                                "input": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "target"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "enum": [
+                                "",
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "output": {
+                          "type": "object",
+                          "properties": {
+                            "node": {
+                              "type": "string",
+                              "pattern": "^n[1-9][0-9]*$",
+                              "maxLength": 32
+                            },
+                            "port": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            }
+                          },
+                          "required": [
+                            "node"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "input",
+                        "output"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "insert",
+                                    "output",
+                                    "master-output",
+                                    "send",
+                                    "plugin-input",
+                                    "plugin-output",
+                                    "graph-input",
+                                    "follower-input",
+                                    "plugin-connection"
+                                  ]
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "target": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "plugin": {
+                                  "type": "string",
+                                  "maxLength": 256
+                                },
+                                "tap": {
+                                  "enum": [
+                                    "post-gain",
+                                    "main-path",
+                                    "pre-master-fader"
+                                  ]
+                                },
+                                "input": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                },
+                                "output": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 63
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "enum": [
+                                "",
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "output": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "insert",
+                                "output",
+                                "master-output",
+                                "send",
+                                "plugin-input",
+                                "plugin-output",
+                                "graph-input",
+                                "follower-input",
+                                "plugin-connection"
+                              ]
+                            },
+                            "source": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "target": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "plugin": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "tap": {
+                              "enum": [
+                                "post-gain",
+                                "main-path",
+                                "pre-master-fader"
+                              ]
+                            },
+                            "input": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            },
+                            "output": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 63
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "input",
+                        "output"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "trims": {
+                "$ref": "#/$defs/audioPortTrims"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "nodes"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "presentation": {
+          "$ref": "#/$defs/graphPresentation"
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "name",
+        "nodes",
+        "audio",
+        "modulation"
+      ],
+      "additionalProperties": false
+    },
     "graphPresentation": {
       "type": "object",
       "properties": {
@@ -19711,9 +23080,16 @@
                 "maxLength": 512
               },
               "output": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 63
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 63
+                  },
+                  {
+                    "const": 4294967294
+                  }
+                ]
               },
               "input": {
                 "type": "integer",
@@ -19745,6 +23121,10 @@
                   "minItems": 2,
                   "maxItems": 2
                 }
+              },
+              "connection": {
+                "type": "string",
+                "maxLength": 128
               }
             },
             "required": [
@@ -19756,6 +23136,1219 @@
           }
         }
       },
+      "additionalProperties": false
+    },
+    "nativePatternCommand": {
+      "type": "object",
+      "required": [
+        "native",
+        "parameters"
+      ],
+      "properties": {
+        "native": {
+          "enum": [
+            "gain-set",
+            "gain-slide",
+            "pan-set",
+            "pan-slide",
+            "pitch-relative",
+            "tone-portamento",
+            "vibrato",
+            "tremolo",
+            "panbrello",
+            "arpeggio",
+            "tremor",
+            "retrigger",
+            "note-release",
+            "note-delay",
+            "sample-offset",
+            "sample-direction",
+            "envelope-position",
+            "envelope-enable",
+            "tempo-set",
+            "tempo-slide",
+            "row-length",
+            "scratch",
+            "scratch-stop"
+          ]
+        },
+        "parameters": {
+          "type": "object"
+        },
+        "binding": {
+          "const": 0
+        },
+        "value": {
+          "const": 0
+        },
+        "pitchRange": {
+          "const": 2
+        },
+        "effect": {
+          "const": 0
+        },
+        "parameter": {
+          "const": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gain-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gain": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "scope": {
+                    "enum": [
+                      "voice",
+                      "channel",
+                      "song"
+                    ],
+                    "default": "voice"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gain-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gain": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "scope": {
+                    "enum": [
+                      "voice",
+                      "channel",
+                      "song"
+                    ],
+                    "default": "voice"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pan-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pan-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "pitch-relative"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "semitones": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tone-portamento"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 120,
+                    "default": 49
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "vibrato"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 96,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tremolo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "panbrello"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "shape": {
+                    "enum": [
+                      "sine",
+                      "triangle",
+                      "saw",
+                      "square",
+                      "random"
+                    ],
+                    "default": "sine"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  },
+                  "reset": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "arpeggio"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "offset1": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 4
+                  },
+                  "offset2": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 7
+                  },
+                  "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "default": 1
+                  },
+                  "rateMode": {
+                    "enum": [
+                      "beat",
+                      "hz"
+                    ],
+                    "default": "beat"
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tremor"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "onBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "offBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "depth": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 1
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "retrigger"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "intervalBeats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65536,
+                    "default": 1
+                  },
+                  "volumeFactor": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "default": 1
+                  },
+                  "volumeStep": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "note-release"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "note-delay"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "sample-offset"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4294967295,
+                    "default": 0
+                  },
+                  "mode": {
+                    "enum": [
+                      "frames",
+                      "normalized",
+                      "cue"
+                    ],
+                    "default": "frames"
+                  }
+                },
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "mode"
+                      ],
+                      "properties": {
+                        "mode": {
+                          "const": "normalized"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "required": [
+                        "mode"
+                      ],
+                      "properties": {
+                        "mode": {
+                          "const": "cue"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9,
+                          "default": 0
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "sample-direction"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "direction": {
+                    "enum": [
+                      "forward",
+                      "reverse"
+                    ],
+                    "default": "forward"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "envelope-position"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "envelope": {
+                    "enum": [
+                      "volume",
+                      "pan",
+                      "pitch",
+                      "all"
+                    ],
+                    "default": "volume"
+                  },
+                  "position": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 65536,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "envelope-enable"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "envelope": {
+                    "enum": [
+                      "volume",
+                      "pan",
+                      "pitch"
+                    ],
+                    "default": "volume"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tempo-set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "bpm": {
+                    "type": "number",
+                    "minimum": 32,
+                    "maximum": 512,
+                    "default": 125
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "tempo-slide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "bpm": {
+                    "type": "number",
+                    "minimum": 32,
+                    "maximum": 512,
+                    "default": 125
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4294967295
+              }
+            },
+            "required": [
+              "duration"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "row-length"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "beats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.25
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              },
+              "position": {
+                "multipleOf": 65536
+              },
+              "offset": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "scratch"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "gesture": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255,
+                    "default": 1
+                  },
+                  "beats": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 1
+                  },
+                  "travelMs": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "default": 200
+                  },
+                  "repeats": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 128,
+                    "default": 1
+                  },
+                  "reverse": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "scratch-stop"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scratchCurve": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "position",
+          "value"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65536
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "curve": {
+            "enum": [
+              "step",
+              "linear",
+              "smooth",
+              "exponential",
+              "logarithmic",
+              "step-next",
+              "exponential-reverse",
+              "logarithmic-reverse",
+              "scripted"
+            ]
+          },
+          "formula": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "curve": {
+                  "const": "scripted"
+                }
+              },
+              "required": [
+                "curve"
+              ]
+            },
+            "then": {
+              "required": [
+                "formula"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "formula"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "description": "Strictly increasing positions with endpoints 0 and 65536. Scripted points require a valid bounded formula.",
+      "prefixItems": [
+        {
+          "properties": {
+            "position": {
+              "const": 0
+            }
+          }
+        }
+      ],
+      "contains": {
+        "properties": {
+          "position": {
+            "const": 65536
+          }
+        },
+        "required": [
+          "position"
+        ]
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "scratchGesture": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "motion",
+        "fader"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Nonempty UTF-8 name, at most 256 bytes."
+        },
+        "motion": {
+          "$ref": "#/$defs/scratchCurve"
+        },
+        "fader": {
+          "$ref": "#/$defs/scratchCurve"
+        }
+      },
+      "additionalProperties": false
+    },
+    "audioPortTrims": {
+      "type": "object",
+      "properties": {
+        "gains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "port": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2048,
+                "pattern": "^[io]:"
+              },
+              "gainDB": {
+                "type": "number",
+                "minimum": -48,
+                "maximum": 48
+              }
+            },
+            "required": [
+              "port",
+              "gainDB"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2048,
+                "pattern": "^[io]:"
+              },
+              "output": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2048,
+                "pattern": "^[io]:"
+              }
+            },
+            "required": [
+              "input",
+              "output"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        },
+        "modulation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "port": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2048,
+                "pattern": "^[io]:"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "pattern": "^n[1-9][0-9]*$",
+                      "maxLength": 32
+                    },
+                    "minimumDB": {
+                      "type": "number",
+                      "minimum": -96,
+                      "maximum": 96
+                    },
+                    "maximumDB": {
+                      "type": "number",
+                      "minimum": -96,
+                      "maximum": 96
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "minimumDB",
+                    "maximumDB"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 256
+              }
+            },
+            "required": [
+              "port",
+              "sources"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
+        }
+      },
+      "required": [],
       "additionalProperties": false
     }
   }

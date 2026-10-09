@@ -1,0 +1,11 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 55: native-mixer
+1/3 Test #55: native-mixer .....................   Passed   11.57 sec
+    Start 56: rack-preset
+2/3 Test #56: rack-preset ......................   Passed    1.19 sec
+    Start 82: native-signal-graph
+3/3 Test #82: native-signal-graph ..............   Passed    1.49 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =  14.26 sec

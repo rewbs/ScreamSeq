@@ -1,11 +1,20 @@
 #import "../Bridge/TrackerSession.h"
 #include "../Audio/AudioUnitHost.hpp"
+#include "../Bridge/SignalTelemetry.hpp"
 #include "editor/TrackerDocument.hpp"
 #include <iostream>
 using namespace Tracker;
 static void check(bool b,const char *message){if(!b)throw std::runtime_error(message);}
+
+#include "GraphTrimSessionChecks.inc"
+#include "GraphEditingSessionChecks.inc"
+#include "GraphStageSessionChecks.inc"
+#include "SignalTelemetrySessionChecks.inc"
 int main(){@autoreleasepool{try{
+  graphTrimSessionChecks();
+  signalTelemetryProjectionChecks();
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  check([[session signalTelemetry] isEqual:[session songSignalTelemetry]],"Stopped root projection must retain the full telemetry envelope and empty-port semantics");
   auto call=[&](NSString *method,NSDictionary *parameters,bool write=false)->NSDictionary *{auto p=[parameters mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto response=[session automationMethod:method params:p error:&error];if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return response;};
   auto data=[&](){return call(@"graph.get",@{})[@"data"];};
   auto empty=data();NSString *revision=session.automationRevision;
@@ -292,12 +301,14 @@ int main(){@autoreleasepool{try{
     auto snapshot=[&](){return api(@"graph.get",@{});};
     api(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"name":@"Gainer",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
     NSString *plugin=snapshot()[@"plugins"][0][@"id"];
-    NSDictionary *add=@{@"source":@{@"kind":@"lfo",@"name":@"Movement",@"rate":@2},@"connect":@{@"plugin":plugin,@"parameter":@1}};
+    NSString *sourceGroup=api(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:plugin]],@"name":@"Dynamics"},true)[@"group"];
+    NSDictionary *add=@{@"source":@{@"kind":@"lfo",@"name":@"Movement",@"rate":@2},@"connect":@{@"plugin":plugin,@"parameter":@1},@"parent":sourceGroup};
     auto before=snapshot();auto rev=mod.automationRevision;
     auto preview=[add mutableCopy];preview[@"dryRun"]=@YES;api(@"graph.song.source.add",preview,true);
     check([rev isEqual:mod.automationRevision]&&[before isEqual:snapshot()],"Song source dry-run changed identities/history");
     NSString *source=api(@"graph.song.source.add",add,true)[@"node"];auto connected=snapshot();
     check([connected[@"songSources"] count]==1&&[connected[@"songModulation"] count]==1&&[connected[@"songModulation"][0][@"maximum"] doubleValue]==0,"Add source connects at zero depth");
+    check([connected[@"groups"][0][@"nodes"] containsObject:[@"source:" stringByAppendingString:source]],"A source added inside a song group must join that group atomically");
     check([before[@"plugins"] isEqual:connected[@"plugins"]]&&[before[@"mixer"] isEqual:connected[@"mixer"]],"Song modulation replaced rack instances or routing");
     api(@"history.undo",@{},true);check([before isEqual:snapshot()],"One Undo must remove source and zero-depth connection");
     api(@"history.redo",@{},true);check([connected isEqual:snapshot()],"Redo must restore source and stable target identities");
@@ -315,7 +326,10 @@ int main(){@autoreleasepool{try{
     }
     check(hasBase&&hasSource&&[rev isEqual:mod.automationRevision],"Activity must expose the unmodulated base and stable source edit link without editing the song");
     auto rejectSong=[&](NSString *method,NSDictionary *p){auto guarded=[p mutableCopy];guarded[@"expectedRevision"]=mod.automationRevision;NSError *failure=nil;auto state=snapshot();auto revision=mod.automationRevision;
-      check(![mod automationMethod:method params:guarded error:&failure],"Invalid song control edit accepted");check([state isEqual:snapshot()]&&[revision isEqual:mod.automationRevision],"Invalid song control partially committed");};
+      check(![mod automationMethod:method params:guarded error:&failure],"Invalid song control edit accepted");check([state isEqual:snapshot()]&&[revision isEqual:mod.automationRevision],"Invalid song control partially committed");return failure.code;};
+    for(id parent in @[@"n999999",@YES,NSNull.null])check(rejectSong(@"graph.song.source.add",@{@"source":@{@"kind":@"lfo"},@"parent":parent})==-32602,"Invalid source parent is a validation error, not an engine failure");
+    auto staleAdd=[add mutableCopy];staleAdd[@"expectedRevision"]=@"stale";
+    check(![mod automationMethod:@"graph.song.source.add" params:staleAdd error:&problem]&&[depthState isEqual:snapshot()],"A stale grouped-source add must not change allocator, membership or routes");
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@1,@"minimum":@(-2)});
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@YES});
     rejectSong(@"graph.song.modulation.set",@{@"source":source,@"plugin":plugin,@"parameter":@99999});
@@ -420,5 +434,7 @@ int main(){@autoreleasepool{try{
     auto saved=snapshot();NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
     check([bypass savePath:path error:&problem]&&[bypass openPath:path error:&problem]&&[saved isEqual:snapshot()],"Recipe bypass lost on save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   }
+  graphEditingSessionChecks();
+  graphStageSessionChecks();
   std::cout<<"PASS graph API: preview, identity allocation, guarded atomic edits, assignment and group-capable lanes, Undo/Redo, recipe/state project roundtrip, independent clone identities\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

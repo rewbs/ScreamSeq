@@ -45,7 +45,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     setting_=false;inspectFields();layout();requestPaint();
   }
   void load(){
-    if(pending_)return;const auto doc=context_().first;pending_=true;layout();try{auto data=request_("graph.get",{{"includeState",false}});if(context_().first!=doc)throw std::runtime_error("Document changed while loading routing; Reload again");data_=std::move(data);document_=doc;revision_=context_().second;dirty_=layoutDirty_=false;++generation_;pending_=false;rebuild();status(L"Configured routes · select a wire to edit, or a node to inspect");}catch(...){pending_=false;layout();throw;}
+    if(pending_)return;const auto doc=context_().first;pending_=true;layout();try{auto data=request_("graph.get",{{"includeState",false}});if(context_().first!=doc)throw std::runtime_error("Document changed while loading routing; Reload again");data_=std::move(data);document_=doc;revision_=context_().second;dirty_=layoutDirty_=false;++generation_;pending_=false;rebuild();status(L"Drag sockets to add · selected wire target handle rewires · select a node to inspect");}catch(...){pending_=false;layout();throw;}
   }
   void mutate(const std::string &method,Json p,bool dry=false){
     if(pending_)return;current();p["expectedRevision"]=revision_;if(dry)p["dryRun"]=true;const auto gen=generation_;pending_=true;layout();
@@ -58,28 +58,37 @@ class SongRoutingWindow final:public NativeToolWindow {
   void selectWire(int index){
     clean();wire_=index;setting_=true;choose(wirePicker,index<0?"":std::to_string(index));if(index<0){setting_=false;return;}selected_.clear();choose(nodePicker,"");set(title,L"Connection");
     const auto &e=canvas_.edges.at(size_t(index));choose(source,e.source);choose(destination,e.target);set(output,Json(e.output));set(input,Json(e.input));const auto &a=e.action;const auto type=a.value("kind",std::string{});Json settings=Json::object();
-    int mode=0;if(type=="send"){mode=1;settings=bus(a.at("source")).at("sends").at(a.at("index").get<size_t>());}else if(type=="graph-input"){mode=2;settings=data_.at("inputs").at(a.at("index").get<size_t>());}else if(type=="graph-output")mode=3;else if(type=="plugin-input"){mode=4;settings=data_.at("mixer").at("sidechains").at(a.at("index").get<size_t>());}else if(type=="plugin-output")mode=5;
+    int mode=0;if(type=="send"){mode=1;settings=bus(a.at("source")).at("sends").at(a.at("index").get<size_t>());}else if(type=="graph-input"){mode=2;settings=data_.at("inputs").at(a.at("index").get<size_t>());}else if(type=="graph-output")mode=3;else if(type=="plugin-input"){mode=4;settings=data_.at("mixer").at("sidechains").at(a.at("index").get<size_t>());}else if(type=="plugin-output")mode=5;else if(type=="plugin-connection"){mode=6;for(const auto &r:data_.at("mixer").at("pluginConnections"))if(r.at("source")==a.at("source")&&r.at("target")==a.at("target")&&r.at("output")==a.at("output")&&r.at("input")==a.at("input")){settings=r;break;}}
     SendMessageW(controls_.at(kind),CB_SETCURSEL,mode,0);page_=0;SendMessageW(controls_.at(page),CB_SETCURSEL,0,0);set(gain,settings.value("gainDB",0.0));pre_=settings.value("preFader",false);enabled_=settings.value("enabled",true);setting_=false;status(type.empty()?L"This wire follows the chain order / use Inserts or open the subgraph":L"Selected wire / edit its settings then Update wire");layout();
   }
   std::pair<std::string,Json> route(bool remove,bool updating){
     if(layoutDirty_)throw std::runtime_error("Save layout or Reload before editing routes");const auto *edge=wire_>=0?&canvas_.edges.at(size_t(wire_)):nullptr;
     const Json a=(updating||remove)&&edge?edge->action:Json::object();std::string type=a.value("kind",std::string{});
-    const std::array<const char *,6> types{"output","send","graph-input","graph-output","plugin-input","plugin-output"};const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);
+    const std::array<const char *,7> types{"output","send","graph-input","graph-output","plugin-input","plugin-output","plugin-connection"};const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);
     if((updating||remove)&&type.empty())throw std::runtime_error("Select an editable routing wire");if(!remove){if(mode<0||mode>=int(types.size()))throw std::runtime_error("Select a route kind");if(updating&&type!=types[size_t(mode)])throw std::runtime_error("Remove and reconnect to change the wire kind");type=types[size_t(mode)];}
     const Node *from=nullptr,*to=nullptr;if(!remove){from=&chosenNode(source);to=&chosenNode(destination);}
     if(type=="output")return {"mixer.bus.set",{{"bus",remove?a.at("source"):Json(busID(*from))},{"output",remove?Json():Json(busID(*to))}}};
     if(type=="send"){
       const auto id=remove?a.at("source").get<std::string>():busID(*from);if(updating&&a.at("source")!=id)throw std::runtime_error("Remove and reconnect to change a send's source");auto list=bus(id).at("sends");
-      if(remove)list.erase(a.at("index").get<size_t>());else{Json item={{"target",busID(*to)},{"gainDB",number(gain)},{"preFader",pre_},{"enabled",enabled_}};if(updating)list.at(a.at("index").get<size_t>())=item;else list.push_back(item);}return {"mixer.sends.set",{{"bus",id},{"sends",list}}};
+      if(remove)list.erase(a.at("index").get<size_t>());else{Json item={{"target",busID(*to)},{"gainDB",number(gain)},{"preFader",pre_},{"enabled",enabled_}};if(updating)list.at(a.at("index").get<size_t>())=item;else list=GraphCableEdits::addSend(list,busID(*to),number(gain),pre_,enabled_);}return {"mixer.sends.set",{{"bus",id},{"sends",list}}};
     }
     if(type=="graph-input"||type=="graph-output"){
       const bool in=type=="graph-input";const auto key=in?"inputs":"outputs";auto list=data_.at(key);
-      if(remove)list.erase(a.at("index").get<size_t>());else{Json item={{"source",busID(*from)},{"target",busID(*to)},{in?"input":"output",port(in?input:output)}};if(in){item["gainDB"]=number(gain);item["preFader"]=pre_;}if(updating)list.at(a.at("index").get<size_t>())=item;else{if(!in)std::erase_if(list.get_ref<Json::array_t &>(),[&](const auto &r){return r.at("source")==item.at("source")&&r.at("output")==item.at("output");});list.push_back(item);}}
+      if(remove)list.erase(a.at("index").get<size_t>());else{Json item={{"source",busID(*from)},{"target",busID(*to)},{in?"input":"output",port(in?input:output)}};if(in){item["gainDB"]=number(gain);item["preFader"]=pre_;}if(updating)list.at(a.at("index").get<size_t>())=item;else{const auto same=std::find_if(list.begin(),list.end(),[&](const auto &r){return r.at("source")==item.at("source")&&r.at("target")==item.at("target")&&r.at(in?"input":"output")==item.at(in?"input":"output");});if(same==list.end())list.push_back(item);}}
       return {"graph.routes.set",{{key,list}}};
     }
     if(type=="plugin-output"){
       const auto plugin=remove?a.at("plugin").get<std::string>():pluginID(*from);const auto out=remove?a.at("output").get<unsigned>():port(output);
-      if(updating&&(a.at("plugin")!=plugin||a.at("output")!=out))throw std::runtime_error("Remove and reconnect to change the plugin output port");return {"mixer.plugin.route",{{"plugin",plugin},{"output",out},{"target",remove?Json():Json(busID(*to))},{"disconnected",remove}}};
+      if(updating&&(a.at("plugin")!=plugin||a.at("output")!=out))throw std::runtime_error("Remove and reconnect to change the plugin output port");
+      std::string implicitMain;for(const auto &p:data_.at("plugins"))if(p.at("id")==plugin&&p.value("isInstrument",false))for(const auto &b:data_.at("mixer").at("buses"))if(b.at("kind")=="master")implicitMain=b.at("id").get<std::string>();
+      const auto oldTarget=(remove||updating)?std::optional<std::string>(edge->target):std::nullopt;
+      const auto newTarget=remove?std::nullopt:std::optional<std::string>(busID(*to));
+      return {"mixer.plugin.route",{{"plugin",plugin},{"output",out},{"targets",GraphCableEdits::pluginTargets(data_.at("mixer").at("instruments"),plugin,out,implicitMain,oldTarget,newTarget)}}};
+    }
+    if(type=="plugin-connection"){
+      if(remove)return {"graph.connections.remove",{{"connections",Json::array({a})}}};
+      Json params={{"source",pluginID(*from)},{"output",port(output)},{"target",pluginID(*to)},{"input",port(input)},{"gainDB",number(gain)},{"enabled",enabled_}};
+      if(updating){auto old=a;old.erase("kind");params["replace"]=std::move(old);}return {"mixer.plugin.connection.set",std::move(params)};
     }
     if(type=="plugin-input"){
       const auto &all=data_.at("mixer").at("sidechains");const auto old=(updating||remove)?all.at(a.at("index").get<size_t>()):Json::object();const auto plugin=remove?old.at("plugin").get<std::string>():pluginID(*to);const auto in=remove?old.at("input").get<unsigned>():port(input);
@@ -129,14 +138,35 @@ class SongRoutingWindow final:public NativeToolWindow {
   }
   void mouse(UINT message,float x,float y,WPARAM)override{
     pointer_={x,y};if(message==WM_CAPTURECHANGED){drag_=0;return;}if(pending_)return;
-    if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)){SetFocus(window_);const auto i=canvas_.nodeAt(x,y);
-      if(i>=0){const auto n=canvas_.nodes[size_t(i)];const bool wire=std::abs(x-(n.rect.x+n.rect.w))<10;
-        if(wire){if(layoutDirty_)clean();}else{if(dirty_)clean();if(!layoutDirty_)selectNode(n.id);else if(n.id!=selected_)clean();}
-        dragNode_=n.id;dragOrigin_={n.x,n.y};dragStart_={x,y};drag_=wire?3:1;}
+    if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)){SetFocus(window_);
+      if(wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty()){
+        const auto &edge=canvas_.edges.at(size_t(wire_));const auto h=edge.points[28];
+        if(std::hypot(x-h.x,y-h.y)<=7){clean();dragNode_=edge.source;drag_=4;SetCapture(window_);requestPaint();return;}
+      }
+      const auto i=canvas_.nodeAt(x,y);
+      if(i>=0){const auto n=canvas_.nodes[size_t(i)];const auto cy=n.rect.y+n.rect.h/2;
+        const bool out=std::abs(x-(n.rect.x+n.rect.w))<10&&std::abs(y-cy)<10;
+        const bool in=std::abs(x-n.rect.x)<10&&std::abs(y-cy)<10;
+        if(out||in){if(layoutDirty_)clean();}else{if(dirty_)clean();if(!layoutDirty_)selectNode(n.id);else if(n.id!=selected_)clean();}
+        dragNode_=n.id;dragOrigin_={n.x,n.y};dragStart_={x,y};drag_=out?3:in?5:1;}
       else if(const auto edge=canvas_.edgeAt(x,y);edge>=0&&!layoutDirty_){selectWire(edge);return;}else{drag_=2;dragStart_={x,y};dragOrigin_={canvas_.panX,canvas_.panY};}SetCapture(window_);
     }else if(message==WM_MOUSEMOVE&&drag_){if(drag_==1){auto n=canvas_.find(dragNode_);if(n){n->x=std::clamp(dragOrigin_.x+(x-dragStart_.x)/canvas_.zoom,0.0f,100000.0f);n->y=std::clamp(dragOrigin_.y+(y-dragStart_.y)/canvas_.zoom,0.0f,100000.0f);if(n->x!=dragOrigin_.x||n->y!=dragOrigin_.y){layoutDirty_=true;++generation_;}}}else if(drag_==2){canvas_.panX=dragOrigin_.x+x-dragStart_.x;canvas_.panY=dragOrigin_.y+y-dragStart_.y;}canvas_.geometry();}
-    else if(message==WM_LBUTTONUP&&drag_){const auto mode=drag_;drag_=0;ReleaseCapture();if(mode==3){const auto target=canvas_.nodeAt(x,y);if(target>=0){choose(source,dragNode_);choose(destination,canvas_.nodes[size_t(target)].id);dirty_=true;++generation_;auto [method,p]=route(false,false);mutate(method,p);}}
-      else if(layoutDirty_)status(L"Moved layout draft / Save layout or Reload");layout();}
+    else if(message==WM_LBUTTONUP&&drag_){const auto mode=drag_;drag_=0;ReleaseCapture();if(mode==3||mode==4||mode==5){const auto target=canvas_.nodeAt(x,y);if(target>=0){
+        const auto drop=canvas_.nodes[size_t(target)].id;choose(source,mode==5?drop:dragNode_);choose(destination,mode==5?dragNode_:drop);
+        // Socket identity determines every new cable. Explicit compatible
+        // drafts retain their controls; selecting a wire never changes what
+        // a later fresh socket drag addresses.
+        if(mode!=4){
+          const auto &from=chosenNode(source),&to=chosenNode(destination);
+          const auto previous=int(SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0));
+          const int routeKind=GraphCableEdits::freshSongRoute(!from.plugin.empty(),!to.plugin.empty(),!from.graph.empty(),!to.graph.empty(),previous,dirty_);
+          const bool keepDraft=dirty_&&previous==routeKind;
+          setting_=true;SendMessageW(controls_.at(kind),CB_SETCURSEL,routeKind,0);
+          if(!keepDraft){set(gain,L"0");set(input,L"0");set(output,L"0");pre_=false;enabled_=true;}setting_=false;
+        }
+        dirty_=true;++generation_;auto [method,p]=route(false,mode==4);mutate(method,p);
+      }}else if(layoutDirty_)status(L"Moved layout draft / Save layout or Reload");layout();}
+    requestPaint();
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const float x=w-322,cw=306;canvas_.viewport={12,82,w-352,h-146};canvas_.geometry();
@@ -150,7 +180,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     place(statusLabel,12,h-52,w-24,42);for(const auto &[id,control]:controls_)if(id<title&&id!=close)EnableWindow(control,!pending_);
     const auto n=canvas_.find(selected_);EnableWindow(controls_.at(enable),!pending_&&data_.value("mixer",Json::object()).value("buses",Json::array()).empty());EnableWindow(controls_.at(saveLayout),!pending_&&layoutDirty_);EnableWindow(controls_.at(open),!pending_&&n);for(int id:{insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown})EnableWindow(controls_.at(id),!pending_&&n&&!n->bus.empty());for(int id:{assign,clear,graphPicker,amount,wet})EnableWindow(controls_.at(id),!pending_&&n&&(!n->bus.empty()||!n->instrument.empty()));
     const bool editable=wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty();for(int id:{update,disconnect})EnableWindow(controls_.at(id),!pending_&&editable);SetWindowTextW(controls_.at(pre),pre_?L"Pre-fader: on":L"Pre-fader: off");SetWindowTextW(controls_.at(enabled),enabled_?L"Route enabled":L"Route disabled");
-    const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);EnableWindow(controls_.at(gain),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(pre),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(enabled),!pending_&&(mode==1||mode==4));EnableWindow(controls_.at(input),!pending_&&(mode==2||mode==4));EnableWindow(controls_.at(output),!pending_&&(mode==3||mode==5));
+    const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);EnableWindow(controls_.at(gain),!pending_&&(mode==1||mode==2||mode==4||mode==6));EnableWindow(controls_.at(pre),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(enabled),!pending_&&(mode==1||mode==4||mode==6));EnableWindow(controls_.at(input),!pending_&&(mode==2||mode==4||mode==6));EnableWindow(controls_.at(output),!pending_&&(mode==3||mode==5||mode==6));
     if(layoutDirty_)for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear})EnableWindow(controls_.at(id),FALSE);
     EnableWindow(controls_.at(open),!pending_&&n&&(!n->bus.empty()||!n->plugin.empty()||!n->graph.empty()));
   }
@@ -164,14 +194,15 @@ class SongRoutingWindow final:public NativeToolWindow {
       if(canvas_.zoom>=.45f){s.clip(r.x+6,r.y+3,std::max(1.0f,r.w-12),std::max(1.0f,r.h-6));s.uiText(n.name,r.x+9,r.y+8,r.w-18,0xe0ecf4);if(canvas_.zoom>=.7f)s.uiText(n.detail,r.x+9,r.y+32,r.w-18,0x9cb1c2);s.unclip();}
       const float cy=r.y+r.h/2;s.fill(r.x-3,cy-3,6,6,accent);s.fill(r.x+r.w-3,cy-3,6,6,accent);s.line(r.x+r.w-8,cy-3,r.x+r.w-4,cy,accent);s.line(r.x+r.w-8,cy+3,r.x+r.w-4,cy,accent);
     }
-    if(drag_==3){const auto n=canvas_.find(dragNode_);if(n){const auto points=GraphCanvas::curve({n->rect.x+n->rect.w,n->rect.y+n->rect.h/2},pointer_);for(size_t i=1;i<points.size();++i)s.line(points[i-1].x,points[i-1].y,points[i].x,points[i].y,0xffd08a,2);}}
+    if(wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty()){const auto h=canvas_.edges[size_t(wire_)].points[28];s.fill(h.x-5,h.y-5,10,10,0x18222d);s.outline(h.x-5,h.y-5,10,10,0xffd08a);}
+    if(drag_==3||drag_==4||drag_==5){const auto n=canvas_.find(dragNode_);if(n){const auto points=drag_==5?GraphCanvas::curve(pointer_,{n->rect.x,n->rect.y+n->rect.h/2}):GraphCanvas::curve({n->rect.x+n->rect.w,n->rect.y+n->rect.h/2},pointer_);for(size_t i=1;i<points.size();++i)s.line(points[i-1].x,points[i-1].y,points[i].x,points[i].y,0xffd08a,2);}}
     if(canvas_.nodes.empty())s.uiText(L"Enable routing to connect channels, instruments and effects",v.x+20,v.y+24,v.w-40,0x8fa8ba);s.unclip();s.outline(v.x,v.y,v.w,v.h,GetFocus()==window_?0x6edac5:0x334757);
   }
 public:
   SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumWidth_=1040;minimumHeight_=680;create(L"ScreamSeq.SongRouting",L"Song routing",1280,800);
     for(int id:{filter,nodePicker,wirePicker,kind,source,destination,page,insertPicker,effectPicker,graphPicker})combo(id);
-    for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(kind),CB_SETCURSEL,0,0);
+    for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(kind),CB_SETCURSEL,0,0);
     for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})SendMessageW(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));SendMessageW(controls_.at(page),CB_SETCURSEL,0,0);
     for(int id:{gain,input,output,amount,wet})edit(id,L"",32);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);

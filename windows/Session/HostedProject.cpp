@@ -39,6 +39,7 @@ std::vector<Tracker::PluginState> projectPluginStates(const Project::ProjectStat
     const bool declaredInstrument=flag(record.value("isInstrument",Json(false)));d.instrument=d.type==Tracker::audioUnitMusicDeviceType||declaredInstrument;
     if(d.format=="VST3")require(d.classID.size()==32&&std::all_of(d.classID.begin(),d.classID.end(),[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F');}),"Invalid VST3 class ID");
     if(d.format=="Built-in")require(!d.classID.empty()&&!d.type&&!d.subtype&&!d.manufacturer&&!d.instrument&&d.path.empty(),"Invalid built-in descriptor");
+    state.audioLayout=text(record.value("audioLayout",Json("")),8192);
     state.instanceID=text(record.at("instanceID"),128);require(!state.instanceID.empty()&&ids.insert(state.instanceID).second,"Invalid/duplicate plugin instance identity");
     state.bypass=flag(record.value("bypass",Json(false)));state.instrument=uint32_t(integer(record.value("instrument",Json(0)),255));
     state.auxiliaryInputs=buses(record.value("auxiliaryInputs",Json::array()));state.auxiliaryOutputs=buses(record.value("auxiliaryOutputs",Json::array()));
@@ -73,7 +74,7 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
   offline_=offline;
   rate_=rate;
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
-  native_=document.native();native_.validate(document.song());auto states=projectPluginStates(project);
+  native_=document.native();if(settings.liveEditing&&!native_.mixer.active())native_.ensureMixer();native_.validate(document.song());auto states=projectPluginStates(project);
   Tracker::validatePluginCapacity(states,native_.mixer.buses.size());auto automation=projectAbsoluteAutomation(project);
   // Audition pauses the pattern clock but retains prepared channel routing.
   // Each PreviewNote explicitly chooses its channel or independent inspector path.
@@ -99,6 +100,12 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
   if(nativeUpdateGeneration_==UINT64_MAX)throw std::runtime_error("Live update generation exhausted");
   auto prepared=std::make_unique<PreparedNativeUpdate>();
   prepared->owner_=this;prepared->generation_=nativeUpdateGeneration_;
+  if(before.scratchGestures!=next.scratchGestures) {
+    auto scratchOnly=before;scratchOnly.scratchGestures=next.scratchGestures;
+    if(scratchOnly!=next)return {};
+    prepared->scratch_=renderer_->prepareScratchUpdate(next);
+    return prepared;
+  }
   // Graph control publication does not update mixer routing. Never let an
   // otherwise compatible graph swallow a simultaneous mixer edit.
   if(before.mixer==next.mixer && before.signal.songSources==next.signal.songSources &&
@@ -113,7 +120,7 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
 }
 bool HostedProjectPlayback::publishNativeUpdate(PreparedNativeUpdate &prepared) {
   if(prepared.owner_!=this || prepared.generation_!=nativeUpdateGeneration_ || prepared.published_)return false;
-  const bool accepted=prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
+  const bool accepted=prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
     prepared.routing_&&chain_->publishMixerRouting(prepared.routing_);
   if(accepted){prepared.published_=true;++nativeUpdateGeneration_;}
   return accepted;
@@ -153,7 +160,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     return true;
   }
   for(uint32_t at=0;at<frames;) {
-    if(chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return !offline_;}
+    if(offline_&&chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     const auto origin=time.offset(at),end=time.offset(at+count);
     const bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;

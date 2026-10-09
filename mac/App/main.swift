@@ -31,6 +31,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var noteTrackWindow: NSWindow?
   var pluginBrowserWindow: NSWindow?
   var sampleBrowserWindow: NSWindow?
+  var sampleRecordingWindow: NSWindow?
   lazy var sampleLibrary = SampleLibrary(directory: sampleLibraryDirectory)
   let sampleAudition = SampleAudition()
   let sampleInspectionQueue = DispatchQueue(label: "org.resonance.sample-inspection", qos: .userInitiated)
@@ -69,6 +70,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var rulerPlaybackOrder:Int?
   var selectedOrder = 0
   var documentURL: URL?
+  var documentLoadReport = DocumentLoadReport()
+  let documentLoadBanner = DocumentLoadBanner(frame: .zero)
+  var documentLoadReportWindow: NSWindow?
   var dirty = false
   var lastStatusUpdate = 0.0
   var lastFrameCount: UInt64 = 0
@@ -134,6 +138,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var patternToolsWindow: NSWindow?
   var commandPickerWindow: NSWindow?
   var patternPerformanceWindow: NSWindow?
+  var scratchGestureWindow: NSWindow?
   var preciseNotesWindow:NSWindow?
   var recordingTakeID:String?,recordingFinishing=false
   var midiQuantization=0,midiLatencyMS=0.0,midiRecordColumns=1
@@ -173,6 +178,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       window.setFrameAutosaveName("ResonanceConnectedWorkspace")
     }
     createContent()
+    patternView.onNeedsRefresh = {[weak self] in self?.tick()}
     patternView.onEdit = { [weak self] row, channel, values in
       guard let self, !self.busy else { return }
       if self.sessionReading {
@@ -211,6 +217,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if let saved=UserDefaults.standard.string(forKey:"patternPositionMode"),let mode=PatternPositionMode(rawValue:saved),!inspectionTest,!automationTest{patternView.positionMode=mode}
     patternView.onNudgeRequest = {[weak self] params,reply in self?.handleAutomation("pattern.effect.set",params:params,reply:reply)}
     patternView.onNativeEffect = {[weak self] in self?.showPatternPerformance()}
+    patternView.onScratchPhrase = {[weak self] in self?.showScratchGestures()}
     patternView.onTrackerEffect = {[weak self] row,channel,column,effect,parameter in self?.setTrackerEffect(row:row,channel:channel,column:column,effect:effect,parameter:parameter)}
     patternView.onTypedNativeEffect = {[weak self] kind in self?.openPatternPerformance(kind:kind)}
     patternView.onClearNativeEffect = {[weak self] row,channel,column in self?.clearNativeEffect(row:row,channel:channel,column:column)}
@@ -322,6 +329,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let divider = Panel(Theme.border)
     divider.fixed(height: 1)
     vertical.addArrangedSubview(divider)
+    documentLoadBanner.report.handler = { [weak self] in self?.importReport() }
+    documentLoadBanner.saveCopy.handler = { [weak self] in self?.saveDocumentAs() }
+    vertical.addArrangedSubview(documentLoadBanner)
     let workspace = NSStackView()
     workspace.orientation = .horizontal
     workspace.distribution = .fill
@@ -463,11 +473,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     guard !busy else { return }
     let previousDocument=model.revisionToken.split(separator:":").first
     model = PatternModel(session.snapshot(model.pattern))
+    documentLoadReport.update(model)
+    if documentLoadReport.requiresSaveAs { documentURL = nil; dirty = true }
+    updateDocumentLoadReport()
     if previousDocument != model.revisionToken.split(separator:":").first {
       sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
+      (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
       workspaceContextTokens.removeAll();workspaceReturnPoints.removeAll()
     }
     patternView.model = model
+    // Catalogues may change through the agent API while their panels are hidden
+    // or pinned. This updates choices only; it never changes targets or drafts.
+    sampleEditor.updateCatalogue(model.samples)
+    instrumentEditor.updateCatalogue(model)
+    if scratchGestureWindow?.isVisible==true,let editor=scratchGestureWindow?.contentView as? ScratchGestureEditor {let revision=model.revisionToken;DispatchQueue.main.async{[weak editor] in editor?.observeRevision(revision)}}
     updateCommandHelp()
     window.isDocumentEdited = dirty
     infoLabel.stringValue =
@@ -850,7 +869,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       if workspace?.visibleIDs.contains("graph") == true {
         UIWorkTrace.measure(.graphTelemetry){
           signalGraphEditor.showActivity(t["graphActivity"] as? [[String:Any]] ?? [],playing:playing)
-          let signalTelemetry=UIWorkTrace.measure(.graphSignalRead){session.signalTelemetry() as? [String:Any] ?? [:]}
+          let signalTelemetry=UIWorkTrace.measure(.graphSignalRead){
+            // Recipe views need every prepared copy for exact selection. The
+            // song view only displays root/aggregate ports, never those copies.
+            (signalGraphEditor.graphID==nil ? session.songSignalTelemetry():session.signalTelemetry()) as? [String:Any] ?? [:]
+          }
           UIWorkTrace.measure(.graphSignalDisplay){signalGraphEditor.showSignals(signalTelemetry)}
         }
       } else {
@@ -942,7 +965,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.model.pattern = self.model.orders.first ?? 0
         self.refreshPattern()
         self.statusLabel.stringValue =
-          "Opened \(url.lastPathComponent)"
+          (self.documentLoadReport.requiresSaveAs ? "Recovered \(url.lastPathComponent) · Save a copy" : "Opened \(url.lastPathComponent)")
           + (self.model.issues.isEmpty ? "" : " · \(self.model.issues.count) import notes")
         self.offerPluginTrust(untrustedPlugins)
       })
@@ -976,7 +999,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc func saveAs() { saveDocumentAs() }
   // `then` runs only after the song has actually been written.
   func saveDocument(then: (() -> Void)? = nil) {
-    if !["screamseq", "resonance"].contains(documentURL?.pathExtension.lowercased() ?? "") {
+    if documentLoadReport.requiresSaveAs || !["screamseq", "resonance"].contains(documentURL?.pathExtension.lowercased() ?? "") {
       saveDocumentAs(then: then)
       return
     }
@@ -994,7 +1017,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     let ext = "screamseq"
     let panel = NSSavePanel()
-    panel.nameFieldStringValue = (model.title.isEmpty ? "Untitled" : model.title) + "." + ext
+    panel.nameFieldStringValue = documentLoadReport.suggestedFilename(title: model.title)
+    if documentLoadReport.requiresSaveAs { panel.title = "Save recovered project as a copy" }
     panel.allowedContentTypes = [UTType(filenameExtension: ext) ?? .data]
     panel.beginSheetModal(for: window) { [weak self] response in
       if response == .OK, let url = panel.url { self?.save(to: url, then: then) }
@@ -1011,6 +1035,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       "Saving…", refresh: false, { try self.session.savePath(url.path) },
       completion: {
         self.documentURL = url
+        self.documentLoadReport.didSave()
+        self.updateDocumentLoadReport()
         self.dirty = false
         self.window.isDocumentEdited = false
         self.statusLabel.stringValue = "Saved \(url.lastPathComponent)"
@@ -1128,6 +1154,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.refreshAssets()
     }
     sampleEditor.onImport = { [weak self] in self?.importSample() }
+    sampleEditor.onRecord = { [weak self] in self?.showSampleRecorder() }
     sampleEditor.onReplace = { [weak self] in
       guard let self else { return }
       self.importSample(replacing: self.sampleEditor.index)
@@ -1162,6 +1189,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     pluginEditor.onNewInstrument = {[weak self] slot in self?.showNewPluginInstrument(slot:slot)}
     instrumentEditor.onCreate = { [weak self] in self?.addInstrument() }
     instrumentEditor.onImport = { [weak self] in self?.importInstrument() }
+    instrumentEditor.onRecord = { [weak self] in
+      self?.showSampleRecorder()
+      (self?.sampleRecordingWindow?.contentView as? SampleRecordingView)?.instrument.state = .on
+    }
     instrumentEditor.onEnvelopeBank = { [weak self] kind in self?.showInstrumentEnvelopeBank(kind) }
     instrumentEditor.onEnvelopeTools = { [weak self] kind in self?.showInstrumentEnvelopeTools(kind) }
     instrumentEditor.envelope.canEdit = { [weak self] in
@@ -1293,7 +1324,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.runPatternCommand("pattern.transform", params: params) { [weak self] reply in
         if let error = reply["error"] as? [String: Any] {
           self?.statusLabel.stringValue = error["message"] as? String ?? "Row edit failed"
-        } else { self?.statusLabel.stringValue = params["operation"] as? String == "clear" ? "Selection cleared · Undo restores it" : params["operation"] as? String == "insertRows" ? "Row inserted" : "Row deleted" }
+        } else {
+          let operation=params["operation"] as? String
+          let fieldOnly=(params["fields"] as? [String])?.count==1 && params["rowCount"] as? Int==1 && params["channelCount"] as? Int==1
+          self?.statusLabel.stringValue = operation=="clear" ? (fieldOnly ? "Field cleared · Undo restores it" : "Selection cleared · Undo restores it") : operation=="insertRows" ? "Row inserted" : params["channelCount"] as? Int==1 ? "Channel row deleted · Undo restores it" : "Row deleted"
+        }
       }
     }
   }
@@ -1304,7 +1339,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     else {
       let id = ["", "samples", "instruments", "plugins"][editorMode]
       // Explicit asset selection must not be replaced by automatic cursor following.
-      workspaceContextTokens[id] = "asset:\(model.pattern):\(patternView.cursorRow):\(patternView.cursorChannel)"
+      workspaceContextTokens[id] = WorkspaceAssetContext.token(panel:id,model:model,row:patternView.cursorRow,channel:patternView.cursorChannel,input:patternView.instrument)
       workspace?.show(id)
       refreshAssets()
     }
@@ -1325,6 +1360,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         defer { self.finishSessionRead() }
         guard self.workspaceAssetTokens[id]==token,(sample ? self.sampleEditor.index : self.instrumentEditor.index)==index else{return}
         if sample {self.sampleEditor.update(data,samples:self.model.samples,revision:revision)} else {self.instrumentEditor.update(data,model:self.model)}
+        WorkspaceAssetContext.updateCaption(self.workspace?.panels[id],index:index,hasDraft:sample ? self.sampleEditor.hasDraft : self.instrumentEditor.hasDraft)
       }
     }
   }
@@ -1445,13 +1481,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     keyboardSettings.window?.delegate = self
   }
   func importReport() {
-    let alert = NSAlert()
-    alert.messageText = "Import report"
-    alert.informativeText =
-      model.issues.isEmpty
-      ? "No missing samples or inactive tracker plug-ins were detected. Native editing supports MOD, XM, S3M, IT, and MPTM. Other formats are preview-only."
-      : model.issues.joined(separator: "\n\n")
-    alert.beginSheetModal(for: window)
+    if documentLoadReportWindow == nil {
+      let view = DocumentLoadReportView(frame: .zero)
+      view.saveCopy.handler = { [weak self] in self?.saveDocumentAs() }
+      let report = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 440),
+        styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+      report.title = "Project load report"; report.minSize = NSSize(width: 460, height: 320)
+      report.isReleasedWhenClosed = false; report.contentView = view; report.delegate = self
+      documentLoadReportWindow = report; report.center()
+    }
+    updateDocumentLoadReport()
+    documentLoadReportWindow?.makeKeyAndOrderFront(nil)
+  }
+  func updateDocumentLoadReport() {
+    documentLoadBanner.update(documentLoadReport)
+    (documentLoadReportWindow?.contentView as? DocumentLoadReportView)?.update(documentLoadReport)
   }
   func refreshPlugins() {
     guard !busy else { return }
@@ -1693,6 +1737,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   enum UnsavedChoice { case proceed, save, cancel }
   func unsavedChoice() -> UnsavedChoice {
+    if session.sampleRecordingTakeID != nil {
+      showSampleRecorder()
+      statusLabel.stringValue = "Add or discard the recorded sample before closing or replacing this song."
+      return .cancel
+    }
     if session.recordingTakeID != nil {statusLabel.stringValue="Finish or discard the recording take from the Pattern menu before closing or replacing the song.";return .cancel}
     if !dirty { return .proceed }
     let alert = NSAlert()
@@ -1910,6 +1959,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(file, "Open…", #selector(openFile), "o")
     item(file, "Open Demo", #selector(demoFile))
     item(file, "Browse Samples…", #selector(showSampleBrowser), "l", [.command, .shift])
+    item(file, "Record Microphone to Sample…", #selector(showSampleRecorder))
     item(file, "Recover a Song…", #selector(recoverDocument))
     file.addItem(.separator())
     item(file, "Save", #selector(saveFile), "s")
@@ -1953,6 +2003,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(pattern, "Finish Recording Take", #selector(retryRecordingFinish), "", [])
     item(pattern, "Discard Recording Take", #selector(discardLiveRecording), "", [])
     item(pattern, "Extra Effects…", #selector(showPatternPerformance), "e", [.command, .shift])
+    item(pattern, "Scratch phrases…", #selector(showScratchGestures))
+    item(pattern, "Record Selection to Sample", #selector(recordSelectionToSample))
+    item(pattern, "Record Selection to Instrument", #selector(recordSelectionToInstrument))
     item(pattern, "Pattern Tools…", #selector(showPatternTools), "t", [.command, .shift])
     item(pattern, "Command Picker…", #selector(showPatternCommands), "k", [.command, .shift])
     item(pattern, "New Note Track…", #selector(newNoteTrack))
@@ -1968,6 +2021,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     pattern.addItem(.separator())
     item(pattern, "Transpose Up", #selector(transposeUp))
     item(pattern, "Transpose Down", #selector(transposeDown))
+    pattern.addItem(NSMenuItem(title:"Clear Field Under Cursor (.)",action:#selector(PatternView.clearCursorField(_:)),keyEquivalent:""))
+    pattern.addItem(NSMenuItem(title:"Delete Channel Row (⇧Delete)",action:#selector(PatternView.deleteChannelRow(_:)),keyEquivalent:""))
     item(pattern, "Insert Row", #selector(insertRow))
     item(pattern, "Delete Row", #selector(deleteRow))
     let workspaceMenu = submenu("Workspace")
@@ -2039,7 +2094,7 @@ final class LevelMeter: NSView {
   }
 }
 
-let app = NSApplication.shared
+let app = QualificationApplicationEncodeTrace.enabled ? UIQualificationApplication.shared:NSApplication.shared
 let controller = AppController()
 app.delegate = controller
 #if SCREAMSEQ_SHUTDOWN_TEST

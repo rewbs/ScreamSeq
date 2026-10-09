@@ -12,6 +12,9 @@ public:
   ~VST3Plugin();
   bool process(float *, uint32_t, uint64_t, const float *const *inputs = nullptr, uint32_t offset = 0) noexcept;
   const std::vector<PluginAudioBus> &buses() const;
+  uint64_t preparedAuxiliaryInputs() const noexcept;
+  uint64_t preparedAuxiliaryOutputs() const noexcept;
+  size_t preparedStorageBytes() const noexcept;
   const float *auxiliaryOutput(uint32_t bus) const noexcept;
   bool parameter(uint32_t, double, uint32_t) noexcept;
   void transport(const PluginTransport &) noexcept;
@@ -22,7 +25,9 @@ public:
   PluginState state() const;
   double latency() const;
   bool latencyChangePending() const noexcept;
-  void refreshLatency(); // Control thread, with audio processing stopped.
+  std::optional<PluginLatencySnapshot> pendingLatency();
+  void acknowledgeLatency(uint64_t) noexcept;
+  void refreshLatency(); // Stopped compatibility maintenance, without vendor reset.
   double tail() const;
   void showEditor();
   void closeEditor();

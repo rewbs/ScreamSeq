@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <dlfcn.h>
 using namespace Tracker;
 using namespace OpenMPT;
 #ifdef TRACKER_SANITIZER
@@ -254,10 +255,33 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp activateIgnoringOtherApps:YES];
+        NSBundle *fixtureBundle=[NSBundle bundleWithPath:@(argv[1])];
+        void *fixtureModule=dlopen(fixtureBundle.executablePath.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
+        auto editorMode=reinterpret_cast<void(*)(bool)>(dlsym(fixtureModule,"ResonanceFixtureEditorResizeMode"));
+        auto editorSizeMode=reinterpret_cast<void(*)(int)>(dlsym(fixtureModule,"ResonanceFixtureEditorSizeMode"));
+        auto resizeEditor=reinterpret_cast<bool(*)(int,int)>(dlsym(fixtureModule,"ResonanceFixtureEditorResize"));
+        auto rejectResize=reinterpret_cast<void(*)(bool)>(dlsym(fixtureModule,"ResonanceFixtureEditorRejectResize"));
+        auto removalResizeRejected=reinterpret_cast<bool(*)()>(dlsym(fixtureModule,"ResonanceFixtureEditorRemovalResizeRejected"));
+        check(fixtureModule&&editorMode&&editorSizeMode&&resizeEditor&&rejectResize&&removalResizeRejected,"Fixture editor geometry hooks");editorMode(true);editorSizeMode(1);
+        const auto fixtureWindow=[&]() -> NSWindow * {
+          for(NSWindow *candidate in NSApp.windows)
+            if(candidate.visible&&[candidate.title isEqualToString:@(gain.descriptor.name.c_str())])return candidate;
+          return nil;
+        };
         NativePlugin plugin(gain, 48000);
         plugin.showEditor();
-        NSWindow *window = NSApp.windows.firstObject;
+        NSWindow *window = fixtureWindow();
         check(window != nil, "plugin editor window");
+        check(NSEqualSizes(window.contentView.frame.size,NSMakeSize(580,240))&&NSEqualRects(window.contentView.subviews[0].frame,NSMakeRect(0,0,580,240)),"VST3 attachment resize must supersede initial dimensions and use a zero-origin view");
+        const auto editorTop=NSMaxY(window.frame);
+        check(resizeEditor(720,320)&&NSEqualSizes(window.contentView.frame.size,NSMakeSize(720,320))&&NSEqualRects(window.contentView.subviews[0].frame,NSMakeRect(0,0,720,320))&&NSMaxY(window.frame)==editorTop,"Plugin-requested resize must keep content and native view aligned below the titlebar");
+        check(!resizeEditor(-1,320)&&NSEqualSizes(window.contentView.frame.size,NSMakeSize(720,320)),"Invalid VST3 editor size must leave window unchanged");
+        rejectResize(true);
+        check(!resizeEditor(820,400)&&!resizeEditor(820,400)&&NSEqualSizes(window.contentView.frame.size,NSMakeSize(720,320))&&NSEqualRects(window.contentView.subviews[0].frame,NSMakeRect(0,0,720,320))&&NSMaxY(window.frame)==editorTop,
+              "Rejected VST3 resize must restore prior geometry and remain rejected on identical retry");
+        rejectResize(false);
+        check(resizeEditor(820,400)&&NSEqualSizes(window.contentView.frame.size,NSMakeSize(820,400))&&NSEqualRects(window.contentView.subviews[0].frame,NSMakeRect(0,0,820,400)),
+              "A formerly rejected VST3 size must be offered to the vendor again");
         NSSlider *slider = nil;
         for (NSView *child in window.contentView.subviews)
           for (NSView *item in child.subviews)
@@ -274,8 +298,20 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         check(plugin.process(buffer.data(), 128, 0) && std::abs(buffer[0] - .144) < 1e-5,
               "custom editor changes audio");
         [window close];
+        check(removalResizeRejected(),"A vendor resize during removed must not re-enter its closing editor");
         plugin.showEditor();
         plugin.closeEditor();
+        editorMode(false);
+        for(int mode:{1,2,3,4,5}){
+          editorSizeMode(mode);
+          plugin.showEditor();
+          window=fixtureWindow();
+          check(window!=nil,"Visible fixture editor window must be found independently of application focus");
+          check(window&&NSEqualSizes(window.contentView.frame.size,NSMakeSize(580,240))&&NSEqualRects(window.contentView.subviews[0].frame,NSMakeRect(0,0,580,240)),
+                "VST3 must attach with delayed/unavailable size, false size status, or a non-resizable native view");
+          plugin.closeEditor();
+        }
+        editorSizeMode(0);dlclose(fixtureModule);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);

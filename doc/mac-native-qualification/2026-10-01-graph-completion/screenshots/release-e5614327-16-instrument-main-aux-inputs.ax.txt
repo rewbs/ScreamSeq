@@ -1,0 +1,59 @@
+Window: "Audio & modulation graph", App: ScreamSeq Final QA.
+0 standard window Audio & modulation graph, Secondary Actions: Raise
+	1 text Audio & modulation graph Shared song graph
+	2 button Description: Pin Audio & modulation graph, Help: Pin this panel's target independently of other panels
+	3 button …, Description: Audio & modulation graph panel actions, Help: Secondary actions · also available with ⌘K
+	4 button Song
+	5 pop up button Description: Graph channel filter, Value: All channels
+	6 button Add…
+	7 button More…, Help: Secondary actions · also available with ⌘K
+	8 text Channels → row graphs → persistent graphs → ordinary graphs → inserts → outputs
+	9 search text field (settable) Description: Filter graph nodes, Value: Input Instrument, Placeholder: Filter nodes…
+		10 button Search
+		11 button cancel
+	12 pop up button Description: Graph node type filter, Value: All node types
+	13 button Clear filters
+	14 text 3 / 29 nodes · 2 hidden branches
+	15 scroll area Secondary Actions: Scroll Left, Scroll Right, Scroll Up, Scroll Down
+		16 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Main input mix, Sidechain 1; QA Instrument inputs → ; ScreamSeq Input Instrument Fixture → Out 0; 5 other outputs  › · Reveal Compressor, Master, QA Wide ports, ScreamSeq Wide Bus Fixture, Sidechain dynamics; 1 other output  › · Reveal Master
+		17 scroll bar (disabled, settable, float) 0
+		18 scroll bar (settable, float) 0.8795562599048989
+			19 value indicator (settable, float) 0.8795562599048989
+			20 increment arrow button
+			21 decrement arrow button
+			22 increment page button
+			23 decrement page button
+	24 scroll area Secondary Actions: Scroll Up, Scroll Down
+		25 text Track 2
+		26 text field (settable) Description: Node or bus name, Value: Track 2
+		27 text Level · dB
+		28 slider (settable, float) Description: Level · dB, Value: 0
+			29 value indicator (settable, float) 0
+		30 text field (settable) Description: Level · dB value, Value: 0.00
+		31 checkbox Mute, Value: 0
+		32 checkbox Solo, Value: 0
+		33 text ORDINARY CHANNEL GRAPH
+		34 pop up button Description: Ordinary channel subgraph, Value: Dry
+		35 text Amount / Wet
+		36 text field (settable) Description: Ordinary graph Amount, Value: 1
+		37 text field (settable) Description: Ordinary graph wet mix, Value: 1
+		38 button Mixer controls
+		39 button Pattern graph commands…
+		40 text Sockets add cables; wire handles reroute. Shift/⌘-click or drag empty space to select nodes. Drop selected effects on a highlighted wire to insert. Hollow sockets enable automatically. Option-drag adds a Main input to an existing insert.
+		41 scroll bar (disabled, settable, float) 0
+	42 text Configured routes · live stack order appears on playing copies
+	43 close button
+	44 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	45 minimize button
+	46 text Audio & modulation graph
+47 menu bar
+	48 ScreamSeq Final QA
+	49 File
+	50 Edit
+	51 Automation
+	52 Playback
+	53 Pattern
+	54 Workspace
+	55 Window
+
+The focused UI element is 16 container Description: Audio and modulation graph, Help: Tab selects nodes; Option-Tab selects wires. Shift/Command-click or drag empty space to select several nodes. Arrows move the selection. Drop selected effects on a highlighted wire to insert them. Return opens controls; M toggles plugin bypass; L listens here; hold Q for scope. Delete removes the selected node or connection. Drag input or output sockets to connect. Sockets add connections; select a wire and drag its round handles to reroute. Plus/minus zoom. Escape cancels a wire., Value: Track 2 → Main input mix, Sidechain 1; QA Instrument inputs → ; ScreamSeq Input Instrument Fixture → Out 0; 5 other outputs  › · Reveal Compressor, Master, QA Wide ports, ScreamSeq Wide Bus Fixture, Sidechain dynamics; 1 other output  › · Reveal Master

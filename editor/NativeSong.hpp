@@ -3,6 +3,7 @@
 #include "soundlib/Sndfile.h"
 #include <map>
 #include <set>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "PreciseNotes.hpp"
 #include "SignalGraph.hpp"
 #include "EnvelopeBank.hpp"
+#include "ScratchGesture.hpp"
 
 namespace Tracker {
 using PrimaryEffectCells = std::set<std::tuple<uint64_t,uint64_t,uint32_t>>; // pattern, track, row
@@ -34,15 +36,17 @@ struct NativeNoteTrack {
   bool operator==(const NativeNoteTrack &) const = default;
 };
 // Semantic cable identities survive filtering, grouping and route reordering.
-// Fixed rack-chain wires are intentionally absent: deleting them requires a
-// detached-processor ownership model, not an implicit reassignment to Master.
-enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation };
+// Cutting implicit rack inputs records a disconnection without healing the chain.
+enum class SongConnectionKind { Output, Send, GraphInput, GraphOutput, PluginInput, PluginOutput, FollowerInput, Modulation, Note, Insert, MasterOutput, PluginConnection, StageConnection };
 struct SongConnectionRef {
   SongConnectionKind kind;
   uint64_t source = 0, target = 0;
   std::string plugin;
   uint32_t port = 0; // Parameter ID for Modulation; audio port otherwise.
   bool preFader = false;
+  std::string sourcePlugin; // Direct plugin contribution; plugin is its target.
+  uint32_t output = 0;
+  uint64_t stage = 0; // Follower input from a typed aggregate graph stage.
 };
 struct NativeSong {
   static constexpr uint64_t maximumID = 1000000000000ULL;
@@ -56,6 +60,7 @@ struct NativeSong {
   MixerGraph mixer;
   SignalGraph signal;
   PatternPerformance performance;
+  std::map<uint16_t, ScratchGesture> scratchGestures; // Stable song-local slots 1..255.
   std::vector<PreciseNote> preciseNotes;
   std::vector<NativeNoteTrack> noteTracks;
   std::map<uint64_t, bool> columnMutes; // Overrides; absence preserves imported mute state.
@@ -68,6 +73,7 @@ struct NativeSong {
   // Remove structural references when a rack instance is deleted. Musical
   // automation and pattern bindings remain unresolved until Undo restores it.
   void removePluginRoutes(const std::string &instance);
+  void removeSongSources(const std::vector<uint64_t> &sources); // Validated atomic removal, including groups and envelope links.
   void reconcile(const OpenMPT::CSoundFile &song);
   void clonePatternAutomation(uint64_t source, uint64_t destination);
   bool clearPrimaryEffects(const PrimaryEffectCells &cells);
@@ -77,8 +83,18 @@ struct NativeSong {
   size_t bytes() const;
   bool operator==(const NativeSong &) const = default;
 };
+struct ScratchPatternCell {
+  uint16_t pattern = 0, row = 0, channel = 0;
+  uint8_t column = 0;
+};
+// Control-thread candidate edit. A target must contain an SK use of source;
+// only that reference changes, retaining its exact onset and other parameters.
+uint16_t cloneScratchGesture(NativeSong &, uint16_t source,
+                            const std::optional<std::string> &name = {},
+                            const std::optional<ScratchPatternCell> &target = {});
 // Validate the entire batch before replacing song. instrumentPlugins identifies
 // live instrument instances whose unrecorded main output defaults to Master.
 void removeSongConnections(NativeSong &song, const std::vector<SongConnectionRef> &connections,
-                           const std::vector<std::string> &instrumentPlugins = {});
+                           const std::vector<std::string> &instrumentPlugins = {},
+                           const std::vector<std::string> &effectRack = {});
 } // namespace Tracker

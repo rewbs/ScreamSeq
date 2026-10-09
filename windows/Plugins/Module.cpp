@@ -28,10 +28,10 @@ std::string modulePath(const std::string &s){
  auto p=nativePath(s);check(p.is_absolute(),"VST3 requires an absolute Windows path; foreign paths are not retargeted");
  p=fs::canonical(p);
  if(fs::is_directory(p)){
-  auto d=p/L"Contents"/L"arm64-win";check(fs::is_directory(d),"VST3 has no ARM64 Windows binary (x64 cannot load in this host)");
+  auto d=p/L"Contents"/nativeBundleDirectory;check(fs::is_directory(d),"VST3 has no Windows binary matching the host architecture");
   std::vector<fs::path> matches;
   for(const auto &entry:fs::directory_iterator(d))if(entry.is_regular_file()&&entry.path().extension()==L".vst3")matches.push_back(entry.path());
-  check(matches.size()==1,"VST3 ARM64 bundle binary is missing or ambiguous");p=fs::canonical(matches[0]);
+  check(matches.size()==1,"VST3 native bundle binary is missing or ambiguous");p=fs::canonical(matches[0]);
  }
  check(fs::is_regular_file(p),"VST3 module missing");return narrow(p.native());
 }
@@ -41,10 +41,7 @@ Fingerprint fingerprint(const std::string &s){
  IMAGE_DOS_HEADER dos{};in.read(reinterpret_cast<char*>(&dos),sizeof dos);check(bool(in)&&dos.e_magic==IMAGE_DOS_SIGNATURE&&dos.e_lfanew>=64&&dos.e_lfanew<=size-24,"Not a valid Windows PE module");
  in.seekg(dos.e_lfanew);DWORD signature=0;IMAGE_FILE_HEADER head{};in.read(reinterpret_cast<char*>(&signature),4);in.read(reinterpret_cast<char*>(&head),sizeof head);
  check(bool(in)&&signature==IMAGE_NT_SIGNATURE&&(head.Characteristics&IMAGE_FILE_DLL),"Not a Windows DLL");f.machine=head.Machine;
- check(f.machine==IMAGE_FILE_MACHINE_ARM64,"Incompatible VST3 architecture: native ARM64 required; x64 is not supported");
- #if !defined(_M_ARM64)
- throw std::runtime_error("This VST3 provider requires a native ARM64 build");
- #endif
+ check(f.machine==nativeMachine,"Incompatible VST3 architecture: module must match the native host");
  BCRYPT_ALG_HANDLE alg=nullptr;BCRYPT_HASH_HANDLE hash=nullptr;
  check(BCryptOpenAlgorithmProvider(&alg,BCRYPT_SHA256_ALGORITHM,nullptr,0)>=0,"SHA256 provider failure");
  struct Close{BCRYPT_ALG_HANDLE &a;BCRYPT_HASH_HANDLE &h;~Close(){if(h)BCryptDestroyHash(h);if(a)BCryptCloseAlgorithmProvider(a,0);}}close{alg,hash};
@@ -56,7 +53,7 @@ Fingerprint fingerprint(const std::string &s){
 Module::Module(const std::string &p,const std::string &expected):pin(CreateFileW(wide(modulePath(p)).c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr)){
  check(pin.h!=INVALID_HANDLE_VALUE,"Cannot pin VST3 binary against replacement");auto f=fingerprint(p);check(expected.empty()||expected==f.sha256,"VST3 changed since scanning; explicit rescan required");
  dll=LoadLibraryExW(wide(f.path).c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
- check(dll!=nullptr,"LoadLibraryExW failed loading ARM64 VST3 or its dependencies");
+ check(dll!=nullptr,"LoadLibraryExW failed loading native VST3 or its dependencies");
  try{
   auto init=reinterpret_cast<bool(*)()>(GetProcAddress(dll,"InitDll"));auto exit=GetProcAddress(dll,"ExitDll");
   auto get=reinterpret_cast<IPluginFactory*(*)()>(GetProcAddress(dll,"GetPluginFactory"));

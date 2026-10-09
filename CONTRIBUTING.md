@@ -24,9 +24,13 @@ batches before committing, and preserve unfinished UI drafts and their captured
 targets. Plugin preparation, allocation, file I/O and UI calls must stay outside
 the audio callback.
 
-Current native projects use container 6 / metadata 17; earlier native formats
-are rejected. Preserve OpenMPT module import/playback and the legacy identifiers
-listed in [the branding notes](assets/branding/BRANDING.md). A product rename is
+Current native projects use container 6 / metadata 17. File opening recovers
+validated, understood fields from incompatible native projects best effort,
+reports conversions and skipped content, and protects the source with Save As
+when recovery changes its representation or loses data. Keep editing APIs and
+canonical saves strict; file recovery is not a compatibility guarantee for every
+historical or damaged file. Preserve OpenMPT module import/playback and the legacy
+identifiers listed in [the branding notes](assets/branding/BRANDING.md). A product rename is
 not a reason to rewrite persisted plugin IDs, recovery paths or wire formats.
 
 ## Validate the change

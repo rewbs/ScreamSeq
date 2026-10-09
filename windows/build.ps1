@@ -106,7 +106,7 @@ if ($Test) {
     if ($targets.Count -eq 0 -or $targets -contains 'worker-tests') {
         & $ctest --test-dir $BuildDirectory -C $Configuration --output-on-failure --no-tests=error -L worker
         if ($LASTEXITCODE -ne 0) { throw "Worker tests failed ($LASTEXITCODE)." }
-        Write-Host 'Worker functional tests passed. Desktop, audio-device and plugin-fixture tests were not run.'
+        Write-Host 'Worker tests passed, including native VST3 channel-pair rendering. Desktop and audio-device checks were not run.'
     } else {
         Write-Host 'Worker tests were not built by this -Target selection; add -Target worker-tests to run them.'
     }

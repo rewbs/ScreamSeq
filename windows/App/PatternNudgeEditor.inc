@@ -2,10 +2,11 @@
 // revision and pattern.effect.set command as the Mac in-cell editor.
     static constexpr int nudgeStrengthField=9800,nudgeDurationField=9801;
     struct PatternNudgeDraft {
-        bool active=false,pending=false,setting=false;
+        bool active=false,pending=false,setting=false,rows=false;
         uint64_t generation=0;
         std::string document,revision,patternID,trackID,kind;
-        unsigned pattern=0,row=0,channel=0,fx=0,offset=0,maximumDuration=0;
+        unsigned pattern=0,row=0,channel=0,fx=0,offset=0,rowsPerBeat=4;
+        double maximumDurationBeats=0;
         double originalValue=.75;
         std::wstring originalStrength,message;
         Json navigation;
@@ -32,15 +33,15 @@
             if(!h)throw std::runtime_error("Cannot create inline nudge fields");
             controls[id]=h;ScreamSeq::NativeControls::install(h,inspection);
             SendMessageW(h,EM_SETLIMITTEXT,64,0);SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(controlFont),TRUE);
-            SendMessageW(h,EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(id==nudgeStrengthField?L"Strength (%)":L"Duration (rows)"));
+            SendMessageW(h,EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(id==nudgeStrengthField?L"Strength (%)":L"Duration (beats)"));
         }
     }
     void layoutPatternNudgeEditor(){
         if(!controls.contains(nudgeStrengthField))return;
-        const auto g=patternGridRect();const bool show=patternNudge.active&&trackerWorkspaceVisible()&&g.w>=gutter+176&&g.h>=gridHeader+24;
+        const auto g=patternGridRect();const bool show=patternNudge.active&&patternNudge.channel<view->channels&&patternNudge.fx<view->effectColumns.at(patternNudge.channel)&&trackerWorkspaceVisible()&&g.w>=gutter+176&&g.h>=gridHeader+24;
         if(!show){for(int id:{nudgeStrengthField,nudgeDurationField})ScreamSeq::NativeControls::show(controls.at(id),false);return;}
         const float s=GetDpiForWindow(window)/96.f;
-        const float x=std::clamp(g.x+gutter+channelStart(std::min(patternNudge.channel,unsigned(view->channels)))-horizontalScroll+fieldStart(4+2*patternNudge.fx),g.x+gutter,g.x+g.w-176);
+        const float x=std::clamp(g.x+gutter+channelStart(patternNudge.channel)-horizontalScroll+effectColumnStart(patternNudge.channel,patternNudge.fx)+effectColumnLayout(patternNudge.channel,patternNudge.fx).start(0),g.x+gutter,g.x+g.w-176);
         const float y=std::clamp(g.y+gridHeader+(float(patternNudge.row)-float(firstRow))*rowHeight,g.y+gridHeader,g.y+g.h-24);
         ScreamSeq::NativeControls::place(controls.at(nudgeStrengthField),int(x*s),int(y*s),int(92*s),int(24*s),show);
         ScreamSeq::NativeControls::place(controls.at(nudgeDurationField),int((x+96)*s),int(y*s),int(80*s),int(24*s),show);
@@ -60,16 +61,17 @@
         for(const auto &item:view->session.document.at("patterns"))if(item.at("index")==patternIndex)next.patternID=item.at("id").get<std::string>();
         for(const auto &item:view->session.document.at("tracks"))if(item.at("index")==channel)next.trackID=item.at("id").get<std::string>();
         next.offset=wasNudge?existing->position%Tracker::performanceUnitsPerRow:0;
-        next.maximumDuration=(patternRows()-row)*Tracker::performanceUnitsPerRow-next.offset;
+        next.rowsPerBeat=view->patternRowsPerBeat.at(patternIndex);next.rows=effectRows;
+        next.maximumDurationBeats=(double(patternRows()-row)-double(next.offset)/Tracker::performanceUnitsPerRow)/next.rowsPerBeat;
         next.originalValue=wasNudge?existing->value:.75;
         wchar_t strength[64]{},duration[64]{};swprintf_s(strength,L"%.15g",next.originalValue*100);
-        swprintf_s(duration,L"%.15g",double(wasNudge?existing->duration:std::min(65536u,next.maximumDuration))/65536.);
+        swprintf_s(duration,L"%.15g",(wasNudge?existing->durationBeats:std::min(1.0,next.maximumDurationBeats))*(next.rows?next.rowsPerBeat:1));
         next.originalStrength=strength;
         next.navigation=position();next.navigation["column"]=4+2*next.fx;next.navigation["following"]=false;
-        next.message=L"Strength (%) / duration (rows) · Tab switches · Enter saves and advances · Esc cancels";
+        next.message=std::wstring(L"Strength (%) / duration (")+(next.rows?L"rows":L"beats")+L") · Tab switches · Enter saves and advances · Esc cancels";
         patternNudge=std::move(next);patternNudge.setting=true;
         SetWindowTextW(controls.at(nudgeStrengthField),replacing.empty()?strength:replacing.c_str());
-        SetWindowTextW(controls.at(nudgeDurationField),duration);patternNudge.setting=false;
+        SetWindowTextW(controls.at(nudgeDurationField),duration);SendMessageW(controls.at(nudgeDurationField),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(patternNudge.rows?L"Duration (rows)":L"Duration (beats)"));patternNudge.setting=false;
         navigate(patternNudge.navigation);layoutPatternNudgeEditor();SetFocus(controls.at(nudgeStrengthField));
         SendMessageW(controls.at(nudgeStrengthField),EM_SETSEL,replacing.empty()?0:WPARAM(-1),-1);status=patternNudge.message;return true;
     }
@@ -87,15 +89,15 @@
             auto number=[](const std::wstring &text){size_t used=0;double value=std::stod(text,&used);while(used<text.size()&&iswspace(text[used]))++used;
                 if(used!=text.size()||!std::isfinite(value))throw std::runtime_error("Enter a finite decimal number");return value;};
             const auto strength=effectField(nudgeStrengthField),duration=effectField(nudgeDurationField);
-            const auto percent=number(strength),rows=number(duration);
-            if(percent<0||percent>100||rows<=0||rows>double(patternNudge.maximumDuration)/65536.||std::round(rows*65536)<1)
-                throw std::runtime_error("Use strength 0–100% and duration 1/65536 row through the end of this pattern");
+            const auto percent=number(strength),beats=number(duration)/(patternNudge.rows?patternNudge.rowsPerBeat:1);
+            if(percent<0||percent>100||beats<1.0/65536||beats>256||beats>patternNudge.maximumDurationBeats)
+                throw std::runtime_error("Use strength 0–100% and duration 1/65536–256 beats, within the remaining pattern");
             const auto generation=patternNudge.generation;
             const auto target=std::tuple{patternNudge.document,patternNudge.patternID,patternNudge.trackID,patternNudge.pattern,patternNudge.row,patternNudge.channel,patternNudge.fx};
             patternNudge.pending=true;
             try{documentOperation("pattern.effect.set",{{"expectedRevision",patternNudge.revision},{"pattern",patternNudge.pattern},{"row",patternNudge.row},
                 {"channel",patternNudge.channel},{"column",patternNudge.fx},{"command",{{"kind",patternNudge.kind},{"value",strength==patternNudge.originalStrength?patternNudge.originalValue:percent/100.},
-                    {"duration",uint32_t(std::llround(rows*65536))},{"offset",patternNudge.offset}}}});}
+                    {"durationBeats",beats},{"offset",patternNudge.offset}}}});}
             catch(...){patternNudge.pending=false;throw;}
             patternNudge.pending=false;
             if(target!=std::tuple{patternNudge.document,patternNudge.patternID,patternNudge.trackID,patternNudge.pattern,patternNudge.row,patternNudge.channel,patternNudge.fx}||!patternNudgeTargetCurrent()){
@@ -121,7 +123,7 @@
         Json result={{"active",patternNudge.active},{"pending",patternNudge.pending},{"stale",patternNudge.active&&!patternNudgeCurrent()},
             {"documentId",patternNudge.document},{"revision",patternNudge.revision},{"patternID",patternNudge.patternID},{"trackID",patternNudge.trackID},
             {"pattern",patternNudge.pattern},{"row",patternNudge.row},{"channel",patternNudge.channel},{"column",patternNudge.fx},
-            {"kind",patternNudge.kind},{"offset",patternNudge.offset},{"generation",patternNudge.generation},{"status",utf8Path(patternNudge.message)}};
+            {"kind",patternNudge.kind},{"timeUnit",patternNudge.rows?"rows":"beats"},{"offset",patternNudge.offset},{"generation",patternNudge.generation},{"status",utf8Path(patternNudge.message)}};
         result["controls"]=Json::array();result["visible"]=false;
         if(controls.contains(nudgeStrengthField)){
             result["strength"]=utf8Path(effectField(nudgeStrengthField));result["duration"]=utf8Path(effectField(nudgeDurationField));

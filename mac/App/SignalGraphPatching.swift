@@ -6,31 +6,53 @@ extension SignalGraphEditor {
     guard let graphID else {
       if remove {removeSongNodes(Set(ids))}
       else {
-        let plugins=ids.compactMap{songNodePlugin[$0]}
-        guard plugins.count==1,plugins.count==ids.count else {rebuild();status.stringValue="Detach one rack effect at a time; loose chains are not supported yet";return}
+        let expanded=expandedProcessingSelection(Set(ids)),selected=Set(expanded.compactMap{songNodePlugin[$0]})
+        guard expanded.allSatisfy({songNodePlugin[$0] != nil || songSource($0) != nil}),let plugins=orderedSongProcessors(selected) else {rebuild();status.stringValue="Detach consecutive processors from one chain; grouped modulation sources stay linked";return}
         var params:[String:Any]=["plugins":plugins]
         if !positions.isEmpty {params["positions"]=positionObjects(positions)}
         mutate("mixer.inserts.detach",params)
       }
       return
     }
-    var params:[String:Any]=["graph":graphID,"nodes":remove ? expandedProcessingSelection(Set(ids)).sorted():ids,"remove":remove]
+    if offerBranchedDetach(ids,positions:positions,remove:remove){return}
+    var params:[String:Any]=["graph":graphID,"nodes":expandedProcessingSelection(Set(ids)).sorted(),"remove":remove]
     if !positions.isEmpty {params["positions"]=positionObjects(positions)}
     mutate("graph.nodes.detach",params)
   }
+  func cutSongMasterOutput() {
+    guard graphID==nil,let master=buses.first(where:{$0["kind"] as? String=="master"})?["id"] as? String else{return}
+    mutate("graph.connections.remove",["connections":[["kind":"master-output","source":master]]])
+  }
+  func reconnectSongMain() {
+    guard graphID==nil else{return}
+    var entries=[GraphAddMenu.Entry]()
+    for plugin in disconnectedMainInputs.sorted(){guard let owner=songNodeBus["plugin:"+plugin],insertChain(owner)?.contains(plugin)==true else{continue};entries.append(.init(id:plugin,title:rackPlugins.first{$0["id"] as? String==plugin}?["name"] as? String ?? plugin,detail:"Reconnect main input",keywords:plugin))}
+    if mixer["masterOutputDisconnected"] as? Bool==true{entries.append(.init(id:"@master",title:"Master output",detail:"Reconnect final audio output",keywords:"master"))}
+    let apply:(String)->Void={[weak self] choice in guard let self else{return}
+      if choice=="@master",let id=self.buses.first(where:{$0["kind"] as? String=="master"})?["id"] as? String{self.mutate("mixer.bus.set",["bus":id,"mainOutputConnected":true])}
+      else if let owner=self.songNodeBus["plugin:"+choice],self.disconnectedMainInputs.contains(choice){self.mutate("mixer.inserts.move",["plugins":[choice],"target":owner,"before":choice])}
+    }
+    if let selectedID,let plugin=songNodePlugin[selectedID],disconnectedMainInputs.contains(plugin){apply(plugin)}
+    else if entries.count==1{apply(entries[0].id)}
+    else if entries.isEmpty{status.stringValue="No disconnected main inputs or Master output"}
+    else{chooseTarget(title:"Reconnect main cable",entries:entries,choose:apply)}
+  }
   func removeSongNodes(_ selected:Set<String>) {
-    let sources=selected.compactMap{songSource($0)?["id"] as? String}
-    if !sources.isEmpty {guard sources.count==selected.count else{status.stringValue="Select only modulation sources, or only rack processors, to remove them in one Undo";return};mutate("graph.song.source.remove",["nodes":sources.sorted()]);return}
-    guard !selected.isEmpty,selected.allSatisfy({id in songNodePlugin[id] != nil || processingGroups.contains(where:{$0["id"] as? String==id})})else{status.stringValue="Select rack processors or processing groups to remove";return}
-    let ids=expandedProcessingSelection(selected),plugins=expandedProcessingSelection(selected).compactMap{songNodePlugin[$0]}
-    guard !plugins.isEmpty,plugins.count==ids.count else{status.stringValue="Select rack processors or processing groups to remove";return}
-    mutate("plugin.remove",["plugins":plugins.sorted()])
+    let ids=expandedProcessingSelection(selected)
+    let sources=ids.compactMap{songSource($0)?["id"] as? String},plugins=ids.compactMap{songNodePlugin[$0]}
+    guard !ids.isEmpty, sources.count+plugins.count==ids.count,
+      selected.allSatisfy({key in ids.contains(key)||processingGroups.contains(where:{$0["id"] as? String==key})}) else {
+      status.stringValue="Select rack processors, modulation sources or their processing groups to remove";return
+    }
+    if plugins.isEmpty {mutate("graph.song.source.remove",["nodes":sources.sorted()])}
+    else {var params:[String:Any]=["plugins":plugins.sorted()];if !sources.isEmpty{params["sources"]=sources.sorted()};mutate("plugin.remove",params)}
   }
   func songCableReference(_ index:Int)->[String:Any]? {
     guard songConnections.indices.contains(index)else{return nil}
     let action=songConnections[index],kind=action["kind"] as? String ?? ""
     var ref:[String:Any]=["kind":kind]
-    if ["output","plugin-output","modulation","follower-input"].contains(kind) {return action}
+    if kind=="note" {return action["implicit"] as? Bool==true ? ["kind":"note","instrument":action["source"] ?? ""]:["kind":"note","route":action["id"] ?? ""]}
+    if ["output","plugin-output","modulation","follower-input","insert","master-output"].contains(kind) {return action}
     if kind=="send",let source=action["source"] as? String,let i=action["index"] as? Int,
       let sends=buses.first(where:{$0["id"] as? String==source})?["sends"] as? [[String:Any]],sends.indices.contains(i),let target=sends[i]["target"] as? String {
       return ["kind":kind,"source":source,"target":target]
@@ -39,6 +61,8 @@ extension SignalGraphEditor {
     switch kind {
     case "graph-input":routes=data["inputs"] as? [[String:Any]] ?? [];fields=["source","target","input"]
     case "graph-output":routes=data["outputs"] as? [[String:Any]] ?? [];fields=["source","target","output"]
+    case "stage-connection":routes=stageConnections;fields=["source","output","target","input"]
+    case "plugin-connection":routes=mixer["pluginConnections"] as? [[String:Any]] ?? [];fields=["source","output","target","input"]
     case "plugin-input":routes=mixer["sidechains"] as? [[String:Any]] ?? [];fields=["source","plugin","input"]
     default:return nil
     }
@@ -52,7 +76,7 @@ extension SignalGraphEditor {
     if graphID==nil {
       let unique=Set(indices).sorted(),refs=Set(indices).sorted().compactMap{songCableReference($0)}
       guard refs.count==unique.count else {
-        status.stringValue="No cables cut: this selection includes a fixed rack or instrument chain. Move the processors onto another cable, or use Delete and heal.";return
+        status.stringValue="No cables cut: this selection includes an instrument/reusable-copy assignment. Edit its assignment or internal graph.";return
       }
       mutate("graph.connections.remove",["connections":refs]);return
     }
@@ -68,7 +92,7 @@ extension SignalGraphEditor {
     let owner=songNodeBus[node].flatMap{id in buses.first{$0["id"] as? String==id}}
     let isBus=node==songNodeBus[node],atBusEnd=songNodePlugin[node].map{effectiveInserts(owner ?? [:]).last==$0} ?? false
     guard port==0,owner != nil,isBus || atBusEnd else {
-      status.stringValue="This input needs a channel or return output. Route the plugin output into a bus first, then connect that bus here; direct plugin patching is available inside subgraphs.";return false
+      status.stringValue="This bus-tap cable needs a channel or return output. Route the plugin output into a bus first, or add a direct cable between plugin sockets.";return false
     };return true
   }
   var selectedBuiltinDetector:[String:Any]? {
@@ -113,14 +137,8 @@ extension SignalGraphEditor {
   func positionObjects(_ values:[(String,Double,Double)])->[[String:Any]] {values.map{["node":$0.0,"x":$0.1,"y":$0.2]}}
   func insertionMove(_ ids:[String],edge:Int)->[String:Any]? {
     guard graphID==nil,songConnections.indices.contains(edge),!ids.isEmpty else{return nil}
-    let selected=Set(ids.compactMap{songNodePlugin[$0]});guard selected.count==ids.count else{return nil}
-    let ordered:[String]
-    if selected.count==1,let plugin=selected.first,detachedEffects.contains(plugin){ordered=[plugin]}
-    else{
-      guard let owner=buses.first(where:{Set(effectiveInserts($0)).isSuperset(of:selected)})else{return nil}
-      let all=effectiveInserts(owner);ordered=all.filter{selected.contains($0)}
-      guard let first=ordered.first,let start=all.firstIndex(of:first),Array(all[start..<(start+ordered.count)])==ordered else{return nil}
-    }
+    let expanded=expandedProcessingSelection(Set(ids)),selected=Set(expanded.compactMap{songNodePlugin[$0]})
+    guard expanded.allSatisfy({songNodePlugin[$0] != nil || songSource($0) != nil}),let ordered=orderedSongProcessors(selected)else{return nil}
     let action=songConnections[edge],kind=action["kind"] as? String ?? ""
     guard ["insert","output","master-output"].contains(kind),let target=action["source"] as? String else{return nil}
     let before=kind=="insert" ? action["plugin"] as? String:nil
@@ -144,8 +162,12 @@ extension SignalGraphEditor {
     let title=name.isEmpty ? (number==0 ? (output ? "Main out":"Main in") : "Aux \(output ? "output":"input") \(number)") : name
     let channels=p?["channels"] as? Int
     let sidechain = !output && (name.lowercased().contains("sidechain") || name.lowercased().contains("side chain") || name.lowercased().contains("detector"))
-    let label=title+(channels.map{" · \($0)ch"} ?? "")
-    return SignalCanvasPort(number:number,label:label,active:p?["active"] as? Bool ?? true,signal:sidechain ? .sidechain:.audio,channels:channels,unavailable:p?["supported"] as? Bool==false ? "\(title) · \(channels ?? 0) channels: this host currently supports mono/stereo buses":nil)
+    let first=p?["firstChannel"] as? Int ?? 0,physical=p?["physicalChannels"] as? Int ?? channels ?? 0
+    let channelLabel:String
+    if let channels,physical>channels {channelLabel=channels==1 ? "channel \(first+1) of \(physical)" : "channels \(first+1)–\(first+channels) of \(physical)"}
+    else{channelLabel=channels.map{"\($0)ch"} ?? ""}
+    let label=title+(channelLabel.isEmpty ? "":" · \(channelLabel)")
+    return SignalCanvasPort(number:number,label:label,active:p?["active"] as? Bool ?? true,signal:sidechain ? .sidechain:.audio,channels:channels,unavailable:p?["supported"] as? Bool==false ? "\(title): this physical bus/channel slice is unavailable":nil)
   }
   func refreshPortChoices() {
     for (popup,nodePicker,field,output) in [(outputChoice,source,outputPort,true),(inputChoice,destination,inputPort,false)] {
@@ -169,7 +191,7 @@ extension SignalGraphEditor {
     let a=from.node,b=to.node,input=to.number,output=from.number
     if songSource(selectedSource) != nil{connectionKind.selectItem(withTitle:"Modulation");connectionModeChanged();return}
     if songSource(b)?["kind"] as? String=="follower"{connectionKind.selectItem(withTitle:"Follower input");connectionModeChanged();return}
-    let kind=input>0 ? (songNodePlugin[b] != nil ? "Plugin sidechain":"Graph sidechain") : songNodePlugin[b] != nil ? "Main output" : songNodePlugin[a] != nil ? "Plugin auxiliary" : output>0 ? "Graph auxiliary":"Main output"
+    let kind=songNodePlugin[a] != nil && songNodePlugin[b] != nil ? "Direct plugin audio" : input>0 ? (songNodePlugin[b] != nil ? "Plugin sidechain":"Graph sidechain") : songNodePlugin[b] != nil ? "Main output" : songNodePlugin[a] != nil ? "Plugin auxiliary" : output>0 ? "Graph auxiliary":"Main output"
     connectionKind.selectItem(withTitle:kind);connectionModeChanged()
   }
   func pluginOutputTargets(_ plugin:String,port:Int)->[String] {

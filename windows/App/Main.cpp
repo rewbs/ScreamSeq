@@ -16,14 +16,17 @@
 #include "WorkspaceShortcuts.hpp"
 #include "WorkspaceShortcutKey.hpp"
 #include "PatternClipboard.hpp"
+#include "PatternFields.hpp"
 #include "GraphCanvas.hpp"
 #include "AutomationCanvas.hpp"
 #include "EnvelopeBankWindow.hpp"
+#include "ScratchGestureWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
 #include "GraphCommandsWindow.hpp"
+#include "GraphTrimsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
 #include "GraphCurveWindow.hpp"
 #include "PreciseNoteWindow.hpp"
@@ -32,6 +35,8 @@
 #include "ParameterActivityWindow.hpp"
 #include "GraphWorkflowWindow.hpp"
 #include "SampleDetailWindow.hpp"
+#include "SampleRecordingWindow.hpp"
+#include "PatternSampleRenderWindow.hpp"
 #include "AuditionWindow.hpp"
 #include "../Samples/Library.hpp"
 #include "../Samples/Preview.hpp"
@@ -87,6 +92,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     undoCommand=122, redoCommand=123, copyCommand=124, pasteCommand=125, clearCommand=126,
     patternChooser=130, orderChooser=131, octaveChooser=132, stepChooser=133, effectColumnChooser=134, soundChooser=135, liveKeysCommand=507, sampleCommandBase=200,
     patternReverse=140,patternRotate=141,patternExpand=142,patternShrink=143,patternInsertRows=144,patternDeleteRows=145,patternTransposeUp=146,patternTransposeDown=147,
+    patternClearField=150,patternDeleteChannelRow=151,
     patternPasteMix=148,patternPasteMerge=149,
     sampleImportCommand=201,sampleImportRawCommand=508,sampleImportInstrumentsCommand=509,instrumentImportCommand=510,sampleAllCommand=202,sampleReverseCommand=203,sampleNormalizeCommand=204,
     sampleFadeInCommand=205,sampleFadeOutCommand=206,sampleTrimCommand=207,sampleLoopCommand=208,
@@ -99,7 +105,8 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
-    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,
+    effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
+    effectFieldBase=700,effectChoiceBase=720,
     noteList=360,notePitch=361,noteInstrument=362,noteVelocity=363,noteOffset=364,noteUnitControl=365,
     noteSnapControl=366,noteEffectControl=367,noteParameter=368,noteAdd=369,noteRemove=370,noteCheck=371,
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
@@ -116,7 +123,8 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512;
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=576,
+    sampleRecordCommand=577,patternRenderSampleCommand=578,patternRenderInstrumentCommand=579,patternRenderOptionsCommand=580,graphTrimsCommand=581;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
 	std::wstring result(size, 0);
@@ -321,6 +329,7 @@ public:
             {"formulaWorkbench",curveFormulaWorkbenchSnapshot()},
             {"formulaReference",curveFormulaReferenceSnapshot()},
             {"envelopeBank",curveEnvelopeBankSnapshot()},
+            {"scratchGestures",scratchGestureWindow?scratchGestureWindow->snapshot():Json{{"visible",false}}},
             {"pluginInstruments",pluginInstruments?pluginInstruments->snapshot():Json{{"visible",false}}},
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
@@ -336,13 +345,17 @@ public:
             {"contextMenu",workspaceContextMenuSnapshot()},
             {"shortcuts",{{"pending",workspaceShortcuts&&workspaceShortcuts->pending()},{"hint",workspaceShortcuts?workspaceShortcuts->hint():std::string()}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
+            {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
+            {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
+            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
             {"noteEditor",preciseNoteSnapshot()},{"preciseNotes",preciseNoteSnapshot()},
             {"effectEditor",{{"visible",effectEditorVisible()},{"pattern",effectDraftPattern},{"row",effectDraftRow},
                 {"channel",effectDraftChannel},{"column",effectDraftColumn},{"expectedRevision",effectDraftRevision},
-                {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)}}},
+                {"stale",effectDraftRevision!=view->session.revision},{"status",utf8Path(effectEditorStatus)},
+                {"inline",effectInline},{"draft",effectDraftDirty},{"draftGeneration",effectDraftGeneration},{"fieldIndex",effectFieldIndex},{"fields",effectFieldsDraft},{"timeUnit",effectRows?"rows":"beats"}}},
             {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
@@ -420,6 +433,7 @@ public:
 
 		bool moved=std::tie(patternIndex,row,channel,column)!=std::tie(p,r,c,col);
 		if(moved) effectPrefix.clear();
+        if(c!=channel||col!=column||p!=patternIndex)effectFieldIndex=0;
 		patternIndex=p; row=r; channel=c; column=col; follow=f; ++contextRevision;
 
 		updateInspector();
@@ -481,10 +495,12 @@ public:
         if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
         else if(oldPosition!=position()) ++contextRevision;
         resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
+        if(sampleRecordingWindow)sampleRecordingWindow->documentChanged();
+        if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
@@ -613,6 +629,7 @@ public:
     #include "WorkspaceShortcutDispatch.inc"
     #include "WorkspaceContextMenus.inc"
     #include "DeferredViews.inc"
+	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
     #include "EditingView.inc"
     #include "SampleEditor.inc"
@@ -624,6 +641,8 @@ public:
     #include "GraphCurveEditor.inc"
     #include "GraphWorkflowIntegration.inc"
     #include "GraphPatternLanes.inc"
+    #include "ScratchGestureIntegration.inc"
+    #include "SampleCaptureIntegration.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
         return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
@@ -663,7 +682,7 @@ public:
     }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
-        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);});
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();});
         connectTyping(*sampleDetailWindow,[this]{return sampleDetailWindow->musicalTarget();});
         sampleDetailWindow->openAt();
     }
@@ -765,13 +784,17 @@ public:
 			// A prompt or chooser is already showing: do not stack another.
 			if(modalActive()||recoverySaving||recoveryRestoring||recoveryReads) return false;
 			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
-			return protectUnsaved();
+			if(!protectRecordingTake()||!protectUnsaved())return false;
+            // A save/discard prompt pumps messages; an API client could have
+            // begun a take after the first check. Do not lose that take.
+            return protectRecordingTake();
 		} catch(const std::exception &e) {
 			try {reason=wide(e.what());} catch(...) {}
 		} catch(...) {}
 		frameRequested=true;
 		try {
 			status=L"Not closed / "+reason;
+			if(recordingTakeKnown||(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()))return false;
 			// The song is known to be dirty and its save (or prompt) failed:
 			// keep it. Closing again offers Save/Discard/Cancel once more.
 			if(unsavedChecked) return false;
@@ -799,14 +822,11 @@ public:
         frameRequested=false;
         auditionWasAnimating=auditionOnly&&auditionAnimating();
         if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
-            const auto generation=stopGeneration;
-            device.stop();
             try {
+                // A busy audio handoff returns false; a later draw retries.
+                // The worker prepares delays while the device keeps rendering.
                 await(controller->refreshPlaybackLatencies());
-                // await pumps Stop and close messages. A stopped transport must
-                // never restart just because its latency refresh completed.
-                if(generation==stopGeneration && !device.start()) throw std::runtime_error("Cannot resume WASAPI after latency maintenance");
-            } catch(const std::exception &e) {stop();status=wide(e.what());}
+            } catch(const std::exception &e) {status=wide(e.what());}
         }
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();
@@ -884,7 +904,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
 		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
-        case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
+        case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
 		case WM_DPICHANGED: {
@@ -909,7 +929,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
-            if(LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)return 0;
+            if((LOWORD(wp)>=effectValue&&LOWORD(wp)<=effectRange)||(LOWORD(wp)>=effectFieldBase&&LOWORD(wp)<effectFieldBase+10)){if(HIWORD(wp)==EN_CHANGE)app->effectFieldChanged();return 0;}
+            if((LOWORD(wp)==effectUnits||(LOWORD(wp)>=effectChoiceBase&&LOWORD(wp)<effectChoiceBase+10))&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
             if((LOWORD(wp)==pluginLibrary || LOWORD(wp)==pluginParameter || LOWORD(wp)==pluginInstrument || LOWORD(wp)==pluginPage || LOWORD(wp)==pluginProgram || LOWORD(wp)==pluginPort) && HIWORD(wp)!=CBN_SELCHANGE)return 0;
@@ -926,7 +947,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_ACTIVATEAPP:if(!wp)app->releaseTypedNotes();break;
 		case WM_LBUTTONDOWN:app->mouseDown(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window),wp);return 0;
 		case WM_MOUSEMOVE:if(wp & MK_LBUTTON) app->mouseMove(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));return 0;
-        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->patternNudgeDoubleClick(x,y))app->graphLaneClick(x,y,true);return 0;}
+        case WM_LBUTTONDBLCLK:{const auto x=GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),y=GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window);if(!app->scratchDoubleClick(x,y)&&!app->patternNudgeDoubleClick(x,y))app->graphLaneClick(x,y,true);return 0;}
 		case WM_LBUTTONUP: app->graphMouseUp(GET_X_LPARAM(lp)*96.0f/GetDpiForWindow(window),GET_Y_LPARAM(lp)*96.0f/GetDpiForWindow(window));app->dragging=0;ReleaseCapture();return 0;
 		case WM_CAPTURECHANGED:if(app->dragging>=6&&app->dragging<=9)app->graphCancelDrag();app->cancelWorkspaceRegionDrag();app->dragging=0;return 0;
 		case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{

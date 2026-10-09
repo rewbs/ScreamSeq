@@ -16,6 +16,7 @@ final class UIQualification {
   private var nextProgress = 0.0
   private var visibleSince: Double?
   private var readyDeadline = CFAbsoluteTimeGetCurrent() + 60
+  private var requestedDisplayID:UInt32?
   var requestedForeground = false
   var usesVST3 = false
   let existingGraph = CommandLine.arguments.contains("--ui-test-existing-graph")
@@ -26,6 +27,7 @@ final class UIQualification {
   private var windowStates=[(timestamp:Double,flags:UInt8)]()
   private var windowStateDropped=0,windowStateSamples=0,inactiveSamples=0,noKeyWindowSamples=0,missingActivitySamples=0
   private var measurementClockStart=0.0,measurementClockEnd=0.0
+  private var windowInventoryBefore=[[String:Any]]()
   let duration: Double
   let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
     "resonance-ui-qualification-" + UUID().uuidString)
@@ -69,6 +71,11 @@ final class UIQualification {
       fail(error)
       return
     }
+    let targetDisplay:NSScreen?
+    do {
+      requestedDisplayID=try QualificationDisplay.requestedID(CommandLine.arguments)
+      targetDisplay=try QualificationDisplay.select(requestedDisplayID,screens:NSScreen.screens,fallback:app.window.screen)
+    } catch {fail(error);return}
     // Use the available display for the dense workload. A fixed small window
     // plus the restored secondary dock can leave only six tiny card fragments
     // visible; that is not a valid graph performance/legibility workload.
@@ -76,7 +83,14 @@ final class UIQualification {
     let chrome=app.window.frame.height-app.window.contentLayoutRect.height
     app.window.setContentSize(NSSize(width:min(existingGraph ? 1600:1360,available.width),
       height:min(existingGraph ? 1000:850,max(500,available.height-chrome))))
-    app.window.center()
+    if let requestedDisplayID,let targetDisplay {
+      // Keep the existing workload size; this option changes placement only.
+      do {app.window.setFrame(try QualificationDisplay.centeredFrame(size:app.window.frame.size,visibleFrame:targetDisplay.visibleFrame),display:true)}
+      catch {fail(error);return}
+      guard QualificationDisplay.id(app.window.screen)==requestedDisplayID else {
+        fail(QualificationDisplay.Failure(message:"Qualification window did not reach the requested display"));return
+      }
+    } else {app.window.center()}
     app.window.level = .floating
     activity = ProcessInfo.processInfo.beginActivity(
       options: [.userInitiated, .idleDisplaySleepDisabled],
@@ -167,6 +181,9 @@ final class UIQualification {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.beginMeasurementWhenVisible() }
       return
     }
+    if let requestedDisplayID,QualificationDisplay.id(app.window.screen) != requestedDisplayID {
+      fail(QualificationDisplay.Failure(message:"Requested qualification display changed before measurement"));return
+    }
     if existingGraph {
       let graph=app.signalGraphEditor
       guard !graph.loading,!graph.canvas.nodes.isEmpty else {
@@ -182,6 +199,7 @@ final class UIQualification {
       // the screenshot-able setup and report its actual scale/card count.
       guard denseGraphCards>=8,graph.scroll.contentSize.height>=180,visiblePatternHeight>=180 else{finish();return}
     }
+    if QualificationWindowEncodeTrace.enabled {windowInventoryBefore=QualificationWindowEncodeTrace.inventory()}
     operation({ try self.app.session.playOrder(0) }) {
       self.app.patternView.resetMetrics()
       self.app.signalGraphEditor.canvas.resetDrawStatistics()
@@ -422,6 +440,10 @@ final class UIQualification {
   func finish() {
     guard !finished else { return }
     sampleWindowState();measurementClockEnd=CACurrentMediaTime()
+    // Freeze the base/audio measurement before draining late presentation
+    // handlers. The drain adds reporting time, never workload or measured time.
+    var report = app.diagnostics()
+    let frozenPresentationTimes=app.patternView.presentationTimestamps
     finished = true
     for observer in windowStateObservers {NotificationCenter.default.removeObserver(observer)}
     windowStateObservers.removeAll()
@@ -432,22 +454,12 @@ final class UIQualification {
       ProcessInfo.processInfo.endActivity(activity)
       self.activity = nil
     }
-    var report = app.diagnostics()
     if measurementStarted {
-      let presented = (report["presentationSamples"] as? Int ?? 0)
-      let missed = (report["missedPresentations"] as? Int ?? 0)
-      require(presented > Int(max(0, duration - 4) * 55), "Insufficient presented frames")
-      require(
-        missed == 0 || Double(missed) / Double(max(1, presented + missed)) < 0.001,
-        "Missed presentation deadlines exceed 0.1%")
-      require(
-        (report["maxPresentMS"] as? Double ?? 100) < 34,
-        "Presentation stall exceeded two 60 Hz periods")
       require(
         (report["p99CPUFrameMS"] as? Double ?? 100) < 6, "CPU frame preparation p99 exceeded 6 ms")
       require((report["p99GPUFrameMS"] as? Double ?? 100) < 4, "GPU execution p99 exceeded 4 ms")
       require((report["maxGeometrySnapshotAgeMS"] as? Double ?? 100) < 34,
-        "Presented pattern geometry became stale for more than two periods")
+        "Pattern geometry snapshot was stale at the render callback for more than two periods")
       require(
         (report["maxMainThreadDrawMS"] as? Double ?? 100) < 34,
         "Main-thread drawing or drawable acquisition stalled for more than two periods")
@@ -489,7 +501,7 @@ final class UIQualification {
     report["requestedVST3"] = CommandLine.arguments.contains("--ui-test-vst3")
     report["automationPoints"] = app.session.snapshot(app.model.pattern)["automationPoints"]
     report["measurementStarted"] = measurementStarted
-    report["durationSeconds"] = measurementStarted ? CFAbsoluteTimeGetCurrent() - start : 0
+    report["durationSeconds"] = measurementStarted ? measurementClockEnd-measurementClockStart : 0
     report["requestedSeconds"] = duration
     report["liveEdits"] = edits
     report["undoRedoCycles"] = undos
@@ -542,7 +554,101 @@ final class UIQualification {
       report["measurementClass"]="instrumented-runloop-diagnostic"
       report["cleanQualificationEligible"]=false
     }
-    let frames=app.patternView.qualificationFrameTrace
+    if let trace=UIWorkTrace.active?.buttonDrawTrace {
+      let entries=trace.snapshot(),path=directory.appendingPathComponent("button-draw-timeline.json")
+      let values:[[String:Any]]=entries.map{entry in
+        ["sequence":entry.sequence,"button":String(entry.identity),"title":entry.title,"context":entry.context,
+         "start":entry.start,"end":entry.end,"enabled":entry.enabled,"highlighted":entry.highlighted,"state":entry.state,
+         "frame":rectangle(entry.frame)]
+      }
+      if let bytes=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? bytes.write(to:path,options:.atomic)) != nil {report["buttonDrawTimeline"]=path.path}
+      report["buttonDrawTimelineSamples"]=entries.count;report["buttonDrawTimelineOverwritten"]=trace.overwritten
+      report["measurementClass"]=QualificationRunLoopTrace.enabled ? "instrumented-runloop-and-button-diagnostic":"instrumented-button-diagnostic"
+      report["cleanQualificationEligible"]=false
+    }
+    if let trace=UIWorkTrace.active?.windowEncodeTrace {
+      let entries=trace.snapshot(),path=directory.appendingPathComponent("window-encode-timeline.json")
+      let values:[[String:Any]]=entries.map{entry in
+        ["sequence":entry.sequence,"windowNumber":entry.windowNumber,"title":entry.title,"class":entry.className,"kind":entry.kind,
+         "isRestorable":entry.restorable,"visible":entry.visible,"start":entry.start,"end":entry.end]
+      }
+      if let bytes=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? bytes.write(to:path,options:.atomic)) != nil {report["windowEncodeTimeline"]=path.path}
+      report["windowEncodeTimelineSamples"]=entries.count;report["windowEncodeTimelineOverwritten"]=trace.overwritten
+      report["windowInventoryBefore"]=windowInventoryBefore;report["windowInventoryAfter"]=QualificationWindowEncodeTrace.inventory()
+      report["windowInventoryLimit"]=128;report["windowInventoryAfterTotal"]=NSApp.windows.count
+      report["measurementClass"]="instrumented-window-state-diagnostic";report["cleanQualificationEligible"]=false
+    }
+    report["applicationClass"]=String(reflecting:type(of:NSApp!))
+    report["applicationStateEncodingTraceRequested"]=QualificationApplicationEncodeTrace.enabled
+    report["applicationStateEncodingTraceInstalled"]=NSApp is UIQualificationApplication
+    if let trace=UIWorkTrace.active?.applicationEncodeTrace {
+      let entries=trace.snapshot(),path=directory.appendingPathComponent("application-encode-timeline.json")
+      let values:[[String:Any]]=entries.map{entry in
+        ["sequence":entry.sequence,"kind":entry.kind.rawValue,"start":entry.start,"end":entry.end]
+      }
+      if let bytes=try? JSONSerialization.data(withJSONObject:values,options:[.sortedKeys]),(try? bytes.write(to:path,options:.atomic)) != nil {report["applicationEncodeTimeline"]=path.path}
+      report["applicationEncodeTimelineSamples"]=entries.count
+      report["applicationEncodeTimelineDropped"]=trace.overwritten
+      report["applicationEncodeMeasurement"]="outer synchronous AppKit call; background queue completion is not measured"
+      report["measurementClass"]="instrumented-window-and-application-state-diagnostic"
+      report["cleanQualificationEligible"]=false
+    }
+    report["presentationQualificationSource"]="canonical-actual-presentation-window"
+    report["presentationWarmupSeconds"]=PatternPresentationMetrics.warmupSeconds
+    report["presentationReportingDrainSeconds"]=0.25
+    report["geometrySnapshotAgeMeasurement"]="render-callback-minus-geometry-prepared"
+    let frozenReport=report
+    DispatchQueue.main.asyncAfter(deadline:.now()+0.25) { [self] in
+      completePresentationReport(frozenReport,mainTimestamps:frozenPresentationTimes)
+    }
+  }
+  private func completePresentationReport(_ frozenReport:[AnyHashable:Any],mainTimestamps:[Double]) {
+    var report=frozenReport
+    // snapshot() already selects the current measurement generation. A fixed
+    // reporting drain permits late handlers; actual times after the frozen end
+    // never repair a real terminal stall or increase the measured frame count.
+    let frames=app.patternView.qualificationFrameTrace.filter{
+      $0.callback>=measurementClockStart && $0.callback<=measurementClockEnd
+    }
+    let traceTimes=frames.map(\.presented).filter{$0.isFinite && $0>0}
+    let cadence=PatternPresentationMetrics(timestamps:mainTimestamps+traceTimes,
+      measurementStart:measurementClockStart,measurementEnd:measurementClockEnd)
+    report["canonicalPresentationWindowStart"]=cadence.start
+    report["canonicalPresentationWindowEnd"]=cadence.end
+    report["canonicalPresentationWindowSeconds"]=cadence.duration
+    report["canonicalPresentationSamples"]=cadence.timestamps.count
+    report["canonicalExpectedPresentationFrames"]=cadence.expectedFrames
+    report["canonicalPresentationRateDeficit"]=cadence.rateDeficit
+    report["canonicalPresentationGapMisses"]=cadence.gapMisses
+    report["canonicalMissedPresentations"]=cadence.missedFrames
+    report["canonicalMissedPresentationFraction"]=cadence.missedFraction
+    report["canonicalPresentedFPS"]=cadence.framesPerSecond
+    report["canonicalLeadingPresentationGapMS"]=cadence.leadingGapMS
+    report["canonicalTrailingPresentationGapMS"]=cadence.trailingGapMS
+    report["canonicalMaxPresentMS"]=cadence.maxGapMS
+    report["canonicalPresentationPassed"]=measurementStarted && cadence.passesCadence
+    report["presentationMainSourceSamples"]=mainTimestamps.count
+    report["presentationTraceSourceSamples"]=traceTimes.count
+    report["presentationMainSourceFirst"]=mainTimestamps.filter{$0.isFinite && $0>0}.min() ?? 0
+    report["presentationMainSourceLast"]=mainTimestamps.filter{$0.isFinite && $0>0}.max() ?? 0
+    report["presentationTraceSourceFirst"]=traceTimes.min() ?? 0
+    report["presentationTraceSourceLast"]=traceTimes.max() ?? 0
+    report["presentationReportClock"]=CACurrentMediaTime()
+    report["presentationActualReportingDelaySeconds"]=CACurrentMediaTime()-measurementClockEnd
+    if measurementStarted {
+      require(cadence.valid && !cadence.timestamps.isEmpty,"Insufficient presented frames in the measured window")
+      require(cadence.missedFraction<0.001,"Missed presentation deadlines exceed 0.1%")
+      require(cadence.maxGapMS<34,"Presentation stall exceeded two 60 Hz periods")
+    }
+    let presentedFrames=frames.filter{$0.presented.isFinite && $0.presented>=cadence.start && $0.presented<=cadence.end}
+    let contentAges=presentedFrames.filter{$0.geometryPrepared>0 && $0.geometryPrepared<=$0.presented}.map{($0.presented-$0.geometryPrepared)*1000}
+    report["presentedContentAgeMeasurement"]="actual-presentation-minus-geometry-prepared; includes intentional queued presentation latency; diagnostic only"
+    report["presentedContentAgeSamples"]=contentAges.count
+    report["p99PresentedContentAgeMS"]=app.patternView.percentile(contentAges,0.99)
+    report["maxPresentedContentAgeMS"]=contentAges.max() ?? 0
+    report["presentedContentAgeSourceFirst"]=presentedFrames.map(\.presented).min() ?? 0
+    report["presentedContentAgeSourceLast"]=presentedFrames.map(\.presented).max() ?? 0
+    report["presentedContentAgeTraceCoversWindowStart"]=(frames.first?.callback ?? .infinity)<=cadence.start
     if !frames.isEmpty {
       let values=frames.map{entry in ["sequence":Double(entry.sequence),"callback":entry.callback,"deadline":entry.deadline,
         "presentationTarget":entry.presentationTarget,"geometryPrepared":entry.geometryPrepared,"committed":entry.committed,
@@ -557,6 +663,8 @@ final class UIQualification {
       report["framesGPUEndedAfterPresentationTarget"]=frames.filter{$0.gpuEnd>$0.presentationTarget}.count
       report["p99PresentationTargetErrorMS"]=app.patternView.percentile(frames.filter{$0.presented>0}.map{($0.presented-$0.presentationTarget)*1000},0.99)
     }
+    report["failures"]=failures
+    report["passed"]=failures.isEmpty
     if let data = try? JSONSerialization.data(
       withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     {

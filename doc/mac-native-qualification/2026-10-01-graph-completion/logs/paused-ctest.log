@@ -1,0 +1,209 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+        Start   1: plugin-presets
+  1/102 Test   #1: plugin-presets ...................   Passed    0.04 sec
+        Start   2: precise-ramps
+  2/102 Test   #2: precise-ramps ....................   Passed    2.22 sec
+        Start   3: precise-notes
+  3/102 Test   #3: precise-notes ....................   Passed    4.71 sec
+        Start   4: pattern-pitch
+  4/102 Test   #4: pattern-pitch ....................   Passed    7.32 sec
+        Start   5: record-nudge
+  5/102 Test   #5: record-nudge .....................   Passed    1.57 sec
+        Start   6: unified-effects
+  6/102 Test   #6: unified-effects ..................   Passed    1.34 sec
+        Start   7: pattern-performance
+  7/102 Test   #7: pattern-performance ..............   Passed    0.82 sec
+        Start   8: plugin-programs
+  8/102 Test   #8: plugin-programs ..................   Passed    0.94 sec
+        Start   9: plugin-preset-session
+  9/102 Test   #9: plugin-preset-session ............   Passed    0.63 sec
+        Start  10: recovery-session
+ 10/102 Test  #10: recovery-session .................   Passed    0.43 sec
+        Start  11: instrument-envelopes
+ 11/102 Test  #11: instrument-envelopes .............   Passed    0.35 sec
+        Start  12: instrument-envelope-session
+ 12/102 Test  #12: instrument-envelope-session ......   Passed    0.52 sec
+        Start  13: plugin-aliases
+ 13/102 Test  #13: plugin-aliases ...................   Passed    1.92 sec
+        Start  14: song-timing-session
+ 14/102 Test  #14: song-timing-session ..............   Passed    0.53 sec
+        Start  15: song-timing
+ 15/102 Test  #15: song-timing ......................   Passed    0.76 sec
+        Start  16: native-reverse-loops
+ 16/102 Test  #16: native-reverse-loops .............   Passed    1.86 sec
+        Start  17: sample-loops
+ 17/102 Test  #17: sample-loops .....................   Passed    2.50 sec
+        Start  18: sample-crossfade-project
+ 18/102 Test  #18: sample-crossfade-project .........   Passed    1.23 sec
+        Start  19: sample-crossfade
+ 19/102 Test  #19: sample-crossfade .................   Passed    0.43 sec
+        Start  20: sample-snap
+ 20/102 Test  #20: sample-snap ......................   Passed    0.37 sec
+        Start  21: sample-drawing
+ 21/102 Test  #21: sample-drawing ...................   Passed    0.35 sec
+        Start  22: sample-copy
+ 22/102 Test  #22: sample-copy ......................   Passed    0.41 sec
+        Start  23: sample-clipboard
+ 23/102 Test  #23: sample-clipboard .................   Passed    0.45 sec
+        Start  24: sample-archive
+ 24/102 Test  #24: sample-archive ...................   Passed    0.41 sec
+        Start  25: sample-processing
+ 25/102 Test  #25: sample-processing ................   Passed    0.54 sec
+        Start  26: sample-project
+ 26/102 Test  #26: sample-project ...................   Passed    0.93 sec
+        Start  27: sample-session
+ 27/102 Test  #27: sample-session ...................   Passed    0.42 sec
+        Start  28: sample-import
+ 28/102 Test  #28: sample-import ....................   Passed    0.43 sec
+        Start  29: tracker-core
+ 29/102 Test  #29: tracker-core .....................   Passed    0.44 sec
+        Start  30: automation-tools
+ 30/102 Test  #30: automation-tools .................   Passed    0.34 sec
+        Start  31: pattern-tools
+ 31/102 Test  #31: pattern-tools ....................   Passed    0.46 sec
+        Start  32: pattern-commands
+ 32/102 Test  #32: pattern-commands .................   Passed    0.33 sec
+        Start  33: plugins
+ 33/102 Test  #33: plugins ..........................   Passed    0.52 sec
+        Start  34: native-effects
+ 34/102 Test  #34: native-effects ...................   Passed    9.82 sec
+        Start  35: eq-effects
+ 35/102 Test  #35: eq-effects .......................   Passed    1.74 sec
+        Start  36: comb
+ 36/102 Test  #36: comb .............................   Passed    0.81 sec
+        Start  37: filters
+ 37/102 Test  #37: filters ..........................   Passed    0.45 sec
+        Start  38: oversampling
+ 38/102 Test  #38: oversampling .....................   Passed    0.34 sec
+        Start  39: distortion
+ 39/102 Test  #39: distortion .......................   Passed    2.17 sec
+        Start  40: lofi
+ 40/102 Test  #40: lofi .............................   Passed    0.56 sec
+        Start  41: cabinet
+ 41/102 Test  #41: cabinet ..........................   Passed   38.98 sec
+        Start  42: dynamics
+ 42/102 Test  #42: dynamics .........................   Passed    1.20 sec
+        Start  43: maximizer
+ 43/102 Test  #43: maximizer ........................   Passed    1.70 sec
+        Start  44: bus-compressor
+ 44/102 Test  #44: bus-compressor ...................   Passed    1.14 sec
+        Start  45: session
+ 45/102 Test  #45: session ..........................   Passed    0.60 sec
+        Start  46: native-song
+ 46/102 Test  #46: native-song ......................   Passed    0.57 sec
+        Start  47: midi
+ 47/102 Test  #47: midi .............................   Passed    0.43 sec
+        Start  48: export
+ 48/102 Test  #48: export ...........................   Passed    0.55 sec
+        Start  49: stress
+ 49/102 Test  #49: stress ...........................   Passed    0.73 sec
+        Start  50: routing-prototype
+ 50/102 Test  #50: routing-prototype ................   Passed    0.49 sec
+        Start  51: mixer-runtime
+ 51/102 Test  #51: mixer-runtime ....................   Passed    0.38 sec
+        Start  52: mixer-transition
+ 52/102 Test  #52: mixer-transition .................   Passed    0.42 sec
+        Start  53: mixer-publication
+ 53/102 Test  #53: mixer-publication ................   Passed    0.49 sec
+        Start  54: realtime-transition
+ 54/102 Test  #54: realtime-transition ..............   Passed    0.02 sec
+        Start  55: native-mixer
+ 55/102 Test  #55: native-mixer .....................   Passed    9.63 sec
+        Start  56: rack-preset
+ 56/102 Test  #56: rack-preset ......................   Passed    1.12 sec
+        Start  57: sidechains
+ 57/102 Test  #57: sidechains .......................   Passed    0.32 sec
+        Start  58: plugin-audio-layout
+ 58/102 Test  #58: plugin-audio-layout ..............   Passed    0.00 sec
+        Start  59: multi-bus
+ 59/102 Test  #59: multi-bus ........................   Passed    2.52 sec
+        Start  60: rack
+ 60/102 Test  #60: rack .............................   Passed    1.00 sec
+        Start  61: mixer-graph
+ 61/102 Test  #61: mixer-graph ......................   Passed    0.30 sec
+        Start  62: native-plugins
+ 62/102 Test  #62: native-plugins ...................   Passed    0.68 sec
+        Start  63: recorded-automation
+ 63/102 Test  #63: recorded-automation ..............   Passed    0.40 sec
+        Start  64: plugin-robustness
+ 64/102 Test  #64: plugin-robustness ................   Passed    1.71 sec
+        Start  65: plugin-latency
+ 65/102 Test  #65: plugin-latency ...................   Passed    0.73 sec
+        Start  66: musical-automation
+ 66/102 Test  #66: musical-automation ...............   Passed    1.04 sec
+        Start  67: automation
+ 67/102 Test  #67: automation .......................   Passed    0.51 sec
+        Start  68: plugin-trust
+ 68/102 Test  #68: plugin-trust .....................   Passed    1.38 sec
+        Start  69: plugin-inventory
+ 69/102 Test  #69: plugin-inventory .................   Passed    0.01 sec
+        Start  70: plugin-lifecycle
+ 70/102 Test  #70: plugin-lifecycle .................   Passed    0.39 sec
+        Start  71: plugin-shutdown
+ 71/102 Test  #71: plugin-shutdown ..................   Passed    0.57 sec
+        Start  72: note-track
+ 72/102 Test  #72: note-track .......................   Passed    0.87 sec
+        Start  73: plugin-library
+ 73/102 Test  #73: plugin-library ...................   Passed    0.01 sec
+        Start  74: automation-target
+ 74/102 Test  #74: automation-target ................   Passed    0.46 sec
+        Start  75: native-note-routing
+ 75/102 Test  #75: native-note-routing ..............   Passed    0.27 sec
+        Start  76: native-source-migration
+ 76/102 Test  #76: native-source-migration ..........   Passed    1.23 sec
+        Start  77: note-routing
+ 77/102 Test  #77: note-routing .....................   Passed    0.30 sec
+        Start  78: plugin-note-sources
+ 78/102 Test  #78: plugin-note-sources ..............   Passed    0.28 sec
+        Start  79: graph-signal-observation
+ 79/102 Test  #79: graph-signal-observation .........   Passed    0.29 sec
+        Start  80: signal-graph
+ 80/102 Test  #80: signal-graph .....................   Passed    0.30 sec
+        Start  81: song-modulation
+ 81/102 Test  #81: song-modulation ..................   Passed    0.30 sec
+        Start  82: native-signal-graph
+ 82/102 Test  #82: native-signal-graph ..............   Passed    2.34 sec
+        Start  83: signal-graph-session
+ 83/102 Test  #83: signal-graph-session .............   Passed    0.62 sec
+        Start  84: effect-auxiliary
+ 84/102 Test  #84: effect-auxiliary .................   Passed    0.31 sec
+        Start  85: signal-routing
+ 85/102 Test  #85: signal-routing ...................   Passed    1.61 sec
+        Start  86: playback-regions
+ 86/102 Test  #86: playback-regions .................   Passed    0.54 sec
+        Start  87: curve-formulas
+ 87/102 Test  #87: curve-formulas ...................   Passed    0.30 sec
+        Start  88: curve-formula-session
+ 88/102 Test  #88: curve-formula-session ............   Passed    0.42 sec
+        Start  89: envelope-bank
+ 89/102 Test  #89: envelope-bank ....................   Passed    0.48 sec
+        Start  90: playback-display
+ 90/102 Test  #90: playback-display .................   Passed    0.45 sec
+        Start  91: parameter-activity
+ 91/102 Test  #91: parameter-activity ...............   Passed    0.45 sec
+        Start  92: unified-history
+ 92/102 Test  #92: unified-history ..................   Passed    0.46 sec
+        Start  93: document-history-allocation
+ 93/102 Test  #93: document-history-allocation ......   Passed    0.52 sec
+        Start  94: windows-graph-document
+ 94/102 Test  #94: windows-graph-document ...........   Passed    0.47 sec
+        Start  95: windows-native-metadata
+ 95/102 Test  #95: windows-native-metadata ..........   Passed    0.91 sec
+        Start  96: windows-mixer-document
+ 96/102 Test  #96: windows-mixer-document ...........   Passed    0.42 sec
+        Start  97: parameter-provenance
+ 97/102 Test  #97: parameter-provenance .............   Passed    0.35 sec
+        Start  98: graph-editing
+ 98/102 Test  #98: graph-editing ....................   Passed    0.35 sec
+        Start  99: signal-group-bypass
+ 99/102 Test  #99: signal-group-bypass ..............   Passed    0.00 sec
+        Start 100: signal-group-runtime
+100/102 Test #100: signal-group-runtime .............   Passed    0.30 sec
+        Start 101: song-group-runtime
+101/102 Test #101: song-group-runtime ...............   Passed    0.55 sec
+        Start 102: mixer-plugin-routing
+102/102 Test #102: mixer-plugin-routing .............   Passed    0.30 sec
+
+100% tests passed, 0 tests failed out of 102
+
+Total Test time (real) = 138.90 sec

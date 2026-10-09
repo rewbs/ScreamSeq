@@ -1,0 +1,10 @@
+Workspace race recheck 1
+PASS actual app workspace: independent pins, pattern focus/compose, moves, rejected-edit atomicity, cursor follow/return, unchanged song and API discovery
+Workspace race recheck 2
+PASS actual app workspace: independent pins, pattern focus/compose, moves, rejected-edit atomicity, cursor follow/return, unchanged song and API discovery
+Workspace race recheck 3
+PASS actual app workspace: independent pins, pattern focus/compose, moves, rejected-edit atomicity, cursor follow/return, unchanged song and API discovery
+Workspace race recheck 4
+PASS actual app workspace: independent pins, pattern focus/compose, moves, rejected-edit atomicity, cursor follow/return, unchanged song and API discovery
+Workspace race recheck 5
+PASS actual app workspace: independent pins, pattern focus/compose, moves, rejected-edit atomicity, cursor follow/return, unchanged song and API discovery

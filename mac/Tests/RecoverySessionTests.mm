@@ -47,8 +47,11 @@ int main(){@autoreleasepool{try{
   check(![recovered automationMethod:@"recording.commit" params:@{@"expectedRevision":recovered.automationRevision,@"take":recovered.recordingTakeID} error:&error],"Incompatible recording cannot silently target a changed song");
   call(recovered,@"recording.discard",@{@"take":recovered.recordingTakeID},true);
   root[@"recoveryTake"][@"events"]=@[@{@"pattern":pattern,@"track":track,@"position":@1234,@"note":@200,@"instrument":@1,@"velocity":@93}];write();
-  revision=recovered.automationRevision;
-  check(![recovered openPath:path error:&error]&&[recovered.automationRevision isEqual:revision],"Malformed recovery is rejected without replacing the current document");
+  NSData *malformedBytes=[NSData dataWithContentsOfFile:path];
+  check([recovered openPath:path error:&error],"Malformed optional take does not prevent recovering the embedded song");
+  check(!recovered.recordingActive&&recovered.recordingTakeID==nil&&[call(recovered,@"pattern.notes.get",@{@"pattern":@0})[@"events"] count]==0,"Recovery skips the invalid take without importing invalid notes");
+  check([[recovered snapshot:0][@"loadWarnings"] count]>0&&[[recovered snapshot:0][@"requiresSaveAs"] boolValue],"Skipped take has explicit warnings and source protection");
+  check(![recovered savePath:path error:&error]&&[[NSData dataWithContentsOfFile:path] isEqual:malformedBytes],"Malformed take source remains byte-identical after recovery");
   // A replaced document must not inherit the previous song's take.
   check(source.recordingTakeID!=nil,"Source still owns its take");[source newSong:NO];
   check(!source.recordingActive&&source.recordingTakeID==nil&&[source savePath:path error:&error],"New song discards the take and can be saved");

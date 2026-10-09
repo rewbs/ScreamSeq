@@ -10,8 +10,13 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
                         const std::vector<ParameterChange> &automation, const std::string &path, uint32_t sequence,
                         const NativeSong *native) {
   constexpr uint32_t rate = 48000;
-  PluginChain effects(states, rate, true, automation);
-  Renderer renderer(module, rate, 0, false, {}, sequence, {}, native);
+  // Export runs on document workers with small stacks. These own large fixed
+  // audio buffers, so allocate them on the heap while retaining destruction
+  // order: renderer adapters are retired before their hosted processors.
+  auto effectsStorage = std::make_unique<PluginChain>(states, rate, true, automation);
+  auto &effects = *effectsStorage;
+  auto rendererStorage = std::make_unique<Renderer>(module, rate, 0, false, std::string{}, sequence, PlaybackRegion{}, native);
+  auto &renderer = *rendererStorage;
   if (native) renderer.applyColumnMutes(*native, renderer.song());
   effects.attachInstruments(renderer, native);
   if (native) effects.attachMusicalAutomation(renderer, *native);

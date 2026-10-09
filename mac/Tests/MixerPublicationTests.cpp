@@ -196,9 +196,8 @@ void retainedMorph(uint32_t rate,uint32_t block) {
   for(const auto &processor:rack->processors)check(processor->processor().rendered==8000,"Changed-input vendors retain one continuous DSP clock");
   check(added->processor().rendered>=2000 && counts.made==4,"Insert/remove keeps all previous processors rather than reconstructing opaque state");
   auto reversed=graph();reversed.buses[0].inserts={"b","a"};reversed.buses[1].inserts.clear();
-  bool rejected=false;
-  try{auto ignored=mixer.prepareRetained(reversed,catalog());}catch(const std::invalid_argument &){rejected=true;}
-  check(rejected && mixer.ready(),"Cyclic union rejects without changing the audible plan");
+  auto handoff=mixer.prepareRetained(reversed,catalog());
+  check(handoff->bridge && mixer.ready(),"Cyclic union prepares a dry handoff without changing the audible plan");
 }
 void catalogChanges(uint32_t rate,uint32_t block,uint32_t latency) {
   Counters counts;
@@ -344,6 +343,44 @@ void stoppedHandoff() {
   check(mixer.commitStopped() && mixer.renderedRevision()==3,"A quiescent device can settle an in-flight fade without dropping the requested topology");
   input->render(mixer,17,51);
 }
+std::vector<float> dryBridge(uint32_t rate,uint32_t block){
+  Counters counts;MixerGraph graph;graph.buses={{1,10,MixerBusKind::Track,"Track"},{10,0,MixerBusKind::Master,"Main"}};graph.buses[0].inserts={"a","b"};
+  std::vector<MixerProcessorInfo> catalog{{"a",13,0},{"b",7,0}};
+  auto initial=std::make_unique<MixerTransition::Plan>();initial->catalog=catalog;initial->runtime=std::make_unique<MixerRuntime>(graph,compileMixer(graph,{1},catalog,rate),rate);
+  auto rack=std::make_shared<Rack>();
+  rack->processors.push_back(std::make_shared<RenderOnce<Processor>>(std::make_shared<Processor>(counts,13,.25f)));
+  rack->processors.push_back(std::make_shared<RenderOnce<Processor>>(std::make_shared<Processor>(counts,7,.5f)));
+  initial->processors=rack;initial->process=Rack::process;
+  MixerTransition mixer(std::move(initial),{1,10},{1},rate);
+  std::array<float,4096> left{},right{};std::array<MixerTransition::DirectInput,2> inputs{{{left.data(),right.data()},{}}};
+  std::shared_ptr<Rack> nextRack;std::vector<float> rendered(10000*2);uint64_t activated=UINT64_MAX;
+  struct Handoff {Rack rack;uint64_t *at;};std::shared_ptr<Handoff> next;
+  for(uint32_t at=0;at<10000;){
+    if(at==1700){graph.buses[0].inserts={"b","a","c"};catalog.push_back({"c",31,0});
+      auto plan=mixer.prepareRetained(graph,catalog);check(bool(plan->bridge),"Changed latency and cyclic retained order must prepare a dry bridge");
+      next=std::make_shared<Handoff>();next->rack.processors=rack->processors;next->rack.processors.push_back(std::make_shared<RenderOnce<Processor>>(std::make_shared<Processor>(counts,31,2.f)));next->at=&activated;
+      plan->processors=next;plan->process=[](void *p,MixerRuntime &m,size_t i,float *s,uint32_t n,uint64_t f)noexcept{return Rack::process(&static_cast<Handoff *>(p)->rack,m,i,s,n,f);};
+      plan->activateAudio=[](void *p,void *,uint64_t frame)noexcept{*static_cast<Handoff *>(p)->at=frame;};
+      check(mixer.publish(plan),"Publish dry bridge");
+    }
+    auto count=std::min(block,10000-at);if(at<1700)count=std::min(count,1700-at);
+    uint64_t a,f,l;tracker_audit_begin();count=mixer.limitFrames(count,at);tracker_audit_end(&a,&f,&l);check(count&&a+f+l==0,"Phase limiter allocated or returned an empty block");
+    for(uint32_t i=0;i<count;++i)left[i]=right[i]=float(.2+.1*std::sin((at+i)*.007));
+    tracker_audit_begin();const bool began=mixer.begin(count,at);const auto *output=began?mixer.render(inputs):nullptr;tracker_audit_end(&a,&f,&l);
+    check(output&&!mixer.failed()&&a+f+l==0,"Dry bridge failed realtime processing");std::copy_n(output,count*2,rendered.data()+at*2);at+=count;mixer.collect();
+  }
+  const auto fade=uint32_t(std::llround(rate*.01)),down=1751u,swap=down+fade,up=swap+fade;
+  check(activated==swap,"Audio ownership changed outside the exact dry boundary");
+  auto input=[](int64_t frame){return frame<0?0.f:float(.2+.1*std::sin(frame*.007));};
+  auto blend=[&](float a,float b,uint32_t at,uint32_t start){const auto t=std::min(1.,double(at-start)/fade);return a+(b-a)*float(t*t*(3-2*t));};
+  for(uint32_t at=0;at<10000;++at){const auto oldDry=input(int64_t(at)-20),newDry=input(int64_t(at)-51);float expected;
+    if(at<down)expected=oldDry*.125f;else if(at<swap)expected=blend(oldDry*.125f,oldDry,at,down);
+    else if(at<up)expected=blend(oldDry,newDry,at,swap);else expected=blend(newDry,newDry*.25f,at,up);
+    check(std::abs(rendered[at*2]-expected)<1e-7,"Dry bridge differs from independent latency-aligned waveform oracle");
+  }
+  check(rack->processors[0]->processor().rendered==10000&&rack->processors[1]->processor().rendered==10000,"Retained processor state did not advance exactly once per frame");
+  check(next->rack.processors[2]->processor().rendered==10000-swap&&mixer.ready(),"New processor did not start at the accepted audio boundary");return rendered;
+}
 }
 int main() {
   try {
@@ -351,6 +388,7 @@ int main() {
       unchanged(rate,block,0);unchanged(rate,block,193);unchanged(rate,block,193,true);reroute(rate,block);
       catalogChanges(rate,block,0);catalogChanges(rate,block,193);retainedMorph(rate,block);detachedProcessors(rate,block);
     }
+    for(auto rate:{44100u,48000u,96000u}){const auto expected=dryBridge(rate,17);check(expected==dryBridge(rate,512)&&expected==dryBridge(rate,4096),"Dry transition depends on device callback partition");}
     failures(); concurrentPublications(); stoppedHandoff();
     std::cout<<"PASS live mixer executor: publication, sample-rate fades, warmup, retained state, effect catalog edits, source mapping, failure retention and realtime audit\n";return 0;
   } catch(const std::exception &error){std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}

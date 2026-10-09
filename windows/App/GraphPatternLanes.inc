@@ -1,3 +1,5 @@
+    std::unique_ptr<ScreamSeq::GraphTrimsWindow> graphTrimsWindow;
+    void openGraphTrims(){if(!graphTrimsWindow)graphTrimsWindow=std::make_unique<ScreamSeq::GraphTrimsWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::GraphTrimsWindow::Context{documentId,view->session.revision};});graphTrimsWindow->open();}
     std::unique_ptr<ScreamSeq::GraphCommandsWindow> graphCommandsWindow;
     unsigned graphLaneSelected=0,graphLaneFirst=0;
     static constexpr float graphLaneWidth=124;

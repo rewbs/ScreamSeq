@@ -1,0 +1,172 @@
+static void graphManyToManySessionChecks() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;auto result=[session automationMethod:method params:p error:&error];if(!result)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return result[@"data"];};
+  auto read=[&](){return call(@"graph.get",@{@"includeImplicitMixer":@YES});};
+  auto initial=read();NSString *first=initial[@"mixer"][@"buses"][0][@"id"],*second=initial[@"mixer"][@"buses"][1][@"id"];
+  NSString *left=call(@"mixer.bus.add",@{@"kind":@"return",@"name":@"Fan-out left"},true)[@"bus"];
+  NSString *right=call(@"mixer.bus.add",@{@"kind":@"return",@"name":@"Fan-out right"},true)[@"bus"];
+  NSMutableArray<NSString *> *ids=[NSMutableArray array];
+  for(NSString *name in @[@"Source A",@"Source B",@"Destination C",@"Destination D"]){
+    const bool source=ids.count<2;
+    call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"name":name,@"classID":source?@"resonance.gainer.v1":@"resonance.compressor.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0},@"detached":@YES},true);
+    [ids addObject:[read()[@"plugins"] lastObject][@"id"]];
+  }
+  auto unconnected=read();check([unconnected[@"mixer"][@"detached"] count]==4,"New unconnected effects must start detached");
+  call(@"mixer.sidechains.set",@{@"plugin":ids[0],@"input":@0,@"sources":@[@{@"source":first,@"gainDB":@0}]},true);
+  call(@"mixer.sidechains.set",@{@"plugin":ids[1],@"input":@0,@"sources":@[@{@"source":second,@"gainDB":@0}]},true);
+  check([read()[@"mixer"][@"detachedChains"] count]==2,"Fresh input cables must prepare loose effect owners without moving inserts");
+  for(NSString *plugin in @[ids[0],ids[1]])call(@"mixer.plugin.route",@{@"plugin":plugin,@"output":@0,@"targets":@[left,right]},true);
+  check([read()[@"mixer"][@"instruments"] count]==4,"Each effect output must retain both explicit bus destinations");
+  auto beforeMatrix=read();NSUInteger count=0;
+  for(NSString *source in @[ids[0],ids[1]])for(NSString *target in @[ids[2],ids[3]])for(NSNumber *input in @[@0,@1]){
+    call(@"mixer.plugin.connection.set",@{@"source":source,@"output":@0,@"target":target,@"input":input},true);
+    check([read()[@"mixer"][@"pluginConnections"] count]==++count,"Adding a fresh main or auxiliary cable must preserve all previous cables");
+  }
+  auto matrix=read();check([matrix[@"mixer"][@"sidechains"] isEqual:beforeMatrix[@"mixer"][@"sidechains"]]&&[matrix[@"mixer"][@"instruments"] isEqual:beforeMatrix[@"mixer"][@"instruments"]],"Direct fan-in must preserve bus-input feeds and output fan-out");
+  NSString *revision=session.automationRevision;
+  NSDictionary *last=@{@"source":ids[1],@"output":@0,@"target":ids[3],@"input":@1};
+  call(@"mixer.plugin.connection.set",last,true);check([revision isEqual:session.automationRevision],"Repeating an existing cable must be a no-op");
+  NSDictionary *cut=@{@"kind":@"plugin-connection",@"source":ids[0],@"output":@0,@"target":ids[2],@"input":@0};
+  call(@"graph.connections.remove",@{@"connections":@[cut]},true);auto removed=read();check([removed[@"mixer"][@"pluginConnections"] count]==7,"Cut must remove only the selected cable from a summed input");
+  call(@"history.undo",@{},true);check([read() isEqual:matrix],"One Undo must restore exactly the chosen cable");
+  call(@"history.redo",@{},true);check([read() isEqual:removed],"Redo must preserve all sibling fan-in and fan-out cables");call(@"history.undo",@{},true);
+  revision=session.automationRevision;
+  check(![session automationMethod:@"mixer.plugin.connection.set" params:@{@"source":ids[2],@"output":@0,@"target":ids[0],@"input":@0,@"expectedRevision":revision} error:&error]&&[read() isEqual:matrix]&&[revision isEqual:session.automationRevision],"A feedback cable must reject atomically without removing valid fan-in/out");
+  auto sends=@[@{@"target":left,@"gainDB":@0},@{@"target":right,@"gainDB":@0}];
+  call(@"mixer.sends.set",@{@"bus":first,@"sends":sends},true);call(@"mixer.sends.set",@{@"bus":second,@"sends":sends},true);
+  auto buses=read()[@"mixer"][@"buses"];for(NSUInteger i=0;i<2;++i)check([buses[i][@"sends"] count]==2&&[buses[i][@"output"] isEqual:initial[@"mixer"][@"buses"][i][@"output"]],"Unity send fan-out preserves each existing main output");
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  auto expected=read();check([session savePath:path error:&error]&&[session openPath:path error:&error]&&[expected isEqual:read()],"Complete many-to-many routing must survive native persistence");
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+}
+
+static void graphEditingSessionChecks() {
+  graphManyToManySessionChecks();
+  TrackerSession *s=[TrackerSession new];NSError *error=nil;
+  auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=s.automationRevision;auto r=[s automationMethod:method params:p error:&error];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);return r;};
+  auto snapshot=[&](){return api(@"graph.get",@{@"includeImplicitMixer":@YES})[@"data"];};
+  NSString *graph=api(@"graph.create",@{@"name":@"Editing actions"},true)[@"data"][@"graph"];
+  NSString *source=api(@"graph.node.add",@{@"graph":graph,@"kind":@"lfo"},true)[@"data"][@"node"];
+  NSString *plugin=api(@"graph.node.add",@{@"graph":graph,@"kind":@"plugin",@"plugin":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1"},@"insertEdge":@0},true)[@"data"][@"node"];
+  auto pluginMetadata=api(@"graph.plugin.get",@{@"graph":graph,@"node":plugin})[@"data"];
+  check([pluginMetadata[@"audioLayout"] hasPrefix:@"pairs-v1"]&&[pluginMetadata[@"buses"][0][@"physicalChannels"] unsignedIntValue]>0,"Plugin metadata must expose actual physical slices and a stable layout fingerprint");
+  NSDictionary *pinnedRecipe=nil;for(NSDictionary *n in snapshot()[@"library"][0][@"nodes"])if([n[@"id"] isEqual:plugin])pinnedRecipe=n[@"plugin"];
+  check([pinnedRecipe[@"audioLayout"] isEqual:pluginMetadata[@"audioLayout"]],"New recipe must pin actual audio layout before it can be connected");
+  auto layoutBefore=snapshot();NSString *layoutRevision=s.automationRevision;NSMutableDictionary *wrongRecipe=[pinnedRecipe mutableCopy];wrongRecipe[@"audioLayout"]=@"pairs-v1;o0=0:0:2:8";
+  check(![s automationMethod:@"graph.node.add" params:@{@"graph":graph,@"kind":@"plugin",@"plugin":wrongRecipe,@"expectedRevision":layoutRevision} error:&error]&&[layoutBefore isEqual:snapshot()]&&[layoutRevision isEqual:s.automationRevision],"A mismatched vendor layout must reject creation without mutation or history");
+  auto findSource=[&](NSString *which)->NSDictionary *{for(NSDictionary *d in snapshot()[@"library"])if([d[@"id"] isEqual:which])for(NSDictionary *n in d[@"nodes"])if([n[@"id"] isEqual:source])return n;return nil;};
+  auto before=snapshot();NSString *revision=s.automationRevision;
+  api(@"graph.source.mute",@{@"graph":graph,@"node":source,@"muted":@YES,@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Source mute preview changes history");
+  api(@"graph.source.mute",@{@"graph":graph,@"node":source,@"muted":@YES},true);check([findSource(graph)[@"muted"] boolValue],"Recipe source mute not persisted");
+  auto muted=snapshot();revision=s.automationRevision;api(@"graph.source.mute",@{@"graph":graph,@"node":source,@"muted":@YES},true);check([revision isEqual:s.automationRevision],"Identical source mute creates Undo");
+  check(![s automationMethod:@"graph.source.mute" params:@{@"graph":graph,@"node":plugin,@"muted":@YES,@"expectedRevision":revision} error:&error]&&[muted isEqual:snapshot()],"Invalid source mute partially commits");
+  api(@"history.undo",@{},true);check(![findSource(graph)[@"muted"] boolValue],"Source mute Undo failed");api(@"history.redo",@{},true);check([muted isEqual:snapshot()],"Source mute Redo failed");
+  NSString *target=snapshot()[@"mixer"][@"buses"][0][@"id"];api(@"graph.assign",@{@"target":target,@"graph":graph},true);
+  before=snapshot();revision=s.automationRevision;api(@"graph.makeIndependent",@{@"graph":graph,@"target":target,@"scope":@"channel",@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Independent-use preview changes model");
+  NSString *independent=api(@"graph.makeIndependent",@{@"graph":graph,@"target":target,@"scope":@"channel"},true)[@"data"][@"graph"];check(![independent isEqual:graph]&&[snapshot()[@"assignments"][0][@"graph"] isEqual:independent],"Independent use did not rebind the selected channel");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Independent use must have one complete Undo");api(@"history.redo",@{},true);
+  auto fragment=api(@"graph.selection.copy",@{@"graph":graph,@"nodes":@[source,plugin]})[@"data"][@"fragment"];check([fragment[@"audio"] count]==0&&[fragment[@"nodes"] count]==4,"Clipboard copies internal data without boundary audio routes");
+  before=snapshot();api(@"graph.selection.paste",@{@"graph":graph,@"fragment":fragment,@"x":@300,@"y":@200},true);check([snapshot()[@"library"][0][@"nodes"] count]==6,"Pasted nodes missing");api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Paste must have one complete Undo");
+  auto cut=api(@"graph.selection.cut",@{@"graph":graph,@"nodes":@[source,plugin]},true)[@"data"];check([cut[@"fragment"] isEqual:fragment]&&[snapshot()[@"library"][0][@"nodes"] count]==2,"Cut did not return exact fragment or remove originals");api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Cut must have one complete Undo");
+  api(@"graph.plugin.set",@{@"graph":graph,@"node":plugin,@"parameters":@[@{@"id":@1,@"value":@(-6)}]},true);api(@"graph.plugin.bypass",@{@"graph":graph,@"node":plugin,@"bypass":@YES},true);
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq-preset"]];
+  revision=s.automationRevision;api(@"graph.plugin.preset.save",@{@"graph":graph,@"node":plugin,@"path":path,@"name":@"Saved baseline"},true);check([revision isEqual:s.automationRevision],"Preset save changes song history");
+  api(@"graph.plugin.set",@{@"graph":graph,@"node":plugin,@"parameters":@[@{@"id":@1,@"value":@(-12)}]},true);before=snapshot();auto preset=api(@"plugin.preset.inspect",@{@"path":path})[@"data"];
+  api(@"graph.plugin.preset.load",@{@"graph":graph,@"node":plugin,@"path":path,@"expectedPresetRevision":preset[@"presetRevision"]},true);
+  auto metadata=api(@"graph.plugin.get",@{@"graph":graph,@"node":plugin})[@"data"];check([metadata[@"bypass"] boolValue]&&[metadata[@"parameters"][1][@"manualValue"] floatValue]==-6,"Recipe preset must restore configured baseline while preserving bypass");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Recipe preset load must have one complete Undo");api(@"history.redo",@{},true);
+  [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+  NSDictionary *gainer=@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"name":@"Gainer",@"type":@0,@"subtype":@0,@"manufacturer":@0};
+  api(@"plugin.add",@{@"descriptor":gainer},true);NSString *rack=snapshot()[@"plugins"][0][@"id"];
+  api(@"plugin.parameters.set",@{@"plugin":rack,@"values":@[@{@"id":@1,@"value":@(-9)}]},true);api(@"plugin.bypass",@{@"plugin":rack,@"bypass":@YES},true);
+  before=snapshot();revision=s.automationRevision;api(@"plugin.duplicate",@{@"plugin":rack,@"position":@{@"x":@300,@"y":@500},@"dryRun":@YES},true);check([revision isEqual:s.automationRevision]&&[before isEqual:snapshot()],"Plugin duplicate dryRun mutated the song");
+  auto duplicated=api(@"plugin.duplicate",@{@"plugin":rack,@"position":@{@"x":@300,@"y":@500}},true)[@"data"];NSString *copy=duplicated[@"plugin"];check(![copy isEqual:rack]&&[duplicated[@"detached"] boolValue]&&[snapshot()[@"mixer"][@"detached"] containsObject:copy],"Plugin duplicate must create a fresh detached effect");
+  auto values=api(@"plugin.parameters.get",@{@"plugin":copy})[@"data"];check([values[1][@"manualValue"] doubleValue]==-9&&[snapshot()[@"plugins"][1][@"bypass"] boolValue]&&[snapshot()[@"plugins"][1][@"assignments"] count]==0,"Plugin duplicate must preserve baseline and bypass without assignments");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Plugin duplicate must have one complete Undo");api(@"history.redo",@{},true);
+  // A rack-only instrument copy has identical NativeSong metadata: the
+  // plugin transaction must run even when Document::annotate would be a no-op.
+  api(@"plugin.add",@{@"descriptor":@{@"format":@"AU",@"name":@"Apple DLSMusicDevice",@"type":@(kAudioUnitType_MusicDevice),@"subtype":@(kAudioUnitSubType_DLSSynth),@"manufacturer":@(kAudioUnitManufacturer_Apple),@"isInstrument":@YES}},true);
+  before=snapshot();NSString *synth=before[@"plugins"][2][@"id"];
+  auto synthCopy=api(@"plugin.duplicate",@{@"plugin":synth},true)[@"data"];
+  check([snapshot()[@"plugins"] count]==4&&![synthCopy[@"plugin"] isEqual:synth]&&![synthCopy[@"detached"] boolValue]&&[snapshot()[@"plugins"][3][@"assignments"] count]==0,"Rack-only instrument duplicate must publish without a native annotation");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Rack-only instrument duplicate must have one Undo");api(@"history.redo",@{},true);check([snapshot()[@"plugins"] count]==4,"Rack-only instrument duplicate Redo failed");
+  NSString *boundaryGroup=api(@"graph.group.create",@{@"graph":graph,@"nodes":@[plugin],@"name":@"Dry boundary"},true)[@"data"][@"group"];
+  auto boundary=api(@"graph.group.boundary",@{@"graph":graph,@"group":boundaryGroup})[@"data"];check(![boundary[@"needsMapping"] boolValue]&&[boundary[@"inputs"] count]==1&&[boundary[@"outputs"] count]==1,"Group boundary must report exact unique dry path");
+  before=snapshot();revision=s.automationRevision;api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES,@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Group bypass dry run mutated model/history");
+  api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES,@"dryRoutes":boundary[@"dryRoutes"]},true);auto groupBypassed=snapshot();check([groupBypassed[@"library"][0][@"groups"][0][@"bypass"] boolValue],"Group bypass flag missing");
+  revision=s.automationRevision;api(@"graph.group.bypass",@{@"graph":graph,@"group":boundaryGroup,@"bypass":@YES},true);check([revision isEqual:s.automationRevision],"Identical group bypass adds history");api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Group bypass Undo is not atomic");api(@"history.redo",@{},true);check([groupBypassed isEqual:snapshot()],"Group bypass Redo changed dry mappings");
+  api(@"graph.clone",@{@"graph":graph},true);check([[[snapshot()[@"library"] lastObject][@"groups"] firstObject][@"bypass"] boolValue],"Graph clone discarded group bypass");
+  api(@"graph.group.export",@{@"graph":graph,@"group":boundaryGroup},true);check([[[snapshot()[@"library"] lastObject][@"groups"] firstObject][@"bypass"] boolValue],"Export must retain the actual bypass boundary");
+  NSString *songSource=api(@"graph.song.source.add",@{@"source":@{@"kind":@"lfo",@"x":@20,@"y":@30}},true)[@"data"][@"node"];
+  NSString *sourceKey=[@"source:" stringByAppendingString:songSource];
+  NSString *mixedGroup=api(@"graph.song.group.create",@{@"nodes":@[sourceKey,[@"plugin:" stringByAppendingString:copy]],@"name":@"Effect and motion"},true)[@"data"][@"group"];
+  before=snapshot();revision=s.automationRevision;
+  check(![s automationMethod:@"graph.song.group.export" params:@{@"group":mixedGroup,@"expectedRevision":revision} error:&error]&&[before isEqual:snapshot()],"Mixed control export must not silently discard song source scope");
+  api(@"plugin.remove",@{@"plugins":@[copy],@"sources":@[songSource],@"dryRun":@YES},true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Mixed group delete dry run must not mutate");
+  check(![s automationMethod:@"plugin.remove" params:@{@"plugins":@[copy],@"sources":@[songSource,songSource],@"expectedRevision":revision} error:&error]&&[before isEqual:snapshot()],"Duplicate source delete must reject the entire plugin/source batch");
+  api(@"plugin.remove",@{@"plugins":@[copy],@"sources":@[songSource]},true);check([snapshot()[@"groups"] count]==0&&[snapshot()[@"songSources"] count]==0&&[snapshot()[@"plugins"] count]==3,"Mixed group delete must remove sources and processors together");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Mixed group delete requires exactly one complete Undo");
+  api(@"mixer.inserts.move",@{@"plugins":@[rack],@"target":target},true);
+  api(@"mixer.inserts.move",@{@"plugins":@[copy],@"target":target},true);
+  auto attached=snapshot();api(@"mixer.inserts.detach",@{@"plugins":@[rack,copy],@"dryRun":@YES},true);check([attached isEqual:snapshot()],"Multi-effect detach dry run mutates");
+  api(@"mixer.inserts.detach",@{@"plugins":@[rack,copy]},true);auto looseChain=snapshot();NSString *chain=looseChain[@"mixer"][@"detachedChains"][0][@"id"];
+  check([looseChain[@"mixer"][@"detachedChains"][0][@"plugins"] isEqual:@[rack,copy]],"Detached chain loses internal order");
+  api(@"history.undo",@{},true);check([attached isEqual:snapshot()],"Detached chain must restore with one Undo");api(@"history.redo",@{},true);
+  NSString *master=nil;for(NSDictionary *b in snapshot()[@"mixer"][@"buses"])if([b[@"kind"] isEqual:@"master"])master=b[@"id"];
+  NSArray *cuts=@[@{@"kind":@"insert",@"source":chain,@"plugin":copy},@{@"kind":@"master-output",@"source":master}];
+  api(@"graph.connections.remove",@{@"connections":cuts},true);auto exact=snapshot();check([exact[@"mixer"][@"disconnectedMainInputs"] containsObject:copy]&&[exact[@"mixer"][@"masterOutputDisconnected"] boolValue],"Exact rack and Master cable cuts missing");
+  api(@"history.undo",@{},true);check([looseChain isEqual:snapshot()],"Mixed exact cuts must share one Undo");api(@"history.redo",@{},true);
+  api(@"mixer.inserts.move",@{@"plugins":@[copy],@"target":chain,@"before":copy},true);check([snapshot()[@"mixer"][@"disconnectedMainInputs"] count]==0,"Repatching exact main input must reconnect without reordering");
+  api(@"mixer.bus.set",@{@"bus":master,@"mainOutputConnected":@YES},true);check(![snapshot()[@"mixer"][@"masterOutputDisconnected"] boolValue],"Master terminal reconnect failed");
+  api(@"plugin.bypass",@{@"plugin":rack,@"bypass":@NO},true);api(@"plugin.bypass",@{@"plugin":copy,@"bypass":@NO},true);
+  NSDictionary *direct=@{@"source":rack,@"output":@0,@"target":copy,@"input":@0,@"gainDB":@(-9),@"enabled":@YES};
+  before=snapshot();revision=s.automationRevision;auto directPreview=[direct mutableCopy];directPreview[@"dryRun"]=@YES;api(@"mixer.plugin.connection.set",directPreview,true);check([before isEqual:snapshot()]&&[revision isEqual:s.automationRevision],"Direct plugin route dry run changes the song");
+  api(@"mixer.plugin.connection.set",direct,true);auto connected=snapshot();check([connected[@"mixer"][@"pluginConnections"] count]==1&&[connected[@"mixer"][@"pluginConnections"][0][@"gainDB"] doubleValue]==-9,"Direct plugin contribution is missing");
+  revision=s.automationRevision;api(@"mixer.plugin.connection.set",direct,true);check([revision isEqual:s.automationRevision],"Identical direct route creates Undo");
+  auto invalidDirect=[direct mutableCopy];invalidDirect[@"target"]=synth;invalidDirect[@"expectedRevision"]=revision;check(![s automationMethod:@"mixer.plugin.connection.set" params:invalidDirect error:&error]&&[snapshot() isEqual:connected],"An instrument without the requested physical audio input must reject without mutation");
+  api(@"history.undo",@{},true);check([before isEqual:snapshot()],"Direct route Undo changes unrelated chains");api(@"history.redo",@{},true);
+  api(@"graph.connections.remove",@{@"connections":@[@{@"kind":@"plugin-connection",@"source":rack,@"output":@0,@"target":copy,@"input":@0}]},true);check([snapshot()[@"mixer"][@"pluginConnections"] count]==0&&[snapshot()[@"mixer"][@"detachedChains"] isEqual:connected[@"mixer"][@"detachedChains"]],"Direct cut must remove exactly its contribution without healing serial audio");api(@"history.undo",@{},true);check([connected isEqual:snapshot()],"Direct cut is not one complete Undo");
+  NSString *songPath=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];before=snapshot();check([s savePath:songPath error:&error]&&[s openPath:songPath error:&error]&&[before isEqual:snapshot()],"Graph editing actions did not survive native project round trip");[[NSFileManager defaultManager] removeItemAtPath:songPath error:nil];
+  {
+    TrackerSession *grouped=[TrackerSession new];NSError *failure=nil;
+    auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=grouped.automationRevision;auto r=[grouped automationMethod:method params:p error:&failure];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+failure.localizedDescription.UTF8String);return r[@"data"];};
+    auto read=[&](){return call(@"graph.get",@{@"includeImplicitMixer":@YES});};
+    NSString *track=read()[@"mixer"][@"buses"][2][@"id"],*detector=read()[@"mixer"][@"buses"][1][@"id"];
+    NSDictionary *compressor=@{@"format":@"Built-in",@"name":@"Compressor",@"classID":@"resonance.compressor.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0},*gain=@{@"format":@"Built-in",@"name":@"After group",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0};
+    call(@"plugin.add",@{@"descriptor":compressor,@"target":track},true);NSString *processor=read()[@"plugins"][0][@"id"];
+    call(@"mixer.sidechains.set",@{@"plugin":processor,@"input":@1,@"sources":@[@{@"source":detector,@"gainDB":@(-9)}]},true);
+    NSString *group=call(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:processor]],@"name":@"Sidechain dynamics"},true)[@"group"];
+    auto boundary=call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group});NSDictionary *mainInput=nil;
+    for(NSDictionary *input in boundary[@"inputs"])if([input[@"kind"] isEqual:@"insert"])mainInput=input;
+    check(mainInput&&[boundary[@"inputs"] count]==2&&[boundary[@"outputs"] count]==1,"Grouped Add fixture must have distinct Main and detector inputs");
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO,@"dryRoutes":@[@{@"input":mainInput,@"output":boundary[@"outputs"][0]}]},true);
+    auto prior=read();call(@"plugin.add",@{@"descriptor":gain,@"target":track},true);auto after=read();NSString *added=after[@"plugins"][1][@"id"];
+    auto dry=after[@"groups"][0][@"dryRoutes"][0];check([dry[@"input"] isEqual:mainInput]&&[dry[@"output"][@"kind"] isEqual:@"insert"]&&[dry[@"output"][@"plugin"] isEqual:added]&&[after[@"mixer"][@"sidechains"] isEqual:prior[@"mixer"][@"sidechains"]],"Adding after a grouped sidechain processor must retain its chosen Main dry source and move only the output boundary");
+    check(![call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group})[@"needsMapping"] boolValue],"Remapped group boundary must remain immediately usable");
+    call(@"history.undo",@{},true);check([prior isEqual:read()],"Grouped Add must undo processor, boundary and rack in one step");call(@"history.redo",@{},true);check([after isEqual:read()],"Grouped Add Redo must restore the exact dry mapping");
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@YES},true);call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO},true);
+    call(@"plugin.add",@{@"descriptor":gain,@"target":track,@"before":processor,@"parent":group},true);auto expanded=read();NSString *head=expanded[@"plugins"][2][@"id"];
+    check([expanded[@"groups"][0][@"dryRoutes"][0][@"input"][@"plugin"] isEqual:head]&&[expanded[@"groups"][0][@"dryRoutes"][0][@"output"][@"plugin"] isEqual:added],"Adding inside the group's leading boundary must preserve its dry path through the new head");
+    NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([grouped savePath:path error:&failure]&&[grouped openPath:path error:&failure]&&[expanded isEqual:read()],"Remapped insertion boundaries must survive native save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@YES},true);auto beforeDetach=read();
+    call(@"mixer.inserts.detach",@{@"plugins":@[head,processor],@"dryRun":@YES},true);check([beforeDetach isEqual:read()],"Grouped detach dry run must preserve the complete song");
+    call(@"mixer.inserts.detach",@{@"plugins":@[head,processor]},true);auto detached=read();
+    check([detached[@"groups"][0][@"dryRoutes"] count]==0&&[detached[@"groups"][0][@"bypass"] boolValue]&&[detached[@"groups"][0][@"nodes"] isEqual:beforeDetach[@"groups"][0][@"nodes"]]&&[detached[@"mixer"][@"sidechains"] isEqual:beforeDetach[@"mixer"][@"sidechains"]],"Detaching a group must remove its old serial dry egress and preserve the detector, membership and bypass state");
+    check([detached[@"mixer"][@"buses"][2][@"inserts"] isEqual:@[added]]&&[detached[@"mixer"][@"detachedChains"][0][@"plugins"] isEqual:@[head,processor]],"Grouped detach must reconnect the original track and preserve the detached chain order");
+    NSString *detachedRevision=grouped.automationRevision;call(@"mixer.inserts.detach",@{@"plugins":@[head,processor]},true);check([detachedRevision isEqual:grouped.automationRevision]&&[detached isEqual:read()],"Repeated grouped detach must be a no-op");
+    call(@"history.undo",@{},true);check([beforeDetach isEqual:read()],"Grouped detach must undo routing and dry maps together");call(@"history.redo",@{},true);check([detached isEqual:read()],"Grouped detach Redo must restore the exact detached song");
+    check([grouped savePath:path error:&failure]&&[grouped openPath:path error:&failure]&&[detached isEqual:read()],"Detached group dry boundaries and sidechain must survive native save/reopen");[[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+  }
+  {
+    TrackerSession *implicit=[TrackerSession new];NSError *failure=nil;
+    auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=implicit.automationRevision;auto r=[implicit automationMethod:method params:p error:&failure];if(!r)throw std::runtime_error(std::string(method.UTF8String)+": "+failure.localizedDescription.UTF8String);return r[@"data"];};
+    NSDictionary *gain=@{@"format":@"Built-in",@"name":@"Gain",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0};
+    call(@"plugin.add",@{@"descriptor":gain},true);NSString *processor=call(@"graph.get",@{})[@"plugins"][0][@"id"];
+    NSString *group=call(@"graph.song.group.create",@{@"nodes":@[[ @"plugin:" stringByAppendingString:processor]]},true)[@"group"];
+    auto boundary=call(@"graph.group.boundary",@{@"graph":NSNull.null,@"group":group});call(@"graph.group.bypass",@{@"graph":NSNull.null,@"group":group,@"bypass":@NO,@"dryRoutes":boundary[@"dryRoutes"]},true);
+    auto prior=call(@"graph.get",@{});call(@"plugin.add",@{@"descriptor":gain},true);auto after=call(@"graph.get",@{});
+    check([after[@"plugins"] count]==2&&[after[@"groups"][0][@"dryRoutes"][0][@"output"][@"plugin"] isEqual:after[@"plugins"][1][@"id"]],"Targetless rack Add must preserve an implicit Master group's boundary");
+    call(@"history.undo",@{},true);check([prior isEqual:call(@"graph.get",@{})],"Implicit grouped Add must have one Undo");call(@"history.redo",@{},true);check([after isEqual:call(@"graph.get",@{})],"Implicit grouped Add Redo must preserve rack publication");
+  }
+
+}

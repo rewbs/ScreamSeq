@@ -136,7 +136,7 @@ static void api() {
   check([session savePath:file error:&error]&&[session openPath:file error:&error],"Unified project saves and reopens");check([expected isEqual:call(@"pattern.effects.get",@{@"pattern":@0})],"All FX types/positions retain exact values");
   NSMutableDictionary *root=[NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:file] options:NSPropertyListMutableContainers format:nil error:nil];
   check([root[@"version"] intValue]==6&&[root[@"native"][@"version"] intValue]==17,"Single current native format");
-  for(int old=1;old<6;++old){root[@"version"]=@(old);[[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];rev=session.automationRevision;check(![session openPath:file error:&error]&&[rev isEqual:session.automationRevision],"Historical project is rejected without replacing current document");}
+  for(int old=1;old<6;++old){root[@"version"]=@(old);NSData *original=[NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];[original writeToFile:file atomically:YES];check([session openPath:file error:&error],"Historical container with a valid known snapshot is recoverable");check([[session snapshot:0][@"loadWarnings"] count]>0&&[[session snapshot:0][@"requiresSaveAs"] boolValue],"Historical recovery warns and requires Save As");check([expected isEqual:call(@"pattern.effects.get",@{@"pattern":@0})]&&[original isEqual:[NSData dataWithContentsOfFile:file]],"Historical recovery preserves FX and original bytes");}
   [[NSFileManager defaultManager] removeItemAtPath:file error:nil];
 }
 static void clipboardBindings() {

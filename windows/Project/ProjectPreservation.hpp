@@ -72,7 +72,7 @@ inline Json canonicalizePreservedMetadata(const Json &original,const Json &known
 			if(known.empty()) return std::string{};
 			auto id=preservedIdentityLike(entry,known.front());if(!id.empty()) return id;
 			if(!entry.is_object()) return std::string{};
-			if(path=="/performance/bindings" && entry.contains("id") && entry.at("id").is_number_integer()) return std::to_string(entry.at("id").get<uint64_t>());
+			if((path=="/performance/bindings"||path=="/scratchGestures") && entry.contains("id") && entry.at("id").is_number_integer()) return std::to_string(entry.at("id").get<uint64_t>());
 			const char *key=path=="/signalGraph/lanes" ? "target" : path=="/signalGraph/layout" ? "node" : nullptr;
 			return key && entry.contains(key) && entry.at(key).is_string() ? entry.at(key).get<std::string>() : std::string{};
 		};
@@ -99,22 +99,22 @@ inline Json canonicalizePreservedMetadata(const Json &original,const Json &known
 }
 // Three-way merge: original opaque tree, canonical pre-edit model, current model.
 // No project tree is sent through a textual JSON conversion.
-inline Json mergePreserved(const Json &original,const Json &before,const Json &after) {
+inline Json mergePreserved(const Json &original,const Json &before,const Json &after,const std::string &path="") {
 	if(sameStoredValue(before,after)) return original;
 	if(before.is_object() && after.is_object() && original.is_object()) {
 		Json result=original;
 		for(auto i=before.begin();i!=before.end();++i) if(!after.contains(i.key())) result.erase(i.key());
 		for(auto i=after.begin();i!=after.end();++i) {
-			if(before.contains(i.key()) && original.contains(i.key())) result[i.key()]=mergePreserved(original.at(i.key()),before.at(i.key()),i.value());
+			if(before.contains(i.key()) && original.contains(i.key())) result[i.key()]=mergePreserved(original.at(i.key()),before.at(i.key()),i.value(),path+"/"+i.key());
 			else result[i.key()]=i.value();
 		}
 		return result;
 	}
 	if(original.is_array() && before.is_array() && after.is_array()) {
-		auto identity=preservedIdentity;
+		auto identity=[&](const Json &entry){if(path=="/scratchGestures"&&entry.is_object()&&entry.contains("id")&&entry.at("id").is_number_integer())return std::to_string(entry.at("id").get<uint64_t>());return preservedIdentity(entry);};
 		auto indexed=[&](const Json &array,bool preserved=false) {
 			std::map<std::string,const Json *> result;
-			for(const auto &entry:array) {auto id=preserved && !before.empty() ? preservedIdentityLike(entry,before.front()) : identity(entry);if(id.empty() || !result.emplace(id,&entry).second) return std::map<std::string,const Json *>{};}
+			for(const auto &entry:array) {auto id=preserved && !before.empty()&&path!="/scratchGestures" ? preservedIdentityLike(entry,before.front()) : identity(entry);if(id.empty() || !result.emplace(id,&entry).second) return std::map<std::string,const Json *>{};}
 			return result;
 		};
 		auto oldMap=indexed(before),originalMap=indexed(original,true),newMap=indexed(after);
@@ -122,7 +122,7 @@ inline Json mergePreserved(const Json &original,const Json &before,const Json &a
 			Json result=Json::array();
 			for(const auto &entry:after) {
 				auto id=identity(entry);auto old=oldMap.find(id),source=originalMap.find(id);
-				result.push_back(old!=oldMap.end() && source!=originalMap.end() ? mergePreserved(*source->second,*old->second,entry) : entry);
+				result.push_back(old!=oldMap.end() && source!=originalMap.end() ? mergePreserved(*source->second,*old->second,entry,path+"/[]") : entry);
 			}
 			return result;
 		}
@@ -130,7 +130,7 @@ inline Json mergePreserved(const Json &original,const Json &before,const Json &a
 	if(original.is_array() && before.is_array() && after.is_array()) {
 		// Indexed entity pairs carry identity in their second element, not in the slot.
 		if(original.size()==2 && before.size()==2 && after.size()==2 && !preservedIdentity(before).empty() && preservedIdentity(before)==preservedIdentity(after))
-			return Json::array({after[0],mergePreserved(original[1],before[1],after[1])});
+			return Json::array({after[0],mergePreserved(original[1],before[1],after[1],path+"/1")});
 		if(hasUnknownProperties(original,before))
 			throw std::runtime_error("Cannot safely preserve unknown data in an edited array without stable identities");
 		return after;

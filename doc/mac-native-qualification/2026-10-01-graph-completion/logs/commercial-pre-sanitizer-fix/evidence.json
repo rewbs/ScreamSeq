@@ -1,0 +1,53 @@
+{
+  "startedUTC": "2026-10-02T02:02:25.440498+00:00",
+  "gitCommit": "b3f5f5952f47fbaf8009fac8617af5347c45206a",
+  "workingTreeChanged": true,
+  "binary": "bin/mac-graph-fluency/commercial-graph-qualification",
+  "binarySHA256": "9c9521ae37eb1eb7071cd627f724dbab95d10e90798493a4576597c424cbeec9",
+  "rate": 48000,
+  "blockFrames": 512,
+  "renderSeconds": 10,
+  "audioDeviceOpened": false,
+  "allowSilent": false,
+  "cases": [
+    {
+      "name": "replika-au",
+      "bundle": "/Library/Audio/Plug-Ins/Components/Replika.component",
+      "version": "1.6.1",
+      "pluginSHA256": "4d2b9a316a4eb39fee2f2393425ad8e4e6163a10b1bf92a87a778158d78d22c2",
+      "returnCode": 0,
+      "wallSeconds": 1.445,
+      "log": "doc/mac-native-qualification/2026-10-01-graph-completion/logs/commercial-pre-sanitizer-fix/replika-au.log"
+    },
+    {
+      "name": "replika-vst3",
+      "bundle": "/Library/Audio/Plug-Ins/VST3/Replika.vst3",
+      "version": "1.6.1",
+      "pluginSHA256": "ed8dcc31e399e95afa30d3e3778bbbeca138be7a1b127824a1027675f25a568e",
+      "returnCode": 0,
+      "wallSeconds": 1.081,
+      "log": "doc/mac-native-qualification/2026-10-01-graph-completion/logs/commercial-pre-sanitizer-fix/replika-vst3.log"
+    },
+    {
+      "name": "serum2-au",
+      "bundle": "/Library/Audio/Plug-Ins/Components/Serum2.component",
+      "version": "2.1.5",
+      "pluginSHA256": "2f69c8e6b6e198a1d16150ed1488df14e4e97f842a0610c314ed09c2f69604db",
+      "returnCode": 0,
+      "wallSeconds": 0.441,
+      "log": "doc/mac-native-qualification/2026-10-01-graph-completion/logs/commercial-pre-sanitizer-fix/serum2-au.log"
+    },
+    {
+      "name": "serum2-vst3",
+      "bundle": "/Library/Audio/Plug-Ins/VST3/Serum2.vst3",
+      "version": "2.1.5",
+      "pluginSHA256": "b9ffd5b7891dd4ccc432df02ae1d1015b8511a006e1fbf8488941f49f6612a4e",
+      "returnCode": 0,
+      "wallSeconds": 0.349,
+      "log": "doc/mac-native-qualification/2026-10-01-graph-completion/logs/commercial-pre-sanitizer-fix/serum2-vst3.log"
+    }
+  ],
+  "sourceSnapshotSHA256": "303e182773218ae55dbf52a5a142304d69346a6d64c798599218f51fd59f9885",
+  "sourceSnapshotScope": "Sorted tracked/nonignored C/C++/Objective-C sources and headers under editor, mac/Audio, mac/Plugins, mac/Tests, soundlib, common and src; hash path NUL bytes NUL. Captured with the compiled-source freeze in effect.",
+  "archiveNote": "Logs moved to commercial-pre-sanitizer-fix after the corrected binary was built; recorded hashes/results unchanged."
+}

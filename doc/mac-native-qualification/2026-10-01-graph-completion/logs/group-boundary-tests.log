@@ -1,0 +1,46 @@
+Test project /Users/rewbs/code/openmpt/bin/mac-graph-fluency
+    Start 51: mixer-runtime
+1/9 Test #51: mixer-runtime ....................   Passed    0.45 sec
+    Start 78: graph-signal-observation
+2/9 Test #78: graph-signal-observation .........   Passed    0.31 sec
+    Start 81: native-signal-graph
+3/9 Test #81: native-signal-graph ..............   Passed    0.50 sec
+    Start 82: signal-graph-session
+4/9 Test #82: signal-graph-session .............   Passed    0.89 sec
+    Start 93: windows-graph-document
+5/9 Test #93: windows-graph-document ...........***Failed    0.42 sec
+PASS noteRoutingOperations
+PASS graphEditingOperations
+PASS groupBypassOperations
+PASS graphProvenance
+PASS graphPresentation
+PASS songModulationSources
+PASS songAutomationAndBanks
+PASS stableImplicitMaster
+PASS songCableCuts
+PASS createReadHistory
+PASS nodesAndCloning
+PASS automationAndBanks
+PASS assignmentsRoutesLayoutCommands
+PASS hostHooks
+PASS automationOrderAndRedo
+PASS cableInsertionAndDetachment
+PASS songProcessingGroups
+processingGroups:372: group==draft.at("group")&&f.stops==stops
+
+    Start 94: windows-native-metadata
+6/9 Test #94: windows-native-metadata ..........   Passed    0.87 sec
+    Start 97: graph-editing
+7/9 Test #97: graph-editing ....................   Passed    0.32 sec
+    Start 98: signal-group-bypass
+8/9 Test #98: signal-group-bypass ..............   Passed    0.00 sec
+    Start 99: signal-group-runtime
+9/9 Test #99: signal-group-runtime .............   Passed    0.01 sec
+
+89% tests passed, 1 tests failed out of 9
+
+Total Test time (real) =   3.78 sec
+
+The following tests FAILED:
+	 93 - windows-graph-document (Failed)
+Errors while running CTest

@@ -914,6 +914,10 @@ double CSoundFile::GetCurrentBPM() const
 
 void CSoundFile::ResetPlayPos()
 {
+#if defined(OPENMPT_EDITOR_CORE)
+	m_PlayState.nativeClockActive = false;
+	m_PlayState.nativeTempo = {};
+#endif
 	const auto muteFlag = GetChannelMuteFlag();
 	for(CHANNELINDEX i = 0; i < m_PlayState.Chn.size(); i++)
 		m_PlayState.Chn[i].Reset(ModChannel::resetSetPosFull, *this, i, muteFlag);

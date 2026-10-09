@@ -2,6 +2,28 @@
 
 ScreamSeq exposes the open song to local applications and agents through a versioned JSON interface. It can read the cursor and song, edit patterns, manipulate samples and instruments, and change native plugins and automation. It works without screen capture, simulated clicks, or audio playback. No language model is embedded: an external agent translates a musical request into explicit edits.
 
+## Scratch phrases
+
+`scratch.gestures.get` returns song-local `gestures` with integer `id` (1–255), `name`, `motion`, `fader`, and `uses`; the read also returns factory `presets`, `unitsPerCycle:65536`, and limits. Preset identifiers are `baby`, `chirp`, `transform`, `one-click-flare`, `two-click-flare`, `crab`, and `scribble`. These are editable starting gestures, not recorded commercial presets.
+
+`scratch.gestures.set` creates the first free slot when `id` is omitted, or patches/upserts that numbered slot. Supply a `preset`, or a complete `name`, `motion` and `fader` for a new phrase. Omitted fields on an existing phrase are preserved; explicit fields override a preset. Edits affect every SK reference in this song. `scratch.gestures.clone {id,name?,target?}` creates a fresh independent slot. Its optional `target:{pattern,row,channel,column}` must still contain SK referencing the source `id`; that cell alone is reassigned, preserving all other parameters and its exact onset. Copy and reassignment share one Undo and reject atomically. Reassigning a cell follows the current stopped pattern-edit path; a bank-only clone preserves playback. `scratch.gestures.remove` rejects a used phrase; replace/remove its SK commands first. All scratch writes require `expectedRevision`, support `dryRun`, avoid history for no-ops, and use global Undo. Curve edits publish during playback without restarting the active phrase's clock.
+
+Each lane has 2–256 strictly ordered points `{position,value,curve,formula?}`, including endpoints **0 and 65536**, with values in **0…1**. Curves use the existing automation names. Formula source is compiled before publication; scripts have no filesystem, networking or executable-code access. For an exact display preview, `automation.formula.preview` accepts `scratchBeats` (duration of one cycle), `rows:257`, `span:65537`, and the lane's points. Formula `beat` starts at zero each cycle; `beats` is time within the current segment, and `t` is normalized segment progress.
+
+Trigger with `pattern.effect.set`, for example:
+
+```json
+{"pattern":0,"row":0,"channel":0,"column":0,"expectedRevision":"<current>",
+ "command":{"kind":"native","native":"scratch","parameters":
+   {"gesture":1,"beats":2,"travelMs":200,"repeats":4,"reverse":false}}}
+```
+
+The grid displays this as **SK**. `beats` is total duration; `repeats` divides it into cycles. `travelMs` is source distance measured at the voice's captured normal pitch, independent of phrase tempo. Rising/falling motion moves forward/back; a flat segment holds position. The motion is relative to its initial value and the current cue. Closed cycles return to that cue; open cycles accumulate displacement. `reverse` flips travel. **SX** (`native:"scratch-stop", parameters:{}`) releases it at the command's exact offset. A new note cancels the previous voice's scratch. Normal playback resumes at the final position, with a short fader release.
+
+SK controls the main active sample voice, not a VST/AU instrument or its NNA tail. While active it traverses physical sample data, clamps at sample ends, and temporarily bypasses sample-loop wrapping; normal loop behavior resumes afterward. Use SO before SK to choose a different cue, particularly before reverse travel near the sample start. Fader cuts multiply existing volume/envelopes, with a 0.5 ms smoothing limit. Up to 16 tracks may contain scratch commands. Strict mutation requires the gesture duration to fit within its pattern.
+
+Native projects persist the paired curves and all SK references. `pattern.paste` accepts `scratchGestures` alongside copied SK effects and remaps phrase slots without replacing unrelated destination-song phrases. Incompatible phrase data is recovered independently with warnings; dependent commands are skipped if their phrase cannot be recovered.
+
 ## Sample library and bulk import
 
 The native app exposes the same cached library used by **Browse Samples…**. These methods do not touch the song, its transport, undo history or plugin rack. The standalone test host exposes `sample.importMany` but not the application-owned library. `api.describe` and the bundled schema identify these methods.
@@ -97,7 +119,7 @@ if family:
 
 `plugin.programs.get {plugin}` reads the standard programs exposed by an existing stable plugin instance. It returns `plugin`, `name`, `catalogRevision` and `programs: [{id, name, group, loadable}]`. AU identifiers retain the vendor's preset number; VST3 identifiers include the unit, program list and program index. Treat these as opaque IDs. An empty list means the plugin does not expose supported standard programs; saved `.resonance-preset` files remain available.
 
-`plugin.programs.load {plugin, program, expectedCatalogRevision, expectedRevision, dryRun?}` validates both the song and catalog revisions. Dry run only validates the selected entry; it does not ask the plugin to load it or predict its state changes. Apply prepares a disposable instance from the saved baseline, loads its program, then replaces opaque state in one plugin Undo step. On macOS, an unsupported active preset replacement rejects while the accepted graph keeps playing; stop transport to apply it. Windows currently stops on successful replacement. Plugin identity, bypass, tracker-instrument aliases, MIDI channels, active audio ports, routing and existing automation are retained. Reloading the same program deliberately restores its factory settings again. A rejected or stale request does not silently select a different program. Retrying a successful socket request with its original request ID uses the existing idempotency mechanism.
+`plugin.programs.load {plugin, program, expectedCatalogRevision, expectedRevision, dryRun?}` validates both the song and catalog revisions. Dry run only validates the selected entry; it does not ask the plugin to load it or predict its state changes. Apply prepares a disposable instance from the saved baseline, loads its program, then replaces opaque state in one plugin Undo step. Both native hosts prepare compatible effect replacements while the accepted graph keeps playing, then crossfade the vendors through a stable processor identity. Instrument presets and replacements that change physical layout, latency or parameter catalogs require stopped playback. A rejected active replacement preserves transport and history. Plugin identity, bypass, tracker-instrument aliases, MIDI channels, active audio ports, routing and existing automation are retained. Reloading the same program deliberately restores its factory settings again. A rejected or stale request does not silently select a different program. Retrying a successful socket request with its original request ID uses the existing idempotency mechanism.
 
 The native Programs… browser uses these same commands, supports text search over program/group names, and requires an explicit Load action. It never loads on selection. VST3 lists without one writable program-change selector per unit are visible but unavailable to load. Catalogs are limited to 4,096 entries and 128 units/lists. AU uses `FactoryPresets`/`PresentPreset`; VST3 uses `IUnitInfo` and program-change parameter delivery to the processor. Programs requesting currently unsupported dynamic I/O/latency changes reject during preparation. Proprietary vendor browsers, `.aupreset`/`.vstpreset` file interchange and runtime process isolation are separate pending features.
 
@@ -201,7 +223,7 @@ Peak release is a one-pole recovery time constant toward unity gain. Sustained r
 
 `plugin.meters {slot}` is a revision-neutral read. Native Compressor/Bus Compressor/Gate/Maximizer return `supported:true`, the stable `plugin` identity, `active`, and stereo arrays `reductionDB` (positive attenuation) and `detectorDB` (dBFS, floor −160; positive values are possible). Unsupported devices return `supported:false, active:false`. Stopped or rack-bypassed devices report zero reduction and −160 detector levels. Active meters have instantaneous rise and a 30 dB/second fall to expose brief transients. Reduction reflects the applied dynamics contribution after Enabled/mix/listen, before makeup (or before Maximizer boost and ceiling normalization); it is not an input/output loudness ratio. Maximizer detector levels are measured after Boost, and its reduction channels are linked. Each stereo pair is published atomically at a render boundary. Meter reads do not reset peak history, modify parameters, or change the document revision. The native Plugins panel reads them at most twenty times per second and exposes an accessible text value alongside the bars.
 
-Enabled and Auto DC use 0 Off / 1 On. Changes are smoothed over 5 ms, including polarity, discrete choices and Enabled, except the explicit LofiMat seed behavior above. Initial/restored values apply immediately. `Enabled` provides an automatable smooth bypass while keeping filter history current; rack bypass is the existing stopped graph edit. Devices are stereo and allocate nothing in processing. The utility/filter/EQ/comb devices, LofiMat, Compressor and Gate have zero host latency; Distortion, Cabinet Simulator, Bus Compressor and Maximizer report their delays as described above. Versioned state stores parameter targets, not live filter memory. The three utility devices report tails of 0 / 1 / 0.1 seconds respectively. Manual DC offset intentionally generates a constant offset even for silent input while the device runs. These are original ScreamSeq implementations, not claims of identical Renoise sound or presets.
+Enabled and Auto DC use 0 Off / 1 On. Changes are smoothed over 5 ms, including polarity, discrete choices and Enabled, except the explicit LofiMat seed behavior above. Initial/restored values apply immediately. `Enabled` provides an automatable smooth bypass while keeping filter history current; rack bypass uses prepared live publication and preserves the processor state. Devices are stereo and allocate nothing in processing. The utility/filter/EQ/comb devices, LofiMat, Compressor and Gate have zero host latency; Distortion, Cabinet Simulator, Bus Compressor and Maximizer report their delays as described above. Versioned state stores parameter targets, not live filter memory. The three utility devices report tails of 0 / 1 / 0.1 seconds respectively. Manual DC offset intentionally generates a constant offset even for silent input while the device runs. These are original ScreamSeq implementations, not claims of identical Renoise sound or presets.
 
 ## Start using it
 
@@ -591,7 +613,7 @@ The parameter must exist even for a deletion. Retain stable plugin identity in
 an editor, resolving its slot only at the guarded revision; rack reorder/removal
 remaps or removes the corresponding stored records.
 
-Structural operations, plugin parameter batches, plugin-state restoration and automation replacement stop transport before rebuilding assets. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. Editing operations do not implicitly start playback, audition notes, open/replace documents or execute arbitrary scripts. Transport/audition and project/file actions require their explicit commands; native saving/recovery retains API edits normally.
+Sample/structural document operations prepare rebuilt assets before replacing playback. Supported graph, routing, rack, parameter and recorded-timeline edits use bounded live publication; unsupported active transitions reject before changing the model/history or transport. Small pattern batches can use the live edit queue; oversized or saturated batches stop playback while retaining the committed edit. The reply reports whether playback stopped. Editing operations do not implicitly start playback, audition notes, open/replace documents or execute arbitrary scripts. Transport/audition and project/file actions require their explicit commands; native saving/recovery retains API edits normally.
 
 ### Shared plugin instruments and MIDI channels
 
@@ -605,9 +627,12 @@ Structural operations, plugin parameter batches, plugin-state restoration and au
   disconnects the plugin. MIDI channels may be shared.
 
 The setter returns `{wouldChange, dryRun, routing}`. Preview validates without
-stopping playback, consuming Undo or changing revisions. A real change stops
-playback and adds one plugin history entry; no-ops preserve Redo. Stable instance
-identity remains valid after rack reordering. The native **Instruments…** panel
+stopping playback, consuming Undo or changing revisions. During playback, Apply
+prepares source bindings and note routing before adding one plugin history
+entry. Removed assignments release their owned notes; new assignments wait for
+the next note-on. Preparation failure preserves the old audible plan, transport
+and history. No-ops preserve Redo. Stable instance identity remains valid after
+rack reordering. The native **Instruments…** panel
 uses these commands and pins the revision across Preview/Apply.
 
 Aliases share one processor, saved sound state, parameter automation and output
@@ -833,6 +858,16 @@ including when preparing a dry run. Empty discarded fields need no override.
 The full result is one document Undo step, with identical preview/commit changes,
 strict revision checking, and revision/redo preservation for no-ops and errors.
 
+The grid's **Shift-Delete** invokes `deleteRows` from the cursor to the pattern end
+with `startChannel` set to the cursor channel, `channelCount:1`, `amount:1` and
+`allowDataLoss:true`, regardless of selection. With the default all-fields mask,
+this also shifts that channel's precise notes, all native FX and graph commands;
+other channels and pattern-wide automation retain their positions. The `.` key
+uses a one-cell `clear` with the current note/instrument/volume field mask, or
+`pattern.effect.set` for the current FX slot. FX code clearing sends `command:null`;
+FX value clearing preserves the command and its timing/binding while resetting
+the value (NC resets its displayed offset). No new API or history domain is used.
+
 For example, insert two empty note/instrument rows in one column from row 8
 through the end of a 64-row pattern:
 
@@ -949,10 +984,10 @@ the editor window and does not overwrite the macOS pasteboard.
 - `mixer.bus.add {expectedRevision, kind, name?, output?, dryRun?}` adds a `group` or `return`; its default output is Master. The response includes the new stable `bus` identity. Track bus IDs equal their song track IDs; track buses are created/removed with song tracks. Preview IDs are not reserved.
 - `mixer.bus.set {expectedRevision, bus, name?, color?, output?, preGainDB?, prePan?, gainDB?, pan?, width?, timingMS?, mute?, solo?, inserts?, dryRun?, preview?}` updates only the supplied fields. Gains are −96…+24 dB, both balance controls are −1…+1, stereo width is 0…2, timing is −500…+500 ms for track buses. Color is a 24-bit RGB integer. `inserts` is an ordered list of effect plugin instance IDs; each instance has one owner. Instruments are sources, not inserts. Unowned effects process on Master in rack order. Master has no output (`output` is an empty string in reads).
 - `mixer.sends.set {expectedRevision, bus, sends, dryRun?}` replaces a bus's sends. A send is `{target, gainDB?, preFader?, enabled?}` with defaults −12 dB, post-fader, enabled. Gain is −96…+12 dB. Pre-fader means **after inserts and before fader, balance and width**. Mute silences both send positions. Disabled sends still participate in cycle validation.
-- `mixer.instrument.route {expectedRevision, plugin, target, output?, dryRun?}` routes one supported plugin instrument output to the chosen bus. The plugin must still be assigned to a tracker instrument with `plugin.instruments.set` or the legacy `plugin.assign`. `output` is the native zero-based bus index (0–63); the default is main output 0. Mono outputs are duplicated to stereo. Null `target` removes an explicit route. An unrouted main output defaults to Master; unrouted auxiliaries are silent. Connected outputs auto-enable at playback; disconnect routing to stop them.
+- `mixer.instrument.route {expectedRevision, plugin, target, output?, dryRun?}` routes one supported plugin instrument output to the chosen bus. The plugin must still be assigned to a tracker instrument with `plugin.instruments.set` or the legacy `plugin.assign`. `output` is the logical channel-pair port index (0–63); the default is main output 0. Mono outputs are duplicated to stereo. Null `target` removes an explicit route. An unrouted main output defaults to Master; unrouted auxiliaries are silent. Connected outputs auto-enable at playback; disconnect routing to stop them.
 - `mixer.bus.remove {expectedRevision, bus, dryRun?}` removes a group/return. Child outputs and instrument sources reconnect to its output, sends targeting it are removed, and its insert chain moves to the beginning of its output's chain. Master and track buses cannot be removed with this method.
 
-Routing is an acyclic graph. Outputs/sends may feed groups, returns or Master; plugin instruments may feed track buses too. Solo keeps selected buses, their upstream contributors and downstream groups/returns audible, while unrelated sibling tracks remain silent. Explicit mute takes precedence. Compensation aligns plugin, sample, group and send paths; intentional track offsets remain audible. Negative offsets introduce a common lookahead delay, removed during WAV export. On macOS, supported routing changes use the prepared live transition described below; unsupported active transitions reject without stopping playback. Windows currently stops for structural edits. Graph limits are 240 buses, 32 inserts and 16 sends per bus; the native rack supports 64 AU/VST3/built-in devices. Assigned plugin instances (including bypassed assignments) and mixer buses together share a 250-slot budget; extra aliases and effects use no additional adapter slots. Assignment, graph edits, channel resizing, load and playback validate this budget. Document Undo/Redo that would exceed it with the current plugin assignments remains unavailable until an instrument is unassigned; the API returns an error without consuming that history. Every history alias validates the complete resulting plugin and graph state. These counts include unresolved retained plugin references.
+Routing is an acyclic graph. Outputs/sends may feed tracks, groups, returns or Master, subject to the no-feedback rule. Plugin outputs can also feed any of these buses. Master is the final sink. Solo keeps selected buses, their upstream contributors and downstream groups/returns audible, while unrelated sibling tracks remain silent. Explicit mute takes precedence. Compensation aligns plugin, sample, group and send paths; intentional track offsets remain audible. Negative offsets introduce a common lookahead delay, removed during WAV export. Both native hosts use prepared live routing for supported structural changes, including dry-bridge handoffs when latency or the old/new dependency union prevents an ordinary fade. Unsupported active transitions reject without stopping playback. Graph limits are 240 buses, 32 inserts and 16 sends per bus; the native rack supports 64 AU/VST3/built-in devices. Assigned plugin instances (including bypassed assignments) and mixer buses together share a 250-slot budget; extra aliases and effects use no additional adapter slots. Assignment, graph edits, channel resizing, load and playback validate this budget. Document Undo/Redo that would exceed it with the current plugin assignments remains unavailable until an instrument is unassigned; the API returns an error without consuming that history. Every history alias validates the complete resulting plugin and graph state. These counts include unresolved retained plugin references.
 
 Input balance (`prePan`) follows pre gain and precedes all inserts. Output balance
 (`pan`) follows inserts and width at the fader. Both use linear stereo balance:
@@ -969,21 +1004,21 @@ existing plugin parameter interface; no new musical operation is hidden in UI.
 
 ### Plugin audio buses
 
-`plugin.buses.get {slot}` reads the loaded plugin's audio ports without rescanning or opening an interface. It returns the stable plugin identity and `buses`, each with `index`, `direction` (`input`/`output`), `name`, `channels`, `active` and `supported`. Native indices are preserved, including inactive ports. Mono and stereo ports are supported, up to 64 declared buses in either direction; larger channel layouts are listed as unsupported. The graph shows names with the native zero-based indices in its port menus. The older Audio buses editor numbers them from 1 for display.
+`plugin.buses.get {slot}` reads the loaded plugin's audio ports without rescanning or opening an interface. It returns the stable plugin identity and `buses`, each with `index`, `direction` (`input`/`output`), `name`, `channels`, `active`, `supported`, `physicalBus`, `firstChannel` and `physicalChannels`. Native N-channel buses expose explicit stereo pairs and an odd final mono port. Each first pair retains the physical bus index; extra pairs follow the physical bus count in bus/channel order. Each direction supports at most 64 logical ports, with at most 64 channels per physical bus. All native buffers are prepared before playback, including inactive ports, so connecting a supported port requires no vendor activation change. Captured `audioLayout` pins the mapping; a changed saved physical layout rejects before playback instead of silently retargeting a wire. The graph shows names with the native zero-based indices in its port menus. The older Audio buses editor numbers them from 1 for display.
 
-`plugin.buses.set {expectedRevision, slot, inputs?, outputs?, dryRun?}` sets the complete enabled auxiliary bus list for each supplied direction. Lists contain unique indices 1–63. Main bus 0 remains enabled; an empty list disables that direction's auxiliaries. Omitted directions retain their current configuration. Changes preserve opaque plugin state and use unified Undo/Redo. Mac playback continues only if a compatible plan can be prepared; unsupported active changes reject without stopping. Windows currently stops for port changes. A dry run validates the known layout without creating a plugin. Repeating the same lists, regardless of order, is a no-op. Old project entries with no activation fields keep only the main buses active.
+`plugin.buses.set {expectedRevision, slot, inputs?, outputs?, dryRun?}` sets the complete enabled auxiliary bus list for each supplied direction. Lists contain unique indices 1–63. Main bus 0 remains enabled; an empty list disables that direction's auxiliaries. Omitted directions retain their current configuration. Changes preserve opaque plugin state and use unified Undo/Redo. Mac playback continues only if a compatible plan can be prepared; unsupported active changes reject without stopping. Windows uses the same prepared rack path and rejects unsupported active physical-port changes before mutation. A dry run validates the known layout without creating a plugin. Repeating the same lists, regardless of order, is a no-op. Old project entries with no activation fields keep only the main buses active.
 
 Use named output sockets in the graph, or choose an instrument output in Mixer and use **Route here**. Supported wired outputs activate automatically. **Audio buses…** also allows explicit manual activation. Each output has independent bus faders, inserts and delay compensation. Inputs enabled without a routed source receive silence. Hardware output pairs remain a separate feature in progress. Route auxiliary effect inputs with `mixer.sidechains.set`, described below.
 
-Host behavior follows [VST3 bus indices and buffers](https://steinbergmedia.github.io/vst3_doc/vstinterfaces/structSteinberg_1_1Vst_1_1ProcessData.html) and [Audio Unit multi-output timestamps](https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)). All enabled AU outputs use the same timestamp/frame count; VST3 is processed once for all buses. Sample-timed parameter splits preserve offsets across every auxiliary buffer.
+Host behavior follows [VST3 bus indices and buffers](https://steinbergmedia.github.io/vst3_doc/vstinterfaces/structSteinberg_1_1Vst_1_1ProcessData.html) and [Audio Unit multi-output timestamps](https://developer.apple.com/documentation/audiotoolbox/audiounitrender(_:_:_:_:_:_:)). All prepared AU physical outputs use the same timestamp/frame count; VST3 is processed once for all buses. Sample-timed parameter splits preserve offsets across every auxiliary buffer.
 
 ### Mixer sidechains
 
-`mixer.sidechains.set {expectedRevision, plugin, input, sources, dryRun?}` replaces every source feeding one auxiliary effect input. `plugin` is a stable effect instance ID; `input` is its native input bus index 1–63 (or 0 for additional main-input summing). Supported wired inputs activate automatically at playback. Each source is `{source: busID, gainDB?: 0, preFader?: false, enabled?: true}`. Gain ranges from −96 to +12 dB. There are at most 128 sidechain routes in a graph; repeated sources for one plugin/input are rejected. An empty `sources` list removes that routing, including an unavailable plugin's retained routes.
+`mixer.sidechains.set {expectedRevision, plugin, input, sources, dryRun?}` replaces every bus source feeding one plugin audio input. `plugin` is a stable instance ID; effects and instruments with supported physical inputs are accepted; `input` is its logical input pair index 1–63 (or 0 for additional main-input summing). Supported wired inputs activate automatically at playback. Each source is `{source: busID, gainDB?: 0, preFader?: false, enabled?: true}`. Gain ranges from −96 to +12 dB. There are at most 128 sidechain routes in a graph; repeated sources for one plugin/input are rejected. An empty `sources` list removes that routing, including an unavailable plugin's retained routes.
 
 Multiple sources sum into one input. Stereo-to-mono inputs average their channels. Both pre/post taps are after source inserts; the pre-fader tap precedes the bus fader, balance and width. Sidechains honor source mute and solo. Solo the key source too if it must continue triggering a soloed receiver. For an almost silent key track, use a pre-fader route and turn its track fader down. There is no automatic unmuting of unrelated tracks.
 
-The graph rejects self-routing and feedback cycles, including disabled routes. Sources process before their receiver. Delay compensation aligns each source with the program signal at the receiving insert's position, including preceding inserts on that bus. Changes validate atomically and have one Undo step; macOS uses the supported live-routing transition below. Bypassing or removing a plugin retains dormant routes; supported connected inputs auto-enable on the playback copy even if their manual activation is off; removing a source bus removes its sidechain routes. Native metadata version 4 stores sidechains and ensures older applications reject new projects rather than silently discarding plugin bus activation. Only the current native project metadata is accepted.
+The graph rejects self-routing and feedback cycles, including disabled routes. Sources process before their receiver. Delay compensation aligns each source with the program signal at the receiving insert's position, including preceding inserts on that bus. Changes validate atomically and have one Undo step; both native hosts prepare the complete routing DAG before live publication. Bypassing or removing a plugin retains dormant routes; supported connected inputs auto-enable on the playback copy even if their manual activation is off; removing a source bus removes its sidechain routes. Native metadata version 4 stores sidechains and ensures older applications reject new projects rather than silently discarding plugin bus activation. Canonical saves use current metadata; incompatible project loads recover known data best effort and report warnings.
 
 Open **Mixer → Sidechains…**, choose the receiving effect and input, then add/update or remove source buses. **Audio buses…** opens input activation; use Reload after changing the plugin's enabled inputs. The window uses the same revision-checked API as external agents.
 
@@ -1254,13 +1289,20 @@ starting a quarter-row into the pattern, over 1.5 rows. Set pitch to zero to
 return to the original note.
 
 Native sample voices integrate the bend at every sample, independently of tracker
-ticks. AU and VST3 instruments receive sample-timed 14-bit MIDI pitch wheel
-values; the plugin must support MIDI pitch bend (VST3 uses its MIDI-controller
-mapping). Its configured wheel range determines audible pitch, and values beyond
-that range saturate. Notes sharing a plugin MIDI channel share its bend. Up to
-16 raw channels may have pitch commands; use distinct plugin MIDI channels for
-independent bends. A bend carries forward until changed, including onto new notes.
-The plugin's own pitch response and smoothing remain under plugin control.
+ticks. BS/BL affects the sample currently playing on the track. A new sample onset
+or sample retrigger starts with zero native bend; a BS/BL command at that same
+onset then applies to the new voice. A command issued with no active sample does
+not prime a later note. Tone-portamento continues the existing sample and keeps
+its bend. An older NNA voice retains its own bend/slide when another note starts,
+and later BS/BL commands on the track affect the new foreground voice.
+
+AU and VST3 instruments receive sample-timed 14-bit MIDI pitch wheel values; the
+plugin must support MIDI pitch bend (VST3 uses its MIDI-controller mapping). Its
+configured wheel range determines audible pitch, and values beyond that range
+saturate. Notes sharing a plugin MIDI channel share its bend, which carries
+forward until changed, including onto new notes. Up to 16 raw channels may have
+pitch commands; use distinct plugin MIDI channels for independent bends. The
+plugin's own pitch response and smoothing remain under plugin control.
 
 Native metadata uses version 7 for parameter commands and version 8 when pitch
 commands are present. Plain module export rejects loss of this metadata; use a
@@ -1634,15 +1676,19 @@ plugin oscillators and recorded plugin output cannot be reversed this way.
 Use `pattern.effect.set` to edit one cell without replacing unrelated effects:
 
 ```json
-{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":0,"command":{"kind":"nudge-reverse","value":0.75,"offset":8192,"duration":65536}}}
+{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":0,"command":{"kind":"nudge-reverse","value":0.75,"offset":8192,"durationBeats":1}}}
 ```
 
 `value` is strength **0–1**, displayed as a percentage; it is not a semitone or
-hexadecimal amount. `duration` includes the push and recovery, in 65536 units per
-row. It must be positive and end within the pattern. `offset` is 0–65535 within
+hexadecimal amount. `durationBeats` is a floating-point number of beats, including
+the push and recovery; it defaults to **1 beat**. The supported range starts at
+1/65536 beat and the nudge must end within the pattern. NF/NR no longer accept
+positive row-unit `duration` values; no migration is provided. `offset` is 0–65535 within
 this row (`position` is the absolute pattern coordinate in collection requests).
 Binding is zero, pitchRange is its default 2, and tracker effect/parameter bytes
 are zero. Both commands have Undo/Redo, dry-run, clipboard and native persistence.
+The inspector opens both nudge duration and offset in Beats; Rows remains an
+explicit display choice. The API onset coordinate stays in common row units.
 
 Forward and reverse refer to the sample's physical direction. At normal speed,
 an opposing nudge below 50% slows playback, 50% reaches zero, and above 50%
@@ -1663,8 +1709,11 @@ ends normally. Sample loops remain enabled. Preview keyboard voices are excluded
 The combined native pitch/nudge limit is 16 raw tracks per song.
 
 The in-pattern NF/NR fields use the existing `pattern.effect.set` operation.
-Strength is displayed as percent and sent as normalized `value`; displayed row
-duration becomes integer `duration` at 65536 units/row. Both numbers commit in one
+Strength is displayed as percent and sent as normalized `value`; duration is
+displayed in beats by default and sent unchanged as `durationBeats`. The optional
+Rows display converts using the actual pattern signature (4 rows = 1 beat at
+4 rows/beat). Playback advances the nudge in musical beats, including across
+tempo and row-length changes. Both numbers commit in one
 revision-guarded transaction, preserving `offset` and unrelated cells. No new
 project format or API operation is needed. The graph connection inspector uses
 `graph.update`, `graph.routes.set`, and the existing mixer route operations with
@@ -1677,7 +1726,7 @@ the displayed revision; all edits remain available to agents.
 {"method":"mixer.inserts.move","params":{"expectedRevision":"<document revision>","plugins":["<distortion instance>","<compressor instance>"],"target":"<track bus ID>","before":null}}
 ```
 
-`plugins` must be a nonempty, ordered, contiguous segment from one bus (1–32 IDs), or one explicitly detached effect. Unassigned rack effects belong to Master in rack order, except identities in `mixer.detached`. `before` names an existing destination insert; omit it or use `null` to append. No processors are cloned or replaced; state, stable parameter bindings, automation and sidechain references stay attached to the same IDs. The entire candidate routing graph is validated before mutation. Feedback, invalid anchors, duplicates and nonconsecutive segments are rejected atomically. `dryRun:true` validates without changing the revision; an effective no-op makes no Undo entry. Mac structural moves use the supported live transition below; Windows currently stops playback. The operation is exposed by both native API adapters.
+`plugins` must be a nonempty, ordered, contiguous segment from one bus (1–32 IDs), or one explicitly detached effect. Unassigned rack effects belong to Master in rack order, except identities in `mixer.detached`. `before` names an existing destination insert; omit it or use `null` to append. No processors are cloned or replaced; state, stable parameter bindings, automation and sidechain references stay attached to the same IDs. The entire candidate routing graph is validated before mutation. Feedback, invalid anchors, duplicates and nonconsecutive segments are rejected atomically. `dryRun:true` validates without changing the revision; an effective no-op makes no Undo entry. Mac and Windows structural moves use the supported live transition below. The operation is exposed by both native API adapters.
 
 The song graph's `plugins` records include available `audioBuses` on Mac so unconnected active auxiliary sockets can be displayed. Empty catalogs do not imply a plugin has no ports. Graph search/type/channel filters are view state; they do not alter song routing. Canvas wire indices are display indices, not API identities.
 
@@ -1692,7 +1741,7 @@ the playback copy. Inferred activation never changes saved manual plugin port
 settings or plugin Undo. Disconnecting routes restores the manual configuration
 on the next playback preparation. Layout-only edits do not stop playback.
 
-Mac route edits prepare a candidate while the accepted plan keeps playing.
+Mac and Windows route edits prepare a candidate while the accepted plan keeps playing.
 Supported effect insertion/removal/reordering, bus rewiring and detached-effect
 insertion retain existing processors and use a 10 ms routing crossfade; retained
 processors advance once per audio interval. The prepared candidate validates
@@ -1701,8 +1750,9 @@ Unsupported transitions, including incompatible port/latency changes, reject
 without stopping transport or partially editing the document. A transition still
 in progress returns the ordinary busy error; retry the same revision. Undo/Redo
 uses the same preparation and publication path. This is a qualified subset, not
-a promise that every vendor or arbitrary topology can change live. Windows
-currently retains its stop-on-structural-edit bridge. Dry runs remain nonmutating.
+a promise that every vendor or arbitrary topology can change live. Windows-native
+CI must pass its worker publication tests; a Mac-hosted adapter test alone is not
+Windows qualification. Dry runs remain nonmutating.
 
 `mixer.plugin.route` and `mixer.instrument.route` accept either `target` (the
 existing single-destination operation) or `targets:[busID,...]` (replace all
@@ -1755,6 +1805,14 @@ Those point edits stop playback and use the unified chronological Undo history.
 | `parameter.activity.get` | Optional `after` sequence (0…9007199254740991) and `limit` (1…8192, default 2048). Nondestructive retained history, token, cursor/oldest/latest, dropped count and current target. Restart cursor at zero when the token changes. Capture is restored on playback restart where the same stable target exists; a new engine starts a new token. |
 | `automation.recorded.get` | Stable `plugin`, `parameter`, optional `offset` (0…100000), `limit` (1…4096, default 512). Returns selected lane points, total and 48000 Hz timestamp rate. |
 | `automation.recorded.edit` | `plugin`, `parameter`, `frame`, `expectedRevision`; either `value` (native units, upsert) with optional `newFrame`, or `remove:true`. Optional `dryRun`. Preserves every other parameter and timestamp. Moves reject occupied destination timestamps. Validates before mutation; no-op creates no Undo. |
+
+Recorded-point edits and Undo/Redo prepare a bounded immutable timeline off the
+audio callback, then adopt it at one render boundary. Catch-up uses device-rate
+frames; deleting a lane restores its saved manual baseline. Earlier manual
+batches are consumed before that timeline and later batches after it. Rejected
+or full-queue publication changes neither musical state nor history and leaves
+playback running. Mac and Windows use the same executor and existing saved-point
+format; this operation does not replace opaque plugin state.
 
 Trace points include sample frame/seconds, zero-based pattern and order,
 fractional position in **256 units per row**, value, bucket extrema, audibility,
@@ -1883,7 +1941,7 @@ engine and restart when that engine is replaced; they are not document revisions
 `preparing` covers warmup and the 10 ms routing transition. A failed candidate
 keeps the old plan audible; Undo restores the displayed topology. The graph
 shows pending/failure text only when relevant. Windows exposes the same signal
-reading fields, but its structural-edit API has not enabled live publication.
+reading fields and publishes supported structural edits through the shared host.
 
 `graph.signal.clear {port, expectedRevision}` requests a latch clear at that
 port's next observed block. It does not edit the song or consume Undo. A new
@@ -1997,20 +2055,21 @@ nesting fail atomically. Cloning a library definition allocates fresh node and
 group IDs and remaps parent/membership references. `graph.update` preserves
 omitted group metadata, like omitted existing plugin state. Boundary edits alone
 keep playback running. These methods package nodes inside reusable definitions;
-the song-rack counterparts below package existing rack processors.
+the song-rack counterparts below package existing rack effects and modulation sources.
 
 `graph.group.export` takes `graph`, `group`, optional `name`/`number`, and the usual `expectedRevision`/`dryRun`. It creates an independent library recipe with fresh processor/group identities; it never replaces the original group or assignments. Enclosed modulation and nested groups are copied. Each incoming audio cable becomes a distinct boundary input, while outgoing taps become boundary outputs; gains on internal/input cables are preserved. External modulation dependencies and groups without a connected audio output are rejected before any edit. Publishing an unused library copy does not restart playback. `graph.group.update` moves descendants with their boundary, matching the native group drag.
 
 ### Song processing groups
 
 `graph.get.groups` contains `{id, parent, name, x, y, nodes}` boundaries around
-existing rack effects. Members use `plugin:<instanceID>` keys, and a member has
+existing rack effects and modulation sources. Members use `plugin:<instanceID>` or
+`source:n<ID>` keys, and a member has
 one immediate owner. Root `parent` is the empty string. Grouping never changes
 rack ownership, mixer routes, plugin state, automation or DSP order.
 
 - `graph.song.group.create {nodes?, groups?, parent?, name?, positions?}` packages
-  sibling rack effects and/or child group IDs. At least one member is required.
-  Optional `positions:[{node,x,y}]` captures only the selected effects' initial
+  sibling rack effects, modulation sources and/or child group IDs. At least one member is required.
+  Optional `positions:[{node,x,y}]` captures only the selected nodes' initial
   positions in the same transaction. Instruments and mixer buses remain outside.
 - `graph.song.group.update {group, name?, x?, y?}` renames or moves the boundary
   and every descendant, retaining their relative positions.
@@ -2020,7 +2079,9 @@ rack ownership, mixer routes, plugin state, automation or DSP order.
   child boundaries return to the former parent; processors and cables remain.
 - `graph.song.group.export {group, name?, number?}` saves an independent reusable
   definition. It currently requires one consecutive effect chain on one bus,
-  one to 62 effects, with no missing or bypassed member. The saved baseline and
+  one to 62 effects, with no missing member. Groups containing song modulation
+  sources are rejected until their song scopes can be preserved in a reusable
+  recipe; no source or envelope is silently omitted. The saved baseline and
   manual parameter overrides are copied, not the current automated value.
   Enabled auxiliary buses become exposed inputs/outputs. External song-cable
   gains and pre/post taps remain with the original song routing; they are not
@@ -2031,6 +2092,10 @@ Undo/Redo. Invalid membership, mixed depths, cycles and unsupported exports are
 rejected before commit. No-op updates retain revision/history. Both native
 codecs preserve groups; the Windows graph adapter implements the same methods.
 The Mac canvas resolves boundary sockets to original rack/port identities.
+`plugin.remove` accepts optional `sources:[nID]` when deleting a mixed processor/
+modulation group, so all members, structural routes and empty groups share one
+Undo. Source-only deletion uses `graph.song.source.remove`; both clean group
+membership and source envelope links.
 
 ### Song modulation into rack parameters
 
@@ -2039,11 +2104,13 @@ outputs address `songModulation` edges by stable source ID, plugin instance ID
 and parameter ID. Existing rack instances, presets, pattern bindings and recorded
 lanes keep their identities.
 
-- `graph.song.source.add {source, connect?}` allocates a source. `source` contains
+- `graph.song.source.add {source, connect?, parent?}` allocates a source. `source` contains
   `kind` (`lfo`, `follower`, `random`, `note-envelope`, `midi`, `amount` or
   `automation`) and optional name/layout/source settings. An optional
   `connect:{plugin,parameter,quantized?}` creates its target edge at zero depth
-  in the same Undo transaction.
+  in the same Undo transaction. Optional `parent` is an existing song processing
+  group ID; creation, membership and wiring commit together. Omit it for song root.
+  Missing/invalid parents reject without allocating identities or editing history.
 - `graph.song.source.update {node, source}` patches only supplied settings.
   Identity and kind cannot change. Use `graph.automation.set` for pattern curves.
 - `graph.song.source.remove {nodes}` removes all listed sources, their cables
@@ -2099,12 +2166,12 @@ change is one document Undo. On macOS prepared copies keep processing while the
 main output smoothly changes to latency-aligned dry audio and auxiliary outputs
 fade to silence. Undo/Redo uses the same prepared publication path. In the Mac
 inspector, the Bypass checkbox and canvas **M** action target the selected recipe
-processor and say that all uses change. Whole-group bypass and source mute are
-separate capabilities and remain explicitly unavailable where unsupported.
-Windows currently rejects active recipe-bypass changes and their Undo/Redo with
-`-32002`, preserving both transport and history; stop playback and independent
-preview notes first. Its shared runtime supports the effect, but live Windows
-publication/history hooks have not yet been integrated or qualified.
+processor and say that all uses change. Whole-group bypass is a separate
+boundary operation; source mute uses `graph.source.mute` as documented below.
+Windows publishes active recipe bypass and native-only Undo/Redo through the same
+prepared controls. Preparation or queue rejection preserves transport and history.
+Windows-native execution must pass its worker CI tests; this API source
+support does not establish a desktop or device qualification.
 
 On macOS, `graph.plugin.set` parameter edits update all prepared copies (ordinary,
 row, persistent and sample-instrument, including inactive copies) together at the
@@ -2125,9 +2192,15 @@ the same publication path. Opaque preset changes also prepare replacement vendor
 for all affected copies, including state not represented by exposed parameters.
 They require matching descriptor, ports, latency and parameter catalogs. The
 prepared replacements publish together and fade old/new vendor output over
-10 ms; unchanged processors retain their state. Incompatible preset, enabled-port
-and recipe-topology changes reject during playback rather than partially applying
-or silently restarting transport.
+10 ms; unchanged processors retain their state. An incompatible opaque preset
+rejects before commit. Changes to recipe nodes,
+cables, graph assignments or prepared logical port membership use a separate
+copy-set and mixer publication. Stable retained copy/node identities keep their
+processors; new copies prepare off the audio callback and removed copies retire
+at the audio handoff. The host uses a latency-aligned dry bridge when the change
+cannot use the ordinary routing fade. Physical layout changes, unsupported ports
+and exhausted preparation budgets reject while the old plan keeps playing.
+Undo/Redo follows the same preparation and publication rules.
 
 `graph.plugin.set` accepts an optional `gesture` string for continuous controls.
 Use a fresh token for each drag, exactly one stable parameter, and no bus changes.
@@ -2143,11 +2216,10 @@ token retains independent transactions. The shared-plugin sidebar uses this path
 Each connection uses its stable semantic identity: `output` or `send` has `source`/`target` bus IDs;
 `graph-input` adds `input`, `graph-output` adds `output`; `plugin-input` has `source`, `plugin`, `input`;
 `plugin-output` has `plugin`, `target`, `output`. Graph auxiliary ports are 1–63; plugin ports are 0–63.
-A batch removes up to 512 explicit cables in one Undo. Duplicate, stale, missing, and unsupported
+An insert cable uses `kind:"insert"`, its `source` owner ID and target `plugin`; the terminal uses `kind:"master-output"` and Master `source`. A batch removes up to 512 cables in one Undo. Duplicate, stale, missing, and unsupported
 references reject the whole operation. An empty array is a no-op. Unselected fan-out branches remain
 intact; cutting an instrument’s last destination saves an explicit disconnected output, preventing
-an accidental reconnection to Master. Fixed rack insert wires cannot be cut independently; use
-processor movement or Delete and heal instead. On macOS, an edit that cannot be prepared for the
+an accidental reconnection to Master. Insert and final-output cuts preserve upstream processing and do not heal another path. On macOS, an edit that cannot be prepared for the
 active engine is rejected without changing the document or interrupting playback.
 
 ### Visual graph annotations and reroute geometry
@@ -2213,3 +2285,238 @@ explicit choice; its connection inspector exposes the target mode. Changing
 that recipe target mode updates its contributing sources together. Adding or
 retargeting recipe topology remains subject to the existing live-publication
 capability checks.
+
+### Shared graph object actions
+
+All musical methods below require `expectedRevision`. Mutating methods support
+`dryRun`; validation/no-op/dry-run paths create no history, and a successful edit
+has one chronological Undo transaction.
+
+| Method | Parameters beyond revision | Meaning |
+|---|---|---|
+| `graph.source.mute` | `graph:null|ID,node,muted` | Mute a complete source contribution while its history continues; recipe scope affects every copy. |
+| `graph.makeIndependent` | `graph,target,scope:"channel"|"instrument",name?,number?` | Clone a definition with fresh entities; rebind all selected-channel uses/commands or the selected instrument assignment. |
+| `graph.selection.copy` | `graph,nodes` | Read-only response `{fragment,version:1}`. Internal selection topology only; no external cables. |
+| `graph.selection.cut` | `graph,nodes` | Return the same fragment and remove originals atomically. |
+| `graph.selection.paste` | `graph,fragment,patternMap?,parent?,x?,y?` | Fresh entities and independent curves; every copied pattern envelope requires a `{source,target}` map. |
+| `graph.selection.duplicate` | `graph,nodes,parent?,x?,y?` | Same-song copy/paste with explicit identity pattern mapping. |
+| `plugin.duplicate` | `plugin,position?` | Fresh rack instance from its saved manual baseline and preset; no assignment/automation/cable copy. Effects are detached. Returns `{slot,plugin,detached,dryRun}`. |
+| `graph.plugin.preset.save` | `graph,node,path,name,overwrite?` | Write the same native preset format as rack presets. Saving does not alter document history. |
+| `graph.plugin.preset.load` | `graph,node,path,expectedPresetRevision` | Validate and restore a preset baseline across recipe copies, preserving physical ports, routing and host bypass. |
+
+`graph.nodes.detach` also accepts `heal:{incoming?,outgoing?}` where indexes refer
+to the current definition's audio edges, pinned by the document revision. An
+omitted endpoint is valid only where that main boundary has no edge. The chosen
+incoming/outgoing path is replaced by one edge whose gain is their product;
+there is no implicit fan-in/fan-out cross product. Without `heal`, existing
+unique-boundary inference remains available. Other branch/sidechain edges stay
+when detaching and are removed with the selected nodes when `remove:true`.
+
+Copy/paste remaps graph/node/group identities and local presentation references.
+Clipboard pattern mapping is mandatory even when IDs happen to match in another
+song. The UI supplies explicit identity mappings only when the clipboard carries
+the same document token. Unsupported or stale destinations reject before any
+allocation is committed to the document. Cross-song copies materialize envelope
+curves rather than creating accidental song-local bank links.
+
+The note-event API, ownership policy, atomic mixed cable cuts and exact activity
+snapshot contract are specified in [Note routing](../doc/SCREAMSEQ_NOTE_ROUTING.md).
+
+### Physical audio bus slices
+
+`plugin.buses.get`, graph rack `audioBuses`, and `graph.plugin.get.buses` expose logical mono/stereo ports with `physicalBus`, zero-based `firstChannel`, and `physicalChannels`. Route using the returned logical `index`; channel pairs are not new vendor buses. The first pair retains the physical bus index, and additional pairs follow the physical bus count. Labels identify the channel range (for example, channels 5–6 of 6). A direction supports at most 64 logical ports.
+
+The host captures `audioLayout` on rack state, graph recipes and portable plugin presets. It pins logical port indices to physical channels; a nonempty saved fingerprint that disagrees with the installed plugin is rejected before activation. Existing records with no fingerprint can still load, and newly created recipes are pinned from an actual host probe. Copy, duplicate, presets and project persistence preserve the fingerprint; changing a display name or enabling a prepared auxiliary slice does not change its identity. Do not clear a fingerprint to bypass a routing mismatch: review the changed physical layout and reconnect deliberately.
+
+### Processing-group bypass
+
+`graph.group.boundary {graph,group}` reads exact ingress/egress identities and
+`needsMapping`. `graph` is a reusable definition ID, or `null` for the song graph.
+`graph.group.bypass {graph,group,bypass,dryRoutes?,expectedRevision,dryRun?}`
+changes the boundary in one Undo. It keeps every inner processor and source warm;
+only outgoing audio/control contributions are bypassed. It does not toggle the
+individual vendors. A unique input/output infers a dry path, a generator boundary
+uses silence, and a branched boundary requires a dry input for every outgoing
+boundary. Dry paths retain input gain and latency alignment before outgoing gains.
+
+Recipe maps use `{input:{source,target,output,input},output:{node,port}}`.
+Song maps use the exact route objects returned by the boundary read. An empty
+string input denotes prepared silence; API reads also accept null for that input.
+The canonical saved form uses an empty string so native property lists remain
+portable. Mappings are validated against the current boundary and causal latency;
+invalid or stale edits leave the document, history and playback unchanged.
+
+### Exact reusable-copy signal observation
+
+`graph.signal.get` includes recipe node ports and each gained, compensated audio
+cable contribution. Its optional `copy:{graph,target,role,instrument,channel}`
+identifies one actual ordinary, row, persistent, or sample-instrument processor
+copy. Inspector audition has a null channel. Recipe node keys use `node:nID`;
+audio-route kinds are `graph-audio` and control-route kinds `graph-modulation`.
+Treat the opaque port key as the identity for `graph.scope.watch` and
+`graph.listen.set`. Those operations accept audio ports only.
+
+Control records have `kind:"control"`, `value` (last endpoint), `first`, and
+`minimum`/`maximum` of the current processing quantum's endpoints. They describe
+actual source or contribution values, including muted contributions, rather than
+vendor-internal modulation. They do not claim to preserve every extremum between
+endpoints. `parameter.activity.*` remains the final parameter/provenance monitor.
+
+Note Envelope source records additionally contain
+`noteGate:{held,on,off,retrigger,lastFrame,scope:"aggregate-envelope-gate"}`.
+These cumulative, saturating counters describe this copy's aggregate envelope
+gate opens, closes and retriggers, not raw MIDI messages or polyphonic voice
+counts. `lastFrame` is the first rendered sample after the latest gate event, or
+null before any event. Repeated unchanged gates do not count again. Retained
+source identities carry their history through a live rebuild; a newly added
+source starts with no historical events. The separate note-routing activity API
+remains the place to inspect actual routed note ownership.
+
+Copy membership changes when its prepared runtime actually adopts. A removed
+node/cable becomes unavailable; a retained key never substitutes another copy.
+Inactive copies continue to process their own silence, and are not a proxy for
+the summed channel signal. Scope/Listen inspect internal processing before the
+outer wet/dry or structural transition mix.
+
+### Detached effect chains and exact cable cuts
+
+`mixer.inserts.detach` accepts 1–32 consecutive effects in their current processing order. Their original serial path is healed once, while the detached processors keep their internal order and explicit auxiliary cables. A `detachedChains` mixer record has a stable `id` and ordered `plugins`; it is not a user-facing bus. `mixer.inserts.move.target` also accepts this chain ID. Empty chains are pruned after a move. Supplied positions are part of the same Undo step, including a fully selected processing-group position.
+
+`graph.connections.remove` accepts `{kind:"insert",source:ownerID,plugin:targetPluginID}` and `{kind:"master-output",source:masterID}` alongside other cable kinds. These are exact cuts: they never heal or reroute another branch. `disconnectedMainInputs` masks only each listed effect's implicit serial input; explicit inputs can still feed it. `masterOutputDisconnected` silences only the final output, retaining upstream processing and observations. Reconnect an insert by moving it before itself on the same owner, or reconnect the terminal using `mixer.bus.set {bus:masterID,mainOutputConnected:true}`. All writes support revision guards, dry-run validation and unified Undo.
+
+Direct plugin audio uses `mixer.plugin.connection.set` with stable `source` and `target` plugin IDs, explicit logical `output` / `input` slice numbers, optional `gainDB` (−96…12) and `enabled`. This adds one contribution while preserving the insert owner and all other fan-in/out. Input `0` adds to the existing Main input; a serial cable can be cut separately when replacement rather than summing is intended. The optional `replace:{source,output,target,input}` rewires exactly one existing contribution atomically and preserves its controls unless supplied. A stale replacement or duplicate destination tuple rejects the whole edit. `dryRun` validates without history. Plugin instruments that expose supported physical audio inputs accept the same routes and are scheduled after their audio dependencies. Missing inputs and feedback cycles reject atomically.
+
+`graph.connections.remove` accepts `{kind:"plugin-connection",source,output,target,input}` alongside other cable types in one Undo transaction. `mixer.get` / `graph.get.mixer` include `pluginConnections`; native save/load retains them. The graph's “Direct plugin audio” connection inspector edits both endpoints, gain and enabled state; Dragging either socket adds a contribution without moving the insert chain; dragging a selected cable’s endpoint handle rewires only that cable. Moving a chain is an explicit socket-menu action or a node drop onto a wire. Exact adopted route observations use `kind:"plugin-connection"`, canvas `plugin:<id>` source/target keys and both slice numbers. An endpoint's aggregate meter is never substituted for missing route telemetry.
+
+`graph.audio.connection.set` adds or replaces an exact auxiliary cable involving
+an outer channel graph stage. Endpoints are typed objects: `{plugin: instanceID}`
+or `{stage: busID}`; at least one endpoint must be a stage. Supply `output`,
+`input`, optional `gainDB`/`enabled`, and optionally an exact four-field `replace`
+identity. Omitted gain/enabled retain the old cable's values. Stage ports start
+at 1; the serial main path keeps its existing routing. The declared port union
+comes from ordinary assignments and Row/Start recipes on that bus. The actual
+prepared catalogue and DAG validate the change before publication.
+
+A stage input feeds the same auxiliary number to every prepared row, persistent
+and ordinary copy; inactive copies remain warm. A combined stage output sums
+only audible active/tail copies, including their Wet and transition gains,
+aligned to the stage latency. This is explicitly an aggregate, not an exact
+selected-copy input or output. Instrument graph copies remain separate.
+`graph.get.stageConnections` persists these typed cables. Cutting
+`{kind:"stage-connection",source,output,target,input}` with
+`graph.connections.remove` participates in the same atomic mixed-cable Undo as
+other routes. Repatching retains gain, enabled state and existing cable bends.
+
+A song envelope follower can also use `audioStage: "n…"` with a declared auxiliary `output` (1–63). This is the channel graph stage's combined audible output, not an individual recipe copy or its channel's stereo bus. `audioBus`, `audioPlugin`, and `audioStage` are mutually exclusive; clear the previous selector when repatching. Stage taps are always after the stage's graph processing (`preFader: false`). Dragging that output onto a parameter offers a follower and creates its zero-depth modulation target in one Undo step. An exact input cut uses `graph.connections.remove` with `{kind:"follower-input",node,stage,output}` and preserves the follower and its modulation edges. Source dry runs validate the model and declared ports; actual publication additionally validates prepared runtime dependencies before committing.
+
+### Typed native pattern effects
+
+The `native` array returned by `pattern.commands` is the shared catalog for precise effects (it is a response property, not a separate API method). Each entry
+has `kind`, `displayCode`, `name`, a native operation ID where applicable, ordered
+`parameters`, and a duration policy. Fields expose their semantic `key`, API
+`storage` path, numeric/integer/choice/boolean type, raw `unit`, `displayUnit`,
+range, default, choices, preferred character width and `inline` visibility.
+The existing PS/PL/BS/BL/NC/NF/NR commands also use this catalog.
+
+A new operation uses `kind:"native"`, its stable string `native` identifier and a
+`parameters` object. Choice values are named strings, switches are JSON booleans,
+and numeric parameters retain double precision. Missing known parameters take
+the catalog defaults. Unknown operations/parameters, wrong types and invalid
+ranges reject before changes. The operation and parameter object are mandatory;
+legacy `value`, `binding`, `effect` and `parameter` must be zero if supplied.
+
+```json
+{"method":"pattern.effect.set","params":{"expectedRevision":"<current revision>","pattern":0,"row":4,"channel":0,"column":1,"command":{"kind":"native","native":"vibrato","parameters":{"depth":0.375,"rate":2.5,"rateMode":"beat","shape":"sine","phase":0,"reset":true},"offset":8192,"duration":262144}}}
+```
+
+UI timing defaults to beats, with rows available as an alternative. API
+`position`, `offset` and `duration` retain 65536 units per row; convert using this
+pattern's actual `rowsPerBeat`, returned by `pattern.effects.get`. Parameters
+whose raw unit is `beats` already use beats. LFO `rateMode:"beat"` means cycles per
+beat; `"hz"` means cycles per second. Identifiers, counts, switches and waveform
+choices remain discrete. No command inherits hidden tracker effect memory.
+
+| Family | Native operation IDs | Codes |
+| --- | --- | --- |
+| Gain | `gain-set`, `gain-slide` | GS, GL |
+| Pan | `pan-set`, `pan-slide` | PN, PA |
+| Pitch | `pitch-relative`, `tone-portamento`, `vibrato`, `arpeggio` | PR, PT, VB, AR |
+| Modulation | `tremolo`, `panbrello`, `tremor` | TM, PB, TR |
+| Note timing | `retrigger`, `note-release`, `note-delay` | RT, NO, ND |
+| Sample playback | `sample-offset`, `sample-direction` | SO, DR |
+| Instrument envelopes | `envelope-position`, `envelope-enable` | EP, EN |
+| Musical clock | `tempo-set`, `tempo-slide`, `row-length` | TS, TL, RL |
+
+The catalog states each operation's scope and lifetime. Sample voice effects do
+not rewrite a plugin's private polyphonic state. Sample gain's channel/song
+scopes apply to sample voices; use plugin parameters and native routing for
+plugin output gain. `tone-portamento.note` uses the tracker encoding (C4 = 49),
+with fractional notes allowed. Sample offset mode `cue` uses integer 0 for the
+sample start and 1–9 for saved cues. `row-length` is valid only at offset zero.
+Imported tracker commands retain their original byte ranges and playback rules.
+
+Single-cell edits, complete-pattern replacement, clipboard paste, Undo/Redo and
+native save/reopen retain the entire typed payload. All fields in one command
+commit together under the same revision guard; changing one inline field must
+preserve the command's other fields. Native metadata remains version 17 during
+this unreleased format iteration; an older reader rejects the new kind rather
+than dropping its parameters.
+
+The exhaustive source-effect mapping, including discrete/import-only controls and plugin scope, is maintained in [Native pattern precision map](../doc/NATIVE_PATTERN_PRECISION.md).
+
+### Best-effort native project recovery
+
+Opening `.screamseq` or `.resonance` attempts compatible content even when wrapper or metadata versions differ. The embedded song must decode successfully; failure leaves the current document untouched. Compatible metadata is validated before publication. Unsupported independent fields/entries are omitted with bounded, readable warnings. Legacy NF/NR `duration` row units convert to `durationBeats` using each embedded pattern’s rows-per-beat setting. API writes still reject unknown fields and invalid units.
+
+On macOS, `document.get` includes `loadWarnings: string[]`, `loadSourcePath: string`, and `requiresSaveAs: boolean`; warnings also appear in `issues`. Recovery with conversions or omissions protects the original file. `document.save` (including `dryRun` or `overwrite:true`) cannot target that source while protection is active. Save to a different `.screamseq` path; a successful copy clears `requiresSaveAs`. The UI displays a persistent report banner and suggests a recovered-copy name. Autosave continues to use separate recovery files.
+
+## Sample recording and resampling
+
+See [Recording samples and instruments](../doc/SCREAMSEQ_SAMPLING.md) for `sample.recording.devices/get/start/stop/commit/discard` and `sample.renderSelection`, with request examples, bounds, source isolation, permission and take ownership. Both append paths create a sample and optional instrument in one shared Undo transaction. Stopped microphone takes survive failed commits; capture never changes system audio defaults or enables input monitoring.
+
+## Audio port trims
+
+`graph.trim.get {graph, node}` returns available audio ports (`key`, `name`,
+`output`, `gainDB`, `linkTo`, `modulation`) and eligible control `sources`.
+Use `graph:null` for song owners: `plugin:<instanceID>`, `stage:n<busID>`, or
+`n<bus/groupID>`; a song follower input uses `source:n<sourceID>`. A graph
+stage must have an assigned or pattern-command graph. For reusable graphs, pass the graph ID and a node/group ID.
+Port keys are stable identities returned by the read; group keys describe an
+exact boundary, not its displayed position.
+
+`graph.trim.set {graph, node, port, gainDB?, linkTo?, modulation?,
+expectedRevision, dryRun?}` is one atomic, undoable edit. Gains default to 0 dB
+and range from −48 to +48 dB. `linkTo` pairs an input and output one-to-one;
+`null` unlinks. Linking keeps both current values. Subsequent gain changes move
+the other value by the opposite dB amount, preserving their sum. An edit that
+would put either value outside the range rejects unchanged. There is no preset
+for a historical mix mode and no automatic loudness matching.
+
+`modulation` replaces that port's contribution list with
+`[{source:"n…", minimumDB:0, maximumDB:12}]`; `[]` removes it. Automation curves,
+LFOs, MIDI, random, note envelope and amount sources use the existing graph
+source system. Each contribution maps 0..1 to its dB endpoints (−96..+96 dB).
+The sum is added to the manual trim and subtracted from its linked counterpart;
+limits clamp the pair together. Muted sources contribute nothing. Audio
+followers are not eligible trim sources in this implementation.
+
+Trims wrap the main and auxiliary ports of processors, graph stages and group
+boundaries. Input trim follows incoming summation; output trim precedes fan-out.
+Bus input trim is before inserts, bus output trim before the fader and all
+sends. Group trims remain outside group bypass; node/plugin trims remain outside
+plugin bypass. Manual changes ramp in dB over 5 ms. A linked linear path with
+zero latency keeps its gain during that ramp; processor latency can temporarily
+offset the two ramps, and compression/distortion can change loudness.
+Native projects store these settings; older metadata without trims defaults to
+unity. Module export does not preserve native trim controls.
+
+On macOS, select a graph node and use **Port trims** in its inspector. On Windows,
+open **Graph / Audio port trims** from the command palette. Both native editors
+include port choice, dB value, inverse link and a single modulation source/range;
+the API supports multiple additive sources. Use the existing automation editor
+to edit a chosen automation source's pattern curves.
+
+Recipe group extraction remaps boundary trim identities. Exporting a song group
+with boundary trims or song-scoped trim modulation currently rejects explicitly;
+keep it in the song, or clear those settings before converting it to a recipe.
+Independent rack-processor trims are copied during export.
