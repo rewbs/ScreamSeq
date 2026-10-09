@@ -12,18 +12,21 @@ class PluginPathWindow final : public NativeToolWindow {
     heading=3700,savedLabel,candidateLabel,manualLabel,statusLabel};
   Request request_;Context context_;Json target_,candidates_=Json::array();
   NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;Json report_=Json::object();
+  struct ScanIntent {std::string method;Json params,fields;uint64_t generation;};
+  std::optional<ScanIntent> scanIntent_;bool readbackNeedsReload_=false;
   std::string document_,revision_,prefix_;int selected_=-1;bool pending_=false,setting_=false,loaded_=false;uint64_t generation_=0;
   Json baseline_=Json::array({"",""});
   std::string selectedPath()const{return selected_>=0&&size_t(selected_)<candidates_.size()?candidates_.at(size_t(selected_)).at("descriptor").at("path").get<std::string>():"";}
   Json raw()const{return Json::array({selectedPath(),utf8(field(manualPath))});}
-  std::optional<Tracker::DocumentDraft> documentDraft()const override{return describeDraft(document_,revision_,target_.dump(),generation_,raw()!=baseline_,pending_,!pending_&&completion_.retained());}
+  bool unresolved()const noexcept{return completion_.retained()||bool(scanIntent_);}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override{return describeDraft(document_,revision_,target_.dump(),generation_,raw()!=baseline_,pending_,!pending_&&unresolved());}
   void status(std::wstring message){status_=std::move(message);set(statusLabel,status_);requestPaint();}
-  void error(const std::exception &e)override{status(wide(e.what()));}
-  void current(){if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song or plugin changed / selection retained; Reload before reconnecting");}
-  void requireResolved()const{if(completion_.retained())throw std::runtime_error("Review the retained reconnect result before checking, scanning or discarding this draft");}
+  void error(const std::exception &e)override{auto message=wide(e.what());if(unresolved())message+=L" / Review result before another reconnect or scan";status(std::move(message));}
+  void current(){if(readbackNeedsReload_||context_()!=std::pair(document_,revision_))throw std::runtime_error("Song or plugin changed / selection retained; Reload before reconnecting");}
+  void requireResolved()const{if(unresolved())throw std::runtime_error("Review the retained reconnect or scan result before checking, scanning or discarding this draft");}
   void chosen(){set(chosenPath,selected_>=0?wide(candidates_.at(size_t(selected_)).at("descriptor").at("path").get<std::string>()):L"");}
-  void load(){
-    if(pending_)return;requireResolved();const auto captured=context_();const auto generation=generation_;
+  void load(bool finishingScan=false){
+    if(pending_)return;if(!finishingScan)requireResolved();const auto captured=context_();const auto generation=generation_;
     if(loaded_&&captured.first!=document_)throw std::runtime_error("Original song is no longer open / plugin path draft retained");
     pending_=true;layout();
     try{auto data=request_(prefix_+"get",target_);if(context_()!=captured||generation!=generation_)throw std::runtime_error("Song or path draft changed while reading / retained; Reload again when ready");
@@ -32,12 +35,12 @@ class PluginPathWindow final : public NativeToolWindow {
       set(heading,L"Reconnect "+wide(data.at("descriptor").at("name").get<std::string>()));set(savedPath,data.at("descriptor").at("path"));ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_RESETCONTENT,0,0);selected_=-1;
       for(size_t i=0;i<candidates_.size();++i){const auto &d=candidates_[i].at("descriptor");auto label=wide(d.at("name").get<std::string>()+" / "+d.at("path").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(d.at("path")==previous)selected_=int(i);}
       if(selected_<0&&!candidates_.empty())selected_=0;ScreamSeq::NativeInputGate::present(controls_.at(candidate),CB_SETCURSEL,selected_,0);chosen();setting_=false;
-      if(!loaded_)baseline_=raw();loaded_=true;++generation_;
+      if(!loaded_)baseline_=raw();loaded_=true;readbackNeedsReload_=false;++generation_;
       status(data.at("moduleVerified").get<bool>()?L"Saved module matches its scan / choose a different location only if needed":wide(data.at("reason").get<std::string>())+L" / choose or scan the matching Windows VST3");
     }catch(...){setting_=false;pending_=false;layout();throw;}pending_=false;layout();
   }
   void apply(bool dry){
-    if(!dry&&completion_.retained()){reviewResult();return;}requireResolved();
+    if(!dry&&unresolved()){reviewResult();return;}requireResolved();
     if(pending_||selected_<0)return;current();const auto generation=generation_;const auto fields=raw();const auto &choice=candidates_.at(size_t(selected_));Json p=target_;p["expectedRevision"]=revision_;p["path"]=choice.at("descriptor").at("path");p["expectedModuleSHA256"]=choice.at("moduleSHA256");p["dryRun"]=dry;pending_=true;layout();
     try{
       if(dry){request_(prefix_+"set",p);current();status(generation!=generation_?L"Module checked / newer path draft retained":L"Module identity verified / Reconnect checks the saved sound and creates one Undo step");}
@@ -61,13 +64,49 @@ class PluginPathWindow final : public NativeToolWindow {
     status(text);completion_.finish();
   }
   void reviewResult(){
-    if(pending_||!completion_.retained())return;pending_=true;layout();
-    try{request_("synchronizeView",Json::object());finishResult();}
+    if(pending_||!unresolved())return;pending_=true;layout();
+    try{request_("synchronizeView",Json::object());if(completion_.returned())finishResult();else reviewObservation();}
     catch(...){pending_=false;layout();throw;}pending_=false;layout();
   }
+  void reviewObservation(){
+    const auto captured=context_();
+    if(captured.first!=document_)throw std::runtime_error("Original song is no longer open / retained result cannot be reconciled against another song");
+    auto data=request_(prefix_+"get",target_);
+    if(context_()!=captured)throw std::runtime_error("Song changed during result review / retained; Review again");
+    // Validate the complete observation before touching fields or releasing
+    // intent. In particular, a rack index cannot substitute for stable identity.
+    for(auto i=target_.begin();i!=target_.end();++i)if(data.at(i.key())!=i.value())throw std::runtime_error("Location readback belongs to another plugin");
+    const auto observedPath=data.at("descriptor").at("path").get<std::string>();
+    (void)data.at("descriptor").at("name").get<std::string>();
+    (void)data.at("moduleVerified").get<bool>();(void)data.at("reason").get<std::string>();
+    const auto &candidates=data.at("candidates");
+    if(!candidates.is_array())throw std::runtime_error("Invalid scanned candidate readback");
+    for(const auto &entry:candidates){(void)entry.at("descriptor").at("path").get<std::string>();(void)entry.at("descriptor").at("name").get<std::string>();(void)entry.at("moduleSHA256").get<std::string>();}
+    auto report=Json{{"outcome","unverified"},{"observedRevision",captured.second},{"observed",std::move(data)}};
+    if(scanIntent_)report["submission"]={{"method",scanIntent_->method},{"params",scanIntent_->params},{"fields",scanIntent_->fields},{"generation",scanIntent_->generation}};
+    else{report["submission"]=completion_.snapshot();report["submission"]["fields"]=completion_.fields();}
+    // Observing the desired path does not prove which request set it or that
+    // an Undo entry was created. Keep all raw fields and their old baseline.
+    set(savedPath,observedPath);report_=std::move(report);readbackNeedsReload_=true;
+    status(L"Current location and scan candidates inspected / earlier outcome unverified / draft retained; Reload before reconnecting or scanning");
+    completion_.finish();scanIntent_.reset();
+  }
+  void runScan(const std::string &method,Json params){
+    const auto generation=generation_;scanIntent_=ScanIntent{method,std::move(params),raw(),generation};
+    pending_=true;layout();bool returned=false;
+    try{
+      request_(method,scanIntent_->params);returned=true;current();
+      if(generation!=generation_)throw std::runtime_error("Scan finished / newer path draft retained; Review result before Reload");
+      pending_=false;load(true);scanIntent_.reset();
+    }catch(const Api::ApiError &e){
+      if(!returned&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted)scanIntent_.reset();
+      pending_=false;layout();throw;
+    }catch(...){pending_=false;layout();throw;}
+    pending_=false;layout();
+  }
   void scanPath(){
-    if(pending_)return;requireResolved();current();const auto generation=generation_;Json p=target_;p["expectedRevision"]=revision_;p["path"]=utf8(field(manualPath));pending_=true;layout();
-    try{request_(prefix_+"scan",p);current();if(generation!=generation_)throw std::runtime_error("Module scanned / newer path draft retained; Reload to see scanned candidates");pending_=false;load();status(L"Matching module scanned / choose it and Reconnect");}catch(...){pending_=false;layout();throw;}layout();
+    if(pending_)return;requireResolved();current();Json p=target_;p["expectedRevision"]=revision_;p["path"]=utf8(field(manualPath));
+    runScan(prefix_+"scan",std::move(p));status(L"Matching module scanned / choose it and Reconnect");
   }
   void chooseFile(){
     if(pending_)return;requireResolved();current();const auto captured=context_();const auto generation=generation_;pending_=true;layout();
@@ -77,7 +116,7 @@ class PluginPathWindow final : public NativeToolWindow {
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void scanInstalled(){
-    if(pending_)return;requireResolved();current();const auto generation=generation_;pending_=true;layout();try{request_("plugin.discover",{{"format","VST3"},{"rescan",true}});current();if(generation!=generation_)throw std::runtime_error("Scan finished / newer path draft retained; Reload to see scanned candidates");pending_=false;load();}catch(...){pending_=false;layout();throw;}layout();
+    if(pending_)return;requireResolved();current();runScan("plugin.discover",{{"format","VST3"},{"rescan",true}});
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;
@@ -98,9 +137,9 @@ class PluginPathWindow final : public NativeToolWindow {
     place(candidateLabel,16,112,w-32,20);place(candidate,16,137,w-32,240);place(chosenPath,16,173,w-32,26);place(preview,16,213,144,26);place(reconnect,168,213,144,26);place(discardDraft,320,213,144,26);
     place(manualLabel,16,260,w-32,20);place(manualPath,16,284,w-174,26);place(browse,w-150,284,134,26);place(scan,16,321,144,26);place(rescan,168,321,168,26);place(close,w-120,321,104,26);place(statusLabel,16,362,w-32,std::max(48.0f,h-378));
     for(int id:{candidate,manualPath})EnableWindow(controls_.at(id),!pending_);
-    for(int id:{reload,scan,browse,rescan,discardDraft})EnableWindow(controls_.at(id),!pending_&&!completion_.retained());
-    EnableWindow(controls_.at(preview),!pending_&&!completion_.retained()&&selected_>=0);
-    set(reconnect,completion_.retained()?L"Review result":L"Reconnect");EnableWindow(controls_.at(reconnect),!pending_&&(completion_.retained()||selected_>=0));
+    for(int id:{reload,scan,browse,rescan,discardDraft})EnableWindow(controls_.at(id),!pending_&&!unresolved());
+    EnableWindow(controls_.at(preview),!pending_&&!unresolved()&&selected_>=0);
+    set(reconnect,unresolved()?L"Review result":L"Reconnect");EnableWindow(controls_.at(reconnect),!pending_&&(unresolved()||selected_>=0));
   }
   void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
 public:
@@ -112,9 +151,9 @@ public:
     const auto captured=context_();document_=captured.first;revision_=captured.second;finish();load();
   }
   const Json &target()const{return target_;}
-  bool retainedDraft()const{return pending_||completion_.retained()||raw()!=baseline_;}
+  bool retainedDraft()const{return pending_||unresolved()||raw()!=baseline_;}
   bool matchesTarget(const Json &target)const{return target_==target&&document_==context_().first;}
   void show(){NativeToolWindow::show();SetFocus(controls_.at(candidate));}
-  Json snapshot()const{return {{"visible",visible()},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"stale",context_()!=std::pair(document_,revision_)},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"draft",raw()!=baseline_},{"generation",generation_},{"selected",selected_},{"candidates",candidates_},{"savedPath",utf8(field(savedPath))},{"manualPath",utf8(field(manualPath))},{"status",utf8(status_)}};}
+  Json snapshot()const{return {{"visible",visible()},{"target",target_},{"document",document_},{"expectedRevision",revision_},{"stale",readbackNeedsReload_||context_()!=std::pair(document_,revision_)},{"pending",pending_},{"completion",completion_.snapshot()},{"scanReview",scanIntent_?Json{{"method",scanIntent_->method},{"params",scanIntent_->params},{"fields",scanIntent_->fields},{"generation",scanIntent_->generation}}:Json()},{"readbackNeedsReload",readbackNeedsReload_},{"report",report_},{"draft",raw()!=baseline_},{"generation",generation_},{"selected",selected_},{"candidates",candidates_},{"savedPath",utf8(field(savedPath))},{"manualPath",utf8(field(manualPath))},{"status",utf8(status_)}};}
 };
 }

@@ -53,6 +53,19 @@ It does not claim whether the earlier operation succeeded. Subsequent explicit
 actions use the observed take identity. An uncertain Keep still requires its
 separate result review; absence of the old take does not prove sample import.
 
+The native reconnect window similarly retains a failed explicit path scan or
+installed-plugin rescan in `workspace.get.data.pluginPath.scanReview`. Review
+result uses `synchronizeView` and the captured stable target's `plugin.path.get`
+or `graph.plugin.path.get`; it never sends another reconnect or scan. A reconnect
+with no retained result uses the same observation path. Successful readback
+records `report.outcome:"unverified"`, the observed location/candidates and the
+original submission. This is current-state evidence, not proof that the earlier
+request committed or created Undo history. Raw path fields and their baseline
+remain unchanged; `readbackNeedsReload:true` requires explicit Reload before
+another Verify, reconnect or scan. Wrong-document, changed-revision, wrong-target,
+malformed or failed reads retain the unresolved operation and departure guard.
+Known reconnect receipts retain their existing exact-result review behavior.
+
 `document.get` includes stable current-sequence order identities in
 `orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
 including End (`65535`), Skip (`65534`) and entries after End. Each existing

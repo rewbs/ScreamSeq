@@ -70,7 +70,7 @@ void pluginPathCompletionReview(HWND main){
     const auto request=[](const std::string &method,const Json &)->Json{
       if(method=="synchronizeView")return Json::object();
       require(method=="plugin.path.get","Unknown reconnect allowed another operation");
-      return {{"descriptor",{{"name","Fixture"},{"path","old"}}},{"moduleVerified",false},{"reason","Missing"},
+      return {{"plugin","stable-plugin"},{"descriptor",{{"name","Fixture"},{"path","old"}}},{"moduleVerified",false},{"reason","Missing"},
         {"candidates",Json::array({{{"descriptor",{{"name","Fixture"},{"path","new"}}},{"moduleSHA256","hash"}}})}};
     };
     PluginPathWindow tool(main,{{"plugin","stable-plugin"}},request,[]{return std::pair(std::string("document"),std::string("r1"));},
@@ -78,7 +78,10 @@ void pluginPathCompletionReview(HWND main){
     Tests::ownGuiWindow(tool.window());SetWindowTextW(GetDlgItem(tool.window(),3611),L"raw -");clickDraftButton(tool.window(),3603);
     auto before=draftOf(tool);require(before.uncertain==!knownRefusal,"Reconnect confused refusal with unknown outcome");
     clickDraftButton(tool.window(),3603);
-    require(writes==(knownRefusal?2u:1u)&&draftOf(tool).sameWork(before),"Unknown reconnect retried or refusal consumed draft");
+    require(writes==(knownRefusal?2u:1u)&&tool.snapshot().at("manualPath")=="raw -"&&draftOf(tool).dirty,"Unknown reconnect retried or refusal consumed draft");
+    if(knownRefusal)require(draftOf(tool).sameWork(before),"Typed refusal changed captured work");
+    else require(!draftOf(tool).uncertain&&tool.snapshot().at("readbackNeedsReload")==true&&tool.snapshot().at("report").at("outcome")=="unverified",
+      "Unknown reconnect observation asserted success or silently enabled another write");
   }
 }
 

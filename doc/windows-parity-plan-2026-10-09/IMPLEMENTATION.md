@@ -2,6 +2,51 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Plugin path and scan readback
+
+`PluginPathWindow` now retains explicit path-scan and installed-rescan intent
+through request/completion failures, including submitted parameters, raw fields
+and generation. Scan uncertainty is independent of the song revision. The owner
+blocks Verify, Reload, reconnect, another scan and draft discard until Review;
+hidden/reopened windows retain this state and document departure refuses it.
+Known typed preflight refusal can release scan intent, but a later presentation
+error cannot classify a request that already returned.
+
+Review uses `synchronizeView` and the captured rack instance or graph/node
+identity's location read. Missing reconnect receipts use this same observation
+path; known receipts continue through their existing exact-result review.
+Failed, malformed, wrong-target, wrong-document or revision-raced reads retain
+uncertainty. Successful observation stores an explicitly **unverified** outcome,
+current location/candidates and captured submission fields. It does not invent
+commit status, Undo history or plugin-state verification. All raw fields and
+their baseline remain; explicit Reload is required before another operation.
+Neither Review nor Reload rescans or reconnects. A removed target whose location
+cannot be read remains unresolved rather than being mistaken for another plugin.
+
+Native tests cover rack and graph targets for reconnect, path scan and installed
+rescan; pending/uncertain departure guards; newer input; failed/malformed/identity-
+mismatched/raced readback; hidden owners; retained submission; and explicit rebase.
+The earlier scan-retention fixture now explicitly reviews and reloads before its
+next reconnect, keeping its existing raw-field and generation assertions.
+
+ARM64 Release evidence is pinned in
+`bin/parity-evidence/p0b-plugin-path-readback-receipt.json`:
+
+| Check | Result and scope |
+|---|---|
+| App/workspace/native-tool build | Passed; no shared engine, codec or Mac source changes |
+| Full workspace, draft census, Application departure and native tool suites | 4/4 CTest entries, 103.08 s |
+| Actual-app plugin paths | 6/6 cases, 14.770 s, no skips: missing-path scan review, stale/deleted targets, scan hashes/vendor-state/ports, graph recipe/history, native window behavior and real-effect recipe/Undo preservation |
+| Additional cache-side-effect case | 1/1, 1.772 s: copied effect scan updates private cache, then fails the expected-class check at unchanged song revision; Review preserves changed cache, song, plugin state and raw path without repeating scan |
+
+The provider fixture and two effect binaries/cache inputs match their retained
+hashes. Tests use disposable projects/caches and private desktops; no physical
+device or foreground accessibility qualification is claimed. The additional
+case changed only test source after the main run; production inputs are unchanged.
+**Remaining P0b:** unknown Keep/render/import result reconciliation, other scan/
+cache entry-point audit, remaining stable-owner checks and cross-platform safety
+qualification. P0c–P8 and reciprocal fixture/final integration gates remain open.
+
 ## P0b.1 Recorder lifecycle readback
 
 `SampleRecordingWindow` now retains uncertain Record, Stop and Discard requests,

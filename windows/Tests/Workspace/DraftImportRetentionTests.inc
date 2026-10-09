@@ -60,9 +60,10 @@ void pluginPathRequestRetention(HWND main){
   unsigned reads=0,writes=0,scans=0;bool pendingObserved=false,discardRefused=false;Json submitted;
   const Json target={{"plugin","stable-plugin"}};
   const auto request=[&](const std::string &method,const Json &params)->Json {
+    if(method=="synchronizeView")return Json::object();
     if(method=="plugin.path.get"){
       ++reads;if(inject==Inject::Read)SetWindowTextW(GetDlgItem(owner->window(),3611),L"C:/later/read.vst3");
-      return {{"descriptor",{{"name","Fixture"},{"path","C:/fixture/a.vst3"}}},{"moduleVerified",true},
+      return {{"plugin","stable-plugin"},{"descriptor",{{"name","Fixture"},{"path","C:/fixture/a.vst3"}}},{"moduleVerified",true},{"reason",""},
         {"candidates",Json::array({{{"descriptor",{{"name","Fixture A"},{"path","C:/fixture/a.vst3"}}},{"moduleSHA256","sha-a"}},
           {{"descriptor",{{"name","Fixture B"},{"path","C:/fixture/b.vst3"}}},{"moduleSHA256","sha-b"}}})}};
     }
@@ -97,6 +98,9 @@ void pluginPathRequestRetention(HWND main){
     inject=Inject::None;clickDraftButton(tool.window(),3604);SetWindowTextW(GetDlgItem(tool.window(),3611),L"C:/fixture/b.vst3");
     const auto beforeScanReads=reads;inject=Inject::Scan;clickDraftButton(tool.window(),3605);
     require(scans==1&&reads==beforeScanReads&&pendingObserved&&discardRefused&&tool.snapshot().at("manualPath")=="C:/later/scan.vst3","Scan completion silently refreshed a newer draft");
+    require(draftOf(tool).uncertain,"Interrupted scan presentation lost its retained outcome");
+    inject=Inject::None;clickDraftButton(tool.window(),3603);clickDraftButton(tool.window(),3604);
+    require(scans==1&&!draftOf(tool).uncertain&&tool.snapshot().at("manualPath")=="C:/later/scan.vst3","Scan review replayed or consumed newer input");
     inject=Inject::Choice;SetWindowTextW(GetDlgItem(tool.window(),3611),L"");clickDraftButton(tool.window(),3603);
     require(writes==2&&tool.snapshot().at("selected")==0&&draftOf(tool).revision=="r2"&&draftOf(tool).dirty,"Late candidate selection was discarded or rebased");
     tool.hide();require(tool.retainedDraft()&&host.registry.capture(context.first,context.second).drafts.size()==1,"Hidden path repair became replaceable");

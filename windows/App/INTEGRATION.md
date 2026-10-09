@@ -338,6 +338,15 @@ state and makes an explicit Stop available. Readback preserves newer name/output
 intent and never consumes an externally created replacement take. Keep's sample
 import/result reconciliation remains distinct from this observation of take state.
 
+Rack and graph plugin location repair retain uncertain reconnect/scan outcomes.
+Review result reads the captured stable target's current location and cached
+candidates. Without an original receipt it labels the outcome unverified,
+preserves the submitted and newer raw paths, and requires explicit Reload before
+another write. A cache scan cannot be classified from song revision equality.
+Malformed, raced or failed readback keeps the owner unresolved; review never
+repeats a scan or reconnect. A known reconnect receipt continues to report its
+original result without treating a different current document as its target.
+
 AssetOperations is registered and retained on the worker, including imports,
 PCM, processing, loop settings, drawing, private clipboard and instrument edits.
 Import validation checks actual preserved plugin assignments, adapter capacity

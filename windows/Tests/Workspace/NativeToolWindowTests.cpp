@@ -139,6 +139,7 @@ void retainedDock(HWND main,HWND host){
 #include "DraftImportRetentionTests.inc"
 #include "NativeWriteCompletionTests.inc"
 #include "RecordingLifecycleReviewTests.inc"
+#include "PluginPathReadbackTests.inc"
 #include "NativeInputGateTests.inc"
 #include "NestedDraftOwnerTests.inc"
 void nativeOwnerRetirement(HWND main) {
@@ -174,7 +175,7 @@ int wmain(int argc,wchar_t **argv){
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
     HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
     require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");
-    {Window main(type.lpszClassName);completionClassification();pluginPathCompletionReview(main.value);renderCompletionReview(main.value);importCompletionReview(main.value);recordingCompletionReview(main.value);recordingLifecycleReview(main.value);nativeOwnerRetirement(main.value);nativeInputGate(main.value);earlyNestedDraftOwner(main.value);}
+    {Window main(type.lpszClassName);completionClassification();pluginPathCompletionReview(main.value);pluginPathReadback(main.value);renderCompletionReview(main.value);importCompletionReview(main.value);recordingCompletionReview(main.value);recordingLifecycleReview(main.value);nativeOwnerRetirement(main.value);nativeInputGate(main.value);earlyNestedDraftOwner(main.value);}
     std::cout<<"Native result review: reconnect/render/import/Keep retain postcommit failures without repeating writes\n";
     });std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
