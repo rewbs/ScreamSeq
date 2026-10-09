@@ -28,6 +28,7 @@
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/NoteRecording.hpp"
+#include "editor/MixerControlEdit.hpp"
 #include <mach/mach_time.h>
 #include "editor/ArrangementTools.hpp"
 #include "soundlib/ModInstrument.h"

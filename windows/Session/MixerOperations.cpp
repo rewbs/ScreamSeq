@@ -3,6 +3,7 @@
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/SignalGroupBypass.hpp"
+#include "editor/MixerControlEdit.hpp"
 #include <cmath>
 #include <set>
 namespace ScreamSeq {
@@ -121,11 +122,11 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
       uint64_t inputs=0,outputs=1;uint32_t count=1;for(auto p:in)inputs|=uint64_t(1)<<p;for(auto p:out){outputs|=uint64_t(1)<<p;count=std::max(count,p+1);}processors.push_back({signalBusIdentity(b.id),0,0,false,false,count,outputs,inputs});
     }
     validatePluginCapacity(host_.plugins,graph.buses.size());if(!preview)next.validate(document_.song());if(host_.validateCandidate)host_.validateCandidate(next);const auto plan=compileMixer(signalRoutingGraph(graph,next.signal),tracks,processors,feedback.sampleRate);
-    auto structural=graph;if(structural.buses.size()==original.buses.size())for(size_t i=0;i<structural.buses.size();++i){auto &b=structural.buses[i];const auto &old=original.buses[i];b.preGainDB=old.preGainDB;b.prePan=old.prePan;b.gainDB=old.gainDB;b.pan=old.pan;b.width=old.width;b.mute=old.mute;b.solo=old.solo;b.name=old.name;b.color=old.color;}
-    const bool controlsOnly=structural==original,different=graph!=original||(!preview&&next.signal.layout!=native.signal.layout);need(!preview||(controlsOnly&&graph.active()),"Only mixer gain, balance, width, mute and solo can be previewed live");
+    const auto controlEdit=classifyMixerControlEdit(original,graph);
+    const bool controlsOnly=controlEdit.controlsOnly,different=controlEdit.changed||(!preview&&next.signal.layout!=native.signal.layout);need(!preview||(controlsOnly&&graph.active()),"Only mixer gain, balance, width, mute and solo can be previewed live");
     Json result={{"mixer",Project::encodeMixerMetadata(graph)},{"wouldChange",different},{"preview",preview},{"bus",affected?Json(id(affected)):Json()},{"controlsOnly",controlsOnly}};
     if(!dry&&(different||preview||(method=="mixer.bus.set"&&graph.active()))) {
-      std::vector<MixerControls> controls;const auto projected=projectMixerDetachedChains(graph);if(controlsOnly&&graph.active())for(size_t i=0;i<projected.buses.size();++i){const auto &b=projected.buses[i];controls.push_back({b.preGainDB,b.gainDB,b.pan,b.width,plan.nodes[i].audible,b.prePan});}
+      const auto controls=controlsOnly&&graph.active()?prepareMixerControlFrame(graph,plan):std::vector<MixerControls>{};
       const bool active=graph.active();
       const auto prepared=!controlsOnly&&different&&(host_.prepareNativeUpdate||host_.preparePublication)?(host_.prepareNativeUpdate?host_.prepareNativeUpdate(native,next):host_.preparePublication(next)):std::function<void()>{};
       auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(prepared)prepared();else if(!controlsOnly&&!host_.prepareNativeUpdate&&!host_.preparePublication&&stop_)stop_();};

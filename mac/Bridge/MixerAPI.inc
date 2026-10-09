@@ -239,24 +239,15 @@
         if (!preview) candidate.validate(song);
         plan = compileMixer(routingGraph, tracks, processors, uint32_t(_audio->sampleRate()));
       } catch (const std::invalid_argument &e) { throw Error(-32602, e.what()); }
-      auto structural = graph;
-      if (structural.buses.size() == original.buses.size()) for (size_t i = 0; i < structural.buses.size(); ++i) {
-        auto &bus = structural.buses[i]; const auto &old = original.buses[i];
-        bus.preGainDB = old.preGainDB; bus.prePan = old.prePan; bus.gainDB = old.gainDB; bus.pan = old.pan; bus.width = old.width;
-        bus.mute = old.mute; bus.solo = old.solo; bus.name = old.name; bus.color = old.color;
-      }
-      const bool controlsOnly = structural == original;
+      const auto controlEdit = classifyMixerControlEdit(original, graph);
+      const bool controlsOnly = controlEdit.controlsOnly;
       const bool dryRun = p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       require(!preview || (controlsOnly && graph.active()), "Only mixer gain, balance, width, mute and solo can be previewed live");
-      const bool different = graph != original || (!preview && candidate.signal.layout != _document->native().signal.layout);
+      const bool different = controlEdit.changed || (!preview && candidate.signal.layout != _document->native().signal.layout);
       if (!dryRun && (different || preview || ([method isEqual:@"mixer.bus.set"] && graph.active()))) {
         std::unique_ptr<MixerTransition::Plan> routing;
         if (controlsOnly && graph.active()) {
-          std::vector<MixerControls> controls;
-          const auto projected=projectMixerDetachedChains(graph);
-          for (size_t i = 0; i < projected.buses.size(); ++i) {
-            const auto &bus = projected.buses[i]; controls.push_back({bus.preGainDB, bus.gainDB, bus.pan, bus.width, plan.nodes[i].audible, bus.prePan});
-          }
+          const auto controls = prepareMixerControlFrame(graph, plan);
           if (!_audio->mixerControls(controls)) throw Error(-32002, "Mixer control queue is busy; retry the same revision");
         } else if(!controlsOnly) {
           if(!_audio->mixerRoutingReady())throw Error(-32002,"Routing transition is busy; retry the same revision");
