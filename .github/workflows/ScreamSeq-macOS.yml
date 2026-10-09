@@ -6,16 +6,41 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      retained_app_run:
+        description: 'Existing Mac build run ID; blank performs a normal build'
+        type: string
+        default: ''
+      retained_runner:
+        description: 'Retained app architecture to check; normal builds always check both'
+        type: choice
+        options: [both, macos-15, macos-15-intel]
+        default: both
+      fixture_run:
+        description: 'Preceding fixture run ID; blank rechecks the original corpus/API/codec baseline'
+        type: string
+        default: ''
+      fixture_artifact:
+        description: 'Exact preceding artifact name (normally screamseq-windows-logs)'
+        type: string
+        default: ''
+      fixture_layout:
+        description: 'Initial Windows outputs or a retained exchange result'
+        type: choice
+        options: [windows, exchange]
+        default: windows
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}
+  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
   cancel-in-progress: true
 
 jobs:
   native-app:
+    if: github.event_name != 'workflow_dispatch' || inputs.retained_app_run == ''
     name: Native app (${{ matrix.runner }})
     strategy:
       fail-fast: false
@@ -123,3 +148,17 @@ jobs:
             bin/mac-ci/ScreamSeq.app/Contents/Resources/BuildInfo.json
           if-no-files-found: warn
           retention-days: 14
+  retained-app:
+    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: ${{ fromJSON(inputs.retained_runner == 'macos-15' && '["macos-15"]' || inputs.retained_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
+    uses: ./.github/workflows/ScreamSeq-Retained.yml
+    with:
+      runner: ${{ matrix.runner }}
+      app-run: ${{ inputs.retained_app_run }}
+      app-artifact: screamseq-macos-${{ matrix.runner }}-logs
+      input-run: ${{ inputs.fixture_run }}
+      input-artifact: ${{ inputs.fixture_artifact }}
+      input-layout: ${{ inputs.fixture_layout }}

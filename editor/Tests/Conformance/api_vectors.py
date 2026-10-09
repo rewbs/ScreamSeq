@@ -8,6 +8,7 @@ import uuid
 
 from project_tree import CORPUS, EvidenceError, differences, read_bytes, read_project, sha256
 from native_roundtrip import ROOT, write_json
+from fixture_loader import FixtureLoader
 
 VECTORS = Path(__file__).with_name("api-vectors.json")
 BASELINE = ROOT / "doc/api/platform-differences.json"
@@ -66,6 +67,9 @@ def run(client, output):
     def write(method, **params):
         return call(method, dict(expectedRevision=call("document.get")["revision"], **params))
 
+    report["fixtureLoads"] = []
+    loader = FixtureLoader(client, call, report["fixtureLoads"])
+
     def outcome(method, params, request_id=None):
         try:
             return "success", call(method, params, request_id)
@@ -97,7 +101,7 @@ def run(client, output):
 
         source = CORPUS / "fixtures/04-complete-reference.screamseq"
         original = read_project(source)
-        write("document.open", path=str(source), discard=True)
+        loader.load(source)
         write("document.save", path=str(output / "before.screamseq"), overwrite=False)
         plugin = original["plugins"][0]
         graph = original["native"]["signalGraph"]["library"][0]
@@ -143,7 +147,7 @@ def run(client, output):
                 row["persistedOutput"] = changed.name
                 row["baselineMatched"] = row["baselineMatched"] and (
                     row["persistedDifference"] == vector.get("persistedDifference", {}).get(platform_name))
-                write("document.open", path=str(source), discard=True)
+                loader.load(source)
 
         # Invalid request ID reuse is deliberately different from uncertain write
         # replay. Neither adapter promises a durable cache. This probes one live cache.
@@ -208,7 +212,7 @@ def run(client, output):
                                                      {k: v for k, v in saved.items() if k != "module"})
         if not report["unrelatedPersistence"]["equal"]:
             raise EvidenceError("Single tracker cell edit changed native/plugin/other container state")
-        write("document.open", path=str(destination), discard=True)
+        loader.load(destination)
         if not differences(call("pattern.get", dict(pattern=0))["data"], edited)["equal"]:
             raise EvidenceError("Saved cell edit did not reopen exactly")
         report["editHistoryReplayPersistence"] = True

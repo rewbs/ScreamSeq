@@ -10,6 +10,7 @@ import time
 import unittest
 import private_desktop
 import test_pattern_performance as support
+from client import ApiError
 
 
 class ScratchEditorTests(unittest.TestCase):
@@ -135,9 +136,11 @@ class ScratchEditorTests(unittest.TestCase):
         self.write('document.open', path=str(path), discard=True)
         self.assertEqual(self.command_at(), after)
         self.assertEqual(len(self.bank()), 2)
-        self.assertTrue(self.state()['stale'])
-        self.press(3108)  # Explicit Reload adopts the reopened document.
+        # Successful adoption retires old owners, including clean scratch views.
+        self.assertFalse(self.state()['visible'])
+        self.command(576)
         self.assertFalse(self.state()['stale'])
+        self.assertEqual(self.state()['draft']['motion'], self.bank()[0]['motion'])
 
     def test_native_fields_drag_cancel_endpoints_and_formula_workbench(self):
         self.setup_phrase(0)
@@ -189,7 +192,7 @@ class ScratchEditorTests(unittest.TestCase):
         self.assertEqual(self.desktop.send(self.child(3109), 0x147), 0)
         self.assertEqual(self.state()['fields']['formula'], 'invalid(')
 
-    def test_external_revision_and_document_switch_retain_draft_until_reload(self):
+    def test_external_revision_and_replacement_refusal_retain_draft_until_reload(self):
         self.setup_phrase()
         path = self.folder/'captured.screamseq'
         self.write('document.save', path=str(path))
@@ -202,14 +205,26 @@ class ScratchEditorTests(unittest.TestCase):
         self.assertEqual(self.bank(), old_bank)
         self.assertTrue(self.state()['dirty'])
         captured = self.state()['document']
-        self.write('document.open', path=str(path), discard=True)
-        reopened = self.bank()
+        before = self.doc()
+        raw = self.state()['fields']
+        with self.assertRaises(ApiError) as raised:
+            self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(raised.exception.code, -32002)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.bank(), old_bank)
         self.command(576)
         self.assertEqual(self.state()['document'], captured)
         self.assertTrue(self.state()['dirty'])
-        self.press(3125)  # A stale draft cannot be used in the new song.
-        self.assertEqual(self.bank(), reopened)
-        self.press(3108)
+        self.assertEqual(self.state()['fields'], raw)
+        self.press(3125)  # A stale draft cannot mutate the current song either.
+        self.assertEqual(self.bank(), old_bank)
+        self.press(3108)  # Explicitly abandon the stale fields before replacement.
+        self.assertFalse(self.state()['dirty'])
+        self.assertFalse(self.state()['stale'])
+        self.write('document.open', path=str(path), discard=True)
+        reopened = self.bank()
+        self.assertFalse(self.state()['visible'])
+        self.command(576)
         self.assertFalse(self.state()['dirty'])
         self.assertFalse(self.state()['stale'])
         self.assertNotEqual(self.state()['document'], captured)

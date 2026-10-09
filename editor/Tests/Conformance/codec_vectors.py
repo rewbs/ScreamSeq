@@ -115,6 +115,9 @@ def run(client, output):
     def write(method, **params):
         return call(method, dict(expectedRevision=call("document.get")["revision"], **params))
 
+    from fixture_loader import FixtureLoader
+    report["fixtureLoads"] = []
+    loader = FixtureLoader(client, call, report["fixtureLoads"])
     try:
         for name, data, question in cases(read_project(source)):
             path, saved = output / (name + ".screamseq"), output / (name + "-saved.screamseq")
@@ -128,10 +131,11 @@ def run(client, output):
             except EvidenceError as error:
                 input_tree = None
                 row["strictComparatorInputError"] = str(error)
-            write("document.open", path=str(source), discard=True)
+            loader.load(source)
             before = call("document.get")
             try:
-                write("document.open", path=str(path), discard=True)
+                effective_source = loader.load(path)
+                row["loadPath"] = report["fixtureLoads"][-1]["method"]
                 row["accepted"] = True
             except Exception as error:
                 # Explicit load rejection is evidence; transport/unknown outcomes
@@ -152,7 +156,7 @@ def run(client, output):
                 row["loadWarnings"] = loaded["data"]["loadWarnings"]
                 if row["requiresSaveAs"]:
                     try:
-                        write("document.save", path=str(path), overwrite=True)
+                        write("document.save", path=str(effective_source), overwrite=True)
                     except Exception as error:
                         if type(getattr(error, "code", None)) is not int or error.code not in {-32602, -32003}:
                             raise
@@ -172,7 +176,9 @@ def run(client, output):
                     row["opaquePluginPreserved"] = differences(input_tree["plugins"], saved_tree["plugins"])
                     if not row["opaquePluginPreserved"]["equal"]:
                         raise EvidenceError(f"Unavailable plugin lost its identity or opaque state: {name}")
-                write("document.open", path=str(saved), discard=True)
+                if read_bytes(effective_source) != data:
+                    raise EvidenceError(f"Probe overwrote its effective load source: {name}")
+                loader.load(saved)
                 row["canonicalReopened"] = call("document.get")
             row["sourceUnchanged"] = read_bytes(path) == data
             if not row["sourceUnchanged"]:

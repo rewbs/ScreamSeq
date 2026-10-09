@@ -6,16 +6,36 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      retained_app_run:
+        description: 'Existing Windows build run ID; blank performs a normal build'
+        type: string
+        default: ''
+      fixture_run:
+        description: 'Preceding fixture run ID; blank rechecks the original corpus/API/codec baseline'
+        type: string
+        default: ''
+      fixture_artifact:
+        description: 'Exact preceding artifact name (for example screamseq-retained-macos-15)'
+        type: string
+        default: ''
+      fixture_layout:
+        description: 'Initial Windows outputs or a retained exchange result'
+        type: choice
+        options: [exchange, windows]
+        default: exchange
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}
+  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
   cancel-in-progress: true
 
 jobs:
   native-app:
+    if: github.event_name != 'workflow_dispatch' || inputs.retained_app_run == ''
     name: Native app (Windows x64)
     runs-on: windows-2022
     timeout-minutes: 60
@@ -143,3 +163,13 @@ jobs:
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn
           retention-days: 14
+  retained-app:
+    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != ''
+    uses: ./.github/workflows/ScreamSeq-Retained.yml
+    with:
+      runner: windows-2022
+      app-run: ${{ inputs.retained_app_run }}
+      app-artifact: screamseq-windows-logs
+      input-run: ${{ inputs.fixture_run }}
+      input-artifact: ${{ inputs.fixture_artifact }}
+      input-layout: ${{ inputs.fixture_layout }}

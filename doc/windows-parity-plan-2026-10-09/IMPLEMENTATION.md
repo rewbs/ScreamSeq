@@ -12,6 +12,73 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Retained binaries and first cross-platform failures — 9 October, 21:42 UTC
+
+No product build was run at this checkpoint. The latest local build remains the
+21:10:15–21:11:49 UTC ARM64 build; normal rebuilding is no earlier than 22:11:49.
+The first CI runs build PR merge commit `d703d86640c770e2a5735ea9a27dc57a011bf0e3`
+from head `8709816852aefad865911b13041371a55f621f9e` and unchanged main `16cab100b`.
+
+* Windows run **37991809865** completed: build and **136/136 portable/worker tests**
+  passed; five originals, API baseline and all 21 codec observations passed.
+  Native UI tests passed **26/29**. Failures: automation control 4205 overlaps its
+  curve/ruler, graph-workflow child access violation, and instrument floating
+  focus/short-body assertion. Three scratch tests originally had two errors from
+  obsolete document-departure expectations. The 30-test integration group reported
+  12 failures (including teardown failures); silent audio app startup, recording
+  clock and recovery-browser cleanup require diagnosis. Silent-output mode still
+  starts a WASAPI endpoint; it is not a device-independent clock. No absence of a
+  runner endpoint has yet been measured, and these failures are not waived.
+* Apple Silicon job **114027623669**, run **37991809860**: app build and **121/121
+  CTests** passed, as did recovery/picker and library steps. The full interface
+  harness failed at the deferred plugin-parameter edit in
+  `EditorDraftInterfaceTests.swift:442`. This remains unresolved; no timeout or
+  assertion was relaxed. Its conformance runner failed before the first fixture
+  because Mac has no `document.open` method. Intel was still building at inspection.
+* The downloaded Windows artifact ZIP hashes to
+  `e4cd5cddd4bcc4bb1341080bd842ea11690d251cdf6e753b03e2546739012ac0`;
+  its archived executable hashes to
+  `6ab18fb83491f13603ef7c64f852bc5985b17bb5a7c6b33de0d8b038ececea9a`.
+  The Apple Silicon artifact ZIP hashes to
+  `da3a1f026370754a955683442e6b2b9d5dd41d724b58a4c1a51123f7fe0d7557`.
+  Original logs and artifacts remain under `bin/parity-evidence/*-gate-01/`.
+
+The new retained workflow and `reuse_native.py` verify archived executable, receipt,
+source and input/report hashes before any launch. They refuse changed product/build
+inputs, existing output paths, unsafe extraction and incomplete preceding legs.
+They can execute baseline or seven-file reciprocal legs without configuration or
+compilation. Both apps must name the same frozen source commit. Native render/import
+outputs require the originating passing fixture test, not merely existing files.
+See `editor/Tests/Conformance/README.md` for explicit dispatch inputs and provenance.
+
+Mac no-edit loading now uses its normal positional launch path, one owned process
+for each input/opened save. API/codec setup uses the existing private recovery API
+with exact staged bytes, real replies and explicit provenance; rejected-load checks
+remain in one session. These are distinct checks, not an invented `document.open`
+alias. Ordinary Open-dialog and draft-admission coverage remains separately required.
+The corrected Mac harness is **not yet runtime qualified**.
+
+Local evidence without rebuilding:
+
+* **21/21** Python conformance/tool-safety checks passed in 8.77 s. A subsequent
+  focused runner group passed **3/3**, including the added Mac launch-chain and
+  uncertain-save-stop regression. All three workflow files parse as YAML 1.2.
+* The retained ARM64 app passed all five originals, API baseline and 21 codec
+  observations with the revised loader (`p0c-retained-local-baseline-02`). The known
+  plugin no-op defect remains visible and `parityComplete` remains false.
+* Earlier actual seven-file Windows-only artifact exchange was successful; its
+  chained first/reopened hashes are now verified by the exchange-input reader.
+  This does not establish a Mac reciprocal pass.
+* The scratch tests now assert refusal without draft loss, explicit Reload before
+  replacement, old-owner retirement, and fresh reopened capture. All **3/3** passed
+  against the **archived x64 CI binary running on this ARM64 Windows host**. The
+  unchanged recovery-browser test also passed on that binary (**4/4, 18.83 s**, log
+  `p0b-x64-app-corrections-01.log`). This resolves the obsolete scratch expectations;
+  it does not explain the recovery CI failure or replace native x64 runner evidence.
+
+P0b remains incomplete. The native UI failures, Mac interface failure, runner audio
+qualification, reciprocal files and subsequent P0c–P8 phases remain required.
+
 ## Grouped ARM64 closure gate and draft PR — 9 October, 21:18 UTC
 
 Candidate **8709816852aefad865911b13041371a55f621f9e** built successfully from

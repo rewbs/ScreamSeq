@@ -1,5 +1,6 @@
 """Safety boundaries for the actual-app runner; native behavior is tested live."""
 import json
+from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,40 @@ from project_tree import CORPUS, sha256
 
 
 class RoundtripSafetyTests(unittest.TestCase):
+    def test_mac_launch_reopens_actual_save_and_stops_on_uncertain_save(self):
+        source = next((CORPUS / "fixtures").glob("*.screamseq"))
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as tmp:
+                root, launches, methods = Path(tmp), [], []
+                @contextmanager
+                def owned(executable, output, identity, document=None):
+                    launches.append(document)
+                    identity["pid"] = len(launches)
+                    class Client:
+                        def call(self, method, params=None):
+                            methods.append(method)
+                            if method == "document.save":
+                                if fail:
+                                    raise RuntimeError("uncertain save")
+                                Path(params["path"]).write_bytes(document.read_bytes())
+                            return dict(revision="guard", data={})
+                    yield Client()
+                row = {}
+                with patch.object(native_roundtrip, "owned_client", owned):
+                    if fail:
+                        with self.assertRaisesRegex(RuntimeError, "uncertain save"):
+                            native_roundtrip.exercise_mac(root / "app", root, source,
+                                root / "first.screamseq", root / "second.screamseq", row)
+                        self.assertEqual(launches, [source])
+                        self.assertIn("error", row["requests"][-1])
+                    else:
+                        native_roundtrip.exercise_mac(root / "app", root, source,
+                            root / "first.screamseq", root / "second.screamseq", row)
+                        self.assertEqual(launches, [source, root / "first.screamseq"])
+                        self.assertTrue(row["passed"])
+                self.assertNotIn("document.open", methods)
+                self.assertNotIn("recovery.restore", methods)
+
     def test_uncertain_save_stops_without_retry_or_replacement(self):
         class BrokenTransport:
             def __init__(self):

@@ -30,8 +30,10 @@ def write_json(path, value):
 
 
 @contextmanager
-def owned_client(executable, output, identity):
+def owned_client(executable, output, identity, document=None):
     if sys.platform == "win32":
+        if document is not None:
+            raise EvidenceError("Positional fixture launch is only used for the Mac Open path")
         sys.path[:0] = [str(ROOT / "windows/Api"), str(ROOT / "windows/Tests")]
         from client import Client, TransportError
         from private_desktop import PrivateDesktop
@@ -57,8 +59,12 @@ def owned_client(executable, output, identity):
         with tempfile.TemporaryDirectory(prefix="ss-parity-") as temporary:
             private = Path(temporary)
             private.chmod(0o700)
+            recovery = private / "Recovery"
+            recovery.mkdir(mode=0o700)
             with (output / "host.log").open("x", encoding="utf-8") as log:
                 command = [str(executable), "--automation-test", "--inspection"]
+                if document is not None:
+                    command.append(str(document))
                 process = subprocess.Popen(command, stdout=log, stderr=log,
                     env={**os.environ, "RESONANCE_AUTOMATION_TEST_DIRECTORY": str(private)})
                 identity.update(pid=process.pid, command=command, isolation="private automation-test socket")
@@ -70,7 +76,13 @@ def owned_client(executable, output, identity):
                             if len(found) != 1 or found[0]["pid"] != process.pid:
                                 raise EvidenceError("Private endpoint does not belong to the launched process")
                             client = Client(found[0]["socket"], timeout=20)
+                            client.fixture_recovery_directory = recovery
                             client.call("document.get")
+                            if document is not None and client.call("context.get")["data"].get("file") != str(document):
+                                if time.monotonic() >= deadline:
+                                    raise EvidenceError("Owned app did not open the requested launch document")
+                                time.sleep(.05)
+                                continue
                             break
                         if process.poll() is not None:
                             raise EvidenceError(f"Owned app exited during startup: {process.returncode}")
@@ -122,6 +134,39 @@ def exercise(client, source, first, second, row):
     reopened = read_project(second)
     row["secondSave"] = dict(file=second.name, sha256=sha256(read_bytes(second)), typedSHA256=digest(reopened))
     row["firstToSecond"] = differences(saved, reopened)
+    row["passed"] = row["originalToFirst"]["equal"] and row["firstToSecond"]["equal"]
+
+
+def exercise_mac(executable, output, source, first, second, row):
+    """Normal AppController launch/openPath, with a fresh owned process per open.
+
+    This qualifies persistence, not same-session replacement or rejected loads.
+    The codec corpus separately uses recovery.restore in one continuing session.
+    """
+    row.update(loadPath="native positional launch", processes=[], requests=[])
+    original = read_project(source)
+    for index, (opened, saved, key) in enumerate(((source, first, "opened"), (first, second, "reopened"))):
+        directory = output / ("launch-" + str(index))
+        directory.mkdir()
+        identity = {}
+        row["processes"].append(identity)
+        with owned_client(executable, directory, identity, document=opened) as client:
+            def call(method, params=None):
+                request = dict(method=method, params=params or {})
+                row["requests"].append(request)
+                try:
+                    request["result"] = client.call(method, params)
+                    return request["result"]
+                except Exception as error:
+                    request["error"] = dict(type=type(error).__name__, message=str(error))
+                    raise
+            row[key] = call("document.get")
+            call("document.save", dict(expectedRevision=row[key]["revision"], path=str(saved), overwrite=False))
+        tree = read_project(saved)
+        row["firstSave" if index == 0 else "secondSave"] = dict(file=saved.name,
+            sha256=sha256(read_bytes(saved)), typedSHA256=digest(tree))
+    row["originalToFirst"] = differences(original, read_project(first))
+    row["firstToSecond"] = differences(read_project(first), read_project(second))
     row["passed"] = row["originalToFirst"]["equal"] and row["firstToSecond"]["equal"]
 
 
@@ -186,14 +231,20 @@ def main(argv=None):
             toolSHA256={str(path.relative_to(ROOT)): sha256(read_bytes(path)) for path in
                 (Path(__file__), Path(__file__).with_name("project_tree.py"),
                  ROOT / "windows/Tests/private_desktop.py", ROOT / "windows/Api/client.py",
-                 ROOT / "mac/Tools/resonance_api.py")})
+                 ROOT / "mac/Tools/resonance_api.py", Path(__file__).with_name("fixture_loader.py"))})
         with owned_client(executable, output, report["process"]) as client:
             for source in sources:
                 row = dict(fixture=source.name, passed=False)
                 report["fixtures"].append(row)
                 try:
-                    exercise(client, source, output / "first" / source.name,
-                             output / "reopened" / source.name, row)
+                    if sys.platform == "darwin":
+                        launch_output = output / ("open-" + source.stem)
+                        launch_output.mkdir()
+                        exercise_mac(executable, launch_output, source, output / "first" / source.name,
+                                     output / "reopened" / source.name, row)
+                    else:
+                        exercise(client, source, output / "first" / source.name,
+                                 output / "reopened" / source.name, row)
                 except Exception as error:
                     row["error"] = dict(type=type(error).__name__, message=str(error))
                     # Transport errors may leave a write in flight. Stop the run;

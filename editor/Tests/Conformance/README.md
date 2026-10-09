@@ -166,3 +166,78 @@ typed preservation through both Mac saves; return those `first/` files to the sa
 Windows candidate with `--input-file` again. Each report identifies its narrower
 scope; this does not replace the mandatory five-original-fixture gate or prove all
 edited journeys. Duplicate input filenames are refused before launching the app.
+
+## Reusing CI binaries and exchanging actual saved files
+
+The existing Windows and Mac workflows accept a `retained_app_run` dispatch input.
+Blank means the normal grouped build; a run ID selects the reusable
+`ScreamSeq-Retained.yml` job, which has **no configure, compile or build step**.
+These follow-up runs have separate concurrency identities and cannot cancel the
+normal build. The source run must have uploaded its archive and identity manifest;
+an unfinished run without those artifacts is not a reusable build.
+Mac dispatch additionally accepts `retained_runner=macos-15|macos-15-intel|both`;
+use one architecture when only its artifact is ready or its inputs changed. Normal
+builds always retain the two-architecture matrix.
+
+`reuse_native.py --app-artifact EXTRACTED_ARTIFACT --output NEW_DIRECTORY` verifies
+archive/executable/build-receipt hashes, matching full built source identity and the
+Git difference to the tooling checkout. Only the explicit documentation/workflow/
+Python conformance changes are allowed; changed C++, Swift, build definitions or API
+schema refuse reuse. It then rechecks the five originals and API/codec baseline in
+an owned native process. This can capture or recheck a reviewed Mac baseline without
+rebuilding product inputs. It is separate from the originating compiled test suite.
+The small GitHub read token used to fetch an old PR merge object is removed from
+the process environment before launching the app; credentials are not retained.
+
+For the actual reciprocal exchange:
+
+1. Dispatch the **Mac** workflow on the tooling branch with `retained_app_run` set
+   to the completed Mac build run, `fixture_run` to the completed Windows build
+   run, `fixture_artifact=screamseq-windows-logs` and `fixture_layout=windows`.
+   Both Mac architectures run from their archived apps. The runner checks the five
+   Windows first-save hashes and the originating F04 native test's passing result,
+   then saves/reopens the five originals and the two actual render/import outputs.
+2. Each Mac job retains `screamseq-retained-macos-15` or
+   `screamseq-retained-macos-15-intel`, with native reports, actual songs and chained
+   input/report hashes in `retained-run.json`.
+3. Dispatch the **Windows** workflow with its original `retained_app_run`, the Mac
+   follow-up `fixture_run`, the exact corresponding Mac artifact name and
+   `fixture_layout=exchange`. Repeat for the other Mac architecture. This validates
+   the prior reports and first-save bytes before the Windows return save/reopen.
+
+The CLI equivalents add `--input-artifact EXTRACTED_PRIOR_ARTIFACT --input-layout
+windows|exchange`. Both platform binaries must identify the same frozen commit.
+Existing output directories, mismatched hashes, incomplete prior legs and changed
+product inputs fail before native execution. No project normalization, assertion
+relaxation or write retry is introduced. A baseline's known API difference cannot
+excuse a failing no-edit fixture; the exchange checks those fixture results directly.
+Partial output remains evidence of failure, not successful exchange.
+
+The returned Windows files can also be checked on ARM64 using that same candidate's
+local app and explicit `native_roundtrip.py --input-file` / `--input-directory` legs.
+The generated manifest does not qualify reciprocal UI edits, audio, missing-provider
+playback, foreground interaction or an architecture whose runner never executed.
+Python 3.12 or later is required by the safe Mac tar extraction path.
+
+### Mac loading provenance
+
+Mac does not advertise `document.open`. The original CI runner failed on that
+unsupported method; this is a harness failure, not a failed codec comparison.
+No-edit Mac legs now launch the exact archived executable with each source file,
+wait for that owned PID's `context.get.file` to identify the input, save, terminate
+that process, and launch the first save in another owned process before saving
+again. Reports retain both PIDs, launch arguments and API receipts. This exercises
+the normal AppController file-loading path and exact typed persistence. It does
+not establish same-session replacement, draft admission or a visible Open dialog.
+
+API/codec probe setup instead stages exact bytes under the automation process's
+private `Recovery` directory and calls its real guarded `recovery.restore` method.
+`fixtureLoads` records original/staged paths, hashes and the actual method; request
+journals contain the real response or error. There is no synthetic `document.open`
+response and API inventory remains unchanged. Codec rejected-load preservation is
+still checked against the **same process and document**, and protected-overwrite
+checks target the file actually loaded. The ordinary Open failure/dialog path
+remains a separate UI gate; these recovery observations cannot qualify it.
+
+These Mac harness changes require execution against the retained Mac apps before
+they are qualified. Local Python tests establish tooling behavior only.
