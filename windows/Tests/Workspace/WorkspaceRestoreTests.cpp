@@ -65,10 +65,22 @@ struct RestoreApplication final:Application {
     std::promise<RestoreJson> *inputCompletion=nullptr;
     unsigned dispatchedInput=0;
     bool pumpOrdinaryReads=false;
+    std::optional<POINT> fixtureMaximumTrack;
+    std::optional<Json> sampleGuardState;
+    bool sampleGuardFails=false;
+    std::function<void()> duringSampleGuard;
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
     Json documentOperation(const std::string &method,const Json &params)override {
+        if(method=="sample.recording.get"&&sampleGuardState) {
+            // Only the device-backed sample read is substituted. The aggregate
+            // Application guard, native review windows and MIDI worker are real.
+            const auto result=*sampleGuardState;
+            if(auto action=std::exchange(duringSampleGuard,{}))action();
+            if(sampleGuardFails)throw ScreamSeq::Api::ApiError(-32003,"Owned sample-state read failure");
+            return result;
+        }
         ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);return result;
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
@@ -113,7 +125,12 @@ LRESULT CALLBACK restoreWindowProc(HWND window,UINT message,WPARAM wp,LPARAM lp)
         auto *app=static_cast<RestoreApplication *>(reinterpret_cast<Application *>(GetWindowLongPtrW(window,GWLP_USERDATA)));
         if(app)app->deliverInput();return 0;
     }
-    return windowProc(window,message,wp,lp);
+    const auto result=windowProc(window,message,wp,lp);
+    if(message==WM_GETMINMAXINFO){
+        auto *app=static_cast<RestoreApplication *>(reinterpret_cast<Application *>(GetWindowLongPtrW(window,GWLP_USERDATA)));
+        if(app&&app->fixtureMaximumTrack)reinterpret_cast<MINMAXINFO *>(lp)->ptMaxTrackSize=*app->fixtureMaximumTrack;
+    }
+    return result;
 }
 
 struct RestoreFixture {
@@ -294,8 +311,13 @@ void firstRestoreMatchesOrdinaryOpen() {
             else app.adoptInitialEffects(app.prepareInitialEffects(code));
             const auto restored=effectsState(app);
             restoreCheck(app.effectChoices.at(app.effectSelected).at("kind").get<std::string>()==kind,"Staged nudge selected the wrong command");
-            restoreCheck(app.effectField(effectValue)==(saved?L"0.375":L"0.75")&&app.effectField(effectOffset)==(saved?L"0.125":L"0")&&
+            // The typed descriptor presents normalized strength as percent;
+            // display conversion must not change the captured raw command.
+            restoreCheck(app.effectField(effectValue)==(saved?L"37.5":L"75")&&app.effectField(effectOffset)==(saved?L"0.125":L"0")&&
                 std::stod(app.effectField(effectDuration))==(saved?123456.0/(65536*4):1.0),"Staged nudge lost saved timing or new-command defaults");
+            const auto read=app.readEffectFields();
+            restoreCheck(read.at("value")== (saved?.375:.75)&&read.at("offset")== (saved?32768:0)&&
+                read.at("durationBeats")== (saved?123456.0/(65536*4):1.0),"Reading displayed nudge fields changed exact raw strength or timing");
             app.openEffectEditor(saved?"":code,true);
             restoreCheck(effectsState(app)==restored,"Staged nudge values/catalogue differ from ordinary opening");
             restoreCheck(songState(app)==before&&app.position()==position,"Nudge restore/open changed song/history or cursor");
@@ -410,9 +432,19 @@ void resizeRestoreClient(RestoreApplication &app,int width,int height) {
     RECT bounds{0,0,MulDiv(width,int(dpi),96),MulDiv(height,int(dpi),96)};
     restoreCheck(AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(app.window,GWL_STYLE)),FALSE,
         DWORD(GetWindowLongPtrW(app.window,GWL_EXSTYLE)),dpi)!=FALSE,"Calculate restore fixture client frame");
+    // SetWindowPos still obeys the monitor-derived maximum tracking size.
+    // This private fixture needs exact virtual client sizes on small CI
+    // desktops; leave production min-size/reflow/focus handling intact.
+    const auto previous=app.fixtureMaximumTrack;
+    app.fixtureMaximumTrack=POINT{bounds.right-bounds.left,bounds.bottom-bounds.top};
+    struct Limit {RestoreApplication &app;std::optional<POINT> previous;~Limit(){app.fixtureMaximumTrack=previous;}} limit{app,previous};
     restoreCheck(SetWindowPos(app.window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,
         SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)!=FALSE,"Resize owned restore fixture");
     app.layoutControls();
+    RECT actual{};restoreCheck(GetClientRect(app.window,&actual)!=FALSE,"Read resized restore fixture client");
+    std::cout<<"Restore geometry: dpi="<<dpi<<" requested="<<width<<'x'<<height<<" DIP actual="
+        <<actual.right<<'x'<<actual.bottom<<" px maxTrack="<<GetSystemMetrics(SM_CXMAXTRACK)<<'x'<<GetSystemMetrics(SM_CYMAXTRACK)<<'\n';
+    restoreCheck(actual.right==MulDiv(width,int(dpi),96)&&actual.bottom==MulDiv(height,int(dpi),96),"Restore fixture did not establish requested client geometry");
 }
 void compactRestoreAndResizeKeepVisibleFocus() {
     withRestoreFixture([](RestoreApplication &app) {
@@ -428,7 +460,17 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="graph"&&app.workspaceFocusedCanvasVisible(),"Restore retained hidden Tracker focus instead of the visible Main canvas");
         for(auto *tool:{static_cast<ScreamSeq::NativeToolWindow *>(app.parameterAutomationWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.instrumentEnvelopeWindow.get())})
             ScreamSeq::Tests::ownGuiWindow(tool->window());
-        const auto retained=app.workspaceDockConfiguration();resizeRestoreClient(app,1440,900);
+        const auto retained=app.workspaceDockConfiguration();
+        // Reproduce a small runner's size cap without changing any desktop or
+        // monitor setting: a nominally wide SetWindowPos remains compact.
+        const auto dpi=GetDpiForWindow(app.window);
+        app.fixtureMaximumTrack=POINT{MulDiv(1100,int(dpi),96),MulDiv(740,int(dpi),96)};
+        restoreCheck(SetWindowPos(app.window,nullptr,0,0,MulDiv(1440,int(dpi),96),MulDiv(900,int(dpi),96),
+            SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)!=FALSE,"Exercise small-desktop fixture cap");
+        app.layoutControls();RECT capped{};restoreCheck(GetClientRect(app.window,&capped)!=FALSE,"Read capped fixture client");
+        restoreCheck(capped.right<MulDiv(1440,int(dpi),96)&&capped.bottom<MulDiv(900,int(dpi),96)&&
+            app.workspaceDockSnapshot().at("mode")=="tabs","Monitor cap did not reproduce compact geometry");
+        app.fixtureMaximumTrack.reset();resizeRestoreClient(app,1440,900);
         restoreCheck(app.workspaceDockSnapshot().at("mode")=="regions"&&app.trackerWorkspaceVisible(),"Wide fixture did not expose independent region bodies");
         const auto header=app.controls.at(regionControlBase+2);restoreCheck(IsWindowVisible(header)&&IsWindowEnabled(header),"Region pin/follow button unavailable");
         SetFocus(header);for(unsigned i=0;i<3;++i)app.layoutControls();
@@ -902,6 +944,43 @@ void provenanceNavigationUsesCapturedTargets() {
 }
 }
 
+static void retainedTakesProtectLeavingDocument() {
+    using Json=RestoreJson;
+    withRestoreFixture([](RestoreApplication &app) {
+        restoreCheck(app.protectRecordingTake(),"No takes must allow the leaving-document guard");
+        const auto revision=app.view->session.revision;
+        const auto midi=app.documentOperation("recording.start",{{"expectedRevision",revision},{"channels",Json::array({0})},{"instrument",1}}).at("take");
+        restoreCheck(!app.protectRecordingTake()&&!app.canClose(),"MIDI-only take must block leaving/closing");
+        app.sampleGuardState=Json{{"take","owned-sample"},{"documentId",app.documentId},{"baseRevision",revision},
+            {"device","owned-input"},{"firstChannel",0},{"channels",1},{"capturing",false},{"frames",32},{"sampleRate",48000}};
+        restoreCheck(!app.protectRecordingTake(),"Both takes must remain protected");
+        restoreCheck(app.hasRecordingTake()&&app.sampleGuardState->at("take")=="owned-sample","Guard must not consume either take");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
+        restoreCheck(!app.protectRecordingTake()&&app.sampleRecordingWindow&&app.sampleRecordingWindow->hasRetainedTake(),
+            "Resolving MIDI must reveal and retain the microphone take");
+        restoreCheck(!app.saveFile(),"Microphone-only take must block Save before opening a chooser");
+        app.openFile();
+        restoreCheck(!app.canClose()&&app.view->session.revision==revision,"Open/Close must not replace the song with a microphone take");
+        app.sampleGuardFails=true;
+        restoreCheck(!app.canClose()&&app.sampleRecordingWindow->hasRetainedTake(),"Read failure must preserve the last known microphone take");
+        app.sampleRecordingWindow.reset();
+    });
+    withRestoreFixture([](RestoreApplication &app) {
+        app.sampleGuardState=Json{{"take",""}};
+        app.duringSampleGuard=[&] {
+            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+        };
+        restoreCheck(!app.protectRecordingTake()&&app.hasRecordingTake(),"MIDI begun while sample read pumps must be rechecked");
+        const auto midi=app.view->recording.at("take");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
+        app.duringSampleGuard=[&] {
+            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+        };
+        app.sampleGuardFails=true;
+        restoreCheck(!app.canClose()&&app.hasRecordingTake(),"Failed sample read after MIDI start must not offer Close anyway");
+    });
+}
+
 int wmain(int argc,wchar_t **argv) {
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -909,6 +988,7 @@ int wmain(int argc,wchar_t **argv) {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
+            retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";
             requiredReadFailuresAreAtomic();std::cout<<"PASS required reads: errors and malformed Notes/Graph/Mixer are atomic\n";
             secondHiddenEditorFailureIsAtomic();std::cout<<"PASS all-before-any: second hidden editor failure and normal adopted callbacks\n";

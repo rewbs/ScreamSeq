@@ -1,4 +1,5 @@
 #include "SampleRecorder.hpp"
+#include "CaptureEndMonitor.hpp"
 #import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #include <AudioToolbox/AudioToolbox.h>
@@ -150,7 +151,7 @@ struct SampleRecorder::Impl {
   uint32_t first = 0;
   std::vector<float> input;
   AudioBufferList inputList{};
-  std::jthread monitor;
+  CaptureEndMonitor monitor;
   bool started = false;
   size_t listenerCount = 0;
   static constexpr std::array<AudioObjectPropertyAddress, 3> properties{{
@@ -184,7 +185,7 @@ struct SampleRecorder::Impl {
     capture.finish(SampleCaptureBuffer::End::Stopped);
     // Only this off-callback owner disposes. Joining prevents the autonomous
     // limit/disconnect stop from racing AudioUnitUninitialize/Dispose.
-    if(monitor.joinable()) { monitor.request_stop(); monitor.join(); }
+    monitor.stop();
     if(unit && started) AudioOutputUnitStop(unit);
     started = false;
     for(size_t i = 0; i < listenerCount; ++i)
@@ -267,11 +268,8 @@ void SampleRecorder::start(const Options &options) {
     captureCheck(AudioOutputUnitStart(self.unit), "Cannot start audio input"); self.started = true;
     // Stop the actual microphone promptly at the limit/disconnection even if
     // no UI/API client polls. This thread never reads or frees PCM storage.
-    self.monitor = std::jthread([&self](std::stop_token stop) {
-      while(!stop.stop_requested() && self.capture.reading().capturing)
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      if(!stop.stop_requested()) AudioOutputUnitStop(self.unit);
-    });
+    self.monitor.start([&self] { return self.capture.reading().capturing; },
+                       [&self] { AudioOutputUnitStop(self.unit); });
   } catch(...) { self.close(); throw; }
 }
 void SampleRecorder::stop() noexcept { impl_->close(); }

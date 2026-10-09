@@ -219,7 +219,10 @@ reports the native dock's captured bus/revision and draft state.
 `graph.plugin.get`, `graph.plugin.set` and `graph.plugin.editor.open/commit/close`
 now follow the Mac recipe interface. These are independent effect instances;
 changes belong to document history and never overwrite the rack baseline.
-Parameter/port writes validate the whole candidate before stopping playback.
+Parameter/port writes validate the whole candidate before publication. Compatible
+recipe controls and topology prepare live updates without stopping playback.
+Preparation failure (including a full graph-control queue) returns `-32002`
+with its reason and preserves the accepted document, history and playback.
 Editor open returns a token; commit requires that token, captured graph/node
 and unchanged recipe. Closing the native window retains its uncommitted draft
 until explicit API close or document replacement. Commit supports dry run.
@@ -227,10 +230,9 @@ until explicit API close or document replacement. Commit supports dry run.
 saved host-bypass flag for one recipe processor in all uses. Getter metadata
 includes `bypass`; parameters and opaque preset data are preserved, as are
 clone/group-export copies. A changed flag is one document Undo; identical values
-and dry runs are no-ops. Windows currently requires stopped playback and audition
-for this action and its Undo/Redo. Active changes return `-32002` without stopping
-transport or changing history. The live shared-engine path exists, but Windows
-publication/history-hook integration and native qualification remain pending.
+and dry runs are no-ops. This action and its Undo/Redo publish to active prepared
+copies. Busy queues or stale playback generations return `-32002` without stopping
+transport or changing history; unsupported preparations also preserve playback.
 `workspace.get.graphEditor` exposes the reusable canvas's captured revision,
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.

@@ -107,7 +107,12 @@ void bounds(Fixture &f,std::set<int> *available=nullptr){
     const auto &r=state.at("canvas");const auto scale=GetDpiForWindow(f.tool.window())/96.;
     RECT canvas{LONG(std::lround((r.at("x").get<double>()-38)*scale)),LONG(std::lround((r.at("y").get<double>()-17)*scale)),LONG(std::lround((r.at("x").get<double>()+r.at("width").get<double>())*scale)),LONG(std::lround((r.at("y").get<double>()+r.at("height").get<double>())*scale))};
     require(canvas.left>=0&&canvas.top>=0&&canvas.right<=client.right&&canvas.bottom<=client.bottom,"Curve axes escape native client");
-    for(const auto &[id,box]:boxes){RECT overlap{};if(IntersectRect(&overlap,&canvas,&box))throw std::runtime_error("GraphCurve control overlaps canvas/axes: "+std::to_string(id));}
+    for(const auto &[id,box]:boxes){RECT overlap{};if(IntersectRect(&overlap,&canvas,&box)){
+      std::cerr<<"GraphCurve geometry: dpi="<<GetDpiForWindow(f.tool.window())<<" client="<<client.right<<'x'<<client.bottom
+        <<" control="<<id<<" ["<<box.left<<','<<box.top<<','<<box.right<<','<<box.bottom<<"] axes=["
+        <<canvas.left<<','<<canvas.top<<','<<canvas.right<<','<<canvas.bottom<<"]\n";
+      throw std::runtime_error("GraphCurve control overlaps canvas/axes: "+std::to_string(id));
+    }}
   }
 }
 void minimumPages(Owner &owner){
@@ -357,5 +362,12 @@ int wmain(int argc,wchar_t **argv){try{
     childDraftsBecomeStaleWithoutReplacement(owner);std::cout<<"PASS Formula/Bank draft ownership and stale-source rejection\n";
     formulaCodeColorAndUndo(owner);std::cout<<"PASS Formula explicit native color, typography refresh, caret and raw-text Undo/Redo\n";
     owner.close();
+    // Exercise 96-DPI native control metrics even on a high-DPI developer
+    // display. Only newly created fixture HWNDs use this thread-local context.
+    const auto oldDpi=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE);
+    require(oldDpi!=nullptr,"Select fixture-local 96-DPI context");
+    struct Dpi {DPI_AWARENESS_CONTEXT previous;~Dpi(){SetThreadDpiAwarenessContext(previous);}} dpi{oldDpi};
+    Owner unscaled;require(GetDpiForWindow(unscaled.window)==96,"96-DPI fixture was not established");
+    minimumPages(unscaled);unscaled.close();std::cout<<"PASS graph curve 96-DPI minimum pages and reachable actions\n";
   });return 0;
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

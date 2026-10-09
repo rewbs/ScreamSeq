@@ -50,7 +50,17 @@
         {kind,inner-278},{snap,82.f},{enabled,74.f},{fit,40.f},{zoomOut,26.f},{zoomIn,26.f}}){
         put(id,x,52+shift,width,id==kind||id==snap?230.f:26.f);x+=width+gap;
       }
-      canvas_.viewport={46,96+shift,std::max(1.f,w-54),std::max(1.f,h-196-shift)};
+      // The requested combo height is its popup height. Its closed HWND can
+      // be taller than 26 DIPs (28 pixels at 96 DPI), so reserve axes space
+      // from the measured controls, not the nominal toolbar row.
+      float canvasTop=96+shift;
+      for(int id:{kind,snap}){
+        RECT box{};if(GetWindowRect(controls_.at(id),&box)){
+          MapWindowPoints(nullptr,window_,reinterpret_cast<POINT *>(&box),2);
+          canvasTop=std::max(canvasTop,box.bottom*96.f/GetDpiForWindow(window_)+18.f);
+        }
+      }
+      canvas_.viewport={46,canvasTop,std::max(1.f,w-54),std::max(1.f,std::min(h-196-shift,h-96-canvasTop))};
       pointFields();
     }else if(page_==1){
       put(kind,left,52+shift,inner-86,230);put(enabled,w-88,52+shift,80,26);
