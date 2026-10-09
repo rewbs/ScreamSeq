@@ -1,6 +1,6 @@
 # Review of the supplied parity plan and matrix
 
-The [latest planning review](planning-review-refresh.md) refreshes this reconciliation at checkout `b36bbefc4` and its pre-existing uncommitted owner census. It also records completed P0a CI: both Mac jobs passed, Windows still failed the precise-note wide-client setup. [Local action audit](local-action-audit.md) adds handler-level evidence, including existing Activity zoom and the distinction between song and recipe modulation controls. Main-pinned findings below are unchanged; candidate status is superseded by the latest review.
+The [latest planning review](planning-review-refresh.md) refreshes this reconciliation at checkout `d37ecf785` and its pre-existing uncommitted owner census. It records the existing fixture-only P0a correction, its scoped local evidence, and current candidate CI runs 37923921386/37923921268 still in progress when read. Earlier CI results remain historical evidence. [Local action audit](local-action-audit.md) adds handler-level evidence, including Activity zoom and the distinction between song and recipe modulation controls. Main-pinned findings below remain at `ffe81aa4b`; candidate status is governed by the latest review.
 
 The [current source review](current-source-review.md) updates candidate disposition through `e7f165eb4` and rechecks both supplied files' hashes. Findings below about main still apply at `ffe81aa4b`; F22/F23 now have existing local candidate fixes. Main status and candidate evidence are kept separate in the parity matrix.
 

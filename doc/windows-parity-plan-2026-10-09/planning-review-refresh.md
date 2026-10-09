@@ -4,7 +4,7 @@ This review consolidates the supplied Downloads plan and matrix into [the implem
 
 ## Current source and evidence
 
-Read-only `git ls-remote origin refs/heads/main` returns `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`, identical to the reference baseline. There are **zero post-reference main commits**. The local checkout is `codex/windows-parity-safety` at `b36bbefc4dd637f2541c20952b0114ed01762722`. At the start it contained 28 modified product/test files plus untracked `windows/App/DocumentDrafts.inc`; those pre-existing changes were inspected and left untouched. Shared departure code now differs from main, unlike the earlier `d5b7a09eb` snapshot. Source findings pinned to main remain valid unless the candidate column says otherwise.
+Read-only `git ls-remote origin refs/heads/main` returns `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`, identical to the reference baseline. There are **zero post-reference main commits**. The local checkout is `codex/windows-parity-safety` at `d37ecf785cfc7ab3a7ac66e1d888f4bf91a00921`. At the start it contained 29 modified product/test files plus untracked `windows/App/DocumentDrafts.inc`; those pre-existing changes were inspected and left untouched. Shared departure code now differs from main, unlike the earlier `d5b7a09eb` snapshot. Source findings pinned to main remain valid unless the candidate column says otherwise.
 
 | Input | Identity |
 |---|---|
@@ -15,6 +15,23 @@ Read-only `git ls-remote origin refs/heads/main` returns `ffe81aa4bfa83bc89b1e1d
 The second supplied file is named `SCREAMSEQ_WINDOWS_PARITY_MATRIX_2026-10-09.csv`. Its 84 rows are retained in the [peer row review](peer-matrix-review.csv). The consolidated matrix covers those 84 checks plus 33 components, and the command/API inventories preserve all 419 reference commands and 232 Mac methods; the handoff additionally covers 16 Windows extensions. These are inventory counts, not completion percentages.
 
 The Mac gallery was reviewed across all nine contact sheets. Live captures have readable native controls; component sheets have blank control captions in several renders, reinforcing their limited use as geometry evidence. Mac Mixer 36 and Sound design 51 establish a useful simultaneous overview; they do not prove meter accuracy, audible gestures or performance. Existing Windows modulation and activity composites show native controls and clear value fields, but long stable-ID strings dominate target labels. The activity composite visibly contains minus/Fit/plus controls. Neither historical Windows composite is a current foreground or Narrator pass.
+
+## Latest candidate snapshot
+
+Read-only review at **2026-10-09 11:34 UTC** found draft [PR 3](https://github.com/rewbs/ScreamSeq/pull/3) open and unmerged: head `6c3eea908fd3167ada681b2c44be551cb7eb94a3`, base `ffe81aa4b`, proposed merge `6433dc0da9c1b779b1390de7a495af2c2353fd9e`. The latter is PR metadata; a future result must use the actual checkout SHA in its job log. The same fixture-only correction is `d37ecf785` in this safety checkout. Documentation commit `bab45ba72` adds no product behavior.
+
+| Existing input | Observation and limit |
+|---|---|
+| `precise_note_native_support.py::resize_main` | Adds `SWP_NOSENDCHANGING` to the owned test-window resize. Exact 1440×852 / compact-size assertions remain; product resize policy is unchanged by this commit |
+| `bin/parity-evidence/p0a-size-probe.log` | Owned surrogate with a maximum-track cap: default client 1008×729; revised calls produce 1440×852 and 1000×720, each with `WM_SIZE`. This supports fixture setup diagnosis, not foreground usability |
+| `p0a-client-geometry-ui-configured.log` | Two actual-app scenarios pass in 5.174 s: simultaneous precise-note hosts/layout retention and independent routing/curve drafts. The earlier `p0a-client-geometry-ui.log` failed before launch because TMPDIR was unset and remains retained |
+| Existing local executable | ARM64 Release SHA-256 `2e43cc3305c1239cb79d9a54e2afb3da509402c3987a84531ca48a8916ac18f2`, matching the executable in `p0-layout-receipt.json` at source `758cd1559`. It is not a build of current dirty P0b source or the isolated x64 candidate |
+| [Windows run 37923921386](https://github.com/rewbs/ScreamSeq/actions/runs/37923921386), job `113798216568` | Build step in progress when read; no terminal result |
+| [Mac run 37923921268](https://github.com/rewbs/ScreamSeq/actions/runs/37923921268), jobs `113798215876` / `113798216235` | Both native build steps in progress when read; no terminal result |
+
+These runs and logs predate this review's inspection. No run was started, rerun, cancelled or waited on to completion. The next implementation session should inspect these handles once before deciding on new execution. Successful old Mac jobs do not qualify the current shared departure header. A Python-only fixture correction can reuse an unchanged executable, but its app scenario, environment and transitive input identity still need an explicit receipt.
+
+The Downloads archive and both peer files retain the hashes below. This review reread their reports/fixture guide/checklist and all peer sections, inspected all nine gallery contact sheets, and read the five binary property trees directly. It did not execute the package validator or recreation scripts. The 84 peer acceptance strings are all preserved exactly in `peer-matrix-review.csv`; no source assessment has been promoted to a Windows runtime pass.
 
 ## Candidate changes since the earlier review
 
@@ -37,7 +54,7 @@ The same five layout/test file changes are isolated on P0a head `8afd4175a82eba3
 | Mac Apple Silicon `113780223733` | Build, 120/120 CTests, Swift recovery and plugin-picker checks passed | Does not run the full interface harness, physical devices or later `b36bbefc4` departure code |
 | Mac Intel `113780224030` | Build, 120/120 CTests, Swift recovery and plugin-picker checks passed | Same scope limit; success is at `de3112d18`, not main |
 
-The next P0a correction should diagnose the owned HWND's work area/DPI/maximum-track geometry and establish an actual 1440×852-DIP client for the wide scenario. `WorkspaceRestoreTests.cpp` already has an owned-window geometry strategy worth reviewing. Keep compact-screen behavior as a separate asserted case. Do not weaken the size assertion, silently skip the wide case, or infer a production layout bug from this setup failure alone. Reuse unchanged Mac/model evidence where transitive inputs match; qualification of a changed final merge candidate remains mandatory. No runs were started, rerun or cancelled during this review.
+This previous failure is now addressed by the existing fixture-only candidate above. Do not schedule the same correction anew. Retain the old failure and its scope; the current candidate's terminal CI result still needs review before future integration. The compact capped-window case remains necessary because forcing owned geometry does not test a user's normal maximum-track/work-area policy.
 
 ## Existing draft foundation and remaining P0b work
 
@@ -58,7 +75,9 @@ The next P0a correction should diagnose the owned HWND's work area/DPI/maximum-t
 
 The short lease must block document-scoped input **before** a Win32 edit mutates raw text (`WM_CHAR`, paste/cut/undo and relevant notifications), and reject/defer concurrent API writes, while still servicing worker callbacks. Discard happens only after successful adoption; chooser cancel, load error, Stop failure, newer owner/generation or unknown write outcome cannot discard. A reply timeout must reconcile the operation before retry or discard. Do not silently auto-Apply every draft as the peer's P0-B2 wording could imply.
 
-Review build ownership before this candidate's first build: `DocumentDraftRegistry.hpp` uses `#include "editor/DocumentDeparture.hpp"`, while standalone `windows/Tests/Workspace/CMakeLists.txt` gives `native-tool-window-tests` only the JSON include root. The new NativeToolWindow dependency exposes an include-path risk in that subproject; resolve it consistently as part of the future batch. This is a source finding, not a compiler result.
+The earlier include-path concern has an uncommitted source correction: `DocumentDraftRegistry.hpp` now includes `../../editor/DocumentDeparture.hpp`, while the standalone `windows/Tests/Workspace/CMakeLists.txt` native-tool target still supplies only the JSON include root. This resolves the observed relative lookup in source; there is no compiler result for this dirty candidate. Preserve a focused standalone-target compilation check in P0b.
+
+Additional owner questions to settle in the first census slice: `SongTimingWindow::documentDraft()` currently uses a constant `song-timing` target although its context includes a sequence; capture that sequence in the consent identity. Main FX summaries currently carry indices, so establish stable pattern/track identity or a demonstrably sufficient captured revision contract. The in-grid nudge Review callback focuses the existing field only if visible; it needs to reveal the captured cell without overwriting its raw strings. Plugin path repair, recorder configuration/pending operations, and uncertain outcomes need an explicit classification rather than inheriting a default clean summary. These are source review findings and proposed acceptance cases, not runtime failures.
 
 **Proposed bounded sequence:** finish one owner-classification/registration slice, then one coherent admission/input/retirement slice; use cheap token/summary cases first, one Windows app/workspace build for the connected candidate, and real-HWND/pipe Open/Close/recovery/take checks. Reuse existing cable/role cases when inputs match. Common shell/message changes trigger the broader workspace/shortcut/recovery suites; shared token/controller changes require relevant Mac compilation/tests and both integration builds. Full reciprocal F01–F05 qualification remains P0c/P6/P8; these foundation logs do not replace it.
 
@@ -88,8 +107,18 @@ All musical writes inherit A01: complete validation before commit, stable identi
 
 ## Recommended first implementation batch
 
-**P0a qualification and integration of the existing isolated repairs**, relative effort **S–M**, remains first. The existing `de3112d18` results narrow its immediate blocker to the precise-note app fixture's unmet wide-client geometry. Correct the demonstrated setup/geometry issue after diagnosis, preserve the musical/draft assertions and qualify the actual merge candidate on both native platforms. Do not repeat the guard/monitor/layout repairs or move unrelated shared code in this batch. Local safety-branch results cannot substitute for the isolated candidate's x64 CI.
+**P0a qualification and integration of the existing isolated repairs**, relative effort **S–M**, remains first. Review head `6c3eea908` and the already-running candidate checks above. The earlier precise-note geometry correction is already implemented and has scoped local logs; do not redo it. If checks expose a new failure, address that demonstrated cause within the safety slice. Preserve all assertions, then qualify the actual integration candidate on both native platforms. Keep unrelated shared refactors out of this batch. Local safety-branch results cannot substitute for isolated x64 CI or current main integration.
 
 After P0a qualifies, the next code batch is **P0b aggregate draft departure protection**, relative effort **M–L** for complete owner/input/close coverage, high data-safety risk. Reuse the existing cable/role slices and departure foundation; review the uncommitted census before adopting it. Its cheapest checks are owner summaries and token/lease transitions, followed by one Windows app/workspace build for the cohesive implementation and targeted Open/API/recovery/Close/recording tests. Common admission changes trigger broader workspace/recovery checks; shared-token changes also require Mac session/editor-draft checks. Follow P0c typed conformance with P1 Mixer, P2 tracks and P3–P8 from the main plan.
 
 No user decision is needed to specify these batches. The only later product input required is the must-support physical audio/MIDI devices and commercial plugins, and explicit agreement if Windows x64/ARM64 or Mac Apple Silicon/Intel support is reduced. Exclusive audio modes, automatic recovery deletion and repository settings changes are optional separate scope decisions, not implicit parity work.
+
+## Peer ideas incorporated into the final sequence
+
+Retained recommendations include typed golden fixtures, method/parameter conformance, common validation and history semantics, native menus and command availability, measured Windows layout and semantic accessibility, gesture-level Undo, shared codec/domain operations, and reciprocal save/reopen. The source-only Mixer proposal remains design input. Full SessionCore relocation, automatic target-only stale rebasing, indiscriminate recovery pruning and weaker CI quarantine are not prerequisites or accepted shortcuts.
+
+One further sequence refinement is P3c: simple file/song entry points and a retained load report can land after departure safety and command infrastructure, without waiting for graph redesign or codec convergence. Exports retain their separate snapshot/cancel/atomic-output gate in P6. This incorporates the peer's everyday-workflow priority without weakening the dependency order.
+
+The recommended Windows design keeps system fonts/focus, native menus and controls, Ctrl-based shortcuts, explicit complex-operation previews and the existing distinct edit cursor/playhead. New direct gestures aim for one Undo at gesture end. Existing shortcut profiles migrate rather than silently changing Escape or transport defaults. Stable identities, container 6 / metadata 17, plugin state and OpenMPT attribution remain protected.
+
+No decision is needed to review or specify the first batch. Required physical devices/commercial plugins must be identified before P7 qualification; reducing architecture support would require an explicit product decision. Routine interface, fixture and validation choices have recommendations in the main plan.

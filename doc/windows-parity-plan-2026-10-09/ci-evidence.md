@@ -83,7 +83,7 @@ Selected log excerpts:
 4. Freeze the coherent correction, build only affected Windows native targets once, then run the three retained-editor CTests and five previously unreached Python cases. If common control/DPI/placement code changes, expand to retained curve/instrument/precise/workspace tests and mixed-DPI foreground A16. If only a test precondition changes, preserve its original product assertions and required x64 execution. Shared build/interface changes also require the affected Mac gate; unchanged Mac evidence is reusable only with matching inputs.
 5. Complete the required candidate CI checks before main integration. Do not quarantine these failures, enlarge windows until assertions happen to pass, or repeatedly run full unrelated DSP suites. Root cause and correction are implementation work, not performed here.
 
-## Latest existing candidate results
+## Previous candidate results at de3112d18
 
 Read-only review on 9 October 2026; no workflow dispatch or rerun. This section supersedes any earlier pending-candidate status; the older baseline logs remain historical evidence. All three fetched job logs identify checkout `de3112d18cda5820861bbbc988487363edefeb9b`, the PR merge of `8afd4175a82eba3dc0331e6951b55e3ea891ae72` into main `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`.
 
@@ -107,3 +107,11 @@ FAILED (failures=1)
 The two typed pattern cases, pattern-wheel case and independent routing/curve draft case passed. The failing setup prevents a conclusion about the later wide-layout assertions. Future P0a work should diagnose and establish owned-window geometry while retaining the real wide and compact assertions. No timeout/threshold relaxation or test quarantine is justified by this log. Native desktop usability at different work areas remains separate acceptance.
 
 These results do not qualify main itself, local departure commit `b36bbefc4`, its dirty owner census, full Mac interface tests, reciprocal fixture saves, foreground accessibility or physical devices. See [current planning review](planning-review-refresh.md).
+
+## Current candidate snapshot at 11:34 UTC
+
+The existing owned-window fixture correction is now on isolated head `6c3eea908fd3167ada681b2c44be551cb7eb94a3` (safety checkout `d37ecf785`). The draft PR remains unmerged. PR metadata proposes merge SHA `6433dc0da9c1b779b1390de7a495af2c2353fd9e`; this is not a verified executed checkout until its job logs confirm it.
+
+Read-only GitHub job status: [Windows 37923921386](https://github.com/rewbs/ScreamSeq/actions/runs/37923921386), job `113798216568`, and [Mac 37923921268](https://github.com/rewbs/ScreamSeq/actions/runs/37923921268), jobs `113798215876` / `113798216235`, were all in progress at native build steps. No terminal result is claimed. No CI was dispatched, rerun or cancelled during this planning pass. Before future implementation, read these existing results rather than starting duplicate runs.
+
+The prior wide-client correction is already present; the preceding diagnosis steps are historical guidance. Existing local logs now show two targeted app cases passing after that fixture-only change, on the ARM64 binary identified in `p0-layout-receipt.json`. They do not qualify this isolated x64 candidate or the uncommitted departure census. See [latest planning review](planning-review-refresh.md) for hashes and the failed initial TMPDIR setup attempt.

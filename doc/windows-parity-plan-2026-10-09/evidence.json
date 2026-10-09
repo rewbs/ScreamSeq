@@ -2,7 +2,7 @@
   "planning_only": true,
   "no_builds_tests_or_app_launches": true,
   "date": "2026-10-09 America/Los_Angeles",
-  "checkout_head": "b36bbefc4dd637f2541c20952b0114ed01762722",
+  "checkout_head": "d37ecf785cfc7ab3a7ac66e1d888f4bf91a00921",
   "inspected_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main_equal_to_reference": true,
   "post_reference_main_commits": 0,
@@ -742,6 +742,206 @@
     "matrix_dispositions": "peer-matrix-review.csv"
   },
   "latest_planning_review": {
+    "scope": "Planning documents only; no product edits, builds, tests, app launches, workflow dispatches, commits, pushes or merges",
+    "read_at_utc": "2026-10-09T11:34:33Z",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "post_reference_main_commits": 0,
+    "checkout_branch": "codex/windows-parity-safety",
+    "checkout_head": "d37ecf785cfc7ab3a7ac66e1d888f4bf91a00921",
+    "pre_existing_modified_product_test_files": 29,
+    "pre_existing_untracked_product_files": 1,
+    "pre_existing_product_hashes": {
+      "editor/DocumentDeparture.hpp": "31d9f0e37aa2e732245e118173e06aa7e1d843fd2ef41d52f2d7b680c8eec30d",
+      "editor/Tests/DocumentDepartureTests.cpp": "104631ee2ce644a332bb2524410d6245f6631dedf12978080eb73019dc3334a2",
+      "windows/App/AbsoluteAutomationWindow.hpp": "4e142374971c6c9c64b0c6a4ec593c2a7e6a767b6ae57ba5c276f50836b67bf5",
+      "windows/App/ArrangementMatrixWindow.hpp": "49d8ea05f704d59cb0542d52c6976f04bf53f7d2d0b35835c2693806b84534e2",
+      "windows/App/ArrangementWindow.hpp": "287c7057765efe49d91f380dcf58ed6f866d98a3aaa24efe184b59bf79e13776",
+      "windows/App/DocumentDraftRegistry.hpp": "3a49ccbf6450fa485fdbf795b8f47505a7bf2e942dbab6d838eb3cdf38b6ace9",
+      "windows/App/EnvelopeBankWindow.hpp": "70a4d4f6d3e6809eb1b75f3211a5f64fabea421addb5d150a13a4eccabce230f",
+      "windows/App/FormulaWorkbenchWindow.hpp": "b24cb094b507f1a1e6920c90db2a354b510f2b808b9182b5d6e3a626bf0a49f6",
+      "windows/App/GraphCommandsWindow.hpp": "e33f3e81cebd1a749f85cb5a4285e19b4a64efa0c8dc5cb23cbcfdfc90a95416",
+      "windows/App/GraphCurveWindow.hpp": "83728138d681555d0f53761a491169da05653175a50342bad86cc5250d95cf30",
+      "windows/App/GraphTrimsWindow.hpp": "d9c655fa6a9707689bf521269517050bfe6385d10d5bd92095af582d05434ad9",
+      "windows/App/GraphWorkflowWindow.hpp": "15f90ddd270c3cc6a800401781495bc0b38a36a09cac053d0f1afcbb791467e9",
+      "windows/App/InstrumentEnvelopeWindow.hpp": "4413b5224861a0576634956060066348496bc005e1dd655d7b3860211c39aa77",
+      "windows/App/Main.cpp": "976a24f1373be04778a68a06ee651f6ce1a6a7107f9a4aee3f537e25458042b0",
+      "windows/App/MultisampleImportWindow.hpp": "82f5926168de0d44fb60b769cdeccec21dfcc779cd2fe725c14830e9db93b052",
+      "windows/App/NativeToolWindow.hpp": "ef466befd30bf974f047273cbebdcfb5e795772dcda51b05f73a06a589b6014b",
+      "windows/App/ParameterActivityWindow.hpp": "7ef24589282ca17d149e9b1d958539fbf509a8db4d9e009748acccf921750fc6",
+      "windows/App/ParameterAutomationWindow.hpp": "22186fd48bcc6b3bb851f97d10097c34c27808876ecd83a40db8654b48f0ebf8",
+      "windows/App/PatternNudgeEditor.inc": "8a07246f0ba75caa30c7d9c5089ea507d2631b85a040e163b5746806dcfc4c4f",
+      "windows/App/PatternSampleRenderWindow.hpp": "a36a4112ff09a4f6c4825a820fa0910af67ab8da188bd793ac3e50b32e00762c",
+      "windows/App/PluginEditor.inc": "eb9b9daacc20750a283b611bf03ab7d81bf7b1fd2d0dfe44a05c6eb6f6da9aca",
+      "windows/App/PluginInstrumentsWindow.hpp": "393a911b3bd4d9cf0000719aff0dd3ae19a92d75b1978be721a026355c454355",
+      "windows/App/PreciseNoteWindow.hpp": "5eadc4e835267e2b9bfaf58a5742f60913a7ac11470a190d66373d80a7aa2559",
+      "windows/App/SampleDetailWindow.hpp": "4c05e3b7804ae19845125676da12d0b3b429f9bfc48bef1a10056dc6951d5fc3",
+      "windows/App/SampleEditor.inc": "0ca951bb99444e504245a83a79c1140831035f74924881edfcc68b8b88b817b6",
+      "windows/App/ScratchGestureWindow.hpp": "78839850b2abba8c4cad5f5be7f1039fb83529ada9842e31159ca403ee81b675",
+      "windows/App/SongRoutingWindow.hpp": "344def1e865391fdff6efde4324200e82f002c6fa7584b6ced4b6dd392edddfa",
+      "windows/App/SongTimingWindow.hpp": "0379432771e3c4061b3d6da44795e7f2b4428e0cd8933a84b5162b165a57620a",
+      "windows/App/WorkspaceView.inc": "f4c023615d5bc785fbf0d0fe0b87d90870492ac3e3a5a5eea35d3efe8841765a",
+      "windows/App/DocumentDrafts.inc": "47db67d735f6fb442d3b06394abdcdad323b47e89a7fc7411f4bd301651cbcb9"
+    },
+    "notes": "planning-review-refresh.md",
+    "local_action_audit": "local-action-audit.md",
+    "peer_plan_sections_reviewed": "all",
+    "peer_matrix_rows": 84,
+    "peer_acceptance_text_preserved": true,
+    "parity_matrix_rows": 117,
+    "commands": 419,
+    "reference_mac_methods": 232,
+    "reference_and_peer_hashes_rechecked": true,
+    "new_runtime_results": false,
+    "reference_inspection": "Read zip reports/gallery/checklist/fixture guide and binary property trees; reviewed all nine contact sheets; no supplied script executed",
+    "ci_snapshot": {
+      "windows_run": 37923921386,
+      "mac_run": 37923921268,
+      "isolated_candidate": "6c3eea908fd3167ada681b2c44be551cb7eb94a3",
+      "pr_metadata_merge_sha": "6433dc0da9c1b779b1390de7a495af2c2353fd9e",
+      "actual_checkout": "Not yet verified from current job logs",
+      "jobs": [
+        {
+          "id": 113798216568,
+          "platform": "Windows x64",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 113798215876,
+          "platform": "Mac Apple Silicon",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 113798216235,
+          "platform": "Mac Intel",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ],
+      "runs_started_by_this_review": false
+    },
+    "existing_fixture_correction": {
+      "safety_commit": "d37ecf785",
+      "file": "windows/Tests/precise_note_native_support.py",
+      "scope": "Owned test window geometry; product sizing unchanged in this commit",
+      "app_log": "bin/parity-evidence/p0a-client-geometry-ui-configured.log",
+      "app_log_sha256": "c3d10e7607e6294d47bc4038f44b5e317c318f60f02b06fe3e7314791d9fafb1",
+      "result": "2 targeted app cases pass in 5.174 seconds in pre-existing log",
+      "executable_sha256": "2e43cc3305c1239cb79d9a54e2afb3da509402c3987a84531ca48a8916ac18f2",
+      "binary_source_receipt": "bin/parity-evidence/p0-layout-receipt.json",
+      "binary_source_commit": "758cd1559bb3e9be13093e1263476708e49d6081",
+      "initial_failed_attempt": "bin/parity-evidence/p0a-client-geometry-ui.log; TMPDIR unset; no app launched",
+      "probe": "bin/parity-evidence/p0a-size-probe.log; capped surrogate, not real desktop qualification"
+    },
+    "remaining_safety_gap": "F21: application does not connect final departure admission, lease/input gating or deferred owner retirement; dirty census remains unqualified",
+    "recommended_first_batch": "P0a review existing candidate results and qualify/integrate safety repairs; then P0b departure safety and P0c conformance",
+    "sequence_refinement": "P3c simple file/song/load-report workflows may precede P6 codec/export work"
+  },
+  "previous_planning_review": {
+    "scope": "Planning documents only; no product edits, builds, tests, application launches, workflow dispatches, commits, pushes or merges",
+    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
+    "post_reference_main_commits": 0,
+    "checkout_branch": "codex/windows-parity-safety",
+    "checkout_head": "d5b7a09eb50a89b775841da14d8d81f49362c122",
+    "clean_at_start": true,
+    "changed_product_test_paths_relative_to_main": 21,
+    "additional_api_guide_change": true,
+    "shared_editor_changes": false,
+    "notes": "planning-review-refresh.md",
+    "local_action_audit": "local-action-audit.md",
+    "source_mapped_local_command_rows": 332,
+    "reference_and_peer_hashes_rechecked": true,
+    "new_runtime_results": false,
+    "ci_snapshot": {
+      "read_before_utc": "2026-10-09T10:41:15Z",
+      "windows_run": 37918435648,
+      "mac_run": 37918435661,
+      "jobs": [
+        113780223549,
+        113780223733,
+        113780224030
+      ],
+      "status": "all three in progress; existing runs only",
+      "isolated_candidate": "8afd4175a82eba3dc0331e6951b55e3ea891ae72"
+    },
+    "existing_local_receipt": "bin/parity-evidence/p0-layout-receipt.json",
+    "remaining_safety_gap": "Aggregate raw native draft admission across replacement/recovery/Close/shutdown; candidate cable/role changes are not main fixes",
+    "fixture_property_tree_inspection": [
+      {
+        "member": "2026-10-09/fixtures/01-midnight-circuit.screamseq",
+        "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/02-editors-and-effects.screamseq",
+        "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/03-routing-and-modulation.screamseq",
+        "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/04-complete-reference.screamseq",
+        "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      },
+      {
+        "member": "2026-10-09/fixtures/05-arrangement-copy-after.screamseq",
+        "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
+        "root_keys": [
+          "automation",
+          "module",
+          "native",
+          "plugins",
+          "sequence",
+          "version"
+        ],
+        "native_version": 17,
+        "container_version": 6
+      }
+    ]
+  },
+  "initial_discovery_checkout_head": "7a65256f7ff67ed696e1788ab4b72ce2721fd840",
+  "prior_candidate_review": {
     "scope": "Planning documents only; no product edits, builds, tests, application launches, workflow dispatches, commits, pushes or merges",
     "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
     "post_reference_main_commits": 0,
@@ -905,107 +1105,5 @@
       "windows/App/WorkspaceView.inc": "f4c023615d5bc785fbf0d0fe0b87d90870492ac3e3a5a5eea35d3efe8841765a"
     }
   },
-  "previous_planning_review": {
-    "scope": "Planning documents only; no product edits, builds, tests, application launches, workflow dispatches, commits, pushes or merges",
-    "remote_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
-    "post_reference_main_commits": 0,
-    "checkout_branch": "codex/windows-parity-safety",
-    "checkout_head": "d5b7a09eb50a89b775841da14d8d81f49362c122",
-    "clean_at_start": true,
-    "changed_product_test_paths_relative_to_main": 21,
-    "additional_api_guide_change": true,
-    "shared_editor_changes": false,
-    "notes": "planning-review-refresh.md",
-    "local_action_audit": "local-action-audit.md",
-    "source_mapped_local_command_rows": 332,
-    "reference_and_peer_hashes_rechecked": true,
-    "new_runtime_results": false,
-    "ci_snapshot": {
-      "read_before_utc": "2026-10-09T10:41:15Z",
-      "windows_run": 37918435648,
-      "mac_run": 37918435661,
-      "jobs": [
-        113780223549,
-        113780223733,
-        113780224030
-      ],
-      "status": "all three in progress; existing runs only",
-      "isolated_candidate": "8afd4175a82eba3dc0331e6951b55e3ea891ae72"
-    },
-    "existing_local_receipt": "bin/parity-evidence/p0-layout-receipt.json",
-    "remaining_safety_gap": "Aggregate raw native draft admission across replacement/recovery/Close/shutdown; candidate cable/role changes are not main fixes",
-    "fixture_property_tree_inspection": [
-      {
-        "member": "2026-10-09/fixtures/01-midnight-circuit.screamseq",
-        "sha256": "e6d7a0ea19f0327ebb0b1e6e2a5885c525916e0f1a2fb0977b602c2efb8e4f58",
-        "root_keys": [
-          "automation",
-          "module",
-          "native",
-          "plugins",
-          "sequence",
-          "version"
-        ],
-        "native_version": 17,
-        "container_version": 6
-      },
-      {
-        "member": "2026-10-09/fixtures/02-editors-and-effects.screamseq",
-        "sha256": "5ca8394b2a597e044421834d0b8b7167560e13a599b32194651f05dd03fb73e6",
-        "root_keys": [
-          "automation",
-          "module",
-          "native",
-          "plugins",
-          "sequence",
-          "version"
-        ],
-        "native_version": 17,
-        "container_version": 6
-      },
-      {
-        "member": "2026-10-09/fixtures/03-routing-and-modulation.screamseq",
-        "sha256": "fb2289429c269c69d4e25f1b8a6358d1a747c44629f603b9f882e3b39ed937b2",
-        "root_keys": [
-          "automation",
-          "module",
-          "native",
-          "plugins",
-          "sequence",
-          "version"
-        ],
-        "native_version": 17,
-        "container_version": 6
-      },
-      {
-        "member": "2026-10-09/fixtures/04-complete-reference.screamseq",
-        "sha256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
-        "root_keys": [
-          "automation",
-          "module",
-          "native",
-          "plugins",
-          "sequence",
-          "version"
-        ],
-        "native_version": 17,
-        "container_version": 6
-      },
-      {
-        "member": "2026-10-09/fixtures/05-arrangement-copy-after.screamseq",
-        "sha256": "f8ea7cc23b73cf2aa7b911867dc3bdb0c1718f32ed7e06a6a3413ed34350efaf",
-        "root_keys": [
-          "automation",
-          "module",
-          "native",
-          "plugins",
-          "sequence",
-          "version"
-        ],
-        "native_version": 17,
-        "container_version": 6
-      }
-    ]
-  },
-  "initial_discovery_checkout_head": "7a65256f7ff67ed696e1788ab4b72ce2721fd840"
+  "snapshot_precedence": "Top-level checkout_head and latest_planning_review identify this review. prior_candidate_review, previous_planning_review and review_refresh are retained historical snapshots."
 }
