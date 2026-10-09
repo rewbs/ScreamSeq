@@ -95,13 +95,15 @@ class PluginPathTests(unittest.TestCase):
         path,tree=self.save_tree('unsupported.screamseq')
         tree['plugins'][0].update(format='AU',type=int.from_bytes(b'aufx','big'),classID='',state=b'opaque Mac Audio Unit state')
         path.write_bytes(plistlib.dumps(tree,fmt=plistlib.FMT_BINARY));self.write('document.open',path=str(path),discard=True);before=self.doc()
-        for action in [lambda:self.location(plugin),lambda:self.write('plugin.path.scan',plugin=plugin,path=self.program()['path']),lambda:self.write('plugin.path.set',**fields)]:
+        for method,action in [('get',lambda:self.location(plugin)),('scan',lambda:self.write('plugin.path.scan',plugin=plugin,path=self.program()['path'])),('set',lambda:self.write('plugin.path.set',**fields))]:
             with self.assertRaises(ApiError) as error:action()
             self.assertEqual(error.exception.code,-32602)
+            if method=='set':self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before);self.assertEqual(self.cache.read_bytes(),cache_before)
         _,after=self.save_tree('unsupported-retained.screamseq');self.assertEqual(after['plugins'],tree['plugins'])
         self.write('plugin.remove',slot=0);before=self.doc()
-        with self.assertRaises(ApiError):self.write('plugin.path.set',**fields)
+        with self.assertRaises(ApiError) as error:self.write('plugin.path.set',**fields)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PLUGIN_CACHE'),'installed effects')
@@ -134,7 +136,8 @@ class PluginPathTests(unittest.TestCase):
     def test_scan_path_hash_rejection_failed_vendor_state_and_ports(self):
         plugin,original,tree=self.broken(self.program(),ports=True);before=self.doc()
         self.assertEqual(self.reconnect(plugin,dryRun=True)['data']['dryRun'],True)
-        with self.assertRaises(ApiError):self.reconnect(plugin,expectedModuleSHA256='0'*64)
+        with self.assertRaises(ApiError) as error:self.reconnect(plugin,expectedModuleSHA256='0'*64)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         different=next(d for d in self.descriptors if d['classID']!=self.program()['classID'])
         with self.assertRaises(ApiError):self.reconnect(plugin,path=different['path'])
         self.assertEqual(self.doc(),before)
@@ -154,7 +157,8 @@ class PluginPathTests(unittest.TestCase):
         path,bad=self.save_tree('bad-state.screamseq');bad['plugins'][0]['path']='/foreign/again.vst3';bad['plugins'][0]['state']=b'invalid vendor state'
         path.write_bytes(plistlib.dumps(bad,fmt=plistlib.FMT_BINARY));self.write('document.open',path=str(path),discard=True);before=self.doc()
         self.reconnect(plugin,changed,dryRun=True)
-        with self.assertRaises(ApiError):self.reconnect(plugin,changed)
+        with self.assertRaises(ApiError) as error:self.reconnect(plugin,changed)
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
         self.assertEqual(self.doc(),before);self.assertEqual(base64.b64decode(self.state()),b'invalid vendor state')
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'native provider fixture')
@@ -178,6 +182,9 @@ class PluginPathTests(unittest.TestCase):
         before=self.doc()
         info=self.read('graph.plugin.path.get',graph=graph,node=node);self.assertFalse(info['moduleVerified']);candidate=info['candidates'][0]
         params=dict(graph=graph,node=node,path=candidate['descriptor']['path'],expectedModuleSHA256=candidate['moduleSHA256'])
+        with self.assertRaises(ApiError) as error:self.write('graph.plugin.path.set',**dict(params,expectedModuleSHA256='0'*64))
+        self.assertEqual(error.exception.data,dict(writeOutcome='notCommitted'))
+        self.assertEqual(self.doc(),before)
         self.write('graph.plugin.path.set',**params,dryRun=True);self.assertEqual(self.doc(),before)
         self.write('graph.plugin.path.set',**params)
         after=self.read('graph.get',includeState=True)['library'][0];expected=copy.deepcopy(definition);next(n for n in expected['nodes'] if n['id']==node)['plugin']['path']=descriptor['path']

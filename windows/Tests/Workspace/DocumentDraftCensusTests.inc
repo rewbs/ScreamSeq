@@ -128,7 +128,8 @@ void importAndRecorderDraftCensus() {
         const RestoreJson first={{"plugin","first-plugin"}},second={{"plugin","second-plugin"}};
         app.pluginPathWindow=std::make_unique<ScreamSeq::PluginPathWindow>(app.window,first,
             [](const auto &,const auto &){return RestoreJson{{"descriptor",{{"name","Fixture"},{"path","C:/fixture/original.vst3"}}},{"candidates",RestoreJson::array()},{"moduleVerified",false},{"reason","Missing fixture plugin"}};},
-            [&]{return std::pair(app.documentId,app.view->session.revision);});
+            [&]{return std::pair(app.documentId,app.view->session.revision);},
+            [](const auto &,const auto &)->ScreamSeq::Api::CompletedCall{throw std::runtime_error("Census fixture must not reconnect");});
         auto *const repair=app.pluginPathWindow.get();const auto repairWindow=repair->window();ScreamSeq::Tests::ownGuiWindow(repairWindow);repair->show();
         rawDraftText(GetDlgItem(repairWindow,3611),L"C:/pending/plugin.vst3");repair->hide();
         const auto captured=census(app);app.openPluginPath(second);

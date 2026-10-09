@@ -39,7 +39,7 @@
     std::unique_ptr<ScreamSeq::PluginLibraryWindow> pluginLibraryWindow;
     std::unique_ptr<ScreamSeq::PluginPathWindow> pluginPathWindow;
     void openPluginPath(const Json &target){
-        if(!pluginPathWindow||(!pluginPathWindow->visible()&&!pluginPathWindow->retainedDraft()&&!pluginPathWindow->matchesTarget(target)))pluginPathWindow=std::make_unique<ScreamSeq::PluginPathWindow>(window,target,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);});
+        if(!pluginPathWindow||(!pluginPathWindow->visible()&&!pluginPathWindow->retainedDraft()&&!pluginPathWindow->matchesTarget(target)))pluginPathWindow=std::make_unique<ScreamSeq::PluginPathWindow>(window,target,[this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &method,const auto &params){return documentOperationWithOutcome(method,params);});
         pluginPathWindow->show();
     }
     void openPluginLibrary(){

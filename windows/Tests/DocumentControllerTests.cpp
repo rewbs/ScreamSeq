@@ -74,6 +74,20 @@ void publicationTests(const std::filesystem::path &directory) {
     catch(const Api::ApiError &e){classified=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
     need(classified,"Rejected prepared import lacks a proven noncommit outcome");
   }
+  // A path repair which cannot identify its target never reaches a vendor,
+  // history, Stop or publication. Native owners can safely keep the draft
+  // editable after this proven refusal; an unclassified error cannot do so.
+  const auto beforePathRefusal=controller.view();const auto pathRefusalStops=stops;
+  for(const auto method:{"plugin.path.set","graph.plugin.path.set"}){
+    bool classified=false;
+    const Json target=std::string_view(method).starts_with("graph.")
+      ?Json{{"graph","n999999"},{"node","n999998"}}
+      :Json{{"plugin","missing-instance"}};
+    try{invoke(controller,method,target);}
+    catch(const Api::ApiError &e){classified=e.code==-32602&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified,"Missing reconnect target lacks a proven preflight refusal");
+    need(controller.view()==beforePathRefusal&&stops==pathRefusalStops,"Reconnect preflight changed the document, history view or transport");
+  }
   std::cout<<"publication tests passed\n";
 }
 

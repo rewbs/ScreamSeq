@@ -28,6 +28,60 @@ void completionClassification(){
   committed.finish();require(!committed.retained()&&!committed.returned(),"Reviewed result remained unresolved");
 }
 
+void pluginPathCompletionReview(HWND main){
+  using namespace ScreamSeq;using Json=Api::Json;
+  for(bool graph:{false,true}){
+    DraftRegistryHost host(main);std::pair<std::string,std::string> context{"path-result","r1"};
+    const Json target=graph?Json{{"graph","n34"},{"node","n37"}}:Json{{"plugin","stable-plugin"}};
+    const std::string prefix=graph?"graph.plugin.path.":"plugin.path.";
+    PluginPathWindow *owner=nullptr;unsigned writes=0,reads=0;bool failedRead=true;
+    const auto request=[&](const std::string &method,const Json &)->Json{
+      if(method=="synchronizeView"){
+        ++reads;require(draftOf(*owner).pending,"Path Review lost pending ownership");
+        if(failedRead)throw std::runtime_error("Failed Review refresh");return Json::object();
+      }
+      require(method==prefix+"get","Retained reconnect issued another side effect or scan");
+      return {{"descriptor",{{"name","Fixture"},{"path","C:/old/plugin.vst3"}}},{"moduleVerified",false},{"reason","Missing"},
+        {"candidates",Json::array({{{"descriptor",{{"name","Fixture"},{"path","C:/new/plugin.vst3"}}},{"moduleSHA256","hash"}}})}};
+    };
+    PluginPathWindow tool(main,target,request,[&]{return context;},[&](const auto &method,const Json &params)->Api::CompletedCall{
+      ++writes;require(method==prefix+"set"&&draftOf(*owner).pending,"Wrong reconnect or unregistered pending work");
+      require(params.at("expectedRevision")=="r1"&&params.at("path")=="C:/new/plugin.vst3","Reconnect changed its captured request");
+      for(auto i=target.begin();i!=target.end();++i)require(params.at(i.key())==i.value(),"Reconnect changed stable target");
+      context.second="r2";SetWindowTextW(GetDlgItem(owner->window(),3611),L"C:/later/plugin.vst3");
+      auto result=target;result.update({{"path","C:/new/plugin.vst3"},{"moduleSHA256","hash"},{"wouldChange",true}});
+      auto receipt=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,context.first,context.second,result});
+      throw Api::ApiError(-32003,"Failed native completion",Tracker::WriteOutcome{},receipt);
+    });
+    owner=&tool;Tests::ownGuiWindow(tool.window());clickDraftButton(tool.window(),3603);
+    auto retained=draftOf(tool);require(writes==1&&retained.uncertain&&!retained.pending&&tool.retainedDraft(),"Reconnect lost its result or hidden-owner protection");
+    require(host.registry.authorize(host.registry.capture(context.first,context.second),true).status==Tracker::DocumentDeparture::Status::Uncertain,"Uncertain reconnect allowed departure consent");
+    for(int id:{3602,3604,3605,3606,3607,3612})clickDraftButton(tool.window(),id);
+    require(draftOf(tool).sameWork(retained)&&writes==1,"Unresolved path could be checked, scanned, rebased or discarded");
+    clickDraftButton(tool.window(),3603);require(reads==1&&draftOf(tool).sameWork(retained),"Failed Review lost retained path state");
+    tool.dock(main);tool.floatWindow();tool.hide();tool.show();
+    context={"new-document","new-revision"};failedRead=false;clickDraftButton(tool.window(),3603);
+    require(writes==1&&reads==2&&!draftOf(tool).uncertain&&draftOf(tool).dirty,"Review repeated reconnect or erased later input");
+    require(tool.snapshot().at("manualPath")=="C:/later/plugin.vst3"&&tool.snapshot().at("report").at("path")=="C:/new/plugin.vst3","Review lost submitted result or newer path");
+    require(tool.snapshot().at("savedPath")=="C:/old/plugin.vst3"&&draftOf(tool).revision=="r1","Original result was labelled as a new document's saved state");
+  }
+  for(bool knownRefusal:{false,true}){
+    DraftRegistryHost host(main);unsigned writes=0;
+    const auto request=[](const std::string &method,const Json &)->Json{
+      if(method=="synchronizeView")return Json::object();
+      require(method=="plugin.path.get","Unknown reconnect allowed another operation");
+      return {{"descriptor",{{"name","Fixture"},{"path","old"}}},{"moduleVerified",false},{"reason","Missing"},
+        {"candidates",Json::array({{{"descriptor",{{"name","Fixture"},{"path","new"}}},{"moduleSHA256","hash"}}})}};
+    };
+    PluginPathWindow tool(main,{{"plugin","stable-plugin"}},request,[]{return std::pair(std::string("document"),std::string("r1"));},
+      [&](const auto &,const auto &)->Api::CompletedCall{++writes;if(knownRefusal)throw Api::ApiError(-32003,"Refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});throw std::runtime_error("No receipt");});
+    Tests::ownGuiWindow(tool.window());SetWindowTextW(GetDlgItem(tool.window(),3611),L"raw -");clickDraftButton(tool.window(),3603);
+    auto before=draftOf(tool);require(before.uncertain==!knownRefusal,"Reconnect confused refusal with unknown outcome");
+    clickDraftButton(tool.window(),3603);
+    require(writes==(knownRefusal?2u:1u)&&draftOf(tool).sameWork(before),"Unknown reconnect retried or refusal consumed draft");
+  }
+}
+
 void renderCompletionReview(HWND main){
   using namespace ScreamSeq;using Json=Api::Json;
   DraftRegistryHost host(main);

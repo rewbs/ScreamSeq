@@ -73,7 +73,7 @@ void pluginPathRequestRetention(HWND main){
       ++scans;if(inject==Inject::Scan)SetWindowTextW(GetDlgItem(owner->window(),3611),L"C:/later/scan.vst3");return Json::object();
     }
     if(method!="plugin.path.set")throw std::runtime_error("Unexpected plugin path request");
-    if(inject==Inject::Reject)throw std::runtime_error("Fixture reconnect refusal");
+    if(inject==Inject::Reject)throw ScreamSeq::Api::ApiError(-32003,"Fixture reconnect refusal",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
     if(!params.at("dryRun").get<bool>()){
       ++writes;context.second="r"+std::to_string(writes+1);
       if(inject==Inject::Text)SetWindowTextW(GetDlgItem(owner->window(),3611),L"C:/later/write.vst3");
@@ -82,7 +82,7 @@ void pluginPathRequestRetention(HWND main){
     return {{"path",params.at("path")},{"wouldChange",true}};
   };
   {
-    ScreamSeq::PluginPathWindow tool(main,target,request,[&]{return context;});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());
+    ScreamSeq::PluginPathWindow tool(main,target,request,[&]{return context;},[&](const auto &method,const auto &params)->ScreamSeq::Api::CompletedCall{auto result=request(method,params);return {method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());
     require(!tool.retainedDraft()&&host.registry.capture(context.first,context.second).drafts.empty(),"Initial plugin candidates fabricated dirty work");
     chooseDraftField(tool.window(),3601,1);SetWindowTextW(GetDlgItem(tool.window(),3611),L"C:/fixture/b.vst3");
     const auto selected=draftOf(tool);clickDraftButton(tool.window(),3602);

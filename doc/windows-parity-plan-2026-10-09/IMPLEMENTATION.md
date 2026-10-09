@@ -1,6 +1,26 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](followup-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-readback.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
+
+## P0b.1 plugin reconnect result retention
+
+Continued from planning checkout `8d2997c2e`, completing the pre-existing seven-file reconnect candidate and adding worker/actual-pipe outcome assertions. This qualifies known-result retention, not unknown-result reconciliation or final departure protection.
+
+- Rack and graph reconnect use the typed native write callback. A failed completion retains the submitted target, raw fields, generation and original worker result. Review refreshes the view without another reconnect or vendor probe. Later typing survives; an old result cannot relabel a newer document's saved path.
+- Pending/uncertain reconnects appear in the native draft registry. Check, scan, reload and discard remain unavailable while the result is unresolved; hide/dock/float preserve it. Proven precommit refusal leaves the raw draft editable. A generic failure without a receipt remains unresolved and cannot trigger a blind retry.
+- Path-set builds its reply before commit and classifies explicit preflight refusals, including missing targets, unsupported AU, module hash mismatch and rejected opaque vendor state. Scans mutate a separate cache and are not covered by this classification. Controller vendor-editor flushing occurs earlier; an unrelated flush revision change does not prove that reconnect succeeded. That boundary and unknown-without-receipt readback remain P0b.1 work.
+- The actual application constructor and census fixtures now supply the typed callback. Native owner cases include rack/graph postcommit failure, failed Review, new document, later text, unknown outcomes and proven refusals. Actual-app tests retain exact recipes/opaque state, unrelated native/automation data, stable IDs, one-step history and save/reopen behavior.
+
+One coherent ARM64 Release build produced the app, controller and both native workspace targets. `bin/parity-evidence/p0b-plugin-reconnect-receipt.json` freezes 1,836 source/dependency hashes, compiler/cache/executable hashes, provider caches and three module binaries; all matched after execution. Logs are retained separately:
+
+| Evidence | Result |
+|---|---|
+| `p0b-plugin-reconnect-build.log` | All four requested targets built |
+| `p0b-plugin-reconnect-native-tests.log` | 28/28: full workspace, native owner and all controller scenarios; 102.55 seconds |
+| `p0b-plugin-reconnect-census-tests.log` | Raw-owner census group 1/1; 6.11 seconds |
+| `p0b-plugin-reconnect-app-tests.log` | Five actual-pipe/native cases, no skips; 10.954 seconds |
+
+Execution used owned private desktops, disposable songs and pinned provider/Contourtonist/OrbitCab modules. No musician or QA app remained at the final process check; no physical capture or system audio-default change occurred. This is Windows ARM64 evidence only. Windows x64/Mac P0b, full reciprocal fixtures, foreground accessibility and devices remain open. The next dependency is complete owner retirement plus final native/API/recovery/Close/session-end admission; no broad parity completion is claimed.
 
 ## P0b.1 native completion retention and direct render
 
