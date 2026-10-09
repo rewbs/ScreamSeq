@@ -65,6 +65,7 @@ struct RestoreApplication final:Application {
     std::promise<RestoreJson> *inputCompletion=nullptr;
     unsigned dispatchedInput=0;
     bool pumpOrdinaryReads=false;
+    std::optional<POINT> fixtureMaximumTrack;
     std::optional<Json> sampleGuardState;
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
@@ -124,7 +125,12 @@ LRESULT CALLBACK restoreWindowProc(HWND window,UINT message,WPARAM wp,LPARAM lp)
         auto *app=static_cast<RestoreApplication *>(reinterpret_cast<Application *>(GetWindowLongPtrW(window,GWLP_USERDATA)));
         if(app)app->deliverInput();return 0;
     }
-    return windowProc(window,message,wp,lp);
+    const auto result=windowProc(window,message,wp,lp);
+    if(message==WM_GETMINMAXINFO){
+        auto *app=static_cast<RestoreApplication *>(reinterpret_cast<Application *>(GetWindowLongPtrW(window,GWLP_USERDATA)));
+        if(app&&app->fixtureMaximumTrack)reinterpret_cast<MINMAXINFO *>(lp)->ptMaxTrackSize=*app->fixtureMaximumTrack;
+    }
+    return result;
 }
 
 struct RestoreFixture {
@@ -426,9 +432,19 @@ void resizeRestoreClient(RestoreApplication &app,int width,int height) {
     RECT bounds{0,0,MulDiv(width,int(dpi),96),MulDiv(height,int(dpi),96)};
     restoreCheck(AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(app.window,GWL_STYLE)),FALSE,
         DWORD(GetWindowLongPtrW(app.window,GWL_EXSTYLE)),dpi)!=FALSE,"Calculate restore fixture client frame");
+    // SetWindowPos still obeys the monitor-derived maximum tracking size.
+    // This private fixture needs exact virtual client sizes on small CI
+    // desktops; leave production min-size/reflow/focus handling intact.
+    const auto previous=app.fixtureMaximumTrack;
+    app.fixtureMaximumTrack=POINT{bounds.right-bounds.left,bounds.bottom-bounds.top};
+    struct Limit {RestoreApplication &app;std::optional<POINT> previous;~Limit(){app.fixtureMaximumTrack=previous;}} limit{app,previous};
     restoreCheck(SetWindowPos(app.window,nullptr,0,0,bounds.right-bounds.left,bounds.bottom-bounds.top,
         SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)!=FALSE,"Resize owned restore fixture");
     app.layoutControls();
+    RECT actual{};restoreCheck(GetClientRect(app.window,&actual)!=FALSE,"Read resized restore fixture client");
+    std::cout<<"Restore geometry: dpi="<<dpi<<" requested="<<width<<'x'<<height<<" DIP actual="
+        <<actual.right<<'x'<<actual.bottom<<" px maxTrack="<<GetSystemMetrics(SM_CXMAXTRACK)<<'x'<<GetSystemMetrics(SM_CYMAXTRACK)<<'\n';
+    restoreCheck(actual.right==MulDiv(width,int(dpi),96)&&actual.bottom==MulDiv(height,int(dpi),96),"Restore fixture did not establish requested client geometry");
 }
 void compactRestoreAndResizeKeepVisibleFocus() {
     withRestoreFixture([](RestoreApplication &app) {
@@ -444,7 +460,17 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="graph"&&app.workspaceFocusedCanvasVisible(),"Restore retained hidden Tracker focus instead of the visible Main canvas");
         for(auto *tool:{static_cast<ScreamSeq::NativeToolWindow *>(app.parameterAutomationWindow.get()),static_cast<ScreamSeq::NativeToolWindow *>(app.instrumentEnvelopeWindow.get())})
             ScreamSeq::Tests::ownGuiWindow(tool->window());
-        const auto retained=app.workspaceDockConfiguration();resizeRestoreClient(app,1440,900);
+        const auto retained=app.workspaceDockConfiguration();
+        // Reproduce a small runner's size cap without changing any desktop or
+        // monitor setting: a nominally wide SetWindowPos remains compact.
+        const auto dpi=GetDpiForWindow(app.window);
+        app.fixtureMaximumTrack=POINT{MulDiv(1100,int(dpi),96),MulDiv(740,int(dpi),96)};
+        restoreCheck(SetWindowPos(app.window,nullptr,0,0,MulDiv(1440,int(dpi),96),MulDiv(900,int(dpi),96),
+            SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)!=FALSE,"Exercise small-desktop fixture cap");
+        app.layoutControls();RECT capped{};restoreCheck(GetClientRect(app.window,&capped)!=FALSE,"Read capped fixture client");
+        restoreCheck(capped.right<MulDiv(1440,int(dpi),96)&&capped.bottom<MulDiv(900,int(dpi),96)&&
+            app.workspaceDockSnapshot().at("mode")=="tabs","Monitor cap did not reproduce compact geometry");
+        app.fixtureMaximumTrack.reset();resizeRestoreClient(app,1440,900);
         restoreCheck(app.workspaceDockSnapshot().at("mode")=="regions"&&app.trackerWorkspaceVisible(),"Wide fixture did not expose independent region bodies");
         const auto header=app.controls.at(regionControlBase+2);restoreCheck(IsWindowVisible(header)&&IsWindowEnabled(header),"Region pin/follow button unavailable");
         SetFocus(header);for(unsigned i=0;i<3;++i)app.layoutControls();
