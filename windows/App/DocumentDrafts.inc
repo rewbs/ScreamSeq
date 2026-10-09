@@ -7,6 +7,7 @@
         result.target=std::move(target);result.generation=generation;result.dirty=dirty;result.pending=pending;return result;
     }
     void reviewMainDraft(const char *editor,int control) {
+        if(std::string_view(editor)=="mixer")mixerStripsMode=false;
         revealWorkspaceMainEditor(editor);layoutControls();
         const auto found=controls.find(control);SetFocus(found!=controls.end()&&IsWindowVisible(found->second)?found->second:window);
     }

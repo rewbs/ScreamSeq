@@ -1,4 +1,5 @@
 #include "editor/MixerControlEdit.hpp"
+#include "editor/MixerGesture.hpp"
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -59,6 +60,26 @@ void candidates() {
     }
   }
 }
+void gestures() {
+  MixerGesture gesture;const MixerGesture::Context captured{"song","opaque:r1","n90"};
+  gesture.begin(captured,MixerControl::Gain,-6.123456789);
+  check(!gesture.changed()&&!gesture.needsPreview(),"Beginning a gesture preserves the unrounded saved value");
+  const auto generation=gesture.generation();gesture.rawChanged();
+  check(gesture.generation()>generation&&!gesture.changed(),"Invalid raw text invalidates consent without inventing a value");
+  gesture.update(-9);gesture.update(-12);
+  check(gesture.needsPreview()&&gesture.value()==-12,"Pointer updates coalesce to the newest value");
+  gesture.previewAccepted(-9);
+  check(gesture.needsPreview(),"An older preview completion cannot swallow a newer value");
+  gesture.previewAccepted(-12);check(!gesture.needsPreview()&&gesture.previewed(),"Accepted preview remains distinct from saved state");
+  check(gesture.baseline()==-6.123456789&&gesture.current(captured),"Audition does not move captured revision or baseline");
+  check(!gesture.current({"song","opaque:r2","n90"})&&!gesture.current({"other","opaque:r1","n90"})&&
+    !gesture.current({"song","opaque:r1","n7"}),"Final admission rejects changed revision, document or stable bus");
+  rejects([&]{gesture.update(25);});check(gesture.value()==-12,"Invalid update preserves prior intent");
+  gesture.finish();check(!gesture.active(),"Cancellation retires the captured gesture only after native reset");
+  gesture.begin({"song","opaque:r2","n7"},MixerControl::Mute,1);gesture.update(0);
+  check(mixerControlPatch(gesture.control(),gesture.value()).mute==false,"False switch edits remain explicit");
+  rejects([&]{gesture.update(.5);});
+}
 void classification() {
   const auto original = fixture();
   const auto noop = classifyMixerControlEdit(original, original);
@@ -111,7 +132,7 @@ void projectedFrames() {
 }
 }
 int main() { try {
-  candidates();classification();projectedFrames();
+  candidates();gestures();classification();projectedFrames();
   std::cout << "PASS shared mixer control candidates, classification and detached control-frame preparation\n";
   return 0;
 } catch(const std::exception &error) { std::cerr << error.what() << '\n'; return 1; } }

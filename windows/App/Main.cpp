@@ -25,6 +25,7 @@
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
+#include "MixerStripsWindow.hpp"
 #include "GraphCommandsWindow.hpp"
 #include "GraphTrimsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
@@ -114,7 +115,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
     mixerCommand=400,mixerList=401,mixerEnable=402,mixerAdd=403,mixerRemove=404,mixerReload=405,
     mixerApply=406,mixerMute=407,mixerSolo=408,mixerOutput=409,mixerName=410,
-    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,mixerRouting=417,
+    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,mixerRouting=417,mixerStripsCommand=418,mixerDetailsCommand=419,
     graphCommand=430,graphLibrary=431,graphNew=432,graphClone=433,graphRemove=434,graphKind=435,graphAddSource=436,
     graphRack=437,graphAddEffect=438,graphFit=439,graphApply=440,graphReload=441,graphNodePicker=442,graphPage=443,
     graphProperty=444,graphPropertyValue=445,graphSetProperty=446,graphSource=447,graphDestination=448,graphWire=449,

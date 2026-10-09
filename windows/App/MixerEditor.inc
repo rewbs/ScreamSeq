@@ -6,6 +6,21 @@
     std::vector<Tracker::MixerMeter> mixerMeters;
     std::wstring mixerStatus=L"Enable routing to create a mixer from the song tracks";
     std::unique_ptr<ScreamSeq::SongRoutingWindow> songRoutingWindow;
+    std::unique_ptr<ScreamSeq::MixerStripsWindow> mixerStrips;
+    bool mixerStripsMode=true;
+    void ensureMixerStrips() {
+        if(mixerStrips&&!mixerStrips->retired())return;
+        mixerStrips=std::make_unique<ScreamSeq::MixerStripsWindow>(window,
+            [this](const auto &method,const auto &params){return documentOperation(method,params);},
+            [this]{return std::pair(documentId,view->session.revision);},
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
+            [this]{if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft first");},
+            [this](const auto &bus){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft before changing buses");mixerTarget=bus;mixerStripsMode=false;refreshMixer();layoutControls();SetFocus(controls.at(mixerName));},
+            [this]{mixerStripsMode=true;revealWorkspaceMainEditor("mixer");layoutControls();});
+        mixerStrips->dock(window);
+        mixerStrips->musicalTyping([this](HWND,WPARAM key,bool repeat){return workspaceMusicalKey(key,repeat);},
+            [this](WPARAM key){return releaseTypedKey(key);},[this]{releaseTypedNotes(window);});
+    }
     void openSongRouting(){
         if(!songRoutingWindow)songRoutingWindow=std::make_unique<ScreamSeq::SongRoutingWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &node){
             if(busy)throw std::runtime_error("Document worker is busy");
@@ -18,12 +33,13 @@
     bool mixerEditorVisible() const {return workspaceMainEditorVisible("mixer");}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
-            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Routing…"}})
+            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Routing…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerList]=CreateWindowExW(0,L"LISTBOX",L"Mixer buses",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerList)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerOutput]=CreateWindowExW(0,L"COMBOBOX",L"Main output",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerOutput)),GetModuleHandleW(nullptr),nullptr);
         for(int id=mixerName;id<=mixerTiming;++id){controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(controls.at(id),EM_SETLIMITTEXT,id==mixerName?256:32,0);}
-        for(int id=mixerCommand;id<=mixerRouting;++id)if(!controls.at(id))throw std::runtime_error("Cannot create mixer controls");
+        for(int id=mixerCommand;id<=mixerDetailsCommand;++id)if(!controls.at(id))throw std::runtime_error("Cannot create mixer controls");
+        ensureMixerStrips();
     }
     int mixerSelected() const {if(!mixerData.contains("buses"))return -1;const auto &b=mixerData.at("buses");for(size_t i=0;i<b.size();++i)if(b[i].at("id")==mixerTarget)return int(i);return -1;}
     void loadMixerFields() {
@@ -122,12 +138,20 @@
         if(!mixerDirty&&(mixerRevision!=view->session.revision||mixerDocument!=documentId)){refreshMixer();layoutControls();}
         if(device.running()&&preparedPlayback&&mixerRevision==view->session.revision){mixerMeters=preparedPlayback->chain().mixerMeters();frameRequested=true;}
         else if(!mixerMeters.empty()){mixerMeters.clear();frameRequested=true;}
+        if(mixerStrips&&!mixerStrips->retired()) {
+            mixerStrips->update();mixerStrips->meters(mixerData.value("buses",Json::array()),mixerMeters);
+        }
     }
     template<class Place> void layoutMixerControls(Place place) {
-        const bool show=mixerEditorVisible();const auto r=workspaceMainEditorRect();const float x=r.x+202,w=std::max(90.0f,(r.w-220)/3);
+        const bool visible=mixerEditorVisible(),show=visible&&!mixerStripsMode;const auto r=workspaceMainEditorRect();const float x=r.x+202,w=std::max(90.0f,(r.w-220)/3);
         place(mixerList,r.x+8,r.y+38,180,r.h-70,show);
-        place(mixerEnable,r.x+8,r.y+5,118,25,show);place(mixerAdd,x,r.y+5,94,25,show);place(mixerRemove,x+98,r.y+5,80,25,show);
-        place(mixerRouting,x+184,r.y+5,96,25,show);
+        place(mixerEnable,r.x+8,r.y+5,118,25,visible);place(mixerAdd,x,r.y+5,94,25,show);place(mixerRemove,x+98,r.y+5,80,25,show);
+        place(mixerRouting,mixerStripsMode?r.x+134:x+184,r.y+5,96,25,visible);
+        place(mixerStripsCommand,r.x+r.w-172,r.y+5,80,25,visible);place(mixerDetailsCommand,r.x+r.w-86,r.y+5,78,25,visible);
+        if(mixerStrips&&!mixerStrips->retired()) {
+            if(visible&&mixerStripsMode){mixerStrips->dockBounds(r.x,r.y+34,r.w,std::max(1.0f,r.h-34));if(!mixerStrips->visible())mixerStrips->show();}
+            else if(mixerStrips->visible())mixerStrips->hide();
+        }
         place(mixerName,x,r.y+56,w*1.5f-5,25,show);place(mixerOutput,x+w*1.5f,r.y+56,w*1.5f-5,230,show);
         for(int i=0;i<6;++i)place(mixerPreGain+i,x+float(i%3)*w,r.y+105+float(i/3)*49,w-8,25,show);
         place(mixerMute,x,r.y+192,88,25,show);place(mixerSolo,x+92,r.y+192,88,25,show);
@@ -138,14 +162,20 @@
         for(int id=mixerName;id<=mixerTiming;++id)EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(mixerOutput),selected&&mixerDraft.value("kind","")!="master");EnableWindow(controls.at(mixerApply),selected&&!mixerPending);
         for(int id:{mixerMute,mixerSolo}){EnableWindow(controls.at(id),selected);ScreamSeq::NativeControls::text(controls.at(id),id==mixerMute?(mixerDraft.value("mute",false)?L"Mute on":L"Mute off"):(mixerDraft.value("solo",false)?L"Solo on":L"Solo off"));}
-        if(show)SetTimer(window,3,50,nullptr);
+        if(visible)SetTimer(window,3,50,nullptr);
     }
     bool mixerControlCommand(int id) {
-        if(id<mixerCommand||id>mixerRouting)return false;
-        if(busy||mixerPending)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(id<mixerCommand||id>mixerDetailsCommand)return false;
         workspaceState.focus="mixer";
         if(id==mixerRouting){openSongRouting();return true;}
-        if(id==mixerCommand){graphEditorOpen=false;mixerEditorOpen=true;workspaceState.layout="Compose";refreshMixer();layoutControls();SetFocus(controls.at(mixerList));return true;}
+        if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand){
+            if(id==mixerStripsCommand)mixerStripsMode=true;if(id==mixerDetailsCommand)mixerStripsMode=false;
+            graphEditorOpen=false;mixerEditorOpen=true;workspaceState.layout="Compose";
+            if(mixerStripsMode)ensureMixerStrips();refreshMixer();layoutControls();
+            SetFocus(mixerStripsMode?mixerStrips->window():controls.at(mixerList));return true;
+        }
+        if(busy||mixerPending)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(mixerStrips&&!mixerStrips->retired()&&mixerStrips->hasGesture())throw std::runtime_error("Finish or cancel the retained mixer strip gesture first");
         if(id==mixerReload){mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
         if(id==mixerList){if(mixerDirty){ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
         if(id==mixerOutput){mixerFieldChanged();return true;}
@@ -168,6 +198,7 @@
     bool mixerKey(WPARAM key){const auto id=GetFocus()==window?0:GetDlgCtrlID(GetFocus());if(id<mixerList||id>mixerTiming)return false;if(key==VK_ESCAPE){command(mixerReload);return true;}if(key==VK_RETURN&&id>=mixerName){command(mixerApply);return true;}return false;}
     void drawMixerEditor() {
         auto &s=*surface;const auto r=workspaceMainEditorRect();const float x=r.x+202,w=std::max(90.0f,(r.w-220)/3);s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x17202a);
+        if(mixerStripsMode){s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="mixer"?0x6edac5:0x303b49);return;}
         s.uiText(L"Bus name",x,r.y+38,w*1.5f,0x8390a2);s.uiText(L"Main output",x+w*1.5f,r.y+38,w*1.5f,0x8390a2);
         const wchar_t *labels[]={L"Pre gain / dB",L"Pre balance / −1…1",L"Gain / dB",L"Balance / −1…1",L"Width / 0…2",L"Timing / ms"};
         for(int i=0;i<6;++i)s.uiText(labels[i],x+float(i%3)*w,r.y+87+float(i/3)*49,w-8,0x8390a2);

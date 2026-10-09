@@ -16,16 +16,19 @@ struct MixerControlPatch {
 // Native adapters parse their wire types, then share musical ranges and the
 // candidate operation. Resolve the persistent bus ID, never a visible strip.
 // Validation finishes before assigning anything, including for multi-field edits.
-inline bool applyMixerControls(MixerGraph &candidate, uint64_t busID, const MixerControlPatch &patch) {
-  auto bus = std::find_if(candidate.buses.begin(), candidate.buses.end(),
-    [&](const auto &value) { return value.id == busID; });
-  if(bus == candidate.buses.end()) throw std::invalid_argument("Mixer bus does not exist");
+inline void validateMixerControls(const MixerControlPatch &patch) {
   const auto validate = [](const std::optional<double> &value, double low, double high) {
     if(value && (!std::isfinite(*value) || *value < low || *value > high))
       throw std::invalid_argument("Mixer control value is outside its range");
   };
   validate(patch.preGainDB, -96, 24); validate(patch.gainDB, -96, 24);
   validate(patch.prePan, -1, 1); validate(patch.pan, -1, 1); validate(patch.width, 0, 2);
+}
+inline bool applyMixerControls(MixerGraph &candidate, uint64_t busID, const MixerControlPatch &patch) {
+  auto bus = std::find_if(candidate.buses.begin(), candidate.buses.end(),
+    [&](const auto &value) { return value.id == busID; });
+  if(bus == candidate.buses.end()) throw std::invalid_argument("Mixer bus does not exist");
+  validateMixerControls(patch);
   bool changed = false;
   const auto assign = [&](auto &target, const auto &value) {
     if(value && target != *value) { target = *value; changed = true; }

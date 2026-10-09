@@ -76,12 +76,61 @@ confirmed live at 22:33 UTC and were not restarted or repurposed. The next norma
 local consolidated build remains no earlier than 23:13:34 UTC; reaching that time
 is not a reason to build an incomplete batch.
 
-Continue P1 with native Windows strips and a shared pure gesture state, retaining
-the existing Mixer Details owner and SongRoutingWindow. Capture stable bus and
-document/revision, begin/preview/final/cancel and uncertain outcome explicitly.
-Preview and Cancel add no history; successful final commits once. Reset also
-needs a prepared but paused renderer. Preserve typing/focus, raw numeric text,
-bounded visible HWND ownership and independent selection while meters update.
+## Native strips candidate — source only, 22:50 UTC
+
+`editor/MixerGesture.hpp` holds one captured document/revision/bus/control,
+unrounded saved value, latest desired value, last accepted preview and draft
+generation. It has no native handles or transport. `MixerControlEditTests.cpp`
+now also covers coalesced updates, stale contexts, raw invalid-text generations,
+exact baselines and boolean values. Neither the shared state nor these added
+cases has been compiled or executed.
+
+`windows/App/MixerStripsWindow.hpp` implements the first native strip owner:
+stock vertical gain and horizontal balance trackbars, exact numeric gain,
+mute/solo, stereo meter drawing and Details navigation. A page contains up to
+16 strips; controls are allocated as needed and retained in a bounded pool.
+Page bindings freeze during a gesture, and a focused control cannot be rebound
+to another bus. Previous/Next and wheel navigation reach later buses. The
+pool/page policy still needs comparison with the planned visible-neighbor
+scrolling ergonomics; it is not yet the final qualified interaction.
+
+`MixerEditor.inc` now exposes Strips/Details modes while retaining the original
+Details draft and SongRoutingWindow. Competing Details writes and strip gestures
+are admitted separately, and both participate in document departure. Strip
+review reveals the correct parent view; Details review selects Details.
+`DocumentDepartureIntegration.inc` releases the retired strip owner after
+adoption. Main's read-only Show/mode commands precede write admission.
+
+The strip owner coalesces previews on the UI service tick, sends one durable
+final through `NativeWriteCompletion`, and retains uncertain results without
+repeating them. Cancel reads current saved controls and uses their current
+revision for a preview reset, including when playback is paused. Capture loss
+and hiding a live slider schedule a reset after the native notification stack,
+independently of the visible-only meter timer. Invalid numeric text stays in
+its HWND until Enter or Cancel. Clicking an unmoved rounded slider thumb does
+not commit its rounded display value.
+
+`NativeToolWindow.hpp` gained default-no-op scroll/capture hooks and an overridable
+draft-review action. Existing owners keep their previous behavior by default.
+`NativeInputGate.hpp` recognizes trackbar presentation mutations; the strip
+uses the explicit presentation path. These common native-owner changes trigger
+the native UI/departure suite at the consolidated checkpoint, not only the new
+strip test.
+
+`windows/Tests/MixerStripsWindowTests.cpp` is registered as
+`mixer-strips-window-tests` (private desktop, 60 seconds). It drives actual
+trackbar notifications and edit HWNDs against a controlled API boundary: preview
+coalescing, one final, untouched rounding, external-revision cancellation,
+invalid raw retention across hide/show, capture loss, and uncertain-result
+review/acknowledgment without a second durable call. This does not replace real
+pipe, renderer, reciprocal-save, accessibility or visual evidence.
+
+Still required before claiming P1 usable: compile this candidate; inspect and
+finish compact/short layout and overflow behavior, focus/caret under external
+reorder, wheel and keyboard gesture termination, high contrast/UIA labels and
+meter adoption identity; update the actual-app/workspace fixtures and commands;
+qualify A02/F04 including a late Master and retained Details; complete the
+cross-platform and reciprocal gates. No build/test was started for this slice.
 
 At the next necessary consolidated P1 checkpoint, run the new pure test and
 existing mixer-document/live-parameter cases, then both native apps and affected

@@ -80,7 +80,7 @@
         // pending/uncertain work before admission. Global browsers survive.
         departureDiscardedViews=departureDiscardedViews||!deferredViews.empty();deferredViews.clear();
         preciseNoteWindow.reset();graphCurveWindow.reset();parameterAutomationWindow.reset();instrumentEnvelopeWindow.reset();
-        graphTrimsWindow.reset();graphCommandsWindow.reset();graphWorkflowWindow.reset();songRoutingWindow.reset();
+        graphTrimsWindow.reset();graphCommandsWindow.reset();graphWorkflowWindow.reset();songRoutingWindow.reset();mixerStrips.reset();
         pluginInstruments.reset();pluginPathWindow.reset();sampleDetailWindow.reset();absoluteAutomationWindow.reset();parameterActivityWindow.reset();
         sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();
         for(auto &panel:workspaceEditors){panel.document.clear();panel.patternID.clear();panel.trackID.clear();panel.origin=Json::object();panel.pinned=false;panel.configured=false;}

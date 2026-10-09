@@ -250,6 +250,9 @@ protected:
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}
+  virtual bool controlScroll(UINT,WPARAM,HWND){return false;}
+  virtual void controlCaptureChanged(HWND){}
+  virtual void reviewDocumentDraft(){show();SetFocus(window_);}
   virtual bool contextMenu(HWND,POINT){return false;}
   bool hasWorkspaceDockAction()const{return bool(workspaceDockAction_);}
   void toggleWorkspaceDock(){if(workspaceDockAction_)workspaceDockAction_();}
@@ -264,6 +267,7 @@ protected:
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
     auto &self=*reinterpret_cast<NativeToolWindow *>(context);
     if(self.retired_&&m!=WM_NCDESTROY&&m!=WM_DESTROY)return 0;
+    if(m==WM_CAPTURECHANGED)try{self.controlCaptureChanged(h);}catch(const std::exception &e){self.error(e);}
     if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self.notifyFocusPresentation();
     if(m==WM_KEYUP||m==WM_SYSKEYUP)try{if((self.musicalRelease_&&self.musicalRelease_(w))||self.keyUp(w))return 0;}catch(const std::exception &e){self.error(e);return 0;}
     if(m==WM_KILLFOCUS&&!self.relocating_&&!self.owns(reinterpret_cast<HWND>(w)))self.releaseMusicalInput();
@@ -319,6 +323,7 @@ protected:
       case WM_PAINT:{PAINTSTRUCT p{};BeginPaint(h,&p);EndPaint(h,&p);self->render();return 0;}
       case WM_TIMER:if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
       case WM_COMMAND:if(self->ready_){const auto notification=HIWORD(w);if(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL)return 0;self->action(LOWORD(w),notification);self->layout();self->requestPaint();}return 0;
+      case WM_HSCROLL:case WM_VSCROLL:if(self->ready_&&self->controlScroll(m,w,reinterpret_cast<HWND>(l)))return 0;break;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
       case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
@@ -354,7 +359,7 @@ public:
     if(draftRegistration_.id())throw std::logic_error("Native draft owner already registered");
     std::wstring title(size_t(GetWindowTextLengthW(window_))+1,0);GetWindowTextW(window_,title.data(),int(title.size()));title.resize(wcslen(title.c_str()));
     if(!SetPropW(window_,documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&registry)))throw std::system_error(GetLastError(),std::system_category(),"Register native draft context");
-    try{draftRegistration_=registry.add(utf8(title),[this]{return documentDraft();},[this]{show();SetFocus(window_);},[this]()noexcept{
+    try{draftRegistration_=registry.add(utf8(title),[this]{return documentDraft();},[this]{reviewDocumentDraft();},[this]()noexcept{
       // Worker adoption has succeeded and the host still holds its input
       // lease. Do not reenter editor actions, placement callbacks or reads.
       // Destroy HWNDs here; the host releases C++ owners after native refresh.
