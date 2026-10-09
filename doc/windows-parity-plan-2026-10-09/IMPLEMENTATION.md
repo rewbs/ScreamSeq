@@ -12,6 +12,66 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Completed ARM Mac reciprocal checkpoint — 9 October, 21:49 UTC
+
+All **seven Windows x64 → Mac ARM64 → Windows x64** fixture journeys passed with
+the archived apps built at `d703d86640c770e2a5735ea9a27dc57a011bf0e3`. No build ran.
+The five originals and actual native F04 rendered/imported outputs each retained
+their exact typed project tree through two Mac saves and two Windows return saves.
+The returned files were also compared directly with the originating Windows
+outputs. [reciprocal-checkpoint-01.json](reciprocal-checkpoint-01.json) pins executable,
+receipt, project and report hashes and explicitly limits this checkpoint's scope.
+
+Mac exchange run **37995384823** and Windows return **37995525893** succeeded. Both
+normal build jobs were skipped, and only archived-app qualification ran. Source
+inputs remained frozen; conformance tooling came from `f22b2d52d`. The downloaded
+Mac exchange ZIP hashes to
+`20a49430360e613b4b6a7789e01a5f5e63daf59644dc3f984b9121794b5a88c8`; the Windows return
+ZIP hashes to `756b29e3e32781cd9efda73c57c488ebe6cdc16cb722aff0f336f8781dc8642e`.
+
+The preceding Mac baseline run **37995159221** passed all five normal launch-based
+fixture legs and completed all 21 recovery probes with their safety checks intact.
+Its overall result remains failed: the actual no-op `order.edit(move,destination=0)`
+created Undo and changed revision, contrary to the unchanged-document assertion.
+Saved typed project data was unchanged. The assertion is **not relaxed**. This is
+now a measured P3a defect; `TrackerSessionAPI.inc:797` dispatches through
+`TrackerSession.mm:1397` to the shared order editor. The original failure and report
+are retained. Mac advertises **70 reads and 162 writes**, matching all 232 schema
+methods; actual inventory and report hash are now in `doc/api/platform-differences.json`.
+
+Exact Mac codec observations are recorded in `doc/api/codec-observations.json`,
+with their source/loader provenance. In particular Mac warns, protects the source,
+and drops unknown root/native/track/node extension fields on canonical save, while
+Windows preserves them. The corrupt core snapshot rejects without replacing the
+current document; invalid ASCII is accepted/recovered with a warning on Mac and
+rejected on Windows. These are P6 convergence findings, not permissions to normalize
+or discard project data. Missing AU/VST3 opaque plugin identity/state checks passed.
+
+The first retained run **37995029602** stopped before launching because the new
+workflow's own root-level log was considered an untracked product input. The log
+was moved under ignored `bin/`; the source-difference guard was not weakened.
+
+### Next consolidated native correction batch — prepared, not built
+
+Current local source changes address the three x64 native UI failures together:
+
+* `GraphWorkflowWindowTests.cpp`: keep the snapshot alive before iterating its
+  `controls` member. The prior range referenced a member of an already destroyed
+  temporary under C++20. Runtime confirmation of the crash fix remains required.
+* `InstrumentEnvelopeWindow.hpp`: when a short dock floats into a compact window,
+  keep a focused inline point field visible by selecting its Points page. The test
+  explicitly preserves a 440×500 floating size so a large local display cannot hide
+  this transition, and continues to require the exact raw text, HWND focus and caret.
+* `ParameterAutomationWindow.hpp`: reserve four additional DIPs before the ruler
+  for classic Windows combo borders, retaining a 100-DIP curve at the minimum
+  440×300 dock. Existing overlap and reachability assertions remain unchanged.
+
+These changes are **uncompiled/unqualified**. Batch their build with any remaining
+Mac interface and runner-diagnostic corrections; do not build before the standing
+22:11:49 UTC local cadence boundary. The Mac plugin deferred-edit failure, native
+x64 UI confirmation, runner audio/startup/cleanup issues, Intel Mac and P0c–P8 work
+remain open. Reciprocal success alone does not close P0b or the full parity goal.
+
 ## Retained binaries and first cross-platform failures — 9 October, 21:42 UTC
 
 No product build was run at this checkpoint. The latest local build remains the
