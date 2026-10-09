@@ -113,8 +113,8 @@ std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,uns
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
-  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),thread_([this]{loop();}) {
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath,DocumentReplacementAdmission *replacementAdmission)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),replacementAdmission_(replacementAdmission),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -205,8 +205,22 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
     capture.append=[this](auto pcm,auto rate,auto channels,const auto &name,bool instrument,bool dry){return assets_->appendCapturedAudio(pcm,rate,channels,name,instrument,dry);};
     initialRecording=std::make_unique<SampleRecordingOperations>(std::move(capture));
   }
-  if(view_) retired_.push_back(view_);
-  try {if(beforeCommit)beforeCommit();if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
+  const auto departing=view_;
+  if(departing) retired_.push_back(departing);
+  bool admitted=false;
+  try {
+    if(beforeCommit)beforeCommit();
+    if(document_)onMain([&] {
+      if(replacementAdmission_) {
+        replacementAdmission_->admit(departing->session.documentId,departing->session.revision);
+        admitted=true;
+      }
+      // Admission and Stop are one UI service callback. The lease remains
+      // active while the worker adopts the already-prepared document below.
+      try{stop_();}
+      catch(...){if(admitted){replacementAdmission_->finish(false);admitted=false;}throw;}
+    });
+  } catch(...) {if(departing)retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
@@ -215,6 +229,7 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
   if(sampleRecording_)sampleRecording_->documentReplaced();
   else sampleRecording_=std::move(initialRecording);
   install(std::move(next));
+  if(admitted)onMain([this]{replacementAdmission_->finish(true);});
 }
 const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const {
   const auto key=std::tuple(pattern,row,target,column);

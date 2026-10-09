@@ -1,6 +1,29 @@
 # Parity implementation progress
 
-Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [current source review](current-source-review.md) retains the planning checkpoint. P0a is not yet fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding. Earlier receipts below retain their original scope and dates.
+Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](planning-review-refresh.md) retains the planning checkpoint. P0a is not yet fully qualified or merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding. Earlier receipts below retain their original scope and dates.
+
+## P0b departure protocol foundation
+
+The latest review was committed separately as `75ca12e30`. Implementation then added the shared value-token rules in `editor/DocumentDeparture.hpp`, UI-thread owner registration in `windows/App/DocumentDraftRegistry.hpp`, and a final replacement-admission observer in `DocumentController`. **The application does not yet pass an observer or register its native editors. This foundation is not complete raw-draft protection and does not close F21.** No product version, musical data, API schema, DSP or native device behavior changed.
+
+- A token captures document/revision, owner incarnation, stable target, captured revision, raw-draft generation and dirty/pending/uncertain state. Presentation labels, clean navigation and owner iteration order are excluded. Pending or uncertain writes cannot be authorized by Discard. New work, owner recreation, failed owner reads, cancellation and a newer review invalidate old consent.
+- The registry retains hidden owners, supports nested owners and raises an existing owner for Review. Registration handles follow native lifetimes; summary callbacks are UI-thread-only, read-only and cannot pump messages. A failed summary fails admission closed. The registry deliberately does not inspect arbitrary HWND text or classify every window as dirty.
+- `DocumentController::installCandidate` now accepts an optional native observer shared by Open and recovery. Candidate parsing, cache construction and the recovery fingerprint check precede admission. Admission and Stop run in the same UI callback; the short lease spans worker adoption and view publication. Stop refusal calls `finish(false)` without changing the original view. Successful publication calls `finish(true)`. Initial construction has no departing document and does not invoke the observer. Existing callers remain compatible.
+
+Local Release ARM64 evidence, built into the existing dedicated `bin/windows-parity-p0` directory with no running musician process found:
+
+| Check | Result / log under `bin/parity-evidence/` |
+|---|---|
+| Token/registry target | Passed; `p0b-departure-tests.log` |
+| New real-worker admission plus publication/recovery/recording regressions | 7 CTest entries passed including scratch/fixture setup, 1.55 s; `p0b-departure-controller-tests.log` |
+| Full controller regression after the worker change | 26 CTest entries passed including setup, 14.71 s; `p0b-departure-controller-regression.log` |
+| Final cancellation/failed-summary consent tightening | Both departure targets rebuilt; 3 focused entries passed including scratch setup, 0.46 s; `p0b-departure-final-build.log`, `p0b-departure-final-tests.log`. Worker implementation is unchanged from the broader regression; the new registry guard and cancellation assertions have this final focused result |
+
+`p0b-departure-receipt.json` records 1,827 source/dependency hashes, CMake cache and log hashes. Final executables: `document-departure-tests.exe` SHA-256 `efcae9f727b3f8d73a0d3f53297b1c354bab8bbcf6a1adef5c31cdc6b5c326f6`; `document-controller-tests.exe` SHA-256 `06c6c32ddb7e33cb6dee23067d4fd2f416ec90e064f8f25148b0bc67dab2dca7`. No app rebuild or foreground/device test was needed for this foundation. The portable departure target is registered in both build definitions; Mac execution of this new source is still required at the cohesive P0b gate.
+
+**Next implementation work:** register every owner family in the handoff census with exact raw-generation summaries, including nested formula/bank drafts and hidden Main-bottom fields. Add the native Review/Discard/Cancel departure flow and structured API refusal. Pass the observer from Application; keep document-scoped input deferred during admission while continuing worker service. On successful adoption, retain that lease until UI refresh/old-owner retirement completes; on failure or cancelled chooser, release without erasing drafts. Apply the same token policy to Close, bounded session end and recovery. Recheck both take types at final admission. Then build the app/workspace target once for the cohesive native integration and run the full owner census plus actual app Open/Close/recovery race checks. Tests of a fake registry owner do not substitute for those native registrations or raw-text retention checks.
+
+P0a CI remains independent at `8afd4175a`: Apple Silicon job `113780223733` in run `37918435661` was observed successful; Windows job `113780223549` and Intel job `113780224030` were still live at the latest poll. No duplicate runs were started. Their eventual results qualify that isolated P0a source, not this P0b foundation. The previous planning turn made review progress; this resumed goal turn adds implementation and targeted execution evidence.
 
 ## P0a retained-editor qualification repairs
 

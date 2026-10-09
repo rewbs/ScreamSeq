@@ -876,6 +876,13 @@ target_include_directories(windows-scratch-editor-state-tests PRIVATE "${ROOT}/i
 target_link_libraries(windows-scratch-editor-state-tests PRIVATE TrackerEditor)
 add_test(NAME windows-scratch-editor-state COMMAND windows-scratch-editor-state-tests)
 
+# Shared departure values plus the Windows owner-registry protocol. This target
+# has no Win32/AppKit or audio dependency; actual native admission is separate.
+add_executable(document-departure-tests "${ROOT}/editor/Tests/DocumentDepartureTests.cpp")
+target_include_directories(document-departure-tests PRIVATE "${ROOT}")
+add_test(NAME document-departure COMMAND document-departure-tests)
+set_tests_properties(document-departure PROPERTIES LABELS "portable;functional;drafts;no-hardware" TIMEOUT 30)
+
 add_executable(audio-port-trim-tests "${ROOT}/editor/Tests/AudioPortTrimTests.cpp")
 target_link_libraries(audio-port-trim-tests PRIVATE TrackerMac)
 if(TRACKER_SANITIZER)

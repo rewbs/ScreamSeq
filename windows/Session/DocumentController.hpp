@@ -85,6 +85,17 @@ struct RecoverySnapshot {
   std::optional<std::filesystem::path> source;
   bool hasRecording=false,needsProtection=false,hasOpenEditors=false;
 };
+// Both callbacks execute on the native UI owner through service(). The host
+// rechecks raw drafts/takes and obtains its short input lease in admit(). A
+// throwing admit must leave no lease behind; finish() is called exactly once
+// after successful admission, including when Stop refuses the replacement.
+// The observer must outlive the controller. Construction of the first document
+// has no departing source and invokes neither callback.
+struct DocumentReplacementAdmission {
+  virtual ~DocumentReplacementAdmission()=default;
+  virtual void admit(const std::string &document,const std::string &revision)=0;
+  virtual void finish(bool adopted)noexcept=0;
+};
 // One serial document owner. Work, cache construction and retired cache disposal
 // run here. service() is called ONLY by the UI thread for playback hooks.
 class DocumentController {
@@ -125,6 +136,7 @@ class DocumentController {
   PlaybackHooks playbackHooks_;
   std::optional<std::filesystem::path> cataloguePath_;
   std::optional<std::filesystem::path> libraryPath_;
+  DocumentReplacementAdmission *replacementAdmission_=nullptr;
   std::thread thread_; // Start only after every worker dependency is initialized.
   void loop();
   void onMain(std::function<void()> task);
@@ -160,7 +172,8 @@ public:
     std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,
     std::function<void()> beforeView={},size_t maxCacheBytes=64u*1024u*1024u,
     std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters={},PlaybackHooks playbackHooks={},
-    std::optional<std::filesystem::path> cataloguePath={},std::optional<std::filesystem::path> libraryPath={});
+    std::optional<std::filesystem::path> cataloguePath={},std::optional<std::filesystem::path> libraryPath={},
+    DocumentReplacementAdmission *replacementAdmission=nullptr);
   ~DocumentController();
   bool publicationPending() const {return publicationPending_.load();}
   std::shared_ptr<const DocumentView> view();

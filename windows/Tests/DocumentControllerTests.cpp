@@ -2,6 +2,7 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
+#include "windows/App/DocumentDraftRegistry.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
@@ -579,8 +580,10 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "ParameterActivityControllerTests.inc"
 #include "LiveNativeControllerTests.inc"
 #include "SamplingOperationsChecks.inc"
+#include "DocumentDepartureControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--departure") {documentDepartureControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}
