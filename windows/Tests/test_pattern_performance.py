@@ -419,10 +419,20 @@ class PatternPerformanceTests(unittest.TestCase):
             self.assertTrue(user.GetWindowRect(self.control(identifier), ctypes.byref(rect)))
             return rect
         before_scroll = control_rect(701)
+        # Wheel coordinates are screen pixels. The native handler deliberately
+        # ignores wheels outside the visible tracker, including screen (0, 0).
         self.desktop.send(self.desktop.hwnd(self.pid), 0x20A, ((-120 & 65535) << 16))
+        self.assertEqual(control_rect(701).top, before_scroll.top)
+        pattern = inline['geometry']['pattern']
+        at = wintypes.POINT(round((pattern['x'] + pattern['width'] / 2) * dpi),
+                            round((pattern['y'] + pattern['height'] / 2) * dpi))
+        user.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+        self.assertTrue(user.ClientToScreen(main, ctypes.byref(at)))
+        wheel_at = (at.x & 65535) | ((at.y & 65535) << 16)
+        self.desktop.send(main, 0x20A, ((-120 & 65535) << 16), wheel_at)
         after_scroll = control_rect(701)
         self.assertLess(after_scroll.top, before_scroll.top)
-        self.desktop.send(self.desktop.hwnd(self.pid), 0x20A, (120 << 16))
+        self.desktop.send(main, 0x20A, (120 << 16), wheel_at)
         self.assertEqual(control_rect(701).top, before_scroll.top)
         self.text(701, 7.125)
         self.command(347)

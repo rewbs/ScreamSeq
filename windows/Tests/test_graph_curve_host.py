@@ -82,6 +82,7 @@ class GraphCurveHostTests(GraphCurveNativeMixin, unittest.TestCase):
     def choose_source(self, graph, node):
         self.main_command(430)
         self.select(443, 0)
+        self.curve_api_idle()  # Observe the retained preview timer; do not retry the read or an edit.
         definition = next(g for g in self.read('graph.get', includeState=False)['library'] if g['id'] == graph)
         self.select(442, next(i for i, n in enumerate(definition['nodes']) if n['id'] == node))
         self.assertEqual(self.ready()['graphEditor']['node'], node)
