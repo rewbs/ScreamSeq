@@ -70,6 +70,17 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    int departureChoice=IDCANCEL;
+    bool failDepartureStop=false,failDepartureRefresh=false;
+    std::function<void()> beforeDepartureAdmission,duringDepartureAdmission;
+    int chooseNativeDraftDeparture(const Tracker::DocumentDepartureSnapshot &,Tracker::DocumentDeparture::Status)override{return departureChoice;}
+    void admit(const std::string &document,const std::string &revision)override {
+        if(auto action=std::exchange(beforeDepartureAdmission,{}))action();
+        Application::admit(document,revision);
+        try{if(auto action=std::exchange(duringDepartureAdmission,{}))action();}catch(...){Application::finish(false);throw;}
+    }
+    void stop()override {if(failDepartureStop&&departureInput)throw std::runtime_error("Owned departure Stop refusal");Application::stop();}
+    void refreshAdoptedDocument()override {if(failDepartureRefresh)throw std::runtime_error("Owned post-adoption refresh failure");Application::refreshAdoptedDocument();}
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
@@ -1003,6 +1014,7 @@ static void retainedTakesProtectLeavingDocument() {
 }
 
 #include "DocumentDraftCensusTests.inc"
+#include "DocumentDepartureApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1056,6 +1068,10 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
+                    applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();
+                    std::cout<<"PASS Application departure: native/API consent, stale input, Stop rollback, retirement, refresh retry and canceled shutdown\n";return;
+                }
                 restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");
                 nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
                 mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";

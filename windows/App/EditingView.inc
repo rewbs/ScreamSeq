@@ -271,6 +271,7 @@
         if(!protectUnsaved()) return;
         auto revision=view->session.revision;auto path=chooseFile(false);if(path.empty()) return;
         if(!protectRecordingTake()) return;
+        if(!reviewNativeDeparture())return;
         documentOperation("document.open",{{"expectedRevision",revision},{"path",utf8Path(path)},{"discard",true}});
         status=L"Opened "+path.filename().wstring();
         const auto warnings=view->session.document.value("loadWarnings",Json::array());

@@ -24,6 +24,23 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
+`document.open` requires a current `expectedRevision`. Its `discard:true` applies
+to unsaved song changes; it does not authorize discarding retained native editor
+drafts. Those drafts produce `-32002` with `data.writeOutcome:"notCommitted"`
+before replacement. Resolve them in their editor, or use the native Open review
+prompt to review, discard the exact captured drafts, or keep editing. Recovery
+Restore uses the same final admission check. A changed draft invalidates an
+earlier native discard decision; pending or uncertain work must be resolved.
+
+During document adoption and native refresh, mutating API and workspace actions
+are refused with `-32002` / `notCommitted`. If refresh fails after adoption,
+`document.get` reads the adopted song and `context.get` reports
+`nativeRefreshPending:true`; remaining native context is the last displayed
+context and must not be used as a new editing target. Input stays protected.
+Press F5 in the app to retry native cleanup/refresh without reopening the file
+or replaying the write. Stop remains available and preserves that recovery
+message. A successful retry restores normal editing.
+
 `document.get` includes stable current-sequence order identities in
 `orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
 including End (`65535`), Skip (`65534`) and entries after End. Each existing

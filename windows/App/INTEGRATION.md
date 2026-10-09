@@ -317,6 +317,17 @@ or baseline changes. Open requires expectedRevision and explicit discard when
 unsaved. Successful-write request-ID deduplication and private PID pipe transport
 remain in the existing adapter/dispatch layers.
 
+Open, Recovery Restore, Close and session-end queries consult the native draft
+registry at final admission. Native Review raises retained work; Discard binds
+the captured owner generations, and Cancel keeps the song and raw fields. API
+`discard:true` does not discard native drafts. Pending/uncertain work refuses
+departure. Failed preparation/admission/Stop retains owners; successful adoption
+retires old document owners while global recovery/library browsers survive.
+Native input and API writes stay protected through refresh. A post-adoption
+refresh failure displays an F5 retry action; it does not repeat Open. Canceled
+OS shutdown releases its admission lease without consuming drafts. A failed
+state read keeps the application open rather than offering an unchecked close.
+
 AssetOperations is registered and retained on the worker, including imports,
 PCM, processing, loop settings, drawing, private clipboard and instrument edits.
 Import validation checks actual preserved plugin assignments, adapter capacity

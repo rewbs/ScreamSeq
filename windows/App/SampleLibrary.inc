@@ -48,6 +48,7 @@
             controller->service();MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){
                 if(message.message==WM_QUIT){PostQuitMessage(int(message.wParam));break;}
+                if(filterDepartureMessage(message))continue;
                 if((message.message==WM_KEYDOWN||message.message==WM_SYSKEYDOWN)&&IsChild(window,message.hwnd)&&!ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd)&&handleKey(message.wParam,(message.lParam&(1LL<<30))!=0))continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
@@ -63,6 +64,7 @@
     std::vector<std::string> independentWrites()const override {auto methods=ScreamSeq::Samples::Library::writes();methods.insert(methods.end(),{"sample.library.preview","sample.library.preview.stop","audio.settings.set","recovery.save","recovery.restore","midi.settings.set"});if(midiTestBuffer)methods.push_back("midi.test.inject");return methods;}
     Json independentGuards()const override {Json guards={{"sample.library.roots.set",{"expectedLibraryRevision"}},{"sample.library.rescan",{"expectedLibraryRevision"}},{"sample.library.preview",Json::array()},{"sample.library.preview.stop",Json::array()},{"audio.settings.set",{"expectedAudioRevision"}},{"recovery.save",{"expectedRevision"}},{"recovery.restore",{"expectedRevision"}},{"midi.settings.set",{"expectedMidiRevision"}}};if(midiTestBuffer)guards["midi.test.inject"]={"expectedMidiRevision","generation"};return guards;}
     Json independentOperation(const std::string &method,const Json &p) override {
+        rejectDepartureInput();
         if(method.starts_with("recovery."))return recoveryOperation(method,p);
         if(method.starts_with("audio."))return audioOperation(method,p);
         if(method.starts_with("midi."))return midiOperation(method,p);

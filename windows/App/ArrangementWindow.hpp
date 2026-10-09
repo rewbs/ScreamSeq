@@ -202,7 +202,7 @@ private:
       // Host publication during the pumped callback may already have advanced
       // selectionGeneration_. Reveal the accepted current selection, including
       // a newer retained selection, without changing ordinary update() scroll.
-      if(visible()){const auto selected=orderIndex(selected_);if(selected>=0)ListView_EnsureVisible(controls_.at(orders),selected,FALSE);}
+      if(visible()){const auto selected=orderIndex(selected_);if(selected>=0)NativeReportList::ensureVisible(controls_.at(orders),selected,FALSE);}
       if(creation&&draftGeneration==draftGeneration_){draftRevision_=state_.at("revision");dirty_=false;}
       error_.clear();statusText();layout();
     } catch(const std::exception &value){
@@ -282,7 +282,7 @@ private:
     const auto list=controls_.at(orders);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;
     columnWidths_[1]=std::max(180.f,columnWidths_[1]+(listWidth_>0?width-listWidth_:width-columnWidths_[0]-columnWidths_[1]-columnWidths_[2]-columnWidths_[3]-18));
-    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<4;++i)ListView_SetColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
+    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<4;++i)NativeReportList::setColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const auto focus=GetFocus();
@@ -414,8 +414,8 @@ public:
     for(size_t i=0;i<sequences_.size();++i)if(sequences_[i].first==currentSequence)ScreamSeq::NativeInputGate::present(controls_.at(sequence),CB_SETCURSEL,i,0);
     const auto chosen=std::find_if(orderList.begin(),orderList.end(),[&](const auto &value){return value.id==selected_;});const auto chosenIndex=chosen==orderList.end()?-1:int(chosen-orderList.begin());
     if(orders_!=orderList||ListView_GetNextItem(list,-1,LVNI_SELECTED)!=chosenIndex){
-      orders_=std::move(orderList);SendMessageW(list,WM_SETREDRAW,FALSE,0);ListView_SetItemCountEx(list,int(orders_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto selectedIndex=orderIndex(selected_);if(selectedIndex>=0)ListView_SetItemState(list,selectedIndex,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-      const auto top=orderIndex(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))ListView_Scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);
+      orders_=std::move(orderList);SendMessageW(list,WM_SETREDRAW,FALSE,0);NativeReportList::setItemCount(list,int(orders_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto selectedIndex=orderIndex(selected_);if(selectedIndex>=0)NativeReportList::setItemState(list,selectedIndex,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      const auto top=orderIndex(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))NativeReportList::scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);
     }
     setting_=false;
     if(first)captureDraft();
@@ -429,12 +429,12 @@ public:
     if(first){mode_=mode;captureDraft(std::move(sourcePatternID));clampToOwnerWorkArea();opened_=true;}
     if(mode=="section"||mode=="pattern")changePage(mode);else if(mode=="new"||mode=="duplicate")changePage("orders");
     const auto views=fieldViews();NativeToolWindow::show();if(retainedFocus&&IsWindowVisible(focused)&&IsWindowEnabled(focused))SetFocus(focused);else {const auto retained=pageFocus_[size_t(pageIndex())];if(retained&&IsWindowVisible(retained)&&IsWindowEnabled(retained))SetFocus(retained);else SetFocus(controls_.at(page_=="section"?sectionPage:page_=="pattern"?patternPage:first&&mode_!="arrange"?rows:orders));}restoreFieldViews(views);
-    if(first){const auto selected=orderIndex(selected_);if(selected>=0)ListView_EnsureVisible(controls_.at(orders),selected,FALSE);}
+    if(first){const auto selected=orderIndex(selected_);if(selected>=0)NativeReportList::ensureVisible(controls_.at(orders),selected,FALSE);}
   }
   void navigateSection(bool next){
     if(unavailable())return;const auto index=sectionIndex(next);if(index<0)return;
     const auto id=orders_[size_t(index)].id;select(id,true);
-    setting_=true;ListView_SetItemState(controls_.at(orders),-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto current=orderIndex(selected_);if(current>=0){ListView_SetItemState(controls_.at(orders),current,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);ListView_EnsureVisible(controls_.at(orders),current,FALSE);}setting_=false;
+    setting_=true;NativeReportList::setItemState(controls_.at(orders),-1,0,LVIS_SELECTED|LVIS_FOCUSED);const auto current=orderIndex(selected_);if(current>=0){NativeReportList::setItemState(controls_.at(orders),current,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);NativeReportList::ensureVisible(controls_.at(orders),current,FALSE);}setting_=false;
   }
   Json snapshot()const{
     Json bounds=Json::array();const float scale=96.f/GetDpiForWindow(window_);

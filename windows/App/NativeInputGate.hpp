@@ -15,7 +15,10 @@ namespace ScreamSeq {
 // replacement for the host's API/worker admission and queued-input guards.
 class NativeInputGate final {
   inline static constexpr UINT_PTR subclassID=0x53434947;
-  struct Permit {HWND window;UINT message;WPARAM w;LPARAM l;bool consumed=false;};
+  struct Permit {
+    HWND window;UINT message;WPARAM w;LPARAM l;bool consumed=false;
+    HWND header=nullptr;int column=0,width=0;bool headerConsumed=false;
+  };
   DWORD thread_=GetCurrentThreadId();
   std::vector<HWND> windows_;
   Permit *permit_=nullptr;
@@ -27,7 +30,9 @@ class NativeInputGate final {
     case CB_SETCURSEL:case CB_SETITEMDATA:
     case LB_ADDSTRING:case LB_INSERTSTRING:case LB_DELETESTRING:case LB_RESETCONTENT:
     case LB_SETCURSEL:case LB_SETSEL:case LB_SETITEMDATA:case LB_SETTOPINDEX:
-    case BM_SETCHECK:return true;
+    case BM_SETCHECK:case EM_LINESCROLL:case EM_SCROLLCARET:
+    case LVM_SETITEMCOUNT:case LVM_SETITEMSTATE:case LVM_ENSUREVISIBLE:case LVM_SCROLL:
+    case LVM_SETCOLUMNWIDTH:return true;
     default:return false;
     }
   }
@@ -91,8 +96,27 @@ class NativeInputGate final {
   static LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data) {
     auto &gate=*reinterpret_cast<NativeInputGate *>(data);
     if(m==WM_NCDESTROY){RemoveWindowSubclass(h,procedure,id);return DefSubclassProc(h,m,w,l);}
-    if(inputMessage(m)||controlMutation(h,m)) {
-      auto *permit=gate.permit_;
+    auto *permit=gate.permit_;
+    // Comctl32 implements a report width setter with a header setter. Permit
+    // exactly that one width on that one child; not arbitrary header messages.
+    if(permit&&permit->consumed&&h==permit->header&&!permit->headerConsumed&&
+        (m==HDM_SETITEMW||m==HDM_SETITEMA)&&int(w)==permit->column&&l) {
+      const auto &item=*reinterpret_cast<const HDITEMW *>(l);
+      if(item.mask==HDI_WIDTH&&item.cxy==permit->width){permit->headerConsumed=true;return DefSubclassProc(h,m,w,l);}
+    }
+    // Owner-data text and custom drawing are reads. Keep them available while
+    // edits/selection notifications remain blocked, including during refresh.
+    const auto *notification=m==WM_NOTIFY?reinterpret_cast<const NMHDR *>(l):nullptr;
+    if(notification&&permit&&permit->consumed&&permit->header&&permit->headerConsumed&&h==permit->window&&notification->hwndFrom==permit->header&&
+        (notification->code==HDN_ITEMCHANGINGW||notification->code==HDN_ITEMCHANGINGA||
+         notification->code==HDN_ITEMCHANGEDW||notification->code==HDN_ITEMCHANGEDA)) {
+      const auto &change=*reinterpret_cast<const NMHEADERW *>(l);
+      if(change.iItem==permit->column&&change.pitem&&change.pitem->mask==HDI_WIDTH&&change.pitem->cxy==permit->width)
+        return CallWindowProcW(reinterpret_cast<WNDPROC>(GetClassLongPtrW(h,GCLP_WNDPROC)),h,m,w,l);
+    }
+    const bool readNotification=notification&&GetParent(notification->hwndFrom)==h&&
+      (notification->code==LVN_GETDISPINFOW||notification->code==LVN_GETDISPINFOA||notification->code==NM_CUSTOMDRAW);
+    if(!readNotification&&(inputMessage(m)||controlMutation(h,m))) {
       if(!permit||permit->consumed||permit->window!=h||permit->message!=m||permit->w!=w||permit->l!=l)
         return refusal(h,m);
       // Consume before native processing/notifications: recursive sends, even
@@ -151,6 +175,9 @@ public:
   static bool protectedWindow(HWND h) noexcept {
     DWORD_PTR data=0;return GetWindowSubclass(h,procedure,subclassID,&data)!=FALSE;
   }
+  static bool queuedInput(const MSG &message)noexcept {
+    return protectedWindow(message.hwnd)&&inputMessage(message.message);
+  }
   static LRESULT text(HWND h,const wchar_t *value) {
     return present(h,WM_SETTEXT,0,reinterpret_cast<LPARAM>(value));
   }
@@ -164,7 +191,12 @@ public:
     DWORD_PTR data=0;
     if(!GetWindowSubclass(h,procedure,subclassID,&data))return SendMessageW(h,m,w,l);
     auto &gate=*reinterpret_cast<NativeInputGate *>(data);
-    Permit permit{h,m,w,l};auto *previous=gate.permit_;gate.permit_=&permit;
+    Permit permit{h,m,w,l};
+    if(m==LVM_SETCOLUMNWIDTH) {
+      wchar_t kind[32]{};GetClassNameW(h,kind,32);
+      if(!_wcsicmp(kind,WC_LISTVIEWW)&&SHORT(LOWORD(l))>=0){permit.header=ListView_GetHeader(h);permit.column=int(w);permit.width=SHORT(LOWORD(l));}
+    }
+    auto *previous=gate.permit_;gate.permit_=&permit;
     struct Reset {NativeInputGate &gate;Permit *previous;~Reset(){gate.permit_=previous;}}reset{gate,previous};
     const auto result=SendMessageW(h,m,w,l);
     if(!permit.consumed)throw std::runtime_error("Native presentation did not reach its input gate");

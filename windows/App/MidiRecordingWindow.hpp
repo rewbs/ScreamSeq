@@ -148,9 +148,9 @@ private:
     const auto list=controls_.at(events);const auto oldTop=ListView_GetTopIndex(list);events_=next;reviewTake_=identity;selected_=-1;selectedKey_.clear();selectedOccurrence_=0;
     if(same&&!oldKey.empty()){unsigned seen=0;for(size_t i=0;i<events_.size();++i)if(eventKey(events_[i])==oldKey&&seen++==occurrence){selected_=int(i);selectedKey_=oldKey;selectedOccurrence_=occurrence;break;}}
     if((!same||first)&&!events_.empty()){selected_=0;selectedKey_=eventKey(events_[0]);}
-    setting_=true;SendMessageW(list,WM_SETREDRAW,FALSE,0);ListView_SetItemCountEx(list,int(events_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
-    if(selected_>=0)ListView_SetItemState(list,selected_,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-    if(same&&oldTop>=0&&size_t(oldTop)<events_.size()){RECT row{};if(ListView_GetItemRect(list,oldTop,&row,LVIR_BOUNDS))ListView_Scroll(list,0,(oldTop-ListView_GetTopIndex(list))*(row.bottom-row.top));}
+    setting_=true;SendMessageW(list,WM_SETREDRAW,FALSE,0);NativeReportList::setItemCount(list,int(events_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    if(selected_>=0)NativeReportList::setItemState(list,selected_,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    if(same&&oldTop>=0&&size_t(oldTop)<events_.size()){RECT row{};if(ListView_GetItemRect(list,oldTop,&row,LVIR_BOUNDS))NativeReportList::scroll(list,0,(oldTop-ListView_GetTopIndex(list))*(row.bottom-row.top));}
     SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);setting_=false;details();
   }
   void begin(Operation operation){
@@ -201,7 +201,7 @@ private:
   void resizeColumns(){
     const auto list=controls_.at(events);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;if(listWidth_>0)columnWidths_[2]=std::max(130.f,columnWidths_[2]+width-listWidth_);else columnWidths_[2]=std::max(130.f,width-columnWidths_[0]-columnWidths_[1]-columnWidths_[3]-columnWidths_[4]-columnWidths_[5]);
-    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<6;++i)ListView_SetColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
+    listWidth_=width;columnDpi_=dpi;resizingColumns_=true;for(int i=0;i<6;++i)NativeReportList::setColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));resizingColumns_=false;
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const auto focus=GetFocus();

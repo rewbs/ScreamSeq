@@ -58,6 +58,7 @@
         recoveryLastDate.reset();recoveryLastCopy.reset();recoveryError.reset();updateRecoveryStatus();
     }
     void serviceRecovery() {
+        if(departureInput)return;
         while(!recoveryCleanups.empty()&&recoveryCleanups.front().result.wait_for(std::chrono::milliseconds(0))==std::future_status::ready) {
             auto item=std::move(recoveryCleanups.front());recoveryCleanups.pop_front();
             try{item.result.get();}catch(const std::exception &e){if(item.epoch==recoveryEpoch){recoveryError=std::string("Recovery cleanup: ")+e.what();updateRecoveryStatus();}}
@@ -137,10 +138,11 @@
             settleRecoveryWork();
             return {{"revision",view->session.revision},{"documentId",documentId},{"changed",true},
                 {"playbackStopped",wasPlaying&&!device.running()},{"data",{{"id",id},{"hasRecording",view->session.document.value("hasRecoveryTake",false)}}}};
-        }catch(...){refreshDocument();settleRecoveryWork();throw;}
+        }catch(...){const auto error=std::current_exception();try{refreshDocument();}catch(...){}settleRecoveryWork();nativeDepartureConsent.reset();std::rethrow_exception(error);}
     }
     Json recoveryOperation(const std::string &method,const Json &p) {
         const bool write=method=="recovery.save"||method=="recovery.restore";
+        if(write)rejectDepartureInput();
         for(auto it=p.begin();it!=p.end();++it)if(!(write&&it.key()=="expectedRevision")&&!(method=="recovery.restore"&&it.key()=="id"))throw ScreamSeq::Api::ApiError(-32602,"Unexpected recovery parameter");
         std::string expected;
         if(write) {
@@ -181,7 +183,7 @@
         recoveryWindow=std::make_unique<ScreamSeq::RecoveryWindow>(window,
             [this]{reloadRecoveryBrowser();},
             [this]{try{recoveryOperation("recovery.save",{{"expectedRevision",view->session.revision}});reloadRecoveryBrowser();}catch(const std::exception &e){recoveryWindow->fail(e.what());}},
-            [this](std::string id){try{recoveryOperation("recovery.restore",{{"expectedRevision",view->session.revision},{"id",id}});recoveryWindow->completeRestore(id,true);}catch(const std::exception &e){recoveryWindow->completeRestore(id,false,e.what());}});
+            [this](std::string id){try{if(!reviewNativeDeparture()){recoveryWindow->completeRestore(id,false,"Retained editor work was kept");return;}recoveryOperation("recovery.restore",{{"expectedRevision",view->session.revision},{"id",id}});nativeDepartureConsent.reset();recoveryWindow->completeRestore(id,true);}catch(const std::exception &e){nativeDepartureConsent.reset();recoveryWindow->completeRestore(id,false,e.what());}});
         recoveryWindow->updateStatus(recoveryStatus());
     }
     void openRecoveryBrowser(){ensureRecoveryWindow();recoveryWindow->show();reloadRecoveryBrowser();}

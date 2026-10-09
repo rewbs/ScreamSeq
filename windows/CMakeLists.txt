@@ -132,6 +132,9 @@ if(BUILD_TESTING)
     # Separate owned processes keep the existing 90-second private-child bound;
     # sharing the executable avoids another compilation of the native app TU.
     add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-departure-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-departure-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=departure" TIMEOUT 120)
     set_tests_properties(workspace-draft-census-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=drafts" TIMEOUT 120)
   endif()

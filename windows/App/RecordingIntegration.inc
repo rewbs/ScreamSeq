@@ -182,6 +182,7 @@
         }
     }
     void serviceMidi() {
+        if(departureInput)return;
         if(!controller||busy||midiBusy||midiServicing||midiClosing||recoveryRestoring)return;
         midiServicing=true;struct Guard{bool &value;~Guard(){value=false;}}guard{midiServicing};
         try {

@@ -266,6 +266,34 @@ class PatternPerformanceTests(unittest.TestCase):
         self.write('document.open', path=str(path))
         self.assertEqual(self.read('pattern.effects.get', pattern=0), saved)
 
+    def test_document_open_discard_preserves_native_draft_until_explicit_cancel(self):
+        path = self.folder / 'departure.screamseq'
+        self.write('document.save', path=str(path))
+        self.navigate(row=4, channel=0, column=3, following=False)
+        self.desktop.send(self.desktop.hwnd(self.pid), 0x111, 113)
+        self.key('N'); self.key('F')
+        self.text(9800, '-')
+        self.text(9801, '-.')
+        self.desktop.send(self.control(9800), 0xB1, 0, 1)
+        before = self.doc()
+        draft = self.read('workspace.get')['nudgeEditor']
+        self.assertTrue(draft['active'])
+        with self.assertRaises(ApiError) as refusal:
+            self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(refusal.exception.code, -32002)
+        self.assertEqual(refusal.exception.data, dict(writeOutcome='notCommitted'))
+        self.assertIn('native editor work', str(refusal.exception))
+        self.assertEqual(self.doc(), before)
+        retained = self.read('workspace.get')['nudgeEditor']
+        for field in ('active', 'strength', 'duration', 'row', 'channel'):
+            self.assertEqual(retained[field], draft[field])
+        self.assertEqual(next(c for c in retained['controls'] if c['id'] == 9800)['selection'], [0, 1])
+        self.key(27)  # The editor's own explicit Cancel releases its raw draft.
+        self.assertFalse(self.read('workspace.get')['nudgeEditor']['active'])
+        self.write('document.open', path=str(path), discard=True)
+        self.assertNotEqual(self.doc()['documentId'], before['documentId'])
+        self.assertFalse(self.read('workspace.get')['nudgeEditor']['active'])
+
     def test_inline_nudge_retains_invalid_and_stale_draft_and_exact_existing_value(self):
         original = .12345678901234567
         self.write('pattern.effect.set', pattern=0, row=6, channel=1, column=0,

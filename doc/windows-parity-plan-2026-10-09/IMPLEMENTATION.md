@@ -2,6 +2,72 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.2 Application admission, retirement and refresh
+
+`Application` now supplies `DocumentController`'s replacement-admission observer.
+`DocumentDepartureIntegration.inc` coordinates final native draft review,
+generation-bound consent, input protection, worker adoption, owner retirement and
+forced refresh. Open and Recovery Restore use this path; Close and session-end
+queries acquire the same final registry admission. API `discard:true` cannot
+discard native raw drafts. Review and Cancel retain them; a changed generation
+invalidates prior Discard consent. Pending or uncertain work refuses departure.
+
+Main and its owned native trees are protected during the review prompt and final
+admission. Queued shortcuts, raw control writes, API mutations, navigation,
+deferred views and document-scoped timers cannot alter captured work while the
+worker adopts and refreshes. Worker-to-main callbacks remain serviced. Report
+count/selection/scroll/column updates now use explicit presentation setters;
+owner-data reads and custom drawing remain available. Column width changes admit
+only their matching stock header cascade, without exposing application callbacks
+to a general recursive-write permission.
+
+Failed admission/Stop releases the leases and keeps exact old owners and fields.
+Successful adoption retires old HWNDs and C++ owners, clears captured workspace
+targets, and keeps global recovery/library browsers and layout preferences.
+Inspectors reopened afterward capture the new song. Discarded queued view intent
+retains the existing “View target changed” explanation. Failed retirement/refresh
+retains protection; document readback identifies the adopted model and context
+marks `nativeRefreshPending`. F5 retries cleanup/refresh without repeating Open;
+its key repeat/release cannot fall through to the normal transport shortcut.
+Stop preserves the retry message. Canceled OS shutdown releases only its own
+closing admission and retains drafts. Failed state inspection now fails closed.
+
+ARM64 Release evidence is retained in
+`bin/parity-evidence/p0b-application-departure-receipt.json`:
+
+| Evidence | Scope/result |
+|---|---|
+| Integration and affected-target build logs | App, workspace fixture and 14 native control/editor targets built |
+| `*-integration-targeted.log` | 2/2: Application departure and native input/report boundary, 7.50 s |
+| `*-workspace-tests.log` | 6/6: full workspace, draft census, Arrangement, Matrix, MIDI recording and Recovery, 99.27 s |
+| `*-affected-tests.log` | 9/9 remaining affected native control/editor targets, 26.08 s |
+| `*-final-boundary-tests.log` | Final Application departure fixture passes, 5.45 s, after the queued-view feedback correction |
+| `*-final-app-tests.log` | 27/27 actual-app cases, 37.183 s, no skips: API draft refusal/Cancel/Open, recovery, Close, queued views, layouts, shortcuts, text ownership and multisample retention |
+
+The Application fixture exercises real owners/worker adoption, exact refusal
+outcomes, late raw input, injected Stop/refresh failures, retry key lifetime,
+canceled shutdown and the native recovery browser callback. Its modal choice and
+fault boundaries are controlled; this is not foreground dialog or OS-shutdown
+qualification. The pipe regression independently proves invalid nudge fields and
+caret survive `document.open(discard:true)` refusal, then explicit editor Cancel
+permits Open.
+
+Retained failures explain the corrections: a const pointer cast and test enum
+qualification caused compile failures; an initial TaskDialog import was not
+available with the current common-controls configuration, so review uses the
+existing native MessageBox convention; a blocked stock header cascade required
+the narrow presentation permission; and one of the first 20 workflow cases found
+the lost queued-view explanation. Assertions were retained. After that final
+status-only correction, the Application fixture and expanded 27-case app run were
+rerun. The earlier full workspace run remains evidence at its recorded source
+snapshot, while unchanged native-control targets reuse their matching inputs.
+
+**Still open:** P0b.1 unknown-without-receipt reconciliation (including reconnect,
+scan/cache and recorder side effects); remaining owner/stable-target audits and
+native modal/foreground qualification; Windows x64 and Mac shared-interface
+gates; P0c–P8, reciprocal supplied fixtures and final integration. This checkpoint
+activates Application departure protection; it does not complete P0b or parity.
+
 ## P0b.2 refresh setters and early nested owners
 
 The Application admission audit found a concrete missing owner: `SampleLibraryWindow` creates `MultisampleImportWindow` before its own `finish`, which previously published the registry property. That early child could therefore remain outside the draft census. `NativeToolWindow` now propagates registry context during `WM_NCCREATE`, while summary registration still waits until controls are initialized. This changes no draft semantics or document state.

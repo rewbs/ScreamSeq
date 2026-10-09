@@ -113,6 +113,11 @@ void nativeInputGate(HWND main) {
     require(SendMessageW(listBox.value,LB_GETCURSEL,0,0)==1&&SendMessageW(listBox.value,LB_GETCOUNT,0,0)==2,"Native listbox draft changed under input lease");
     require(ListView_GetItemCount(report.value)==1&&(ListView_GetItemState(report.value,0,LVIS_SELECTED)&LVIS_SELECTED),"Report selection or rows changed under input lease");
     require(ListView_GetColumnWidth(report.value,0)==100,"Report header changed under input lease");
+    NativeInputGate::present(report.value,LVM_SETCOLUMNWIDTH,0,MAKELPARAM(160,0));
+    require(ListView_GetColumnWidth(report.value,0)==160,"Guarded report refresh did not update its native header width");
+    LVITEMW deselect{};deselect.stateMask=LVIS_SELECTED;
+    NativeInputGate::present(report.value,LVM_SETITEMSTATE,0,reinterpret_cast<LPARAM>(&deselect));
+    require(!ListView_GetItemState(report.value,0,LVIS_SELECTED),"Guarded report refresh did not update selection");
     NativeInputGate::present(listBox.value,LB_RESETCONTENT);
     require(NativeInputGate::present(listBox.value,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"New list target"))==0,"Guarded list refresh could not add the new target");
     NativeInputGate::present(listBox.value,LB_SETITEMDATA,0,456);NativeInputGate::present(listBox.value,LB_SETCURSEL,0);
