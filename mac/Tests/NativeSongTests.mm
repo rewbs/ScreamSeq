@@ -139,7 +139,8 @@ int main() {
         check(same(unique.targetPattern, 64), "Independent block copy keeps signature, tempo swing, name and colour");
       }
       {
-        // A copied source-format effect replaces FX 1's precise command, as Document::edit does.
+        // Merge replaces occupied FX 1 while retaining destination-only events;
+        // overwrite copies the entire block, including empty native FX slots.
         auto fx = Document::demo();
         fx->edit({Edit{0, 0, 0, {}, {49, 1, VOLCMD_VOLUME, 38, CMD_VIBRATO, 0x34}}});
         fx->editOrder(0, 0, "after");
@@ -155,13 +156,15 @@ int main() {
           std::sort(values.begin(), values.end()); return values;
         };
         ArrangementCopy block{0, 1, 0, 4};
-        for (bool unique : {true, false}) {
+        for (const std::string mode : {"merge", "overwrite"}) for (bool unique : {true, false}) {
           block.makeUnique = unique;
+          block.mode = mode;
           const auto plan = prepareArrangementCopy(*fx, block);
           check(plan.clone == unique, "Block copy fixture");
           applyArrangementCopy(*fx, plan);
-          check(fx->cell(plan.targetPattern, 0, 4).effect == CMD_VIBRATO && commands(plan.targetPattern) == std::vector<double>{2.0, 3.0},
-                "Block copy replaces the conflicting FX 1 precise command and keeps other rows and columns");
+          const auto expected = mode == "merge" ? std::vector<double>{2.0, 3.0} : std::vector<double>{};
+          check(fx->cell(plan.targetPattern, 0, 4).effect == CMD_VIBRATO && commands(plan.targetPattern) == expected,
+                "Block copy must merge or overwrite destination native FX according to the selected mode");
           if (unique) check(commands(0) == std::vector<double>{1.0, 2.0, 3.0}, "Independent block copy leaves the shared pattern's commands");
           fx->native().validate(fx->song());
           fx->undo();
