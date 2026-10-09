@@ -14,6 +14,18 @@ does not waive necessary tests or authorize a narrower parity result.
 
 ## Consolidated checkpoint 04 — 9 October, 23:22 UTC
 
+**23:42 UTC remote result update:** Windows x64 and Mac ARM64 are terminal; Intel
+is still building. Windows passed 136/137 portable/worker and 29/29 native editor
+tests; the actual-app group has 12 failure records over nine cases. Both Windows
+audio services started but no endpoint exists, and a separate inspection-mode
+recovery cleanup timeout remains unexplained. Mac passed 122/122 native and 34/35
+interface groups. Both five-fixture roundtrip baselines passed; the known Windows
+plugin-parameter no-op preservation difference remains. The
+[reviewed CI record](p0b-ci-checkpoint-04.md) and [receipt](p0b-ci-checkpoint-04.json)
+retain exact scope, artifacts and follow-up. A Mac parameter-drop fixture now
+answers trim-catalog reads explicitly instead of counting them as mutations;
+that correction is source-only. No new build/test cycle was started.
+
 Frozen source `d39ec5548fc6224f5d395dbf02d6b0eca35b48ac` built locally on ARM64
 in one configure/build cycle, **23:14:30–23:19:50 UTC**. Source hashes stayed
 unchanged across that build. The log retains a C4244 int-to-float warning from the
