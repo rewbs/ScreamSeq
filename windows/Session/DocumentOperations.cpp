@@ -356,7 +356,11 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
     const int order=int(integer(field(p,"order"),0,document_.song().Order().size()));
     const int pattern=p.contains("pattern") ? int(integer(p.at("pattern"),0,UINT16_MAX)) : 0;
     require(order<int(document_.song().Order().size()),"Select a valid order");
-    if(!document_.orderEditChanges(order,pattern,operation))return Json::object();
+    // Shared preflight precedes the candidate validator so an exact no-op
+    // allocates no snapshot. Preserve that validator's public error contract.
+    try {if(!document_.orderEditChanges(order,pattern,operation))return Json::object();}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     const auto change=[&](Document &d){d.editOrder(order,pattern,operation);};
     validateStructural(document_,change,validateCandidate_);
     if(stopPlayback_) stopPlayback_();

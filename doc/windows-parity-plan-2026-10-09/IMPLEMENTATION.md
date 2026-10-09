@@ -12,6 +12,46 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Consolidated checkpoint 04 — 9 October, 23:22 UTC
+
+Frozen source `d39ec5548fc6224f5d395dbf02d6b0eca35b48ac` built locally on ARM64
+in one configure/build cycle, **23:14:30–23:19:50 UTC**. Source hashes stayed
+unchanged across that build. The log retains a C4244 int-to-float warning from the
+existing `PluginChain.cpp:948` fill operation; the build succeeded.
+
+Targeted native/model checks: **20/21 passed in 35.05 seconds**. The new shared
+order-admission test, history allocation, envelope JSON guard, dock geometry,
+private native controls and workspace departure/fixture cases passed. The
+arrangement worker case failed at exhausted-order insertion: shared preflight
+threw `std::invalid_argument` before the Windows candidate validator could map it
+to API error `-32602`. The expected error and atomicity assertions are retained.
+The adapter now performs the same validation-exception mapping around preflight;
+this follow-up is source-only and is **not** covered by the completed build.
+
+Actual application checks: **30/30 passed in 52.069 seconds**, no skips, using
+owned private desktops and disposable files. They cover the existing shortcut,
+typing, capture/recording, retained-editor, recovery, pattern and graph cases.
+They are not physical-device, foreground visual or P1 qualification.
+
+Receipts/logs: `bin/parity-evidence/p0b-closure-receipt-04.json`,
+`p0b-closure-build-04.log`, `p0b-closure-native-04.log`, `p0b-closure-app-06.log`.
+The 17 explicitly selected build targets include the app, shared order/history,
+document/envelope workers, workspace harness and all private-GUI-helper consumers.
+The 21-test selection includes its required scratch fixture. Unrelated suites
+were not repeated locally; remote full gates retain their necessary scope.
+
+At 23:22 UTC these exact jobs were confirmed live on the same frozen source:
+
+* Windows x64: run **38003410537**, job **114066588740**, building.
+* Mac ARM64: run **38003412848**, job **114066597302**, building.
+* Mac Intel: that same run, job **114066597619**, building.
+
+Do not restart those jobs because of the known follow-up; retain their independent
+Mac interface/no-op and Windows environment results. No new normal local build
+before **2026-10-10 00:19:51 UTC**. P0 remains open. P1 native compact/focus and
+shared meter identity work is prepared separately in the mixer worktree, with P0
+integrated into it; it has not been built or tested.
+
 ## Cross-platform correction batch — prepared, 9 October, 23:02 UTC
 
 **23:09 UTC update:** the frozen Windows x64 → Intel Mac → Windows x64
