@@ -2,6 +2,61 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Plugin-library completion and application-wide draft retention
+
+`PluginLibraryWindow` now submits rescans, browser preference changes and Add to
+rack through `NativeWriteCompletion`, with a captured method/parameters, library
+selection/revision, raw category, document and draft generation. Failed completion
+keeps that request across hiding/reopening and changes Reload to **Review result**.
+Another write, rescan or draft discard is refused while the result is unresolved.
+Exact worker receipts are reviewed without repeating the operation. Category Apply
+clears only its submitted generation; newer raw category text survives completion.
+
+When no receipt exists, Review reads current library data with `rescan:false`, or
+the original song's current rack after synchronizing its view. The report labels
+this observation **unverified**, preserves submission and raw fields, and requires
+explicit Reload before another write. Failed/malformed observations, unavailable
+preferences, a missing preference target, or a changed original rack context retain
+uncertainty. Observation never attributes current state to the earlier operation.
+
+Library preferences, scans and category drafts remain application-wide: replacing
+a song preserves their native owner. An unresolved Add to rack registers a
+song-scoped pending/uncertain draft and blocks replacement. `Application::canClose`
+checks global library work both before and after its message-pumping departure
+checks; Close/session-end cannot silently discard it. Escape may hide an uncertain
+library, but cannot discard it. A reviewed raw category can still be discarded
+explicitly with Escape/Reload. Stale library-revision rejection now carries the
+proven NotCommitted outcome at the locked, pre-write check in `PluginLibrary::set`.
+
+The actual `plugin.add` API returns `slot` and `dryRun`, not a stable instance ID.
+Its exact receipt proves the original insertion, but Review never uses that old
+slot to select or inspect today's rack. A changed song context produces a historical
+completion message. The external API response and preference storage schema remain
+unchanged; the UI continues using the existing independent library revision.
+
+Evidence: `bin/parity-evidence/p0b-library-completion-receipt.json`, 1,849 source/
+dependency inputs, final compiler/cache/executable hashes and retained logs.
+
+| Check | Result and scope |
+|---|---|
+| ARM64 native-tool, app and workspace targets | Final build passed |
+| Native tool suite | 1/1 CTest entry, 3.57 s; six scan/preference/add × known/unknown cases, failed/malformed Review, scope separation, hidden/reopened state, newer raw input and no side-effect replay |
+| Full workspace plus draft/departure/receipt groups | 4/4, 105.38 s; new real Application case drops preference and Add responses after actual worker success, preserves library across document replacement, refuses Close/departure appropriately, retains newer category and verifies a single plugin Undo |
+| Actual application library tests | 5/5, 12.316 s, no skips; API filters/defaults/dry/no-op/replay/independent history, stale concurrent writers, locking/atomic failure/corruption, bounded preferences, native search/favorite/hide/category/add workflows, stale drafts, keyboard and minimum-size geometry |
+
+The first native fixture build placed its header inside an anonymous namespace;
+a second compile caught a string/JSON comparison requiring explicit extraction.
+The first real-app run then exposed the incorrect Add result assumption described
+above. Product/fixture handling was corrected to the current API and the complete
+selected checks reran successfully. Initial failure logs and source freeze remain
+available; no assertion was weakened or excluded.
+
+No vendor/device behavior, project format, shared engine or Mac UI changed. Windows
+x64, Mac integration, physical/foreground accessibility, supplied reciprocal
+fixtures and the final cross-platform gate remain open. Installed-instrument and
+live-audio optional library cases were not selected or claimed. P0b still requires
+the remaining retained-owner/cache entry-point audit; P0c–P8 remain outstanding.
+
 ## P0b.1 Prepare asset receipts before the musical commit
 
 The previous callback-loss receipt is now prepared **before** the asset commit.

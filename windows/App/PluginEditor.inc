@@ -43,7 +43,12 @@
         pluginPathWindow->show();
     }
     void openPluginLibrary(){
-        if(!pluginLibraryWindow)pluginLibraryWindow=std::make_unique<ScreamSeq::PluginLibraryWindow>(window,[this](const auto &method,const auto &params){auto result=documentOperation(method,params);if(method=="plugin.library.set"){pluginLibraryLoaded=false;armPluginTimer();}return result;},[this]{return std::pair(documentId,view->session.revision);});
+        if(!pluginLibraryWindow)pluginLibraryWindow=std::make_unique<ScreamSeq::PluginLibraryWindow>(window,[this](const auto &method,const auto &params){
+            if(method=="document.get")return view->session.document;
+            auto result=documentOperation(method,params);if(method=="plugin.library.get"){pluginLibraryLoaded=false;armPluginTimer();}return result;
+        },[this]{return std::pair(documentId,view->session.revision);},[this](const auto &method,const auto &params,const auto &receipt){
+            auto result=documentOperationWithOutcome(method,params,receipt);if(method=="plugin.library.set"){pluginLibraryLoaded=false;armPluginTimer();}return result;
+        });
         pluginLibraryWindow->show();
     }
     void openPluginInstruments(){

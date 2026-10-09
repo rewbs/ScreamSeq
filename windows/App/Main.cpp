@@ -829,10 +829,14 @@ public:
 			// A prompt or chooser is already showing: do not stack another.
 			if(modalActive()||recoverySaving||recoveryRestoring||recoveryReads) return false;
 			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){
+                pluginLibraryWindow->show();status=L"Not closed / review the plugin-library result, or apply/discard its category draft";frameRequested=true;return false;
+            }
 			if(!protectRecordingTake()||!protectUnsaved()||!reviewNativeDeparture())return false;
             // A save/discard prompt pumps messages; an API client could have
             // begun a take after the first check. Do not lose that take.
             if(!protectRecordingTake()){nativeDepartureConsent.reset();return false;}
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){nativeDepartureConsent.reset();pluginLibraryWindow->show();return false;}
             admit(documentId,view->session.revision);departureClosing=true;return true;
 		} catch(const std::exception &e) {
 			try {reason=wide(e.what());} catch(...) {}

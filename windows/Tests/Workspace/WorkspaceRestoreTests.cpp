@@ -1015,6 +1015,7 @@ static void retainedTakesProtectLeavingDocument() {
 
 #include "DocumentDraftCensusTests.inc"
 #include "DocumentDepartureApplicationTests.inc"
+#include "PluginLibraryApplicationTests.inc"
 #include "NativeReceiptApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
@@ -1070,7 +1071,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
-                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
