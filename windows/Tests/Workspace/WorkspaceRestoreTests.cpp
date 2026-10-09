@@ -1060,6 +1060,7 @@ int wmain(int argc,wchar_t **argv) {
                 nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
                 mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
                 importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
+                mainOwnersRetireAfterAdmission();std::cout<<"PASS Main retirement: seven owners, rollback, raw text, generations and fresh initialization\n";
                 directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }

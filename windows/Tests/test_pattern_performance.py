@@ -357,8 +357,20 @@ class PatternPerformanceTests(unittest.TestCase):
         self.assertTrue(self.read('workspace.get')['effectEditor']['visible'])
         self.command(348)  # Explicitly reload the current cursor.
         self.text(349, 'pitch slide')
-        self.assertEqual(self.desktop.send(self.control(341), 0x146), 1)
-        self.desktop.send(self.control(341), 0x14E, 0)
+        # Search includes descriptions: the source-format up/down commands
+        # describe pitch slides too. Select the native command by identity,
+        # rather than applying the first descriptive match as a native slide.
+        choices = self.control(341)
+        self.assertEqual(self.desktop.send(choices, 0x146), 3)
+        labels = []
+        for index in range(3):
+            length = self.desktop.send(choices, 0x149, index)  # CB_GETLBTEXTLEN
+            self.assertLess(length, 1024)
+            label = ctypes.create_unicode_buffer(length + 1)
+            self.desktop.send(choices, 0x148, index, ctypes.addressof(label))
+            labels.append(label.value)
+        self.assertCountEqual(labels, ['0F  Portamento Up', '0E  Portamento Down', 'BL  Pitch slide'])
+        self.desktop.send(choices, 0x14E, labels.index('BL  Pitch slide'))
         self.command(341, 1)
         self.text(342, 7.5)
         self.text(343, .125)

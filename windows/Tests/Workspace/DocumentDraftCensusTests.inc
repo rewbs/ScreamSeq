@@ -111,6 +111,14 @@ void mainAndTimingDraftCensus() {
         restoreCheck(app.documentDrafts.admit(*token.token,app.documentId,app.view->session.revision).status==Status::Changed&&songState(app)==song,
             "New timing raw text must revoke consent without changing song history");
         app.songTimingWindow.reset();
+        const auto prior=namedDraft(census(app),"In-grid nudge");
+        const auto oldConsent=app.documentDrafts.authorize(census(app),true);
+        app.finishPatternNudge(false);restoreCheck(app.beginPatternNudgeEdit("nudge-forward"),"Reopen canceled nudge draft");
+        rawDraftText(app.controls.at(app.nudgeStrengthField),raw.c_str());
+        const auto reopened=namedDraft(census(app),"In-grid nudge");
+        restoreCheck(reopened.target==prior.target&&reopened.generation>prior.generation&&
+            app.documentDrafts.admit(*oldConsent.token,app.documentId,app.view->session.revision).status==Status::Changed&&songState(app)==song,
+            "Reopened same-target nudge revived older discard consent or changed music");
     });
 }
 
@@ -141,6 +149,70 @@ void importAndRecorderDraftCensus() {
         restoreCheck(songState(app)==song,"Native setup/path census mutated the song or history");
         app.pluginPathWindow.reset();app.sampleRecordingWindow.reset();
         restoreCheck(census(app).drafts.empty(),"Destroyed setup/path owners stayed registered");
+    });
+}
+
+void mainOwnersRetireAfterAdmission() {
+    using Status=Tracker::DocumentDeparture::Status;
+    withRestoreFixture([](RestoreApplication &app) {
+        addRestoreGain(app);createRestoreCurveSource(app);app.edit("mixer.enable",RestoreJson::object());
+        app.renderPatternSample(false); // A completed result still owns its old selection/report.
+        restoreCheck(!app.directSampleRenderCompletion.retained()&&!app.directSampleRenderTarget.empty(),"Completed render fixture has no retained target");
+        const auto openMain=[&](const char *panel){
+            auto layout=layoutFor(app,panel);
+            // Retargeting the lower host also retires its prior compact-tab
+            // selection; a saved tab cannot refer to an unselected old panel.
+            layout["editors"]["compactSelection"]="pattern";app.restoreLayoutConfiguration(layout);
+        };
+        for(const auto &[panel,control]:std::array<std::pair<const char *,int>,4>{{
+            {"effects",effectValue},{"plugins",pluginValue},{"mixer",mixerPreGain},{"graph",graphPropertyValue}}}) {
+            openMain(panel);rawDraftText(app.controls.at(control),L"-");
+        }
+        app.revealWorkspaceMainEditor("samples");app.layoutControls();(void)app.sampleRange();
+        rawDraftText(app.controls.at(sampleStartField),L"-");
+        auto cursor=app.position();cursor["row"]=4;cursor["column"]=3;cursor["following"]=false;app.navigate(cursor);
+        app.revealWorkspacePattern();app.workspaceState.focus="pattern";app.layoutControls();
+        restoreCheck(app.beginPatternNudgeEdit("nudge-forward"),"Open retirement nudge fixture");
+        rawDraftText(app.controls.at(app.nudgeStrengthField),L"-.");
+        const auto captured=census(app);const auto song=songState(app),controls=allControlState(app);
+        for(const auto *name:{"Pattern FX","In-grid nudge","Sample range","Mixer","Plugin parameters and programs","Graph recipe"})
+            restoreCheck(namedDraft(captured,name).dirty,"Main retirement fixture lacks a raw draft");
+        const auto generations=std::array{app.effectDraftGeneration,app.patternNudge.generation,app.sampleDraftGeneration,
+            app.mixerGeneration,app.pluginDraftGeneration,app.graphGeneration,app.directSampleRenderGeneration};
+        auto consent=app.documentDrafts.authorize(captured,true);
+        {
+            auto admission=app.documentDrafts.admitForReplacement(*consent.token,app.documentId,app.view->session.revision);
+            restoreCheck(admission.status==Status::Ready&&admission.replacement,"Main owners have no staged retirement action");
+        }
+        restoreCheck(census(app).sameWork(captured)&&allControlState(app)==controls&&songState(app)==song,
+            "Rolled-back Main retirement lost raw text, caret, identity or music");
+        consent=app.documentDrafts.authorize(captured,true);
+        auto admission=app.documentDrafts.admitForReplacement(*consent.token,app.documentId,app.view->session.revision);
+        // Exercise the post-adoption callback contract alone. Application's
+        // actual Open/Close admission is a separate integration gate.
+        restoreCheck(admission.replacement&&admission.replacement->retireOwners()&&app.documentDrafts.departing(),
+            "Main owner cleanup did not complete under its refresh lease");
+        restoreCheck(census(app).drafts.empty()&&app.effectDraftDocument.empty()&&app.patternNudge.document.empty()&&
+            app.sampleRangeDocument.empty()&&app.mixerDocument.empty()&&app.pluginDocument.empty()&&app.graphDocument.empty(),
+            "Main cleanup retained a document identity or raw-draft owner");
+        restoreCheck(!app.effectDraftExists&&!app.patternNudge.active&&!app.sampleDraft&&!app.mixerDirty&&!app.pluginDraft&&!app.graphDirty&&!app.graphFieldDirty&&
+            app.effectChoices.empty()&&app.sampleRanges.empty()&&app.mixerDraft.empty()&&app.pluginParameters.empty()&&app.graphDraft.empty()&&
+            app.graphCanvas.nodes.empty()&&app.directSampleRenderTarget.empty()&&app.directSampleRenderReport.empty(),
+            "Main cleanup retained old definitions, targets or a completed render result");
+        const auto retired=std::array{app.effectDraftGeneration,app.patternNudge.generation,app.sampleDraftGeneration,
+            app.mixerGeneration,app.pluginDraftGeneration,app.graphGeneration,app.directSampleRenderGeneration};
+        for(size_t i=0;i<retired.size();++i)restoreCheck(retired[i]>generations[i],"Retirement revived an old callback generation");
+        restoreCheck(allControlState(app)==controls&&songState(app)==song,"State retirement pumped native controls or changed musical history");
+        restoreCheck(!admission.replacement->retireOwners(),"Main retirement repeated completed cleanup");
+        admission.replacement.reset();
+        // Owners can be initialized afresh after refresh is admitted; old raw
+        // text must not become a dirty draft for the next captured target.
+        for(const auto *panel:{"effects","plugins","mixer","graph"})openMain(panel);
+        app.revealWorkspaceMainEditor("samples");app.layoutControls();app.refreshSampleFields();
+        restoreCheck(census(app).drafts.empty()&&songState(app)==song,"Reopening retired Main owners resurrected drafts or edited music");
+        app.revealWorkspacePattern();app.workspaceState.focus="pattern";app.layoutControls();
+        restoreCheck(app.beginPatternNudgeEdit("nudge-forward")&&app.patternNudge.generation>retired[1],
+            "Fresh nudge initialization reused its pre-retirement generation");
     });
 }
 

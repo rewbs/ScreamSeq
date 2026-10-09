@@ -2,6 +2,26 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.2 Main raw-owner retirement
+
+`DocumentDrafts.inc` now supplies post-adoption cleanup for Main's seven registered owners: FX, nudge, sample range, Mixer, plugin parameters/programs, graph recipe and completed direct-render results. Cleanup clears captured document/target data, cached definitions, stale selections and gesture state without sending control messages or calling the worker. Pending/uncertain results remain non-discardable; completed cleanup runs once under the registry lease. Generations advance, while app-level unit/layout preferences and plugin discovery data remain. Application final admission is still not wired, so these callbacks are not yet complete Open/Close protection.
+
+The nudge editor also advances its generation when opening a fresh draft. Previously cancel/reopen at the same document, cell and raw value could recreate an older generation. A real-HWND regression now proves prior discard consent is rejected after that sequence and after retirement/fresh initialization. The expanded census creates invalid raw drafts in every Main family, exercises rollback, verifies cleanup leaves native controls and song/history untouched, and reinitializes clean owners.
+
+ARM64 Release app/workspace builds pass. Final evidence is pinned in `bin/parity-evidence/p0b-main-retirement-receipt.json` with 1,836 source hashes, native build inputs, compiler/cache/executable hashes and retained logs:
+
+| Log | Result |
+|---|---|
+| `p0b-main-retirement-final-build.log` | App and workspace test target built |
+| `p0b-main-retirement-census-final-tests.log` | Expanded raw-owner/retirement census passed; 8.98 s |
+| `p0b-main-retirement-workspace-tests.log` | Full workspace regression passed; 85.27 s |
+| `p0b-main-retirement-app-tests.log` | Four selected actual-app cases passed; one search-count assertion failed |
+| `p0b-main-retirement-search-tests.log` | Corrected remaining case passed; 0.692 s, no skips |
+
+Both intermediate failures remain in their original logs. The first new fixture retained an obsolete compact-tab selection after selecting another Main panel; it now supplies a valid layout without changing production validation. The existing FX test assumed “pitch slide” matched only one command, but the catalog descriptions also match legacy Portamento Up/Down. It now asserts all three exact display labels and explicitly selects native BL; all captured-target, stale-edit, Undo and save/reopen assertions remain. Only this Python test changed after the final native build; no rebuild was needed for it.
+
+Next: wire the optional controller observer in Application, retire its C++ native-owner pointers safely, and gate document input/API writes before control mutation through adoption/retirement/refresh. Review/Discard/Cancel must cover exact captured owner generations; API Open must refuse unresolved native work without a modal prompt. Preserve both take guards and carry this policy through native Open, recovery, Close and bounded session end. Existing real-owner checks do not substitute for those end-to-end paths. Windows x64/Mac integration and P0c–P8 remain outstanding.
+
 ## P0b.2 post-adoption owner retirement foundation
 
 The existing registry/native-window candidate now has bounded ARM64 qualification. `DocumentDraftRegistry::admitForReplacement` prepares cleanup and summary reads before acquiring its lease. Its move-only `AdmittedReplacement` retires document owners only after the caller observes adoption; dropping an unused admission leaves drafts intact. Clean document owners retire alongside dirty ones; global tools remain. Missing cleanup or failed summary reads refuse admission. Retirement skips nested owners already destroyed by their parent, retries only incomplete cleanup and retains its lease through native refresh.

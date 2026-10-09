@@ -66,7 +66,8 @@
         if(busy||recoveryRestoring){status=L"Document busy / nudge draft unchanged";return true;}
         if(patternNudge.active){layoutPatternNudgeEditor();SetFocus(controls.at(nudgeStrengthField));status=patternNudge.message;return true;}
         installPatternNudgeControls();
-        PatternNudgeDraft next;next.active=true;next.kind=std::move(kind);next.document=documentId;next.revision=view->session.revision;
+        PatternNudgeDraft next;next.active=true;next.generation=patternNudge.generation+1;
+        next.kind=std::move(kind);next.document=documentId;next.revision=view->session.revision;
         next.pattern=patternIndex;next.row=row;next.channel=channel;next.fx=(column-3)/2;
         for(const auto &item:view->session.document.at("patterns"))if(item.at("index")==patternIndex)next.patternID=item.at("id").get<std::string>();
         for(const auto &item:view->session.document.at("tracks"))if(item.at("index")==channel)next.trackID=item.at("id").get<std::string>();
