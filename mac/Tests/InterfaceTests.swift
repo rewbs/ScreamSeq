@@ -5,6 +5,18 @@ struct InterfaceFailure: Error { let message: String }
   static func require(_ value: @autoclosure () -> Bool, _ message: String) throws {
     if !value() { throw InterfaceFailure(message: message) }
   }
+  static func pumpMainRunLoop(_ seconds: TimeInterval) {
+    let deadline = Date().addingTimeInterval(seconds)
+    // These offscreen tests do not enter NSApplication.run(). Keep a source
+    // attached and return through short run-loop turns so a dispatch callback
+    // can schedule another retry within the original assertion deadline.
+    let wake = Timer(timeInterval: 0.005, repeats: true) { _ in }
+    RunLoop.current.add(wake, forMode: .default)
+    defer { wake.invalidate() }
+    while Date() < deadline {
+      _ = RunLoop.current.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.005)))
+    }
+  }
   static func key(
     _ view: PatternView, _ code: UInt16, _ text: String,
     flags: NSEvent.ModifierFlags = [], repeatKey: Bool = false, up: Bool = false
@@ -744,7 +756,7 @@ struct InterfaceFailure: Error { let message: String }
           if let control = view as? NSControl {
             let rect = control.convert(control.bounds, to: mixerView.inspector), bounds = mixerView.inspector.bounds
             try require(rect.width > 0 && rect.height > 0 && rect.minX >= -1 && rect.maxX <= bounds.width + 1 && rect.minY >= -1 && rect.maxY <= bounds.height + 1,
-              "Scrolling mixer inspector control fits: \(type(of: control)) \(rect)")
+              "Scrolling mixer inspector control fits: \(type(of: control)) \((control as? NSButton)?.title ?? "") \(rect), inspector \(bounds)")
           }
           for child in view.subviews { try checkInspector(child) }
         }

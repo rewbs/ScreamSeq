@@ -12,6 +12,43 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Mac interface correction batch — prepared, 9 October, 22:24 UTC
+
+The four failures from run **37997879633** are being handled together. No new
+build or test run has been started. The source changes are **uncompiled and
+unqualified**, and do not replace the recorded 31/35 result:
+
+* The draft helper now uses a shared `pumpMainRunLoop` with an attached 5-ms
+  timer and short run-loop turns. Plugin retry exhaustion schedules multiple
+  consecutive dispatch callbacks; the prior one-shot deadline timer was
+  insufficient in the observed run. The overall 0.08/0.12-second deadlines and
+  expected edits/baseline/status remain unchanged. Native execution must determine
+  whether this resolves the failure; no product retry semantics were changed.
+* The queued graph handle fixture uses that same bounded pump. Its combined
+  assertion is separated into exact-once, captured revision, chosen source and
+  original gain checks, with the submitted payload in failure diagnostics.
+  Current production code already captures the mutation before a pending load and
+  reads sidechain gain in `selectSongConnection`; it was not declared missing or
+  rewritten without evidence identifying a failing clause.
+* The Back fixture previously counted **every request** as a write. Source shows
+  that `showPort` calls `inspect`, which invokes `GraphTrimControls.context` and
+  `graph.trim.get`. The fixture now answers only that explicit read for the
+  captured destination in song scope, requires exactly one such read, and fails
+  on every mutation or unexpected request. Original connection identity, consumed
+  return state and every card position remain separate required assertions.
+* `MixerEditor` gives the scrolling inspector 12 points of inset instead of 3,
+  leaving room for rounded-button bezels beyond their alignment rectangles.
+  The existing full-control-bounds and reachability checks remain intact; failures
+  now identify the button title and inspector bounds. This candidate layout
+  correction needs Mac execution before the geometry failure can be closed.
+
+The only product edit in this batch is native Mac inspector spacing. No Windows,
+shared editing, audio, API, serialization, plugin state or project identity code
+changed. The Windows binaries qualified at `494d65563` remain the current Windows
+candidate. Preserve the still-running x64/Intel jobs at that frozen commit. Keep
+this new batch local until the existing archived-app exchange can use the remote
+qualification checkout without encountering changed Mac product inputs.
+
 ## Consolidated native checkpoint — 9 October, 22:19 UTC
 
 Frozen product/test commit: `494d6556367ee6ac9c592ae19cc7a858e6bc2e1b`.

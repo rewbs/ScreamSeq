@@ -107,11 +107,23 @@ extension InterfaceTests {
     let detector=nav.canvas.nodes.first{$0.id=="plugin:comp"}!,detectorPort=detector.inputs.first{$0.number==1}!
     try require(nav.scroll.documentVisibleRect.contains(detector.portPoint(detectorPort,output:false)) && nav.canvas.nodes.map(\.rect)==preserved,"Choosing an off-screen socket frames its endpoint without rewriting any saved card position")
     let edge=nav.canvas.edges.firstIndex{$0.source=="one"}!,route=nav.cableLocation(nav.canvas.edges[edge]);nav.selectConnection(edge)
-    let positions=Dictionary(uniqueKeysWithValues:nav.canvas.nodes.map{($0.id,$0.rect)});var navigationWrites=0;nav.onRequest={_,_,_ in navigationWrites+=1}
+    let positions=Dictionary(uniqueKeysWithValues:nav.canvas.nodes.map{($0.id,$0.rect)})
+    var navigationReads=[String](),unexpectedRequests=[String]()
+    nav.onRequest={method,params,reply in
+      // Showing a bus legitimately loads its trim inspector. Permit only this
+      // explicit read; a mutation or any unexpected request still fails.
+      if method=="graph.trim.get",params["node"] as? String==route.target,params["graph"] is NSNull {
+        navigationReads.append(method);reply(["result":["data":["ports":[],"sources":[]]]])
+      }else{unexpectedRequests.append(method);reply(["error":["message":"Unexpected navigation request"]])}
+    }
     nav.showCableEndpoint(output:false)
     try require(nav.portReturn?.cable==route && nav.selectedID==route.target,"Show cable target selects the actual endpoint and records a stable return connection")
     nav.returnToConnection()
-    try require(nav.canvas.selectedEdge.map{nav.cableLocation(nav.canvas.edges[$0])}==route && nav.portReturn==nil && navigationWrites==0 && nav.canvas.nodes.allSatisfy{positions[$0.id]==$0.rect},"Back restores the original connection without moving cards or creating document Undo")
+    try require(nav.canvas.selectedEdge.map{nav.cableLocation(nav.canvas.edges[$0])}==route,"Back restores the original connection; status: \(nav.status.stringValue)")
+    try require(nav.portReturn==nil,"Back consumes its saved return location")
+    try require(unexpectedRequests.isEmpty,"Connection navigation performs no writes or unexpected requests: \(unexpectedRequests)")
+    try require(navigationReads==["graph.trim.get"],"Showing the bus loads its trim inspector once: \(navigationReads)")
+    try require(nav.canvas.nodes.allSatisfy{positions[$0.id]==$0.rect},"Back preserves every card position")
     controls.targetMenu.close();editor.targetMenu.close();move.targetMenu.close();sum.targetMenu.close()
     try graphConnectionGainChecks(song:song,recipe:recipe)
     try graphAudioFanChecks()

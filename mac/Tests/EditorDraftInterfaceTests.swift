@@ -21,16 +21,7 @@ extension InterfaceTests {
     guard let button = find(root) else { throw InterfaceFailure(message: "Missing button \(title)") }
     button.handler?()
   }
-  private static func wait(_ seconds: Double) {
-    let deadline = Date().addingTimeInterval(seconds)
-    // Unlike NSApplication.run(), this offscreen harness may have no attached
-    // source. run(until:) then returns immediately, before asyncAfter can fire.
-    // Keep the loop alive for the original bound; do not extend retry deadlines.
-    let wake = Timer(fire: deadline, interval: 0, repeats: false) { _ in }
-    RunLoop.current.add(wake, forMode: .default)
-    defer { wake.invalidate() }
-    RunLoop.current.run(until: deadline)
-  }
+  private static func wait(_ seconds: Double) { pumpMainRunLoop(seconds) }
 
   static var editorDraftGroups: [(String, () throws -> Void)] {
     [("draft-assets", assetCatalogueChecks), ("draft-text-history", textHistoryChecks),
