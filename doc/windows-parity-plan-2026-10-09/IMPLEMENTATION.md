@@ -2,6 +2,34 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.2 native input boundary
+
+`NativeInputGate.hpp` adds a UI-thread RAII guard over explicit native root windows and their children. Install it after editor subclasses and before the final registry capture/admission. It intercepts input before stock controls or custom editor handlers receive it: queued/sent keyboard and mouse messages, focus-triggered edits, command/notification handlers, and text/selection/content setters for the application's standard edit, combo, button, listbox and report/header controls. Destroyed HWNDs unregister safely; failed construction removes only its own protection. Additional fully initialized trees require explicit `protect` before exposure or a message-pumping read.
+
+Host refresh uses `NativeInputGate::present` for one exact presentation setter. Permission is consumed at the outer subclass before native processing; recursive messages and sibling writes cannot inherit it. The helper cannot authorize arbitrary commands, key input or callbacks. `NativeControls::text/select` now use that path, with their unchanged-value optimization intact. Direct `SetWindowTextW` and raw control messages remain blocked while protected. This is a native application coordination boundary, not a security boundary against arbitrary in-process code or direct model calls.
+
+Real HWND tests in `NativeInputGateTests.inc` cover docked/floating roots, raw text and caret retention, queued characters, keyboard/focus/command handlers, combo/listbox/report/header state, one-shot recursive-send refusal, rollback after invalid roots, overlapping-lease rejection, new-tree registration, destruction during the lease, and resumed editing after release. An initial test incorrectly used the `SetWindowTextW` wrapper's boolean as proof of control acceptance; that wrapper returned success even when the subclass rejected its message. The corrected test checks exact raw text and handler counts, and separately checks the direct `WM_SETTEXT` return. Product behavior did not change for that correction; the failed log is retained.
+
+**Integration remains open.** No Application departure path creates this guard yet. The next coherent batch must:
+
+1. Collect Main plus all owned floating/native/global command surfaces, including nested owners, and install protection after their custom subclasses. Release typing/audition ownership and handle vendor editors/takes before final admission. Do not treat disabled parents as protection.
+2. Filter queued shortcuts before `await` and the outer message loop call `handleKey`; guard API writes, audition, deferred actions and document-scoped timers before dispatch. Continue servicing worker-to-main callbacks to avoid deadlock. Native subclass tests alone do not prove these host entry points.
+3. Migrate the remaining direct refresh setters (Main plugin/graph/effect/list controls and retained owners) to explicit presentation helpers; audit report notifications separately from paint/read requests. Never introduce a broad callback scope that permits arbitrary reentrant writes. No new editor subclass may be installed outside the guard after admission.
+4. Acquire the guard before the registry's final re-read, pass the existing controller admission observer, and keep both leases through adoption, owner retirement, C++ owner-pointer cleanup and completed native refresh. Failed Stop/admission must preserve drafts and restore usable focus. Failed refresh must retain protection and provide a recoverable path; it must not silently reopen input against stale targets.
+5. Exercise native/API Open, recovery, Close and bounded session end with actual Application owners. Native Review/Discard/Cancel must bind exact draft generations; API `discard:true` is not native-draft consent. New/Demo policy follows the planned command batch. Existing take guards remain authoritative and separately tested.
+
+ARM64 Release qualification passed with 1,838 frozen source/dependency inputs:
+
+| Evidence under `bin/parity-evidence/` | Scope/result |
+|---|---|
+| `p0b-native-input-gate-native-rebuild.log` | Native owner/input target built after the test correction |
+| `p0b-native-input-gate-native-retest.log` | Native owner, result-retention and input-boundary regression passed; 2.03 s |
+| `p0b-native-input-gate-app-build.log` | App and workspace targets built |
+| `p0b-native-input-gate-workspace-tests.log` | Full workspace 85.37 s and separate draft census 9.04 s; 2/2 passed |
+| `p0b-native-input-gate-app-tests.log` | Three actual-app cases: invalid/stale nudge, precise-note layout draft, retained inspectors/pin/Return; 1.535 s, no skips |
+
+The tests used owned private desktops and disposable inspection documents. No physical capture or system audio-default change occurred. This Windows-only slice changes no shared model, project format, DSP or Mac UI. Its receipt is `bin/parity-evidence/p0b-native-input-gate-receipt.json`; results are bounded to its source/compiler/cache/executable/log hashes. Cross-platform P0b integration, reciprocal fixture saves and P0c–P8 remain outstanding.
+
 ## P0b.2 Main raw-owner retirement
 
 `DocumentDrafts.inc` now supplies post-adoption cleanup for Main's seven registered owners: FX, nudge, sample range, Mixer, plugin parameters/programs, graph recipe and completed direct-render results. Cleanup clears captured document/target data, cached definitions, stale selections and gesture state without sending control messages or calling the worker. Pending/uncertain results remain non-discardable; completed cleanup runs once under the registry lease. Generations advance, while app-level unit/layout preferences and plugin discovery data remain. Application final admission is still not wired, so these callbacks are not yet complete Open/Close protection.

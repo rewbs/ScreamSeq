@@ -1,4 +1,5 @@
 #pragma once
+#include "NativeInputGate.hpp"
 #include <windows.h>
 #include <commctrl.h>
 #include <algorithm>
@@ -110,8 +111,9 @@ inline void text(HWND h,std::wstring_view value){
   if(size_t(length)==value.size()){
     std::wstring current(size_t(length)+1,0);GetWindowTextW(h,current.data(),length+1);current.resize(size_t(length));if(current==value)return;
   }
-  SetWindowTextW(h,std::wstring(value).c_str());
+  const std::wstring next(value);
+  NativeInputGate::present(h,WM_SETTEXT,0,reinterpret_cast<LPARAM>(next.c_str()));
 }
-inline void select(HWND h,LRESULT index){if(SendMessageW(h,CB_GETCURSEL,0,0)!=index)SendMessageW(h,CB_SETCURSEL,WPARAM(index),0);}
+inline void select(HWND h,LRESULT index){if(SendMessageW(h,CB_GETCURSEL,0,0)!=index)NativeInputGate::present(h,CB_SETCURSEL,WPARAM(index),0);}
 inline void active(HWND h,bool value){auto *s=state(h);if(!s||s->active!=value){if(s)s->active=value;InvalidateRect(h,nullptr,FALSE);}}
 }
