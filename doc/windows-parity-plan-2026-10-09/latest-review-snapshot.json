@@ -1,9 +1,9 @@
 {
-  "reviewed_utc": "2026-10-09T13:37:27.802223+00:00",
+  "reviewed_utc": "2026-10-09T13:53:31.873587+00:00",
   "scope": "Planning only: existing source and evidence read; no product edits, builds, tests or application launches. Hash checks are artifact inspection, not product qualification.",
   "reference_main": "ffe81aa4bfa83bc89b1e1dd92db06c67819c247a",
   "remote_main": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
-  "checkout": "68c2cf1ded25aebe600df222de9282662949c25d",
+  "checkout": "09a45783b338478e513f77e36cd89a239f15008b",
   "branch": "codex/windows-parity-safety",
   "inputs": {
     "screamseq-mac-ui-reference-2026-10-09.zip": {
@@ -21,12 +21,18 @@
   },
   "preexisting_product_worktree": {
     "windows/Api/SessionAdapter.hpp": "eb17f038ea659e08a2e5f843d4422524677bf45e7536c9986827d85d0b795a5a",
-    "windows/App/Main.cpp": "cb4a6ff249fba038934e6675247224ace2886b2f41668e99dd295a7b719709a9",
+    "windows/App/Main.cpp": "ba3c181ac66da8cfdc252ca7c494062359cb4e46fe7ae33cc490a5209389654c",
+    "windows/App/MultisampleImportWindow.hpp": "f4352b74d519c0ed2be4ac39d654ec9ce7d1eaa6cda0cd58d35214bdc113f4cb",
     "windows/App/NativeToolWindow.hpp": "2ba0e735a288a03614c5172e49a7af38a803fd1c366c72c9cfb59f3da08aba06",
     "windows/App/PatternSampleRenderWindow.hpp": "c078a39f5a7c2214e86a94786f8e31e42e7cb52dc207acb9c5e31b9edb8cc8df",
-    "windows/Session/DocumentController.cpp": "173e13b28229d06f8e892697f2c7f0f5b5f2c6fd007290ee93bb8699d9ab8669",
-    "windows/Session/DocumentController.hpp": "3241321496bd6e725330a26e7920fe67cf6a2c930e07c5a6ff85c1fbf8e69412",
-    "windows/App/NativeWriteCompletion.hpp": "614cf2a4b3bdf41fc65d1f27595fbbc6acd2139f6befd31f8c86bd6cfee8045b"
+    "windows/App/SampleCaptureIntegration.inc": "8bc71a996d916149101825ac79974ac091dc2f58121a1f1f1f8799dca048ffea",
+    "windows/App/SampleLibrary.inc": "2d4067e9986080f903b314f7d1d4ebfbdafcfb39c64e57f845ef796f6e21c5c2",
+    "windows/App/SampleLibraryWindow.hpp": "afd396b1ce4f8ae95bf2a769ee4a543cda8d40271bb12323b48dbb4affa0faed",
+    "windows/Session/DocumentController.cpp": "6bbd91b9069f3477e13cf263601ec3233105b2eb110381d10d68072426cf9420",
+    "windows/Session/DocumentController.hpp": "90b6932f48c8830cfe5378f75e58546c703a385734882efa7ba5511480a135b2",
+    "windows/Tests/Workspace/DraftImportRetentionTests.inc": "15ccc32d08688ffa1f6388ec19a9c76bcae89d0949229306f09873dea73b2311",
+    "windows/Tests/Workspace/DraftRequestRetentionTests.inc": "cee0611ab9f1c2af8f8f23de056573b6412e0a1d17dc642ca6ab805da0a3fced",
+    "windows/App/NativeWriteCompletion.hpp": "fcd9dac4e5a9fd96d4faa7497292140007ce0c1e3361a2925fe5a9584cb3426e"
   },
   "outcome_receipt": {
     "path": "bin/parity-evidence/p0b-outcome-receipt.json",
@@ -39,10 +45,16 @@
         "changed": [
           "windows/Api/SessionAdapter.hpp",
           "windows/App/Main.cpp",
+          "windows/App/MultisampleImportWindow.hpp",
           "windows/App/NativeToolWindow.hpp",
           "windows/App/PatternSampleRenderWindow.hpp",
+          "windows/App/SampleCaptureIntegration.inc",
+          "windows/App/SampleLibrary.inc",
+          "windows/App/SampleLibraryWindow.hpp",
           "windows/Session/DocumentController.cpp",
-          "windows/Session/DocumentController.hpp"
+          "windows/Session/DocumentController.hpp",
+          "windows/Tests/Workspace/DraftImportRetentionTests.inc",
+          "windows/Tests/Workspace/DraftRequestRetentionTests.inc"
         ],
         "missing": []
       },
@@ -166,6 +178,14 @@
       "peer-matrix-review.csv": 84
     },
     "missing_local_document_links": [],
-    "scope": "Static document/link/hash readback only; no product builds/tests/launches."
+    "scope": "Static document, inventory, link and hash readback only; no product builds/tests/launches."
+  },
+  "product_checkpoint": "68c2cf1ded25aebe600df222de9282662949c25d",
+  "source_observations": {
+    "worker_result_identity": "invokeCompleted/invokeOperation captures result revision on worker; unqualified",
+    "render_import_wiring": "Typed write is wired to render and multisample owners; unqualified",
+    "generic_failure": "NativeWriteCompletion retains unclassified failures; no domain resolution for unknown without receipt",
+    "recorder_mismatch": "SampleCaptureIntegration passes 5 constructor arguments; SampleRecordingWindow accepts 4",
+    "departure": "Application does not pass replacement admission; protectUnsaved does not consult retained-owner registry"
   }
 }
