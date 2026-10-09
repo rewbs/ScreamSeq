@@ -2,6 +2,77 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Native plugin preset file-result recovery
+
+Native rack preset Save/Load now captures its stable plugin ID, document/revision,
+file path and inspected preset digest in an independent Main draft owner. Pending
+work begins before plugin-editor flush and the native chooser. Cancellation and
+pre-submission stale-context refusal release pending work; a submitted uncertain
+result remains protected across inspector refresh and document-departure attempts.
+The parameter/program draft owner remains independent.
+
+`windows/App/PluginPresetIntegration.inc` sends the existing preset API through
+`NativeWriteCompletion` and its per-call worker receipt. Save/Load becomes **Review
+result** and **Use current state** while unresolved. Review of a known result
+validates the returned file/path/digest or original plugin/load result, presents
+that historical completion and performs no further write, chooser or selection
+change. A later missing/changed file does not relabel the returned receipt.
+Newer parameter text, target/revision, draft generation and focus remain intact.
+Completed reports retire only after successful document replacement.
+
+Without a receipt, Review reads the captured file through `plugin.preset.inspect`
+or the original stable plugin through `plugin.state.get`. A current file or saved
+baseline is explicitly **unverified** evidence of the earlier effect. Missing
+files/plugins and failed/malformed reads keep the result unresolved. Successful
+readback enables explicit **Use current state** acknowledgement, guarded by the
+observed document/revision; acknowledgement also performs no write. The next
+Save/Load requires a separate deliberate command. Neither equal song revision nor
+readback equality is used to declare a file effect committed or rejected.
+
+No preset format, plugin state transaction, routing, history, worker dispatch,
+audio/device or Mac implementation changed. Legacy file magic/extensions and
+physical-layout fingerprints remain compatible. `workspace` inspection includes
+`pluginPresetAction` with captured intent, receipt/readback report and pending/
+acknowledgement state. This completes the identified rack native preset caller,
+not the full remaining P0b owner audit or other asset/file-effect callers.
+
+Validation (Release ARM64, `bin/windows-parity-p0`):
+
+- `workspace-restore-tests` and `ScreamSeq` built successfully.
+- Final draft census passed (9.40 s); native receipt scenarios passed (25.08 s),
+  including real Save/Load dropped completion, exact historical receipt, no replay,
+  newer raw parameter/focus retention, one Undo/Redo, pending API Open refusal,
+  missing original file/plugin, unverified readback, stale acknowledgement,
+  explicit acknowledgement, cancellation, stale chooser and report retirement.
+- Departure behavior assertions passed in the combined run, but its unchanged
+  private-desktop guard observed a foreground-window change and failed the run.
+  A separate recheck on the identical binary passed, including isolation (5.39 s).
+- Actual application API/native-dialog checks: **5/5 passed, 6.510 s, no skips**.
+  These cover preset tokens, binary/XML/Unicode, bounds, atomic overwrite/no
+  history, file/song/class guards, malformed/vendor decode rejection, Undo/Redo,
+  and native chooser Save/Load/cancel/stale behavior on disposable private desktops.
+- Source/dependency, toolchain/cache, executable and all build/test log hashes are
+  retained in `bin/parity-evidence/p0b-plugin-preset-receipt.json` (1,855 inputs).
+  No broad engine suite was repeated for this native-caller-only change.
+
+The no-ticket test intentionally drops a successful real operation's return outside
+its worker receipt path; it proves domain readback/acknowledgement, not failure of
+the production ticket. No installed third-party providers, physical devices,
+foreground presentation/UIA, Mac/x64 builds or supplied reciprocal project fixtures
+were qualified. Shared formats/worker code are unchanged. Those gates, other P0b
+owners and P0c–P8 remain open.
+
+The first C++ build exposed mixed string/JSON comparisons; explicit string extraction
+fixed them. The first native receipt fixture reached an unsaved-song dialog before
+the intended Close guard and hit its existing bounded timeout. Saving the disposable
+fixture before that check isolates the retained-work guard without weakening it.
+The initial actual-app run passed four of five cases, including the real native
+Save/Load/cancel/stale dialogs. Its older exact preset-key assertion omitted the
+already-persisted `audioLayout` field (introduced before this batch). The fixture
+now retains exact key equality, checks the fingerprint against the saved plugin
+baseline and returned summary, and additionally verifies old files without that
+field retain the empty-layout read contract.
+
 ## P0b.1 Independent sample-library root and rescan recovery
 
 Sample folder Add/Remove and Rescan now submit through the browser's retained

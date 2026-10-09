@@ -8,30 +8,7 @@
     std::string selectedProgram,programCatalogRevision;
     int pluginDetailPage=0,selectedPort=-1;
     bool pluginProgramDraft=false,pluginExtrasError=false;
-    bool pluginPresetPending=false;
-    void pluginPresetFile(bool save) {
-        if(pluginPresetPending)throw ScreamSeq::Api::ApiError(-32002,"A preset dialog is already open");
-        if(pluginDraft)throw std::runtime_error("Apply the parameter draft or press Escape before choosing a preset");
-        documentOperation("flushPluginEditors",{{"force",true}});
-        const auto slot=selectedPluginSlot();if(slot<0)throw std::runtime_error("Select a plugin");
-        const auto target=selectedPlugin,revision=view->session.revision,document=documentId;
-        pluginPresetPending=true;struct Reset{bool &value;~Reset(){value=false;}} reset{pluginPresetPending};
-        std::vector<wchar_t> file(32768);if(save)wcscpy_s(file.data(),file.size(),L"Untitled.screamseq-preset");
-        OPENFILENAMEW choice{};choice.lStructSize=sizeof(choice);choice.hwndOwner=window;
-        choice.lpstrFile=file.data();choice.nMaxFile=DWORD(file.size());choice.lpstrDefExt=L"screamseq-preset";
-        choice.lpstrTitle=save?L"Save plugin preset":L"Load plugin preset";
-        choice.lpstrFilter=L"ScreamSeq plugin preset\0*.screamseq-preset;*.resonance-preset\0\0";
-        choice.Flags=OFN_EXPLORER|OFN_NOCHANGEDIR|OFN_DONTADDTORECENT|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
-        bool chosen=false;{ModalScope modal(modalDepth);chosen=save?GetSaveFileNameW(&choice)!=FALSE:GetOpenFileNameW(&choice)!=FALSE;}
-        if(!chosen){if(CommDlgExtendedError())throw std::runtime_error("Could not open the preset file dialog");return;}
-        const auto check=[&]{if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Document changed while choosing a preset; choose the preset again");};
-        check();const std::filesystem::path path(file.data());
-        Json params={{"plugin",target},{"path",utf8Path(path)},{"expectedRevision",revision}};
-        if(save){params["name"]=utf8Path(path.stem());params["overwrite"]=true;}
-        else{auto info=documentOperation("plugin.preset.inspect",{{"path",utf8Path(path)}});check();params["expectedPresetRevision"]=info.at("presetRevision");}
-        documentOperation(save?"plugin.preset.save":"plugin.preset.load",params);
-        status=save?L"Plugin preset saved":L"Plugin preset loaded / Undo available";
-    }
+    #include "PluginPresetIntegration.inc"
     std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
     uint32_t selectedParameter=0,pluginDraftParameter=0;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
@@ -198,7 +175,11 @@
         const auto slot=selectedPluginSlot();const bool selected=slot>=0;const auto plugin=selected?view->session.document.at("nativePlugins")[slot]:Json::object();
         const bool instrument=selected && plugin.value("isInstrument",false);
         EnableWindow(controls.at(pluginAliases),instrument);
-        for(int id:{pluginSavePreset,pluginLoadPreset})EnableWindow(controls.at(id),selected&&!pluginPresetPending);
+        const bool retainedPreset=pluginPresetCompletion.retained();
+        ScreamSeq::NativeControls::text(controls.at(pluginSavePreset),retainedPreset?L"Review result":L"Save preset…");
+        ScreamSeq::NativeControls::text(controls.at(pluginLoadPreset),retainedPreset?L"Use current state":L"Load preset…");
+        EnableWindow(controls.at(pluginSavePreset),!pluginPresetPending&&(selected||retainedPreset));
+        EnableWindow(controls.at(pluginLoadPreset),!pluginPresetPending&&(retainedPreset?pluginPresetNeedsReload:selected));
         place(pluginInstrument,x,y+131,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginNewInstrument,r.x+r.w-188,y+131,108,24,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && pluginDetailPage==0 && r.h>=164);
         EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
@@ -291,7 +272,7 @@
         auto r=workspaceMainEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
-        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
+        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginDetailPage==4&&!pluginPresetStatus.empty()?pluginPresetStatus:pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
         else if(r.h>=161 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
             s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+134,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
     }

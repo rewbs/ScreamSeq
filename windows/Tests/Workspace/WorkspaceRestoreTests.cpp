@@ -80,6 +80,13 @@ struct RestoreApplication final:Application {
         if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
         return sampleImportChooser(instruments);
     }
+    std::function<std::optional<std::filesystem::path>(bool)> pluginPresetChooser;
+    std::function<void()> pluginPresetCompletionFault;
+    unsigned pluginPresetWrites=0;
+    std::optional<std::filesystem::path> choosePluginPresetFile(bool save)override {
+        if(!pluginPresetChooser)throw std::runtime_error("Fixture requires an owned preset chooser");
+        return pluginPresetChooser(save);
+    }
     int departureChoice=IDCANCEL;
     bool failDepartureStop=false,failDepartureRefresh=false;
     std::function<void()> beforeDepartureAdmission,duringDepartureAdmission;
@@ -96,6 +103,9 @@ struct RestoreApplication final:Application {
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
     void finishDocumentOperation(const std::string &method,const Json &result)override {
         Application::finishDocumentOperation(method,result);
+        if(method=="plugin.preset.save"||method=="plugin.preset.load") {
+            ++pluginPresetWrites;if(auto fault=std::exchange(pluginPresetCompletionFault,{}))fault();
+        }
         if(auto fault=std::exchange(completionFault,{}))fault();
     }
     Json documentOperation(const std::string &method,const Json &params)override {
@@ -1029,6 +1039,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SampleBrowserApplicationTests.inc"
 #include "SampleLibraryApplicationTests.inc"
 #include "NativeReceiptApplicationTests.inc"
+#include "PluginPresetApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
     using Json=RestoreJson;
@@ -1083,7 +1094,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
-                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
@@ -1098,6 +1109,7 @@ int wmain(int argc,wchar_t **argv) {
                 directRenderCompletionCensus();std::cout<<"PASS direct render: pending census, retained result, read-only review, one Undo and stale selection\n";
                 return;
             }
+            applicationPluginPresetRecovery();std::cout<<"PASS preset recovery: exact receipts, unknown readback, pending departure and draft retention\n";
             nativeCompletionRetainsOutcome();std::cout<<"PASS native completion: real worker commit, classified error, readback and one Undo\n";
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
             modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";

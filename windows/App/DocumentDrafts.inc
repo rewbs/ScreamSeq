@@ -56,13 +56,22 @@
             });
         add("Plugin parameters and programs",[this]{return mainDraft(pluginDocument,pluginDraftRevision,
             Json::array({pluginDraftTarget,pluginDraftParameter,pluginProgramDraft?selectedProgram:std::string()}).dump(),
-            pluginDraftGeneration,pluginDraft,pluginPresetPending);},[this]{reviewMainDraft("plugins",pluginValue);},[this]()noexcept{
+            pluginDraftGeneration,pluginDraft);},[this]{reviewMainDraft("plugins",pluginValue);},[this]()noexcept{
                 if(pluginPresetPending)return false;
                 ++pluginDraftGeneration;pluginDraft=pluginProgramDraft=pluginExtrasError=false;
                 pluginDocument.clear();pluginDraftRevision.clear();pluginDraftTarget.clear();pluginDetailsRevision.clear();pluginDetailsTarget.clear();
                 selectedPlugin.clear();selectedProgram.clear();programCatalogRevision.clear();selectedParameter=pluginDraftParameter=0;selectedPort=-1;
                 listedPlugins=nullptr;pluginParameters.clear();pluginPrograms.clear();pluginPorts.clear();pendingPluginTriggers.clear();return true;
             });
+        add("Plugin preset result",[this]{
+            auto result=mainDraft(pluginPresetTarget.value("documentId",std::string()),pluginPresetTarget.value("expectedRevision",std::string()),
+                pluginPresetTarget.dump(),pluginPresetGeneration,false,pluginPresetPending);
+            result.uncertain=!pluginPresetPending&&pluginPresetCompletion.retained();return result;
+        },[this]{showPluginPresetReview();},[this]()noexcept{
+            if(pluginPresetPending||pluginPresetCompletion.retained())return false;
+            ++pluginPresetGeneration;pluginPresetCompletion=ScreamSeq::NativeWriteCompletion{};
+            pluginPresetTarget.clear();pluginPresetReport.clear();pluginPresetStatus.clear();pluginPresetNeedsReload=false;return true;
+        });
         add("Graph recipe",[this]{return mainDraft(graphDocument,graphRevision,graphID,graphGeneration,
             graphDirty||graphFieldDirty||dragging==7,graphPending);},[this]{reviewMainDraft("graph",graphPropertyValue);},[this]()noexcept{
                 if(graphPending)return false;
