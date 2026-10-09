@@ -12,6 +12,41 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## P0c typed corpus and no-edit Windows leg — 9 October, 20:28 UTC
+
+Independent P0c tooling progressed without another native build. The
+[conformance tools](../../editor/Tests/Conformance/README.md) pin all five supplied
+projects and every original archive member. The comparator distinguishes bool/int/real,
+exact integers, IEEE-754 bits, ordered arrays, unknown fields, stable IDs and opaque
+bytes; it has no ignore list or normalization exceptions. Eleven focused comparator
+checks passed; two additional runner safety checks passed, including no replay after
+uncertain Save and refusal to overwrite existing evidence or launch a mismatched binary.
+
+The actual Windows ARM64 app at **5358a8ebcaafae88c071cd7ed8fd27c227c747db**,
+SHA-256 `39cd3cae8c118d54ccec70053b18d15a0a107d3e1012bbc9da96b999c44f75b8`,
+passed F01–F05 original → Save As → reopen → second Save As with exact typed-tree
+equality for both saves. The owned private-desktop run preserved the original inputs,
+complete corpus, executable, clipboard and foreground window. Outputs and full RPC
+receipts are retained in `bin/parity-evidence/p0c-windows-no-edit-01/{first,reopened}`
+and `report.json`. This qualifies that existing binary, not the later unbuilt P0b
+repairs. It is one Windows no-edit leg, not reciprocal Mac or edited-file qualification.
+The retained report SHA-256 is
+`e018e14ee69f82dff1c22568f974d7e9077e415ba340b7efb2e69a65ed6c7b5e`.
+
+Prepared Mac harness repairs add the omitted `GraphTrimControls.swift` source and
+separate the new `graph.trim.get` inspector read from the graph draft test's pending
+write queue. The fixture additionally checks the captured graph/node and hidden empty
+trim controls. Existing repeated-arrow, one-write and retained-draft assertions remain.
+This diagnosis follows current source and the original reference failure; actual Mac
+compilation/execution is pending. Branding compatibility prose now matches the existing
+best-effort recovery/source-protection contract; no persisted identifier changed.
+
+Logs: `p0c-typed-tree-01.log`, `p0c-roundtrip-safety-01.log`, and
+`p0c-windows-no-edit-01.log` under `bin/parity-evidence`. P0c still requires API
+contract vectors/inventory, codec divergence classification, declared-versus-scheduled
+test coverage, helper alignment, Mac harness results and reciprocal fixture legs.
+The complete P1–P8 implementation scope remains outstanding.
+
 ## Initial grouped P0b gate — 9 October, 20:06–20:17 UTC
 
 Candidate `5358a8ebc` built successfully in one consolidated ARM64 invocation,

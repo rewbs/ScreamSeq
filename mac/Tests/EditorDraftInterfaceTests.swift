@@ -271,7 +271,17 @@ extension InterfaceTests {
       "mixer": ["buses": [["id": "n1", "name": "Drums", "kind": "track", "output": "n2"], ["id": "n3", "name": "Bass", "kind": "track", "output": "n2"], ["id": "n2", "name": "Master", "kind": "master", "output": ""]]],
       "assignments": [], "commands": [], "lanes": []]
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
-    editor.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    var trimReads = [[String: Any]]()
+    editor.onRequest = { method, params, reply in
+      // Inspector context now reads trims even for a source with no audio ports.
+      // Keep that read separate from pending graph edits and their replies.
+      if method == "graph.trim.get" {
+        trimReads.append(params)
+        reply(["result": ["revision": editor.revision, "data": ["ports": [[String: Any]](), "sources": [[String: Any]]()]]])
+        return
+      }
+      calls.append((method, params)); replies.append(reply)
+    }
     editor.load(); replies.removeFirst()(["result": ["revision": "g:0", "data": data]]); calls = []
     editor.graphID = "n100"; editor.update(data)
     editor.disconnect()
@@ -287,6 +297,8 @@ extension InterfaceTests {
     try require(editor.canvas.selectedEdge == nil && calls.isEmpty, "A wire that no longer exists is deselected, never replaced by its neighbour")
 
     editor.update(data); editor.selectedID = "n104"; editor.canvas.selected = "n104"; editor.inspect()
+    try require(trimReads.last?["graph"] as? String == "n100" && trimReads.last?["node"] as? String == "n104" && editor.trimControls.isHidden,
+      "LFO inspection reads its captured trim target and hides the empty audio-port controls")
     editor.canvas.nudgeDelay = 5
     for index in 0..<3 { editor.canvas.keyDown(with: keyEvent(124, repeating: index > 0)) }
     try require(calls.isEmpty && editor.canvas.nodes.first { $0.id == "n104" }?.x == 42, "Repeated arrow nudges move the node without writing the definition each time")
