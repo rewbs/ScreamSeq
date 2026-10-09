@@ -17,10 +17,23 @@
             [this]{return ScreamSeq::SampleLibraryWindow::Context{documentId,view->session.revision,view->instruments!=0};},
             [this](const Json &result,const std::string &document){revealCapturedSample(document,result.at("samples").at(0));},
             [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
-            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
+            [this](const auto &method,const auto &params,const auto &receipt){return method.starts_with("sample.library.")?sampleLibraryOperationWithOutcome(method,params,receipt):documentOperationWithOutcome(method,params,receipt);});
     }
     void openSampleBrowser() {ensureSampleBrowser();sampleBrowser->show();}
 
+    virtual void finishSampleLibraryOperation(const std::string &,const Json &){}
+    ScreamSeq::Api::CompletedCall sampleLibraryOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt){
+        rejectDepartureInput();
+        if(libraryWaits>=8)throw ScreamSeq::Api::ApiError(-32002,"Sample library requests are busy",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        prepareSampleLibrary();const auto document=documentId;
+        auto result=awaitLibrary(sampleLibrary->invoke(method,params,receipt,document));
+        finishSampleLibraryOperation(method,result.at("data"));
+        return {method,document,result.at("data").at("libraryRevision").get<std::string>(),std::move(result.at("data"))};
+    }
+    bool protectSampleLibraryClose(){
+        if(!sampleBrowser||!sampleBrowser->protectsClose())return true;
+        sampleBrowser->show();status=L"Not closed / review the sample-library result";frameRequested=true;return false;
+    }
     void prepareSampleLibrary() {
         if(sampleLibrary)return;
         std::vector<std::string> roots;

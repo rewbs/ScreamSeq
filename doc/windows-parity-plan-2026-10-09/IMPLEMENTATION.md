@@ -2,6 +2,67 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## P0b.1 Independent sample-library root and rescan recovery
+
+Sample folder Add/Remove and Rescan now submit through the browser's retained
+native completion path. The owner captures the exact method, root list/library
+revision and browser fields, retains an unresolved result across hide/reopen and
+song replacement, freezes conflicting browser actions, and changes Rescan to
+**Review**. Stop preview and gain remain available. `Application::canClose` checks
+this application-wide work both before and after message-pumping departure checks.
+A folder chooser or unresolved library result blocks Close/session end; it is not
+registered as a song draft and does not acquire musical Undo or document revision.
+
+Review consumes the exact worker receipt, then reads current library state. With
+no receipt, it reads and validates current state, labels that observation
+**unverified**, and requires explicit **Reload** before a fresh library write.
+Failed or malformed reads keep uncertainty. Review and Reload never start another
+scan, change roots, reimport samples or attribute a later state to an old request.
+The successful rescan receipt records **accepted/indexing**, not completed scan
+work; current scan status is read separately. Configured source files remain intact.
+
+`windows/Samples/Library.cpp::commitScan` prepares the status publication, independent
+API response, optional native receipt and scan-queue storage before promoting
+`roots.json`. After successful atomic promotion it moves/swaps the prepared state,
+publishes the receipt and wakes the scanner. Accepted rescans retain the previous
+immutable index while scanning. The standalone library worker now accepts an
+optional per-invocation receipt/document identity; that original identity attributes
+the request without making global preferences belong to a song. Recognized native
+pre-commit failures carry NotCommitted. Pipe calls retain the established independent
+API error envelope, response fields, replay behavior and library revision semantics.
+
+The App callback routes only native library writes through this receipt-aware
+worker path. No project format, shared musical model, Mac code, audio route or
+plugin state changes. This batch finishes the identified root/rescan completion
+path; it does not declare the complete P0b owner/entry-point audit finished.
+
+Evidence: `bin/parity-evidence/p0b-sample-library-recovery-receipt.json`, 1,853
+source/dependency inputs, both CMake caches, compiler/executable hashes and logs.
+
+| Check | Result and scope |
+|---|---|
+| ARM64 standalone library, native-tool, workspace and app targets | Built successfully |
+| Library worker | Final 1/1, 0.20 s; exact root/rescan receipts, locked-file rejection with no publication, independent revision/search, old-index visibility, cancellation by newer roots, source-file preservation, cache reopen/corruption and ephemeral settings |
+| Native-tool group | 1/1, 4.91 s in the initial 4-entry native run (32.41 s total); root/rescan × returned/read-failed, ticket-with-lost-return and unknown outcomes; failed/malformed Review, frozen actions, hidden owners and replacement song. Its sources/binary are unchanged by the later worker-only API-envelope correction |
+| Final draft census, departure and Application receipt groups | 3/3, 27.69 s; real root removal/rescan followed by dropped native completion, Close refusal, global owner surviving song replacement, Review without resubmission and unchanged music/history |
+| Final actual application sample-library tests | 11/11, 7.656 s, no skips; discovery/guards/error envelope/replay, independent revisions, search/paging/tags/families, silent preview, persisted cache/reopen, batch Undo/save-reopen, retained drafts and minimum-size/source-file-preserving folder removal |
+
+The first build selected the standalone library target in the main build tree;
+its dedicated `windows/Tests/Samples` CMake project was then configured separately.
+The first worker test compile required explicit string extraction in a JSON
+comparison. Source review also caught the existing API assertion that independent
+library errors have no added data; native outcome annotation was restricted to
+receipt callers, preserving that assertion unchanged. The final worker/Application/
+API checks passed after the correction. Initial logs and source freeze are retained.
+
+The native-tool test binary is reused only for unchanged native-tool inputs. No
+current full-workspace or full-app suite is claimed. Physical/live-audio preview,
+foreground folder-chooser/UIA behavior, Windows x64, Mac integration, supplied
+reciprocal fixtures and final qualification remain open. Further visual work should
+also review how background scan diagnostics persist during search/status refresh;
+this batch proves retained request outcomes, not every later scan-presentation state.
+P0b's remaining owner/cache audit and all P0c–P8 work remain active.
+
 ## P0b.1 Direct file import reuses the retained native import owner
 
 The main Import command, Ctrl+I and explicit raw-sample/mapped-instrument commands

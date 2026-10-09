@@ -1,4 +1,5 @@
 #include "windows/Samples/Library.hpp"
+#include "windows/Session/NativeCallReceipt.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include <windows.h>
@@ -27,7 +28,9 @@ int main(int argc,char **argv){try{
     Library library(storage,{},[gate]{gate->wait();});Release release{gate};
     auto initial=ready(library);check(initial["roots"].empty()&&initial["count"]==0,"empty initial library");
     auto get=invoke(library,"sample.library.get");check(get["data"]==initial&&get["revision"]=="library:"+initial["libraryRevision"].get<std::string>(),"independent reply revision");
-    auto changed=invoke(library,"sample.library.roots.set",{{"expectedLibraryRevision",initial["libraryRevision"]},{"roots",{text(pack),text(pack)}}});
+    auto rootReceipt=std::make_shared<ScreamSeq::NativeCallReceipt>();
+    auto changed=library.invoke("sample.library.roots.set",{{"expectedLibraryRevision",initial["libraryRevision"]},{"roots",{text(pack),text(pack)}}},rootReceipt,"original-song").get();
+    check(rootReceipt->read()&&rootReceipt->read()->method=="sample.library.roots.set"&&rootReceipt->read()->document=="original-song"&&rootReceipt->read()->result==changed.at("data")&&rootReceipt->read()->revision==changed.at("data").at("libraryRevision").get<std::string>(),"Committed root change lost its exact native receipt");
     check(changed["data"]["indexing"]&&!changed["data"]["ready"].get<bool>()&&changed["data"]["roots"].size()==1,"root commit must reset index and deduplicate paths");
     auto current=ready(library);check(current["count"]==4,"real directory scan");
     auto query=invoke(library,"sample.library.search",{{"query","electric kick"},{"expectedLibraryRevision",current["libraryRevision"]},{"limit",1.0}});
@@ -42,12 +45,17 @@ int main(int argc,char **argv){try{
     // Atomic preferences cannot publish in-memory roots if replacement fails.
     const auto before=ScreamSeq::Project::readProjectBytes(storage/L"roots.json");
     HANDLE locked=CreateFileW((storage/L"roots.json").c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);check(locked!=INVALID_HANDLE_VALUE,"lock fixture preferences");
-    bool failed=false;try{invoke(library,"sample.library.roots.set",{{"expectedLibraryRevision",current["libraryRevision"]},{"roots",{text(other)}}});}catch(const std::exception &){failed=true;}CloseHandle(locked);
+    auto rejected=std::make_shared<ScreamSeq::NativeCallReceipt>();
+    bool failed=false;try{library.invoke("sample.library.roots.set",{{"expectedLibraryRevision",current["libraryRevision"]},{"roots",{text(other)}}},rejected,"original-song").get();}
+    catch(const ScreamSeq::Api::ApiError &e){failed=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed&&!rejected->read();}CloseHandle(locked);
     check(failed&&library.status()==current&&ScreamSeq::Project::readProjectBytes(storage/L"roots.json")==before,"failed replacement changed roots/file/revision");
     // Hold a real rescan before enumeration; query and preference ownership must
     // remain independent, and changing roots must retire the old generation.
     file(pack/L"Drums/New.wav");gate->armed=true;auto entered=gate->entered.get_future();
-    invoke(library,"sample.library.rescan",{{"expectedLibraryRevision",current["libraryRevision"]}});check(entered.wait_for(2s)==std::future_status::ready,"scanner did not enter gate");
+    auto scanReceipt=std::make_shared<ScreamSeq::NativeCallReceipt>();
+    const auto scanResult=library.invoke("sample.library.rescan",{{"expectedLibraryRevision",current["libraryRevision"]}},scanReceipt,"original-song").get();
+    check(scanReceipt->read()&&scanReceipt->read()->result==scanResult.at("data")&&scanReceipt->read()->result.at("indexing")==true,"Accepted rescan lost its scheduling receipt");
+    check(entered.wait_for(2s)==std::future_status::ready,"scanner did not enter gate");
     auto scanning=library.status();check(scanning["indexing"]&&scanning["ready"]&&scanning["count"]==4,"rescan hid the immutable previous index");
     code([&]{invoke(library,"sample.library.rescan",{{"expectedLibraryRevision",scanning["libraryRevision"]}});},-32002);
     const auto start=std::chrono::steady_clock::now();query=invoke(library,"sample.library.search");check(std::chrono::steady_clock::now()-start<500ms&&query["data"]["total"]==4&&query["data"]["indexing"],"search blocked on a scan or exposed partial results");

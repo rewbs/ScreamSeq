@@ -70,6 +70,11 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    std::function<void()> sampleLibraryCompletionFault;
+    unsigned sampleLibraryCompletions=0;
+    void finishSampleLibraryOperation(const std::string &,const Json &)override {
+        ++sampleLibraryCompletions;if(auto fault=std::exchange(sampleLibraryCompletionFault,{}))fault();
+    }
     std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
     std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments)override {
         if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
@@ -1022,6 +1027,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "DocumentDepartureApplicationTests.inc"
 #include "PluginLibraryApplicationTests.inc"
 #include "SampleBrowserApplicationTests.inc"
+#include "SampleLibraryApplicationTests.inc"
 #include "NativeReceiptApplicationTests.inc"
 
 void nativeCompletionRetainsOutcome() {
@@ -1077,7 +1083,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
-                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
