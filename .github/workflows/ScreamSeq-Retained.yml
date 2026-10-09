@@ -85,14 +85,14 @@ jobs:
           if [[ -n "$INPUT_RUN" ]]; then
             args+=(--input-artifact bin/retained-input --input-layout "$INPUT_LAYOUT")
           fi
-          python -B editor/Tests/Conformance/reuse_native.py "${args[@]}" 2>&1 | tee retained-native.log
+          python -B editor/Tests/Conformance/reuse_native.py "${args[@]}" 2>&1 | tee bin/retained-native.log
       - name: Retain every result, including failed or incomplete legs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: screamseq-retained-${{ inputs.runner }}
           path: |
-            retained-native.log
+            bin/retained-native.log
             bin/retained-result/**
             !bin/retained-result/app/**
           if-no-files-found: warn
