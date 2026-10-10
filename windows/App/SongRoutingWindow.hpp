@@ -2,13 +2,16 @@
 #include "NativeToolWindow.hpp"
 #include "SongRoutingCanvas.hpp"
 #include "NativeWriteCompletion.hpp"
+#include "NativeContextMenu.hpp"
 namespace ScreamSeq {
 class SongRoutingWindow final:public NativeToolWindow {
   using Json=Api::Json;using Node=SongRoutingCanvas::Node;
   using Request=std::function<Json(const std::string &,const Json &)>;using Context=std::function<std::pair<std::string,std::string>()>;
   enum:int {filter=3801,nodePicker,wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,reload,fit,zoomOut,zoomIn,arrange,close,open,enable,page,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,saveLayout,verify,
-    inputPorts,outputPorts,title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
+    inputPorts,outputPorts,addEffect,addGroup,addReturn,showInserts,showAssignment,helpLabel,title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
   Request request_;Context context_;std::function<void(const Node &)> inspect_;
+  std::function<void(const std::string &,const std::string &,const std::string &)> addEffect_;
+  std::function<bool()> canRefresh_;bool contextOpen_=false;
   NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;
   std::string operation_,operationDocument_,operationRevision_;Json operationParams_,report_;bool readbackNeedsReload_=false;
   bool unresolved()const noexcept{return completion_.retained();}
@@ -59,12 +62,12 @@ class SongRoutingWindow final:public NativeToolWindow {
   }
   void load(bool completing=false){
     if(!completing)requireResolved();if(pending_)return;const auto captured=context_();const auto generation=generation_;pending_=true;layout();
-    try{auto data=request_("graph.get",{{"includeState",false}});if(context_()!=captured||generation_!=generation)throw std::runtime_error("Document or draft changed while loading routing; Reload again");data_=std::move(data);document_=captured.first;revision_=captured.second;dirty_=layoutDirty_=readbackNeedsReload_=false;++generation_;pending_=false;resetPluginPorts();rebuild();status(L"Drag sockets to add · select declared plugin ports before connecting · select a node to inspect");}catch(...){pending_=false;layout();throw;}
+    try{auto data=request_("graph.get",{{"includeState",false}});if(context_()!=captured||generation_!=generation)throw std::runtime_error("Document or draft changed while loading routing; Reload again");data_=std::move(data);document_=captured.first;revision_=captured.second;dirty_=layoutDirty_=readbackNeedsReload_=false;++generation_;pending_=false;resetPluginPorts();rebuild();status(L"Select a bus, then Add effect to browse plugins. Drag sockets to route; plugin cables use the declared port selectors.");}catch(...){pending_=false;layout();throw;}
   }
   void finishResult(){
     const auto result=completion_.returned();if(!result)throw std::runtime_error("Routing result is uncertain / use Review result");
     auto report=Json{{"outcome","returned"},{"submission",{{"method",operation_},{"document",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"result",result->result}};
-    if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation())load(true);
+    if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation()){if(operation_=="mixer.bus.add")selected_=result->result.at("bus").get<std::string>();load(true);if(operation_=="mixer.bus.add")canvas_.fit();}
     report_=std::move(report);completion_.finish();operation_.clear();
     status(dirty_||layoutDirty_?L"Earlier routing edit completed / newer draft retained / no write repeated":L"Routing edit completed / document Undo available");
   }
@@ -92,7 +95,46 @@ class SongRoutingWindow final:public NativeToolWindow {
         pending_=false;finishResult();}
     }catch(...){if(!unresolved())operation_.clear();pending_=false;layout();throw;}pending_=false;layout();
   }
-  void selectNode(const std::string &id){clean();selected_=id;wire_=-1;rebuild(false);choose(source,id);refreshRoutePorts();SetFocus(window_);}
+  void selectNode(std::string id){clean();selected_=id;wire_=-1;rebuild(false);choose(source,id);refreshRoutePorts();SetFocus(window_);}
+  void inspectorPage(int value){clean();page_=value;NativeInputGate::present(controls_.at(page),CB_SETCURSEL,value,0);inspectFields();layout();}
+  void browseEffect(){clean();current();const auto &n=chosenNode(nodePicker);if(!n.canEditInserts()||!addEffect_)throw std::runtime_error("Select a bus or one of its regular effects to add an effect");const auto target=n.bus;const auto name=bus(target).at("name").get<std::string>();addEffect_(document_,target,name);}
+  void timer(UINT_PTR id)override{
+    if(id!=7||!visible()||pending_||dirty_||layoutDirty_||drag_||unresolved()||readbackNeedsReload_||contextOpen_||GetCapture()||(canRefresh_&&!canRefresh_()))return;
+    if(context_()==std::pair(document_,revision_))return;
+    // Follow completed edits only. Raw route/layout drafts retain their target.
+    // A worker may still be publishing; defer busy reads without replaying writes.
+    try{const auto focus=GetFocus();load();if(focus&&owns(focus)&&IsWindowEnabled(focus))SetFocus(focus);}
+    catch(const Api::ApiError &e){if(e.code!=-32002)throw;}
+  }
+  bool wheel(UINT message,float x,float y,WPARAM keys)override{
+    if(!canvas_.viewport.contains(x,y)||drag_)return false;
+    const float delta=float(GET_WHEEL_DELTA_WPARAM(keys))/WHEEL_DELTA;
+    if(message==WM_MOUSEWHEEL&&(GET_KEYSTATE_WPARAM(keys)&MK_CONTROL)){
+      const auto anchor=canvas_.world(x,y);canvas_.zoom=std::clamp(canvas_.zoom*std::pow(1.2f,delta),.15f,2.f);
+      canvas_.panX=x-canvas_.viewport.x-anchor.x*canvas_.zoom;canvas_.panY=y-canvas_.viewport.y-anchor.y*canvas_.zoom;
+    }else if(message==WM_MOUSEHWHEEL||(GET_KEYSTATE_WPARAM(keys)&MK_SHIFT))canvas_.panX+=delta*48;
+    else canvas_.panY+=delta*48;
+    canvas_.geometry();requestPaint();return true;
+  }
+  bool contextMenu(HWND target,POINT at)override{
+    if(target!=window_)return false;if(pending_||unresolved()||readbackNeedsReload_||drag_||contextOpen_)return true;
+    if(at.x==-1&&at.y==-1){const auto n=canvas_.find(selected_);const auto r=n?n->rect:canvas_.viewport;at={LONG((r.x+16)*GetDpiForWindow(window_)/96),LONG((r.y+16)*GetDpiForWindow(window_)/96)};ClientToScreen(window_,&at);}
+    else{POINT local=at;ScreenToClient(window_,&local);const float scale=96.f/GetDpiForWindow(window_);const float x=local.x*scale,y=local.y*scale;if(!canvas_.viewport.contains(x,y))return false;
+      clean();if(const int i=canvas_.nodeAt(x,y);i>=0)selectNode(canvas_.nodes[size_t(i)].id);else if(const int i=canvas_.edgeAt(x,y);i>=0)selectWire(i);else {selected_.clear();wire_=-1;rebuild(false);}}
+    const auto n=canvas_.find(selected_);const bool cleanDraft=!dirty_&&!layoutDirty_;const bool active=!data_.at("mixer").at("buses").empty();
+    using Item=NativeContextMenu::Item;std::vector<Item> menu;
+    const auto item=[&](int id,const wchar_t *text,bool available=true){menu.push_back({id,text,available});};
+    item(open,L"Open selected node\tEnter",cleanDraft&&n&&(!n->bus.empty()||!n->plugin.empty()||!n->graph.empty()));
+    item(addEffect,L"Add effect to this bus…\tInsert",cleanDraft&&n&&n->canEditInserts()&&bool(addEffect_));
+    item(showInserts,L"Edit insert chain",cleanDraft&&n&&n->canEditInserts());item(showAssignment,L"Assign graph recipe",cleanDraft&&n&&n->canAssignGraph());
+    item(disconnect,L"Disconnect selected wire\tDelete",wire_>=0&&!canvas_.edges[size_t(wire_)].action.empty()&&!layoutDirty_);
+    menu.push_back({0,L""});item(addGroup,L"Add group bus",cleanDraft&&active);item(addReturn,L"Add return bus",cleanDraft&&active);
+    menu.push_back({0,L""});item(fit,L"Fit graph\tHome");item(arrange,L"Arrange nodes",cleanDraft);item(saveLayout,L"Save layout",layoutDirty_&&!dirty_);
+    const auto before=context_();const auto generation=generation_;const auto selected=selected_;const auto wire=wire_;
+    contextOpen_=true;struct Reset{bool &flag;~Reset(){flag=false;}}reset{contextOpen_};
+    const auto command=NativeContextMenu::show(window_,at,menu);
+    if(command){if(!visible()||pending_||context_()!=before||generation_!=generation||selected_!=selected||wire_!=wire)throw std::runtime_error("Graph changed while the menu was open / action cancelled");action(command,BN_CLICKED);}return true;
+  }
   void selectWire(int index){
     clean();wire_=index;resetPluginPorts();setting_=true;choose(wirePicker,index<0?"":std::to_string(index));if(index<0){setting_=false;return;}selected_.clear();choose(nodePicker,"");set(title,L"Connection");
     const auto &e=canvas_.edges.at(size_t(index));choose(source,e.source);choose(destination,e.target);set(output,Json(e.output));set(input,Json(e.input));const auto &a=e.action;const auto type=a.value("kind",std::string{});Json settings=Json::object();
@@ -161,6 +203,9 @@ class SongRoutingWindow final:public NativeToolWindow {
     }
     if(note!=BN_CLICKED)return;
     if(id==reload)load();else if(id==fit){canvas_.fit();requestPaint();}else if(id==zoomIn||id==zoomOut)scale(id==zoomIn?1.25f:.8f);else if(id==arrange)arrangeNodes();else if(id==saveLayout)savePositions();
+    else if(id==addEffect)browseEffect();
+    else if(id==addGroup||id==addReturn){clean();mutate("mixer.bus.add",{{"kind",id==addGroup?"group":"return"}});}
+    else if(id==showInserts||id==showAssignment)inspectorPage(id==showInserts?1:2);
     else if(id==enable){clean();mutate("mixer.enable",Json::object());}
     else if(id==pre||id==enabled){changed();if(id==pre)pre_=!pre_;else enabled_=!enabled_;}
     else if(id==connect||id==update||id==disconnect||id==verify){auto [method,p]=route(id==disconnect,id==update||(id==verify&&wire_>=0));mutate(method,p,id==verify);}
@@ -173,13 +218,16 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(ctrl&&key=='R'){if(unresolved())reviewResult();else load();return true;}requireResolved();if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(nodePicker):window_);return true;}
     if(ctrl&&key==VK_RETURN){if(layoutDirty_)savePositions();else action(page_==2?assign:wire_>=0?update:connect,BN_CLICKED);return true;}
     if(GetFocus()!=window_)return false;
-    if(ctrl&&key=='Z'){clean();mutate(shift?"history.redo":"history.undo",{{"domain","document"}});return true;}
+    if(ctrl&&(key=='Z'||key=='Y')){clean();mutate(key=='Y'||shift?"history.redo":"history.undo",{{"domain","document"}});return true;}
+    if(key==VK_INSERT){action(addEffect,BN_CLICKED);return true;}
+    if(key==VK_APPS||(shift&&key==VK_F10)){contextMenu(window_,{-1,-1});return true;}
     if(key==VK_HOME){canvas_.fit();requestPaint();return true;}if(key==VK_OEM_PLUS||key==VK_ADD){scale(1.25f);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){scale(.8f);return true;}
     if(key==VK_DELETE&&wire_>=0){action(disconnect,BN_CLICKED);return true;}if(key==VK_RETURN){action(open,BN_CLICKED);return true;}
     if(key>=VK_LEFT&&key<=VK_DOWN){if(dirty_)clean();if(auto n=canvas_.find(selected_)){const float amount=shift?16:4;n->x=std::clamp(n->x+(key==VK_RIGHT?amount:key==VK_LEFT?-amount:0),0.0f,100000.0f);n->y=std::clamp(n->y+(key==VK_DOWN?amount:key==VK_UP?-amount:0),0.0f,100000.0f);layoutDirty_=true;++generation_;canvas_.geometry();status(L"Moved layout draft / Save layout or Reload");layout();}return true;}return false;
   }
   void mouse(UINT message,float x,float y,WPARAM)override{
     pointer_={x,y};if(message==WM_CAPTURECHANGED){drag_=0;return;}if(pending_||unresolved()||readbackNeedsReload_)return;
+    if(message==WM_LBUTTONDBLCLK&&canvas_.viewport.contains(x,y)){clean();if(const auto i=canvas_.nodeAt(x,y);i>=0){selectNode(canvas_.nodes[size_t(i)].id);action(open,BN_CLICKED);}return;}
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)){SetFocus(window_);
       if(wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty()){
         const auto &edge=canvas_.edges.at(size_t(wire_));const auto h=edge.points[28];
@@ -212,8 +260,8 @@ class SongRoutingWindow final:public NativeToolWindow {
     requestPaint();
   }
   void layout()override{
-    if(!ready_)return;const auto [w,h]=size();const float x=w-322,cw=306;canvas_.viewport={12,82,w-352,h-146};canvas_.geometry();
-    place(filter,12,12,220,240);place(enable,240,12,114,26);place(reload,w-226,12,120,26);place(close,w-98,12,86,26);
+    if(!ready_)return;const auto [w,h]=size();const float x=w-322,cw=306;canvas_.viewport={12,82,w-352,h-170};canvas_.geometry();
+    place(filter,12,12,220,240);place(enable,240,12,114,26);place(addEffect,362,12,124,26);place(addGroup,494,12,90,26);place(addReturn,592,12,90,26);place(reload,w-226,12,120,26);place(close,w-98,12,86,26);
     place(fit,12,46,52,26);place(zoomOut,70,46,32,26);place(zoomIn,108,46,32,26);place(arrange,148,46,82,26);place(saveLayout,238,46,108,26);place(title,x,48,cw,24);
     place(nodeLabel,x,82,cw,18);place(nodePicker,x,104,cw-78,260);place(open,x+cw-72,104,72,26);place(page,x,140,cw,240);
     for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel})ShowWindow(controls_.at(id),SW_HIDE);
@@ -226,8 +274,10 @@ class SongRoutingWindow final:public NativeToolWindow {
     }
     if(page_==1){place(insertLabel,x,188,cw,36);place(insertPicker,x,230,cw,240);place(insertUp,x,266,72,26);place(insertDown,x+78,266,72,26);place(insertRemove,x+158,266,148,26);place(effectLabel,x,310,cw,40);place(effectPicker,x,358,cw,260);place(insertAdd,x,398,cw,26);}
     if(page_==2){place(graphLabel,x,188,cw,40);place(graphPicker,x,238,cw,260);place(amountLabel,x,283,145,18);place(wetLabel,x+158,283,145,18);place(amount,x,307,145,26);place(wet,x+158,307,148,26);place(assign,x,350,145,26);place(clear,x+158,350,148,26);}
-    place(statusLabel,12,h-52,w-24,42);for(const auto &[id,control]:controls_)if(id<title&&id!=close)EnableWindow(control,!pending_);
-    const auto n=canvas_.find(selected_);EnableWindow(controls_.at(enable),!pending_&&data_.value("mixer",Json::object()).value("buses",Json::array()).empty());EnableWindow(controls_.at(saveLayout),!pending_&&layoutDirty_);EnableWindow(controls_.at(open),!pending_&&n);for(int id:{insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown})EnableWindow(controls_.at(id),!pending_&&n&&n->canEditInserts());for(int id:{assign,clear,graphPicker,amount,wet})EnableWindow(controls_.at(id),!pending_&&n&&n->canAssignGraph());
+    place(helpLabel,12,h-76,w-24,20);place(statusLabel,12,h-52,w-24,42);for(const auto &[id,control]:controls_)if(id<title&&id!=close)EnableWindow(control,!pending_);
+    const auto n=canvas_.find(selected_);EnableWindow(controls_.at(addEffect),!pending_&&!dirty_&&!layoutDirty_&&n&&n->canEditInserts()&&bool(addEffect_));
+    for(int id:{addGroup,addReturn})EnableWindow(controls_.at(id),!pending_&&!dirty_&&!layoutDirty_&&!data_.value("mixer",Json::object()).value("buses",Json::array()).empty());
+    EnableWindow(controls_.at(enable),!pending_&&data_.value("mixer",Json::object()).value("buses",Json::array()).empty());EnableWindow(controls_.at(saveLayout),!pending_&&layoutDirty_);EnableWindow(controls_.at(open),!pending_&&n);for(int id:{insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown})EnableWindow(controls_.at(id),!pending_&&n&&n->canEditInserts());for(int id:{assign,clear,graphPicker,amount,wet})EnableWindow(controls_.at(id),!pending_&&n&&n->canAssignGraph());
     const bool editable=wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty();for(int id:{update,disconnect})EnableWindow(controls_.at(id),!pending_&&editable);ScreamSeq::NativeInputGate::text(controls_.at(pre),pre_?L"Pre-fader: on":L"Pre-fader: off");ScreamSeq::NativeInputGate::text(controls_.at(enabled),enabled_?L"Route enabled":L"Route disabled");
     const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);EnableWindow(controls_.at(gain),!pending_&&(mode==1||mode==2||mode==4||mode==6));EnableWindow(controls_.at(pre),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(enabled),!pending_&&(mode==1||mode==4||mode==6));EnableWindow(controls_.at(input),!pending_&&(mode==2||mode==4||mode==6));EnableWindow(controls_.at(output),!pending_&&(mode==3||mode==5||mode==6));
     if(layoutDirty_)for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear})EnableWindow(controls_.at(id),FALSE);
@@ -251,17 +301,19 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(canvas_.nodes.empty())s.uiText(L"Enable routing to connect channels, instruments and effects",v.x+20,v.y+24,v.w-40,0x8fa8ba);s.unclip();s.outline(v.x,v.y,v.w,v.h,GetFocus()==window_?0x6edac5:0x334757);
   }
 public:
-  SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),write_(std::move(write)){
-    minimumWidth_=1040;minimumHeight_=680;create(L"ScreamSeq.SongRouting",L"Song routing",1280,800);
+  SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect,NativeWriteCompletion::Write write,std::function<void(const std::string &,const std::string &,const std::string &)> browseEffectCallback={},std::function<bool()> canRefresh={}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),addEffect_(std::move(browseEffectCallback)),canRefresh_(std::move(canRefresh)),write_(std::move(write)){
+    minimumWidth_=1040;minimumHeight_=680;create(L"ScreamSeq.SongRouting",L"Mixing graph",1280,800,true);
     for(int id:{filter,nodePicker,wirePicker,kind,source,destination,page,insertPicker,effectPicker,graphPicker,inputPorts,outputPorts})combo(id);
     for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,0,0);
     for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})ScreamSeq::NativeInputGate::present(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);
     for(int id:{gain,input,output,amount,wet})edit(id,L"",32);
-    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{addEffect,L"Add effect…"},{addGroup,L"Add group"},{addReturn,L"Add return"},{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Song routing"},{nodeLabel,L"Selected stage"},{wireLabel,L"Connection"},{sourceLabel,L"From"},{destinationLabel,L"To"},{gainLabel,L"Gain / dB"},{inputLabel,L"Input port"},{outputLabel,L"Output port"},{insertLabel,L"Explicit inserts / processed in this order"},{effectLabel,L"Unassigned effects / otherwise processed on master"},{graphLabel,L"Each channel or sample voice gets an independent copy"},{amountLabel,L"Amount / 0…1"},{wetLabel,L"Wet / 0…1"},{statusLabel,L""}})label(id,name);
+    label(helpLabel,L"Right-click: actions · Double-click / Enter: open · Insert: add effect · Wheel: pan · Ctrl+wheel: zoom · Home: fit");
     finish();load();canvas_.fit();
   }
-  void show(){NativeToolWindow::show();SetFocus(window_);}
+  void show(){NativeToolWindow::show();SetTimer(window_,7,250,nullptr);SetFocus(window_);}
+  void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
   Json snapshot()const{
     const auto catalog=[](const PortCatalog &value){return Json{{"plugin",value.plugin},{"document",value.document},{"revision",value.revision},{"error",value.error},{"ports",value.ports},{"indices",value.indices}};};
     return {{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"inputPorts",catalog(inputCatalog_)},{"outputPorts",catalog(outputCatalog_)},{"generation",generation_},{"fields",{{"gain",utf8(field(gain))},{"input",utf8(field(input))},{"output",utf8(field(output))}}},{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",context_()!=std::pair(document_,revision_)},{"pending",pending_},{"draft",dirty_},{"layoutDraft",layoutDirty_},{"selected",selected_},{"wire",wire_},{"filter",filter_},{"page",page_},{"status",utf8(status_)},{"canvas",canvas_.snapshot()}};

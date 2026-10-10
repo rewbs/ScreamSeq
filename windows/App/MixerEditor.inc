@@ -28,13 +28,14 @@
             if(!node.graph.empty()){if(graphDirty||graphFieldDirty)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=node.graph;command(graphCommand);}
             else if(!node.plugin.empty()){if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the captured plugin draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==node.plugin;}))throw std::runtime_error("This insert's plugin is unavailable; its route is retained");selectedPlugin=node.plugin;pluginDetailsTarget.clear();graphEditorOpen=mixerEditorOpen=false;command(pluginsCommand);armPluginTimer();}
             else if(!node.bus.empty()){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the captured mixer draft first");mixerTarget=node.bus;command(mixerDetailsCommand);}
-        },[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
+        },[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
+          [this](const auto &document,const auto &bus,const auto &name){openPluginLibrary(document,bus,name);},[this]{return !busy&&!recoveryRestoring;});
         songRoutingWindow->show();
     }
     bool mixerEditorVisible() const {return workspaceMainEditorVisible("mixer");}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
-            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Routing…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
+            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Mixing graph…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerList]=CreateWindowExW(0,L"LISTBOX",L"Mixer buses",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerList)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerOutput]=CreateWindowExW(0,L"COMBOBOX",L"Main output",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerOutput)),GetModuleHandleW(nullptr),nullptr);
@@ -180,7 +181,7 @@
         place(mixerList,r.x+8,r.y+38,180,std::max(1.0f,r.h-168),show);
         place(mixerAdd,r.x+8,r.y+r.h-57,88,25,show);place(mixerAddReturn,r.x+100,r.y+r.h-57,88,25,show);
         place(mixerEnable,r.x+8,r.y+5,118,25,visible);place(mixerRemove,x,r.y+5,80,25,show);
-        place(mixerRouting,mixerStripsMode?r.x+134:x+86,r.y+5,96,25,visible);
+        place(mixerRouting,mixerStripsMode?r.x+134:x+86,r.y+5,124,25,visible);
         place(mixerStripsCommand,r.x+r.w-172,r.y+5,80,25,visible);place(mixerDetailsCommand,r.x+r.w-86,r.y+5,78,25,visible);
         if(mixerStrips&&!mixerStrips->retired()) {
             if(visible&&mixerStripsMode){mixerStrips->dockBounds(r.x,r.y+34,r.w,std::max(1.0f,r.h-34));if(!mixerStrips->visible())mixerStrips->show();}

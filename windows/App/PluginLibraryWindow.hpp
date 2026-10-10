@@ -12,6 +12,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
   NativeWriteCompletion completion_;std::string operation_,operationDocument_,operationRevision_;
   Json operationParams_,report_;uint64_t generation_=0;bool readbackNeedsReload_=false;
   std::string destinationDocument_,destinationBus_,destinationName_;
+  HWND pendingFocus_{};
   bool unresolved()const noexcept{return completion_.retained();}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     if(operation_!="plugin.add"||(!pending_&&!unresolved()))return {};
@@ -192,10 +193,22 @@ class PluginLibraryWindow final : public NativeToolWindow {
     if(ctrl&&value=='F'){SetFocus(controls_.at(search));ScreamSeq::NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(ctrl&&value=='R'){action(reload,BN_CLICKED);return true;}
     if(value==VK_F6){SetFocus(controls_.at(GetFocus()==controls_.at(plugins)?search:plugins));return true;}
+    if(!ctrl&&GetFocus()==controls_.at(search)&&(value==VK_UP||value==VK_DOWN||value==VK_RETURN)){
+      if(pending_||unresolved()||readbackNeedsReload_||categoryDraft_)return true;
+      // Apply an already typed local query before choosing; never insert a
+      // result from the previous query or trigger an extra library scan.
+      if(refreshQueued_){if(readQueued_)return true;KillTimer(window_,1);filter();}
+      if(entries_.empty())return true;
+      const auto current=SendMessageW(controls_.at(plugins),LB_GETCURSEL,0,0);
+      const auto next=current<0?0:std::clamp<int>(int(current)+(value==VK_DOWN?1:value==VK_UP?-1:0),0,int(entries_.size())-1);
+      NativeInputGate::present(controls_.at(plugins),LB_SETCURSEL,next,0);selected_=entries_[size_t(next)].at("catalogID").get<std::string>();fields();
+      if(value==VK_RETURN)addPlugin();return true;
+    }
     if(value==VK_RETURN){const auto focus=GetFocus();if(focus==controls_.at(customCategory)){action(saveCategory,BN_CLICKED);return true;}if(focus==controls_.at(plugins)){addPlugin();return true;}wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(GetDlgCtrlID(focus),BN_CLICKED);return true;}}return false;
   }
   void layout()override{
-    if(!ready_)return;const auto [w,h]=size();place(heading,16,14,w-254,26);place(reload,w-232,14,96,26);place(rescan,w-128,14,112,26);
+    if(!ready_)return;const auto focused=GetFocus();if(pending_&&!pendingFocus_&&focused&&owns(focused)&&focused!=controls_.at(close))pendingFocus_=focused;
+    const auto [w,h]=size();place(heading,16,14,w-254,26);place(reload,w-232,14,96,26);place(rescan,w-128,14,112,26);
     place(searchLabel,16,54,160,20);place(search,16,77,w-32,26);
     const auto third=(w-48)/3;place(kindLabel,16,115,third,20);place(formatLabel,24+third,115,third,20);place(categoryLabel,32+2*third,115,third,20);
     place(kind,16,138,third,200);place(format,24+third,138,third,220);place(category,32+2*third,138,third,280);
@@ -212,6 +225,7 @@ class PluginLibraryWindow final : public NativeToolWindow {
     set(destinationLabel,destinationBus_.empty()?L"Destination: plugin rack":wide("Destination: "+destinationName_+" ["+destinationBus_+"] / bus inserts"));
     for(int id:{favorite,hidePlugin,customCategory,saveCategory})EnableWindow(controls_.at(id),ready&&!refreshQueued_&&has&&!revision_.empty()&&(!categoryDraft_||id==customCategory||id==saveCategory));
     set(favorites,favoritesOnly_?L"★ Favorites only":L"Favorites filter: off");set(hidden,includeHidden_?L"Hidden included":L"Hidden excluded");
+    if(!pending_&&pendingFocus_){const auto previous=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowVisible(previous)&&IsWindowEnabled(previous)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(previous);}
   }
   void fontsChanged()override{if(controls_.contains(plugins))SendMessageW(controls_.at(plugins),LB_SETITEMHEIGHT,0,LPARAM(29*GetDpiForWindow(window_)/96));}
   void drawControl(const DRAWITEMSTRUCT &d)override{
@@ -234,6 +248,7 @@ public:
     for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{favorites,L"Favorites filter: off"},{hidden,L"Hidden excluded"},{favorite,L"Favorite"},{hidePlugin,L"Hide"},{saveCategory,L"Apply category"},{insert,L"Add to rack"},{reload,L"Reload"},{rescan,L"Rescan"},{close,L"Close"},{rackDestination,L"Rack destination"}})button(id,label);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Plugin library"},{searchLabel,L"Search plugins"},{kindLabel,L"Kind"},{formatLabel,L"Format"},{categoryLabel,L"Category"},{detailLabel,L""},{customLabel,L"Custom category / empty uses the default"},{statusLabel,L""}})label(id,text);
     label(destinationLabel,L"Destination: plugin rack");
+    SendMessageW(controls_.at(search),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Search plugins · Up/Down chooses · Enter adds"));
     strings(kind,{L"All kinds",L"Effects",L"Instruments"});strings(format,{L"All formats",L"Built-in",L"VST3",L"AU"});strings(category,{L"All categories"});finish();queue(true);
   }
   void setDestination(std::string document,std::string bus,std::string name){

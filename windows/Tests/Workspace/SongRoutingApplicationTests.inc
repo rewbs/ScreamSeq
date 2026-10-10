@@ -94,3 +94,50 @@ void applicationSongRoutingCatalogRefusal(){
     if(scenario==2)restoreCheck(state.at("inputPorts").at("indices").empty(),"Empty plugin catalog fabricated a sidechain input");
   }
 }
+
+// Graph-to-browser insertion exercises real native controls and the shared
+// atomic plugin.add path, including publication, history and persistence.
+void applicationMixingGraphUsability(){
+  RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());
+  app.openSongRouting();auto *tool=app.songRoutingWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+  const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
+  const auto select=[&](const std::string &identity){const auto nodes=tool->snapshot().at("canvas").at("nodes");for(size_t i=0;i<nodes.size();++i)if(nodes[i].at("id")==identity){SendMessageW(GetDlgItem(window,3802),CB_SETCURSEL,i,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(3802,CBN_SELCHANGE),LPARAM(GetDlgItem(window,3802)));return;}throw std::runtime_error("Missing graph usability node");};
+  const auto bus=app.documentOperation("mixer.get",RestoreJson::object()).at("buses")[0].at("id").get<std::string>();select(bus);
+  restoreCheck(IsWindowEnabled(GetDlgItem(window,3839)),"Selected bus cannot browse effects");click(3839);
+  auto *library=app.pluginLibraryWindow.get();restoreCheck(library&&library->visible()&&library->snapshot().at("destination").at("bus")==bus,"Graph Add effect did not capture its bus");
+  const auto browser=library->window();ScreamSeq::Tests::ownGuiWindow(browser);SendMessageW(browser,WM_TIMER,1,0);
+  const auto search=GetDlgItem(browser,3201);SetFocus(search);SetWindowTextW(search,L"Gain");
+  SendMessageW(search,WM_KEYDOWN,VK_DOWN,1);
+  restoreCheck(GetFocus()==search&&!library->snapshot().at("selected").get<std::string>().empty(),"Plugin search arrows lost focus or did not choose a filtered result");
+  const auto before=app.documentOperation("mixer.get",RestoreJson::object()).at("buses");const auto rack=app.view->session.document.at("nativePlugins");
+  SendMessageW(search,WM_KEYDOWN,VK_RETURN,1);
+  restoreCheck(app.view->session.document.at("nativePlugins").size()==rack.size()+1,"Enter in plugin search did not add the chosen effect");
+  const auto plugin=app.view->session.document.at("nativePlugins").back().at("instanceID").get<std::string>();
+  auto expected=before;for(auto &entry:expected)if(entry.at("id")==bus)entry.at("inserts").push_back(plugin);
+  restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==expected,"Graph insertion changed an unrelated bus or missed the captured destination");
+  SendMessageW(window,WM_TIMER,7,0);auto nodes=tool->snapshot().at("canvas").at("nodes");
+  restoreCheck(std::any_of(nodes.begin(),nodes.end(),[&](const auto &n){return n.at("id")=="plugin:"+plugin;})&&GetFocus()==search,"Graph refresh did not reveal the new effect or stole browser focus");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.view->session.document.at("nativePlugins")==rack&&app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==before,"Graph effect insertion did not have atomic Undo");
+  app.edit("history.redo",{{"domain","all"}});restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==expected,"Graph effect insertion Redo changed routing");
+  SendMessageW(window,WM_TIMER,7,0);library->hide();tool->show();
+  // Add group/return are native graph actions, with stable new-node selection.
+  click(3840);auto group=tool->snapshot().at("selected").get<std::string>();restoreCheck(group!=bus&&!group.empty(),"New group was not selected in graph");
+  auto mixer=app.documentOperation("mixer.get",RestoreJson::object());restoreCheck(std::any_of(mixer.at("buses").begin(),mixer.at("buses").end(),[&](const auto &b){return b.at("id")==group&&b.at("kind")=="group";}),"Add group did not create a group bus");
+  click(3841);const auto ret=tool->snapshot().at("selected").get<std::string>();restoreCheck(ret!=group&&!ret.empty(),"New return was not selected in graph");
+  select(bus);click(3842);restoreCheck(tool->snapshot().at("page")==1,"Context insert-chain action did not select its inspector");
+  // A native context menu must enter USER32's menu loop and cancel cleanly.
+  const auto thread=GetWindowThreadProcessId(window,nullptr);
+  auto menu=std::async(std::launch::async,[=]{bool entered=false;const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(3);while(std::chrono::steady_clock::now()<until){GUITHREADINFO info{sizeof(info)};if(GetGUIThreadInfo(thread,&info)&&(info.flags&GUI_INMENUMODE)){entered=true;break;}std::this_thread::sleep_for(std::chrono::milliseconds(5));}PostMessageW(window,WM_CANCELMODE,0,0);return entered;});
+  SendMessageW(window,WM_CONTEXTMENU,WPARAM(window),MAKELPARAM(-1,-1));restoreCheck(menu.get(),"Graph context menu never entered the native menu loop");
+  // Dirty fields remain captured after an external document change.
+  SetWindowTextW(GetDlgItem(window,3807),L"-.");const auto captured=tool->snapshot().at("expectedRevision");app.edit("mixer.bus.set",{{"bus",bus},{"gainDB",-3.0}});SendMessageW(window,WM_TIMER,7,0);
+  restoreCheck(tool->snapshot().at("expectedRevision")==captured&&tool->snapshot().at("draft")==true&&restoreText(GetDlgItem(window,3807))==L"-.","Automatic graph refresh discarded or rebased raw input");
+  click(3839);restoreCheck(!library->visible(),"Dirty graph opened an effect browser against another revision");click(3815);
+  select(bus);const auto canvas=tool->snapshot().at("canvas");const auto node=*std::find_if(canvas.at("nodes").begin(),canvas.at("nodes").end(),[&](const auto &n){return n.at("id")==bus;});
+  const auto rect=node.at("rect");const auto scale=GetDpiForWindow(window)/96.f;const auto point=MAKELPARAM(int((rect[0].get<float>()+rect[2].get<float>()/2)*scale),int((rect[1].get<float>()+rect[3].get<float>()/2)*scale));
+  restoreCheck(GetClassLongPtrW(window,GCL_STYLE)&CS_DBLCLKS,"Graph window did not register double-click input");SendMessageW(window,WM_LBUTTONDBLCLK,MK_LBUTTON,point);
+  restoreCheck(app.mixerTarget==bus&&!app.mixerStripsMode,"Graph double-click did not open the selected bus inspector");
+  const auto saved=app.documentOperation("mixer.get",RestoreJson::object()).at("buses");const auto path=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));
+  restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==saved&&app.view->session.document.at("nativePlugins").back().at("instanceID")==plugin,"Graph changes lost routing or plugin identity on save/reopen");
+  fixture.close();
+}
