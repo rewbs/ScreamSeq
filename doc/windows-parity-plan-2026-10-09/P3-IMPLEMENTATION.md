@@ -201,3 +201,10 @@ Add these plus controller budget/history tests and both native app builds to the
 combined gate. Inspect F04 in both real UIs and inspect 3-row beats/10-row measures
 at that gate; authored value/state checks do not establish pixel clarity or visual
 parity. No build or test has run for this display slice.
+
+The Windows root test project now includes `Tests/Api` as `api-tests`, preserving
+its standalone entry point while adding the exact same ApiTests and
+SessionCacheTests targets/tests to the main checkpoint. They remain separately
+labelled pipe/cache tests with their existing time bounds. This avoids a second
+configure/build cycle solely to validate the changed SessionAdapter; it does not
+replace actual application pipe or native UI checks.

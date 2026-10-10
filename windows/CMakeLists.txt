@@ -117,6 +117,10 @@ if(SCREAMSEQ_BUILD_RENDER_PROBE)
 endif()
 
 if(BUILD_TESTING)
+  # Keep the standalone pipe/cache project usable while allowing one native
+  # checkpoint to build and run its real tests with the application targets.
+  add_subdirectory(Tests/Api api-tests)
+  add_dependencies(portable-tests ApiTests SessionCacheTests)
   if(TARGET ScreamSeq)
     get_target_property(workspace_restore_sources ScreamSeq SOURCES)
     list(REMOVE_ITEM workspace_restore_sources App/Main.cpp Resources/ScreamSeq.rc)
