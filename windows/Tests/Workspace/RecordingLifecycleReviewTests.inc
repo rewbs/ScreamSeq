@@ -28,9 +28,12 @@ void recordingLifecycleReview(HWND main){
   SampleRecordingWindow tool(main,request,[&]{return context;},[](const std::string &,const Json &){},
     [&](const auto &,const auto &)->Api::CompletedCall{throw std::runtime_error("Lifecycle review attempted Keep");});
   owner=&tool;Tests::ownGuiWindow(tool.window());tool.openAt();
+  chooseDraftField(tool.window(),6514,1);
   clickDraftButton(tool.window(),6504);
   require(starts==1&&draftOf(tool).uncertain&&tool.snapshot().at("lifecycleReview").at("method")==failMethod,
     "Unknown Record lost its captured operation");
+  require(tool.snapshot().at("lifecycleReview").at("params").at("maxSeconds")==300,"Unknown Record lost the submitted duration");
+  chooseDraftField(tool.window(),6514,0);require(tool.snapshot().at("maxSeconds")==300,"Uncertain recording accepted a different duration");
   require(tool.snapshot().at("name")=="Newer sample name","Record failure lost newer setup");
   const auto captured=host.registry.capture(context.first,context.second);
   require(host.registry.authorize(captured,true).status==Tracker::DocumentDeparture::Status::Uncertain,"Unknown Record allowed document departure");

@@ -4,6 +4,11 @@ Implementation resumed after the documentation-only review under the active user
 
 ## Standing build cadence (user instruction)
 
+Current prepared feature details are in [P1](P1-IMPLEMENTATION.md),
+[P2](P2-IMPLEMENTATION.md), [P3](P3-IMPLEMENTATION.md) and
+[P4](P4-IMPLEMENTATION.md). P4 now includes the API-backed recorder duration
+choice; it is source progress, not physical capture or phase qualification.
+
 From this checkpoint onward, batch related code and test changes before building
 or executing tests. Aim for at most one consolidated build cycle per hour. Do not
 run a build for each owner, control, small edit or audit finding. Schedule required

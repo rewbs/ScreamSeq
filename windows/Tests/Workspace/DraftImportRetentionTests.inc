@@ -130,9 +130,9 @@ void recordingSetupRetention(HWND main){
     if(method=="sample.recording.get")return take;
     if(method=="sample.recording.start"){
       ++starts;submitted=params;
-      chooseDraftField(owner->window(),6501,1);chooseDraftField(owner->window(),6502,1);
-      selectionRetained=owner->snapshot().at("device")==params.at("device")&&owner->snapshot().at("firstChannel")==params.at("firstChannel");
-      take={{"take","take-"+std::to_string(starts)},{"documentId",context.first},{"baseRevision",context.second},{"device",params.at("device")},{"firstChannel",params.at("firstChannel")},{"channels",params.at("channels")},{"capturing",true},{"frames",24000},{"sampleRate",24000}};return take;
+      chooseDraftField(owner->window(),6501,1);chooseDraftField(owner->window(),6502,1);chooseDraftField(owner->window(),6514,0);
+      selectionRetained=owner->snapshot().at("device")==params.at("device")&&owner->snapshot().at("firstChannel")==params.at("firstChannel")&&owner->snapshot().at("maxSeconds")==params.at("maxSeconds");
+      take={{"take","take-"+std::to_string(starts)},{"documentId",context.first},{"baseRevision",context.second},{"device",params.at("device")},{"firstChannel",params.at("firstChannel")},{"channels",params.at("channels")},{"capturing",true},{"frames",24000},{"sampleRate",96000},{"maxSeconds",174.7626666667},{"maxFrames",16777216}};return take;
     }
     if(method=="sample.recording.stop"){take["capturing"]=false;return take;}
     if(method=="sample.recording.discard"){take={{"take",nullptr}};return Json::object();}
@@ -149,14 +149,19 @@ void recordingSetupRetention(HWND main){
   {
     ScreamSeq::SampleRecordingWindow tool(main,request,[&]{return context;},committed,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.openAt();
     require(pendingObserved&&discardRefused&&host.registry.capture(context.first,context.second).drafts.empty(),"Recording reads omitted pending work or fabricated a draft");
-    chooseDraftField(tool.window(),6501,1);chooseDraftField(tool.window(),6502,2);
+    require(tool.snapshot().at("maxSeconds")==60,"Recorder default duration changed");
+    chooseDraftField(tool.window(),6501,1);chooseDraftField(tool.window(),6502,2);chooseDraftField(tool.window(),6514,1);
     require(host.registry.capture(context.first,context.second).drafts.empty(),"Global capture preferences counted as a song edit");
+    chooseDraftField(tool.window(),6514,99);require(tool.snapshot().at("maxSeconds")==300,"Invalid duration choice changed the capture limit");
     // Restore the first endpoint/range so the injected choices differ.
     chooseDraftField(tool.window(),6501,0);chooseDraftField(tool.window(),6502,0);
     SetWindowTextW(GetDlgItem(tool.window(),6508),L"Submitted take");const auto configured=draftOf(tool);tool.hide();
     require(configured.dirty&&draftOf(tool).sameWork(configured)&&host.registry.capture(context.first,context.second).drafts.size()==1,"Hidden sample name intent was lost");
     tool.openAt();clickDraftButton(tool.window(),6504);
     require(starts==1&&pendingObserved&&discardRefused&&selectionRetained&&tool.hasRetainedTake(),"Pending recording start lost its captured input or census guard");
+    require(submitted.at("maxSeconds")==300&&tool.snapshot().at("maxSeconds")==300&&!IsWindowEnabled(GetDlgItem(tool.window(),6514)),"Recorder lost the five-minute choice across reopen/start");
+    require(tool.snapshot().at("state").at("maxFrames")==16777216&&text(GetDlgItem(tool.window(),6556)).find(L"174.76")!=std::wstring::npos,"Recorder did not display the actual frame-capped duration");
+    chooseDraftField(tool.window(),6514,0);require(tool.snapshot().at("maxSeconds")==300,"Retained take allowed duration setup changes");
     clickDraftButton(tool.window(),6505);const auto stopped=draftOf(tool);
     reject=true;clickDraftButton(tool.window(),6506);
     require(commits==0&&tool.hasRetainedTake()&&draftOf(tool).sameWork(stopped),"Rejected Keep consumed the take or setup");
