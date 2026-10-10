@@ -45,6 +45,24 @@ supersedes that status. Previous partial/failed evidence is preserved.
 
 ## Standing build cadence (user instruction)
 
+### Stopping checkpoint requested by the user
+
+Source work stops after committing the shared parameter-preview host boundary
+and its prepared cross-platform tests; see [P4](P4-IMPLEMENTATION.md). The working
+implementation branch includes `bc981bf99` (shared validation), `b8f6932f1`
+(audition compile repair), and `5ee3c9757` (atomic live admission and retained
+vendor notifications), plus this preview checkpoint. These changes have not been
+built or tested. The integration checkout remains at checkpoint 05's failed
+`85a90f095`; no new checkpoint was launched, dispatched or scheduled.
+
+Resume by reviewing the current implementation branch and its unqualified
+changes, extending the consolidated selection with `parameter-edit-tests` and
+`parameter-preview-tests`, and retaining the controller/vendor recovery cases
+named above. Freeze one clean candidate for both platforms before building.
+The last attempt's earliest next local build time remains 07:43:55.207390 UTC;
+resuming later does not require a new arbitrary cooldown. Keep all prior failure
+receipts intact. No phase closure, main merge or full-goal completion is claimed.
+
 Current prepared feature details are in [P1](P1-IMPLEMENTATION.md),
 [P2](P2-IMPLEMENTATION.md), [P3](P3-IMPLEMENTATION.md) and
 [P4](P4-IMPLEMENTATION.md). P4 now includes the API-backed recorder duration

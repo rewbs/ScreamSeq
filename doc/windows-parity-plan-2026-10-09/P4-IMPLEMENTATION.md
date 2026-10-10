@@ -293,3 +293,44 @@ newer value, then accepts one retained coalesced value; verifies no idle resend,
 unchanged revision/owner/transport on refusal, and exactly one accepted Undo/Redo.
 Keep this case in the next bounded selection. It tests notification retention;
 the separate real queue/renderer case supplies audio admission evidence.
+
+## Shared parameter preview boundary — prepared, unqualified
+
+The next prerequisite is in `editor/hosted/PluginChain.cpp` / `HostedAudio.hpp`,
+shared by both native hosts. `previewParameters` publishes a complete batch using
+the existing 4096-entry queue but leaves the control-owned manual catalog and
+observation catalog's manual baseline unchanged. Each rack entry owns prepared
+per-parameter preview flags; rendering does not allocate or access those flags.
+Invalid targets/ranges and queue failure reject before changing flags or values.
+Ordinary accepted parameter writes and harvested vendor edits retire their
+parameter's preview flag. Explicit preset replacement starts with clean flags;
+retained rack entries keep their identity during normal routing changes.
+
+`states()` drains the existing parameter queue on the quiescent control owner as
+before. For previewed parameters only, it restores current accepted values in a
+disposable vendor copy before returning opaque state, preserving other captured
+settings and leaving the audible vendor untouched. Failure to reconstruct an
+accepted value throws instead of returning a state containing the preview.
+`cancelParameterPreviews(slot, ids)` prepares one reset batch from the current
+manual catalog. A later accepted edit has already retired its flag, so Cancel
+cannot overwrite that edit with a gesture's old baseline. Failed reset admission
+keeps all flags and audible values for explicit retry.
+
+`editor/Tests/ParameterPreviewTests.cpp` is registered as `parameter-preview`
+on both platforms and belongs to the Windows worker aggregate. Prepared cases
+use two real built-in gain processors at 44.1/48/96 kHz and 17/128/511-frame
+partitions: audible preview, independent manual values, exact opaque-state
+capture/reopen, save without audible reset, independent cancellation, intervening
+accepted edit, subsequent preview/cancel, invalid later entries, full-queue
+preview/cancel rejection, and callback audit. Windows audit covers scoped C++
+allocation/free; Mac uses the existing allocation/free/lock audit except sanitizer
+builds. These tests have **not run**. Exact sample-by-sample partition comparisons,
+AU/VST3 state side effects and preset/rack transition combinations still need
+coverage before exposing the mechanism in the native UI.
+
+This is an internal host boundary, not a finished user gesture. No public API
+schema or native slider uses it yet. On resumption, finish the adapter/API and
+retained UI ownership layer, including stable identities/revision/generation,
+one durable final Undo, same-baseline final reset, cancellation on capture loss
+or document replacement, and busy/unknown outcomes. Do not advertise parameter
+slider parity or mark P4 complete from this source checkpoint.

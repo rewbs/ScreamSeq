@@ -379,6 +379,7 @@ class PluginChain {
     std::shared_ptr<NativePlugin::Preset> preset;
     PluginState baseline;
     std::vector<PluginParameter> parameters;
+    std::vector<bool> previewed; // Control owner; same catalog order, allocated during preparation.
     ObservedProcessor ports;
     uint32_t activity=0;
   };
@@ -443,6 +444,7 @@ class PluginChain {
   std::vector<bool> bypass_;
   struct QueuedParameter {ParameterChange change;bool last=false,observed=false;NativePlugin *plugin=nullptr;uint32_t activity=0;};
   std::array<QueuedParameter, 4096> queue_{};
+  bool enqueueParameterBatch(std::span<const ParameterChange>,bool preview) noexcept;
   alignas(64) std::atomic<uint32_t> write_{0};
   alignas(64) std::atomic<uint32_t> read_{0};
   bool parameterBlockOpen_=false; // Audio owner only; excludes mid-block updates.
@@ -634,6 +636,13 @@ public:
   // Single control producer. One release publishes the complete batch, or no
   // values on failure. Caller validates IDs/ranges against its baseline catalog.
   bool enqueueParameters(std::span<const ParameterChange>) noexcept;
+  // Transient audition leaves the accepted manual catalog and captured state
+  // unchanged. All calls are on the single control producer, never rendering.
+  bool previewParameters(std::span<const ParameterChange>) noexcept;
+  bool hasParameterPreview(size_t slot,uint32_t id) const noexcept;
+  // Restore CURRENT accepted values for these IDs, not a gesture's old copy.
+  // Allocation/preparation may throw; queue refusal leaves every preview intact.
+  bool cancelParameterPreviews(size_t slot,std::span<const uint32_t> ids);
   bool bypass(size_t slot,bool value) noexcept;
   size_t bypassStorageBytes() const noexcept;
   // Pair with process(): instrument/mixer/effect stages see the same boundary.
