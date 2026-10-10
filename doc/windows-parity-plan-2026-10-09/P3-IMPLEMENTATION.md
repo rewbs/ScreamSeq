@@ -662,3 +662,54 @@ departure, save/recovery, import/persistence and existing source-protection test
 No codec, Mac UI or musical edit semantics changed. Retain the P0/P8 reciprocal
 fixture and earlier shared-code Mac gates. P3c title/channel controls and the
 remaining P3a accessibility/visual work are still open.
+
+## Song title and channel count — prepared after checkpoint 02
+
+`SongPropertiesWindow.hpp` / `SongPropertiesIntegration.inc` add command 627 to
+the Song catalogue and the sidebar channel-count summary. This retained native
+form calls existing `document.patch`; no alternate title conversion, channel
+resizing, metadata reconciliation, history or codec was added. The controller
+snapshot now publishes format channel minimum/maximum alongside its existing
+format limits. Invalid raw channel text and out-of-format counts are rejected
+locally; the existing worker candidate validation remains authoritative for
+capacity and native reference integrity before structural Stop/mutation.
+
+The form captures document/revision, submits only changed fields and preserves
+tempo/meter/groove. It warns that reducing the count removes trailing channels
+and their music. Refresh/reopen never overwrite fields; explicit Use current
+revision retains typed intent, whereas Reload values discards it. Ctrl+Enter,
+Tab, F6 and Escape provide native keyboard operation. The existing document
+draft registry owns hidden drafts and replacement retirement; the existing
+`NativeWriteCompletion` retains known or unknown outcomes without replay and
+protects later typing by generation. Unknown readback requires explicit
+acceptance at the observed revision. This reuses P0b's native ownership and
+receipt boundaries instead of introducing another command/history controller.
+
+Prepared `workspace-song-properties-tests` shares the existing workspace
+executable, with no extra compilation of Main. Cases cover invalid/raw/range
+input, stale drafts, retained focus, atomic title/count Apply, stable channel
+identities through one Undo/Redo and save/reopen, hidden departure protection,
+minimum native control bounds, Escape and committed/unknown completion failures.
+The actual-pipe
+`SongToolsUITests.test_song_properties_native_patch_history_shrink_and_reopen`
+is explicitly selected in Windows CI: native Apply preserves unrelated cells
+and timing; removing a populated trailing channel and undoing restores its
+cells and identity; equivalent numeric text is a no-op retaining Redo; native
+save/reopen preserves the restored data and retires the previous owner.
+
+Qualification is pending: only source/diff inspection and Python syntax parsing
+are appropriate during the build cooldown. The next consolidated Windows gate
+must include the new workspace group, actual-pipe test, existing document patch,
+track/mixer capacity, departure and persistence checks. Windows x64 and ARM64
+remain separate requirements. This slice changes no shared/Mac source or project
+format; earlier shared-code Mac gates and reciprocal fixture checks remain open.
+P3c's planned entry points are now prepared in source, not qualified complete.
+P3a accessibility/visual checks and P3b's remaining interaction work remain open.
+
+Source layout inspection also found that stacking the two new entry buttons
+under Live Loop would clip Settings at the 620-DIP frame minimum and overlap the
+sidebar help. Settings now shares the channel-count summary row; Report shares
+the Save As row, with compact Report/Warnings/Recovery captions and full names in
+the command catalogue. The retained OpenMPT credit is placed on the bottom row
+so it no longer overlaps Live Loop at the minimum frame height. Foreground text
+legibility and mixed-DPI qualification remain pending.

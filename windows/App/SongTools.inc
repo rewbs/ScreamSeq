@@ -52,6 +52,7 @@
         if(arrangementWindow)arrangementWindow->update(arrangementState());
         if(arrangementMatrixWindow)arrangementMatrixWindow->update(arrangementMatrixState());
         if(songTimingWindow)songTimingWindow->update(songTimingContext());
+        if(songPropertiesWindow)songPropertiesWindow->update();
         if(createNoteTrackWindow)createNoteTrackWindow->update();
         if(groupNoteTrackWindow)groupNoteTrackWindow->update();
         if(patternToolsWindow)patternToolsWindow->update();

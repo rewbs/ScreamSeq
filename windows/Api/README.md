@@ -96,9 +96,10 @@ Press F5 in the app to retry native cleanup/refresh without reopening the file
 or replaying the write. Stop remains available and preserves that recovery
 message. A successful retry restores normal editing.
 
-**Load report…** beside the file controls, and **File / Project load and recovery
+**Report…** beside Save As, and **File / Project load and recovery
 report** in the command palette (626), open a modeless native report. The button
-reads **Recovery report…** while Save a copy is required. The report displays the
+reads **Recovery…** while Save a copy is required, or **Warnings…** for retained
+load diagnostics. The report displays the
 original source, current saved path, all deduplicated load warnings/import issues
 and preview-only status. Its text is read-only, selectable and scrollable;
 refreshing an unchanged report preserves selection and focus. Warnings remain
@@ -113,6 +114,25 @@ old report and cancels its queued action. `workspace.get.loadReport` exposes
 `visible`, the report's `context` and its displayed `text`. Context includes
 `documentId`, `sourcePath`, `path`, `warnings`, `issues`, `requiresSaveAs`,
 `editable` and `busy`; these are existing loader facts, not a new recovery policy.
+
+**Settings…** beside the sidebar channel count, and **Song / Title and channel
+count** in the command palette (627), open a retained native form over
+`document.patch`. Title and channel-count changes are submitted together with
+the captured revision. Omitted/unchanged fields are preserved, including tempo,
+speed, meter and groove. The displayed channel range comes from
+`document.get.data.formatLimits.channelsMin/channelsMax`, alongside the existing
+pattern/order limits. Removing trailing channels removes their music; the form
+explains this before Apply, and document history restores a successful edit.
+
+Refresh, close and reopen retain raw field text. **Use current revision** keeps
+that text and explicitly rebases its target; **Reload values** replaces it with
+the current song values. Ctrl+Enter applies, F6 returns to the pattern and Escape
+hides the form. Hidden dirty fields participate in document departure review.
+**Review result** reconciles a retained completion without repeating its write;
+an outcome without a receipt requires readback and explicit acceptance of the
+observed state. `workspace.get.songProperties` exposes the captured context,
+draft, generation, dirty/stale/pending/completed flags and retained result or
+observation. This UI adds no separate editing, history or persistence policy.
 
 The native sample recorder retains an unresolved Record/Stop/Discard operation
 in `workspace.get.data.sampleRecording.lifecycleReview`, including its method,

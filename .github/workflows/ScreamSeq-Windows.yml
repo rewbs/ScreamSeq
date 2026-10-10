@@ -126,6 +126,7 @@ jobs:
               test_pattern_tools.PatternToolsAppTests `
               test_pattern_tools.EffectPickerAppTests `
               test_song_tools_ui.SongToolsUITests.test_repeated_occurrence_moves_undo_and_native_duplicate_persistence `
+              test_song_tools_ui.SongToolsUITests.test_song_properties_native_patch_history_shrink_and_reopen `
               test_main_integration.MainIntegrationTests.test_input_is_atomic_context_only_and_supports_empty_slots `
               test_main_integration.MainIntegrationTests.test_new_and_demo_identity_validation_replay_and_save_reopen `
               test_main_integration.MainIntegrationTests.test_retained_load_report_preserves_source_warnings_after_save_copy `

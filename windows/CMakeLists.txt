@@ -158,6 +158,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-note-track-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-pattern-tools-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-effect-picker-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-song-properties-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-song-properties-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts;song-properties"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=song-properties" TIMEOUT 120)
     set_tests_properties(workspace-effect-picker-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;pattern-effects"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=effect-picker" TIMEOUT 120)
     set_tests_properties(workspace-pattern-tools-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts;pattern-tools"

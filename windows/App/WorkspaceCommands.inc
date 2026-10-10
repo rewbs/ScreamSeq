@@ -53,6 +53,7 @@
             {arrangementCommand,L"Song / Arrange pattern orders",L""},
             {arrangementMatrixCommand,L"Song / Arrangement matrix and block copy",L""},
             {songTimingCommand,L"Song / Tempo, meter and groove",L""},
+            {songPropertiesCommand,L"Song / Title and channel count",L""},
             {noteColumnMuteCommand,L"Track / Toggle current note column mute",L""},
             {noteTrackCreateCommand,L"Track / New note track…",L""},
             {noteTrackGroupCommand,L"Track / Group selected note columns…",L""},

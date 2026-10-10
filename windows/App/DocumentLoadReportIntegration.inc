@@ -37,7 +37,7 @@
         if(controls.contains(documentLoadReportCommand)) {
             const auto &doc=view->session.document;
             const auto warnings=doc.value("loadWarnings",Json::array()).size()+doc.value("issues",Json::array()).size();
-            const auto label=doc.value("requiresSaveAs",false)?L"Recovery report…":warnings?L"Load report / warnings":L"Load report…";
+            const auto label=doc.value("requiresSaveAs",false)?L"Recovery…":warnings?L"Warnings…":L"Report…";
             ScreamSeq::NativeControls::text(controls.at(documentLoadReportCommand),label);
         }
     }

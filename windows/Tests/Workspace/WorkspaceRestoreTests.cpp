@@ -1068,6 +1068,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PatternToolsApplicationTests.inc"
 #include "EffectPickerApplicationTests.inc"
 #include "DocumentLoadReportApplicationTests.inc"
+#include "SongPropertiesApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1169,6 +1170,9 @@ int wmain(int argc,wchar_t **argv) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
                     applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();applicationNewAndDemo();applicationDocumentLoadReport();
                     std::cout<<"PASS Application departure: native/API consent, stale input, Stop rollback, retirement, refresh retry and canceled shutdown\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"song-properties") {
+                    applicationSongProperties();std::cout<<"PASS Song properties: captured drafts, format limits, history, persistence, retirement and retained outcomes\n";return;
                 }
                 restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");
                 nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";

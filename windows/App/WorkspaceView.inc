@@ -103,14 +103,15 @@
         place(mixerCommand,564,52,76,26);
         place(parameterAutomationCommand,644,52,96,26);
         place(liveKeysCommand,744,52,92,26);
-        place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,146,25);
+        place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,72,25);
+        place(documentLoadReportCommand,86,322,70,25);updateDocumentLoadReport();
+        place(songPropertiesCommand,86,95,70,23);
         place(undoCommand,10,354,68,25);place(redoCommand,82,354,74,25);
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
         place(soundChooser,10,484,146,230);
         place(playbackLoopCommand,10,516,146,25);
         refreshPlaybackLoopControl();
-        place(documentLoadReportCommand,10,548,146,25);updateDocumentLoadReport();
         EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
@@ -195,6 +196,7 @@
             {recoveryCommand,L"Recovery copies"},{documentLoadReportCommand,L"Load report…"},
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
+            {songPropertiesCommand,L"Settings…"},
             {noteColumnMuteCommand,L"Mute column"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
@@ -239,6 +241,7 @@
             if(id==effectPickerCommand){openEffectPicker();return;}
             if(id==newDocumentCommand||id==openDemoCommand){newFile(id==openDemoCommand);return;}
             if(id==documentLoadReportCommand){openDocumentLoadReport();return;}
+            if(id==songPropertiesCommand){openSongProperties();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;

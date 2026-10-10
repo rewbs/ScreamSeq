@@ -30,7 +30,8 @@ class SongToolsUITests(unittest.TestCase):
     focus_control = midi_ui.MidiRecordingUITests.focus_control
 
     tools = {'arrangement': ('ScreamSeq.Arrangement', 'arrangementWindow', 553),
-             'timing': ('ScreamSeq.SongTiming', 'songTimingWindow', 554)}
+             'timing': ('ScreamSeq.SongTiming', 'songTimingWindow', 554),
+             'properties': ('ScreamSeq.SongProperties', 'songProperties', 627)}
 
     def state(self, tool=None):
         return self.read('workspace.get')[self.tools[tool or self.active_tool][1]]
@@ -147,6 +148,53 @@ class SongToolsUITests(unittest.TestCase):
 
     def timing(self):
         return self.read('document.timing.get')
+
+    def test_song_properties_native_patch_history_shrink_and_reopen(self):
+        original = self.doc()
+        count = original['data']['channels']
+        timing = self.timing()
+        cells = self.read('pattern.get', pattern=0, rowCount=64, channelCount=count)
+        self.open_tool('properties')
+        self.field(8601, 'Native title & channel settings')
+        self.field(8602, '-')
+        self.press(8605)
+        self.assertEqual(self.doc(), original)
+        self.assertEqual(self.text(8602), '-')
+        self.field(8602, count + 1)
+        self.press(8605)
+        applied = self.doc()['data']
+        self.assertEqual(applied['title'], 'Native title & channel settings')
+        self.assertEqual(applied['channels'], count + 1)
+        self.assertEqual(self.timing(), timing)
+        self.assertEqual(self.read('pattern.get', pattern=0, rowCount=64, channelCount=count)['cells'], cells['cells'])
+        self.write('history.undo')
+        self.assertEqual(self.doc()['data']['title'], original['data']['title'])
+        self.assertEqual(self.doc()['data']['tracks'], original['data']['tracks'])
+        self.write('history.redo')
+        self.assertEqual(self.doc()['data']['tracks'], applied['tracks'])
+        self.write('pattern.apply', cells=[dict(pattern=0, row=3, channel=count, note=61, instrument=1)])
+        populated = self.read('pattern.get', pattern=0, startRow=3, rowCount=1, startChannel=count, channelCount=1)['cells']
+        self.press(8604)  # Explicitly reload after the external edit.
+        self.field(8602, count)
+        self.press(8605)
+        self.assertEqual(self.doc()['data']['channels'], count)
+        self.write('history.undo')
+        self.assertEqual(self.doc()['data']['tracks'], applied['tracks'])
+        self.assertEqual(self.read('pattern.get', pattern=0, startRow=3, rowCount=1, startChannel=count, channelCount=1)['cells'], populated)
+        self.press(8604)
+        self.field(8602, f'0{count + 1}')
+        before_noop = self.doc()
+        self.press(8605)
+        self.assertEqual(self.doc(), before_noop)  # Equivalent text does not consume Redo or add history.
+        self.assertTrue(self.doc()['data']['canRedo'])
+        saved = self.doc()['data']
+        path = self.folder / 'native-song-properties.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertFalse(self.state()['visible'])
+        for key in ('title', 'channels', 'tracks'):
+            self.assertEqual(self.doc()['data'][key], saved[key])
+        self.assertEqual(self.read('pattern.get', pattern=0, startRow=3, rowCount=1, startChannel=count, channelCount=1)['cells'], populated)
 
     def test_arrangement_minimum_raw_draft_focus_reopen_and_explicit_reload(self):
         self.open_tool('arrangement', 555)

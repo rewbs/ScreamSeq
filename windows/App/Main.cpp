@@ -54,6 +54,7 @@
 #include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
 #include "DocumentLoadReportWindow.hpp"
+#include "SongPropertiesWindow.hpp"
 #include "NoteTrackWindow.hpp"
 #include "PatternToolsWindow.hpp"
 #include "EffectPickerWindow.hpp"
@@ -91,6 +92,7 @@ constexpr int effectPickerCommand=597;
 constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
 constexpr int newDocumentCommand=624,openDemoCommand=625;
 constexpr int documentLoadReportCommand=626;
+constexpr int songPropertiesCommand=627;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -351,6 +353,7 @@ public:
             {"patternTools",patternToolsWindow?patternToolsWindow->snapshot():Json{{"visible",false}}},
             {"effectPicker",effectPickerWindow?effectPickerWindow->snapshot():Json{{"visible",false}}},
             {"loadReport",documentLoadReportWindow?documentLoadReportWindow->snapshot():Json{{"visible",false}}},
+            {"songProperties",songPropertiesWindow?songPropertiesWindow->snapshot():Json{{"visible",false}}},
             {"trackHeaders",noteTrackHeaderSnapshot()},
             {"noteTrackEditors",{{"create",createNoteTrackWindow?createNoteTrackWindow->snapshot():Json{{"visible",false}}},
                 {"group",groupNoteTrackWindow?groupNoteTrackWindow->snapshot():Json{{"visible",false}}}}},
@@ -667,6 +670,7 @@ public:
     #include "WorkspaceRuler.inc"
     #include "EffectPickerIntegration.inc"
     #include "DocumentLoadReportIntegration.inc"
+    #include "SongPropertiesIntegration.inc"
 	void play() { playWorkspaceRegion(false,false); }
     bool supportsPlaybackLoop()const override{return true;}
     void refreshPlaybackLoopControl() {
