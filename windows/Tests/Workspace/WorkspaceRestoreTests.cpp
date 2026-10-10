@@ -1073,6 +1073,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "KeyboardSettingsApplicationTests.inc"
 #include "MenuBarApplicationTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
+#include "PluginSearchApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1128,6 +1129,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
+                    applicationPluginSearch();std::cout<<"PASS native plugin search: stable filtered identities, retained drafts, keyboard and empty catalogues\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;
                 }

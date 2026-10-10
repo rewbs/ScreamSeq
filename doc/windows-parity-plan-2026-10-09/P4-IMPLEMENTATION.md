@@ -66,3 +66,51 @@ memory behavior, retained Keep/Discard and reciprocal save/reopen remain P4/P7
 qualification requirements. There was no microphone access, build or test run
 for this source change. The native capture engine's existing strict limits and
 the original test assertions are unchanged.
+
+## Plugin parameter and program search — prepared, unqualified
+
+`windows/App/PluginEditor.inc` previously populated the full parameter and factory
+program catalogues into unfiltered native combos. The rack now adds native search
+fields for parameter name/unit/ID and factory program name/group/ID. Matching is
+ordinal Unicode case-insensitive. Search is presentation state: no API mutation,
+Undo entry, project metadata or plugin-state change is introduced. The existing
+parameter Apply and revision/catalogue-guarded program Load remain authoritative.
+
+Filtered rows carry their original catalogue index as combo item data; command
+handlers resolve that row through the catalogue to the existing stable ID. An
+empty placeholder has an explicit invalid index. The current selection remains
+visible with `[selected; outside search]` when it does not match. Selecting a new
+matching item removes the obsolete retained row. Unavailable programs retain
+their label and existing Load eligibility. Parameter selection while a raw draft
+exists is still rejected and restores the correct filtered selection. Searching
+never changes raw value text, captured revision/target or draft generation.
+
+Both searches have explicit native accessible names and precede their results in
+Tab order. Enter focuses results; Down focuses and opens the native dropdown;
+Escape clears the query without discarding a parameter/program draft. Search
+text survives detail refresh and retained workspace hide/reopen in the current
+process. It is not a new saved preference. The extra compact row increases the
+height needed to expose parameter/program controls from 132 to 164 DIPs, and the
+instrument assignment row to 196 DIPs; minimum-size usability must be inspected.
+No custom cross-platform widget or plugin audio/host change is involved.
+
+`PluginSearchApplicationTests.inc` adds the private-desktop
+`workspace-plugin-search-tests` group to the existing workspace executable and
+CI native-UI selection. It prepares 200 deterministic parameters to distinguish
+filtered row 1 from catalogue index 179/ID 1179, checks raw invalid-draft retention
+and rejected selection, case matching, names, Tab/Enter/Escape behavior, program
+IDs/catalogue revision, unavailable entries and empty placeholders. Synthetic
+catalogue entries are never sent as musical writes. A real built-in Gain fixture
+allows the check to assert unchanged document/plugin history throughout. Existing
+actual-app plugin tests remain necessary to cover real Apply/Load behavior.
+
+Add the new named group to the next consolidated local checkpoint selection;
+checkpoint 04 is frozen and must not be rewritten. Build the Windows application
+and workspace harness once with the other pending changes, then run this group,
+existing plugin draft/departure tests and the actual-PID plugin scenarios against
+that freeze. Inspect native dropdown keyboard behavior, query retention, minimum
+height and 100/150/200% DPI. Broaden to plugin worker/persistence gates if request,
+revision, identity or state code changes. No additional Mac build is needed solely
+for these Windows presentation changes; shared pending changes retain their Mac
+gates. This section records source inspection and prepared checks only: no build
+or test was run for the search batch.

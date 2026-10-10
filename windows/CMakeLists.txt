@@ -170,6 +170,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-keyboard-settings-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-menu-bar-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-pattern-accessibility-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-plugin-search-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-plugin-search-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;plugins;keyboard"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=plugin-search" TIMEOUT 120)
     set_tests_properties(workspace-pattern-accessibility-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;accessibility;pattern"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-accessibility" TIMEOUT 120)
     set_tests_properties(workspace-menu-bar-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;menus;keyboard"

@@ -53,9 +53,67 @@
         controls[pluginList]=CreateWindowExW(0,L"LISTBOX",L"Plugin rack",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginList)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginValue]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValue)),GetModuleHandleW(nullptr),nullptr);
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
+        for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{pluginParameterSearch,L"Search parameters by name, unit or ID"},{pluginProgramSearch,L"Search factory programs by name or group"}}) {
+            controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
+            if(!controls[id])throw std::runtime_error("Cannot create plugin search field");
+            SendMessageW(controls.at(id),EM_SETLIMITTEXT,128,0);SendMessageW(controls.at(id),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(label));
+            ScreamSeq::check(ScreamSeq::NativeAccessibility::name(controls.at(id),label),"Name plugin search");
+            const auto selector=controls.at(id==pluginProgramSearch?pluginProgram:pluginParameter);
+            ScreamSeq::check(SetWindowPos(controls.at(id),GetWindow(selector,GW_HWNDPREV),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order plugin search before results");
+        }
+        for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{pluginParameter,L"Selected plugin parameter"},{pluginValue,L"Plugin parameter value"},{pluginProgram,L"Selected factory program"}})
+            ScreamSeq::check(ScreamSeq::NativeAccessibility::name(controls.at(id),label),"Name plugin field");
         for(auto label:{L"Parameters",L"Factory programs",L"Audio ports",L"Instrument assignments",L"Presets",L"Plugin location"})ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_SETCURSEL,0,0);
-        for(int id=pluginList;id<=pluginReconnect;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginProgramSearch;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+    }
+    static bool pluginSearchMatches(std::wstring_view text,std::wstring_view query) {
+        if(query.empty())return true;
+        for(size_t i=0;i+query.size()<=text.size();++i)
+            if(CompareStringOrdinal(text.data()+i,int(query.size()),query.data(),int(query.size()),TRUE)==CSTR_EQUAL)return true;
+        return false;
+    }
+    void filterPluginChoices(bool programs) {
+        const int search=programs?pluginProgramSearch:pluginParameterSearch,selector=programs?pluginProgram:pluginParameter;
+        if(!controls.contains(search)||!controls.contains(selector))return;
+        std::wstring query(size_t(GetWindowTextLengthW(controls.at(search)))+1,0);
+        GetWindowTextW(controls.at(search),query.data(),int(query.size()));query.resize(wcslen(query.c_str()));
+        const auto &catalog=programs?pluginPrograms:pluginParameters;
+        ScreamSeq::NativeInputGate::present(controls.at(selector),CB_RESETCONTENT,0,0);int selected=-1;
+        for(size_t i=0;i<catalog.size();++i) {
+            const auto &item=catalog[i];const bool current=programs?item.at("id")==selectedProgram:item.at("id")==selectedParameter;
+            auto label=wide(programs?item.at("group").get<std::string>()+" / "+item.at("name").get<std::string>():
+                item.at("name").get<std::string>()+(item.at("unitLabel").get<std::string>().empty()?"":" / "+item.at("unitLabel").get<std::string>()));
+            const bool match=pluginSearchMatches(label+L" "+wide(item.at("id").dump()),query);
+            if(!match&&!current)continue;
+            if(programs&&!item.at("loadable").get<bool>())label+=L" [unavailable]";
+            if(!match)label+=L" [selected; outside search]";
+            const auto row=ScreamSeq::NativeInputGate::present(controls.at(selector),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+            if(row==CB_ERR||row==CB_ERRSPACE)throw std::runtime_error("Cannot populate plugin search results");
+            if(ScreamSeq::NativeInputGate::present(controls.at(selector),CB_SETITEMDATA,row,LPARAM(i))==CB_ERR) {
+                ScreamSeq::NativeInputGate::present(controls.at(selector),CB_DELETESTRING,row,0);
+                throw std::runtime_error("Cannot associate a plugin search result with its target");
+            }
+            if(current)selected=int(row);
+        }
+        if(SendMessageW(controls.at(selector),CB_GETCOUNT,0,0)==0) {
+            const auto label=catalog.empty()?(programs?L"No standard factory programs":L"No exposed parameters"):(programs?L"No matching programs":L"No matching parameters");
+            const auto row=ScreamSeq::NativeInputGate::present(controls.at(selector),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+            if(row==CB_ERR||row==CB_ERRSPACE)throw std::runtime_error("Cannot display empty plugin search");
+            if(ScreamSeq::NativeInputGate::present(controls.at(selector),CB_SETITEMDATA,row,LPARAM(-1))==CB_ERR) {
+                ScreamSeq::NativeInputGate::present(controls.at(selector),CB_DELETESTRING,row,0);
+                throw std::runtime_error("Cannot mark empty plugin search results");
+            }
+            selected=int(row);
+        }
+        ScreamSeq::NativeInputGate::present(controls.at(selector),CB_SETCURSEL,selected,0);frameRequested=true;
+    }
+    int pluginChoiceIndex(int selector)const {
+        const auto row=SendMessageW(controls.at(selector),CB_GETCURSEL,0,0);
+        if(row==CB_ERR)return -1;
+        const auto index=SendMessageW(controls.at(selector),CB_GETITEMDATA,row,0);
+        const auto &catalog=selector==pluginProgram?pluginPrograms:pluginParameters;
+        return index<0||size_t(index)>=catalog.size()?-1:int(index);
     }
     void syncPluginRack() {
         if(!controls.contains(pluginList)) return;
@@ -102,10 +160,8 @@
             pluginParameters=documentOperation("plugin.parameters.get",{{"slot",slot}});
             pluginDetailStatus=wide(view->session.document.at("nativePlugins")[slot].at("name").get<std::string>());
         } catch(const std::exception &e) {pluginDetailStatus=wide(e.what());}
-        ScreamSeq::NativeInputGate::present(controls.at(pluginParameter),CB_RESETCONTENT,0,0);int selected=-1;
-        for(size_t i=0;i<pluginParameters.size();++i) {const auto &p=pluginParameters[i];auto label=wide(p.at("name").get<std::string>()+(p.at("unitLabel").get<std::string>().empty()?"":" / "+p.at("unitLabel").get<std::string>()));ScreamSeq::NativeInputGate::present(controls.at(pluginParameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("id")==selectedParameter)selected=int(i);}
-        if(selected<0 && !pluginParameters.empty()) {selected=0;selectedParameter=pluginParameters[0].at("id").get<uint32_t>();}
-        ScreamSeq::NativeInputGate::present(controls.at(pluginParameter),CB_SETCURSEL,selected,0);setPluginParameterField();
+        if(!pluginParameters.empty()&&std::none_of(pluginParameters.begin(),pluginParameters.end(),[&](const auto &p){return p.at("id")==selectedParameter;}))selectedParameter=pluginParameters[0].at("id").get<uint32_t>();
+        filterPluginChoices(false);setPluginParameterField();
         ScreamSeq::NativeInputGate::present(controls.at(pluginInstrument),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls.at(pluginInstrument),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Unassigned"));ScreamSeq::NativeInputGate::present(controls.at(pluginInstrument),CB_SETITEMDATA,0,0);
         unsigned assigned=slot<0?0:view->session.document.at("nativePlugins")[slot].value("instrument",0u);int instrumentSelection=0;
         for(const auto &i:view->session.document.at("instruments")) {auto n=i.at("index").get<unsigned>();auto label=std::to_wstring(n)+L"  "+wide(i.at("name").get<std::string>());auto item=ScreamSeq::NativeInputGate::present(controls.at(pluginInstrument),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(pluginInstrument),CB_SETITEMDATA,item,n);if(n==assigned)instrumentSelection=int(item);}
@@ -120,12 +176,8 @@
             if(pluginDetailPage==1){auto result=documentOperation("plugin.programs.get",{{"plugin",selectedPlugin}});pluginPrograms=result.at("programs");programCatalogRevision=result.at("catalogRevision").get<std::string>();}
             if(pluginDetailPage==2)pluginPorts=documentOperation("plugin.buses.get",{{"slot",slot}}).at("buses");
         }catch(const std::exception &e){pluginDetailStatus=wide(e.what());pluginExtrasError=true;}
-        ScreamSeq::NativeInputGate::present(controls.at(pluginProgram),CB_RESETCONTENT,0,0);int programSelection=-1;
-        for(size_t i=0;i<pluginPrograms.size();++i){const auto &p=pluginPrograms[i];auto label=wide(p.at("group").get<std::string>()+" / "+p.at("name").get<std::string>()+(p.at("loadable").get<bool>()?"":" [unavailable]"));
-            ScreamSeq::NativeInputGate::present(controls.at(pluginProgram),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("id")==selectedProgram)programSelection=int(i);}
-        if(programSelection<0&&!pluginPrograms.empty()){programSelection=0;selectedProgram=pluginPrograms[0].at("id").get<std::string>();}
-        if(pluginPrograms.empty())ScreamSeq::NativeInputGate::present(controls.at(pluginProgram),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"No standard factory programs"));
-        ScreamSeq::NativeInputGate::present(controls.at(pluginProgram),CB_SETCURSEL,programSelection<0?0:programSelection,0);
+        if(!pluginPrograms.empty()&&std::none_of(pluginPrograms.begin(),pluginPrograms.end(),[&](const auto &p){return p.at("id")==selectedProgram;}))selectedProgram=pluginPrograms[0].at("id").get<std::string>();
+        filterPluginChoices(true);
         ScreamSeq::NativeInputGate::present(controls.at(pluginPort),CB_RESETCONTENT,0,0);selectedPort=-1;displayedPluginPorts=pluginPorts;
         for(size_t i=0;i<pluginPorts.size();++i){const auto &p=pluginPorts[i];const auto index=p.at("index").get<unsigned>();
             auto label=wide(p.at("direction").get<std::string>()=="input"?"Input ":"Output ")+std::to_wstring(index)+L"  "+wide(p.at("name").get<std::string>())+L" / "+std::to_wstring(p.at("channels").get<unsigned>())+L" ch / "+(index==0?L"Main":!p.at("supported").get<bool>()?L"Unsupported":p.at("active").get<bool>()?L"On":L"Off");
@@ -166,8 +218,10 @@
         place(pluginList,r.x+8,y+67,210,std::max(24.0f,r.h-75),show);
         float bx=x;for(auto [id,w]:std::initializer_list<std::pair<int,float>>{{pluginEditor,66.0f},{pluginBypass,72.0f},{pluginRemove,68.0f},{pluginUp,44.0f},{pluginDown,52.0f}}) {place(id,bx,y+67,w,24,show);bx+=w+4;}
         const float parameterWidth=std::max(80.0f,r.w-406);
-        place(pluginParameter,x,y+99,parameterWidth,240,show && pluginDetailPage==0 && r.h>=132);place(pluginValue,x+parameterWidth+6,y+99,86,24,show && pluginDetailPage==0 && r.h>=132);place(pluginApply,x+parameterWidth+98,y+99,68,24,show && pluginDetailPage==0 && r.h>=132);
-        place(pluginProgram,x,y+99,r.w-360,300,show && pluginDetailPage==1 && r.h>=132);place(pluginLoadProgram,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==1 && r.h>=132);
+        place(pluginParameterSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==0&&r.h>=164);
+        place(pluginProgramSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==1&&r.h>=164);
+        place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);place(pluginValue,x+parameterWidth+6,y+131,86,24,show && pluginDetailPage==0 && r.h>=164);place(pluginApply,x+parameterWidth+98,y+131,68,24,show && pluginDetailPage==0 && r.h>=164);
+        place(pluginProgram,x,y+131,r.w-360,300,show && pluginDetailPage==1 && r.h>=164);place(pluginLoadProgram,r.x+r.w-120,y+131,112,24,show && pluginDetailPage==1 && r.h>=164);
         place(pluginPort,x,y+99,r.w-360,300,show && pluginDetailPage==2 && r.h>=132);place(pluginTogglePort,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==2 && r.h>=132);
         place(pluginAliases,x,y+99,r.w-242,26,show&&pluginDetailPage==3&&r.h>=132);
         place(pluginSavePreset,x,y+99,132,26,show&&pluginDetailPage==4&&r.h>=132);
@@ -181,7 +235,7 @@
         ScreamSeq::NativeControls::text(controls.at(pluginLoadPreset),retainedPreset?L"Use current state":L"Load preset…");
         EnableWindow(controls.at(pluginSavePreset),!pluginPresetPending&&(selected||retainedPreset));
         EnableWindow(controls.at(pluginLoadPreset),!pluginPresetPending&&(retainedPreset?pluginPresetNeedsReload:selected));
-        place(pluginInstrument,x,y+131,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginNewInstrument,r.x+r.w-188,y+131,108,24,show && instrument && pluginDetailPage==0 && r.h>=164);place(pluginAssign,r.x+r.w-76,y+131,68,24,show && instrument && pluginDetailPage==0 && r.h>=164);
+        place(pluginInstrument,x,y+163,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=196);place(pluginNewInstrument,r.x+r.w-188,y+163,108,24,show && instrument && pluginDetailPage==0 && r.h>=196);place(pluginAssign,r.x+r.w-76,y+163,68,24,show && instrument && pluginDetailPage==0 && r.h>=196);
         EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
@@ -214,13 +268,13 @@
             const auto slot=SendMessageW(controls.at(pluginList),LB_GETCURSEL,0,0);if(slot!=LB_ERR)selectedPlugin=listedPlugins.at(size_t(slot)).at("instanceID").get<std::string>();pluginDetailsTarget.clear();return true;
         }
         if(id==pluginParameter) {
-            if(pluginDraft) {for(size_t i=0;i<pluginParameters.size();++i)if(pluginParameters[i].at("id")==selectedParameter)ScreamSeq::NativeInputGate::present(controls.at(pluginParameter),CB_SETCURSEL,i,0);throw std::runtime_error("Apply the parameter draft or press Escape before choosing another parameter");}
-            auto selected=SendMessageW(controls.at(pluginParameter),CB_GETCURSEL,0,0);if(selected!=CB_ERR)selectedParameter=pluginParameters.at(size_t(selected)).at("id").get<uint32_t>();setPluginParameterField();return true;
+            if(pluginDraft) {filterPluginChoices(false);throw std::runtime_error("Apply the parameter draft or press Escape before choosing another parameter");}
+            const auto selected=pluginChoiceIndex(pluginParameter);if(selected>=0)selectedParameter=pluginParameters.at(size_t(selected)).at("id").get<uint32_t>();filterPluginChoices(false);setPluginParameterField();return true;
         }
         if(id==pluginLibrary || id==pluginInstrument)return true;
-        if(id==pluginProgram){const auto chosen=SendMessageW(controls.at(pluginProgram),CB_GETCURSEL,0,0);if(chosen>=0 && size_t(chosen)<pluginPrograms.size()){
+        if(id==pluginProgram){const auto chosen=pluginChoiceIndex(pluginProgram);if(chosen>=0){
             ++pluginDraftGeneration;
-            selectedProgram=pluginPrograms[size_t(chosen)].at("id").get<std::string>();if(!pluginDraft){pluginDraft=true;pluginProgramDraft=true;pluginDraftRevision=pluginDetailsRevision;pluginDraftTarget=pluginDetailsTarget;}}return true;}
+            selectedProgram=pluginPrograms[size_t(chosen)].at("id").get<std::string>();if(!pluginDraft){pluginDraft=true;pluginProgramDraft=true;pluginDraftRevision=pluginDetailsRevision;pluginDraftTarget=pluginDetailsTarget;}filterPluginChoices(true);}return true;}
         if(id==pluginPort){const auto chosen=SendMessageW(controls.at(pluginPort),CB_GETCURSEL,0,0);if(chosen>=0&&size_t(chosen)<pluginPorts.size())selectedPort=int(chosen);return true;}
         if(id==pluginRescan) {refreshPluginLibrary(true);status=L"Plugin library scan finished";return true;}
         if(pluginDraft && id!=pluginApply && id!=pluginLoadProgram)throw std::runtime_error("Apply the draft or press Escape before changing the rack");
@@ -273,7 +327,7 @@
         auto r=workspaceMainEditorRect();auto &s=*surface;s.fill(r.x,r.y,r.w,r.h,0x171f29);s.fill(r.x,r.y,r.w,32,0x232e3b);
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
-        if(r.h>=161 && pluginDetailPage!=0)s.uiText(pluginDetailPage==4&&!pluginPresetStatus.empty()?pluginPresetStatus:pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+134,r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
-        else if(r.h>=161 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
-            s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+134,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
+        if(r.h>=(pluginDetailPage==1?193:161) && pluginDetailPage!=0)s.uiText(pluginDetailPage==4&&!pluginPresetStatus.empty()?pluginPresetStatus:pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+(pluginDetailPage==1?166:134),r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
+        else if(r.h>=193 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
+            s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+166,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
     }

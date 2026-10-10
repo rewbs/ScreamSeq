@@ -345,7 +345,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginProgramSearch) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
@@ -378,6 +378,11 @@
             if(key==VK_RETURN) {command(sampleRangeCommand);return true;}
             if(key==VK_ESCAPE) {sampleDraft=false;refreshSampleFields();setWorkspaceCanvasFocus("samples");SetFocus(window);return true;}
             if(key==VK_TAB) {SetFocus(GetFocus()==controls.at(sampleStartField) ? controls.at(sampleEndField) : controls.at(sampleRangeCommand));return true;}
+        }
+        if(pluginEditorVisible()&&(GetFocus()==controls.at(pluginParameterSearch)||GetFocus()==controls.at(pluginProgramSearch))) {
+            const auto focus=GetFocus();const auto selector=focus==controls.at(pluginProgramSearch)?pluginProgram:pluginParameter;
+            if(key==VK_ESCAPE&&!ctrl&&!alt){ScreamSeq::NativeInputGate::text(focus,L"");return true;}
+            if((key==VK_RETURN||key==VK_DOWN)&&!ctrl&&!alt){SetFocus(controls.at(selector));if(key==VK_DOWN)SendMessageW(controls.at(selector),CB_SHOWDROPDOWN,TRUE,0);return true;}
         }
         if(pluginEditorVisible()&&GetFocus()==controls.at(pluginValue)) {
             if(key==VK_RETURN) {command(pluginApply);return true;}
