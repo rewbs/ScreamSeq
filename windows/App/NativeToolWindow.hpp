@@ -451,7 +451,7 @@ public:
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
   void show(){if(retired_||!window_)throw std::logic_error("Document editor was retired");const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
   virtual void hide(){
-    if(automaticEdit_){cancelAutomaticEdit();automaticEditFailed_=true;}
+    if(automaticEdit_){cancelAutomaticEdit();automaticEditFailed_=true;if(ready_)layout();}
     const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();
     if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}
     // A source-free child can belong to a retained but hidden native tool.

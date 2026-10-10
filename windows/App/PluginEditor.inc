@@ -46,7 +46,7 @@
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
             {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo"},{pluginRedo,L"Redo"},
-            {pluginAutomate,L"Automation…"},{pluginActivity,L"Activity…"},{pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
+            {pluginAutomate,L"Automation…"},{pluginActivity,L"Activity…"},{pluginApply,L"Retry"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
             {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"},{pluginReconnect,L"Reconnect plugin…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort,pluginValueChoice})
@@ -257,6 +257,7 @@
     void pluginTimer() {
         if(busy || refreshingPlugins || pluginPresetPending) return;
         KillTimer(window,1);
+        if(pluginAutoQueued&&!pluginEditorVisible()){pluginAutoQueued=false;pluginAutoFailed=true;}
         if(pluginAutoQueued&&pluginEditorVisible()){
             if(GetTickCount64()<pluginEditDue){SetTimer(window,1,100,nullptr);return;}
             pluginAutoQueued=false;

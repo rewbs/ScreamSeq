@@ -108,7 +108,7 @@ public:
     for(int id:{pattern,kind,snap})combo(id);
     for(int id:{pointRow,pointValue,formula})edit(id,L"",id==formula?2048:32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
-      {apply,L"Apply curve"},{reload,L"Reload captured"},{setPoint,L"Set point"},{deletePoint,L"Delete point"},
+      {apply,L"Retry changes"},{reload,L"Reload captured"},{setPoint,L"Set point"},{deletePoint,L"Delete point"},
       {ramp,L"Ramp"},{clear,L"Clear"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{preview,L"Check / preview"},
       {enabled,L"Enabled"},{bank,L"Envelope bank…"},{expand,L"Expand…"},{reference,L"Guide"},
       {pageCurve,L"Curve"},{pageFormula,L"Formula"},{pageTools,L"Tools"},{follow,L"Load selection"},

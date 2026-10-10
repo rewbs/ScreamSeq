@@ -181,7 +181,7 @@
     }
     void mixerFieldChanged(){if(!settingMixerFields&&mixerSelected()>=0){mixerDirty=true;++mixerGeneration;mixerAutoQueued=true;mixerAutoFailed=false;mixerEditDue=GetTickCount64()+600;frameRequested=true;}}
     void mixerTimer() {
-        if(!mixerEditorVisible()){KillTimer(window,3);return;}
+        if(!mixerEditorVisible()){KillTimer(window,3);if(mixerAutoQueued){mixerAutoQueued=false;mixerAutoFailed=true;}return;}
         if(busy||refreshingMixer||mixerPending)return;
         if(mixerAutoQueued&&GetTickCount64()>=mixerEditDue){
             mixerAutoQueued=false;mixerEditField=GetFocus();

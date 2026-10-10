@@ -20,6 +20,7 @@
       require(!pending_&&!dragging_&&!openingChild_,"Curve editor is busy");
       if(id==pattern){
         const auto chosen=selection(pattern);
+        try{flushAutomaticEdit();}catch(...){restorePatternChoice();throw;}
         if(retainedDraft()){restorePatternChoice();throw std::runtime_error("Apply or Reload this curve and finish its child draft before changing pattern");}
         require(chosen>=0&&size_t(chosen)<patterns_.size(),"Choose an available pattern");
         auto target=target_;target.patternID=patterns_[size_t(chosen)].at("id");

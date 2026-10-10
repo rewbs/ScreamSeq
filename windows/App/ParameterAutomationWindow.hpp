@@ -181,7 +181,7 @@ private:
     if(!points_.empty())shape={{"span",rows_*256},{"rowsPerBeat",rowsPerBeat_},{"points",points_}};
     bank_=std::make_unique<EnvelopeBankWindow>(window_,target,shape,captured_.document,captured_.revision,parameterName()+L" · Pattern "+std::to_wstring(captured_.pattern),std::move(request),std::move(context),std::move(source),std::move(write));bank_->show();
   }
-  void touch(){require(!draft(),"Apply or Reload the current curve draft first");const auto data=request_("automation.target.get",Json::object());const auto &target=data.at("target");require(!target.is_null()&&target.value("available",false),"Touch a parameter in the rack or a plugin editor first");load(true,target.at("plugin"),target.at("parameter").get<uint32_t>());}
+  void touch(){require(!draft(),"Finish or discard the current curve draft first");const auto data=request_("automation.target.get",Json::object());const auto &target=data.at("target");require(!target.is_null()&&target.value("available",false),"Touch a parameter in the rack or a plugin editor first");load(true,target.at("plugin"),target.at("parameter").get<uint32_t>());}
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){if(dragging_)cancelDrag();hide();return;}
     if(id>=pageTarget&&id<=pageTools&&notification==BN_CLICKED){choosePage(id-pageTarget);return;}
@@ -190,10 +190,10 @@ private:
     if(notification==CBN_SELCHANGE){
       if(id==kind){kind_=std::clamp(selection(kind),0,8);pointFields_=true;++generation_;if(selected_>=0)queueCurveEdit(1);layout();return;}if(id==snap){snap_=std::array<unsigned,4>{256,128,64,1}.at(size_t(std::max(0,selection(snap))));return;}
       if(id==tool){tool_=std::clamp(selection(tool),0,8);toolFields();return;}
-      if(id==pattern||id==plugin){if(draft()){choices();throw std::runtime_error("Apply or Reload the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
+      if(id==pattern||id==plugin){const auto wanted=selection(id);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(id,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
         try{if(id==pattern)load(false,{},parameter_,captured_.patterns.at(size_t(index)).at("index").get<unsigned>());else load(false,plugins_.at(size_t(index)).at("instanceID"),std::nullopt);}catch(...){choices();throw;}return;}
     }
-    if(id==parameters&&notification==LBN_SELCHANGE){const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(draft()){filter();throw std::runtime_error("Apply or Reload the curve draft before changing parameter");}if(index>=0&&size_t(index)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(index)]).at("id"));filter();}return;}
+    if(id==parameters&&notification==LBN_SELCHANGE){const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(draft()){filter();throw std::runtime_error("Finish or discard the curve draft before changing parameter");}if(index>=0&&size_t(index)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(index)]).at("id"));filter();}return;}
     if(id==parameters&&notification==LBN_DBLCLK&&compact_&&parameter_){choosePage(1);return;}
     if(notification!=BN_CLICKED)return;
     if(id==reload||id==fromCursor){load(id==fromCursor);toolFieldsDirty_=false;}else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
@@ -426,7 +426,7 @@ public:
     load(true,std::move(plugin),parameter);
   }
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||retainedDraft();show();if(!retain){load(true,std::move(plugin),parameter);if(compact_&&!parameter_){compactPage_=0;layout();}}if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
-  void openSourceAt(std::string plugin,uint32_t parameter){require(!retainedDraft()&&!pending_,"Apply or Reload the existing parameter curve draft before opening a source");load(true,std::move(plugin),parameter,{ },false,true);show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
+  void openSourceAt(std::string plugin,uint32_t parameter){require(!retainedDraft()&&!pending_,"Finish or discard the existing parameter curve draft before opening a source");load(true,std::move(plugin),parameter,{ },false,true);show();if(previewNeeded_)SetTimer(window_,3,120,nullptr);focusPage();}
   Json snapshot()const{
     Json handles=Json::array();for(size_t i=0;i<canvas_.handles.size();++i)handles.push_back({{"index",i},{"x",canvas_.handles[i].x},{"y",canvas_.handles[i].y}});const auto r=canvas_.viewport;
     return {{"visible",visible()},{"compact",compact_},{"shortDock",shortDock_},{"page",std::array<const char *,4>{"target","curve","formula","tools"}[size_t(compactPage_)]},{"canvasVisible",canvasVisible_},{"toolFieldDraft",toolFieldsDirty_},{"retainedDraft",retainedDraft()},{"generation",generation_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"pattern",captured_.pattern},{"patternID",patternID_},{"plugin",pluginID_},{"parameter",parameter_?Json(*parameter_):Json()},{"lane",laneID_},{"dirty",dirty_},{"fieldDraft",pointFields_},{"pending",pending_},{"stale",!current()},{"enabled",enabled_},{"points",points_},{"selectedPoint",selected_},{"parameterCount",catalog_.size()},{"filteredCount",filtered_.size()},{"start",canvas_.start},{"end",canvas_.end},{"valueLow",canvas_.valueLow},{"valueHigh",canvas_.valueHigh},{"previewSamples",canvas_.curve.size()},{"handles",handles},{"canvas",{r.x,r.y,r.w,r.h}},{"status",utf8(status_)},{"envelopeBank",bank_?bank_->snapshot():Json{{"visible",false}}},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}}};

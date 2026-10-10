@@ -117,7 +117,7 @@ void bounds(Fixture &f,std::set<int> *available=nullptr){
   }
 }
 void automaticCurve(Owner &owner){
-  Fixture f(owner.window);f.click(Tool::ramp);require(f.writes.empty(),"Curve button wrote before its edit settled");
+  Fixture f(owner.window);f.page(2);f.click(Tool::ramp);f.page(0);require(f.writes.empty(),"Curve button wrote before its edit settled");
   SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);require(f.writes.size()==1&&!f.tool.snapshot().at("dirty").get<bool>(),"Curve edit still requires Apply");
   f.field(Tool::pointValue,L"35.00");const auto field=f.control(Tool::pointValue);SendMessageW(field,EM_SETSEL,1,4);
   SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
