@@ -1,4 +1,5 @@
 #include "editor/TrackerDocument.hpp"
+#include "soundlib/mod_specifications.h"
 #include "editor/TrackLayout.hpp"
 #include <functional>
 #include <iostream>

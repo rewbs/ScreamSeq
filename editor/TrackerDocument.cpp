@@ -1121,6 +1121,12 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		auto begin = std::begin(song_->m_PlayState.ChnMix);
 		auto end = std::remove(begin, begin + song_->m_nMixChannels, channel);
 		song_->m_nMixChannels = CHANNELINDEX(std::distance(begin, end));
+		// A live audition may arrive between tracker ticks. Prepare only its
+		// new sample voice now; otherwise it remains absent from ChnMix until
+		// the next tick. At a tick boundary Read() prepares it normally.
+		// ReadNote(channel) preserves the transport clock and other voices.
+		if(chn.nLength && song_->m_PlayState.m_nBufferCount)
+			song_->ReadNote(channel);
 	}
 	noteRead_.store(noteRead, std::memory_order_release);
 	auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);

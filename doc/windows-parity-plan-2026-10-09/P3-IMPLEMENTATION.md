@@ -1079,3 +1079,70 @@ MSAA and UIA properties explicitly and clears both on retirement; its previous
 name is retained for recovery if updating the second property fails. The new
 client check uses the actual UIA Name property rather than assuming the legacy
 name mapping. This linkage correction was made before any build attempt.
+
+### Checkpoint 04: bounded ARM64 execution and prepared audio correction
+
+Frozen integration source: `dbd149d5ea7817aeff19597acaad03663968beea`.
+The consolidated build started 2026-10-10 05:38:21 UTC and finished at
+05:43:28 UTC. It completed 38 of 53 requested targets, including the application,
+all 17 native GUI executables and `native-audio-bus`. It then failed compiling
+`editor/Tests/NoteTrackEditTests.cpp`: `CModSpecifications` was incomplete at the
+format-limit check. The prepared repair adds `soundlib/mod_specifications.h`;
+the assertions and limits are unchanged. The remaining 15 requested targets
+were not qualified. This is a failed consolidated build, not a passing gate.
+
+The preserved evidence directory is
+`C:/Users/P14/.codex/worktrees/parity-ci-layout/ScreamSeq/bin/parity-evidence/`:
+
+- Receipt: `integration-checkpoint-04.json`.
+- Build log: `integration-build-04.log`, SHA256
+  `71847ea04c47f5e7db84c5277e2f9b8502e2c47e9226f6af7cd58ded91851298`.
+- Application SHA256:
+  `c1fd5bf5c6790b66ddb38f70a6227b0a64f51a75a7fb4e70a40653a80b71e70f`.
+- Bounded diagnostic log: `integration-ui-diagnostic-04.log`, SHA256
+  `a0f9ce3ad24f2aef81ed398c62ffffa1216b1b96da9a5a9ee49bfce408fc9077`.
+
+A separate diagnostic helper verified frozen source and completed target
+identities before execution; it did not bypass the full helper's failed-build
+guard. Extraction of actual embedded manifests passed for all 17 GUI executables:
+Common Controls 6, PerMonitorV2 and asInvoker without uiAccess. Eight CTests passed:
+`workspace-menu-bar-tests`, `workspace-pattern-accessibility-tests`,
+`workspace-song-properties-tests`, `workspace-keyboard-settings-tests`,
+`workspace-effect-picker-tests`, `native-control-tests`, `native-tool-window-tests`
+and `graph-curve-window-tests`. This includes the real MTA UI Automation client
+and retained draft/focus checks described above. It does not establish foreground
+Narrator behavior, visual quality, mixed-monitor interaction or hardware behavior.
+
+The ninth diagnostic, `native-audio-bus`, failed with
+“Column mute silenced an independent sample audition voice”. The subsequent
+bus/routing cases in that executable were not reached. The full native gate and
+actual-PID application gate remain unrun for this source.
+
+Source inspection found that the mute loop explicitly skips audition voices,
+but preview onset removed the new voice from `ChnMix` until the next tracker
+tick. Three 17-frame callbacks can finish before that tick. A prepared shared
+renderer change calls the existing voice-specific `ReadNote(channel)` when a
+sample audition arrives between ticks; a tick-boundary arrival retains normal
+`Read()` preparation. It changes neither the tracker clock nor another voice's
+tick processing and introduces no new storage or callback ownership. This is a
+source-supported diagnosis and an **unbuilt candidate fix**, not a verified
+resolution of the observed failure.
+
+`PlaybackRegionChecks.hpp`, already used by both platform wrappers, now adds
+first-callback PCM, clock and realtime-audit checks at 44.1/48/96 kHz with
+17/128/511-frame callbacks, stopped/running transport, and direct sample versus
+instrument-envelope audition. A second onset checks that the first voice's
+envelope/pitch and the tracker clock are unchanged. The existing column-mute
+ownership/PCM assertions are retained in full. Windows audit scope remains host
+C++ allocation/free; its wrapper does not instrument locks.
+
+Next consolidated build is no earlier than 2026-10-10 06:43:28 UTC under the
+requested cadence. Include all previously incomplete targets, `playback-regions`
+and the full `native-audio-bus` execution. Shared renderer changes also require
+Mac playback-region/core audition and hosted ownership coverage. Preserve the
+checkpoint-04 checkout and logs until comparison is recorded. Reuse unchanged
+manifest evidence only after comparing embedded resource content; reuse test
+results only where executable/relevant transitive inputs remain unchanged.
+Do not inherit the eight GUI passes wholesale across a relink with shared audio
+changes. Cross-platform CI, full application integration, foreground/accessibility,
+hardware and reciprocal F01–F05 save/reopen gates remain open.
