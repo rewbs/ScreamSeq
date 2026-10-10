@@ -2,7 +2,51 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
-## Latest consolidated checkpoint — compile failure, 10 October, 06:43 UTC
+## Usable Windows build — 10 October, 07:44 UTC onward
+
+The user requested only the minimal steps to obtain a working build and commit /
+push accumulated work. **The full parity goal remains paused.** This checkpoint
+supersedes the unbuilt status in the historical entries below; it does not close
+P0b–P8 or the cross-platform integration gate.
+
+Windows ARM64 Release built successfully from `1d74ef4055a35d18808fc7fb8d4267717d948231`.
+The application and scanner are in the integration checkout's
+`bin/windows-parity-p1/Release/`; keep the build directory together when launching
+`ScreamSeq.exe`. Source and executable hashes, exact commands, timestamps and
+retained log locations are in the [bounded checkpoint receipt](USABLE-BUILD-2026-10-10.json).
+The failed configuration attempt was repaired by placing the portable-test
+aggregate dependency after its target definition; no compilation occurred in
+that failed attempt. The subsequent single application build succeeded.
+
+Eight selected native/worker checks now pass: shared parameter preparation,
+transient parameter preview, playback regions, native audio bus, live parameters,
+controller scratch setup and atomic live-queue admission, and plugin search /
+value controls / parameter navigation. Three real-application cases pass on
+private desktops: new/demo identity and save/reopen, rack buttons with stale
+parameter drafts and history, and vendor-editor recovery with retained/coalesced
+notifications. Embedded app/workspace-test manifests passed Common Controls 6,
+PerMonitorV2 and asInvoker checks.
+
+Initial smoke failures were retained and repaired without weakening assertions:
+two API test requests passed JSON null instead of an object; a Python test called
+a button helper instead of the combo notification helper; plugin UI fixtures
+assumed physical desktop dimensions. The exact-client sizing helper also omitted
+the installed native menu, producing a 39-pixel height deficit at 192 DPI.
+Fixtures now establish a 1440×800-DIP client and include the menu in frame sizing.
+The two affected test executables were rebuilt once together, followed by two
+workspace-test-only sizing retries. Failed receipts remain recorded. Only failed
+checks were repeated; **ScreamSeq.exe stayed byte-for-byte unchanged** throughout
+all test repairs. Final test source is `7b09ec575`.
+
+These passes qualify the bounded Windows usability selection only. They do not
+establish Mac/x64 viability for the new shared changes, physical recording or
+hardware loopback, third-party plugin behavior, full reciprocal fixture saves,
+or full parity completion. The shared preview boundary remains a host foundation
+without a public UI/API gesture. No remote build was dispatched and no main merge
+is included. The temporary integration branch remains the convergence branch;
+resume the reviewed plan and outstanding cross-platform gates only on request.
+
+## Historical consolidated checkpoint — compile failure, 10 October, 06:43 UTC
 
 Checkpoint 05 ran once against frozen `85a90f095`, starting at 06:43:41 UTC
 and ending at 06:43:54 UTC. Configuration succeeded; compilation stopped at
@@ -45,7 +89,7 @@ supersedes that status. Previous partial/failed evidence is preserved.
 
 ## Standing build cadence (user instruction)
 
-### Stopping checkpoint requested by the user
+### Historical stopping checkpoint requested by the user
 
 Source work stops after committing the shared parameter-preview host boundary
 and its prepared cross-platform tests; see [P4](P4-IMPLEMENTATION.md). The working

@@ -4,6 +4,16 @@ This records prepared source, not phase completion. P0–P3 qualification and th
 remaining P4 asset/curve/manual-recording work stay open. Both native platforms
 remain on the same temporary implementation branch and must converge on main.
 
+## Bounded Windows verification — 10 October
+
+The [usable-build checkpoint](IMPLEMENTATION.md) supersedes earlier unbuilt
+status for the shared parameter validation, preview foundation, atomic live
+queue admission and retained vendor notifications: their selected Windows
+ARM64 checks now pass. The receipt preserves initial harness failures and
+subsequent targeted repairs. This does not qualify the recorder duration UI,
+physical capture, every vendor plugin, Mac/x64 builds, or the complete P4 phase.
+The broader implementation goal remains paused.
+
 ## Recorder duration choice — prepared, unqualified
 
 Parity matrix row 44 identified a fixed 60-second Windows recorder form. Current
