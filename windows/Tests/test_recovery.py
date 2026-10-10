@@ -65,13 +65,29 @@ class RecoveryTests(unittest.TestCase):
     def command(self, identifier, kind='ScreamSeqWindowsDevelopment'):
         self.desktop.send(self.window(kind), 0x111, identifier, 0)
 
-    def wait(self, condition, seconds=8):
+    def wait(self, condition, seconds=8, diagnostics=None):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             result = condition()
             if result: return result
             time.sleep(.05)
-        self.fail('recovery state did not settle')
+        detail = ''
+        if diagnostics:
+            try: detail = '\n' + json.dumps(diagnostics(), indent=2, ensure_ascii=False, default=str)
+            except Exception as error: detail = '\nRecovery diagnostics failed: ' + repr(error)
+        self.fail('recovery state did not settle' + detail)
+
+    def native_save_diagnostics(self, path, chosen):
+        # Failure-only observation: do not issue a second Save,
+        # remove the copy, or extend the original cleanup deadline.
+        workspace = self.read('workspace.get')
+        return dict(document=self.doc(), context=self.read('context.get'),
+                    recovery=self.read('recovery.status'), copies=self.copies(),
+                    chosen=chosen, chosenExists=(self.directory / chosen).exists(),
+                    savedPath=str(path), savedExists=path.exists(),
+                    savedSHA256=hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None,
+                    workspace={key: workspace.get(key) for key in
+                               ('status', 'documentBusy', 'nativeCommandResult', 'recovery')})
 
     def test_contract_force_no_mutation_validation_and_request_replay(self):
         before = self.doc()
@@ -231,7 +247,8 @@ class RecoveryTests(unittest.TestCase):
         state = self.read('workspace.get')['recovery']
         self.assertEqual(state['selected'], chosen); self.assertTrue(state['restoreEnabled'])
         self.command(120)  # Existing path avoids a file dialog.
-        self.wait(lambda: not (self.directory / chosen).exists())
+        self.wait(lambda: not (self.directory / chosen).exists(),
+                  diagnostics=lambda: self.native_save_diagnostics(path, chosen))
         self.command(7002, 'ScreamSeq.Recovery')
         self.assertFalse(self.read('workspace.get')['recovery']['restoreEnabled'])
         self.command(7003, 'ScreamSeq.Recovery')

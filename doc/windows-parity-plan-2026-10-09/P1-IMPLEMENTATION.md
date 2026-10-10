@@ -420,3 +420,26 @@ shared musical operation, project format or audio/device implementation changed
 in this slice. At 00:07:44 UTC the original Intel d39 job had passed its native,
 Swift recovery/picker and sample-library steps and was running the interface
 harness; final conformance and job disposition were still pending.
+
+## Consolidated checkpoint preparation — 10 October, 00:18 UTC
+
+The unresolved x64 recovery browser Save cleanup test now collects failure-only
+document/context/recovery/native-command and file-hash diagnostics. Its original
+eight-second deadline and deletion assertion remain unchanged. Observation after
+timeout cannot turn a failure into a pass, repeat Save or delete the copy. No
+product fix is inferred from the earlier timeout.
+
+The original Intel job 114066597619 is now terminal at frozen d39ec5548: build,
+122 native tests, Swift recovery/picker and sample-library steps succeeded; the
+interface harness passed 34/35 with the same zero-depth graph-drop assertion as
+Apple Silicon. API baseline matched with parityComplete false and zero reported
+preservation failures. This is old-source evidence; the prepared fixture repair
+and P1 source remain unqualified. The existing jobs will not be restarted.
+
+The next local checkpoint uses a fresh ARM64 CMake directory for this worktree,
+one consolidated target build, then bounded native/worker/provider and actual-app
+checks. Source and executable hashes pin all results. The earliest start remains
+2026-10-10 00:19:51 UTC. Any compile failures will be collected for a subsequent
+cohesive correction batch, without an automatic build retry. Native popup/UIA,
+foreground aesthetics, physical devices, Mac P1 and reciprocal fixtures remain
+separate required gates.
