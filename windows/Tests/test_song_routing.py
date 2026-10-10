@@ -53,12 +53,12 @@ class SongRoutingTests(unittest.TestCase):
     def main_command(self,identifier):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier))
     def local(self):return self.read('workspace.get')['songRouting']
-    def window(self):
+    def window(self,class_name='ScreamSeq.SongRouting'):
         found=[]
         @private_desktop.callback
         def visit(hwnd,_):
             pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));name=ctypes.create_unicode_buffer(100);private_desktop.user.GetClassNameW(hwnd,name,100)
-            if pid.value==self.pid and name.value=='ScreamSeq.SongRouting':found.append(hwnd)
+            if pid.value==self.pid and name.value==class_name:found.append(hwnd)
             return True
         private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1);return found[0]
     def control(self,identifier):
@@ -108,6 +108,60 @@ class SongRoutingTests(unittest.TestCase):
             elif identifier==3809 and kind in (5,6):
                 self.select(3838,self.local()['outputPorts']['indices'].index(value)+1)
             else:self.field(identifier,value)
+
+    def test_direct_cable_drag_cut_backspace_and_node_removal(self):
+        first,second,master=self.setup_mixer();plugin=self.add_gain()
+        self.write('mixer.bus.set',bus=first,inserts=[plugin])
+        group=self.write('mixer.bus.add',kind='group',name='Drag destination')['bus']
+        self.start();scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,point,keys=1):
+            x,y=point;self.desktop.send(self.window(),message,keys if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        def socket(node,output):
+            x,y,w,h=self.node(node)['rect'];return (x+w+2 if output else x-2,y+h/2)
+        def drag(a,b):
+            mouse(0x201,a);mouse(0x200,b);mouse(0x202,b);self.idle()
+        def key(k):self.desktop.send(self.window(),0x100,k);self.desktop.send(self.window(),0x101,k);self.idle()
+        # Socket hit regions extend outside the node. A plain socket click is
+        # neither an edit nor a failed self-connection.
+        before=self.doc();p=socket(first,True);mouse(0x201,p);mouse(0x202,p);self.idle();self.assertEqual(self.doc(),before);self.assertFalse(self.local()['draft'])
+        drag(socket(second,True),socket(group,False));self.assertEqual(self.bus(second)['output'],group)
+        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
+        handle=self.edges()[self.local()['wire']]['targetHandle']
+        drag(handle,socket(master,False));self.assertEqual(self.bus(second)['output'],master)
+        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
+        handle=self.edges()[self.local()['wire']]['targetHandle'];v=self.local()['canvas']['viewport'];empty=(v[0]+v[2]-14,v[1]+v[3]-14)
+        drag(handle,empty);self.assertEqual(self.bus(second)['output'],'')
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(second)['output'],master)
+        # A serial cable cut preserves the processor and chain order. Its
+        # original sockets restore the exact implicit input in one operation.
+        self.choose_wire(lambda a:a.get('kind')=='insert' and a.get('plugin')==plugin)
+        handle=self.edges()[self.local()['wire']]['targetHandle'];mouse(0x201,handle);mouse(0x202,handle);key(8)
+        self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.assertEqual(self.bus(first)['inserts'],[plugin])
+        self.assertFalse(any(e['action'].get('kind')=='insert' and e['action'].get('plugin')==plugin for e in self.edges()))
+        drag(socket(first,True),socket('plugin:'+plugin,False));self.assertNotIn(plugin,self.read('mixer.get')['disconnectedMainInputs'])
+        self.write('history.undo',domain='all');self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.write('history.redo',domain='all')
+        # Ctrl-click opens parameters; dragging/clicking a socket never does.
+        r=self.node('plugin:'+plugin)['rect'];mouse(0x201,(r[0]+r[2]/2,r[1]+r[3]/2),9);self.idle()
+        self.assertTrue(next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==plugin)['visible'])
+        self.choose_node(3802,'plugin:'+plugin);self.press(3845);self.assertFalse(any(n['plugin']==plugin for n in self.nodes()))
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(first)['inserts'],[plugin])
+        self.choose_node(3802,group);self.press(3845);self.assertFalse(any(b['id']==group for b in self.buses()))
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(group)['name'],'Drag destination')
+        self.choose_node(3802,master);before=self.doc();self.press(3845);self.assertEqual(self.doc(),before)
+        path=self.folder/'direct-routing.screamseq';saved=self.read('mixer.get');self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        for field in ('buses','disconnectedMainInputs','pluginConnections'):self.assertEqual(self.read('mixer.get')[field],saved[field])
+
+    def test_plugin_socket_drag_uses_declared_main_ports(self):
+        first,second,_=self.setup_mixer();a=self.add_gain();b=self.add_gain()
+        self.write('mixer.bus.set',bus=first,inserts=[a]);self.write('mixer.bus.set',bus=second,inserts=[b]);self.start()
+        scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        ra=self.node('plugin:'+a)['rect'];rb=self.node('plugin:'+b)['rect']
+        mouse(0x201,ra[0]+ra[2]+2,ra[1]+ra[3]/2);mouse(0x200,rb[0]-2,rb[1]+rb[3]/2);mouse(0x202,rb[0]-2,rb[1]+rb[3]/2);self.idle()
+        cables=self.read('mixer.get')['pluginConnections'];self.assertEqual(len(cables),1);self.assertEqual((cables[0]['source'],cables[0]['target'],cables[0]['output'],cables[0]['input']),(a,b,0,0))
+        self.choose_wire(lambda r:r.get('kind')=='plugin-connection');handle=self.edges()[self.local()['wire']]['targetHandle'];mouse(0x201,*handle);mouse(0x202,*handle)
+        self.desktop.send(self.window(),0x100,8);self.idle();self.assertEqual(self.read('mixer.get')['pluginConnections'],[])
+        self.write('history.undo',domain='all');self.assertEqual(self.read('mixer.get')['pluginConnections'],cables)
 
     def test_graph_click_jitter_and_completed_moves_do_not_lock_selection(self):
         first,second,_=self.setup_mixer();self.start();scale=self.read('workspace.get')['dpi']/96

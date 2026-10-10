@@ -58,7 +58,10 @@ struct SongRoutingCanvas {
       for(const auto &a:data.at("assignments"))if(a.at("target")==id)addGraph(a.at("graph"),"Ordinary");
       for(const auto &p:inserts(b)){const auto pid=p.get<std::string>(),key="plugin:"+pid;const auto found=plugin.find(pid);const auto name=found==plugin.end()?"Unavailable effect":found->second->at("name").get<std::string>();
         const auto detail=found==plugin.end()?"Retained insert":found->second->value("bypass",false)?"Bypassed":assigned.contains(pid)?"Effect insert":"Master insert · default";
-        add(key,name,detail,x,y,"plugin",id,pid);edge(previous,key,"");previous=key;x+=236;}
+        add(key,name,detail,x,y,"plugin",id,pid);
+        const auto cut=mixer.value("disconnectedMainInputs",Json::array());
+        if(std::find(cut.begin(),cut.end(),pid)==cut.end())edge(previous,key,"Insert",{{"kind","insert"},{"source",id},{"plugin",pid}});
+        previous=key;x+=236;}
       last[id]=previous;y+=118;
     }
     for(const auto &b:buses){const auto id=b.at("id").get<std::string>();if(!last.contains(id))continue;edge(last.at(id),b.at("output"),"Output",{{"kind","output"},{"source",id}});
@@ -89,6 +92,7 @@ struct SongRoutingCanvas {
   }
   void fit(){if(nodes.empty())return;float l=FLT_MAX,t=FLT_MAX,r=-FLT_MAX,b=-FLT_MAX;for(const auto &n:nodes){l=std::min(l,n.x);t=std::min(t,n.y);r=std::max(r,n.x+184);b=std::max(b,n.y+68);}zoom=std::clamp(std::min((viewport.w-32)/(r-l),(viewport.h-32)/(b-t)),.15f,1.5f);panX=(viewport.w-(r-l)*zoom)/2-l*zoom;panY=(viewport.h-(b-t)*zoom)/2-t*zoom;geometry();}
   int nodeAt(float x,float y)const{for(size_t i=nodes.size();i>0;--i)if(nodes[i-1].rect.contains(x,y))return int(i-1);return -1;}
+  std::pair<int,bool> socketAt(float x,float y)const{for(size_t i=nodes.size();i>0;--i){const auto &r=nodes[i-1].rect;const auto cy=r.y+r.h/2;if(std::abs(y-cy)>9)continue;if(std::abs(x-r.x-r.w)<=9)return {int(i-1),true};if(std::abs(x-r.x)<=9)return {int(i-1),false};}return {-1,false};}
   int edgeAt(float x,float y)const{float best=7;int found=-1;for(size_t i=0;i<edges.size();++i)if(edges[i].bounds.contains(x,y))for(size_t j=1;j<edges[i].points.size();++j){auto d=GraphCanvas::distance({x,y},edges[i].points[j-1],edges[i].points[j]);if(d<best){best=d;found=int(i);}}return found;}
   Json snapshot()const{Json ns=Json::array(),es=Json::array();for(const auto &n:nodes)ns.push_back({{"id",n.id},{"stageRole",roleName(n.role)},{"canEditInserts",n.canEditInserts()},{"canAssignGraph",n.canAssignGraph()},{"bus",n.bus},{"plugin",n.plugin},{"graph",n.graph},{"instrument",n.instrument},{"x",n.x},{"y",n.y},{"rect",{n.rect.x,n.rect.y,n.rect.w,n.rect.h}}});for(const auto &e:edges)es.push_back({{"source",e.source},{"target",e.target},{"action",e.action},{"enabled",e.enabled},{"midpoint",{e.points[16].x,e.points[16].y}},{"targetHandle",{e.points[28].x,e.points[28].y}}});return {{"nodes",ns},{"edges",es},{"viewport",{viewport.x,viewport.y,viewport.w,viewport.h}},{"zoom",zoom}};}
 };

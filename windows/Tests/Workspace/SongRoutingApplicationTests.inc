@@ -151,30 +151,57 @@ void applicationGraphParameterInspector(){
   restoreCheck(editor->visible()&&graph->visible(),"Parameter inspector hid the mixing graph");
   const auto click=[&](int id){SendMessageW(window,WM_COMMAND,id,LPARAM(GetDlgItem(window,id)));};
   const auto original=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto untouched=app.documentOperation("plugin.parameters.get",{{"plugin",other}});
-  click(3953);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[0].at("value")!=original[0].at("value"),"Native parameter toggle did not apply");
+  click(4004);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[0].at("value")!=original[0].at("value"),"Native parameter toggle did not apply");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");click(3955);
   const auto found=std::find_if(original.begin(),original.end(),[](const auto &p){const auto f=ScreamSeq::PluginParameterField::read(p);return f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum;});
   restoreCheck(found!=original.end(),"Gain fixture has no numeric parameter");const auto index=size_t(found-original.begin());const auto field=ScreamSeq::PluginParameterField::read(*found);
-  SendMessageW(GetDlgItem(window,3950),CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(3950,CBN_SELCHANGE),LPARAM(GetDlgItem(window,3950)));
+  const int rawControl=4002+int(index)*10,applyControl=4005+int(index)*10,moreControl=4008+int(index)*10;
+  restoreCheck(editor->snapshot().at("rows").size()==original.size(),"Parameter page did not expose all Gain controls together");
   const double candidate=field.minimum+(field.maximum-field.minimum)*.25;
-  SetWindowTextW(GetDlgItem(window,3951),L"-.");select("plugin:"+other);
-  restoreCheck(graph->snapshot().at("selected")=="plugin:"+other&&editor->snapshot().at("plugin")==plugin&&restoreText(GetDlgItem(window,3951))==L"-.","Graph navigation retargeted or discarded a parameter draft");
-  click(3957);restoreCheck(restoreText(GetDlgItem(window,3951))==L"-.","Parameter step overwrote partial text");
-  click(3954);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Invalid parameter text mutated the plugin");
-  SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(candidate).c_str());click(3954);
+  SetWindowTextW(GetDlgItem(window,rawControl),L"-.");select("plugin:"+other);
+  restoreCheck(graph->snapshot().at("selected")=="plugin:"+other&&editor->snapshot().at("plugin")==plugin&&restoreText(GetDlgItem(window,rawControl))==L"-.","Graph navigation retargeted or discarded a parameter draft");
+  click(moreControl);restoreCheck(restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter step overwrote partial text");
+  click(applyControl);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Invalid parameter text mutated the plugin");
+  SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(candidate).c_str());click(applyControl);
   const auto after=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});restoreCheck(after[index].at("value")!=original[index].at("value")&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter editor changed the graph's new selection instead of its captured plugin");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter edit did not have one Undo");
   app.edit("history.redo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Parameter Redo changed the value");click(3955);
+  // The trackbar must drive the actual parameter, finish in one Undo, and
+  // retain a partial text field instead of overwriting it.
+  const auto track=GetDlgItem(window,4001+int(index)*10);
+  SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider tracking committed before gesture completion");
+  SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+  const auto slid=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+  restoreCheck(slid[index].at("value")!=after[index].at("value")&&!editor->snapshot().at("dirty").get<bool>(),"Slider release failed to modify the plugin");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider gesture needed more than one Undo");click(3955);
+  SendMessageW(track,TBM_SETPOS,TRUE,9000);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,1);
+  restoreCheck(!editor->snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Escape committed a cancelled slider");
+  SetFocus(track);SendMessageW(track,WM_KEYDOWN,VK_RIGHT,1);SendMessageW(track,WM_KEYUP,VK_RIGHT,1);
+  restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[index].at("value")!=after[index].at("value"),"Native slider arrow key did not modify the parameter");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider keyboard step failed Undo");click(3955);
   // Unrelated graph edits must not silently rebase a typed parameter draft.
-  SetWindowTextW(GetDlgItem(window,3951),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
-  restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,3951))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(field.value).c_str());click(3954);
+  SetWindowTextW(GetDlgItem(window,rawControl),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(field.value).c_str());click(applyControl);
   restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Stale parameter edit was applied");
   const auto path=saveDepartureFixture(fixture);restoreRejected([&]{app.documentOperation("document.open",departureOpenRequest(app,path));});
-  click(3955);SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(field.value).c_str());
-  app.sampleMutationCompletion=[&](const std::string &method){if(method=="plugin.parameters.set"){SetWindowTextW(GetDlgItem(window,3951),L"Newer text");throw std::runtime_error("Drop parameter completion after commit");}};
-  click(3954);app.sampleMutationCompletion={};restoreCheck(!editor->snapshot().at("completion").is_null(),"Parameter completion was not retained");
-  const auto committed=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});click(3954);click(3955);
-  restoreCheck(editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,3951))==L"Newer text"&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed,"Parameter Review replayed a write or discarded newer text");
+  click(3955);SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(field.value).c_str());
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="plugin.parameters.set"){SetWindowTextW(GetDlgItem(window,rawControl),L"Newer text");throw std::runtime_error("Drop parameter completion after commit");}};
+  click(applyControl);app.sampleMutationCompletion={};restoreCheck(!editor->snapshot().at("completion").is_null(),"Parameter completion was not retained");
+  const auto committed=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});click(applyControl);click(3955);
+  restoreCheck(editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer text"&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed,"Parameter Review replayed a write or discarded newer text");
   click(3955);saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));
-  restoreCheck(editor->retired()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter identity/value failed save/reopen or stale editor remained live");fixture.close();
+  restoreCheck(editor->retired()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter identity/value failed save/reopen or stale editor remained live");
+  const auto catalog=app.documentOperation("plugin.discover",{{"format","Built-in"}});const auto eq=std::find_if(catalog.begin(),catalog.end(),[](const auto &p){return p.at("name")=="EQ10";});restoreCheck(eq!=catalog.end(),"EQ10 fixture absent");app.edit("plugin.add",{{"descriptor",*eq}});
+  const auto eqID=app.view->session.document.at("nativePlugins").back().at("instanceID").get<std::string>();app.openGraphPluginParameters(eqID);auto *paged=app.graphPluginParameters.at(eqID).get();const auto pane=paged->window();ScreamSeq::Tests::ownGuiWindow(pane);
+  auto state=paged->snapshot();const auto count=state.at("parameters").size();restoreCheck(count>20&&state.at("rows").size()==10&&state.at("pages")==int((count+9)/10),"Large parameter catalog was not paged in tens");
+  RECT client{};GetClientRect(pane,&client);for(int row=0;row<10;++row)for(int part=0;part<9;++part){const auto child=GetDlgItem(pane,4000+row*10+part);if(!IsWindowVisible(child))continue;RECT r{};GetWindowRect(child,&r);MapWindowPoints(nullptr,pane,reinterpret_cast<POINT *>(&r),2);restoreCheck(r.left>=0&&r.top>=0&&r.right<=client.right&&r.bottom<=client.bottom,"Paged parameter control extends outside the native window");}
+  const auto pageClick=[&](int id){SendMessageW(pane,WM_COMMAND,id,LPARAM(GetDlgItem(pane,id)));};pageClick(3963);state=paged->snapshot();restoreCheck(state.at("page")==1&&state.at("rows")[0].at("index")==10,"Next page did not rebind controls to its stable parameters");
+  const auto eqBefore=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});int changed=-1;double target=0;
+  for(int i=0;i<10;++i){const auto f=ScreamSeq::PluginParameterField::read(eqBefore[size_t(10+i)]);if(f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum){changed=i;target=f.value==f.minimum?f.maximum:f.minimum;break;}}
+  restoreCheck(changed>=0,"EQ10 page has no numeric fixture");SetWindowTextW(GetDlgItem(pane,4002+changed*10),std::to_wstring(target).c_str());pageClick(3963);restoreCheck(paged->snapshot().at("page")==1,"Page navigation discarded typed value");pageClick(3964);
+  const auto eqAfter=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});for(size_t i=0;i<count;++i)restoreCheck(i==size_t(10+changed)?eqAfter[i].at("value")==target:eqAfter[i]==eqBefore[i],"Page edit wrote a different parameter");
+  pageClick(3963);pageClick(3962);restoreCheck(paged->snapshot().at("rows")[size_t(changed)].at("value").get<std::string>()==eqAfter[size_t(10+changed)].at("value").dump(),"Page navigation lost committed parameter value");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqBefore,"Page edit failed atomic Undo");pageClick(3955);
+  app.edit("history.redo",{{"domain","all"}});pageClick(3955);saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqAfter,"Paged parameter values failed save/reopen");fixture.close();
 }
