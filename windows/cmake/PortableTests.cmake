@@ -45,16 +45,27 @@ screamseq_portable_test(routing-prototype-tests RoutingPrototypeTests routing-pr
 screamseq_portable_test(mixer-runtime-tests MixerRuntimeTests mixer-runtime)
 screamseq_portable_test(sidechain-tests SidechainTests sidechains)
 screamseq_portable_test(effect-auxiliary-tests EffectAuxiliaryTests effect-auxiliary)
-screamseq_portable_test(playback-region-tests PlaybackRegionTests playback-regions)
+# The same region assertions now use the native host C++ allocation/free probe.
+# Register one target here, retaining the existing CTest identity and aggregate.
+add_executable(playback-region-tests "${ROOT}/windows/Tests/PlaybackRegionTests.cpp"
+  "${ROOT}/windows/Tests/HostedProject/CallbackAudit.cpp")
+target_link_libraries(playback-region-tests PRIVATE TrackerEditor)
+target_compile_definitions(playback-region-tests PRIVATE SCREAMSEQ_WASAPI_ALLOCATION_AUDIT=1)
+target_compile_options(playback-region-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
+target_link_options(playback-region-tests PRIVATE /STACK:8388608)
+add_test(NAME playback-regions COMMAND playback-region-tests)
+set_tests_properties(playback-regions PROPERTIES WORKING_DIRECTORY "${ROOT}"
+  LABELS "portable;functional;transport;host-cpp-allocation-audit" TIMEOUT 120)
+set_property(GLOBAL APPEND PROPERTY SCREAMSEQ_PORTABLE_TEST_TARGETS playback-region-tests)
 screamseq_portable_test(curve-formula-tests CurveFormulaTests curve-formulas)
 foreach(target song-timing-tests native-reverse-loop-tests filter-tests oversampling-tests
     routing-prototype-tests mixer-runtime-tests sidechain-tests effect-auxiliary-tests
-    playback-region-tests curve-formula-tests)
+    curve-formula-tests)
   target_compile_definitions(${target} PRIVATE TRACKER_SANITIZER)
 endforeach()
 set_tests_properties(song-timing native-reverse-loops filters oversampling routing-prototype
-  mixer-runtime sidechains effect-auxiliary playback-regions curve-formulas
+  mixer-runtime sidechains effect-auxiliary curve-formulas
   PROPERTIES LABELS "portable;functional;no-realtime-audit")
-message(STATUS "Windows tests are functional only: Darwin realtime audit and sanitizers are NOT enabled")
+message(STATUS "Windows portable tests omit Darwin interposition and sanitizers; native host C++ audit scopes are labelled per target")
 get_property(portable_targets GLOBAL PROPERTY SCREAMSEQ_PORTABLE_TEST_TARGETS)
 add_custom_target(portable-tests DEPENDS ${portable_targets})

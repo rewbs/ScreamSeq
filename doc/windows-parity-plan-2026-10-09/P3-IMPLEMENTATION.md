@@ -208,3 +208,20 @@ SessionCacheTests targets/tests to the main checkpoint. They remain separately
 labelled pipe/cache tests with their existing time bounds. This avoids a second
 configure/build cycle solely to validate the changed SessionAdapter; it does not
 replace actual application pipe or native UI checks.
+
+## First integration configuration observation
+
+Prepared P1–P3 source was merged into temporary `codex/windows-parity-integration`
+at `c21c6f4eea8edaee25bbbdd2220b145b3ede3680`, with a tree identical to P3
+`7967a7095`. The existing P1 cache stayed in its original checkout. The first
+configuration at 2026-10-10 02:26 UTC failed before compilation: the API dependency
+preceded creation of portable-tests, and the new playback-region registration
+duplicated the existing portable registration. Neither binaries nor tests ran.
+
+The follow-up puts the API dependency after the portable include and replaces the
+single existing playback-region registration with the native audit wrapper. Test
+identity and all shared region assertions remain; the functional-only sanitizer
+shim is no longer applied to that native audited target. This is a configuration
+repair within the same grouped checkpoint, not evidence of a successful build.
+The failed log/receipt remain under bin/parity-evidence/integration-build-01.log
+and integration-checkpoint-01.json; compilation, runtime and Mac gates remain open.
