@@ -37,7 +37,7 @@ void applicationLibraryCompletionRetention(){
   click(3213);choose();
   const auto effectEntries=library->snapshot().at("plugins");
   for(const auto &entry:effectEntries)restoreCheck(!entry.at("isInstrument").get<bool>(),"Bus effect destination offered an instrument");
-  app.sampleMutationCompletion=[](const std::string &method,const RestoreJson &){if(method=="plugin.add")throw std::runtime_error("Drop bus insertion completion after atomic success");};
+  app.sampleMutationCompletion=[](const std::string &method){if(method=="plugin.add")throw std::runtime_error("Drop bus insertion completion after atomic success");};
   click(3212);app.sampleMutationCompletion={};
   const auto afterBusInsert=app.documentOperation("mixer.get",RestoreJson::object());
   const auto rackAfterBusInsert=app.view->session.document.at("nativePlugins");
