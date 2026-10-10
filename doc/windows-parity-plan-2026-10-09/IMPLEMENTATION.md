@@ -2,6 +2,14 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Next consolidated checkpoint — prepared, 10 October, 06:35 UTC
+
+The [checkpoint-05 preparation](CHECKPOINT-05-PREPARATION.md) freezes and publishes
+`85a90f095` for the combined pending P1–P4 source. It records the 54-target local
+build, additional focused native/app cases and guarded Windows x64/Mac matrix
+follow-up. Nothing in that checkpoint has run yet. The hourly deadline remains
+06:43:28 UTC; previous partial/failed evidence is preserved. Main is unchanged.
+
 ## Standing build cadence (user instruction)
 
 Current prepared feature details are in [P1](P1-IMPLEMENTATION.md),
