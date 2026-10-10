@@ -20,6 +20,16 @@ user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
 user.GetClientRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
 user.GetWindowRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
 user.SetWindowPos.argtypes = [w.HWND, w.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, w.UINT]
+user.GetMenu.argtypes = [w.HWND]
+user.GetMenu.restype = w.HMENU
+user.GetSubMenu.argtypes = [w.HMENU, ctypes.c_int]
+user.GetSubMenu.restype = w.HMENU
+user.GetMenuItemCount.argtypes = [w.HMENU]
+user.GetMenuItemID.argtypes = [w.HMENU, ctypes.c_int]
+user.GetMenuItemID.restype = w.UINT
+user.GetMenuStringW.argtypes = [w.HMENU, w.UINT, w.LPWSTR, ctypes.c_int, w.UINT]
+user.GetMenuState.argtypes = [w.HMENU, w.UINT, w.UINT]
+user.GetMenuState.restype = w.UINT
 
 
 class WorkspaceShortcutTests(unittest.TestCase):
@@ -103,6 +113,61 @@ class WorkspaceShortcutTests(unittest.TestCase):
                 return state
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
+
+    def test_native_menu_catalogue_bindings_and_stale_history(self):
+        owner = self.native_window()
+        root = user.GetMenu(owner)
+        self.assertTrue(root)
+        self.assertEqual(user.GetMenuItemCount(root), 6)
+
+        def item(identifier):
+            pending = [root]
+            while pending:
+                menu = pending.pop()
+                for index in range(user.GetMenuItemCount(menu)):
+                    child = user.GetSubMenu(menu, index)
+                    if child:
+                        pending.append(child)
+                    elif user.GetMenuItemID(menu, index) == 32000 + identifier:
+                        value = ctypes.create_unicode_buffer(512)
+                        self.assertGreater(user.GetMenuStringW(menu, index, value, len(value), 0x400), 0)
+                        return value.value, user.GetMenuState(menu, index, 0x400)
+            self.fail(f'Missing native menu command {identifier}')
+
+        def begin():
+            self.desktop.send(owner, 0x211, 0)  # WM_ENTERMENULOOP, menu bar.
+            self.desktop.send(owner, 0x116, root)
+
+        def choose(identifier):
+            self.desktop.send(owner, 0x212, 0)
+            self.desktop.send(owner, 0x111, 32000 + identifier)
+            return self.ready()
+
+        self.focus_pattern()
+        before = self.doc()
+        begin()
+        self.assertIn('Ctrl+N', item(624)[0])
+        self.desktop.send(owner, 0x212, 0)
+        self.bind(120, ['ctrl+alt+s'])
+        begin()
+        self.assertIn('Ctrl+Alt+S', item(120)[0])
+        self.assertNotIn('\tCtrl+S', item(120)[0])
+        self.desktop.send(owner, 0x212, 0)
+        self.assertEqual(self.doc(), before)
+        self.write('document.patch', title='Menu baseline')
+        begin()
+        self.write('document.patch', title='Changed while menu was open')
+        changed = self.doc()
+        state = choose(122)
+        self.assertEqual(self.doc(), changed)
+        self.assertIn('Menu target changed', state['status'])
+        self.focus_pattern()
+        begin()
+        self.assertFalse(item(122)[1] & 3)
+        choose(122)
+        self.assertEqual(self.doc()['data']['title'], 'Menu baseline')
+        # These are actual HWND/menu and named-pipe checks on a private desktop.
+        # Real Alt/F10 presentation and Narrator operation remain a separate gate.
 
     def test_keyboard_preferences_atomic_guard_replay_and_native_entry(self):
         before = self.doc()

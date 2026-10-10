@@ -229,10 +229,11 @@
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();
-		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();layoutControls();
+		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();
 	}
 	void command(int id) {
 		try {
+            if(id==exitCommand){PostMessageW(window,WM_CLOSE,0,0);return;}
             if(focusedEditingCommand(id))return;
             if(id==positionRulerCommand){cyclePositionMode();return;}
             if(id==patternRowsLargerCommand||id==patternRowsSmallerCommand){setPatternRowHeight(std::clamp(rowHeight+(id==patternRowsLargerCommand?4.f:-4.f),18.f,34.f));return;}

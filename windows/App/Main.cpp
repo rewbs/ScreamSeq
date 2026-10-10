@@ -13,6 +13,7 @@
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
 #include "NativeContextMenu.hpp"
+#include "NativeMenuBar.hpp"
 #include "WorkspaceShortcuts.hpp"
 #include "WorkspaceShortcutKey.hpp"
 #include "PatternClipboard.hpp"
@@ -95,6 +96,7 @@ constexpr int newDocumentCommand=624,openDemoCommand=625;
 constexpr int documentLoadReportCommand=626;
 constexpr int songPropertiesCommand=627;
 constexpr int keyboardSettingsCommand=628;
+constexpr int exitCommand=629;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -741,6 +743,7 @@ public:
     #include "WorkspaceCommands.inc"
     #include "WorkspaceShortcutDispatch.inc"
     #include "WorkspaceContextMenus.inc"
+    #include "WorkspaceMenuBar.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -1023,7 +1026,12 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			}
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-		case WM_NCDESTROY: RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+		case WM_NCDESTROY: if(app->menuBar)app->menuBar->ownerDestroyed();RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+        case WM_ENTERMENULOOP:if(!wp)app->beginMenuBar();break;
+        case WM_EXITMENULOOP:if(!wp)app->endMenuBar();break;
+        case WM_INITMENU:if(app->menuBar&&reinterpret_cast<HMENU>(wp)==app->menuBar->handle())app->refreshMenuBar();break;
+        case WM_MENUSELECT:if(HIWORD(wp)!=0xFFFF&&!(HIWORD(wp)&MF_POPUP))app->menuBarHint(LOWORD(wp));break;
+        case WM_CANCELMODE:app->menuArmed=false;app->endMenuBar();break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
@@ -1034,7 +1042,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_SIZE: app->retainWorkspaceFocusForResize(wp);if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
 		case WM_GETMINMAXINFO: {
 			auto limits=reinterpret_cast<MINMAXINFO *>(lp);float scale=GetDpiForWindow(window)/96.0f;
-			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
+			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)+(GetMenu(window)?GetSystemMetricsForDpi(SM_CYMENU,GetDpiForWindow(window)):0)};return 0;
 		}
 		case WM_DRAWITEM: app->drawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lp));return TRUE;
         case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:{
@@ -1044,6 +1052,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_CTLCOLORLISTBOX:case WM_CTLCOLOREDIT:case WM_CTLCOLORSTATIC:
             return ScreamSeq::NativeControls::controlColor(reinterpret_cast<HDC>(wp),reinterpret_cast<HWND>(lp),ScreamSeq::NativeControls::Surface::main);
         case WM_COMMAND:
+            if(!lp&&!HIWORD(wp)&&app->dispatchMenuBar(LOWORD(wp)))return 0;
             if(LOWORD(wp)==9800||LOWORD(wp)==9801){if(HIWORD(wp)==EN_CHANGE)app->patternNudgeFieldChanged();return 0;}
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
             if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;

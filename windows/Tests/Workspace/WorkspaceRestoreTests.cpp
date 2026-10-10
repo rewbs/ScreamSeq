@@ -1070,6 +1070,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "DocumentLoadReportApplicationTests.inc"
 #include "SongPropertiesApplicationTests.inc"
 #include "KeyboardSettingsApplicationTests.inc"
+#include "MenuBarApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1125,6 +1126,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"menu-bar") {
+                    applicationMenuBar();std::cout<<"PASS native menu catalogue, binding labels, local text/history, stale target rejection and busy availability\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-tools") {
                     applicationPatternTools();std::cout<<"PASS retained Pattern tools: catalogue, scopes, preview, history, focus, departure and completion recovery\n";return;
                 }

@@ -166,6 +166,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-effect-picker-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-song-properties-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-keyboard-settings-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-menu-bar-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-menu-bar-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;menus;keyboard"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=menu-bar" TIMEOUT 120)
     set_tests_properties(workspace-keyboard-settings-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;preferences;keyboard"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=keyboard-settings" TIMEOUT 120)
     set_tests_properties(workspace-song-properties-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts;song-properties"

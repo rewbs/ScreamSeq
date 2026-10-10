@@ -41,6 +41,15 @@ editing, pattern and song automation, envelope reuse and the formula workbench.
 Document and plugin edits share chronological Undo/Redo. Detailed behavior and
 individual feature reports are linked from [application integration](App/INTEGRATION.md).
 
+The native menu bar groups common actions under File, Edit, Song, Playback, View
+and Tools. View opens the searchable command palette for the full catalogue.
+Menu shortcuts follow the configured bindings. Edit uses a focused text field's
+local Undo and clipboard; elsewhere it uses the song's existing editing commands.
+If an editing target changes while its menu is open, reopen the menu before
+applying that action. File > Exit uses the existing unsaved-song and retained-take
+departure checks. Native menu presentation and keyboard qualification are pending
+in the current parity batch.
+
 **Record a sample…** opens WASAPI input capture. Choose a device and mono channel
 or contiguous stereo pair, then **Record**, **Stop** and **Keep take** to add a
 sample or instrument in one Undo step. The Windows recorder currently uses a

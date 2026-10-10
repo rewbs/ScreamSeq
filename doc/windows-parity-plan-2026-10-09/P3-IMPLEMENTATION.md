@@ -914,3 +914,54 @@ precise-note hit-list, instrument short-dock and plugin-library draft/completion
 checks. Source/diff inspection only has occurred. Actual Windows high-contrast,
 Narrator, custom canvas semantics and cross-platform integration gates remain
 open. No API, shared music, codec, native plugin state or Mac source changed.
+
+## Native application menus — prepared in the same P3 batch
+
+`NativeMenuBar.hpp` owns an ordinary Win32 menu tree, with 74 common catalogue
+commands under File, Edit, Song, Playback, View and Tools. Tools has bounded
+Pattern/Sound/Automation/Preferences submenus; View exposes the full searchable
+palette. Top-level native mnemonics are distinct. `WorkspaceMenuBar.inc` supplies
+existing command IDs, strips only catalogue categories from captions, reads
+current configured shortcuts when the menu opens, and publishes native disabled
+and checked state. Labels escape literal ampersands. Disabled-state explanations
+use the existing status line. Command 629 adds Exit to the catalogue and posts
+the existing guarded WM_CLOSE path; Alt+F4 remains a Windows system action.
+
+The menu captures document/revision, cursor/selection, relevant pattern/sample/
+graph draft target and text focus/caret when it opens. It releases musical typing
+before entering the nested menu interaction, and consumes the captured action
+once. Selection edits reject a changed target; song Undo rejects a newer revision.
+Text Copy/Cut/Paste/Delete/Select All/Undo and RichEdit Redo stay in the captured
+native field, preserving song history. Invalid raw sample-field text does not
+need to parse as a sample range to use these local text actions. Ordinary pending
+worker work can retain local text editing; departure/layout admission still
+blocks it. Native control notifications and menu selection have separate wire
+IDs, so controls keep their existing dispatch semantics.
+
+Stopping, saving and opening preferences/views do not require a stationary
+playback-follow cursor. Each action retains the guards relevant to its target;
+checkbox actions also compare their captured toggle state. Existing document
+operations still own revision validation, draft/take protection, Undo and saves.
+The menu adds no second editing service. The minimum outer frame accounts for
+the native menu height so the previously required client space is preserved.
+Native menu ownership is retired with the main HWND.
+
+Prepared `workspace-menu-bar-tests` shares the workspace executable and is picked
+up by CI's existing native-ui label. It checks the actual HMENU tree, configured
+binding changes, native text Undo/selection, stale text and song rejection,
+fresh song Undo, cursor-independent properties opening and busy availability.
+The actual-PID `WorkspaceShortcutTests.test_native_menu_catalogue_bindings_and_stale_history`
+is selected by the existing full shortcut-class CI entry; it checks real menu
+labels/state with named-pipe document edits during captured menu interaction.
+The future local consolidated helper must add `workspace-menu-bar-tests` to its
+explicit selection; no additional build target is needed.
+
+Completed source-only inspection resolved all 74 menu IDs to unique catalogue
+entries and reserved wire IDs, and Python syntax parsing succeeded. No build or
+runtime test has run for this slice. Native Alt/F10 and mouse interaction,
+especially focused text in docked/floating owners, menu closure/cancel ordering,
+Narrator, mixed DPI and minimum-size captures remain runtime gates. Do not treat
+synthetic menu messages as foreground evidence. Include workspace geometry,
+shortcut/local-input, draft/departure and song-history cases in the next Windows
+UI gate. Mac musical sources are unchanged; existing Mac/shared and reciprocal
+requirements remain open.
