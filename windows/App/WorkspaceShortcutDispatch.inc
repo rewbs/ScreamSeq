@@ -165,7 +165,7 @@
         if((id==patternPasteMix||id==patternClearField||id==patternDeleteChannelRow)&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
             status=L"Focus the pattern selection before using this command";return;
         }
-        const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
+        const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==playbackLoopCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
         command(id);
         if(id==stopCommand&&!ScreamSeq::NativeToolWindow::belongsToTool(focus))command(focusPatternCommand);
         if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){setWorkspaceCanvasFocus(panel,inspector);SetFocus(focus);}

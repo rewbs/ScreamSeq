@@ -481,6 +481,25 @@ unconfirmed play command. Propagate engine failure; do not report success.
 operation changes the document or its Undo history. Host callbacks must not
 partially mutate on validation failure.
 
+Hosts advertising `supportsPlaybackLoop()` also expose `transport.loop` with
+`expectedRevision` and a required boolean `enabled`. ScreamSeq's Windows app
+implements it through the shared renderer's atomic loop setter. It updates a
+running song/pattern region without restarting WASAPI, replacing the region,
+moving the edit cursor, changing history, or stopping/discarding a recording take.
+While stopped, it sets the default for the next Play; an explicit `transport.play`
+`loop` field overrides that default. `transport.get.loop` is the current setting;
+`region` retains the parameters of the request that started playback. Busy or
+document-replacement admission refuses before changing the loop setting.
+Hosts without this capability do not advertise it and return unknown-method.
+
+The Windows command palette and pattern context menu expose the loop toggle,
+along with a native `Playback loop: on/off` button below the typing selectors.
+The palette permits assigning a shortcut using the existing command ID scheme.
+Native editor focus and raw drafts survive shortcut activation. This parity
+slice adds no project field or saved preference format. Its new actual-app,
+native-control and shared renderer checks require qualification before a runtime
+parity claim; authored checks alone are not evidence of device behavior.
+
 ## Workspace subset
 
 `context.set` uses the existing shared schema fields `expectedRevision`,

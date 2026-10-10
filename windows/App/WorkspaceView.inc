@@ -82,6 +82,9 @@
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
         place(soundChooser,10,484,146,230);
+        place(playbackLoopCommand,10,516,146,25);
+        refreshPlaybackLoopControl();
+        EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
 		auto g=geometry(); bool show=workspaceInspectorVisible();
@@ -142,7 +145,7 @@
         refreshShortcutControlLabels();
         ScreamSeq::NativeControls::text(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
 		ScreamSeq::NativeControls::text(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
-        for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
+        for(int id:{playbackLoopCommand,liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
         layoutPatternNudgeEditor();
@@ -153,7 +156,7 @@
 			if(!h) throw std::runtime_error("Cannot create workspace control");controls.emplace(id,h);
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
-			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},
+			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
@@ -280,6 +283,7 @@
             }
 			else if(id==playCommand) play();
 			else if(id==stopCommand) stopAndFinishRecording();
+            else if(id==playbackLoopCommand)setPlaybackLoop(!playbackLoop);
 			else if(id==followCommand) { auto n=position();n["following"]=!follow;navigate(n); }
 			else if(id==composeCommand || id==patternCommand || id==soundCommand) workspace("workspace.layout",{{"name",id==composeCommand ? "Compose" : id==patternCommand ? "Pattern focus" : "Sound design"}});
 			else if(id==samplesCommand) {workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples");}
@@ -436,6 +440,7 @@
         if(effectInline)layoutControls();
     }
 	bool controlActive(int id) const {
+        if(id==playbackLoopCommand)return playbackLoop;
         if(id==noteColumnMuteCommand)return noteColumn(channel).at("mute").get<bool>();
         if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();
         if(id==editorTrackerTab)return hasWorkspaceDock()&&trackerWorkspaceVisible();

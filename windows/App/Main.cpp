@@ -79,6 +79,7 @@ constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphC
     editorPreciseNotesTab=568,notesInspectorCommand=569,graphWorkflowCommand=574,parameterActivityCommand=575,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCreateCommand=584,noteTrackGroupCommand=585;
+constexpr int playbackLoopCommand=586;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -641,6 +642,21 @@ public:
     #include "SongTools.inc"
     #include "NoteTrackPresentation.inc"
 	void play() { play(Json::object()); }
+    bool supportsPlaybackLoop()const override{return true;}
+    void refreshPlaybackLoopControl() {
+        if(auto found=controls.find(playbackLoopCommand);found!=controls.end()) {
+            ScreamSeq::NativeControls::text(found->second,playbackLoop?L"Playback loop: on":L"Playback loop: off");
+            ScreamSeq::NativeControls::active(found->second,playbackLoop);
+        }
+    }
+    void setPlaybackLoop(bool enabled)override {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; loop was not changed",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        // This atomic setter changes the running region without replacing its
+        // renderer, restarting the device, flushing edits or touching a take.
+        if(device.running()&&!auditionOnly&&renderer)renderer->loop(enabled);
+        playbackLoop=enabled;frameRequested=true;refreshPlaybackLoopControl();
+    }
     void play(const Json &settings) override {rejectDepartureInput();startPlayback(settings,false);startRecordingIfArmed();}
     void startPlayback(const Json &settings,bool audition) {
         frameRequested=true;
@@ -664,7 +680,7 @@ public:
             if(generation!=stopGeneration) throw ScreamSeq::Api::ApiError(-32003,"Playback preparation cancelled by Stop");
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
             auditionOnly=audition;
-			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;}
+			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();}
 			status = (audition?L"Audition / song position stopped / ":L"Playing / monitor -20 dB / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
 		} catch(...) { device.close(); throw; }
 	}

@@ -12,6 +12,7 @@
             {saveLayoutCommand,L"Workspace / Save custom layout",L""},{restoreLayoutCommand,L"Workspace / Restore custom layout",L""},
             {dockToggle,L"Workspace / Toggle lower dock",L"Ctrl+J"},
             {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
+            {playbackLoopCommand,L"Playback / Toggle region or song loop",L""},
             {graphCommand,L"Graph / Open reusable routing and modulation canvas",L""},
             {graphTrimsCommand,L"Graph / Audio port trims",L""},
             {graphWorkflowCommand,L"Graph / Groups, modulation, visual layout and signal inspection",L""},

@@ -89,6 +89,8 @@ public:
   // (-32003 for engine failure) rather than reporting queued-but-not-started play.
   virtual void play(const Json &settings) = 0;
   virtual void stop() = 0;
+  virtual bool supportsPlaybackLoop() const { return false; }
+  virtual void setPlaybackLoop(bool) { throw ApiError(-32601,"Live playback loop is not available in this host"); }
   virtual void navigate(const Json &) { throw ApiError(-32601,"Navigation is not available in this host"); }
   virtual Json workspace(const std::string &, const Json &) { throw ApiError(-32601,"Workspace is not available in this host"); }
 };
@@ -177,6 +179,10 @@ class SessionAdapter {
         {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
         {"schema","windows/Api/workspace.schema.json"}}},
       {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; other workspace operations accept neither token. Unsupported parameters reject."}};
+    if(host_ && host_->supportsPlaybackLoop()) {
+      result["writes"].push_back("transport.loop");
+      result["revisionGuards"]["transport.loop"]={"expectedRevision"};
+    }
     if(host_ && host_->supportsDocumentOperations()) {
       for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
       for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
@@ -309,7 +315,8 @@ public:
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
     const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
     const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
-    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
+    const bool liveLoop=method=="transport.loop" && host_ && host_->supportsPlaybackLoop();
+    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || liveLoop || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");
     std::string revision;
@@ -383,6 +390,10 @@ public:
       else if(method=="transport.play") {
         validatePlay(p,before); Json settings=p; settings.erase("expectedRevision");
         host_->play(settings);hostReturned=true; data={{"playing",true},{"region",settings}};
+      } else if(liveLoop) {
+        keys(p,{"expectedRevision","enabled"});require(p.contains("enabled") && p.at("enabled").is_boolean(),"enabled must be boolean");
+        const bool enabled=p.at("enabled").get<bool>();
+        host_->setPlaybackLoop(enabled);hostReturned=true;data={{"loop",enabled}};
       } else {
         keys(p,{"expectedRevision"}); host_->stop();hostReturned=true; data={{"playing",false}};
       }

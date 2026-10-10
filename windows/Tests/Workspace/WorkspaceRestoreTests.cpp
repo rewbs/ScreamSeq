@@ -1062,6 +1062,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "BankClosureApplicationTests.inc"
 #include "NativeCommandApplicationTests.inc"
 #include "NoteTrackApplicationTests.inc"
+#include "TransportApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1117,6 +1118,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"transport-controls") {
+                    applicationPlaybackLoop();std::cout<<"PASS native playback loop: retained focus/draft/take, unchanged song and busy refusal\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"note-tracks") {
                     applicationNoteTrackWindows();std::cout<<"PASS native track forms: captured selection, drafts, revision refusal, one Undo, completion Review, unknown observations and departure retirement\n";return;
                 }
