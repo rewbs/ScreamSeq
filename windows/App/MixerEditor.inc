@@ -22,11 +22,34 @@
         mixerStrips->musicalTyping([this](HWND,WPARAM key,bool repeat){return workspaceMusicalKey(key,repeat);},
             [this](WPARAM key){return releaseTypedKey(key);},[this]{releaseTypedNotes(window);});
     }
+    std::map<std::string,std::unique_ptr<ScreamSeq::PluginParametersWindow>> graphPluginParameters;
+    Json graphPluginParameterSnapshots()const {
+        Json result=Json::array();for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())result.push_back(editor->snapshot());return result;
+    }
+    void openGraphPluginParameters(const std::string &plugin){
+        const auto &rack=view->session.document.at("nativePlugins");
+        const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;});
+        if(found==rack.end())throw std::runtime_error("This plugin is unavailable; its routing is retained");
+        auto &editor=graphPluginParameters[plugin];
+        if(!editor||editor->retired()){editor=std::make_unique<ScreamSeq::PluginParametersWindow>(window,plugin,found->at("name").get<std::string>(),
+            [this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);},
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},[this]{return !busy&&!recoveryRestoring;});
+            if(songRoutingWindow&&songRoutingWindow->visible()){
+                RECT graph{},panel{};GetWindowRect(songRoutingWindow->window(),&graph);GetWindowRect(editor->window(),&panel);
+                MONITORINFO monitor{sizeof(monitor)};if(GetMonitorInfoW(MonitorFromWindow(songRoutingWindow->window(),MONITOR_DEFAULTTONEAREST),&monitor)){
+                    const auto &work=monitor.rcWork;const auto x=std::max(work.left,std::min(graph.right+8,work.right-(panel.right-panel.left)));
+                    const auto y=std::max(work.top,std::min(graph.top,work.bottom-(panel.bottom-panel.top)));
+                    SetWindowPos(editor->window(),nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+                }
+            }
+        }
+        editor->show();
+    }
     void openSongRouting(){
         if(!songRoutingWindow||songRoutingWindow->retired())songRoutingWindow=std::make_unique<ScreamSeq::SongRoutingWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &node){
             if(busy)throw std::runtime_error("Document worker is busy");
             if(!node.graph.empty()){if(graphDirty||graphFieldDirty)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=node.graph;command(graphCommand);}
-            else if(!node.plugin.empty()){if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the captured plugin draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==node.plugin;}))throw std::runtime_error("This insert's plugin is unavailable; its route is retained");selectedPlugin=node.plugin;pluginDetailsTarget.clear();graphEditorOpen=mixerEditorOpen=false;command(pluginsCommand);armPluginTimer();}
+            else if(!node.plugin.empty())openGraphPluginParameters(node.plugin);
             else if(!node.bus.empty()){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the captured mixer draft first");mixerTarget=node.bus;command(mixerDetailsCommand);}
         },[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
           [this](const auto &document,const auto &bus,const auto &name){openPluginLibrary(document,bus,name);},[this]{return !busy&&!recoveryRestoring;});

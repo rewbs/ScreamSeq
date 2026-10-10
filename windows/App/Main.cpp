@@ -26,6 +26,7 @@
 #include "ScratchGestureWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginParameterField.hpp"
+#include "PluginParametersWindow.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
@@ -376,6 +377,7 @@ public:
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
             {"songRouting",songRoutingWindow?songRoutingWindow->snapshot():Json{{"visible",false}}},
+            {"graphPluginParameters",graphPluginParameterSnapshots()},
             {"mixerStrips",mixerStrips?mixerStrips->snapshot():Json{{"visible",false}}},
             {"graphCommands",graphCommandsWindow?graphCommandsWindow->snapshot():Json{{"visible",false}}},
             {"graphLanes",graphLanesSnapshot()},

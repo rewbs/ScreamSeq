@@ -96,6 +96,22 @@ class SongRoutingTests(unittest.TestCase):
                 self.select(3838,self.local()['outputPorts']['indices'].index(value)+1)
             else:self.field(identifier,value)
 
+    def test_graph_click_jitter_and_completed_moves_do_not_lock_selection(self):
+        first,second,_=self.setup_mixer();self.start();scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        self.choose_node(3802,first);before=self.doc();r=self.node(first)['rect'];x,y=r[0]+r[2]/2,r[1]+r[3]/2
+        mouse(0x201,x,y);mouse(0x200,x+1,y+1);mouse(0x202,x+1,y+1);self.idle()
+        self.assertFalse(self.local()['layoutDraft']);self.assertEqual(self.doc(),before)
+        self.choose_node(3802,second);self.assertEqual(self.local()['selected'],second)
+        layouts=[]
+        for node in (first,second):
+            self.choose_node(3802,node);r=self.node(node)['rect'];x,y=r[0]+r[2]/2,r[1]+r[3]/2
+            mouse(0x201,x,y);mouse(0x200,x+24,y+14);mouse(0x202,x+24,y+14);self.idle()
+            self.assertFalse(self.local()['layoutDraft']);layouts.append(self.read('graph.get',includeState=False)['layout'])
+        self.assertNotEqual(layouts[0],layouts[1]);self.write('history.undo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],layouts[0])
+        self.write('history.undo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
+        self.write('history.redo',domain='all');self.write('history.redo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],layouts[1])
+
     def test_graph_wheel_navigation_is_anchored_and_new_actions_fit(self):
         first,_,_=self.setup_mixer();self.start();before=self.doc();saved=self.read('graph.get',includeState=False)
         user=private_desktop.user;owner=self.window();scale=self.read('workspace.get')['dpi']/96
@@ -253,12 +269,12 @@ class SongRoutingTests(unittest.TestCase):
         self.write('history.undo',domain='document');self.press(3815);self.assertEqual(self.bus(first)['inserts'],[b,a]);self.select(3823,0)
         self.choose_node(3802,first);before=self.doc();x=self.node(first)['x'];self.desktop.send(self.window(),0x100,0x27);self.assertTrue(self.local()['layoutDraft']);self.assertEqual(self.doc(),before);self.assertEqual(self.node(first)['x'],x+4)
         self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(3812)))
-        self.press(3820);self.start();self.assertTrue(self.local()['layoutDraft']);self.press(3835)
+        self.desktop.send(self.window(),0x101,0x27);self.idle();self.assertFalse(self.local()['layoutDraft']);self.press(3820);self.start();self.assertFalse(self.local()['layoutDraft'])
         positions=self.read('graph.get',includeState=False)['layout'];self.assertEqual(next(p for p in positions if p['node']==first)['x'],x+4)
         self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[]);self.write('history.redo',domain='document');self.press(3815)
         self.choose_node(3802,first);rect=self.node(first)['rect'];scale=self.read('workspace.get')['dpi']/96
         def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(int(x*scale)&65535)|((int(y*scale)&65535)<<16))
-        mx,my=rect[0]+12,rect[1]+10;mouse(0x201,mx,my);mouse(0x200,mx+20,my+12);mouse(0x202,mx+20,my+12);self.assertTrue(self.local()['layoutDraft']);self.press(3835)
+        mx,my=rect[0]+12,rect[1]+10;mouse(0x201,mx,my);mouse(0x200,mx+20,my+12);mouse(0x202,mx+20,my+12);self.idle();self.assertFalse(self.local()['layoutDraft'])
         path=self.folder/'routing.screamseq';self.write('document.save',path=str(path));layout=self.read('graph.get',includeState=False)['layout'];self.write('graph.layout.set',reset=True);self.write('document.open',path=str(path),discard=True);self.start();self.press(3815)
         self.assertEqual(self.read('graph.get',includeState=False)['layout'],layout);self.assertEqual(self.bus(first)['inserts'],[b,a])
 
@@ -314,7 +330,7 @@ class SongRoutingTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','owned silent WASAPI')
     def test_layout_and_validated_routing_keep_audio_running_through_history(self):
         first,_,_=self.setup_mixer();self.add_gain();path=self.folder/'live.screamseq';self.write('document.save',path=str(path));self.launch(path);self.start();self.choose_node(3802,first)
-        before=self.read('transport.get');self.desktop.send(self.window(),0x100,0x27);self.press(3835);time.sleep(.25);after=self.read('transport.get');self.assertTrue(after['audioActive']);self.assertGreater(after['frames'],before['frames']);self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
+        before=self.read('transport.get');self.desktop.send(self.window(),0x100,0x27);self.desktop.send(self.window(),0x101,0x27);self.idle();time.sleep(.25);after=self.read('transport.get');self.assertTrue(after['audioActive']);self.assertGreater(after['frames'],before['frames']);self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
         def adopted(previous, previous_plan):
             deadline=time.monotonic()+8
             while time.monotonic()<deadline:
@@ -353,7 +369,7 @@ class SongRoutingTests(unittest.TestCase):
                 if not user.IsWindowVisible(control):continue
                 rect=wintypes.RECT();user.GetWindowRect(control,ctypes.byref(rect));self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right);self.assertLessEqual(rect.bottom,frame.bottom)
         self.choose_node(3802,first);self.assertEqual(self.desktop.focus(self.window()),self.window());self.desktop.send(self.window(),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.control(3802));self.desktop.send(self.control(3802),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.window())
-        before=self.doc();self.press(3819);self.assertTrue(self.local()['layoutDraft']);self.assertEqual(self.doc(),before);self.press(3835);self.assertTrue(self.read('graph.get',includeState=False)['layout']);self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
+        before=self.doc();self.press(3819);self.assertFalse(self.local()['layoutDraft']);self.assertNotEqual(self.doc(),before);self.assertTrue(self.read('graph.get',includeState=False)['layout']);self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
 
     def test_unavailable_insert_retains_routing_and_open_does_not_select_another_plugin(self):
         _,_,master=self.setup_mixer();a=self.add_gain();b=self.add_gain();self.write('mixer.bus.set',bus=master,inserts=[b])

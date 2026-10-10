@@ -141,3 +141,40 @@ void applicationMixingGraphUsability(){
   restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==saved&&app.view->session.document.at("nativePlugins").back().at("instanceID")==plugin,"Graph changes lost routing or plugin identity on save/reopen");
   fixture.close();
 }
+
+void applicationGraphParameterInspector(){
+  RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());const auto plugin=addRestoreGain(app),other=addRestoreGain(app);
+  app.openSongRouting();auto *graph=app.songRoutingWindow.get();ScreamSeq::Tests::ownGuiWindow(graph->window());
+  const auto select=[&](const std::string &id){const auto nodes=graph->snapshot().at("canvas").at("nodes");for(size_t i=0;i<nodes.size();++i)if(nodes[i].at("id")==id){SendMessageW(GetDlgItem(graph->window(),3802),CB_SETCURSEL,i,0);SendMessageW(graph->window(),WM_COMMAND,MAKEWPARAM(3802,CBN_SELCHANGE),LPARAM(GetDlgItem(graph->window(),3802)));return;}throw std::runtime_error("Missing parameter graph node");};
+  select("plugin:"+plugin);SendMessageW(graph->window(),WM_COMMAND,3821,LPARAM(GetDlgItem(graph->window(),3821)));
+  auto *editor=app.graphPluginParameters.at(plugin).get();const auto window=editor->window();ScreamSeq::Tests::ownGuiWindow(window);
+  restoreCheck(editor->visible()&&graph->visible(),"Parameter inspector hid the mixing graph");
+  const auto click=[&](int id){SendMessageW(window,WM_COMMAND,id,LPARAM(GetDlgItem(window,id)));};
+  const auto original=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto untouched=app.documentOperation("plugin.parameters.get",{{"plugin",other}});
+  click(3953);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[0].at("value")!=original[0].at("value"),"Native parameter toggle did not apply");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");click(3955);
+  const auto found=std::find_if(original.begin(),original.end(),[](const auto &p){const auto f=ScreamSeq::PluginParameterField::read(p);return f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum;});
+  restoreCheck(found!=original.end(),"Gain fixture has no numeric parameter");const auto index=size_t(found-original.begin());const auto field=ScreamSeq::PluginParameterField::read(*found);
+  SendMessageW(GetDlgItem(window,3950),CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(3950,CBN_SELCHANGE),LPARAM(GetDlgItem(window,3950)));
+  const double candidate=field.minimum+(field.maximum-field.minimum)*.25;
+  SetWindowTextW(GetDlgItem(window,3951),L"-.");select("plugin:"+other);
+  restoreCheck(graph->snapshot().at("selected")=="plugin:"+other&&editor->snapshot().at("plugin")==plugin&&restoreText(GetDlgItem(window,3951))==L"-.","Graph navigation retargeted or discarded a parameter draft");
+  click(3957);restoreCheck(restoreText(GetDlgItem(window,3951))==L"-.","Parameter step overwrote partial text");
+  click(3954);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Invalid parameter text mutated the plugin");
+  SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(candidate).c_str());click(3954);
+  const auto after=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});restoreCheck(after[index].at("value")!=original[index].at("value")&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter editor changed the graph's new selection instead of its captured plugin");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter edit did not have one Undo");
+  app.edit("history.redo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Parameter Redo changed the value");click(3955);
+  // Unrelated graph edits must not silently rebase a typed parameter draft.
+  SetWindowTextW(GetDlgItem(window,3951),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,3951))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(field.value).c_str());click(3954);
+  restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Stale parameter edit was applied");
+  const auto path=saveDepartureFixture(fixture);restoreRejected([&]{app.documentOperation("document.open",departureOpenRequest(app,path));});
+  click(3955);SetWindowTextW(GetDlgItem(window,3951),std::to_wstring(field.value).c_str());
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="plugin.parameters.set"){SetWindowTextW(GetDlgItem(window,3951),L"Newer text");throw std::runtime_error("Drop parameter completion after commit");}};
+  click(3954);app.sampleMutationCompletion={};restoreCheck(!editor->snapshot().at("completion").is_null(),"Parameter completion was not retained");
+  const auto committed=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});click(3954);click(3955);
+  restoreCheck(editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,3951))==L"Newer text"&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed,"Parameter Review replayed a write or discarded newer text");
+  click(3955);saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));
+  restoreCheck(editor->retired()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==committed&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter identity/value failed save/reopen or stale editor remained live");fixture.close();
+}
