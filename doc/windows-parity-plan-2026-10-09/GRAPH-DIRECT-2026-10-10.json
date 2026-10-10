@@ -1,0 +1,168 @@
+{
+  "scope": "Direct mixing graph node/cable removal, socket gestures and paged native parameter sliders; broader parity goal remains paused",
+  "build": {
+    "commit": "b612fb93fa5769b5f69dda37bb4f9c8c7f756ee3",
+    "startedUTC": "2026-10-10T10:33:15.200741+00:00",
+    "oldAppSHA256": "aa7f7120177bf13ec5029aa565e85344e14a18d8e526d5458f895afa52542fbe",
+    "scope": "Direct graph cuts and nodes; paged native parameter sliders; batched app/native harness build; no running musician process observed",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\GraphDirect-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T10:34:50.247094+00:00",
+    "exitCode": 0,
+    "logSHA256": "de9dce1b8c4b8e9c859109cf4d1a61f77f228d6891fdf7b192f14faead7e1337",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\GraphDirect-Release\\ScreamSeq.exe": "b6601778c729bb4becb84ba2a70e92fc0cb1c6e4fe3ff6d0dd658d976469790b",
+      "bin\\windows-parity-p1\\GraphDirect-Release\\ScreamSeqVST3Scanner.exe": "3a552a625c2a89fd336037e4507c1b809b6414a497c272e2b7a558f49c0297c6",
+      "bin\\windows-parity-p1\\GraphDirect-Release\\workspace-restore-tests.exe": "cd884741e5a2d8e30c829c04e4ff9a2d4e81c91596a24a6e717fd9abd71d4f62"
+    }
+  },
+  "initialValidation": {
+    "commit": "b612fb93fa5769b5f69dda37bb4f9c8c7f756ee3",
+    "testCommit": "a37720f339b965dc05c820b5858a3d26be63262b",
+    "pythonTestSHA256": "785c510a1c4a913b1ece350d44f3442239fccb75bc81b451566e55acab124f2e",
+    "buildReceiptSHA256": "bde09349a7abe3a2dc1b81b570aaaa7ce89ba86af749411bf2b2f7ab0d5800c7",
+    "appSHA256": "b6601778c729bb4becb84ba2a70e92fc0cb1c6e4fe3ff6d0dd658d976469790b",
+    "gates": [
+      {
+        "name": "native",
+        "startedUTC": "2026-10-10T10:35:11.031094+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(workspace-command-result-tests|workspace-plugin-search-tests|workspace-draft-census-tests)$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T10:36:25.121068+00:00",
+        "log": "bin\\parity-evidence\\graph-direct-native-runner.log",
+        "sha256": "da4001df90674c85de89ffad9dd8d1ca372fa52a78fa3c6bd430b84f9a08fd33"
+      },
+      {
+        "name": "app",
+        "startedUTC": "2026-10-10T10:36:25.134646+00:00",
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\graph-direct-app.log",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_plugin_socket_drag_uses_declared_main_ports",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_plugin_output_add_and_cut_preserve_other_destinations",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_graph_ports_preserve_other_routes_and_socket_drag_uses_selected_kind",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_graph_click_jitter_and_completed_moves_do_not_lock_selection",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_insert_order_layout_keyboard_mouse_history_and_reopen",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_overview_stages_default_inserts_filter_and_connections",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_graph_wheel_navigation_is_anchored_and_new_actions_fit",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_minimum_native_control_bounds_focus_and_layout_history",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_plugin_sidechains_auxiliary_output_and_disconnection",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts"
+        ],
+        "exitCode": 1,
+        "finishedUTC": "2026-10-10T10:37:40.948533+00:00",
+        "log": "bin\\parity-evidence\\graph-direct-app-runner.log",
+        "sha256": "6c074e97dd37b379a5a12d24bee684e5997ceaf419093c5fa3744104c7be8e94"
+      }
+    ],
+    "applicationLogSHA256": "0d5727f8320d7d74a52ea3359acb6ebe7877f9798f42f4eb9f57375864c410f6",
+    "appUnchanged": true
+  },
+  "finalQualificationCommit": "bfb55e0508c66bc4f6ebff97444299d098bbbb6e",
+  "sourceVerification": {
+    "changedSinceBuild": [
+      "windows/Tests/test_song_routing.py"
+    ],
+    "finalPythonTestSHA256": "d0aa0924b9b4e005fbe628ef497b9a16bbaf6fed91d828e58a1eadf3b9bbc11b",
+    "allOtherCapturedInputsAndExecutablesUnchanged": true
+  },
+  "result": {
+    "nativeGroupsPassed": 3,
+    "distinctApplicationCasesPassed": 13,
+    "nativeSeconds": 73.96,
+    "initialApplicationSeconds": 75.147,
+    "finalFocusedSeconds": 11.375,
+    "buildInvocations": 1
+  },
+  "notes": [
+    "Native command-results group exercises the actual paged inspector: numeric/toggle values, slider release, arrow keys, cancel, Undo/Redo, invalid and stale drafts, postcommit failure with newer text, parameter identity, EQ10 page edits and save/reopen. Visible native child rectangles are bounded by the client.",
+    "Twelve application cases passed initially. The remaining combined case selected a wire before Undo readback completed, then a diagnostic run reached a Ctrl-click before Redo readback completed. The fixture now waits for adopted clean view state before control selection and after writes. It never retries writes or weakens route/history assertions. The unchanged executable passes the focused case.",
+    "Fresh bus socket drags intentionally add sends; selected handles rewire the captured route. Exact serial insert cuts preserve the chain and restore through its original sockets; insert order remains an explicit chain edit.",
+    "Sliders commit on release; keyboard/step/choice/toggle actions commit immediately. This does not add continuous audio preview while the slider thumb is held.",
+    "No ScreamSeq musician process was observed before this build. Previous binaries were preserved. Tests use owned private desktops and disposable projects.",
+    "Windows UI and tests only: no shared model, DSP, API schema, persistence format or Mac product input changed. No Mac rebuild or reciprocal Mac run for this batch.",
+    "No foreground visual-quality, physical-audio, third-party vendor UI, or performance claim. MSVC emitted nonfatal C5055 for enum/float row-height arithmetic; build completed."
+  ],
+  "logs": {
+    "graph-direct-native-runner.log": {
+      "sha256": "da4001df90674c85de89ffad9dd8d1ca372fa52a78fa3c6bd430b84f9a08fd33",
+      "text": "Internal ctest changing into directory: C:/Users/P14/.codex/worktrees/parity-ci-layout/ScreamSeq/bin/windows-parity-p1\nTest project C:/Users/P14/.codex/worktrees/parity-ci-layout/ScreamSeq/bin/windows-parity-p1\n    Start  2: workspace-draft-census-tests\n1/3 Test  #2: workspace-draft-census-tests .....   Passed    7.26 sec\n    Start  7: workspace-command-result-tests\n2/3 Test  #7: workspace-command-result-tests ...   Passed   62.59 sec\n    Start 16: workspace-plugin-search-tests\n3/3 Test #16: workspace-plugin-search-tests ....   Passed    4.11 sec\n\n100% tests passed, 0 tests failed out of 3\n\nLabel Time Summary:\ndrafts             =   7.26 sec*proc (1 test)\nkeyboard           =   4.11 sec*proc (1 test)\nnative-ui          =  73.96 sec*proc (3 tests)\nplugins            =   4.11 sec*proc (1 test)\nprivate-desktop    =  73.96 sec*proc (3 tests)\nreceipts           =  62.59 sec*proc (1 test)\nworkspace          =  73.96 sec*proc (3 tests)\n\nTotal Test time (real) =  74.02 sec"
+    },
+    "graph-direct-app.log": {
+      "sha256": "0d5727f8320d7d74a52ea3359acb6ebe7877f9798f42f4eb9f57375864c410f6",
+      "text": "Qualification desktop: ScreamSeqTest-96b4981e77b044ce918d9d7c977f62d8\ntest_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal) ... FAIL\ntest_plugin_socket_drag_uses_declared_main_ports (test_song_routing.SongRoutingTests.test_plugin_socket_drag_uses_declared_main_ports) ... ok\ntest_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send (test_song_routing.SongRoutingTests.test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send) ... ok\ntest_plugin_output_add_and_cut_preserve_other_destinations (test_song_routing.SongRoutingTests.test_plugin_output_add_and_cut_preserve_other_destinations) ... ok\ntest_graph_ports_preserve_other_routes_and_socket_drag_uses_selected_kind (test_song_routing.SongRoutingTests.test_graph_ports_preserve_other_routes_and_socket_drag_uses_selected_kind) ... ok\ntest_graph_click_jitter_and_completed_moves_do_not_lock_selection (test_song_routing.SongRoutingTests.test_graph_click_jitter_and_completed_moves_do_not_lock_selection) ... ok\ntest_insert_order_layout_keyboard_mouse_history_and_reopen (test_song_routing.SongRoutingTests.test_insert_order_layout_keyboard_mouse_history_and_reopen) ... ok\ntest_overview_stages_default_inserts_filter_and_connections (test_song_routing.SongRoutingTests.test_overview_stages_default_inserts_filter_and_connections) ... ok\ntest_graph_wheel_navigation_is_anchored_and_new_actions_fit (test_song_routing.SongRoutingTests.test_graph_wheel_navigation_is_anchored_and_new_actions_fit) ... ok\ntest_minimum_native_control_bounds_focus_and_layout_history (test_song_routing.SongRoutingTests.test_minimum_native_control_bounds_focus_and_layout_history) ... ok\ntest_native_send_update_preserves_other_routes_dry_stale_and_retained_draft (test_song_routing.SongRoutingTests.test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft) ... ok\ntest_native_plugin_sidechains_auxiliary_output_and_disconnection (test_song_routing.SongRoutingTests.test_native_plugin_sidechains_auxiliary_output_and_disconnection) ... ok\ntest_command_stages_cannot_change_ordinary_assignment_or_regular_inserts (test_song_routing.SongRoutingTests.test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts) ... ok\n\n======================================================================\nFAIL: test_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\test_song_routing.py\", line 139, in test_direct_cable_drag_cut_backspace_and_node_removal\n    self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.assertEqual(self.bus(first)['inserts'],[plugin])\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '{3C3D6AF4-A4BA-4A13-B991-ACE20A68BAA4}' not found in []\n\n----------------------------------------------------------------------\nRan 13 tests in 75.147s\n\nFAILED (failures=1)"
+    },
+    "graph-direct-focused-app.log": {
+      "sha256": "f850124477ccacfb1ce5d06d470fda731e0317cc2cf869ef07a60946d14faf9d",
+      "text": "Qualification desktop: ScreamSeqTest-6d4083cb74d2432d85b85d1d4a27ae61\ntest_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal) ... FAIL\n\n======================================================================\nFAIL: test_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\test_song_routing.py\", line 139, in test_direct_cable_drag_cut_backspace_and_node_removal\n    self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs'],self.local());self.assertEqual(self.bus(first)['inserts'],[plugin])\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '{F637742F-1923-4443-B100-AEC0C5522F78}' not found in [] : {'canvas': {'edges': [{'action': {'kind': 'insert', 'plugin': '{F637742F-1923-4443-B100-AEC0C5522F78}', 'source': 'n2'}, 'enabled': True, 'midpoint': [469.5, 114.92478942871094], 'source': 'n2', 'target': 'plugin:{F637742F-1923-4443-B100-AEC0C5522F78}', 'targetHandle': [469.02557373046875, 114.9247817993164]}, {'action': {'kind': 'output', 'source': 'n2'}, 'enabled': True, 'midpoint': [469.5, 349.88055419921875], 'source': 'plugin:{F637742F-1923-4443-B100-AEC0C5522F78}', 'target': 'n12', 'targetHandle': [350.795166015625, 564.644775390625]}, {'action': {'kind': 'output', 'source': 'n3'}, 'enabled': True, 'midpoint': [410.7610778808594, 144.29425048828125], 'source': 'n3', 'target': 'n2', 'targetHandle': [356.5955505371094, 117.44871520996094]}, {'action': {'index': 0, 'kind': 'send', 'source': 'n3'}, 'enabled': True, 'midpoint': [410.7610778808594, 408.6195068359375], 'source': 'n3', 'target': 'n17', 'targetHandle': [356.5955505371094, 623.3837280273438]}, {'action': {'kind': 'output', 'source': 'n4'}, 'enabled': True, 'midpoint': [410.7610778808594, 408.6195068359375], 'source': 'n4', 'target': 'n12', 'targetHandle': [356.5955505371094, 569.6926879882812]}, {'action': {'kind': 'output', 'source': 'n5'}, 'enabled': True, 'midpoint': [410.7610778808594, 437.98895263671875], 'source': 'n5', 'target': 'n12', 'targetHandle': [356.5955505371094, 572.2166137695312]}, {'action': {'kind': 'output', 'source': 'n6'}, 'enabled': True, 'midpoint': [410.7610778808594, 467.3583984375], 'source': 'n6', 'target': 'n12', 'targetHandle': [356.5955505371094, 574.7406005859375]}, {'action': {'kind': 'output', 'source': 'n7'}, 'enabled': True, 'midpoint': [410.7610778808594, 496.7279052734375], 'source': 'n7', 'target': 'n12', 'targetHandle': [356.5955505371094, 577.2645263671875]}, {'action': {'kind': 'output', 'source': 'n8'}, 'enabled': True, 'midpoint': [410.7610778808594, 526.0973510742188], 'source': 'n8', 'target': 'n12', 'targetHandle': [356.5955505371094, 579.7884521484375]}, {'action': {'kind': 'output', 'source': 'n9'}, 'enabled': True, 'midpoint': [410.7610778808594, 555.4668579101562], 'source': 'n9', 'target': 'n12', 'targetHandle': [356.5955505371094, 582.3123779296875]}, {'action': {'kind': 'output', 'source': 'n17'}, 'enabled': True, 'midpoint': [410.7610778808594, 614.205810546875], 'source': 'n17', 'target': 'n12', 'targetHandle': [356.5955505371094, 587.3602294921875]}], 'nodes': [{'bus': 'n2', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n2', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 98.0, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 28.0}, {'bus': 'n2', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'plugin:{F637742F-1923-4443-B100-AEC0C5522F78}', 'instrument': '', 'plugin': '{F637742F-1923-4443-B100-AEC0C5522F78}', 'rect': [482.4425048828125, 98.0, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 264.0, 'y': 28.0}, {'bus': 'n3', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n3', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 156.73895263671875, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 146.0}, {'bus': 'n4', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n4', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 215.47789001464844, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 264.0}, {'bus': 'n5', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n5', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 274.2168273925781, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 382.0}, {'bus': 'n6', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n6', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 332.95574951171875, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 500.0}, {'bus': 'n7', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n7', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 391.6947021484375, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 618.0}, {'bus': 'n8', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n8', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 450.43365478515625, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 736.0}, {'bus': 'n9', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n9', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 509.1725769042969, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 854.0}, {'bus': 'n12', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n12', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 567.9114990234375, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 972.0}, {'bus': 'n17', 'canAssignGraph': True, 'canEditInserts': True, 'graph': '', 'id': 'n17', 'instrument': '', 'plugin': '', 'rect': [364.964599609375, 626.6504516601562, 91.59292602539062, 33.84955978393555], 'stageRole': 'none', 'x': 28.0, 'y': 1090.0}], 'viewport': [12.0, 82.0, 915.0, 594.5], 'zoom': 0.49778762459754944}, 'completion': None, 'document': '{CF35F745-CDA4-4F98-8C53-8FDEE6D34534}:1', 'draft': False, 'expectedRevision': '{CF35F745-CDA4-4F98-8C53-8FDEE6D34534}:1:7:0:1', 'fields': {'gain': '0', 'input': '1', 'output': '0'}, 'filter': '', 'generation': 7, 'inputPorts': {'document': '', 'error': '', 'indices': [], 'plugin': '', 'ports': [], 'revision': ''}, 'layoutDraft': False, 'outputPorts': {'document': '', 'error': '', 'indices': [], 'plugin': '', 'ports': [], 'revision': ''}, 'page': 0, 'pending': False, 'readbackNeedsReload': False, 'report': {'outcome': 'returned', 'result': {'bus': 'n3', 'controlsOnly': False, 'mixer': {'buses': [{'color': 0, 'gainDB': 0.0, 'id': 'n2', 'inserts': ['{F637742F-1923-4443-B100-AEC0C5522F78}'], 'kind': 'track', 'mute': False, 'name': 'Track 1', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n3', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 2', 'output': '', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [{'enabled': True, 'gainDB': 0.0, 'preFader': False, 'target': 'n17'}], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n4', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 3', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n5', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 4', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n6', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 5', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n7', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 6', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n8', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 7', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n9', 'inserts': [], 'kind': 'track', 'mute': False, 'name': 'Track 8', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n12', 'inserts': [], 'kind': 'master', 'mute': False, 'name': 'Master', 'output': '', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}, {'color': 0, 'gainDB': 0.0, 'id': 'n17', 'inserts': [], 'kind': 'group', 'mute': False, 'name': 'Drag destination', 'output': 'n12', 'pan': 0.0, 'preGainDB': 0.0, 'prePan': 0.0, 'sends': [], 'solo': False, 'timingMS': 0.0, 'width': 1.0}], 'detached': [], 'detachedChains': [], 'disconnectedMainInputs': [], 'instruments': [], 'masterOutputDisconnected': False, 'pluginConnections': [], 'sidechains': []}, 'preview': False, 'wouldChange': True}, 'submission': {'document': '{CF35F745-CDA4-4F98-8C53-8FDEE6D34534}:1', 'fields': {'gain': '0.0', 'input': '0', 'output': '0', 'selected': '', 'wire': 2}, 'method': 'mixer.bus.set', 'params': {'bus': 'n3', 'expectedRevision': '{CF35F745-CDA4-4F98-8C53-8FDEE6D34534}:1:5:0:1', 'output': None}, 'revision': '{CF35F745-CDA4-4F98-8C53-8FDEE6D34534}:1:5:0:1'}}, 'selected': '', 'stale': False, 'status': 'Select a plugin, group, return or assigned graph. Track, Master and pattern-command stages are retained.', 'visible': True, 'wire': -1}\n\n----------------------------------------------------------------------\nRan 1 test in 4.403s\n\nFAILED (failures=1)"
+    },
+    "graph-direct-focused-app2.log": {
+      "sha256": "0c3adec08d26df28513a477cc04260a5019b952e58cc619854e5b4c71b59fb47",
+      "text": "Qualification desktop: ScreamSeqTest-d2a76aa80b064b0783d391f06cded226\ntest_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal) ... ERROR\n\n======================================================================\nERROR: test_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\test_song_routing.py\", line 146, in test_direct_cable_drag_cut_backspace_and_node_removal\n    self.assertTrue(next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==plugin)['visible'])\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nStopIteration\n\n----------------------------------------------------------------------\nRan 1 test in 6.993s\n\nFAILED (errors=1)"
+    },
+    "graph-direct-focused-app3.log": {
+      "sha256": "53f8fe467e91dcaabc74a1388583e1805173d24e4cceb643c72757f7742d6113",
+      "text": "Qualification desktop: ScreamSeqTest-9f908986101b4871bc3c89c91b53291f\ntest_direct_cable_drag_cut_backspace_and_node_removal (test_song_routing.SongRoutingTests.test_direct_cable_drag_cut_backspace_and_node_removal) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 11.375s\n\nOK"
+    }
+  }
+}

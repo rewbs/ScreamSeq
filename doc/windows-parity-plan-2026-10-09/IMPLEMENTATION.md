@@ -2,6 +2,69 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Direct graph editing and paged parameters — 10 October, 10:34 UTC
+
+The next user-requested batch adds direct removal, cable gestures and a replacement
+for the single-parameter inspector. `SongRoutingWindow.hpp` exposes **Remove node**
+in the toolbar and native context menu. Backspace/Delete act on the selected cable
+or removable node when the canvas owns focus. Plugins use `plugin.remove`; groups
+and returns use `mixer.bus.remove`, retaining its existing child-route/insert
+migration semantics. Removing an ordinary/sample graph stage clears its assignment,
+preserving the shared recipe. Track, Master and pattern-command stages are protected.
+
+`SongRoutingCanvas.hpp` now exposes serial insert cables as exact editable cuts and
+omits their wires when `disconnectedMainInputs` masks them. Backspace, Disconnect or
+dragging a selected handle to empty canvas cuts its specific route. Dragging the
+original serial sockets together restores that input without adding feedback or
+moving inserts. Insert ordering remains an explicit chain edit; a serial cable's
+handle cannot arbitrarily reorder a chain. Other selected routing handles retain
+their existing route-specific rewire validation.
+
+Sockets have larger visible and clickable bounds, including outside the node edge.
+Plain socket clicks and sub-four-pixel motion do not create a route draft. Socket
+drags connect in either direction; fresh bus connections add sends while preserving
+the main output and other sends. Fresh plugin socket drags select physical main port
+zero only after confirming it in the real supported catalog. Explicit auxiliary
+port drafts retain their selectors. Ctrl-click or double-click the node body opens
+its editor, while plain socket gestures route audio. Escape cancels a captured drag.
+
+`PluginParametersWindow.hpp` now shows pages of up to ten parameter rows with native
+numeric sliders, exact text fields, step buttons, choices and switches. Prev/Next,
+the page picker and Ctrl+PageUp/PageDown navigate. Slider release saves one Undo step;
+arrow-key adjustments, choices and switches apply immediately. This batch does not
+add continuous audio preview during a held thumb drag. Multiple typed values on the
+same page apply atomically, with native units/ranges, read-only metadata and stable
+parameter IDs. Incomplete text blocks page changes and slider/step overwrites. The
+existing document/revision/generation, independent-plugin, departure and uncertain
+completion protections remain. A failed non-busy automatic parameter refresh stops
+retrying until Reload, including when its plugin has just been removed.
+
+One ARM64 Release app/native-harness build at `b612fb93f` passed. Three native groups
+pass (73.96 seconds), including actual slider release and arrow-key writes, slider
+cancel, toggle/numeric edits, partial/stale refusal, retained newer text after a lost
+completion, EQ10 paging, bounded native control rectangles, Undo/Redo and save/reopen.
+Thirteen distinct application cases pass across the initial and focused runs. The
+new cases exercise direct routing, exact insert cuts/reconnection, plugin main-port
+drags, Backspace, Ctrl-click inspection, plugin/group removal, protected Master and
+saved routing. Existing send/auxiliary route preservation, retained drafts, graph
+roles, layout gestures and resize checks also pass.
+
+The initial combined case raced Undo readback, and a focused diagnostic run then
+reached a Ctrl-click before Redo readback completed. The Python fixture now waits
+for adopted clean view state after writes and before selection. The unchanged app
+passes the focused case in 11.375 seconds; no assertions were removed and no writes
+are replayed. Earlier successful cases retain their evidence. Source/executable
+fingerprints, all failures and final results are in the
+[bounded receipt](GRAPH-DIRECT-2026-10-10.json).
+
+The delivered build is `bin/windows-parity-p1/GraphDirect-Release/ScreamSeq.exe` in
+the integration checkout, beside its scanner. Prior builds remain untouched. No
+musician process was observed at this checkpoint. Qualification used owned private
+desktops and disposable songs; foreground presentation and physical audio were not
+measured. MSVC emitted a nonfatal enum/float arithmetic deprecation warning. Shared
+model, DSP, API schema, file format and Mac product inputs are unchanged; this batch
+does not require a Mac rebuild. Broader parity work remains paused.
+
 ## Graph movement and independent parameters — 10 October, 10:08 UTC
 
 The next user report identified repeated Apply/Reload selection blocks and difficulty
