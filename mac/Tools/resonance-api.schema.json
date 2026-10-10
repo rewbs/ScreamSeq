@@ -1480,6 +1480,17 @@
               "description": "Final order position for move, preserving the entry\u2019s section metadata."
             }
           },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "operation": { "const": "move" }
+                }
+              },
+              "then": { "required": ["destination"] },
+              "else": { "not": { "required": ["destination"] } }
+            }
+          ],
           "required": [
             "order",
             "operation",

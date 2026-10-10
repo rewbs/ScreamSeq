@@ -397,3 +397,40 @@ old executable cannot validate this work. Next normal build remains no earlier
 than **2026-10-10 03:28:34 UTC**, in the frozen integration checkout after a
 deliberate source update. P0b/P0c qualification and the remaining P3–P8 scope stay
 open; this source batch is not phase completion.
+
+## Order destination API parity — prepared, unqualified
+
+Windows `DocumentOperations.cpp::order.edit` now admits `move` with the required
+`destination`, routed to existing shared `Document::orderEditChanges/editOrder`.
+Destination means the final slot in the current sequence; it is not a pattern
+number or a new identity. The existing candidate validation and preflight keep
+exact no-ops before snapshots and Stop. Both directional moves preserve complete
+occurrence metadata, repeated pattern uses and End/Skip slots. No shared model,
+file representation or native audio code changed.
+
+The Mac bridge already supports moves but previously ignored destination when
+operation was remove. Its move-only guard now runs before that branch. This
+rejects a meaningless formerly ignored parameter; valid remove/move requests are
+unchanged. The shared schema now requires destination for move and forbids it
+otherwise. This closes the order portion of F27 in prepared source only; plugin
+move/gesture and other F27 contracts remain in their later batches.
+
+Prepared regression additions reuse existing binaries/groups:
+
+- Windows `document-controller-arrangement`: repeated-occurrence destination
+  move, same-index no-op retaining Redo, absent/bool/fraction/range/misused
+  destination rejection without Stop/history changes; arbitrary moves through
+  sentinel slots in both directions, complete metadata, Undo/Redo and reopen.
+- Actual PID `SongToolsUITests.test_repeated_occurrence_moves_undo_and_native_duplicate_persistence`:
+  retains the existing native adjacent-move/duplicate checks and adds arbitrary
+  API move, stable native arrangement selection, no-op/Redo and reopen. The case
+  is explicitly included in the Windows CI application selection.
+- Mac `native-song-tests` matrix/session checks: invalid move and remove
+  parameters, occurrence metadata, same-index no-op, Undo/Redo and native reopen.
+  Existing shared `order-edit-admission` continues protecting the common model.
+
+Run these with the same consolidated Windows/Mac build as the Pattern Tools and
+ruler changes. No additional build for this adapter correction. Schema JSON and
+Python syntax parsing plus diff review are source checks only; the new acceptance
+cases have not run. Drag-to-reorder and other native Arrangement ergonomics are
+not claimed by this API change.

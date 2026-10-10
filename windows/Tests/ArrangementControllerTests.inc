@@ -48,7 +48,7 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   need(snapshot.at("sequences")[1].at("name")=="Second / 序列","Sequence UTF-8 name changed");
 
   // Swapping two uses of the same pattern changes only their native identities.
-  invoke(c,"order.edit",{{"order",0},{"operation","down"}});const auto moved=c.view();
+  invoke(c,"order.edit",{{"order",0},{"operation","move"},{"destination",1}});const auto moved=c.view();
   auto movedMetadata=originalMetadata;std::swap(movedMetadata[0],movedMetadata[1]);
   need(moved->session.document.at("orders")==expectedOrders&&moved->session.document.at("orderMetadata")==movedMetadata,"Repeated-pattern move did not carry the selected identity");
   need(moved->catalogRevision==original->catalogRevision+1,"Same-pattern order move left chooser catalog revision unchanged");
@@ -60,6 +60,7 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   need(c.view()->session.document.at("orderMetadata")==originalMetadata&&c.view()->catalogRevision==moved->catalogRevision+1,"Undo did not restore order identities and invalidate the catalog");
   const auto undone=c.view();const auto beforeNoopStops=stops;
   invoke(c,"order.edit",{{"order",0},{"operation","assign"},{"pattern",0}});
+  invoke(c,"order.edit",{{"order",0},{"operation","move"},{"destination",0}});
   need(c.view()==undone&&stops==beforeNoopStops&&c.view()->session.document.at("canRedo")==true,"Same-pattern assign republished catalog or consumed redo");
   invoke(c,"history.redo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Redo did not restore moved order identities");
@@ -68,6 +69,28 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   need(sentinelMoved->session.document.at("orders")[2]==unsigned(OpenMPT::PATTERNINDEX_SKIP)&&sentinelMoved->session.document.at("orderMetadata")[3]==originalMetadata[2],"Moving End/Skip lost slot identity");
   invoke(c,"history.undo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Sentinel move Undo did not retain other occurrences");
+
+  const auto beforeDestinationRefusal=c.view();const auto beforeDestinationStops=stops;
+  for(const auto &bad:std::vector<Json>{{{"operation","move"}},{{"operation","move"},{"destination",true}},
+      {{"operation","move"},{"destination",1.5}},{{"operation","move"},{"destination",-1}},
+      {{"operation","move"},{"destination",6}},{{"operation","remove"},{"destination",1}},
+      {{"operation","assign"},{"pattern",0},{"destination",1}}}) {
+    auto request=bad;request["order"]=0;bool rejected=false;
+    try{invoke(c,"order.edit",request);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&c.view()==beforeDestinationRefusal&&stops==beforeDestinationStops,"Invalid destination changed history, occurrence or transport");
+  }
+  invoke(c,"order.edit",{{"order",2},{"operation","move"},{"destination",5}});
+  const auto farMove=c.view();auto farMetadata=movedMetadata;auto farOrders=expectedOrders;
+  for(unsigned i=2;i<5;++i){std::swap(farMetadata[i],farMetadata[i+1]);std::swap(farOrders[i],farOrders[i+1]);}
+  need(farMove->session.document.at("orders")==farOrders&&farMove->session.document.at("orderMetadata")==farMetadata,
+    "Destination is not the final slot or an arbitrary move lost intermediate occurrence metadata");
+  invoke(c,"history.undo",{{"domain","all"}});need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Arbitrary move was not one Undo");
+  invoke(c,"history.redo",{{"domain","all"}});need(c.view()->session.document.at("orderMetadata")==farMetadata,"Arbitrary move Redo changed identity");
+  const auto movePath=directory/"order-destination.screamseq";invoke(c,"document.save",{{"path",movePath.generic_string()}});
+  invoke(c,"document.open",{{"path",movePath.generic_string()}});
+  need(c.view()->session.document.at("orders")==farOrders&&c.view()->session.document.at("orderMetadata")==farMetadata,"Destination move reopen lost occurrence order");
+  invoke(c,"order.edit",{{"order",5},{"operation","move"},{"destination",2}});
+  need(c.view()->session.document.at("orders")==expectedOrders&&c.view()->session.document.at("orderMetadata")==movedMetadata,"Upward arbitrary move did not preserve intervening slots");
 
   const auto beforeSequence=c.view();const auto beforeSequenceStops=stops;
   invoke(c,"sequence.select",{{"sequence",1}});const auto second=c.view();

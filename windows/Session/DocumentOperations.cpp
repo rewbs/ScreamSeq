@@ -348,14 +348,16 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
     return {{"pattern",document_.addPattern(rows,duplicate,source)}};
   }
   if(method=="order.edit") {
-    keys(p,{"order","pattern","operation"});
+    keys(p,{"order","pattern","operation","destination"});
     require(document_.editable(),"This document is read-only");
     const auto operation=string(field(p,"operation"),20);
     require(operation=="before" || operation=="after" || operation=="assign" || operation=="up"
-      || operation=="down" || operation=="remove","Unknown order operation");
+      || operation=="down" || operation=="remove" || operation=="move","Unknown order operation");
     const int order=int(integer(field(p,"order"),0,document_.song().Order().size()));
-    const int pattern=p.contains("pattern") ? int(integer(p.at("pattern"),0,UINT16_MAX)) : 0;
     require(order<int(document_.song().Order().size()),"Select a valid order");
+    require(!p.contains("destination")||operation=="move","Destination is only used by move");
+    const int pattern=operation=="move" ? int(integer(field(p,"destination"),0,document_.song().Order().size()-1))
+      : p.contains("pattern") ? int(integer(p.at("pattern"),0,UINT16_MAX)) : 0;
     // Shared preflight precedes the candidate validator so an exact no-op
     // allocates no snapshot. Preserve that validator's public error contract.
     try {if(!document_.orderEditChanges(order,pattern,operation))return Json::object();}

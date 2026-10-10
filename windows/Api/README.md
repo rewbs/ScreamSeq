@@ -1347,3 +1347,20 @@ observation; **Accept observed state** requires its unchanged revision. Inspect
 the affected music using **Pattern / F6** before accepting it. New operations
 still require explicit capture and Preview. Tab/Shift+Tab use native navigation,
 Ctrl+Enter applies a prepared preview, and Escape hides the retained window.
+
+### Move an order occurrence
+
+`order.edit {expectedRevision, order, operation:"move", destination}` moves the
+selected occurrence to the zero-based final index in the current sequence. It
+uses the shared document operation, carries the occurrence's stable identity and
+section metadata, and preserves intermediate occurrences, including repeated
+patterns and End/Skip slots. The move is one Undo step and persists in native
+projects. Native arrangement selection follows its stable occurrence identity.
+Moving to the same index is a no-op: no Stop, new revision or lost Redo.
+
+`destination` is required for move and rejected for other operations. Invalid,
+boolean, fractional and out-of-range destinations are rejected before Stop or
+mutation. Mac now also rejects an unused destination on remove; previously that
+branch bypassed the existing move-only parameter check. The shared schema
+expresses the same conditional requirement. Existing before/after/assign/up/down
+and remove operations retain their meanings.

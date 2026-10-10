@@ -44,6 +44,25 @@ static void matrixAPITests(NSString *folder) {
     NSError *failure=nil;check(![session automationMethod:@"arrangement.matrix" params:bad error:&failure]&&failure.code==-32602,"Mac matrix malformed page accepted");
   }
   std::cout<<"PASS Mac matrix API native-only density/copy, dry-run/no-op, alias identities, Undo/Redo and persistence\n";
+  // Destination is a final occurrence index, including repeated patterns.
+  const auto beforeMove=[session snapshot:0];NSString *beforeRevision=session.automationRevision;
+  for(NSDictionary *bad in @[@{@"operation":@"move"},@{@"operation":@"move",@"destination":@YES},
+      @{@"operation":@"move",@"destination":@1.5},@{@"operation":@"move",@"destination":@99999},
+      @{@"operation":@"remove",@"destination":@1}]) {
+    auto params=[bad mutableCopy];params[@"order"]=@0;params[@"expectedRevision"]=session.automationRevision;NSError *failure=nil;
+    check(![session automationMethod:@"order.edit" params:params error:&failure]&&failure.code==-32602&&
+      [beforeRevision isEqual:session.automationRevision],"Mac malformed destination mutated the order list");
+  }
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@1},true);
+  const auto movedOrders=[session snapshot:0][@"orderMetadata"];
+  check([movedOrders[1] isEqual:beforeMove[@"orderMetadata"][0]]&&[movedOrders[0] isEqual:beforeMove[@"orderMetadata"][1]],"Mac destination move lost occurrence metadata");
+  call(@"history.undo",@{@"domain":@"all"},true);beforeRevision=session.automationRevision;
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@0},true);
+  check([beforeRevision isEqual:session.automationRevision],"Mac same-destination move advanced revision");
+  call(@"history.redo",@{@"domain":@"all"},true);
+  check([[session snapshot:0][@"orderMetadata"] isEqual:movedOrders],"Mac same-destination no-op destroyed Redo");
+  check([session savePath:saved error:&error]&&[session openPath:saved error:&error]&&
+    [[session snapshot:0][@"orderMetadata"] isEqual:movedOrders],"Mac destination move did not survive native reopen");
 }
 int main() {
   @autoreleasepool {

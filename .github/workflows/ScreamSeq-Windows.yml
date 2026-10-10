@@ -124,6 +124,7 @@ jobs:
               test_mixer_strips_ui.MixerStripsUITests `
               test_note_tracks.NoteTrackAppTests `
               test_pattern_tools.PatternToolsAppTests `
+              test_song_tools_ui.SongToolsUITests.test_repeated_occurrence_moves_undo_and_native_duplicate_persistence `
                 test_transport_loop.TransportLoopTests `
               test_graph_mixer_app.GraphMixerAppTests.test_native_mixer_draft_stale_selection_undo_and_reload `
               test_graph_mixer_app.GraphMixerAppTests.test_native_mixer_controls_fit_small_window `

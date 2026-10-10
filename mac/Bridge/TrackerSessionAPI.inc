@@ -795,10 +795,10 @@
       require([@[ @"before", @"after", @"assign", @"up", @"down", @"remove", @"move" ] containsObject:operation],
               "Unknown order operation");
       auto order = integer(p[@"order"], 0, song.Order().size());
+      require(!p[@"destination"] || [operation isEqual:@"move"], "Destination is only used by move");
       if ([operation isEqual:@"remove"])
         succeeded([self removeOrder:order error:&problem], problem);
       else {
-        require(!p[@"destination"] || [operation isEqual:@"move"], "Destination is only used by move");
         auto pattern = [operation isEqual:@"move"] ? integer(p[@"destination"],0,song.Order().size()-1) : integer(p[@"pattern"] ?: @0, 0, UINT16_MAX);
         succeeded([self editOrder:order pattern:pattern operation:operation error:&problem], problem);
       }

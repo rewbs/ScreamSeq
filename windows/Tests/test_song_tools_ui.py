@@ -255,6 +255,31 @@ class SongToolsUITests(unittest.TestCase):
         self.assertEqual(self.doc()['data']['orderMetadata'], duplicated['orderMetadata'])
         self.assertEqual(self.read('pattern.notes.get', pattern=index)['events'], source_notes)
 
+        # The API's arbitrary destination must retain the native selected
+        # occurrence by stable ID, just like the adjacent move buttons.
+        self.open_tool('arrangement')
+        selected_id = self.order(0)['id']
+        before_move = self.doc()['data']
+        destination = len(before_move['orders']) - 1
+        self.write('order.edit', order=0, operation='move', destination=destination)
+        self.idle()
+        moved = self.doc()['data']
+        expected_orders = before_move['orders'][1:] + before_move['orders'][:1]
+        expected_metadata = before_move['orderMetadata'][1:] + before_move['orderMetadata'][:1]
+        self.assertEqual(moved['orders'], expected_orders)
+        self.assertEqual(moved['orderMetadata'], expected_metadata)
+        self.assertEqual(self.read('workspace.get')['arrangementSelection']['id'], selected_id)
+        self.write('history.undo', domain='all')
+        self.assertEqual(self.doc()['data']['orderMetadata'], before_move['orderMetadata'])
+        revision = self.doc()['revision']
+        self.write('order.edit', order=0, operation='move', destination=0)
+        self.assertEqual(self.doc()['revision'], revision)
+        self.write('history.redo', domain='all')
+        self.assertEqual(self.doc()['data']['orderMetadata'], expected_metadata)
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.doc()['data']['orderMetadata'], expected_metadata)
+
     def test_sequence_and_sentinel_selection_keep_occurrence_and_other_tool_draft(self):
         self.import_arrangement_fixture()
         self.open_tool('arrangement')
