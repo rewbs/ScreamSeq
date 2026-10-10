@@ -1129,7 +1129,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationEffectPicker();std::cout<<"PASS native FX picker: captured target, typed draft transfer, no-op search, stale rejection, history and departure\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-display") {
-                    applicationPatternDisplay();applicationPatternRuler();std::cout<<"PASS native pattern and graph display: effective metrics, timing Undo, F04 values, native ruler and stale completion\n";return;
+                    applicationPatternDisplay();applicationPatternRuler();applicationPatternRowHeight();std::cout<<"PASS native pattern and graph display: metrics, timing Undo, F04 values, ruler, row geometry, saved density and retained drafts\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-selection") {
                     applicationWholePatternSelection();applicationTypingNavigation();std::cout<<"PASS whole-pattern selection and typing navigation: cursor/view/history, grouping bounds, retained focus/drafts and input admission\n";return;

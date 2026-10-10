@@ -1,3 +1,50 @@
+void applicationPatternRowHeight() {
+  RestoreFixture fixture;auto &app=*fixture.app;app.command(patternCommand);
+  app.selectWholePattern();app.openPatternTools();auto *tool=app.patternToolsWindow.get();
+  const auto field=GetDlgItem(tool->window(),8006);ScreamSeq::Tests::ownGuiWindow(tool->window());
+  rawDraftText(field,L"-");SetFocus(field);
+  const auto draft=tool->snapshot().at("draft"),captured=tool->snapshot().at("captured");
+  const auto song=songState(app),position=app.position(),selection=app.selection(),viewport=app.workspaceSnapshot().at("viewport");
+  const auto context=app.contextRevision;const auto rows=app.visibleRows();
+  for(unsigned height:{22u,26u,30u,34u,34u}) {
+    app.runWorkspaceShortcut(patternRowsLargerCommand);
+    restoreCheck(app.rowHeight==height&&app.workspaceSnapshot().at("geometry").at("pattern").at("rowHeight")==height,
+      "Native increase-row-height command or public geometry diverged");
+  }
+  restoreCheck(app.visibleRows()<rows&&songState(app)==song&&app.position()==position&&app.selection()==selection&&app.contextRevision==context&&
+    app.workspaceSnapshot().at("viewport")==viewport&&GetFocus()==field&&tool->snapshot().at("draft")==draft&&tool->snapshot().at("captured")==captured,
+    "Row height changed music, input context, viewport, focus or retained raw draft");
+  restoreCheck(app.savedLayouts.load(fixture.folder/L"row-height-layouts.json"),"Load isolated row-height layout storage");
+  app.workspace("workspace.layout",{{"name","Save custom"},{"savedName","Readable"}});
+  for(unsigned height:{30u,26u,22u,18u,18u}) {
+    app.runWorkspaceShortcut(patternRowsSmallerCommand);restoreCheck(app.rowHeight==height,"Row-height lower bound failed");
+  }
+  restoreCheck(app.savedLayouts.reload(),"Reopen saved row-height layout from disk");
+  app.workspace("workspace.layout",{{"name","Restore custom"},{"savedName","Readable"}});
+  restoreCheck(app.rowHeight==34&&GetFocus()==field&&tool->snapshot().at("draft")==draft&&tool->snapshot().at("captured")==captured,
+    "Saved row height did not restore without redirecting the retained inspector");
+  const auto valid=app.layoutConfiguration();
+  for(const auto &value:{RestoreJson(true),RestoreJson(17),RestoreJson(20),RestoreJson(35),RestoreJson(22.5),RestoreJson("22")}) {
+    auto invalid=valid;invalid["patternRowHeight"]=value;bool refused=false;
+    try{app.restoreLayoutConfiguration(invalid);}catch(const ScreamSeq::Api::ApiError &error){refused=error.code==-32602;}
+    restoreCheck(refused&&app.layoutConfiguration()==valid,"Invalid row-height layout partially applied");
+  }
+  auto legacy=valid;legacy.erase("patternRowHeight");app.restoreLayoutConfiguration(legacy);
+  restoreCheck(app.rowHeight==18,"Legacy layout did not restore its historical row height");
+  for(const float height:{18.f,22.f,26.f,30.f,34.f}) {
+    app.setPatternRowHeight(height);const auto grid=app.patternGridRect();
+    const auto expected=app.firstRow+2;
+    restoreCheck(app.gridClick(grid.x+app.gutter+4,grid.y+app.gridHeader+2.5f*height,false)&&app.row==expected,
+      "Pattern drawing and native hit-testing use different row heights");
+  }
+  const auto unchanged=app.rowHeight;SetCapture(app.window);bool refused=false;
+  try{app.setPatternRowHeight(18);}catch(const ScreamSeq::Api::ApiError &error){refused=error.code==-32002;}
+  ReleaseCapture();restoreCheck(refused&&app.rowHeight==unchanged,"Row resize changed coordinates during mouse capture");
+  const auto roots=app.departureRoots();app.departureInput=std::make_unique<ScreamSeq::NativeInputGate>(roots);
+  requireDepartureRefusal([&]{app.setPatternRowHeight(18);});app.departureInput.reset();
+  restoreCheck(app.rowHeight==unchanged&&songState(app)==song,"Refused density change altered row height or song");
+}
+
 void applicationPatternDisplay() {
   RestoreFixture fixture;auto &app=*fixture.app;app.command(patternCommand);
   const auto original=app.patternGridTiming();

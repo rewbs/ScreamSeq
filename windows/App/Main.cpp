@@ -86,6 +86,7 @@ constexpr int positionRulerCommand=590;
 constexpr int patternToolsCommand=591;
 constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumentPreviousCommand=594,inputInstrumentNextCommand=595,inputInstrumentAtCursorCommand=596;
 constexpr int effectPickerCommand=597;
+constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -322,7 +323,7 @@ public:
         }
 		auto g=geometry();
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
-        auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;patternRect["gutterWidth"]=gutter;
+        auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;patternRect["gutterWidth"]=gutter;patternRect["rowHeight"]=rowHeight;
 		return {{"geometry",{{"pattern",patternRect},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},{"gridTiming",patternGridTiming()},

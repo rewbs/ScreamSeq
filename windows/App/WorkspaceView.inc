@@ -19,7 +19,20 @@
     void selectWholePattern() {
         rejectDepartureInput();setPatternSelection(true,0,0,std::pair{patternRows()-1,view->channels-1});
     }
-    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72;
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, gridHeader=72;
+    float rowHeight=18;
+    static bool validPatternRowHeight(float height) {
+        return height==18||height==22||height==26||height==30||height==34;
+    }
+    void setPatternRowHeight(float height) {
+        rejectDepartureInput();
+        if(!validPatternRowHeight(height))throw ScreamSeq::Api::ApiError(-32602,"Choose a pattern row height of 18, 22, 26, 30 or 34 DIPs");
+        if(busy||recoveryRestoring||preparingWorkspaceLayout||GetCapture())
+            throw ScreamSeq::Api::ApiError(-32002,"Finish the current operation or mouse gesture before resizing pattern rows");
+        if(rowHeight==height)return;
+        rowHeight=height;layoutControls();
+        status=L"Pattern row height / "+std::to_wstring(unsigned(rowHeight))+L" DIPs";
+    }
     float gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
@@ -219,6 +232,7 @@
 		try {
             if(focusedEditingCommand(id))return;
             if(id==positionRulerCommand){cyclePositionMode();return;}
+            if(id==patternRowsLargerCommand||id==patternRowsSmallerCommand){setPatternRowHeight(std::clamp(rowHeight+(id==patternRowsLargerCommand?4.f:-4.f),18.f,34.f));return;}
             if(id==patternToolsCommand){openPatternTools();return;}
             if(typingInputCommand(id))return;
             if(id==effectPickerCommand){openEffectPicker();return;}

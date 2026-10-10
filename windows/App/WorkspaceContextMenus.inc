@@ -72,6 +72,8 @@
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
             {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
             {positionRulerCommand,L"Cycle position ruler",enabled},
+            {patternRowsLargerCommand,L"Increase row height",enabled&&!recoveryRestoring&&rowHeight<34},
+            {patternRowsSmallerCommand,L"Decrease row height",enabled&&!recoveryRestoring&&rowHeight>18},
             {patternToolsCommand,L"Pattern tools…",enabled},
             {effectPickerCommand,L"Choose effect…",enabled},
             {inputInstrumentAtCursorCommand,L"Use instrument at cursor",enabled},

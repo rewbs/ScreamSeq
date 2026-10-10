@@ -14,6 +14,23 @@ class TransportLoopTests(unittest.TestCase):
     read = support.GraphMixerAppTests.read
     write = support.GraphMixerAppTests.write
 
+    def test_pattern_density_commands_and_saved_layout_leave_song_unchanged(self):
+        window = self.desktop.hwnd(self.pid)
+        before, context = self.doc(), self.read('context.get')
+        viewport = self.read('workspace.get')['viewport']
+        for height in (22, 26, 30, 34, 34):
+            self.desktop.send(window, 0x111, 598)
+            self.assertEqual(self.read('workspace.get')['geometry']['pattern']['rowHeight'], height)
+        self.client.call('workspace.layout', {'name': 'Save custom', 'savedName': 'Readable test'})
+        for height in (30, 26, 22, 18, 18):
+            self.desktop.send(window, 0x111, 599)
+            self.assertEqual(self.read('workspace.get')['geometry']['pattern']['rowHeight'], height)
+        self.client.call('workspace.layout', {'name': 'Restore custom', 'savedName': 'Readable test'})
+        self.assertEqual(self.read('workspace.get')['geometry']['pattern']['rowHeight'], 34)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.read('context.get'), context)
+        self.assertEqual(self.read('workspace.get')['viewport'], viewport)
+
     def test_timeline_pipe_contract_occurrence_guards_and_purity(self):
         self.assertIn('pattern.timeline.get', self.read('api.describe')['reads'])
         self.write('order.edit', order=0, operation='after', pattern=0)

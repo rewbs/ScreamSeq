@@ -19,6 +19,8 @@
             {inputInstrumentAtCursorCommand,L"Keyboard / Use instrument at edit cursor",L"Enter in instrument cell"},
             {playbackLoopCommand,L"Playback / Toggle region or song loop",L""},
             {positionRulerCommand,L"Pattern / Cycle ruler: rows, beats, pattern time, song time",L""},
+            {patternRowsLargerCommand,L"Pattern / Increase row height",L""},
+            {patternRowsSmallerCommand,L"Pattern / Decrease row height",L""},
             {patternToolsCommand,L"Pattern / Tools: preview transforms",L""},
             {effectPickerCommand,L"Pattern / Choose effect near cursor",L"F4 in pattern"},
             {playCursorCommand,L"Playback / Play from edit cursor",L""},

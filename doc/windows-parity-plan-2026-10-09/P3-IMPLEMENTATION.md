@@ -539,3 +539,48 @@ previous freeze. Keep the full pending P1/P2/P3 and provider checks; this change
 reduces compilation duplication, not coverage. Windows x64 and ARM64 builds are
 required for the build-graph change. Earlier shared/catalogue edits still require
 their pending Mac gates. No assertion or timeout has been relaxed.
+
+### Bounded diagnostic of freshly linked targets
+
+After the failed consolidated build, a separate diagnostic verified the exact
+source, log and executable hashes and that workspace/worker executable write
+times fell inside that build with successful target-link log entries. Only those
+two fresh executables were admitted; later/unbuilt binaries were excluded. The
+full test helper still refuses the failed build and was not bypassed.
+
+At `607154901`, ten targeted groups plus their scratch-directory setup passed
+in 21.76 seconds: workspace note tracks, Pattern Tools, transport controls,
+selection/input navigation and pattern display/ruler; document-worker tracks,
+timeline, pattern transforms, performance and clipboard. This is private-desktop
+and worker evidence, not foreground, device, actual-pipe or whole-integration
+acceptance. The newer chooser, build refactor and density controls are excluded.
+The integration checkout retains `bin/parity-evidence/integration-diagnostic-02.json`
+and `.log`; log SHA-256
+`8fd527ccc6e59efde4a09fa6ad31d922cce203c59a29821c142caee130817087`.
+Reuse these results only while their relevant source/build inputs remain valid.
+
+## Pattern density — prepared after checkpoint 02
+
+Native commands 598/599 adjust row height over 18/22/26/30/34 DIPs, with clamped
+endpoints. They are discoverable in the pattern context menu and shortcut
+palette without introducing conflicting default bindings. All existing pattern
+and graph-lane drawing, hit tests, inline placement and visible-row calculations
+use the same height. The public workspace geometry reports it. The change
+preserves song/history, cursor, selection, viewport and raw inspector focus/drafts;
+mouse capture, document departure and busy replacement refuse the adjustment.
+
+Custom workspace layouts persist optional `patternRowHeight`, validated before
+any editor preparation/adoption. Absence means the prior 18-DIP default, and
+default saved layouts keep their old shape. Nondefault new layouts may be
+rejected by older readers; existing layouts and all project files are unchanged.
+Mac already offers these row heights; no shared musical or Mac code changes.
+This does not complete configurable note-key mappings, font scaling, UIA or the
+remaining P3a/P3c work.
+
+Prepared checks extend the existing workspace pattern-display group: every size,
+limits, native coordinate hits, focus/raw-draft retention, disk save/reload,
+legacy/invalid layouts, mouse-capture and departure guards. The already-scheduled
+`TransportLoopTests` adds actual-PID native commands and save/restore purity.
+Run these with the existing saved-layout, workspace and shortcut tests at the
+next consolidated build. Only source review, diff checks and Python parsing are
+claimed here; compilation, foreground DPI and rendered legibility remain pending.

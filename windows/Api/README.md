@@ -1283,6 +1283,22 @@ rack and optional canvas position join one unified history operation and persist
 
 ### Pattern time ruler
 
+The native pattern menu and command palette expose **Increase row height** and
+**Decrease row height** (commands 598/599). Heights are 18, 22, 26, 30 and 34 DIPs;
+the endpoints clamp. Bind either through the existing shortcut editor. Pattern
+and graph-lane drawing, hits, inline fields and visible-row calculations share
+the height. `workspace.get.geometry.pattern.rowHeight` exposes its current value.
+Changing height retains the song/history, playback, edit cursor, selection,
+viewport and retained inspector drafts. A captured mouse gesture or document
+operation must finish first. This changes row spacing, not font size.
+
+Custom saved layouts retain a nondefault height in optional local
+`patternRowHeight`; a missing field restores the historical 18-DIP default.
+The height is never written to project files. A malformed height refuses the
+entire restore before preparing or changing editors. Older app versions may
+reject layouts containing the new field; their existing saved layouts still
+load, and the new default layout shape remains unchanged.
+
 `pattern.timeline.get {pattern, order?}` is a document-worker read advertised by
 `api.describe`. It uses the same shared engine walk as Mac, in the current
 sequence. Omit `order` for the first occurrence, or specify the zero-based order
