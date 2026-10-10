@@ -145,7 +145,6 @@ private:
     set(apply,completion_.retained()?L"Review result":creating_?L"Create track":L"Group columns");
     set(statusLabel,displayedStatus(now));
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if(((id==name||id==count)&&notification==EN_CHANGE)||(id==output&&notification==CBN_SELCHANGE)){changed();return;}

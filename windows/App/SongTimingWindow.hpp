@@ -171,7 +171,6 @@ private:
     if(!unavailable()&&pendingFocus_){const auto previous=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(previous)&&IsWindowEnabled(previous)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(previous);}
     textStatus();
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override{
     if(setting_)return;
     if((id>=tempo&&id<=swing&&notification==EN_CHANGE)||(id==mode&&notification==CBN_SELCHANGE)){changed();return;}

@@ -128,7 +128,6 @@ private:
     if(unavailable()&&focus&&IsChild(window_,focus)&&!GetFocus())pendingFocus_=focus;
     if(!unavailable()&&pendingFocus_){const auto old=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(old)&&IsWindowEnabled(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{
     if(!controls_.contains(copies))return;
     const auto dpi=GetDpiForWindow(window_);

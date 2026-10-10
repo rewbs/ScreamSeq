@@ -85,7 +85,6 @@ private:
     set(render,completion_.retained()?L"Review result":L"Render sample");
     EnableWindow(controls_.at(render),!pending_&&(completion_.retained()||current()));
   }
-  void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);}
 public:
   bool hasUnresolvedResult()const noexcept{return pending_||completion_.retained();}
   PatternSampleRenderWindow(HWND owner,Request request,Context context,Committed committed,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),committed_(std::move(committed)),write_(std::move(write)){

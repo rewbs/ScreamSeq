@@ -38,7 +38,6 @@ private:
     place(transportLabel,18,280,130,20);place(transport,156,274,w-174,160);place(statusLabel,18,320,w-36,h-382);
     place(apply,18,h-46,88,28);place(reload,114,h-46,138,28);place(defaults,260,h-46,104,28);place(close,w-94,h-46,76,28);
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void error(const std::exception &error)override{set(statusLabel,wide(error.what()));}
   void action(int id,unsigned notification)override {
     if(setting_)return;

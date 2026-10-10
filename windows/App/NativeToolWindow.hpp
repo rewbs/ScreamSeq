@@ -254,7 +254,13 @@ protected:
   // UI-thread presentation work may have been deferred while this retained
   // HWND was hidden. Never reload its target or move focus from this hook.
   virtual void resumeVisiblePresentation()noexcept{}
-  virtual void paint(RenderSurface &)=0;
+  // Plain native forms share the same surface as their HWND fields, including
+  // the user's high-contrast colors. Canvas owners can supply their own paint.
+  virtual void paint(RenderSurface &surface) {
+    const auto [w,h]=size();
+    surface.fill(0,0,w,h,NativeControls::renderColor(
+      NativeControls::colors(NativeControls::Surface::inspector,NativeControls::highContrast()).background));
+  }
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}

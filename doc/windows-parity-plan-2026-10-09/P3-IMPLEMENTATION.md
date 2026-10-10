@@ -1165,3 +1165,28 @@ preview/Apply and history behavior. These additions are unbuilt and unrun. Inclu
 names were checked against source and the generated CTest inventory. No Mac source, API, musical state
 or file representation changes in this slice. Remaining native forms and custom
 canvases still need the full accessibility census and foreground qualification.
+
+### Prepared common form background
+
+Eighteen forms had identical paint overrides that always filled `0x18222d`,
+even when their native HWND fields used the system high-contrast background.
+`NativeToolWindow::paint` now supplies the common inspector surface from
+`NativeControls::colors`; `renderColor` explicitly converts Windows COLORREF
+byte order to Direct2D's packed RGB. Normal appearance retains the same color.
+The redundant overrides are removed from Arrangement, Arrangement Matrix,
+Audio Settings, Load Report, Effect Picker, Graph Trims, Keyboard Settings,
+MIDI Recording, Multisample Import, Note Track, Pattern Sample Render, Pattern
+Tools, Plugin Instruments, Plugin Library, Plugin Paths, Recovery, Song
+Properties and Song Timing. Custom graph/curve/meter canvases retain their own
+paint implementations and still require a separate semantic-color migration.
+
+The existing native-tool test fixture now inherits the real default paint path,
+including its retained theme-notification, nested docking, text/caret/Undo and
+input-ownership checks. No OS appearance preference has been changed and no
+build/test has run for this change. Because the common native base changed,
+include the pending native UI gate (especially `native-control-tests` and
+`native-tool-window-tests`) in the next consolidated Windows build/test batch.
+Foreground high-contrast inspection of the forms remains necessary; source
+palette use and private-desktop checks alone do not establish visual parity.
+No additional Mac/audio validation is introduced by this Windows paint change;
+the shared audition repair in the same pending batch still has its own gates.

@@ -221,7 +221,6 @@ private:
     if(unavailable()&&focus&&IsChild(window_,focus)&&!GetFocus())pendingFocus_=focus;
     if(!unavailable()&&pendingFocus_){const auto old=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(old)&&IsWindowEnabled(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{
     if(!controls_.contains(events))return;const auto replacement=ImageList_Create(1,std::max(1,MulDiv(25,GetDpiForWindow(window_),96)),ILC_COLOR32,1,1);
     if(replacement){ListView_SetImageList(controls_.at(events),replacement,LVSIL_SMALL);if(rowHeight_)ImageList_Destroy(rowHeight_);rowHeight_=replacement;}columnDpi_=0;

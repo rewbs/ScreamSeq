@@ -30,7 +30,6 @@ public:
   }
   void minimumClient(int width,int height){minimumClientWidth_=width;minimumClientHeight_=height;}
   void layout()override{++layouts;const auto [w,h]=size();place(1,8,8,std::max(1.f,w-16),24);place(2,8,40,90,24);place(3,106,40,150,160);}
-  void paint(ScreamSeq::RenderSurface &surface)override{surface.fill(0,0,surface.width(),surface.height(),0x18222d);}
   void action(int,unsigned)override{}
   bool key(WPARAM key,bool,bool)override{if(key==VK_F6){++localKeys;return true;}return false;}
   void deactivate()override{++deactivations;}

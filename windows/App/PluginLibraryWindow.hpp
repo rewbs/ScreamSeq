@@ -213,7 +213,6 @@ class PluginLibraryWindow final : public NativeToolWindow {
     for(int id:{favorite,hidePlugin,customCategory,saveCategory})EnableWindow(controls_.at(id),ready&&!refreshQueued_&&has&&!revision_.empty()&&(!categoryDraft_||id==customCategory||id==saveCategory));
     set(favorites,favoritesOnly_?L"★ Favorites only":L"Favorites filter: off");set(hidden,includeHidden_?L"Hidden included":L"Hidden excluded");
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{if(controls_.contains(plugins))SendMessageW(controls_.at(plugins),LB_SETITEMHEIGHT,0,LPARAM(29*GetDpiForWindow(window_)/96));}
   void drawControl(const DRAWITEMSTRUCT &d)override{
     if(d.CtlID!=plugins){NativeToolWindow::drawControl(d);return;}

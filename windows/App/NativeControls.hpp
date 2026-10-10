@@ -26,6 +26,11 @@ inline bool highContrast(){HIGHCONTRASTW value{sizeof(value)};return SystemParam
 inline bool themeMessage(UINT message){return message==WM_SETTINGCHANGE||message==WM_THEMECHANGED||message==WM_SYSCOLORCHANGE;}
 enum class Surface {main,inspector};
 struct ControlColors {COLORREF background,text,disabled,button,pressed,hot,active,activeText;};
+// COLORREF is BGR; Direct2D's packed color argument is RGB.
+inline constexpr UINT32 renderColor(COLORREF value) {
+  return (UINT32(GetRValue(value))<<16)|(UINT32(GetGValue(value))<<8)|UINT32(GetBValue(value));
+}
+static_assert(renderColor(RGB(0x18,0x22,0x2d))==0x18222d);
 inline ControlColors colors(Surface surface,bool contrast) {
   if(contrast)return {GetSysColor(COLOR_WINDOW),GetSysColor(COLOR_WINDOWTEXT),GetSysColor(COLOR_GRAYTEXT),
     GetSysColor(COLOR_BTNFACE),GetSysColor(COLOR_BTNFACE),GetSysColor(COLOR_BTNFACE),

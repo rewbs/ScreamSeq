@@ -159,7 +159,6 @@ private:
     if(columnDpi_!=GetDpiForWindow(window_))columns();
   }
   void fontsChanged()override{if(!controls_.contains(matrix))return;const auto image=ImageList_Create(1,std::max(1,MulDiv(48,GetDpiForWindow(window_),96)),ILC_COLOR32,1,1);if(image){ListView_SetImageList(controls_.at(matrix),image,LVSIL_SMALL);if(rowHeight_)ImageList_Destroy(rowHeight_);rowHeight_=image;}columnDpi_=0;}
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   LRESULT draw(NMLVCUSTOMDRAW &value){
     if(NativeControls::highContrast())return NativeReportList::customDraw(value,[this](size_t r,unsigned c){return cell(r,c);});
     if(value.nmcd.dwDrawStage==CDDS_PREPAINT)return CDRF_NOTIFYITEMDRAW;if(value.nmcd.dwDrawStage!=CDDS_ITEMPREPAINT)return CDRF_DODEFAULT;

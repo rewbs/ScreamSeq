@@ -141,7 +141,6 @@ class PluginPathWindow final : public NativeToolWindow {
     EnableWindow(controls_.at(preview),!pending_&&!unresolved()&&selected_>=0);
     set(reconnect,unresolved()?L"Review result":L"Reconnect");EnableWindow(controls_.at(reconnect),!pending_&&(unresolved()||selected_>=0));
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
 public:
   PluginPathWindow(HWND owner,Json target,Request request,Context context,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),target_(std::move(target)),write_(std::move(write)){
     prefix_=target_.contains("graph")?"graph.plugin.path.":"plugin.path.";minimumWidth_=700;minimumHeight_=480;create(L"ScreamSeq.PluginPath",L"Reconnect Windows plugin",820,540);

@@ -167,7 +167,6 @@ private:
     EnableWindow(controls_.at(preview),available());EnableWindow(controls_.at(apply),!pending_&&(completion_.retained()||(available()&&preview_.is_object()&&changes(preview_))));
     EnableWindow(controls_.at(acceptState),!pending_&&observation_.is_object());set(apply,completion_.retained()?L"Review result":L"Apply changes");set(statusLabel,displayedStatus());
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if((id>=operation&&id<=filter&&notification==CBN_SELCHANGE)||(id>=from&&id<=seed&&notification==EN_CHANGE)||

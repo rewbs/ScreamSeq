@@ -93,7 +93,6 @@ private:
     set(channelsLabel,L"Channels / format range "+std::to_wstring(now.at("minimumChannels").get<unsigned>())+L"–"+std::to_wstring(now.at("maximumChannels").get<unsigned>()));
     set(statusLabel,displayedStatus(now));
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if((id==title||id==channels)&&notification==EN_CHANGE){++generation_;observation_=nullptr;message(L"Draft retained / Apply validates before changing the song");return;}

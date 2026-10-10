@@ -60,7 +60,6 @@ private:
     place(results,18,86,w-36,h-258);place(detail,18,h-158,w-36,66);place(statusLabel,18,h-88,w-36,32);
     place(chooseButton,18,h-48,110,28);place(recaptureButton,140,h-48,164,28);place(closeButton,w-98,h-48,80,28);selectionChanged();
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if(id==search&&notification==EN_CHANGE){filter();return;}

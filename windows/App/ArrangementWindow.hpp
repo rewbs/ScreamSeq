@@ -335,7 +335,6 @@ private:
     NativeToolWindow::drawControl(draw);if(draw.CtlType!=ODT_BUTTON||draw.CtlID!=unsigned(ordersPage+pageIndex()))return;
     auto rect=draw.rcItem;rect.top=rect.bottom-std::max(2,MulDiv(2,GetDpiForWindow(window_),96));SetDCBrushColor(draw.hDC,NativeControls::highContrast()?GetSysColor(COLOR_HIGHLIGHT):RGB(110,218,197));FillRect(draw.hDC,&rect,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{
     if(!controls_.contains(orders))return;const auto replacement=ImageList_Create(1,std::max(1,MulDiv(27,GetDpiForWindow(window_),96)),ILC_COLOR32,1,1);
     if(replacement){ListView_SetImageList(controls_.at(orders),replacement,LVSIL_SMALL);if(rowHeight_)ImageList_Destroy(rowHeight_);rowHeight_=replacement;}columnDpi_=0;

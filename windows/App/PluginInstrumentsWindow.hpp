@@ -106,7 +106,6 @@ class PluginInstrumentsWindow final : public NativeToolWindow {
     EnableWindow(controls_.at(discard),!pending_);
     const bool canAdd=std::any_of(inventory_.begin(),inventory_.end(),[&](const auto &item){return available(item.at("instrument").template get<unsigned>());});EnableWindow(controls_.at(addRoute),ready&&canAdd);
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
 public:
   PluginInstrumentsWindow(HWND owner,std::string plugin,Request request,Context context)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),plugin_(std::move(plugin)){

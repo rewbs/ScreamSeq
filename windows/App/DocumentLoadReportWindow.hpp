@@ -40,7 +40,6 @@ private:
     place(saveCopyButton,18,h-48,140,28,!context_.empty()&&context_.at("requiresSaveAs")==true);
     place(closeButton,w-98,h-48,80,28);
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void action(int id,unsigned notification)override {
     if(notification!=BN_CLICKED)return;
     if(id==saveCopyButton)saveCopy();else if(id==closeButton)hide();

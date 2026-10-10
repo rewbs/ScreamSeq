@@ -43,7 +43,6 @@ class AudioSettingsWindow final : public NativeToolWindow {
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(_wcsicmp(type,L"Button")==0)action(GetDlgCtrlID(GetFocus()),BN_CLICKED);else action(apply,BN_CLICKED);return true;}return false;
   }
   void layout()override{if(!ready_)return;const auto [w,h]=size();place(heading,18,14,w-36,26);place(deviceLabel,18,52,w-36,20);place(endpoint,18,76,w-146,240);place(refresh,w-116,76,98,27);place(periodLabel,18,116,w-36,20);place(period,18,140,210,190);place(help,18,183,w-36,47);place(statusLabel,18,238,w-36,std::max(42.f,h-300));place(reload,18,h-48,140,28);place(apply,w-204,h-48,86,28);place(close,w-106,h-48,88,28);for(int id:{endpoint,period,refresh,apply,reload})EnableWindow(controls_.at(id),!pending_);}
-  void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);}
 public:
   AudioSettingsWindow(HWND owner,std::function<Json(const std::string &,const Json &)> request):NativeToolWindow(owner),request_(std::move(request)){
     minimumWidth_=560;minimumHeight_=380;create(L"ScreamSeq.AudioSettings",L"Audio settings",620,400);combo(endpoint);combo(period);
