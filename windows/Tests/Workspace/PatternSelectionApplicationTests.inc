@@ -81,7 +81,7 @@ void applicationQueuedPatternPaste() {
   app.edit("pattern.apply",{{"cells",RestoreJson::array({{{"pattern",0},{"row",0},{"channel",0},{"note",61}},{{"pattern",0},{"row",8},{"channel",0},{"note",0}}})}});
   auto cursor=app.position();cursor["pattern"]=0;cursor["row"]=0;cursor["channel"]=0;cursor["column"]=0;cursor["following"]=false;app.navigate(cursor);
   restoreCheck(app.copyCells(),"Prepare private paste clipboard");cursor["row"]=8;app.navigate(cursor);
-  const auto note=[&](unsigned row){return app.documentOperation("pattern.get",{{"pattern",0},{"startRow",row},{"rowCount",1},{"startChannel",0},{"channelCount",1}}).at("cells").at(0).at("note").get<unsigned>();};
+  const auto note=[&](unsigned row){const auto pattern=app.pattern(0);return unsigned(pattern.cells.at(size_t(row)*pattern.channels).at(0));};
   // Exercise input inside the genuine busy wait, not a timing-dependent sleep.
   std::promise<RestoreJson> gate;app.inputCompletion=&gate;
   app.postedInput=[&]{restoreCheck(app.busy,"Paste fixture did not enter a worker wait");app.command(pasteCommand);restoreCheck(app.pendingPatternPaste.has_value(),"Busy paste was dropped instead of retaining its intent");};
