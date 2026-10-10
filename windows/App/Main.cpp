@@ -55,6 +55,7 @@
 #include "SongTimingWindow.hpp"
 #include "NoteTrackWindow.hpp"
 #include "PatternToolsWindow.hpp"
+#include "EffectPickerWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -84,6 +85,7 @@ constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand
 constexpr int positionRulerCommand=590;
 constexpr int patternToolsCommand=591;
 constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumentPreviousCommand=594,inputInstrumentNextCommand=595,inputInstrumentAtCursorCommand=596;
+constexpr int effectPickerCommand=597;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -342,6 +344,7 @@ public:
             {"arrangementMatrixWindow",arrangementMatrixWindow?arrangementMatrixWindow->snapshot():Json{{"visible",false}}},
             {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
             {"patternTools",patternToolsWindow?patternToolsWindow->snapshot():Json{{"visible",false}}},
+            {"effectPicker",effectPickerWindow?effectPickerWindow->snapshot():Json{{"visible",false}}},
             {"trackHeaders",noteTrackHeaderSnapshot()},
             {"noteTrackEditors",{{"create",createNoteTrackWindow?createNoteTrackWindow->snapshot():Json{{"visible",false}}},
                 {"group",groupNoteTrackWindow?groupNoteTrackWindow->snapshot():Json{{"visible",false}}}}},
@@ -656,6 +659,7 @@ public:
     #include "WorkspaceTransport.inc"
     #include "PatternToolsIntegration.inc"
     #include "WorkspaceRuler.inc"
+    #include "EffectPickerIntegration.inc"
 	void play() { playWorkspaceRegion(false,false); }
     bool supportsPlaybackLoop()const override{return true;}
     void refreshPlaybackLoopControl() {

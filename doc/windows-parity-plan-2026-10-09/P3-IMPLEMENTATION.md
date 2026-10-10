@@ -468,3 +468,39 @@ layout/display customization and the near-cursor FX picker remain outstanding.
 
 Only source/diff review and Python syntax parsing are claimed for this slice;
 the Windows build and actual native checks remain pending.
+
+## Near-cursor FX chooser — prepared after checkpoint 02 freeze
+
+This source batch is **outside** integration checkpoint 02's frozen `607154901`
+candidate. Its build or test results cannot qualify the chooser.
+
+`EffectPickerWindow.hpp` supplies Win32 search/list controls and native keyboard
+navigation. `EffectPickerIntegration.inc` captures the single-cell target and
+catalogue, places the modeless window near its screen position with monitor
+clamping, and transfers a choice into the existing Pattern FX inspector. Command
+597 is in the palette and pattern menu; local F4 works after native text/editor
+ownership and configured shortcuts have had priority. Enter on an FX cell retains
+its prior inspector behavior. No global F4 binding or parallel mutation path was
+added. Search covers display code, name, description and format equivalents.
+
+Choosing opens typed parameter fields and marks the selected command as a
+retained draft; no musical write occurs until the existing inspector Apply.
+Escape restores prior focus, while successful choice preserves the inspector's
+new focus. The chooser compares document/revision, cursor, stable pattern/column,
+FX/nudge generation and plugin-parameter context before selection. Stale input
+cannot retarget a write. Explicit Use current cursor retains the query. Existing
+dirty FX/nudge drafts are raised intact. Search is read-only and does not block
+departure; the registered native owner is retired with its document.
+
+Prepared checks, not executed: `workspace-effect-picker-tests` uses the actual
+Application and native controls for F4/catalogue search, captured draft transfer,
+Apply/Undo/Redo through the existing mutation path, stale cursor/newer invalid FX
+refusal, explicit recapture retaining search, no matches, minimum geometry and
+document retirement. `test_pattern_tools.EffectPickerAppTests` adds actual-PID
+choice/Apply/history/save/reopen and stale/no-match cases, explicitly selected in
+Windows CI. Reuse the workspace/app targets in the next eligible batch build and
+run these plus native tool, pattern-field/performance, shortcut and departure
+groups. Mac has no source change in this chooser slice; retain the pending Mac
+gate for the earlier shared/catalogue work. Foreground placement, DPI, high
+contrast, screen-reader behavior and keyboard ergonomics still require direct
+qualification; private native tests do not establish those properties.

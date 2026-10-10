@@ -23,7 +23,7 @@ class PatternToolsAppTests(unittest.TestCase):
             time.sleep(.01)
         self.fail('Pattern workbench did not settle')
 
-    def window(self):
+    def window(self, kind='ScreamSeq.PatternTools'):
         found = []
 
         @private_desktop.callback
@@ -32,7 +32,7 @@ class PatternToolsAppTests(unittest.TestCase):
             private_desktop.user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             name = ctypes.create_unicode_buffer(128)
             private_desktop.user.GetClassNameW(hwnd, name, len(name))
-            if pid.value == self.pid and name.value == 'ScreamSeq.PatternTools':
+            if pid.value == self.pid and name.value == kind:
                 found.append(hwnd)
             return True
 
@@ -116,3 +116,74 @@ class PatternToolsAppTests(unittest.TestCase):
         self.assertTrue(self.press(8018)['stale'])
         self.assertEqual(self.doc(), before)
         self.assertIsNone(self.state()['completion'])
+
+
+class EffectPickerAppTests(unittest.TestCase):
+    setUp = support.GraphMixerAppTests.setUp
+    doc = support.GraphMixerAppTests.doc
+    read = support.GraphMixerAppTests.read
+    write = support.GraphMixerAppTests.write
+    window = PatternToolsAppTests.window
+    navigate = PatternToolsAppTests.navigate
+
+    def picker(self):
+        return self.read('workspace.get')['effectPicker']
+
+    def button(self, identifier):
+        window = self.window('ScreamSeq.EffectPicker')
+        self.desktop.send(window, 0x111, identifier, private_desktop.user.GetDlgItem(window, identifier))
+
+    def search(self, text):
+        window = self.window('ScreamSeq.EffectPicker')
+        raw = ctypes.create_unicode_buffer(text)
+        self.desktop.send(private_desktop.user.GetDlgItem(window, 8201), 0xC, 0, ctypes.addressof(raw))
+
+    def test_native_choice_transfers_captured_draft_then_apply_history_and_reopen(self):
+        self.navigate(16, 0)
+        before = self.doc()
+        original = self.read('pattern.effects.get', pattern=0)
+        main = self.desktop.hwnd(self.pid)
+        self.desktop.send(main, 0x111, 597)
+        descriptor = next(c for c in self.read('pattern.commands')['native'] if c.get('native') == 'vibrato')
+        self.search(descriptor['displayCode'] + '  ' + descriptor['name'])
+        self.assertEqual(self.picker()['matches'], 1)
+        self.assertEqual(self.doc(), before)
+        self.button(8205)
+        state = self.read('workspace.get')
+        self.assertFalse(state['effectPicker']['visible'])
+        self.assertTrue(state['effectEditor']['draft'])
+        self.assertEqual((state['effectEditor']['pattern'], state['effectEditor']['row'], state['effectEditor']['channel']), (0, 16, 0))
+        self.assertEqual(self.doc(), before)
+        self.desktop.send(main, 0x111, 347)
+        applied = self.read('pattern.effects.get', pattern=0)
+        self.assertTrue(any(c.get('native') == 'vibrato' and c['channel'] == 0 and c['position'] // 65536 == 16
+                            for c in applied['commands']))
+        self.write('history.undo', domain='all')
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), original)
+        self.write('history.redo', domain='all')
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), applied)
+        path = self.folder / 'picker.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('pattern.effects.get', pattern=0), applied)
+        self.assertFalse(self.picker()['visible'])
+
+    def test_stale_choice_and_empty_search_do_not_retarget_or_write(self):
+        main = self.desktop.hwnd(self.pid)
+        self.desktop.send(main, 0x111, 597)
+        self.search('nudge')
+        self.assertGreater(self.picker()['matches'], 0)
+        target = self.picker()['captured']
+        self.navigate(12, 1)
+        before = self.doc()
+        self.button(8205)
+        self.assertEqual(self.picker()['captured'], target)
+        self.assertFalse(self.picker()['current'])
+        self.assertEqual(self.doc(), before)
+        self.button(8206)
+        self.assertTrue(self.picker()['current'])
+        self.assertEqual(self.picker()['search'], 'nudge')
+        self.search('no-such-effect-phrase')
+        self.assertEqual(self.picker()['matches'], 0)
+        self.button(8205)
+        self.assertEqual(self.doc(), before)

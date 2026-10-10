@@ -20,6 +20,7 @@
             {playbackLoopCommand,L"Playback / Toggle region or song loop",L""},
             {positionRulerCommand,L"Pattern / Cycle ruler: rows, beats, pattern time, song time",L""},
             {patternToolsCommand,L"Pattern / Tools: preview transforms",L""},
+            {effectPickerCommand,L"Pattern / Choose effect near cursor",L"F4 in pattern"},
             {playCursorCommand,L"Playback / Play from edit cursor",L""},
             {playSelectionCommand,L"Playback / Play selection or pattern",L""},
             {playSelectionCursorCommand,L"Playback / Play selection or pattern from edit cursor",L""},

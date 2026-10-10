@@ -55,6 +55,7 @@
         if(createNoteTrackWindow)createNoteTrackWindow->update();
         if(groupNoteTrackWindow)groupNoteTrackWindow->update();
         if(patternToolsWindow)patternToolsWindow->update();
+        if(effectPickerWindow)effectPickerWindow->update();
     }
     void returnToSongPattern() {
         deferredViews.clear();revealWorkspacePattern();workspaceState.focus="pattern";

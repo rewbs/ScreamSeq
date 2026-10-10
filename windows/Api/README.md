@@ -1384,3 +1384,24 @@ chooser's existing 0–9 range. Boundary no-ops do not revise the input context.
 Busy/replacing documents refuse changes. The existing `workspace.input` API
 remains the guarded API for instrument and octave setup, with its existing
 Mac-compatible octave range 0–8; this batch does not expand that wire contract.
+
+### Near-cursor effect chooser
+
+**Choose effect near cursor** (597), the pattern context menu, and local F4 in
+the pattern grid open a native searchable list beside the edited cell. Code,
+name, description and source-format equivalents are searchable. Arrow keys
+choose results, Enter or double-click opens their typed values in the existing
+Pattern FX inspector, and Escape returns to the prior focus. Choosing does not
+write music: the inspector retains the chosen command until Apply or explicit
+discard. Its existing `pattern.effect.set`/binding, Undo and persistence paths
+remain authoritative.
+
+The chooser captures document/revision, cursor, stable pattern/column identities,
+FX/nudge draft generation and selected plugin parameter context. A changed
+target cannot silently receive a stale choice; **Use current cursor** explicitly
+captures it and preserves search. An existing dirty FX or nudge editor is raised
+instead of overwritten. Empty searches and dismissal never mutate the song.
+The window is resizable, constrained to its monitor work area, and retired on
+document replacement. Read-only search does not become an unsaved musical draft.
+`workspace.get.effectPicker` exposes `visible`, `captured`, `search`, `matches`,
+`selected` (catalogue index) and `current` while the owner exists.

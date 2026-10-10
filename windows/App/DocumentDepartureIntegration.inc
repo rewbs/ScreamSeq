@@ -85,6 +85,7 @@
         sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();
         createNoteTrackWindow.reset();groupNoteTrackWindow.reset();
         patternToolsWindow.reset();
+        effectPickerWindow.reset();
         for(auto &panel:workspaceEditors){panel.document.clear();panel.patternID.clear();panel.trackID.clear();panel.origin=Json::object();panel.pinned=false;panel.configured=false;}
     }
     // Virtual only at the native presentation boundary so the actual-app

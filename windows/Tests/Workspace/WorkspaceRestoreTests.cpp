@@ -1066,6 +1066,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
+#include "EffectPickerApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1123,6 +1124,9 @@ int wmain(int argc,wchar_t **argv) {
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-tools") {
                     applicationPatternTools();std::cout<<"PASS retained Pattern tools: catalogue, scopes, preview, history, focus, departure and completion recovery\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"effect-picker") {
+                    applicationEffectPicker();std::cout<<"PASS native FX picker: captured target, typed draft transfer, no-op search, stale rejection, history and departure\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-display") {
                     applicationPatternDisplay();applicationPatternRuler();std::cout<<"PASS native pattern and graph display: effective metrics, timing Undo, F04 values, native ruler and stale completion\n";return;
