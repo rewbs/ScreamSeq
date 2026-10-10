@@ -19,6 +19,49 @@ void beginDepartureDraft(RestoreApplication &app) {
     restoreCheck(app.beginPatternNudgeEdit("nudge-forward"),"Create departure nudge draft");
     rawDraftText(app.controls.at(app.nudgeStrengthField),L"-");
 }
+void applicationNewAndDemo() {
+    for(bool demo:{false,true}) {
+        RestoreFixture fixture;auto &app=*fixture.app;beginDepartureDraft(app);
+        const auto draft=census(app);const auto song=songState(app);const auto identity=app.documentId;const auto stopped=app.stopGeneration;
+        const auto field=app.controls.at(app.nudgeStrengthField);SetFocus(field);
+        const auto params=RestoreJson{{"expectedRevision",app.view->session.revision},{"demo",demo},{"discard",true}};
+        const auto refusal=restoreRejected([&]{app.documentOperation("document.new",params);});
+        restoreCheck(refusal.find("native editor work")!=std::string::npos&&census(app).sameWork(draft)&&songState(app)==song,
+            "API New/Demo bypassed raw native draft protection");
+        app.departureChoice=IDCANCEL;app.command(demo?openDemoCommand:newDocumentCommand);
+        restoreCheck(app.documentId==identity&&census(app).sameWork(draft)&&GetFocus()==field&&app.stopGeneration==stopped,
+            "Cancel New/Demo lost the document, raw fields, focus or playback");
+        app.departureChoice=1002;app.failDepartureStop=true;
+        restoreRejected([&]{app.newFile(demo);});app.failDepartureStop=false;
+        restoreCheck(app.documentId==identity&&census(app).sameWork(draft)&&!app.nativeDepartureConsent&&!app.departureInput,
+            "Failed New/Demo Stop consumed drafts or retained discard authority");
+        app.beforeDepartureAdmission=[&]{rawDraftText(field,L"-.");};
+        restoreRejected([&]{app.newFile(demo);});
+        restoreCheck(app.documentId==identity&&restoreText(field)==L"-."&&!app.nativeDepartureConsent,
+            "New/Demo reused discard consent after newer raw input");
+        app.command(demo?openDemoCommand:newDocumentCommand);
+        restoreCheck(app.documentId!=identity&&census(app).drafts.empty()&&!app.patternNudge.active&&!app.departureInput&&
+            !app.nativeDepartureConsent&&app.view->path.empty()&&app.view->session.document.at("canUndo")==false,
+            "Successful native New/Demo failed to retire owners and start independent history");
+    }
+    {
+        RestoreFixture fixture;auto &app=*fixture.app;
+        const auto take=app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",{0}},{"instrument",1}}).at("take");
+        const auto identity=app.documentId;app.newFile();
+        restoreCheck(app.documentId==identity&&app.view->recording.at("take")==take,"Native New discarded a retained MIDI take");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",take}});
+    }
+    {
+        RestoreFixture fixture;auto &app=*fixture.app;const auto path=fixture.folder/L"pre-new-shortcuts.json";
+        const RestoreJson saved={{"version",1},{"overrides",{{app.shortcutCommandID(inputOctaveUpCommand),{"ctrl+n"}}}}};
+        {std::ofstream file(path);file<<saved.dump();restoreCheck(bool(file),"Write previous user shortcut fixture");}
+        app.loadWorkspaceShortcuts(path);
+        restoreCheck(app.workspaceShortcuts->keys(app.shortcutCommandID(newDocumentCommand)).empty()&&
+            app.workspaceShortcuts->keys(app.shortcutCommandID(inputOctaveUpCommand))==std::vector<std::string>{"ctrl+n"},
+            "New Ctrl+N default displaced an existing saved user binding");
+    }
+}
+
 void applicationDepartureRefusalAndAdoption() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto path=saveDepartureFixture(fixture);
     beginDepartureDraft(app);app.openSongTiming();const auto timing=app.songTimingWindow->window();ScreamSeq::Tests::ownGuiWindow(timing);

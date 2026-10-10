@@ -61,11 +61,29 @@ query the running instance's `api.describe` for its current method catalog. Do n
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
 
-`document.open` requires a current `expectedRevision`. Its `discard:true` applies
+**File / New song** (Ctrl+N) and **File / Open demo song** are available through
+the native command palette. New uses the shared blank-song defaults; Demo uses
+the same shared example song as Mac. Both ask the existing Save/Discard/Cancel
+question for unsaved music, protect recording takes, and review retained editor
+drafts before replacement. Cancel and failed preparation/Stop preserve the old
+document. A successful replacement starts a fresh document identity, empty
+history and no save path, then focuses the pattern. An existing custom Ctrl+N
+binding is preserved and leaves New unbound until explicitly reassigned.
+
+The native application advertises `document.new` as a Windows extension. It
+requires `expectedRevision` and accepts optional booleans `demo` (default false)
+and `discard` (default false). All other fields reject. Its schema is
+[`document-new.schema.json`](document-new.schema.json). It uses the normal write
+replay cache, so retry an uncertain reply with the same request ID and content;
+do not issue a fresh creation speculatively. New is a document replacement, not
+an Undo entry. Musical edits in the new document retain ordinary Undo/Redo and
+native save/reopen. This extension does not claim that Mac exposes this API.
+
+`document.open` and `document.new` require a current `expectedRevision`. Their `discard:true` applies
 to unsaved song changes; it does not authorize discarding retained native editor
 drafts. Those drafts produce `-32002` with `data.writeOutcome:"notCommitted"`
 before replacement. Resolve them in their editor, or use the native Open review
-prompt to review, discard the exact captured drafts, or keep editing. Recovery
+prompt to review, discard the exact captured drafts, or keep editing. New/Demo and Recovery
 Restore uses the same final admission check. A changed draft invalidates an
 earlier native discard decision; pending or uncertain work must be resolved.
 

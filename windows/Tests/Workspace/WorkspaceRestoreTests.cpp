@@ -1166,7 +1166,7 @@ int wmain(int argc,wchar_t **argv) {
                     std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
-                    applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();
+                    applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();applicationNewAndDemo();
                     std::cout<<"PASS Application departure: native/API consent, stale input, Stop rollback, retirement, refresh retry and canceled shutdown\n";return;
                 }
                 restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");

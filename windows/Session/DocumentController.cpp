@@ -556,6 +556,15 @@ std::function<void()> DocumentController::prepareNativePublication(const Tracker
 }
 
 Json DocumentController::operation(const std::string &method,Json params) {
+  const bool replacing=method=="document.open"||method=="document.new";
+  if(method=="document.new") {
+    // Reject malformed/stale creation requests before flushing native plugin
+    // editors; the ordinary write guard also rechecks after that flush.
+    keys(params,{"expectedRevision","demo","discard"});
+    if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())throw Api::ApiError(-32602,"expectedRevision is required");
+    if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
+    (void)flag(params,"demo");(void)flag(params,"discard");
+  }
   if(publicationPending_) publish();
   if(method.starts_with("parameter.activity."))return parameterActivityOperation(method,params);
   if(method.starts_with("recording.")) {
@@ -564,7 +573,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
   }
-  if(recording_&&(method=="document.save"||method=="document.open"))
+  if(recording_&&(method=="document.save"||replacing))
     throw Api::ApiError(-32602,"Finish or discard the recording take before saving or opening another song");
   if(method.starts_with("sample.recording.")) {
     if(SampleRecordingOperations::requiresRevision(method)&&!document_->editable())throw Api::ApiError(-32602,"This document is read-only");
@@ -591,7 +600,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || method=="document.open" || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
+  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
     flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
@@ -605,7 +614,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
-  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.open";
+  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || replacing;
   if(write) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
@@ -623,7 +632,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(sample>=1 && sample<=65535 && std::floor(sample)==sample) changedSamples_.insert(unsigned(sample));
   }
   scanPatterns_=method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="arrangement.copyBlock";
-  if(write && method!="document.open") preflightGrowth(method,params);
+  if(write && !replacing) preflightGrowth(method,params);
   Json result;
   if(method=="sample.renderSelection") {
     keys(params,{"pattern","firstRow","lastRow","firstChannel","lastChannel","name","createInstrument","tailSeconds","dryRun"});
@@ -656,6 +665,18 @@ Json DocumentController::operation(const std::string &method,Json params) {
           [this,&result](const Json &){return prepareAssetCompletion("sample.renderSelection",result);});
       }
     } catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+  } else if(method=="document.new") {
+    keys(params,{"demo","discard"});
+    const bool demo=flag(params,"demo"),discard=flag(params,"discard");
+    if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard)
+      throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before creating another song");
+    Project::OpenedProject candidate;
+    candidate.document=demo?Tracker::Document::demo():std::make_unique<Tracker::Document>();
+    candidate.state=Project::newProjectState(*candidate.document);
+    // Prepare the response before adoption as well. New/Demo use the same
+    // fallible staging, take protection and native draft lease as Open.
+    Json response={{"demo",demo},{"path",""},{"loadWarnings",Json::array()},{"requiresSaveAs",false},{"loadSourcePath",""}};
+    installCandidate(std::move(candidate));return response;
   } else if(method=="document.save" || method=="document.open") {
     if(method=="document.save") keys(params,{"path","overwrite","dryRun"});else keys(params,{"path","discard"});
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
@@ -841,7 +862,7 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // This does not classify recording start/stop/discard, files or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform") {
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

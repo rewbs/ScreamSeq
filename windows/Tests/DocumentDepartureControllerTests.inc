@@ -90,5 +90,67 @@ void documentDepartureControllerTests(const std::filesystem::path &directory) {
   admission.review(true);recoveryWait(c,c.recover(capture->bytes,opened->session.revision,true));
   need(admission.accepted==2&&admission.retired==2&&admission.completionIdentity&&stops==2&&!admission.registry.departing(),
     "successful recovery must publish then release its lease exactly once");
-  std::cout<<"Native departure admission, candidate failure, pumped raw edit, Stop rollback, open and recovery passed\n";
+  for(bool demo:{false,true}) {
+    admission.fields.dirty=true;++admission.fields.generation;admission.consent.reset();
+    const auto previous=c.view();const auto previousStops=stops,previousRetired=admission.retired;
+    refused=false;try{invoke(c,"document.new",{{"demo",demo},{"discard",true}});}catch(const Api::ApiError &e){refused=e.code==-32002;}
+    need(refused&&c.view()==previous&&stops==previousStops&&admission.retired==previousRetired,
+      "New/Demo bypassed retained native work or stopped before admission");
+    admission.review(true);failStop=true;refused=false;
+    try{invoke(c,"document.new",{{"demo",demo},{"discard",true}});}catch(const std::runtime_error &){refused=true;}failStop=false;
+    need(refused&&c.view()==previous&&admission.fields.dirty&&!admission.registry.departing(),"Failed New/Demo Stop retired native work");
+    admission.review(true);invoke(c,"document.new",{{"demo",demo},{"discard",true}});
+    need(c.view()->session.documentId!=previous->session.documentId&&admission.retired==previousRetired+1&&
+      stops==previousStops+1&&admission.completionIdentity&&!admission.registry.departing(),"New/Demo did not adopt once through the shared lease");
+  }
+  std::cout<<"Native departure admission, candidate failure, pumped raw edit, Stop rollback, open, recovery, New and Demo passed\n";
+}
+
+void documentCreationControllerTests(const std::filesystem::path &directory) {
+  bool failView=false;unsigned stops=0;
+  DocumentController c({},"creation",[&]{++stops;},[](const auto &){},[&]{if(failView)throw std::runtime_error("creation staging failure");});
+  const auto original=c.view();
+  const auto samePatterns=[](const DocumentView &a,const DocumentView &b) {
+    if(a.patterns.size()!=b.patterns.size())return false;
+    for(const auto &[index,pattern]:a.patterns) {
+      const auto other=b.patterns.find(index);if(other==b.patterns.end())return false;
+      if(pattern->rows!=other->second->rows||pattern->channels!=other->second->channels||pattern->cells!=other->second->cells)return false;
+    }
+    return true;
+  };
+  const auto reject=[&](const Json &params,int code) {
+    const auto before=c.view();const auto stopped=stops;bool refused=false;
+    try{call(c,"document.new",params);}catch(const Api::ApiError &e){refused=e.code==code;}
+    need(refused&&c.view()==before&&stops==stopped,"Invalid New partially changed song or playback");
+  };
+  reject(Json::object(),-32602);reject({{"expectedRevision","stale"}},-32001);
+  for(const auto &extra:std::vector<Json>{{{"demo",1}},{{"demo","false"}},{{"discard",1}},{{"unknown",true}},{{"dryRun",true}},{{"path",""}}}) {
+    auto params=extra;params["expectedRevision"]=c.view()->session.revision;reject(params,-32602);
+  }
+  const auto library=call(c,"plugin.discover",{{"format","Built-in"}});invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
+  need(c.view()->dirty&&!c.view()->session.document.at("nativePlugins").empty(),"Creation preservation fixture lacks dirty plugin state");
+  reject({{"expectedRevision",c.view()->session.revision}},-32602);
+  const auto dirty=c.view();const auto beforeStops=stops;failView=true;bool refused=false;
+  try{invoke(c,"document.new",{{"discard",true}});}catch(const std::runtime_error &){refused=true;}failView=false;
+  need(refused&&c.view()==dirty&&stops==beforeStops,"Failed New preparation lost dirty plugin state");
+  invoke(c,"document.new",{{"discard",true}});
+  const auto blank=c.view();Tracker::Document sharedBlank;
+  need(blank->session.documentId!=original->session.documentId&&blank->session.document.at("title")=="Untitled"&&
+    blank->channels==sharedBlank.song().GetNumChannels()&&blank->path.empty()&&!blank->dirty&&blank->patterns.size()==1&&
+    blank->patterns.at(0)->rows==64&&blank->session.document.at("nativePlugins").empty()&&
+    blank->session.document.at("canUndo")==false&&blank->session.document.at("canRedo")==false,
+    "New did not use shared blank defaults or reset its independent identity/history/path/plugins");
+  for(const auto &cell:blank->patterns.at(0)->cells)for(const auto &field:cell)need(field==0,"Blank song contains a musical cell");
+  const auto path=directory/"created-blank.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()}});invoke(c,"document.open",{{"path",path.generic_string()}});
+  need(samePatterns(*c.view(),*blank)&&c.view()->session.document.at("tracks")==blank->session.document.at("tracks"),
+    "Blank save/reopen changed cells or stable track identities");
+  invoke(c,"document.new",{{"demo",true}});const auto demo=c.view();
+  need(samePatterns(*demo,*original)&&demo->session.document.at("samples")==original->session.document.at("samples")&&
+    demo->session.document.at("canUndo")==false&&demo->session.document.at("canRedo")==false&&demo->path.empty(),
+    "Open Demo diverged from the shared demo or retained another song's history/path");
+  const auto take=invoke(c,"recording.start",{{"channels",{0}},{"instrument",1}}).at("take");
+  reject({{"expectedRevision",c.view()->session.revision},{"demo",false},{"discard",true}},-32602);
+  invoke(c,"recording.discard",{{"take",take}});
+  std::cout<<"New/Demo validation, shared defaults, plugin preservation, staging failure, history, save/reopen and retained take passed\n";
 }

@@ -91,6 +91,7 @@
             {pluginSavePreset,L"Plugins / Save sound preset",L""},{pluginLoadPreset,L"Plugins / Load sound preset",L""},
             {pluginBrowse,L"Plugins / Browse library, favorites and categories",L""},
             {pluginReconnect,L"Plugins / Reconnect a Windows VST3 location",L""},{graphReconnect,L"Graph / Reconnect the selected Windows VST3 node",L""},
+            {newDocumentCommand,L"File / New song",L"Ctrl+N"},{openDemoCommand,L"File / Open demo song",L""},
             {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {recoveryCommand,L"File / Recover a song",L""},

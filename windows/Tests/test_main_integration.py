@@ -15,6 +15,49 @@ class MainIntegrationTests(unittest.TestCase):
     add_gain = support.GraphMixerAppTests.add_gain
     control = support.GraphMixerAppTests.control
 
+    def test_new_and_demo_identity_validation_replay_and_save_reopen(self):
+        catalog = self.read('api.describe')
+        self.assertIn('document.new', catalog['writes'])
+        self.assertEqual(catalog['revisionGuards']['document.new'], ['expectedRevision'])
+        original = self.doc()
+        for params in ({}, {'expectedRevision': 'stale'},
+                       {'expectedRevision': original['revision'], 'demo': 1},
+                       {'expectedRevision': original['revision'], 'discard': 'true'},
+                       {'expectedRevision': original['revision'], 'path': ''}):
+            with self.assertRaises(ApiError):
+                self.client.call('document.new', params)
+            self.assertEqual(self.doc(), original)
+        self.add_gain()
+        dirty = self.doc()
+        with self.assertRaises(ApiError):
+            self.write('document.new')
+        self.assertEqual(self.doc(), dirty)
+        params = {'expectedRevision': dirty['revision'], 'discard': True}
+        result = self.client.call('document.new', params, request_id='create-blank-once')
+        blank = self.doc()
+        self.assertEqual(self.client.call('document.new', params, request_id='create-blank-once'), result)
+        self.assertEqual(self.doc(), blank)
+        self.assertNotEqual(blank['documentId'], original['documentId'])
+        self.assertEqual(blank['data']['title'], 'Untitled')
+        self.assertEqual(blank['data']['nativePlugins'], [])
+        self.assertFalse(blank['data']['canUndo'])
+        self.assertFalse(blank['data']['canRedo'])
+        path = self.folder / 'new-from-pipe.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        for key in ('patterns', 'tracks', 'samples', 'nativePlugins', 'orders'):
+            self.assertEqual(self.doc()['data'][key], blank['data'][key])
+        # Both native actions use the same guarded operation as the pipe.
+        window = self.desktop.hwnd(self.pid)
+        self.desktop.send(window, 0x111, 625)
+        demo = self.doc()
+        for key in ('patterns', 'samples', 'orders'):
+            self.assertEqual(demo['data'][key], original['data'][key])
+        self.assertFalse(demo['data']['canUndo'])
+        self.desktop.send(window, 0x111, 624)
+        self.assertNotEqual(self.doc()['documentId'], demo['documentId'])
+        self.assertEqual(self.doc()['data']['title'], 'Untitled')
+
     def test_direct_selection_render_has_one_history_entry_and_exact_reopen(self):
         for command, instrument in [(578, False), (579, True)]:
             before = self.doc()

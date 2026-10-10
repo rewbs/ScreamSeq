@@ -584,3 +584,43 @@ legacy/invalid layouts, mouse-capture and departure guards. The already-schedule
 Run these with the existing saved-layout, workspace and shortcut tests at the
 next consolidated build. Only source review, diff checks and Python parsing are
 claimed here; compilation, foreground DPI and rendered legibility remain pending.
+
+## New and Open Demo — prepared after checkpoint 02
+
+Commands 624/625 expose New song and Open demo song in the native File command
+catalogue. Ctrl+N is a newly introduced default, using the existing shortcut
+migration rule so a saved custom binding keeps priority. Native New/Demo call
+the existing unsaved-song/take guard, capture the revision, review raw drafts,
+then invoke the same worker operation as the API. Cancellation returns before
+generic focus reset. Success focuses the pattern after adoption.
+
+`document.new {expectedRevision, demo?, discard?}` is a native Windows extension,
+advertised only by hosts listing it in additional writes. The schema and guide
+are in `windows/Api/`. It constructs `Tracker::Document` or `Document::demo()`
+exactly as Mac New/Demo do, creates fresh `ProjectState`, and passes through
+`DocumentController::installCandidate`: full view/assets/plugins/recorder staging,
+late native draft admission, Stop, one adoption, owner retirement and refresh.
+No parallel replacement lifecycle or musical constructor was introduced. The
+response is allocated before adoption. Document/revision identity is fresh;
+history and path are empty. Retained MIDI or microphone takes reject replacement,
+and `discard:true` cannot authorize raw native draft loss. Consent is cleared on
+completion or failure. Existing post-adoption refresh recovery and request replay
+prevent treating an uncertain result as permission to replace the song again.
+
+Prepared controller checks extend `document-controller-departure`: New/Demo
+admission and Stop rollback, malformed/missing/stale input, dirty plugin-state
+preservation, candidate failure before Stop, shared blank/demo contents, fresh
+identity/history, stable-ID save/reopen and retained MIDI refusal. Workspace
+departure checks add both native commands, raw-draft cancel/focus, late edits,
+failed Stop, retirement, MIDI retention and Ctrl+N preference migration. The
+actual-PID `MainIntegrationTests.test_new_and_demo_identity_validation_replay_and_save_reopen`
+is explicitly selected in Windows CI and checks catalogue, parameter rejection,
+song-discard guard, exact replay, native commands and persistence.
+
+No build or test execution is claimed for this slice. Batch it with the pending
+chooser, density controls and build refactor. Run API/cache, worker/native
+departure, recording/recovery, shortcut and actual-PID creation cases. Existing
+recording and microphone guard suites remain necessary; synthetic native checks
+do not establish physical capture/device behavior. Mac source and project wire
+format are unchanged; its pending earlier shared-code gate is still required.
+P3c title/channel controls and retained load report remain outstanding.

@@ -87,6 +87,7 @@ constexpr int patternToolsCommand=591;
 constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumentPreviousCommand=594,inputInstrumentNextCommand=595,inputInstrumentAtCursorCommand=596;
 constexpr int effectPickerCommand=597;
 constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
+constexpr int newDocumentCommand=624,openDemoCommand=625;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -538,7 +539,7 @@ public:
     }
     bool supportsDocumentOperations() const override {return true;}
     std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::TrackOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::TrackOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"document.new","transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::TrackOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         guardDepartureOperation(method);
@@ -550,7 +551,7 @@ public:
     ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
         guardDepartureOperation(method);
         if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
-        struct ClearConsent {Application &app;bool open;~ClearConsent(){if(open)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"};
+        struct ClearConsent {Application &app;bool replacing;~ClearConsent(){if(replacing)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"||method=="document.new"};
         ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
         try {

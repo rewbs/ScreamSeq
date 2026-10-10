@@ -268,6 +268,16 @@
         if(view->session.revision!=revision) throw ScreamSeq::Api::ApiError(-32001,"Document changed during the prompt; review changes again");
         return choice==IDNO || saveFile();
     }
+    void newFile(bool demo=false) {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectUnsaved())return;
+        const auto revision=view->session.revision;
+        if(!reviewNativeDeparture())return;
+        documentOperation("document.new",{{"expectedRevision",revision},{"demo",demo},{"discard",true}});
+        command(focusPatternCommand);
+        status=demo?L"Opened demo song":L"New song / save as a ScreamSeq project";
+    }
     void openFile() {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake()) return;
