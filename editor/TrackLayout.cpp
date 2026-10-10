@@ -1,4 +1,6 @@
 #include "TrackLayout.hpp"
+#include "soundlib/mod_specifications.h"
+#include <algorithm>
 #include <set>
 #include <stdexcept>
 namespace Tracker {

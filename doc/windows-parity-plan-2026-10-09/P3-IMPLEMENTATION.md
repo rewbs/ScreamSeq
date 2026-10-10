@@ -225,3 +225,27 @@ shim is no longer applied to that native audited target. This is a configuration
 repair within the same grouped checkpoint, not evidence of a successful build.
 The failed log/receipt remain under bin/parity-evidence/integration-build-01.log
 and integration-checkpoint-01.json; compilation, runtime and Mac gates remain open.
+
+## Grouped compilation checkpoint 01b — failed, correction batched
+
+The first actual compilation of the integrated P1–P3 candidate
+`c96bec8dbd00932bc89fdf9a27b6467d4502cf1b` ran on Windows ARM64 from
+2026-10-10 02:28:01 to 02:28:34 UTC. Configuration succeeded. Compilation stopped
+in `editor/TrackLayout.cpp`: both accesses to
+`song.GetModSpecifications().channelsMax` require the complete
+`OpenMPT::CModSpecifications` definition, which `Sndfile.h` only forward declares.
+The accompanying `std::min` diagnostics follow from that incomplete type.
+
+The source correction explicitly includes `soundlib/mod_specifications.h` and
+`<algorithm>` in the shared implementation. No behavior or assertion changes.
+It remains uncompiled. No immediate build retry or test execution was started;
+the next normal local build is no earlier than **2026-10-10 03:28:34 UTC**
+(20:28:34 Pacific on 9 October), after batching further source work.
+
+The frozen integration checkout retains `bin/parity-evidence/integration-checkpoint-01b.json`
+and `integration-build-01b.log`; log SHA-256 is
+`f3bb7ee6203d112e111bc9de5d37f143890fa98654697bf587ac54a69f17ce9c`.
+Source hashes remained unchanged across compilation. Existing executable hashes
+in that failed-build receipt do not establish new app binaries: the shared library
+failed before the app could link. Do not run those stale binaries as P2/P3 evidence.
+All grouped native/application and cross-platform qualification gates remain open.
