@@ -248,3 +248,11 @@ checkpoint must include the changed grid/context-menu/docking/shortcut and graph
 lane scenarios, plus both native ownership targets. Native create/group forms,
 their captured target/count/name/output drafts and runtime/fixture qualification
 are still outstanding. P1 checkpoint 02 continues to use frozen `a320bd9da`.
+
+The existing `workspace-command-result-tests` fixture also gains a real track
+write whose native completion fails after a newer cursor move. It requires the
+original receipt to survive, a second toggle to reject, Review to preserve the
+new cursor without resending, and one Undo to restore mute. Its unknown-outcome
+matrix now includes track mute: readback observes the current layout, a revision
+change during acknowledgement retains review, and final acknowledgement cannot
+claim verified success. These additions are likewise unexecuted.
