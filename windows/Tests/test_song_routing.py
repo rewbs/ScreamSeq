@@ -136,7 +136,7 @@ class SongRoutingTests(unittest.TestCase):
         # original sockets restore the exact implicit input in one operation.
         self.choose_wire(lambda a:a.get('kind')=='insert' and a.get('plugin')==plugin)
         handle=self.edges()[self.local()['wire']]['targetHandle'];mouse(0x201,handle);mouse(0x202,handle);key(8)
-        self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.assertEqual(self.bus(first)['inserts'],[plugin])
+        self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs'],self.local());self.assertEqual(self.bus(first)['inserts'],[plugin])
         self.assertFalse(any(e['action'].get('kind')=='insert' and e['action'].get('plugin')==plugin for e in self.edges()))
         drag(socket(first,True),socket('plugin:'+plugin,False));self.assertNotIn(plugin,self.read('mixer.get')['disconnectedMainInputs'])
         self.write('history.undo',domain='all');self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.write('history.redo',domain='all')
