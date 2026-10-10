@@ -1037,10 +1037,12 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
 		}
 		case WM_DRAWITEM: app->drawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lp));return TRUE;
+        case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:{
+            const BOOL dark=!ScreamSeq::NativeControls::highContrast();DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+            ScreamSeq::NativeControls::refreshTheme(window,message,wp,lp);app->frameRequested=true;break;}
         case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT *>(lp)->itemHeight=unsigned(22*GetDpiForWindow(window)/96);return TRUE;
         case WM_CTLCOLORLISTBOX:case WM_CTLCOLOREDIT:case WM_CTLCOLORSTATIC:
-            SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
-            SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+            return ScreamSeq::NativeControls::controlColor(reinterpret_cast<HDC>(wp),reinterpret_cast<HWND>(lp),ScreamSeq::NativeControls::Surface::main);
         case WM_COMMAND:
             if(LOWORD(wp)==9800||LOWORD(wp)==9801){if(HIWORD(wp)==EN_CHANGE)app->patternNudgeFieldChanged();return 0;}
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
@@ -1198,7 +1200,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			work.left + 40, work.top + 40, (work.right - work.left) * 9 / 10, (work.bottom - work.top) * 9 / 10,
 			nullptr, nullptr, instance, &app);
 		if(!window) throw std::runtime_error("Cannot create native window");
-        const BOOL darkFrame=TRUE;DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
+        const BOOL darkFrame=!ScreamSeq::NativeControls::highContrast();DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
 		app.surface = std::make_unique<ScreamSeq::RenderSurface>(window);
 		app.installControls();
         std::optional<std::filesystem::path> recoveryDirectory;

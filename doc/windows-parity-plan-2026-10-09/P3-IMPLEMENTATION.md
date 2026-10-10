@@ -833,3 +833,49 @@ other reviewed changes for that checkpoint. Reuse the linked app evidence only
 for its exact source; the manifest changes invalidate executable/UI evidence
 for the next candidate. Preserve every pending native, actual-pipe, x64, Mac and
 reciprocal integration gate, with no relaxed assertions.
+
+## Shared Windows control appearance — prepared during checkpoint 03 cooldown
+
+Observed source gap: `NativeControls::comboItem` and `NativeReportList` honored
+high contrast, but Main's and `NativeToolWindow`'s field colors were unconditional
+dark RGB values. Main and retained owners also duplicated button rendering;
+retained actions lacked pressed feedback. The common native button renderer now
+uses normal, pressed, hover, disabled and retained-active state. Existing
+`NativeControls::active` page state becomes visible through this renderer.
+Windows focus-cue suppression is respected, DPI controls content/focus insets,
+and drawing restores its DC state. Main's single-line native lists use the same
+system selection/text roles in high contrast. Native controls still own input,
+accessible native semantics, selection, type-ahead and click dispatch.
+
+`NativeControls.hpp` owns the semantic field/action palette and drawing helpers;
+`WorkspaceView.inc` and `NativeToolWindow.hpp` consume them. Top-level appearance
+messages now reach registered native controls and nested retained owners on the
+same UI thread. A forwarding guard prevents recursive enumeration. Unregistered
+vendor children are not explicitly sent appearance messages. These paths repaint
+without rebuilding layout, loading data or moving focus. Main and native tool
+frames request normal system chrome when high contrast is active, both on
+creation and on a subsequent appearance message. No system preference is changed.
+
+Prepared native-control checks cover normal/pressed/hover/active/disabled colors,
+visible and suppressed keyboard focus, system list/field roles and DC isolation.
+The system-color branch is selected explicitly within a drawing fixture; this
+does not constitute foreground high-contrast evidence. The retained native-tool
+fixture sends appearance notifications through nested docked owners and requires
+unchanged raw text, caret, selection, Undo, focus, layout count and input release
+count. Existing theme/list/geometry assertions remain intact.
+
+No build or test was run for this slice. Batch its validation with the activation
+manifest and checkpoint 03 fixture fixes: Windows app/workspace, native-control,
+native-tool, graph-curve/workflow, precise-note, short instrument dock, parameter
+automation, mixer, arrangement/matrix, recording/recovery and palette harnesses;
+then existing actual-pipe focus/draft/departure checks. This shared native-control
+change warrants the broader retained-UI gate on both Windows architectures.
+Failure broadens inspection of the relevant message/layout path, not tolerances.
+Mac/shared musical code and storage are unchanged; retain the outstanding Mac
+and reciprocal gates without an extra Mac build just for these Windows helpers.
+
+Still open: custom canvas color semantics, rich formula text, specialized
+multi-column/multi-line owner-drawn lists, the accessibility root and virtual
+canvas elements, actual Narrator/keyboard-layout checks and foreground mixed-DPI
+captures. This is a common-control foundation, not a claim that P3a or application
+accessibility is complete.

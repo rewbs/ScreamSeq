@@ -88,6 +88,44 @@ struct Bitmap {
     std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char *>(&file),sizeof(file));out.write(reinterpret_cast<const char *>(&info),sizeof(info));out.write(static_cast<const char *>(pixels),width*height*4);require(bool(out),"Write selector evidence");
   }
 };
+void nativeControlAppearance(HWND parent,HFONT font){
+  using namespace ScreamSeq::NativeControls;
+  FixtureResources button;
+  button.window=CreateWindowW(L"BUTTON",L"Apply",WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,180,36,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+  require(button.window,"Create appearance fixture button");ScreamSeq::Tests::ownGuiWindow(button.window);
+  install(button.window);SendMessageW(button.window,WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);
+  Bitmap bitmap(180,36);DRAWITEMSTRUCT draw{};draw.CtlType=ODT_BUTTON;draw.hwndItem=button.window;draw.hDC=bitmap.dc;draw.rcItem={0,0,180,36};
+  SetTextColor(bitmap.dc,RGB(1,2,3));SetBkColor(bitmap.dc,RGB(4,5,6));SetBkMode(bitmap.dc,OPAQUE);
+  const auto originalFont=GetCurrentObject(bitmap.dc,OBJ_FONT);
+  buttonItem(draw,Surface::inspector,false,false);require(bitmap.at(10,6)==RGB(35,49,63),"Inspector action lost its normal surface");
+  draw.itemState=ODS_SELECTED;buttonItem(draw,Surface::inspector,false,false);require(bitmap.at(10,6)==RGB(66,80,94),"Pressed inspector action has no feedback");
+  draw.itemState=0;state(button.window)->hot=true;buttonItem(draw,Surface::main,false,false);
+  require(bitmap.at(10,6)==RGB(51,65,79),"Hot native action has no feedback");
+  SendMessageW(button.window,WM_MOUSELEAVE,0,0);require(!state(button.window)->hot,"Mouse leave retained a hot button");
+  active(button.window,true);buttonItem(draw,Surface::inspector,false,false);
+  require(bitmap.at(10,6)==RGB(46,67,77),"Native retained page selection is invisible");
+  buttonItem(draw,Surface::main,false,true);require(bitmap.at(10,6)==GetSysColor(COLOR_HIGHLIGHT),"High-contrast active action ignores system selection");
+  draw.itemState=ODS_DISABLED|ODS_SELECTED;buttonItem(draw,Surface::main,true,true);
+  require(bitmap.at(10,6)==GetSysColor(COLOR_BTNFACE),"Disabled high-contrast action still looks active");
+  active(button.window,false);draw.itemState=ODS_FOCUS|ODS_NOFOCUSRECT;buttonItem(draw,Surface::main,false,false);GdiFlush();
+  const auto pixels=[&]{GdiFlush();const auto bytes=static_cast<unsigned char *>(bitmap.pixels);return std::vector<unsigned char>(bytes,bytes+bitmap.width*bitmap.height*4);};
+  const auto hiddenFocus=pixels();draw.itemState=0;buttonItem(draw,Surface::main,false,false);
+  require(pixels()==hiddenFocus,"Suppressed native focus cue is still drawn");
+  draw.itemState=ODS_FOCUS;buttonItem(draw,Surface::main,false,false);
+  require(pixels()!=hiddenFocus,"Keyboard focus cue is absent");
+  require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE&&GetCurrentObject(bitmap.dc,OBJ_FONT)==originalFont,"Native button draw leaked DC state");
+  draw.CtlType=ODT_LISTBOX;draw.itemState=ODS_SELECTED;listItem(draw,L"Selected list item",true);
+  require(bitmap.at(10,3)==GetSysColor(COLOR_HIGHLIGHT),"High-contrast list selection ignores system colors");
+  draw.itemState=0;listItem(draw,L"Unselected list item",true);require(bitmap.at(10,3)==GetSysColor(COLOR_WINDOW),"High-contrast list background ignores system colors");
+  require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE,"Native list draw leaked DC state");
+  const auto brush=controlColor(bitmap.dc,button.window,Surface::main,true);
+  require(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&GetTextColor(bitmap.dc)==GetSysColor(COLOR_WINDOWTEXT)&&GetBkColor(bitmap.dc)==GetSysColor(COLOR_WINDOW),"Native field ignores system text/background roles");
+  EnableWindow(button.window,FALSE);controlColor(bitmap.dc,button.window,Surface::inspector,true);
+  require(GetTextColor(bitmap.dc)==GetSysColor(COLOR_GRAYTEXT),"Disabled native field ignores system disabled text");
+  // This explicitly selects the system-color rendering branch without changing
+  // the musician's OS theme. Foreground high-contrast qualification is separate.
+  std::cout<<"Native appearance: pressed/hot/active/disabled, focus cues, system colors and DC isolation\n";
+}
 void reportDrawing(HWND parent,HFONT font){
   using namespace ScreamSeq::NativeReportList;
   INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};require(InitCommonControlsEx(&common),"Initialize native report");
@@ -210,7 +248,7 @@ int main(int argc,char **argv){
     const auto before=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int i=0;i<200;++i){InvalidateRect(combo,nullptr,FALSE);UpdateWindow(combo);}
     require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==before,"Paint leaks GDI resources");
-    reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();
+    nativeControlAppearance(parent,font);reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();
     const auto reportResources=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int cycle=0;cycle<2;++cycle){
       reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();

@@ -40,7 +40,7 @@ inline WPARAM physicalMusicalKey(WPARAM key){
 // Modeless native editor shell. Repaint is requested by edits and window events;
 // a hidden or unchanged tool has no running presentation timer.
 class NativeToolWindow {
-  inline static constexpr wchar_t toolProperty_[]=L"ScreamSeq.NativeToolWindow";
+  inline static constexpr auto toolProperty_=NativeControls::appearanceOwnerProperty;
   DocumentDraftRegistry::Registration draftRegistration_;
   bool retired_=false;
   std::optional<Tracker::DocumentDraft> parentDraftIdentity_;
@@ -267,9 +267,7 @@ protected:
   virtual bool wheel(UINT,float,float,WPARAM){return false;}
   virtual void timer(UINT_PTR){}
   virtual void error(const std::exception &e){status_=wide(e.what());requestPaint();}
-  virtual void drawControl(const DRAWITEMSTRUCT &d){NativeControls::recordDraw(d.hwndItem);if(d.CtlType==ODT_COMBOBOX){NativeControls::comboItem(d);return;}RECT r=d.rcItem;const bool disabled=(d.itemState&ODS_DISABLED)!=0;SetDCBrushColor(d.hDC,RGB(35,49,63));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?RGB(103,119,133):RGB(218,232,241));SelectObject(d.hDC,font_);std::wstring text;
-    if(d.CtlType==ODT_COMBOBOX){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,CB_GETLBTEXTLEN,d.itemID,0);if(length>=0){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));text.resize(size_t(length));}}}else {text.resize(size_t(GetWindowTextLengthW(d.hwndItem))+1);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));}
-    r.left+=7;r.right-=5;DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|(d.CtlType==ODT_BUTTON?DT_CENTER:DT_LEFT));if(d.itemState&ODS_FOCUS){r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}}
+  virtual void drawControl(const DRAWITEMSTRUCT &d){NativeControls::recordDraw(d.hwndItem);if(d.CtlType==ODT_COMBOBOX){NativeControls::comboItem(d);return;}if(d.CtlType==ODT_BUTTON)NativeControls::buttonItem(d,NativeControls::Surface::inspector);}
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
     auto &self=*reinterpret_cast<NativeToolWindow *>(context);
     if(self.retired_&&m!=WM_NCDESTROY&&m!=WM_DESTROY)return 0;
@@ -323,6 +321,9 @@ protected:
       case WM_SIZE:self->rememberFloatingBounds();self->layoutAll();return 0;
       case WM_DPICHANGED:{if(!self->docked()){auto r=reinterpret_cast<RECT *>(l);SetWindowPos(h,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);}self->layoutAll();return 0;}
       case WM_DPICHANGED_AFTERPARENT:self->layoutAll();return 0;
+      case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:{
+        const BOOL dark=!NativeControls::highContrast();DwmSetWindowAttribute(h,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+        NativeControls::refreshTheme(h,m,w,l);self->requestPaint();break;}
       case WM_GETMINMAXINFO:{if(self->docked())break;const auto dpi=GetDpiForWindow(h);const auto scale=dpi/96.0f;auto &minimum=reinterpret_cast<MINMAXINFO *>(l)->ptMinTrackSize;minimum={LONG(self->minimumWidth_*scale),LONG(self->minimumHeight_*scale)};
         if(self->minimumClientWidth_>0&&self->minimumClientHeight_>0){RECT r{0,0,LONG(std::ceil(self->minimumClientWidth_*scale)),LONG(std::ceil(self->minimumClientHeight_*scale))};if(AdjustWindowRectExForDpi(&r,DWORD(GetWindowLongPtrW(h,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(h,GWL_EXSTYLE)),dpi))minimum={r.right-r.left,r.bottom-r.top};}return 0;}
       case WM_ERASEBKGND:return 1;
@@ -332,7 +333,7 @@ protected:
       case WM_HSCROLL:case WM_VSCROLL:if(self->ready_&&self->controlScroll(m,w,reinterpret_cast<HWND>(l)))return 0;break;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
-      case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+      case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:return NativeControls::controlColor(reinterpret_cast<HDC>(w),reinterpret_cast<HWND>(l),NativeControls::Surface::inspector);
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->workspaceShortcut(w,(l&(1LL<<30))!=0,true)||(self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0))||self->workspaceShortcut(w,(l&(1LL<<30))!=0,false))return 0;break;
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
@@ -348,7 +349,7 @@ protected:
   explicit NativeToolWindow(HWND owner):owner_(owner){
     if(auto *parent=presentationTool(owner))parentDraftIdentity_=parent->documentDraft();
   }
-  void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}
+  void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=!NativeControls::highContrast();DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}
   void finish(){
     if(!SetPropW(window_,toolProperty_,reinterpret_cast<HANDLE>(this)))throw std::system_error(GetLastError(),std::system_category(),"Identify native tool window");
     rememberFloatingBounds();ready_=true;layoutAll();

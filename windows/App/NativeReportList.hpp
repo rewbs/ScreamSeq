@@ -25,7 +25,7 @@ struct SavedDC {
   explicit SavedDC(HDC value):dc(value),saved(SaveDC(value)){}
   ~SavedDC(){if(saved)RestoreDC(dc,saved);}
 };
-inline bool themeMessage(UINT message){return message==WM_SETTINGCHANGE||message==WM_THEMECHANGED||message==WM_SYSCOLORCHANGE;}
+inline bool themeMessage(UINT message){return NativeControls::themeMessage(message);}
 inline void refresh(HWND list){
   const auto colors=palette(NativeControls::highContrast());
   if(ListView_GetBkColor(list)!=colors.background)ListView_SetBkColor(list,colors.background);

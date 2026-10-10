@@ -496,23 +496,13 @@
 	void drawButton(const DRAWITEMSTRUCT &d) {
         ScreamSeq::NativeControls::recordDraw(d.hwndItem);
         if(d.CtlType==ODT_COMBOBOX){ScreamSeq::NativeControls::comboItem(d);return;}
-		if(d.CtlType==ODT_LISTBOX || d.CtlType==ODT_COMBOBOX) {
-            const bool list=d.CtlType==ODT_LISTBOX;std::wstring label;
+		if(d.CtlType==ODT_LISTBOX) {
+            std::wstring label;
             if(d.itemID!=UINT(-1)) {
-                auto length=SendMessageW(d.hwndItem,list?LB_GETTEXTLEN:CB_GETLBTEXTLEN,d.itemID,0);
-                if(length>=0 && length<4096) {label.resize(size_t(length)+1);SendMessageW(d.hwndItem,list?LB_GETTEXT:CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(label.data()));label.resize(size_t(length));}
+                auto length=SendMessageW(d.hwndItem,LB_GETTEXTLEN,d.itemID,0);
+                if(length>=0 && length<4096) {label.resize(size_t(length)+1);SendMessageW(d.hwndItem,LB_GETTEXT,d.itemID,reinterpret_cast<LPARAM>(label.data()));label.resize(size_t(length));}
             }
-            const bool selected=(d.itemState&ODS_SELECTED)!=0;
-            SetDCBrushColor(d.hDC,selected?RGB(43,73,80):RGB(22,31,41));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-            SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,selected?RGB(164,240,221):RGB(199,214,227));
-            auto old=SelectObject(d.hDC,controlFont);auto r=d.rcItem;r.left+=7;r.right-=5;
-            DrawTextW(d.hDC,label.c_str(),int(label.size()),&r,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
-            SelectObject(d.hDC,old);if(d.itemState&ODS_FOCUS) {InflateRect(&r,-1,-1);DrawFocusRect(d.hDC,&r);}return;
+            ScreamSeq::NativeControls::listItem(d,label);return;
         }
-		wchar_t text[128]{};GetWindowTextW(d.hwndItem,text,128);
-		bool active=controlActive(d.CtlID);
-		SetDCBrushColor(d.hDC,(d.itemState&ODS_SELECTED) ? RGB(66,80,94) : active ? RGB(46,67,77) : RGB(42,51,63));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-		SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,(d.itemState&ODS_DISABLED) ? RGB(111,126,140) : active ? RGB(125,228,206) : RGB(215,225,235));auto old=SelectObject(d.hDC,controlFont);
-		RECT r=d.rcItem;r.left+=6;r.right-=6;DrawTextW(d.hDC,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);SelectObject(d.hDC,old);
-		if(d.itemState&ODS_FOCUS) {InflateRect(&r,-2,-2);DrawFocusRect(d.hDC,&r);}
+        if(d.CtlType==ODT_BUTTON)ScreamSeq::NativeControls::buttonItem(d,ScreamSeq::NativeControls::Surface::main,controlActive(d.CtlID));
 	}

@@ -4,6 +4,7 @@
 #include <commctrl.h>
 #include <algorithm>
 #include <array>
+#include <cwchar>
 #include <string>
 #include <string_view>
 
@@ -12,21 +13,90 @@ namespace ScreamSeq::NativeControls {
 // actual window height is its closed height, not the requested dropdown height.
 struct State {
   std::array<int,4> bounds{};
-  bool placed=false,active=false,combo=false,edit=false,inspect=false,contrast=false;
+  bool placed=false,active=false,combo=false,edit=false,button=false,hot=false,inspect=false,contrast=false;
 };
 inline constexpr UINT_PTR subclassID=0x534351;
 inline constexpr wchar_t inspectionProperty[]=L"ScreamSeq.ControlInspection";
+inline constexpr wchar_t appearanceOwnerProperty[]=L"ScreamSeq.NativeToolWindow";
 inline LRESULT CALLBACK procedure(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
 inline State *state(HWND h){DWORD_PTR data=0;return GetWindowSubclass(h,procedure,subclassID,&data)?reinterpret_cast<State *>(data):nullptr;}
 inline void count(HWND h,const wchar_t *name){if(GetPropW(h,inspectionProperty))SetPropW(h,name,reinterpret_cast<HANDLE>(reinterpret_cast<UINT_PTR>(GetPropW(h,name))+1));}
 inline void recordDraw(HWND h){count(h,L"ScreamSeq.DrawCount");}
 inline bool highContrast(){HIGHCONTRASTW value{sizeof(value)};return SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(value),&value,0)&&(value.dwFlags&HCF_HIGHCONTRASTON);}
+inline bool themeMessage(UINT message){return message==WM_SETTINGCHANGE||message==WM_THEMECHANGED||message==WM_SYSCOLORCHANGE;}
+enum class Surface {main,inspector};
+struct ControlColors {COLORREF background,text,disabled,button,pressed,hot,active,activeText;};
+inline ControlColors colors(Surface surface,bool contrast) {
+  if(contrast)return {GetSysColor(COLOR_WINDOW),GetSysColor(COLOR_WINDOWTEXT),GetSysColor(COLOR_GRAYTEXT),
+    GetSysColor(COLOR_BTNFACE),GetSysColor(COLOR_BTNFACE),GetSysColor(COLOR_BTNFACE),
+    GetSysColor(COLOR_HIGHLIGHT),GetSysColor(COLOR_HIGHLIGHTTEXT)};
+  return {surface==Surface::main?RGB(22,31,41):RGB(24,34,45),
+    surface==Surface::main?RGB(212,224,235):RGB(218,232,241),RGB(111,126,140),
+    surface==Surface::main?RGB(42,51,63):RGB(35,49,63),RGB(66,80,94),RGB(51,65,79),
+    RGB(46,67,77),RGB(125,228,206)};
+}
+inline LRESULT controlColor(HDC dc,HWND control,Surface surface,bool contrast=highContrast()) {
+  const auto palette=colors(surface,contrast);
+  SetTextColor(dc,IsWindowEnabled(control)?palette.text:palette.disabled);
+  SetBkColor(dc,palette.background);SetDCBrushColor(dc,palette.background);
+  return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+}
+// Broadcasts reach top-level windows, not every retained child. Forward only
+// appearance notifications to owned descendants; never reload data or focus.
+inline void refreshTheme(HWND owner,UINT message,WPARAM w,LPARAM l) {
+  static thread_local bool forwarding=false;
+  if(forwarding)return;
+  forwarding=true;struct Guard{bool &flag;~Guard(){flag=false;}} guard{forwarding};
+  struct Change{UINT message;WPARAM w;LPARAM l;} change{message,w,l};
+  EnumChildWindows(owner,[](HWND child,LPARAM context)->BOOL{
+    DWORD process=0;
+    if(GetWindowThreadProcessId(child,&process)!=GetCurrentThreadId()||process!=GetCurrentProcessId())return TRUE;
+    if(!state(child)&&!GetPropW(child,appearanceOwnerProperty))return TRUE;
+    const auto &change=*reinterpret_cast<const Change *>(context);
+    SendMessageW(child,change.message,change.w,change.l);return TRUE;
+  },reinterpret_cast<LPARAM>(&change));
+  RedrawWindow(owner,nullptr,nullptr,RDW_INVALIDATE|RDW_FRAME|RDW_ALLCHILDREN);
+}
 inline std::wstring itemText(HWND h,UINT item){
   if(item==UINT(-1))return {};
   auto length=SendMessageW(h,CB_GETLBTEXTLEN,item,0);if(length<0)return {};
   std::wstring text(size_t(length)+1,0);SendMessageW(h,CB_GETLBTEXT,item,reinterpret_cast<LPARAM>(text.data()));text.resize(size_t(length));return text;
 }
 inline void fill(HDC dc,const RECT &r,COLORREF color){SetDCBrushColor(dc,color);FillRect(dc,&r,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));}
+inline void buttonItem(const DRAWITEMSTRUCT &d,Surface surface,bool active=false,bool contrast=highContrast()) {
+  const int saved=SaveDC(d.hDC);if(!saved)return;const auto palette=colors(surface,contrast);
+  const bool disabled=(d.itemState&ODS_DISABLED)!=0,pressed=!disabled&&(d.itemState&ODS_SELECTED)!=0;
+  const auto retained=state(d.hwndItem);const bool hot=!disabled&&retained&&retained->hot;
+  const bool highlighted=(active||(retained&&retained->active))&&!disabled;
+  fill(d.hDC,d.rcItem,highlighted?palette.active:pressed?palette.pressed:hot?palette.hot:palette.button);
+  auto rect=d.rcItem;
+  if(contrast) {
+    // Use native system button edges and colors. A pressed edge remains visible
+    // even when the user's button-face and highlight colors happen to match.
+    DrawEdge(d.hDC,&rect,pressed?EDGE_SUNKEN:EDGE_RAISED,BF_RECT);
+  }
+  SetBkMode(d.hDC,TRANSPARENT);
+  SetTextColor(d.hDC,disabled?palette.disabled:highlighted?palette.activeText:contrast?GetSysColor(COLOR_BTNTEXT):palette.text);
+  if(const auto font=reinterpret_cast<HFONT>(SendMessageW(d.hwndItem,WM_GETFONT,0,0)))SelectObject(d.hDC,font);
+  const int inset=std::max(1,MulDiv(6,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-inset,-1);
+  if(pressed)OffsetRect(&rect,1,1);
+  std::wstring text(size_t(GetWindowTextLengthW(d.hwndItem))+1,0);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));
+  DrawTextW(d.hDC,text.data(),int(text.size()),&rect,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+  if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)) {
+    rect=d.rcItem;const int focusInset=std::max(2,MulDiv(3,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-focusInset,-focusInset);DrawFocusRect(d.hDC,&rect);
+  }
+  if(saved)RestoreDC(d.hDC,saved);
+}
+inline void listItem(const DRAWITEMSTRUCT &d,std::wstring_view text,bool contrast=highContrast()) {
+  const int saved=SaveDC(d.hDC);if(!saved)return;const bool selected=(d.itemState&ODS_SELECTED)!=0,disabled=(d.itemState&ODS_DISABLED)!=0;
+  fill(d.hDC,d.rcItem,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):selected?RGB(43,73,80):RGB(22,31,41));
+  SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,contrast?GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT):disabled?RGB(111,126,140):selected?RGB(164,240,221):RGB(199,214,227));
+  if(const auto font=reinterpret_cast<HFONT>(SendMessageW(d.hwndItem,WM_GETFONT,0,0)))SelectObject(d.hDC,font);
+  auto rect=d.rcItem;const int inset=std::max(1,MulDiv(7,GetDpiForWindow(d.hwndItem),96));rect.left+=inset;rect.right-=inset;
+  DrawTextW(d.hDC,text.data(),int(text.size()),&rect,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+  if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){InflateRect(&rect,-1,-1);DrawFocusRect(d.hDC,&rect);}
+  if(saved)RestoreDC(d.hDC,saved);
+}
 inline void comboItem(const DRAWITEMSTRUCT &d){
   const int saved=SaveDC(d.hDC);
   const bool contrast=highContrast(),disabled=(d.itemState&ODS_DISABLED)!=0;
@@ -77,7 +147,14 @@ inline LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DW
   // Handle its translated Ctrl+A locally; RichEdit keeps its own implementation.
   // The ordinary EM_SETSEL send remains subject to any active departure lease.
   if(s->edit&&m==WM_CHAR&&w==1){SendMessageW(h,EM_SETSEL,0,-1);return 0;}
-  if(s->combo&&(m==WM_SETTINGCHANGE||m==WM_THEMECHANGED||m==WM_SYSCOLORCHANGE)){s->contrast=highContrast();InvalidateRect(h,nullptr,FALSE);}
+  if(themeMessage(m)){s->contrast=highContrast();InvalidateRect(h,nullptr,FALSE);}
+  if(s->button){
+    if(m==WM_MOUSEMOVE&&!s->hot&&IsWindowEnabled(h)){
+      TRACKMOUSEEVENT tracking{sizeof(tracking),TME_LEAVE,h,0};
+      if(TrackMouseEvent(&tracking)){s->hot=true;InvalidateRect(h,nullptr,FALSE);}
+    }
+    if((m==WM_MOUSELEAVE||m==WM_ENABLE)&&s->hot){s->hot=false;InvalidateRect(h,nullptr,FALSE);}
+  }
   if(s->combo&&!s->contrast){
     if(m==WM_ERASEBKGND)return 1;
     if(m==WM_PRINTCLIENT){paintCombo(h,reinterpret_cast<HDC>(w));return 0;}
@@ -98,7 +175,7 @@ inline LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DW
 inline void install(HWND h,bool inspect=false){
   if(state(h))return;
   wchar_t name[32]{};GetClassNameW(h,name,32);
-  auto *s=new State;s->combo=_wcsicmp(name,L"COMBOBOX")==0&&(GetWindowLongPtrW(h,GWL_STYLE)&3)==CBS_DROPDOWNLIST;s->edit=_wcsicmp(name,L"EDIT")==0;s->inspect=inspect;s->contrast=highContrast();
+  auto *s=new State;s->combo=_wcsicmp(name,L"COMBOBOX")==0&&(GetWindowLongPtrW(h,GWL_STYLE)&3)==CBS_DROPDOWNLIST;s->edit=_wcsicmp(name,L"EDIT")==0;s->button=_wcsicmp(name,L"BUTTON")==0;s->inspect=inspect;s->contrast=highContrast();
   if(!SetWindowSubclass(h,procedure,subclassID,reinterpret_cast<DWORD_PTR>(s))){delete s;return;}
   if(inspect)SetPropW(h,inspectionProperty,reinterpret_cast<HANDLE>(1));
 }
