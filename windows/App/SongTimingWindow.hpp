@@ -199,7 +199,7 @@ public:
     label(grooveLabel,L"Groove / one duration per row, separated by commas");auto weights=add(groove,L"EDIT",L"",ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL);SendMessageW(weights,EM_SETLIMITTEXT,8192,0);
     label(swingLabel,L"Swing / %");edit(swing,L"62.5",128);button(setSwing,L"Set swing");button(straight,L"Straight");
     label(help,L"Groove needs Musical timing. Durations are normalized to keep the beat length. Set swing and Straight edit this draft. Applying changed timing stops playback and creates one Undo.");
-    add(previewLabel,L"EDIT",L"",ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY|WS_VSCROLL);label(statusLabel,L"");button(preview,L"Preview");button(apply,L"Apply");button(reload,L"Reload");button(returnPattern,L"Return to pattern / F6");button(close,L"Close");
+    add(previewLabel,L"EDIT",L"",ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY|WS_VSCROLL);label(statusLabel,L"");button(preview,L"Preview");button(apply,L"Update timing");button(reload,L"Reload");button(returnPattern,L"Return to pattern / F6");button(close,L"Close");
     for(const auto id:{heading,scope,modeLabel,tempoLabel,speedLabel,beatLabel,barLabel,grooveLabel,swingLabel,help,statusLabel})SetWindowLongPtrW(controls_.at(id),GWL_STYLE,GetWindowLongPtrW(controls_.at(id),GWL_STYLE)|SS_NOPREFIX);
     accessibleName(mode,L"Timing mode");accessibleName(tempo,L"Tempo / BPM");accessibleName(speed,L"Ticks per row");
     accessibleName(beat,L"Rows per beat");accessibleName(bar,L"Rows per bar");

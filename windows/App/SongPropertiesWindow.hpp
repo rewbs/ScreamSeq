@@ -89,7 +89,7 @@ private:
     place(acceptState,186,h-46,172,28,completion_.retained());place(returnPattern,w-216,h-46,112,28,!completion_.retained());place(close,w-96,h-46,78,28);
     EnableWindow(controls_.at(captureRevision),!busy&&!completion_.retained());EnableWindow(controls_.at(reloadValues),!busy&&!completion_.retained());
     EnableWindow(controls_.at(apply),!busy&&(completion_.retained()||available(now)));EnableWindow(controls_.at(acceptState),!busy&&observation_.is_object());
-    set(apply,completion_.retained()?L"Review result":L"Apply / Ctrl+Enter");
+    set(apply,completion_.retained()?L"Review result":L"Update song");
     set(channelsLabel,L"Channels / format range "+std::to_wstring(now.at("minimumChannels").get<unsigned>())+L"–"+std::to_wstring(now.at("maximumChannels").get<unsigned>()));
     set(statusLabel,displayedStatus(now));
   }
@@ -113,7 +113,7 @@ public:
     minimumClientWidth_=520;minimumClientHeight_=460;create(L"ScreamSeq.SongProperties",L"Song title and channels",600,490);
     label(heading,L"Song title and channels");label(titleLabel,L"Title");edit(title,L"",200);label(channelsLabel,L"Channels");edit(channels,L"",20);
     label(helpLabel,L"Adding channels appends empty columns to every pattern. Reducing the count removes trailing channels and their music. Apply stops playback; Undo restores changes. Tempo, meter and groove are in Timing.");
-    label(statusLabel,L"");button(captureRevision,L"Use current revision");button(reloadValues,L"Reload values");button(apply,L"Apply / Ctrl+Enter");
+    label(statusLabel,L"");button(captureRevision,L"Use current revision");button(reloadValues,L"Reload values");button(apply,L"Update song");
     button(acceptState,L"Accept observed state");button(returnPattern,L"Pattern / F6");button(close,L"Close");
     for(int id:{heading,titleLabel,channelsLabel,helpLabel,statusLabel})SetWindowLongPtrW(controls_.at(id),GWL_STYLE,GetWindowLongPtrW(controls_.at(id),GWL_STYLE)|SS_NOPREFIX);
     accessibleName(title,L"Song title");accessibleName(channels,L"Channel count");finish();

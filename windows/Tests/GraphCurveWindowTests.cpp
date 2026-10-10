@@ -116,13 +116,24 @@ void bounds(Fixture &f,std::set<int> *available=nullptr){
     }}
   }
 }
+void automaticCurve(Owner &owner){
+  Fixture f(owner.window);f.click(Tool::ramp);require(f.writes.empty(),"Curve button wrote before its edit settled");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);require(f.writes.size()==1&&!f.tool.snapshot().at("dirty").get<bool>(),"Curve edit still requires Apply");
+  f.field(Tool::pointValue,L"35.00");const auto field=f.control(Tool::pointValue);SendMessageW(field,EM_SETSEL,1,4);
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes.size()==2&&f.saved.at("pattern-a")[0].at("value")==.35,"Existing point fields did not save directly");
+  require(GetFocus()==field&&text(field)==L"35.00"&&caret(field)==std::pair<DWORD,DWORD>{1,4},"Automatic curve write lost text/caret/focus");
+  f.field(Tool::pointValue,L"-.");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes.size()==2&&text(field)==L"-."&&IsWindowVisible(f.control(Tool::apply)),"Invalid point was saved/retried or lacks recovery action");
+}
 void minimumPages(Owner &owner){
   Fixture f(owner.window);const auto window=f.tool.window();f.dock(owner.window);std::set<int> reachable;const auto reads=f.reads;
   for(int height:{300,310}){f.tool.dockBounds(0,48,440,float(height));for(int page:{0,1,2}){
-    f.page(page);bounds(f,&reachable);for(int id:{Tool::apply,Tool::preview,Tool::reload,Tool::statusLabel})require(IsWindowVisible(f.control(id)),"A short page hid fixed curve actions/status");
+    f.page(page);bounds(f,&reachable);for(int id:{Tool::preview,Tool::reload,Tool::statusLabel})require(IsWindowVisible(f.control(id)),"A short page hid fixed curve actions/status");
     if(page==0){const auto h=f.tool.snapshot().at("canvas").at("height").get<double>();require(h>=100&&h<=120,"Short curve viewport is not 100–120 DIPs high");}
   }}
-  for(int id=Tool::pattern;id<=Tool::reference;++id)require(reachable.contains(id),"An original curve action is unreachable across short pages");
+  require(!IsWindowVisible(f.control(Tool::apply)),"Clean curve still requires an Apply action");
+  for(int id=Tool::pattern;id<=Tool::reference;++id)if(id!=Tool::apply)require(reachable.contains(id),"An original curve action is unreachable across short pages");
   require(f.tool.window()==window&&f.reads==reads&&f.writes.empty()&&f.current.revision=="r0","Layout recreated/reloaded/applied curve");
   f.tool.floatWindow();sizeClient(window,440,500);for(int page:{0,1,2}){f.page(page);bounds(f);}
   f.page(0);require(f.tool.snapshot().at("canvas").at("height")==272,"Floating minimum lost proposed 272-DIP curve height");
@@ -360,7 +371,7 @@ int wmain(int argc,wchar_t **argv){try{
   ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqGraphCurveOwner",argc,argv,[]{
     const auto result=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(result,"Initialize graph curve test COM");struct Com{~Com(){CoUninitialize();}} com;
     Owner owner;
-    minimumPages(owner);std::cout<<"PASS graph curve minimum pages and reachable actions\n";
+    automaticCurve(owner);minimumPages(owner);std::cout<<"PASS graph curve minimum pages and reachable actions\n";
     retainedFieldsAndFocus(owner);std::cout<<"PASS retained HWND/raw fields/caret/axes and focused short transition\n";
     stableIdentityAndExplicitRecapture(owner);std::cout<<"PASS stable pattern identity, deleted target and explicit successful recapture\n";
     pumpedReadGuards(owner);std::cout<<"PASS pumped read identity/generation guards preserve newer state\n";

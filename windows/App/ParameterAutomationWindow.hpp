@@ -51,7 +51,14 @@ private:
   void error(const std::exception &e)override{status(wide(e.what()));}
   void rebuild(){canvas_.rebuild(points_,values_);requestPaint();}
   void schedule(){previewNeeded_=true;if(visible())resumeVisiblePresentation();}
-  void changed(){dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(L"Curve draft / Apply saves one document Undo step");}
+  bool reviewRequired_=false;
+  bool displayControl(int id)const override{return id!=apply||reviewRequired_||automaticEditFailed_;}
+  void queueCurveEdit(UINT delay=600){if(reviewRequired_)return;queueAutomaticEdit([this]{
+    if(pending_||dragging_){queueCurveEdit();return;}
+    if(pointFields_&&selected_>=0)setPointFields();
+    if(dirty_&&!pointFields_)commit(false,points_.empty()&&!laneID_.empty());
+  },delay);}
+  void changed(bool automatic=true){if(!automatic){reviewRequired_=true;cancelAutomaticEdit();}dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(reviewRequired_?L"Tool preview / Use preview saves it":L"Saving curve changes…");if(!dragging_)queueCurveEdit();}
   std::wstring parameterName()const{for(const auto &p:catalog_)if(parameter_&&p.at("id")==*parameter_)return wide(p.at("name").get<std::string>());return L"No parameter";}
   void showPoint(){
     setting_=true;const auto p=selected_>=0&&size_t(selected_)<points_.size()?points_[size_t(selected_)]:Json{{"position",0},{"value",.5},{"curve",curves[size_t(kind_)]}};
@@ -62,7 +69,7 @@ private:
     parameter_=id;laneID_.clear();points_=Json::array();enabled_=true;selected_=-1;
     for(const auto &l:lanes_)if(l.at("plugin")==pluginID_&&l.at("parameter")==id){laneID_=l.at("id");points_=l.at("points");enabled_=l.at("enabled");break;}
     if(position)for(size_t i=0;i<points_.size();++i)if(points_[i].at("position")==*position)selected_=int(i);
-    dirty_=pointFields_=false;++generation_;values_=Json::array();showPoint();schedule();rebuild();set(targetLabel,parameterName()+L" · "+(laneID_.empty()?L"new envelope":wide(laneID_)));
+    reviewRequired_=false;dirty_=pointFields_=false;++generation_;values_=Json::array();showPoint();schedule();rebuild();set(targetLabel,parameterName()+L" · "+(laneID_.empty()?L"new envelope":wide(laneID_)));
   }
   void filter(){
     auto term=field(search);std::transform(term.begin(),term.end(),term.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});filtered_.clear();int selected=-1;
@@ -78,6 +85,7 @@ private:
     setting_=false;filter();
   }
   void load(bool follow,std::string wantedPlugin={},std::optional<uint32_t> wantedParameter={},std::optional<unsigned> wantedPattern={},bool allowMissingPlugin=false,bool strictTarget=false){
+    cancelAutomaticEdit();
     if(pending_)return;const auto now=context_();require(follow||now.document==captured_.document,"Document changed / use From cursor to capture the new song");
     unsigned index=follow?now.pattern:captured_.pattern;
     if(wantedPattern)index=*wantedPattern;else if(!follow){auto found=std::find_if(now.patterns.begin(),now.patterns.end(),[&](const auto &p){return p.at("id")==patternID_;});require(found!=now.patterns.end(),"Captured pattern was removed / use From cursor");index=found->at("index");}
@@ -100,7 +108,7 @@ private:
       const bool samePattern=sameSong&&data.at("patternID")==patternID_;captured_=now;captured_.pattern=index;patternID_=data.at("patternID");rows_=data.at("rows");rowsPerBeat_=data.at("rowsPerBeat");plugins_=std::move(plugins);pluginID_=wanted;lanes_=data.at("lanes");catalog_=std::move(catalog);
       if(!samePattern){canvas_.fit(rows_);selectedPosition.reset();setting_=true;set(rangeStart,L"0");set(rangeEnd,std::to_wstring(rows_));setting_=false;}else if(canvas_.end>rows_*256)canvas_.fit(rows_);
       parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &v){return wantedID&&v.at("id")==*wantedID;});if(p==catalog_.end())p=catalog_.begin();selectParameter(p->at("id"),selectedPosition);}
-      else {points_=values_=Json::array();laneID_.clear();selected_=-1;dirty_=pointFields_=false;++generation_;set(targetLabel,L"No available parameter");showPoint();rebuild();}
+      else {points_=values_=Json::array();laneID_.clear();selected_=-1;reviewRequired_=false;dirty_=pointFields_=false;++generation_;set(targetLabel,L"No available parameter");showPoint();rebuild();}
       choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / Apply saves; the pattern cursor remains independent");
     }catch(...){pending_=false;layout();throw;}layout();
   }
@@ -123,6 +131,7 @@ private:
     catch(const std::exception &e){pending_=false;if(token==generation_){values_=Json::array();rebuild();error(e);}}layout();
   }
   void commit(bool dry,bool removing=false){
+    cancelAutomaticEdit();
     requireCurrent();require(parameter_.has_value(),"Choose a parameter");require(!pointFields_,"Set or discard the point fields before applying");require(!removing||!laneID_.empty(),"This parameter has no saved envelope");require(removing||!points_.empty(),"Add points, or use Remove lane to delete the envelope");
     Json p={{"expectedRevision",captured_.revision},{"dryRun",dry}};if(removing)p["lane"]=laneID_;else {p["pattern"]=captured_.pattern;p["plugin"]=pluginID_;p["parameter"]=*parameter_;p["enabled"]=enabled_;p["points"]=points_;}
     const auto token=generation_;pending_=true;layout();try{const auto result=request_(removing?"automation.pattern.remove":"automation.pattern.set",p);pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed during Apply / newer draft retained");
@@ -144,7 +153,7 @@ private:
     }
     const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{auto result=request_(copy?"automation.pattern.copy":"automation.pattern.transform",p);pending_=false;requireCurrent();require(generation_==token&&signature==toolSignature(),"Curve or tool settings changed / preview discarded");
       if(copy){clip_=std::move(result);status(L"Range copied inside this editor / choose Paste or Insert paste");}
-      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed();showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Apply saves; Reload discards");}
+      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed(false);showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Apply saves; Reload discards");}
       else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;
     }catch(...){pending_=false;layout();throw;}layout();
   }
@@ -176,10 +185,10 @@ private:
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){if(dragging_)cancelDrag();hide();return;}
     if(id>=pageTarget&&id<=pageTools&&notification==BN_CLICKED){choosePage(id-pageTarget);return;}
-    if(notification==EN_CHANGE){if(id==search){filter();return;}if(id==pointRow||id==pointValue||id==formula){pointFields_=true;++generation_;status(L"Point fields pending / Set point before Apply");}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue3)){toolFieldsDirty_=true;++generation_;}return;}
+    if(notification==EN_CHANGE){if(id==search){filter();return;}if(id==pointRow||id==pointValue||id==formula){pointFields_=true;++generation_;if(selected_>=0)queueCurveEdit();status(selected_>=0?L"Saving point changes…":L"Enter point fields, then Add point");}else if(id==rangeStart||id==rangeEnd||(id>=toolValue0&&id<=toolValue3)){toolFieldsDirty_=true;++generation_;}return;}
     if(pending_)return;
     if(notification==CBN_SELCHANGE){
-      if(id==kind){kind_=std::clamp(selection(kind),0,8);pointFields_=true;++generation_;layout();return;}if(id==snap){snap_=std::array<unsigned,4>{256,128,64,1}.at(size_t(std::max(0,selection(snap))));return;}
+      if(id==kind){kind_=std::clamp(selection(kind),0,8);pointFields_=true;++generation_;if(selected_>=0)queueCurveEdit(1);layout();return;}if(id==snap){snap_=std::array<unsigned,4>{256,128,64,1}.at(size_t(std::max(0,selection(snap))));return;}
       if(id==tool){tool_=std::clamp(selection(tool),0,8);toolFields();return;}
       if(id==pattern||id==plugin){if(draft()){choices();throw std::runtime_error("Apply or Reload the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
         try{if(id==pattern)load(false,{},parameter_,captured_.patterns.at(size_t(index)).at("index").get<unsigned>());else load(false,plugins_.at(size_t(index)).at("instanceID"),std::nullopt);}catch(...){choices();throw;}return;}
@@ -200,7 +209,7 @@ private:
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelection_;++generation_;values_=Json::array();schedule();showPoint();rebuild();ReleaseCapture();}
   void mouse(UINT message,float x,float y,WPARAM)override{
-    if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){dragging_=false;ReleaseCapture();schedule();return;}
+    if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();schedule();if(completed&&dirty_)queueCurveEdit(1);return;}
     if(!canvasVisible_)return;
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)&&parameter_&&!pending_&&!pointFields_){SetFocus(window_);dragBefore_=points_;dragDirty_=dirty_;dragSelection_=selected_;selected_=canvas_.hit(x,y);
       if(selected_<0){auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(points_[i].at("position")==position)selected_=int(i);
@@ -241,6 +250,7 @@ private:
     if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);
   }
   void layout()override{
+    if(ready_)set(apply,reviewRequired_?L"Use preview":L"Retry changes");
     if(bank_)bank_->refreshSourceState();
     if(workbench_)workbench_->refreshSourceState();
     // Preserve the former 1040x760 outer-window layout after nonclient chrome;
@@ -395,7 +405,7 @@ public:
     for(auto name:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(kind,1);
     for(auto name:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(snap,0);
     for(auto name:{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"})ScreamSeq::NativeInputGate::present(controls_.at(tool),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(tool,0);
-    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{setPoint,L"Set point"},{deletePoint,L"Delete point"},{rampUp,L"Ramp up"},{rampDown,L"Ramp down"},{enabled,L"Enabled"},{apply,L"Apply curve"},{verify,L"Verify"},{remove,L"Remove lane"},{reload,L"Reload"},{fromCursor,L"From cursor"},{bank,L"Envelope bank…"},{expand,L"Expand…"},{reference,L"Reference"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{copyRange,L"Copy range"},{previewTool,L"Preview tool"},{close,L"Close"}})button(id,name);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{setPoint,L"Set point"},{deletePoint,L"Delete point"},{rampUp,L"Ramp up"},{rampDown,L"Ramp down"},{enabled,L"Enabled"},{apply,L"Use preview"},{verify,L"Verify"},{remove,L"Remove lane"},{reload,L"Reload"},{fromCursor,L"From cursor"},{bank,L"Envelope bank…"},{expand,L"Expand…"},{reference,L"Reference"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{copyRange,L"Copy range"},{previewTool,L"Preview tool"},{close,L"Close"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Pattern parameter automation"},{targetLabel,L"Choose a plugin parameter"},{rowLabel,L"Row / 1⁄256"},{valueLabel,L"Value / %"},{formulaLabel,L"Formula"},{rangeLabel,L"Range / rows"},{statusLabel,L""}})label(id,name);
     for(int id=toolLabel0;id<=toolLabel3;++id)label(id,L"");label(pageHelp,L"");setting_=true;set(rangeStart,L"0");set(rangeEnd,L"64");setting_=false;finish();
   }

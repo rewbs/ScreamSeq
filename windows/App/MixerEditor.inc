@@ -1,6 +1,7 @@
-// Retained bus draft: UI values never mutate the song until a guarded Apply.
+// Routine bus edits debounce into the same guarded, Undo-aware command as explicit retries.
     bool mixerEditorOpen=false,mixerDirty=false,mixerPending=false,settingMixerFields=false,refreshingMixer=false;
     uint64_t mixerGeneration=0;
+    bool mixerAutoQueued=false,mixerAutoFailed=false;ULONGLONG mixerEditDue=0;HWND mixerEditField{};
     std::string mixerDocument,mixerRevision,mixerTarget;
     Json mixerData=Json::object(),mixerDraft=Json::object();
     std::vector<Tracker::MixerMeter> mixerMeters;
@@ -58,7 +59,7 @@
     bool mixerEditorVisible() const {return workspaceMainEditorVisible("mixer");}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
-            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Apply"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Mixing graph…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
+            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Retry"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Mixing graph…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerList]=CreateWindowExW(0,L"LISTBOX",L"Mixer buses",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerList)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerOutput]=CreateWindowExW(0,L"COMBOBOX",L"Main output",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerOutput)),GetModuleHandleW(nullptr),nullptr);
@@ -88,8 +89,8 @@
         settingMixerFields=true;
         const auto selected=mixerSelected();mixerDraft=selected>=0?mixerData.at("buses")[size_t(selected)]:Json::object();
         const char *keys[]={"name","preGainDB","prePan","gainDB","pan","width","timingMS"};
-        for(int id=mixerName;id<=mixerTiming;++id){std::wstring text;if(selected>=0){const auto &v=mixerDraft.at(keys[id-mixerName]);text=wide(v.is_string()?v.get<std::string>():v.dump());}ScreamSeq::NativeInputGate::text(controls.at(id),text.c_str());}
-        ScreamSeq::NativeInputGate::text(controls.at(mixerColor),selected>=0?mixerColorText(mixerDraft).c_str():L"");
+        for(int id=mixerName;id<=mixerTiming;++id){std::wstring text;if(selected>=0){const auto &v=mixerDraft.at(keys[id-mixerName]);text=wide(v.is_string()?v.get<std::string>():v.dump());}if(controls.at(id)!=mixerEditField)ScreamSeq::NativeInputGate::text(controls.at(id),text.c_str());}
+        if(controls.at(mixerColor)!=mixerEditField)ScreamSeq::NativeInputGate::text(controls.at(mixerColor),selected>=0?mixerColorText(mixerDraft).c_str():L"");
         ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Disconnected"));
         int output=0;if(mixerData.contains("buses"))for(size_t i=0;i<mixerData.at("buses").size();++i){const auto &b=mixerData.at("buses")[i];auto name=wide(b.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(selected>=0&&mixerDraft.at("output")==b.at("id"))output=int(i+1);}
         ScreamSeq::NativeInputGate::present(controls.at(mixerOutput),CB_SETCURSEL,output,0);ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,selected,0);
@@ -178,10 +179,15 @@
         }catch(const std::exception &e){mixerStatus=wide(e.what());}
         refreshingMixer=false;
     }
-    void mixerFieldChanged(){if(!settingMixerFields&&mixerSelected()>=0){mixerDirty=true;++mixerGeneration;frameRequested=true;}}
+    void mixerFieldChanged(){if(!settingMixerFields&&mixerSelected()>=0){mixerDirty=true;++mixerGeneration;mixerAutoQueued=true;mixerAutoFailed=false;mixerEditDue=GetTickCount64()+600;frameRequested=true;}}
     void mixerTimer() {
         if(!mixerEditorVisible()){KillTimer(window,3);return;}
         if(busy||refreshingMixer||mixerPending)return;
+        if(mixerAutoQueued&&GetTickCount64()>=mixerEditDue){
+            mixerAutoQueued=false;mixerEditField=GetFocus();
+            try{if(mixerDirty)mixerControlCommand(mixerApply);}catch(const std::exception &e){mixerAutoFailed=true;mixerStatus=wide(e.what());}
+            mixerEditField=nullptr;layoutControls();
+        }
         if(!mixerDirty&&(mixerRevision!=view->session.revision||mixerDocument!=documentId)){refreshMixer();layoutControls();}
         Tracker::MixerMeterReading reading;
         if(device.running()&&preparedPlayback)reading=preparedPlayback->chain().identifiedMixerMeters();
@@ -215,7 +221,7 @@
         place(mixerMute,x,r.y+192,88,25,show);place(mixerSolo,x+92,r.y+192,88,25,show);
         place(mixerAddEffect,r.x+8,r.y+r.h-89,180,25,show);
         place(mixerRouteInstrument,r.x+8,r.y+r.h-121,180,25,show);
-        place(mixerReload,r.x+r.w-164,r.y+192,76,25,show);place(mixerApply,r.x+r.w-84,r.y+192,76,25,show);
+        place(mixerReload,r.x+r.w-164,r.y+192,76,25,show);place(mixerApply,r.x+r.w-84,r.y+192,76,25,show&&mixerAutoFailed&&mixerDirty);
         const bool active=mixerData.value("active",false),selected=mixerSelected()>=0;
         ScreamSeq::NativeControls::text(controls.at(mixerEnable),active?L"Mixer enabled":L"Enable mixer");EnableWindow(controls.at(mixerEnable),!active&&!mixerPending);
         EnableWindow(controls.at(mixerAdd),active&&!mixerDirty&&!mixerPending);EnableWindow(controls.at(mixerRemove),selected&&!mixerDirty&&!mixerPending&&(mixerDraft.value("kind","")=="group"||mixerDraft.value("kind","")=="return"));
@@ -255,16 +261,16 @@
         if((adding||id==mixerRemove)&&mixerDirty)throw std::runtime_error("Apply or Reload the retained Mixer Details draft before changing buses");
         if(adding&&initialMixerPristine())refreshMixer();
         if(adding&&!mixerData.value("active",false))throw std::runtime_error("Enable the mixer before adding a bus");
-        if(id==mixerReload){mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
+        if(id==mixerReload){mixerAutoQueued=false;mixerAutoFailed=false;mixerDirty=false;++mixerGeneration;refreshMixer();return true;}
         if(id==mixerList){if(mixerDirty){ScreamSeq::NativeInputGate::present(controls.at(mixerList),LB_SETCURSEL,mixerSelected(),0);throw std::runtime_error("Apply or reload the captured mixer draft before changing buses");}const auto index=SendMessageW(controls.at(mixerList),LB_GETCURSEL,0,0);if(index>=0&&size_t(index)<mixerData.at("buses").size()){mixerTarget=mixerData.at("buses")[size_t(index)].at("id").get<std::string>();loadMixerFields();}return true;}
-        if(id==mixerOutput){mixerFieldChanged();return true;}
-        if(id==mixerMute||id==mixerSolo){const char *key=id==mixerMute?"mute":"solo";mixerDraft[key]=!mixerDraft.value(key,false);mixerFieldChanged();return true;}
+        if(id==mixerOutput){mixerFieldChanged();return mixerControlCommand(mixerApply);}
+        if(id==mixerMute||id==mixerSolo){const char *key=id==mixerMute?"mute":"solo";mixerDraft[key]=!mixerDraft.value(key,false);mixerFieldChanged();return mixerControlCommand(mixerApply);}
         if(mixerDocument!=documentId||mixerRevision!=view->session.revision)throw std::runtime_error("Song changed; mixer draft retained. Reload to use the current song");
         Json p={{"expectedRevision",mixerRevision}};std::string method;
         if(id==mixerEnable)method="mixer.enable";
         else if(adding){method="mixer.bus.add";p["kind"]=id==mixerAddReturn?"return":"group";}
         else if(id==mixerRemove){method="mixer.bus.remove";p["bus"]=mixerTarget;}
-        else if(id==mixerApply){method="mixer.bus.set";p["bus"]=mixerTarget;p["name"]=utf8Path(effectField(mixerName));
+        else if(id==mixerApply){mixerAutoQueued=false;method="mixer.bus.set";p["bus"]=mixerTarget;p["name"]=utf8Path(effectField(mixerName));
             p["color"]=mixerColorValue();
             const char *keys[]={"preGainDB","prePan","gainDB","pan","width","timingMS"};for(int i=0;i<6;++i){const auto raw=effectField(mixerPreGain+i);size_t end=0;const auto value=std::stod(raw,&end);if(end!=raw.size()||!std::isfinite(value))throw std::runtime_error("Enter a finite mixer value");p[keys[i]]=value;}
             p["mute"]=mixerDraft.value("mute",false);p["solo"]=mixerDraft.value("solo",false);

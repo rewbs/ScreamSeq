@@ -14,17 +14,18 @@
     setting_=true;for(int sustain=0;sustain<2;++sustain){const auto &row=sustain?loops_.raw().sustain:loops_.raw().normal;set(sustain?sustainStart:normalStart,row.start);set(sustain?sustainEnd:normalEnd,row.end);set(sustain?sustainEnabled:normalEnabled,row.enabled?L"Enabled":L"Disabled");choose(sustain?sustainDirection:normalDirection,row.reverse?2:row.pingpong?1:0);}setting_=false;
   }
   void resetLoops(){loops_.reset(workflowTarget(),info_);syncLoops();}
-  void loopChanged(){loops_.replaceRaw(loopFields());++generation_;report_=Json::object();invalidatePaste();requestPaint();}
+  void loopChanged(){loops_.replaceRaw(loopFields());++generation_;report_=Json::object();invalidatePaste();queueSampleEdit();requestPaint();}
   void useSelectionForLoop(bool sustain){
     requireCurrent();applyRange();require(region_.first<region_.last,"Select a nonempty range for the loop");
     auto raw=loopFields();auto &row=sustain?raw.sustain:raw.normal;row.start=std::to_wstring(region_.first);row.end=std::to_wstring(region_.last);row.enabled=true;const auto direction=choice(sustain?sustainDirection:normalDirection);row.pingpong=direction==1;row.reverse=direction==2;
-    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();page_=2;status(L"Loop draft uses the selection / Preview or Apply loops saves both rows together");
+    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();page_=2;status(L"Saving loop from selection…");queueSampleEdit();
   }
   void toggleLoop(bool sustain){
     auto raw=loopFields();auto &row=sustain?raw.sustain:raw.normal;row.enabled=!row.enabled;
-    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();status(L"Loop draft / audio and history unchanged until Apply loops");
+    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();status(L"Saving loop changes…");queueSampleEdit();
   }
   void editLoops(bool dry){
+    cancelAutomaticEdit();
     requireCurrent();loops_.replaceRaw(loopFields());const auto submittedTarget=loops_.target();const auto submittedRaw=loops_.raw();
     auto params=loops_.params(workflowTarget(),dry);mutate("sample.loops.set",std::move(params),dry,false,false,true);
     if(!dry){require(loops_.acceptApplied(submittedTarget,submittedRaw,workflowTarget()),"Loop draft changed during Apply / newer fields retained");syncLoops();}
@@ -45,7 +46,7 @@
     if(loopTarget<0){region_.first=start;region_.last=end;syncFields();++selectionVersion_;}
     else{auto &row=loopTarget?raw.sustain:raw.normal;require(!row.enabled||start<end,"Snapping would collapse the enabled loop / widen its boundaries");row.start=std::to_wstring(start);row.end=std::to_wstring(end);loops_.replaceRaw(std::move(raw));syncLoops();}
     ++generation_;invalidatePaste();report_=std::move(result);unsigned matched=0;for(const auto &v:report_.at("positions"))matched+=v.at("matched").get<bool>();
-    status(L"Matched "+std::to_wstring(matched)+L"/2 boundaries · "+std::to_wstring(start)+L" → "+std::to_wstring(end)+(loopTarget<0?L" / selection only":L" / loop draft; Apply loops to save"));
+    status(L"Matched "+std::to_wstring(matched)+L"/2 boundaries · "+std::to_wstring(start)+L" → "+std::to_wstring(end)+(loopTarget<0?L" / selection only":L" / saving loop changes…"));if(loopTarget>=0)queueSampleEdit();
   }
   Json pasteParams(){
     applyRange();static constexpr const char *modes[]={"insert","overwrite","mix","replace"};const auto mode=choice(pasteMode);require(mode>=0&&mode<4,"Choose a paste mode");
@@ -62,7 +63,7 @@
     if(dry){pasteSignature_=signature;pasteTarget_=target;pasteClipboard_=params.at("clipboardId");}
     else{invalidatePaste();const unsigned start=report_.at("start"),frames=report_.at("insertedFrames");region_.first=std::min(start,region_.frames);region_.last=std::min(region_.frames,start+frames);syncFields();++selectionVersion_;}
     std::wstring text=dry?L"Paste preview: ":L"Pasted: ";text+=std::to_wstring(report_.at("insertedFrames").get<unsigned>())+L" inserted · "+std::to_wstring(report_.at("removedFrames").get<unsigned>())+L" removed · "+std::to_wstring(report_.at("resultFrames").get<unsigned>())+L" result frames";
-    if(report_.value("clippedSamples",uint64_t(0)))text+=L" · "+std::to_wstring(report_.at("clippedSamples").get<uint64_t>())+L" clipped values";status(text+(dry?L"\nReview the result, then Apply paste. The reviewed clipboard and song revision are retained.":L"\nOne Undo restores the previous audio and loop positions."));layout();
+    if(report_.value("clippedSamples",uint64_t(0)))text+=L" · "+std::to_wstring(report_.at("clippedSamples").get<uint64_t>())+L" clipped values";status(text+(dry?L"\nReview the result, then choose Paste audio. The reviewed clipboard and song revision are retained.":L"\nOne Undo restores the previous audio and loop positions."));layout();
   }
   void clipboard(int id){
     if(id==paste){pasteAudio(false);return;}auto p=rangeParams();require(region_.first<region_.last,"Select a nonempty range first");
@@ -83,6 +84,8 @@
   void workflowLayout(){
     const auto [w,h]=size();const auto dpi=GetDpiForWindow(window_);
     const auto previousFocus=GetFocus();
+    ShowWindow(controls_.at(applySettings),automaticEditFailed_&&settingsDraft()?SW_SHOWNA:SW_HIDE);
+    ShowWindow(controls_.at(applyLoops),automaticEditFailed_&&loops_.dirty()&&page_==2?SW_SHOWNA:SW_HIDE);
     // Edits must retain their focus, selection and raw strings while a request
     // refreshes its result. Reflow only for actual geometry/page changes.
     const bool geometry=w!=layoutWidth_||h!=layoutHeight_||dpi!=layoutDpi_||page_!=layoutPage_;

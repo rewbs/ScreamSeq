@@ -2,8 +2,8 @@
   bool shortLayout_=false;
   std::wstring displayStatus()const{
     if(!hasTarget())return L"Choose a source in Graph / Tools → Load selection";
-    if(hasTarget()&&!current())return L"Song changed / captured curve retained — Reload before Apply";
-    if(pointFields_)return L"Point fields pending / Set point before Apply";
+    if(hasTarget()&&!current())return L"Song changed / captured curve retained — Reload before editing";
+    if(pointFields_)return selected_>=0?L"Point changes save after typing / correct invalid values":L"Enter point fields, then Set point";
     return status_;
   }
   void drawControl(const DRAWITEMSTRUCT &d)override{

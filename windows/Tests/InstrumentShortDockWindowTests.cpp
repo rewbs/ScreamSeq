@@ -64,7 +64,7 @@ std::set<int> geometry(Form &form){
     for(const auto &other:rectangles){RECT intersection{};require(!IntersectRect(&intersection,&rect,&other),"Short instrument native controls overlap");}
     rectangles.push_back(rect);ids.insert(entry.at("id").get<int>());
   }
-  for(int id:{4450,4451,4452,4453,4454})require(ids.contains(id),"Fixed Apply/Reload/Cursor/Audition/Close disappeared");
+  for(int id:{4451,4452,4453,4454})require(ids.contains(id),"Fixed Apply/Reload/Cursor/Audition/Close disappeared");
   if(snapshot.at("canvasVisible").get<bool>()){
     const auto &r=snapshot.at("canvas");const float scale=GetDpiForWindow(window)/96.f;
     RECT canvas{LONG(r[0].get<float>()*scale),LONG(r[1].get<float>()*scale),LONG((r[0].get<float>()+r[2].get<float>())*scale),LONG((r[1].get<float>()+r[3].get<float>())*scale)};
@@ -80,7 +80,7 @@ void allPagesAndActions(Owner &owner){
     form.tool.dockBounds(0,0,float(width),float(height));std::set<int> visited;
     for(int page=0;page<5;++page){form.page(page);if(page==2)form.choose(4429,5);const auto current=geometry(form);visited.insert(current.begin(),current.end());}
     form.page(0);form.press(4605);require(!form.tool.snapshot().at("canvasVisible").get<bool>(),"Options should not retain a hidden interactive canvas");auto options=geometry(form);visited.insert(options.begin(),options.end());
-    for(int id:{4401,4402,4403,4404,4405,4406,4407,4408,4409,4410,4411,4412,4413,4414,4415,4416,4417,4418,4419,4420,4421,4422,4423,4424,4425,4426,4427,4428,4429,4430,4431,4432,4433,4434,4435,4436,4437,4438,4439,4440,4441,4442,4443,4444,4445,4446,4447,4448,4449,4450,4451,4452,4453,4454,4455,4456})
+    for(int id:{4401,4402,4403,4404,4405,4406,4407,4408,4409,4410,4411,4412,4413,4414,4415,4416,4417,4418,4419,4420,4421,4422,4423,4424,4425,4426,4427,4428,4429,4430,4431,4432,4433,4434,4435,4436,4437,4438,4439,4440,4441,4442,4443,4444,4445,4446,4447,4448,4449,4451,4452,4453,4454,4455,4456})
       require(visited.contains(id),"An original instrument action/field is unreachable in short pages");
     form.press(4605);geometry(form);require(form.tool.snapshot().at("canvasVisible").get<bool>(),"Curve did not return from Options");
   }
@@ -146,7 +146,7 @@ void zoomedCanvasMouseMapping(Owner &owner){
   SendMessageW(window,WM_LBUTTONDBLCLK,MK_LBUTTON,point(24,24));SendMessageW(window,WM_LBUTTONUP,0,point(24,24));
   const auto staged=form.tool.snapshot();require(staged.at("envelope").at("points").size()==4&&staged.at("envelope").at("points").at(2)==Json::array({24,24})&&staged.at("selectedPoint")==2,"Zoomed double-click did not insert the exact tick/value");
   require(staged.at("dirty").get<bool>()&&staged.at("expectedRevision")=="r1"&&staged.at("document")=="owned-song"&&form.current.revision=="r1"&&form.writes==0,"Canvas interaction committed or redirected the captured document");
-  form.press(4450);require(form.writes==1&&form.current.revision=="r2"&&form.envelope==staged.at("envelope")&&!form.tool.snapshot().at("dirty").get<bool>(),"Apply did not save exactly the staged mouse edits once");
+  SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);require(form.writes==1&&form.current.revision=="r2"&&form.envelope==staged.at("envelope")&&!form.tool.snapshot().at("dirty").get<bool>(),"Apply did not save exactly the staged mouse edits once");
 }
 
 void stagedAndPendingEdits(Owner &owner){
@@ -155,10 +155,10 @@ void stagedAndPendingEdits(Owner &owner){
   form.page(4);form.field(4446,L"60");form.field(4447,L"63");form.choose(4448,0);form.press(4449);const auto mapping=form.tool.snapshot().at("mapping");
   for(int note=60;note<=63;++note)require(mapping[note]==0,"Short key range was not staged");
   for(int page=0;page<5;++page){form.page(page);geometry(form);require(form.tool.snapshot().at("envelope")==staged&&form.tool.snapshot().at("mapping")==mapping,"Page changed staged data");}
-  form.page(0);form.press(4450);require(form.writes==1&&!form.tool.snapshot().at("dirty").get<bool>()&&form.envelope==staged&&form.properties.at("mapping")==mapping,"Fixed short Apply did not save staged envelope/mapping once");
+  form.page(0);SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);require(form.writes==1&&!form.tool.snapshot().at("dirty").get<bool>()&&form.envelope==staged&&form.properties.at("mapping")==mapping,"Fixed short Apply did not save staged envelope/mapping once");
   form.page(2);form.choose(4429,5);form.field(4436,L"unfinished spacing");const auto generation=form.tool.snapshot().at("generation");
   form.page(0);form.press(4605);form.press(4605);form.page(2);require(form.tool.snapshot().at("toolFieldDraft").get<bool>()&&form.tool.snapshot().at("generation")==generation&&text(form.control(4436))==L"unfinished spacing","Pages lost the fifth raw tool parameter");
-  form.page(1);form.duringPatch=[&]{form.field(4413,L"newer pending tick");form.page(0);form.press(4605);};form.press(4450);
+  form.page(1);form.choose(4412,0);form.field(4414,L"39");form.duringPatch=[&]{form.field(4413,L"newer pending tick");form.page(0);form.press(4605);};SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);
   require(form.writes==2&&form.tool.snapshot().at("fieldDraft").get<bool>()&&text(form.control(4413))==L"newer pending tick"&&form.tool.snapshot().at("expectedRevision")=="r2","Pumped Apply discarded/rebased a newer raw field");
   require(!form.tool.snapshot().at("pending").get<bool>()&&form.tool.snapshot().at("status").get<std::string>().find("newer draft retained")!=std::string::npos,"Pumped Apply error did not retain a usable editor");
 }

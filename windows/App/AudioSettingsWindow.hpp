@@ -24,7 +24,7 @@ class AudioSettingsWindow final : public NativeToolWindow {
   void describe(){
     const auto &checked=settings_.at("checked");
     if(checked.is_object())status(L"Checked output / "+std::to_wstring(checked.at("sampleRate").get<unsigned>())+L" Hz / actual period "+std::to_wstring(checked.at("periodFrames").get<unsigned>())+L" frames / buffer "+std::to_wstring(checked.at("bufferFrames").get<unsigned>())+L" frames");
-    else status(L"Choose an output and preferred period / Apply stops playback");
+    else status(L"Choose an output and preferred period / Switch output stops playback");
   }
   void current(){settings_=call("audio.settings.get");selected_=settings_.at("endpoint").get<std::string>();frames_=settings_.at("periodFrames");outputs();for(unsigned i=0;i<5;++i)if(periods_[i]==frames_)ScreamSeq::NativeInputGate::present(controls_.at(period),CB_SETCURSEL,i,0);describe();}
   void action(int id,unsigned notification)override {
@@ -47,8 +47,8 @@ public:
   AudioSettingsWindow(HWND owner,std::function<Json(const std::string &,const Json &)> request):NativeToolWindow(owner),request_(std::move(request)){
     minimumWidth_=560;minimumHeight_=380;create(L"ScreamSeq.AudioSettings",L"Audio settings",620,400);combo(endpoint);combo(period);
     for(unsigned n:periods_){const auto text=n?std::to_wstring(n)+L" frames":L"Lowest supported";ScreamSeq::NativeInputGate::present(controls_.at(period),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{apply,L"Apply"},{reload,L"Use current settings"},{close,L"Close"}})button(id,text);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Audio output"},{deviceLabel,L"Output device"},{periodLabel,L"Preferred buffer period"},{help,L"The device chooses its supported period and sample rate.\nApply stops playback. Settings last for this session."},{statusLabel,L""}})label(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{apply,L"Switch output"},{reload,L"Use current settings"},{close,L"Close"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Audio output"},{deviceLabel,L"Output device"},{periodLabel,L"Preferred buffer period"},{help,L"The device chooses its supported period and sample rate.\nSwitch output stops playback. Settings last for this session."},{statusLabel,L""}})label(id,text);
     devices_=call("audio.devices.get").at("devices");current();finish();
   }
   Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"endpoint",selected_},{"periodFrames",frames_},{"audioRevision",settings_.at("audioRevision")},{"devices",devices_},{"status",utf8(status_)}};}

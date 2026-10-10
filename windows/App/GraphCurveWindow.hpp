@@ -77,7 +77,13 @@ private:
   void error(const std::exception &e)override{status(wide(e.what()));}
   void rebuild(){canvas_.rebuild(points_,values_);requestPaint();}
   void schedule(){previewNeeded_=true;if(visible())resumeVisiblePresentation();}
-  void changed(){dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(L"Curve draft / Apply saves one document Undo step");}
+  bool displayControl(int id)const override{return id!=apply||automaticEditFailed_;}
+  void queueCurveEdit(UINT delay=600){queueAutomaticEdit([this]{
+    if(pending_||dragging_||openingChild_||context_().busy){queueCurveEdit();return;}
+    if(pointFields_&&selected_>=0)replacePoint(pointFromFields());
+    if(dirty_&&!pointFields_)commit();
+  },delay);}
+  void changed(){dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(L"Saving curve changes…");if(!dragging_)queueCurveEdit();}
   void selection(int id,int value){NativeControls::select(controls_.at(id),value);}
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   struct Pending {

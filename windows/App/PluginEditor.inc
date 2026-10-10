@@ -159,7 +159,7 @@
         }
         settingPluginFields=true;
         try {
-            ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());
+            if(!automaticPluginEdit)ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());
             ScreamSeq::NativeInputGate::present(controls.at(pluginValueChoice),CB_RESETCONTENT);
             const auto &field=pluginParameterField;
             if(field.valid&&field.kind==ScreamSeq::PluginParameterField::Kind::Choice) {
@@ -256,7 +256,17 @@
     Json displayedPluginPorts=Json::array();
     void pluginTimer() {
         if(busy || refreshingPlugins || pluginPresetPending) return;
-        KillTimer(window,1);refreshingPlugins=true;
+        KillTimer(window,1);
+        if(pluginAutoQueued&&pluginEditorVisible()){
+            if(GetTickCount64()<pluginEditDue){SetTimer(window,1,100,nullptr);return;}
+            pluginAutoQueued=false;
+            if(pluginDraft&&!pluginProgramDraft){
+                automaticPluginEdit=GetFocus()==controls.at(pluginValue);
+                try{pluginCommand(pluginApply);refreshPluginDetails();}catch(const std::exception &e){pluginAutoFailed=true;status=wide(e.what());}
+                automaticPluginEdit=false;layoutControls();
+            }
+        }
+        refreshingPlugins=true;
         bool detailsChanged=false;
         try {
             if(view->session.document.value("openPluginEditors",0u)) documentOperation("flushPluginEditors",{{"force",false}});
@@ -270,9 +280,10 @@
         // instead of causing random busy failures in otherwise idle sessions.
         if(api)PostMessageW(window,ScreamSeq::ApiDispatch::message,0,0);
     }
+    bool pluginAutoQueued=false,pluginAutoFailed=false;ULONGLONG pluginEditDue=0;bool automaticPluginEdit=false;
     void pluginFieldChanged() {
         if(settingPluginFields) return;
-        ++pluginDraftGeneration;
+        ++pluginDraftGeneration;pluginAutoQueued=true;pluginAutoFailed=false;pluginEditDue=GetTickCount64()+600;SetTimer(window,1,100,nullptr);
         if(!pluginDraft) {pluginDraft=true;pluginProgramDraft=false;pluginDraftRevision=view->session.revision;pluginDraftTarget=selectedPlugin;pluginDraftParameter=selectedParameter;}
         frameRequested=true;
     }
@@ -288,7 +299,7 @@
         const float parameterWidth=std::max(80.0f,r.w-320-valueWidth);
         place(pluginParameterSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==0&&r.h>=164);
         place(pluginProgramSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==1&&r.h>=164);
-        place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);for(const int id:{pluginValue,pluginValueChoice,pluginValueToggle})place(id,x+parameterWidth+6,y+131,valueWidth,id==pluginValueChoice?240:24,show&&pluginDetailPage==0&&r.h>=164&&valueControl==id);place(pluginApply,x+parameterWidth+valueWidth+12,y+131,68,24,show && pluginDetailPage==0 && r.h>=164);
+        place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);for(const int id:{pluginValue,pluginValueChoice,pluginValueToggle})place(id,x+parameterWidth+6,y+131,valueWidth,id==pluginValueChoice?240:24,show&&pluginDetailPage==0&&r.h>=164&&valueControl==id);place(pluginApply,x+parameterWidth+valueWidth+12,y+131,68,24,show && pluginDetailPage==0 && r.h>=164 && pluginAutoFailed && pluginDraft);
         place(pluginAutomate,x,y+163,132,24,show&&pluginDetailPage==0&&r.h>=196);
         place(pluginActivity,x+140,y+163,112,24,show&&pluginDetailPage==0&&r.h>=196);
         for(const int id:{pluginAutomate,pluginActivity})EnableWindow(controls.at(id),hasPluginParameterTarget()&&!busy&&!pluginPresetPending);
@@ -393,6 +404,7 @@
             edit("instrument.plugin.set",{{"instrument",instrument},{"plugin",selectedPlugin},{"channel",1}});
             pendingPluginTriggers.erase(selectedPlugin);pluginDetailsRevision.clear();
         } else if(id==pluginApply) {
+            pluginAutoQueued=false;
             if(pluginDraft&&pluginProgramDraft)throw std::runtime_error("Load or discard the program selection first");
             if(!pluginParameterField.editable())throw std::runtime_error("This parameter is read-only or its metadata is unavailable");
             if(pluginDraft && (pluginDraftRevision!=view->session.revision || pluginDraftTarget!=selectedPlugin || pluginDraftParameter!=selectedParameter))throw ScreamSeq::Api::ApiError(-32001,"The song or target changed. Escape discards the parameter draft; re-enter it against the current state.");
@@ -414,6 +426,6 @@
         else if(pluginDetailPage==0) {
             const bool instrument=selectedPluginSlot()>=0&&view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false);
             const float statusY=instrument?230.0f:198.0f;
-            if(r.h>=statusY+27)s.uiText(pluginDraft?L"Parameter draft / Apply retries / Escape discards":pluginDetailStatus,r.x+230,r.y+statusY,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
+            if(r.h>=statusY+27)s.uiText(pluginDraft?L"Unsaved parameter / correct the value or press Escape to discard":pluginDetailStatus,r.x+230,r.y+statusY,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
         }
     }

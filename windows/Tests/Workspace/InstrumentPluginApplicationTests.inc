@@ -20,18 +20,18 @@ void applicationInstrumentPluginAssignment(){
   const auto catalog=app.documentOperation("plugin.discover",{{"format","VST3"}});auto descriptor=std::find_if(catalog.begin(),catalog.end(),[](const auto &p){return p.at("name")=="Resonance Test Instrument";});restoreCheck(descriptor!=catalog.end(),"Instrument fixture missing");
   write("plugin.add",{{"descriptor",*descriptor}});const auto plugin=app.view->session.document.at("nativePlugins").back().at("instanceID").get<std::string>();
   SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugins").size()==1,"New rack plugin did not appear in captured instrument chooser");
-  choose(4801,1);choose(4802,6);restoreCheck(snapshot().at("dirty")==true&&panel->retainedDraft(),"Assignment draft is absent from retained owner census");
-  const auto target=snapshot().at("instrument");press(4803);
+  choose(4801,1);restoreCheck(snapshot().at("plugin")==plugin&&!snapshot().at("dirty").get<bool>(),"Plugin selection did not save immediately");choose(4802,6);
+  const auto target=snapshot().at("instrument");
   restoreCheck(!snapshot().at("dirty").get<bool>()&&snapshot().at("plugin")==plugin&&snapshot().at("channel")==7,"Native assignment failed");
   const auto assignment=app.documentOperation("plugin.instruments.get",{{"plugin",plugin}}).at("assignments");
   restoreCheck(assignment.size()==1&&assignment[0].at("instrument")==1&&assignment[0].at("channel")==7,"Wrong captured instrument or MIDI channel assigned");
   restoreCheck(app.documentOperation("instrument.get",{{"instrument",1}}).at("mapping")==mapping,"Assigning plugin erased sample mapping");
-  write("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")=="","One Undo did not remove assignment");
+  write("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin&&snapshot().at("channel")==1,"One Undo did not restore the previous MIDI channel");
   write("history.redo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin,"Redo lost plugin identity");
   // A stale draft must not jump to the newer revision or another instrument.
-  choose(4802,9);write("document.patch",{{"title","Newer song edit"}});const auto newer=app.view->session.revision;press(4803);
+  write("document.patch",{{"title","Newer song edit"}});const auto newer=app.view->session.revision;choose(4802,9);
   restoreCheck(snapshot().at("dirty")==true&&snapshot().at("stale")==true&&app.view->session.revision==newer&&snapshot().at("instrument")==target,"Stale assignment was replayed or redirected");
-  press(4804);choose(4801,0);app.completionFault=[]{throw std::runtime_error("Lost assignment callback");};press(4803);
+  press(4804);app.completionFault=[]{throw std::runtime_error("Lost assignment callback");};choose(4801,0);
   restoreCheck(!snapshot().at("completion").is_null(),"Lost assignment callback discarded its result");const auto assignedRevision=app.view->session.revision;press(4804);
   restoreCheck(snapshot().at("completion").is_null()&&snapshot().at("plugin")==""&&app.view->session.revision==assignedRevision,"Review repeated assignment or failed to read current state");
   write("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin,"Unassign recovery added another Undo");

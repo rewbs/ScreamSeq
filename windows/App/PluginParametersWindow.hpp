@@ -52,6 +52,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     return data;
   }
   void load(bool completing=false){
+    cancelAutomaticEdit();
     if(!completing&&completion_.retained())throw std::runtime_error("Review the parameter result first");
     const auto context=context_();if(context.first!=document_)throw std::runtime_error("This parameter editor belongs to another song");
     const auto generation=generation_;pending_=true;layout();
@@ -60,7 +61,7 @@ class PluginParametersWindow final : public NativeToolWindow {
       parameters_=std::move(data);page_=std::min(page_,pages()-1);revision_=context.second;needsReload_=false;sliderRow_=-1;++generation_;
       setting_=true;NativeInputGate::present(controls_.at(parameter),CB_RESETCONTENT,0,0);
       for(int i=0;i<pages();++i){const auto text=L"Page "+std::to_wstring(i+1)+L" / "+std::to_wstring(pages())+L"  ·  "+std::to_wstring(parameters_.empty()?0:i*pageSize+1)+L"–"+std::to_wstring(std::min(parameters_.size(),size_t((i+1)*pageSize)));NativeInputGate::present(controls_.at(parameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-      setting_=false;presentPage();status(L"Sliders apply on release; arrow keys adjust. Enter applies typed values. Up to 10 parameters per page.");
+      setting_=false;presentPage();status(L"Changes save automatically; sliders save on release. Up to 10 parameters per page.");
     }catch(...){setting_=pending_=false;layout();throw;}pending_=false;layout();
   }
   void finishResult(){
@@ -69,8 +70,12 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation())load(true);
     report_=report;completion_.finish();status(dirty()?L"Earlier edit completed / newer fields retained":L"Parameter applied / one Undo restores it");
   }
+  void queueTypedEdit(){queueAutomaticEdit([this]{
+    if(pending_||(available_&&!available_())){queueTypedEdit();return;}
+    if(sliderRow_<0)commit();
+  });}
   void commit(){
-    requireReady();if(!dirty())return;
+    cancelAutomaticEdit();requireReady();if(!dirty())return;
     if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / parameter text retained. Reload before applying");
     Json values=Json::array(),raw=Json::array();
     for(int i=0;i<pageSize;++i)if(rows_[i].dirty){const auto &r=rows_[i];const auto &f=r.field;if(!f.editable()||r.index<0)throw std::runtime_error("This parameter is read-only or unavailable");
@@ -96,14 +101,14 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void changePage(int page){
     NativeInputGate::present(controls_.at(parameter),CB_SETCURSEL,page_,0);
-    if(dirty())throw std::runtime_error("Apply or reload this page's typed values before changing pages");
+    if(dirty()){flushAutomaticEdit();if(dirty())throw std::runtime_error("Correct or discard the unsaved values before changing pages");}
     if(page<0||page>=pages())return;page_=page;++generation_;presentPage();
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){hide();return;}
     const int row=(id-rowBase)/stride,part=(id-rowBase)%stride;
     const bool rowControl=id>=rowBase&&row<pageSize&&rows_[row].index>=0;
-    if(rowControl&&part==value&&notification==EN_CHANGE){rows_[row].dirty=true;++generation_;return;}
+    if(rowControl&&part==value&&notification==EN_CHANGE){rows_[row].dirty=true;++generation_;queueTypedEdit();return;}
     if(pending_)return;
     if(id==reload&&notification==BN_CLICKED){if(completion_.retained())review();else load();return;}requireReady();
     if(id==parameter&&notification==CBN_SELCHANGE){changePage(int(SendMessageW(controls_.at(parameter),CB_GETCURSEL,0,0)));return;}
@@ -153,11 +158,11 @@ class PluginParametersWindow final : public NativeToolWindow {
     for(int i=0;i<pageSize;++i){const auto &r=rows_[i];const auto &f=r.field;const bool visible=r.index>=0;const bool numeric=f.kind==PluginParameterField::Kind::Number;const float y=82+i*rowHeight;
       place(control(i,nameLabel),12,y,178,19,visible);place(control(i,rangeLabel),12,y+20,178,20,visible);
       place(control(i,slider),196,y+4,w-418,30,visible&&numeric);
-      place(control(i,value),w-216,y+4,96,26,visible&&numeric);place(control(i,less),w-114,y+4,28,26,visible&&numeric);place(control(i,more),w-82,y+4,28,26,visible&&numeric);place(control(i,apply),w-50,y+4,38,26,visible&&numeric);
+      place(control(i,value),w-216,y+4,132,26,visible&&numeric);place(control(i,less),w-76,y+4,28,26,visible&&numeric);place(control(i,more),w-40,y+4,28,26,visible&&numeric);place(control(i,apply),w-50,y+4,38,26,false);
       place(control(i,choices),196,y+4,w-208,260,visible&&f.kind==PluginParameterField::Kind::Choice);place(control(i,toggle),196,y+4,w-208,26,visible&&f.kind==PluginParameterField::Kind::Toggle);
       for(auto part:{slider,value,choices,toggle,apply,less,more})EnableWindow(controls_.at(control(i,part)),ready&&visible&&f.editable()&&(part!=slider||f.maximum>f.minimum));
     }
-    place(statusLabel,12,h-82,w-24,38);place(reload,12,h-36,134,26);place(applyAll,w-150,h-36,138,26);
+    place(statusLabel,12,h-82,w-24,38);place(reload,12,h-36,134,26);place(applyAll,w-150,h-36,138,26,dirty()&&!pending_&&automaticEditFailed_);
     EnableWindow(controls_.at(previous),ready&&page_>0);EnableWindow(controls_.at(next),ready&&page_+1<pages());EnableWindow(controls_.at(parameter),ready);EnableWindow(controls_.at(applyAll),ready&&dirty());EnableWindow(controls_.at(reload),!pending_);set(reload,completion_.retained()?L"Review result":L"Reload values");
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
@@ -165,7 +170,7 @@ public:
   PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)){
     const auto captured=context_();document_=captured.first;revision_=captured.second;minimumClientWidth_=620;minimumClientHeight_=650;
     const auto title=wide(name)+L" — Parameters";create(L"ScreamSeq.PluginParameters",title.c_str(),720,740);combo(parameter);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Apply values"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Retry values"}})button(id,text);
     label(heading,wide(name).c_str());label(statusLabel,L"");
     for(int i=0;i<pageSize;++i){label(control(i,nameLabel),L"");label(control(i,rangeLabel),L"");edit(control(i,value),L"",64);combo(control(i,choices));button(control(i,toggle),L"Off");button(control(i,apply),L"Set");button(control(i,less),L"−");button(control(i,more),L"+");
       const auto track=add(control(i,slider),TRACKBAR_CLASSW,L"Parameter",TBS_HORZ|TBS_NOTICKS);NativeInputGate::present(track,TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));NativeInputGate::present(track,TBM_SETLINESIZE,0,100);NativeInputGate::present(track,TBM_SETPAGESIZE,0,1000);}

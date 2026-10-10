@@ -1073,6 +1073,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SongPropertiesApplicationTests.inc"
 #include "KeyboardSettingsApplicationTests.inc"
 #include "MenuBarApplicationTests.inc"
+#include "AutomaticEditsApplicationTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
@@ -1167,7 +1168,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
-                    applicationGraphParameterInspector();applicationMixingGraphUsability();applicationNativeCommandRecovery();applicationMixerInstrumentRouting();applicationSongRoutingPorts();applicationSongRoutingUnknownResult();applicationSongRoutingCatalogRefusal();std::cout<<"PASS Main command recovery: sample, MIDI, saved file, mixer destination, routing ports and recovery cleanup without replay\n";return;
+                    applicationAutomaticEdits();applicationGraphParameterInspector();applicationMixingGraphUsability();applicationNativeCommandRecovery();applicationMixerInstrumentRouting();applicationSongRoutingPorts();applicationSongRoutingUnknownResult();applicationSongRoutingCatalogRefusal();std::cout<<"PASS Main command recovery: sample, MIDI, saved file, mixer destination, routing ports and recovery cleanup without replay\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
                     applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;

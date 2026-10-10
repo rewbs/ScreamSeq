@@ -220,12 +220,33 @@ protected:
   void combo(int id){add(id,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL);}
   void label(int id,const wchar_t *text){add(id,L"STATIC",text,SS_LEFT);}
   void accessibleName(int id,const wchar_t *text){check(NativeAccessibility::name(controls_.at(id),text),"Name native editor control");}
-  void set(int id,const std::wstring &s){NativeControls::text(controls_.at(id),s);}
+  // Automatic writes must not normalize the active text field underneath a
+  // musician's caret. A later explicit reload may present the canonical value.
+  HWND automaticEditField_{};
+  bool automaticEditFailed_=false;
+  virtual bool displayControl(int)const{return true;}
+  std::function<void()> automaticEdit_;
+  static constexpr UINT_PTR automaticEditTimer=0x5345;
+  void cancelAutomaticEdit(){KillTimer(window_,automaticEditTimer);automaticEdit_={};}
+  void queueAutomaticEdit(std::function<void()> edit,UINT delay=600){
+    automaticEditFailed_=false;automaticEdit_=std::move(edit);SetTimer(window_,automaticEditTimer,delay,nullptr);
+  }
+  void flushAutomaticEdit(){
+    KillTimer(window_,automaticEditTimer);auto edit=std::exchange(automaticEdit_,{});if(!edit)return;
+    const auto focus=GetFocus();wchar_t type[32]{};GetClassNameW(focus,type,32);
+    automaticEditField_=owns(focus)&&!_wcsicmp(type,L"EDIT")?focus:nullptr;
+    struct Reset{HWND &field;~Reset(){field=nullptr;}}reset{automaticEditField_};
+    // Remove the callback before submitting. A rejected/uncertain write is
+    // never retried by a timer; only a new edit or an explicit retry can do so.
+    try{edit();layout();}catch(...){cancelAutomaticEdit();automaticEditFailed_=true;layout();throw;}
+    if(focus&&(!GetFocus()||GetFocus()==window_)&&IsWindow(focus)&&IsWindowVisible(focus)&&IsWindowEnabled(focus)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(focus);
+  }
+  void set(int id,const std::wstring &s){const auto h=controls_.at(id);if(h!=automaticEditField_)NativeControls::text(h,s);}
   void set(int id,const wchar_t *s){set(id,std::wstring(s));}
   void set(int id,const Api::Json &v){set(id,wide(v.is_string()?v.get<std::string>():v.dump()));}
   std::wstring field(int id)const{auto h=controls_.at(id);std::wstring s(size_t(GetWindowTextLengthW(h))+1,0);GetWindowTextW(h,s.data(),int(s.size()));s.resize(wcslen(s.c_str()));return s;}
   double number(int id)const{auto s=field(id);size_t end=0;auto value=std::stod(s,&end);if(end!=s.size()||!std::isfinite(value))throw std::runtime_error("Enter a finite number");return value;}
-  void place(int id,float x,float y,float w,float h,bool show=true){const auto scale=GetDpiForWindow(window_)/96.0f;NativeControls::place(controls_.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),show);}
+  void place(int id,float x,float y,float w,float h,bool show=true){const auto scale=GetDpiForWindow(window_)/96.0f;NativeControls::place(controls_.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),show&&displayControl(id));}
   std::pair<float,float> size()const{RECT r{};GetClientRect(window_,&r);const auto scale=96.0f/GetDpiForWindow(window_);return {r.right*scale,r.bottom*scale};}
   void requestPaint(){if(window_&&IsWindowVisible(window_))InvalidateRect(window_,nullptr,FALSE);}
   void layoutAll(){if(!ready_||relocating_)return;const auto dpi=GetDpiForWindow(window_);if(fontDpi_!=dpi){auto scale=dpi/96.0f;auto font=CreateFontW(-int(13*scale),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");for(auto [id,h]:controls_)SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);if(font_)DeleteObject(font_);font_=font;fontDpi_=dpi;fontsChanged();}layout();requestPaint();}
@@ -346,7 +367,8 @@ protected:
         if(self->minimumClientWidth_>0&&self->minimumClientHeight_>0){RECT r{0,0,LONG(std::ceil(self->minimumClientWidth_*scale)),LONG(std::ceil(self->minimumClientHeight_*scale))};if(AdjustWindowRectExForDpi(&r,DWORD(GetWindowLongPtrW(h,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(h,GWL_EXSTYLE)),dpi))minimum={r.right-r.left,r.bottom-r.top};}return 0;}
       case WM_ERASEBKGND:return 1;
       case WM_PAINT:{PAINTSTRUCT p{};BeginPaint(h,&p);EndPaint(h,&p);self->render();return 0;}
-      case WM_TIMER:if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
+      case WM_TIMER:if(w==automaticEditTimer){if(self->visible())self->flushAutomaticEdit();else self->cancelAutomaticEdit();}
+        else if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
       case WM_COMMAND:if(self->ready_){const auto notification=HIWORD(w);if(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL)return 0;self->action(LOWORD(w),notification);self->layout();self->requestPaint();}return 0;
       case WM_HSCROLL:case WM_VSCROLL:if(self->ready_&&self->controlScroll(m,w,reinterpret_cast<HWND>(l)))return 0;break;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
@@ -429,6 +451,7 @@ public:
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
   void show(){if(retired_||!window_)throw std::logic_error("Document editor was retired");const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
   virtual void hide(){
+    if(automaticEdit_){cancelAutomaticEdit();automaticEditFailed_=true;}
     const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();
     if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}
     // A source-free child can belong to a retained but hidden native tool.

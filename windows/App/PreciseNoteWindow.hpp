@@ -109,7 +109,7 @@ public:
     for(int id:{pitch,units,snap,localEffect})combo(id);
     for(int id:{instrument,velocity,offset,parameter,repeatCount,endVelocity})edit(id,L"",32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
-      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Apply"},
+      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Write note"},
       {loadTarget,L"Load selection"},{replaceRow,L"Replace row note: on"},{fillRow,L"Fill to row end"},
       {pageTimeline,L"Timeline"},{pageHit,L"Hit"},{pageTools,L"Tools"},{pageDetails,L"Details"},{reloadCapturedCommand,L"Reload captured"},
       {returnPattern,L"Return to pattern"},{close,L"Close"}})button(id,text);

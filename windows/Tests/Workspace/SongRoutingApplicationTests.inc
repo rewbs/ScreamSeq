@@ -161,8 +161,8 @@ void applicationGraphParameterInspector(){
   SetWindowTextW(GetDlgItem(window,rawControl),L"-.");select("plugin:"+other);
   restoreCheck(graph->snapshot().at("selected")=="plugin:"+other&&editor->snapshot().at("plugin")==plugin&&restoreText(GetDlgItem(window,rawControl))==L"-.","Graph navigation retargeted or discarded a parameter draft");
   click(moreControl);restoreCheck(restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter step overwrote partial text");
-  click(applyControl);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Invalid parameter text mutated the plugin");
-  SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(candidate).c_str());click(applyControl);
+  SendMessageW(window,WM_TIMER,0x5345,0);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Invalid automatic parameter text mutated the plugin");
+  SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(candidate).c_str());SendMessageW(window,WM_TIMER,0x5345,0);
   const auto after=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});restoreCheck(after[index].at("value")!=original[index].at("value")&&app.documentOperation("plugin.parameters.get",{{"plugin",other}})==untouched,"Parameter editor changed the graph's new selection instead of its captured plugin");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter edit did not have one Undo");
   app.edit("history.redo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Parameter Redo changed the value");click(3955);

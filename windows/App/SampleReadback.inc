@@ -32,6 +32,7 @@
     requireCurrent();const auto token=generation_;auto wave=readSampleWave(slot_,region_,channel_,[&]{checkSampleRead(captured_,token);});adoptSampleWave(std::move(wave));
   }
   void load(bool follow,unsigned requested=0){
+    cancelAutomaticEdit();
     require(!mutationCompletion_.retained(),"Review the retained sample result before reloading");if(pending_)return;
     auto c=context_(true);require(follow||c.document==captured_.document,"Document replaced / use From cursor to capture the new song");validateSampleCatalogue(c);
     const auto selected=std::find_if(c.samples.begin(),c.samples.end(),[&](const auto &v){return follow?v.at("index")==unsigned(requested?requested:c.sample):v.at("id")==id_;});

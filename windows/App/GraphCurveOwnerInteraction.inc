@@ -10,7 +10,7 @@
   void action(int id,unsigned notification)override{
     if(setting_)return;
     if(notification==EN_CHANGE&&(id==pointRow||id==pointValue||id==formula)){
-      pointFields_=true;++generation_;status(L"Point fields pending / Set point before Apply");return;
+      pointFields_=true;++generation_;if(selected_>=0)queueCurveEdit();status(selected_>=0?L"Saving point changes…":L"Enter point fields, then Set point");return;
     }
     if(id>=pageCurve&&id<=pageTools&&notification==BN_CLICKED){choosePage(id-pageCurve);return;}
     if(id==close&&notification==BN_CLICKED){if(dragging_)cancelDrag();hide();return;}
@@ -26,7 +26,7 @@
         const auto now=context_();require(now.document==document_,"Document changed / Load selection to capture the new song");
         try{load(now,resolve(now,std::move(target)),false);}catch(...){restorePatternChoice();throw;}return;
       }
-      if(id==kind){const auto chosen=selection(kind);require(chosen>=0&&chosen<int(curves.size()),"Choose a curve kind");kind_=chosen;pointFields_=true;++generation_;status(L"Point fields pending / Set point before Apply");return;}
+      if(id==kind){const auto chosen=selection(kind);require(chosen>=0&&chosen<int(curves.size()),"Choose a curve kind");kind_=chosen;pointFields_=true;++generation_;if(selected_>=0)queueCurveEdit();status(selected_>=0?L"Saving point changes…":L"Enter point fields, then Set point");return;}
       const auto chosen=selection(snap);require(chosen>=0&&chosen<4,"Choose a snap interval");snapIndex_=chosen;snapUnits_=std::array<unsigned,4>{256,128,64,1}[size_t(snapIndex_)];return;
     }
     if(notification!=BN_CLICKED)return;
@@ -60,7 +60,7 @@
   void deactivate()override{cancelDrag();}
   void mouse(UINT message,float x,float y,WPARAM buttons)override{
     if(message==WM_CAPTURECHANGED){cancelDrag();return;}
-    if(message==WM_LBUTTONUP&&dragging_){dragging_=false;dragBefore_=Json::array();if(GetCapture()==window_)ReleaseCapture();schedule();return;}
+    if(message==WM_LBUTTONUP&&dragging_){dragging_=false;dragBefore_=Json::array();if(GetCapture()==window_)ReleaseCapture();schedule();if(dirty_)queueCurveEdit(1);return;}
     if(!canvasVisible_||pending_||openingChild_)return;
     const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
     if(message==WM_LBUTTONDOWN&&hit.contains(x,y)&&hasTarget()){
