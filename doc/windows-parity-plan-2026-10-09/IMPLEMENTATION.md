@@ -2,13 +2,40 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
-## Next consolidated checkpoint — prepared, 10 October, 06:35 UTC
+## Latest consolidated checkpoint — compile failure, 10 October, 06:43 UTC
+
+Checkpoint 05 ran once against frozen `85a90f095`, starting at 06:43:41 UTC
+and ending at 06:43:54 UTC. Configuration succeeded; compilation stopped at
+`TrackerDocument.cpp:1128`, error C2248: direct access to protected
+`PlayState::m_nBufferCount`. Source hashes remained unchanged. The
+[terminal receipt summary](integration-checkpoint-05-result.json) records exact
+commands, timing, log hash and evidence scope. No manifest, native, actual-app or
+remote gate ran; old executables cannot qualify this candidate.
+
+The source repair adds a read-only `SamplesRemainingInTick()` accessor inside
+the existing `OPENMPT_EDITOR_CORE` block and uses it in the audition path and
+all three regression clock observations. The protected field stays protected;
+there is no layout, tick advancement, persistence or plugin-state change.
+`ReadNote(channel)` is already public under the native editor build, and its
+single-channel path bypasses row/tick preparation and other voice updates.
+The first-callback PCM, independent-envelope/pitch, clock and realtime assertions
+remain intact. This repair is **unbuilt and unqualified**.
+
+The next consolidated batch must include this repair plus `bc981bf99`'s shared
+parameter validation on both platforms. Add `parameter-edit-tests` / CTest
+`parameter-edit` to the retained selection; preserve the audition/audio-bus and
+API/history cases. The next normal local build may start no earlier than
+**2026-10-10 07:43:55.207390 UTC** (00:43:55 Pacific). Continue source work during
+the interval; do not retry checkpoint 05 or reinterpret its failed build as a
+partial runtime pass. P0b–P8 and final integration remain open.
+
+## Historical checkpoint preparation — 10 October, 06:35 UTC
 
 The [checkpoint-05 preparation](CHECKPOINT-05-PREPARATION.md) freezes and publishes
 `85a90f095` for the combined pending P1–P4 source. It records the 54-target local
 build, additional focused native/app cases and guarded Windows x64/Mac matrix
-follow-up. Nothing in that checkpoint has run yet. The hourly deadline remains
-06:43:28 UTC; previous partial/failed evidence is preserved. Main is unchanged.
+follow-up. At that preparation point nothing had run; the execution result above
+supersedes that status. Previous partial/failed evidence is preserved.
 
 ## Standing build cadence (user instruction)
 

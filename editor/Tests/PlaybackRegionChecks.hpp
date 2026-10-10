@@ -61,7 +61,7 @@ static void playbackRegionChecks() {
       Renderer immediate(previewBytes,rate,0,paused);
       check(immediate.render(out.data(),1)==1,"Prime preview between tracker ticks");
       const auto &state=immediate.song().m_PlayState;
-      const auto remaining=state.m_nBufferCount;
+      const auto remaining=state.SamplesRemainingInTick();
       const auto tick=state.m_nTickCount;
       const auto row=state.m_nRow;
       check(remaining>block,"Audition fixture must finish before the next tick");
@@ -70,7 +70,7 @@ static void playbackRegionChecks() {
       check(got==block&&!immediate.faulted()&&a+f+l==0,"Immediate audition must render without callback allocation or locks");
       check(std::any_of(out.begin(),out.begin()+block*2,[](float v){return std::abs(v)>1e-7f;}),
         "Sample and instrument auditions must sound in their first callback between ticks");
-      check(state.m_nBufferCount==remaining-block&&state.m_nTickCount==tick&&state.m_nRow==row,
+      check(state.SamplesRemainingInTick()==remaining-block&&state.m_nTickCount==tick&&state.m_nRow==row,
         "Audition onset must not advance or restart the tracker tick");
       const auto &firstVoice=state.Chn[immediate.song().GetNumChannels()];
       const auto envelope=firstVoice.VolEnv.nEnvPosition;
@@ -80,7 +80,7 @@ static void playbackRegionChecks() {
       check(second==17&&!immediate.faulted()&&a+f+l==0,"Second audition must preserve realtime safety");
       check(firstVoice.VolEnv.nEnvPosition==envelope&&firstVoice.increment==increment,
         "A new audition must not refresh an existing voice's envelope or pitch");
-      check(state.m_nBufferCount==remaining-block-17&&state.m_nTickCount==tick&&state.m_nRow==row,
+      check(state.SamplesRemainingInTick()==remaining-block-17&&state.m_nTickCount==tick&&state.m_nRow==row,
         "A second audition must also preserve the tracker clock");
     }
 }

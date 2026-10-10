@@ -1,5 +1,10 @@
 # Consolidated checkpoint 05 — prepared, not executed
 
+**Historical preparation snapshot.** The subsequent build failed on 10 October
+at 06:43 UTC; see [current status](IMPLEMENTATION.md) and the
+[terminal evidence](integration-checkpoint-05-result.json). Statements below
+about unrun helpers describe preparation time, not current execution status.
+
 The clean integration checkout and temporary remote branch
 `codex/windows-parity-integration` are frozen at
 `85a90f095de67309779891ddc300cfae59740ec0`. This is the single source candidate for

@@ -1125,7 +1125,7 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		// new sample voice now; otherwise it remains absent from ChnMix until
 		// the next tick. At a tick boundary Read() prepares it normally.
 		// ReadNote(channel) preserves the transport clock and other voices.
-		if(chn.nLength && song_->m_PlayState.m_nBufferCount)
+		if(chn.nLength && song_->m_PlayState.SamplesRemainingInTick())
 			song_->ReadNote(channel);
 	}
 	noteRead_.store(noteRead, std::memory_order_release);
