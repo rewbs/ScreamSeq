@@ -237,3 +237,59 @@ must join the next cohesive shared batch and receive Windows/Mac builds plus the
 new candidate test and existing targeted parameter/API/history suites. It does
 not invalidate checkpoint 05's attribution or authorize an early extra build.
 No build or test has been run for this extraction.
+
+## Live parameter admission — prepared, unqualified
+
+Source review before adding continuous gestures found a real failure-policy gap:
+`Main.cpp` stopped playback and allowed the saved edit to commit when
+`PluginChain::enqueueParameters` refused a complete batch. The existing worker
+test explicitly expected that fallback, despite the shared queue's atomic
+rejection and the session's ability to roll back its prepared history entry.
+An active device with no prepared playback pointer also silently accepted the
+saved edit. Neither case is an acceptable foundation for repeated previews.
+
+The native app and worker regression now share
+`windows/Session/LiveParameterPublication.hpp::publishLiveParameters`.
+It runs on the existing UI producer, returns without audio work when no device
+is active, and rejects a full/unavailable live queue with busy error `-32002`
+and an explicit NotCommitted outcome at the failed admission boundary. It never
+stops transport. `PluginOperations::commit` and `restoreHistory` already remove
+their prepared history copy on this exception before adopting saved state;
+the controller still upgrades any later failure after revision advancement to
+Committed. No error-number-only outcome inference was added.
+
+The strengthened `document-controller-live-parameters` case now fills the real
+4096-entry queue and exercises that same app admission helper. Prepared checks
+require unchanged saved state, immutable view/revision, last-touched target,
+transport and successful-publication count after refusal; harmless dry-run/no-op
+at saturation; failed Undo without history movement; draining then explicitly
+retrying; no rejected prefix in audio; one Undo per accepted edit; retained Redo
+after a refused new edit; missing active host rejection; and save/reopen of the
+accepted baseline. The original stopped-transport fallback expectation is
+replaced by stronger atomicity assertions, not removed for a passing result.
+
+This source changes no queue capacity, callback loop, project encoding, plugin
+state format or Mac path. Batch the app and existing controller executable with
+the already pending shared/audio changes. Required targeted checks are
+`document-controller-live-parameters`, `live-parameter-tests`, relevant actual
+app plugin draft/API/history cases, and the retained shared audio regressions.
+The broader batch still requires both platform builds. No build or test ran for
+this repair. Slider previews, cancellation and one-final-Undo gesture ownership
+remain P4 work; this change supplies their reliable failure boundary only.
+
+The same callback also receives consumed vendor editor notifications.
+`PluginOperations::pendingLiveParameters_` now retains their latest values by
+stable instance/parameter until the whole live batch is admitted. A failed poll
+does not erase them; later edits coalesce into the retained batch, and successful
+publication clears it before opaque-state capture. Accepted API/history rack
+replacement and editor removal clear obsolete pending values with their owners.
+This prevents a refused editor update from disappearing on the next poll or
+being saved without ever reaching the prepared audio host.
+
+The existing `--recovery-manual` controller scenario (invoked by the isolated
+actual-app recovery test with its deterministic VST3 cache) gains a focused
+editor admission case. It rejects the fixture's attached gesture, rejects a
+newer value, then accepts one retained coalesced value; verifies no idle resend,
+unchanged revision/owner/transport on refusal, and exactly one accepted Undo/Redo.
+Keep this case in the next bounded selection. It tests notification retention;
+the separate real queue/renderer case supplies audio admission evidence.

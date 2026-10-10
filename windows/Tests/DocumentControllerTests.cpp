@@ -1,4 +1,5 @@
 #include "windows/Session/DocumentController.hpp"
+#include "windows/Session/LiveParameterPublication.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
@@ -179,7 +180,8 @@ void liveParameterTests(const std::filesystem::path &directory) {
     [&](std::span<const Tracker::ParameterChange> changes){
       need(std::this_thread::get_id()==mainThread,"Live parameter publication must use the single UI producer");
       if(reject)throw std::runtime_error("controlled prepublication failure");
-      if(active){++batches;if(!playback->chain().enqueueParameters(changes)){++stops;active=false;}}
+      publishLiveParameters(active,playback,changes);
+      if(active)++batches;
     });
   auto library=call(c,"plugin.discover",{{"format","Built-in"}});
   invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
@@ -199,15 +201,43 @@ void liveParameterTests(const std::filesystem::path &directory) {
   view=c.view();edit(-12);need(c.view()==view&&batches==1&&stops==beforeStops,"Parameter no-op must not add history or queue traffic");
   const auto path=directory/"live-parameters.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()}});need(active&&stops==beforeStops,"Save of parameter baseline should retain playback");
-  // Saturation falls back to stopping BEFORE committing the complete baseline.
+  // Use the application's exact admission boundary: saturation rejects before
+  // saved state, revision, touch or chronological history can be adopted.
   std::vector<Tracker::ParameterChange> full(4096,{0,1,-12,0});need(playback->chain().enqueueParameters(full),"Fill live queue");
-  edit(-24);need(!active&&stops==beforeStops+1,"Whole-batch queue failure stops instead of partially publishing");
-  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Undo recovers the pre-overflow saved baseline");
-  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==baseline,"One live batch is one plugin Undo step");
-  invoke(c,"history.redo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Redo restores the whole live batch");
+  view=c.view();const auto touched=call(c,"automation.target.get",{});const auto beforeBatches=batches;
+  const auto refused=[&](auto action){
+    bool classified=false;try{action();}catch(const Api::ApiError &e){
+      classified=e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
+    }
+    need(classified,"Live queue rejection must report a known uncommitted operation");
+  };
+  refused([&]{edit(-24);});
+  need(active&&stops==beforeStops&&batches==beforeBatches&&c.view()==view&&
+    call(c,"plugin.state.get",{{"slot",0}})==changed&&call(c,"automation.target.get",{})==touched,
+    "Full queue changed transport, accepted state, view, history or last-touched target");
+  edit(-24,true);edit(-12);
+  need(c.view()==view&&batches==beforeBatches,"Dry run and no-op must remain harmless with a full queue");
+  refused([&]{invoke(c,"history.undo",{{"domain","plugins"}});});
+  need(c.view()==view&&active&&stops==beforeStops,"Failed live Undo changed history or stopped playback");
+  need(playback->render(pcm.data(),256)&&gain()==-12,"Rejected edit leaked through the queued accepted batch");
+  edit(-24);need(playback->render(pcm.data(),256)&&gain()==-24,"Explicit retry after draining must publish the complete edit");
+  invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed&&playback->render(pcm.data(),256)&&gain()==-12,"One Undo must recover the pre-retry baseline");
+  invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==baseline&&playback->render(pcm.data(),256)&&gain()==0,"Rejected edits must not leave phantom Undo entries");
+  for(auto &change:full)change.value=0;
+  need(playback->chain().enqueueParameters(full),"Fill queue while Redo exists");view=c.view();
+  refused([&]{edit(-24);});
+  need(c.view()==view&&active&&stops==beforeStops,"Rejected edit with Redo changed accepted state");
+  need(playback->render(pcm.data(),256)&&gain()==0,"Second rejected edit reached audio");
+  invoke(c,"history.redo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed&&playback->render(pcm.data(),256)&&gain()==-12,"Rejected new edit destroyed the existing Redo branch");
+  auto *retained=playback;playback=nullptr;view=c.view();
+  refused([&]{edit(-24);});playback=retained;
+  need(c.view()==view&&active&&stops==beforeStops,"Active audio without a prepared host must reject without stopping or committing");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"plugin.state.get",{{"slot",0}})==changed&&!c.view()->dirty,"Save/reopen retains the live-edited baseline");
-  std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, overflow fallback, independent history and save/reopen\n";
+  std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, atomic overflow rejection, retained Undo/Redo and save/reopen\n";
 }
 
 void triggerInstrumentTests(const std::filesystem::path &directory) {

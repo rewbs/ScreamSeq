@@ -22,9 +22,15 @@ The first-callback PCM, independent-envelope/pitch, clock and realtime assertion
 remain intact. This repair is **unbuilt and unqualified**.
 
 The next consolidated batch must include this repair plus `bc981bf99`'s shared
-parameter validation on both platforms. Add `parameter-edit-tests` / CTest
+parameter validation on both platforms and P4's native live-parameter admission
+repair. The latter rejects full/unavailable queues without stopping or committing
+and retains consumed vendor notifications for a later coalesced retry; source
+and prepared acceptance details are in [P4](P4-IMPLEMENTATION.md).
+Add `parameter-edit-tests` / CTest
 `parameter-edit` to the retained selection; preserve the audition/audio-bus and
-API/history cases. The next normal local build may start no earlier than
+API/history cases, including `document-controller-live-parameters` and
+`test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard`.
+The next normal local build may start no earlier than
 **2026-10-10 07:43:55.207390 UTC** (00:43:55 Pacific). Continue source work during
 the interval; do not retry checkpoint 05 or reinterpret its failed build as a
 partial runtime pass. P0b–P8 and final integration remain open.

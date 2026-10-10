@@ -4,6 +4,7 @@
 #include "soundlib/mod_specifications.h"
 #include "soundlib/ModInstrument.h"
 #include "../Session/DocumentController.hpp"
+#include "../Session/LiveParameterPublication.hpp"
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
@@ -651,9 +652,7 @@ public:
         controller=std::make_unique<ScreamSeq::DocumentController>(input,documentId,[this]{stop();},[this](const auto &edits){
             if(device.running() && renderer && !renderer->enqueue(edits)) {stop();status=L"Edit committed; playback stopped because live queue was full";}
         },std::function<void()>{},64u*1024u*1024u,[this](std::span<const Tracker::ParameterChange> changes){
-            if(device.running() && preparedPlayback && !preparedPlayback->chain().enqueueParameters(changes)) {
-                stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
-            }
+            ScreamSeq::publishLiveParameters(device.running(),preparedPlayback,changes);
         },std::move(playback),std::move(catalogue),std::move(library),this);
         view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;resolveArrangementSelection();
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();

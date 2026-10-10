@@ -129,7 +129,53 @@ void recoveryControllerTests(const std::filesystem::path &directory) {
   std::cout<<"PASS recovery capture purity/playback, exact PCM/native/opaque/take persistence, guarded transactional restore, dirty/save, corruption/budget and pending revisions\n";
 }
 
+void liveEditorAdmissionTests(const std::filesystem::path &scanner,const std::filesystem::path &cache) {
+  Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
+  bool reject=true;unsigned attempts=0,stops=0;
+  std::vector<Tracker::ParameterChange> accepted;
+  DocumentController c({},"editor-live-admission",[&]{++stops;},[](const auto &){},{},64u*1024u*1024u,
+    [&](std::span<const Tracker::ParameterChange> changes){
+      ++attempts;
+      if(reject)publishLiveParameters(true,nullptr,changes);
+      accepted.assign(changes.begin(),changes.end());
+    });
+  const auto catalog=call(c,"plugin.discover",{{"format","VST3"}});Json descriptor;
+  for(const auto &p:catalog)if(p.at("classID")=="5245534F4E414E434546464543540001")descriptor=p;
+  need(!descriptor.is_null(),"Editor admission needs the deterministic VST3 gain fixture");
+  invoke(c,"plugin.add",{{"descriptor",descriptor}});
+  const auto baseline=call(c,"plugin.state.get",{{"slot",0}});
+  invoke(c,"plugin.editor.open",{{"slot",0}});
+  const auto revision=c.view()->session.revision;const auto stopped=stops;
+  const auto refused=call(c,"flushPluginEditors",{{"force",true}});
+  need(refused.contains("pluginEditorWarning")&&accepted.empty()&&attempts==1&&
+    c.view()->session.revision==revision&&c.view()->hasOpenEditors&&stops==stopped,
+    "Rejected editor publication discarded the owner, changed history or stopped playback");
+  const auto module=GetModuleHandleW(std::filesystem::u8path(descriptor.at("path").get<std::string>()).c_str());
+  need(module!=nullptr,"Editor admission fixture module unavailable");
+  const auto gesture=reinterpret_cast<int(*)(double)>(GetProcAddress(module,"ResonanceFixtureGesture"));
+  need(gesture!=nullptr,"Editor admission fixture gesture export missing");
+  Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.375)>0,"Newer editor gesture rejected");});
+  const auto again=call(c,"flushPluginEditors",{{"force",true}});
+  need(again.contains("pluginEditorWarning")&&attempts==2&&accepted.empty()&&c.view()->session.revision==revision,
+    "A newer gesture must remain pending after another admission failure");
+  reject=false;
+  const auto delivered=call(c,"flushPluginEditors",{{"force",true}});
+  need(!delivered.contains("pluginEditorWarning")&&attempts==3&&accepted.size()==1&&
+    accepted[0].slot==0&&accepted[0].id==7&&accepted[0].value==.375f&&stops==stopped,
+    "Retry lost the consumed notification, replayed an older value or stopped playback");
+  need(c.view()->session.revision!=revision,"Accepted retained editor gesture did not commit");
+  const auto changed=call(c,"plugin.state.get",{{"slot",0}});need(changed!=baseline,"Retried editor state was not captured");
+  call(c,"flushPluginEditors",{{"force",true}});
+  need(attempts==3,"Accepted editor notification was published again on an idle poll");
+  invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==baseline,"Retried editor gesture created more than one Undo entry");
+  invoke(c,"history.redo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Retried editor gesture did not survive Redo");
+  std::cout<<"PASS retained vendor notifications, retry coalescing, idle delivery and one-step history\n";
+}
+
 void recoveryManualEditorTests(const std::filesystem::path &scanner,const std::filesystem::path &cache,const std::filesystem::path &directory) {
+  liveEditorAdmissionTests(scanner,cache);
   const char *stage="initial plugin setup";
   try {
   Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
