@@ -222,6 +222,23 @@ int main() {
       request["targets"]=GraphCableEdits::pluginTargets(m.invoke("mixer.get",Json::object())["instruments"],synth.instanceID,0,main,t1,{});m.invoke("mixer.plugin.route",request);
       CHECK(d.native().mixer.instruments.size()==2&&d.native().mixer.instruments[0]==branched.mixer.instruments[0]&&d.native().mixer.instruments[1]==branched.mixer.instruments[2]);
       d.undo();CHECK(d.native()==repatched);
+      // Native Route Here replaces only this instrument output. Preserve the
+      // other output's explicit fan-out, and keep no-op/history semantics.
+      const auto beforeHere=d.native();
+      const Json here={{"plugin",synth.instanceID},{"output",1},{"target",t0}};
+      auto hereDry=here;hereDry["dryRun"]=true;m.invoke("mixer.instrument.route",hereDry);CHECK(d.native()==beforeHere);
+      m.invoke("mixer.instrument.route",here);const auto afterHere=d.native();
+      auto expectedHere=beforeHere;std::erase_if(expectedHere.mixer.instruments,[&](const auto &route){return route.plugin==synth.instanceID&&route.output==1;});
+      expectedHere.mixer.instruments.push_back({synth.instanceID,expectedHere.tracks[0].id,1});
+      CHECK(afterHere==expectedHere);
+      const auto hereRevision=d.revision;const auto hereHistory=d.historyBytes();m.invoke("mixer.instrument.route",here);CHECK(d.revision==hereRevision&&d.historyBytes()==hereHistory);
+      d.undo();CHECK(d.native()==beforeHere);d.redo();CHECK(d.native()==afterHere);
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(afterHere))==afterHere);
+      for(const auto *field:{"plugin","output","target"}){
+        auto invalidHere=here;invalidHere[field]=std::string(field)=="output"?Json(63):Json("missing");
+        const auto revision=d.revision;bool rejected=false;try{m.invoke("mixer.instrument.route",invalidHere);}catch(const Api::ApiError &){rejected=true;}
+        CHECK(rejected&&d.native()==afterHere&&d.revision==revision);
+      }
     }
 
     const auto beforeReturn=native();

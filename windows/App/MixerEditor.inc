@@ -8,6 +8,7 @@
     std::unique_ptr<ScreamSeq::SongRoutingWindow> songRoutingWindow;
     std::unique_ptr<ScreamSeq::MixerStripsWindow> mixerStrips;
     bool mixerStripsMode=true;
+    #include "MixerInstrumentRouting.inc"
     void ensureMixerStrips() {
         if(mixerStrips&&!mixerStrips->retired())return;
         mixerStrips=std::make_unique<ScreamSeq::MixerStripsWindow>(window,
@@ -39,9 +40,10 @@
         controls[mixerOutput]=CreateWindowExW(0,L"COMBOBOX",L"Main output",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerOutput)),GetModuleHandleW(nullptr),nullptr);
         for(int id=mixerName;id<=mixerTiming;++id){controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(controls.at(id),EM_SETLIMITTEXT,id==mixerName?256:32,0);}
         controls[mixerAddEffect]=CreateWindowExW(0,L"BUTTON",L"Add effect…",WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerAddEffect)),GetModuleHandleW(nullptr),nullptr);
+        controls[mixerRouteInstrument]=CreateWindowExW(0,L"BUTTON",L"Route instrument here…",WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerRouteInstrument)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerColor]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerColor)),GetModuleHandleW(nullptr),nullptr);
         if(controls[mixerColor])SendMessageW(controls.at(mixerColor),EM_SETLIMITTEXT,6,0);
-        for(int id=mixerCommand;id<=mixerAddEffect;++id)if(!controls.at(id))throw std::runtime_error("Cannot create mixer controls");
+        for(int id=mixerCommand;id<=mixerRouteInstrument;++id)if(!controls.at(id))throw std::runtime_error("Cannot create mixer controls");
         ensureMixerStrips();
     }
     static std::wstring mixerColorText(const Json &bus) {
@@ -175,7 +177,7 @@
         // Document adoption retires the previous native owner. Recreate it for
         // a restored visible Strips view without requiring another Mixer click.
         if(visible&&mixerStripsMode)ensureMixerStrips();
-        place(mixerList,r.x+8,r.y+38,180,std::max(1.0f,r.h-136),show);
+        place(mixerList,r.x+8,r.y+38,180,std::max(1.0f,r.h-168),show);
         place(mixerAdd,r.x+8,r.y+r.h-57,88,25,show);place(mixerAddReturn,r.x+100,r.y+r.h-57,88,25,show);
         place(mixerEnable,r.x+8,r.y+5,118,25,visible);place(mixerRemove,x,r.y+5,80,25,show);
         place(mixerRouting,mixerStripsMode?r.x+134:x+86,r.y+5,96,25,visible);
@@ -188,6 +190,7 @@
         for(int i=0;i<6;++i)place(mixerPreGain+i,x+float(i%3)*w,r.y+105+float(i/3)*49,w-8,25,show);
         place(mixerMute,x,r.y+192,88,25,show);place(mixerSolo,x+92,r.y+192,88,25,show);
         place(mixerAddEffect,r.x+8,r.y+r.h-89,180,25,show);
+        place(mixerRouteInstrument,r.x+8,r.y+r.h-121,180,25,show);
         place(mixerReload,r.x+r.w-164,r.y+192,76,25,show);place(mixerApply,r.x+r.w-84,r.y+192,76,25,show);
         const bool active=mixerData.value("active",false),selected=mixerSelected()>=0;
         ScreamSeq::NativeControls::text(controls.at(mixerEnable),active?L"Mixer enabled":L"Enable mixer");EnableWindow(controls.at(mixerEnable),!active&&!mixerPending);
@@ -195,6 +198,7 @@
         EnableWindow(controls.at(mixerAddReturn),active&&!mixerDirty&&!mixerPending);
         EnableWindow(controls.at(mixerColor),selected);
         EnableWindow(controls.at(mixerAddEffect),selected&&!mixerDirty&&!mixerPending);
+        EnableWindow(controls.at(mixerRouteInstrument),selected&&!mixerDirty&&!mixerPending);
         for(int id=mixerName;id<=mixerTiming;++id)EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(mixerOutput),selected&&mixerDraft.value("kind","")!="master");EnableWindow(controls.at(mixerApply),selected&&!mixerPending);
         ScreamSeq::NativeControls::text(controls.at(mixerReload),nativeCommandCompletion.retained()?L"Review result":L"Reload");
@@ -202,7 +206,7 @@
         if(visible)SetTimer(window,3,50,nullptr);
     }
     bool mixerControlCommand(int id) {
-        if(id<mixerCommand||id>mixerAddEffect)return false;
+        if(id<mixerCommand||id>mixerRouteInstrument)return false;
         workspaceState.focus="mixer";
         if(id==mixerRouting){openSongRouting();return true;}
         if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand){
@@ -217,9 +221,9 @@
             throw std::runtime_error("Review the earlier command result before changing Mixer Details");
         }
         if(mixerStrips&&!mixerStrips->retired()&&mixerStrips->hasGesture())throw std::runtime_error("Finish or cancel the retained mixer strip gesture first");
+        if(id==mixerRouteInstrument){routeMixerInstrument();return true;}
         if(id==mixerAddEffect){
             if(mixerDirty)throw std::runtime_error("Apply or Reload the retained Mixer Details draft before choosing an effect destination");
-            if(mixerDocument!=documentId||mixerRevision!=view->session.revision)refreshMixer();
             if(mixerSelected()<0||mixerDocument!=documentId||mixerRevision!=view->session.revision)throw std::runtime_error("Reload Mixer before choosing an effect destination");
             openPluginLibrary(mixerDocument,mixerTarget,mixerDraft.at("name").get<std::string>());return true;
         }

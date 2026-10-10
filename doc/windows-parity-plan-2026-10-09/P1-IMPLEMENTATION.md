@@ -286,8 +286,8 @@ Because common command dispatch changed, that checkpoint must also include the
 workspace/departure/shortcut/typing/recovery application group, in addition to P1
 native strip/model/PCM checks. No build or test was run for these changes.
 
-Remaining bounded P1 feature work includes instrument Route Here and sidechain
-catalogs. Physical UI/accessibility and reciprocal
+Remaining bounded P1 feature work includes sidechain catalogs. Physical
+UI/accessibility and reciprocal
 Mac fixture checks remain open; prepared source does not close them.
 
 ## Destination-aware effect browser — source only
@@ -328,3 +328,42 @@ pending strip/model cases. Full foreground layout, keyboard, UIA and mixed-DPI
 acceptance remains open. Only `git diff --check` was used during preparation;
 no build or product test was started. The normal local build remains gated until
 2026-10-10 00:19:51 UTC or later, and should include the next ready P1 slices.
+
+## Instrument Route Here — source only
+
+Details and the palette now expose **Route instrument here…** (423). The native
+popup groups outputs by stable plugin identity and displays actual port names,
+current destinations, implicit Master versus unrouted auxiliary outputs, and
+unsupported/unavailable states. Supported inactive outputs are explicitly marked
+as enabling on playback, matching existing API admission. An empty catalog never
+fabricates a main output. Native menus provide Windows keyboard/DPI/theme behavior.
+
+`windows/App/MixerInstrumentRouting.inc` owns the presentation and captured menu
+intent. The existing `mixer.instrument.route {plugin,output,target}` transaction
+moves only the chosen output to this bus. Its existing multiple destinations are
+replaced, as the menu's “one output only to” heading states; other outputs and
+plugins are preserved. The full Routing editor remains the branch-editing path.
+The action rechecks document, revision, destination and draft generation after
+the native menu loop and uses the existing retained Mixer command receipt and
+Review path. Cancellation performs no write. Mixer pending ownership protects
+the menu interval; raw drafts and strip gestures block entry.
+
+Both Route Here and Add Effect now reject stale Mixer context before opening.
+They no longer refresh and potentially choose a first bus when the originally
+selected bus disappears. Explicit Reload may choose a current selection, which
+the musician can inspect before invoking either action.
+
+Prepared checks: `MixerInstrumentApplicationTests.inc`, invoked by the existing
+workspace command-result group, covers menu identity/port labels, unavailable
+outputs, native label escaping, cancellation, changed destination, newer raw
+draft, stale context and an actual document edit during menu selection. It uses
+synthetic catalog data only for menu/admission cases; it does not claim hosted
+instrument execution. `MixerOperationsTests.cpp` extends the existing instrument
+fan-out fixture with actual Route Here mutation, dry run, one-step Undo/Redo,
+no-op revision/history, invalid identity/output rejection, unrelated output
+preservation and metadata roundtrip. Full native save/reopen with a hosted
+multi-output instrument and audible routing remains required at the P1 gate.
+
+No build/test was started for this slice. At 2026-10-10 00:00:07 UTC the existing
+Intel job 114066597619 had completed its build successfully and was executing
+native model/host tests at frozen d39; it does not qualify this P1 source.

@@ -91,6 +91,11 @@ struct RestoreApplication final:Application {
         return pluginPresetChooser(save);
     }
     int nativeCommandChoice=IDNO;std::function<void()> duringCommandAcknowledgement;
+    std::function<unsigned(const std::wstring &,const std::vector<MixerInstrumentChoice> &)> mixerInstrumentChooser;
+    unsigned chooseMixerInstrumentOutput(const std::wstring &destination,const std::vector<MixerInstrumentChoice> &choices)override{
+        if(!mixerInstrumentChooser)throw std::runtime_error("Fixture requires an owned instrument output chooser");
+        return mixerInstrumentChooser(destination,choices);
+    }
     bool failSaveBeforeCleanup=false;unsigned saveCleanupFailures=0;
     int chooseNativeCommandAcknowledgement(const Json &)override{if(auto action=std::exchange(duringCommandAcknowledgement,{}))action();return nativeCommandChoice;}
     int departureChoice=IDCANCEL;
@@ -1044,6 +1049,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "DocumentDraftCensusTests.inc"
 #include "DocumentDepartureApplicationTests.inc"
 #include "PluginLibraryApplicationTests.inc"
+#include "MixerInstrumentApplicationTests.inc"
 #include "SampleBrowserApplicationTests.inc"
 #include "SampleLibraryApplicationTests.inc"
 #include "NativeReceiptApplicationTests.inc"
@@ -1115,7 +1121,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
-                    applicationNativeCommandRecovery();std::cout<<"PASS Main command recovery: sample, MIDI, saved file and recovery cleanup without replay\n";return;
+                    applicationNativeCommandRecovery();applicationMixerInstrumentRouting();std::cout<<"PASS Main command recovery: sample, MIDI, saved file, mixer destination and recovery cleanup without replay\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
                     applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;

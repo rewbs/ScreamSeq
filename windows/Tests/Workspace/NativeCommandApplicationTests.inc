@@ -39,7 +39,7 @@ void applicationNativeCommandRecovery(){
     restoreCheck(app.documentOperation("mixer.get",RestoreJson::object()).at("buses")==added.at("buses"),"Add Return Redo changed its stable identity");
     rawDraftText(app.controls.at(mixerName),L"Texture return");rawDraftText(app.controls.at(mixerColor),L"12zz90");app.mixerFieldChanged();
     const auto generation=app.mixerGeneration;const auto revision=app.view->session.revision;
-    for(const auto command:{mixerApply,mixerAdd,mixerAddReturn,mixerRemove,mixerAddEffect})restoreRejected([&]{app.mixerControlCommand(command);});
+    for(const auto command:{mixerApply,mixerAdd,mixerAddReturn,mixerRemove,mixerAddEffect,mixerRouteInstrument})restoreRejected([&]{app.mixerControlCommand(command);});
     restoreCheck(app.mixerDirty&&app.mixerGeneration==generation&&app.view->session.revision==revision&&
       restoreText(app.controls.at(mixerColor))==L"12zz90"&&app.documentOperation("mixer.get",RestoreJson::object())==added,
       "Invalid color or structural command discarded a raw draft or changed the mixer");

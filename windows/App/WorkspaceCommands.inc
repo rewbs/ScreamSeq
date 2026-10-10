@@ -22,6 +22,7 @@
             {mixerAdd,L"Mix / Add group bus",L""},
             {mixerAddReturn,L"Mix / Add return bus",L""},
             {mixerAddEffect,L"Mix / Add effect to selected bus…",L""},
+            {mixerRouteInstrument,L"Mix / Route instrument output here…",L""},
             {mixerRouting,L"Mix / Song routing overview, inserts, sends and sidechains",L""},
             {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
             {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},

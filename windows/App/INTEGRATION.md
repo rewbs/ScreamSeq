@@ -290,6 +290,14 @@ destination, filters to effects and uses existing atomic `plugin.add` insertion.
 documents, pending operations and retained drafts cannot silently redirect the
 insertion. This prepared P1 source has not yet been built or qualified.
 
+**Route instrument here…** uses a native menu of the instrument's actual named
+outputs and their current destinations. One choice moves that output to the
+selected bus through `mixer.instrument.route`; other outputs remain unchanged.
+Unsupported ports are unavailable, and missing catalogs never imply a main port.
+The action retains its document/bus/revision across the menu and refuses changed
+context. Both destination actions require Reload when Mixer is stale. These
+prepared controls still require native and hosted-instrument qualification.
+
 The native mixer Details dock has a captured, revision-guarded bus draft, compact numeric
 controls, main-output selection (including disconnect), mute/solo, group/return creation
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
