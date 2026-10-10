@@ -96,6 +96,33 @@ class SongRoutingTests(unittest.TestCase):
                 self.select(3838,self.local()['outputPorts']['indices'].index(value)+1)
             else:self.field(identifier,value)
 
+    def test_graph_wheel_navigation_is_anchored_and_new_actions_fit(self):
+        first,_,_=self.setup_mixer();self.start();before=self.doc();saved=self.read('graph.get',includeState=False)
+        user=private_desktop.user;owner=self.window();scale=self.read('workspace.get')['dpi']/96
+        user.ClientToScreen.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.POINT)]
+        v=self.local()['canvas']['viewport'];point=(v[0]+v[2]/2,v[1]+v[3]/2)
+        screen=wintypes.POINT(round(point[0]*scale),round(point[1]*scale));self.assertTrue(user.ClientToScreen(owner,ctypes.byref(screen)))
+        packed=(screen.x&65535)|((screen.y&65535)<<16)
+        old=self.node(first)['rect'];zoom=self.local()['canvas']['zoom']
+        self.desktop.send(owner,0x20A,(120<<16)|8,packed)  # Ctrl+wheel, cursor-anchored zoom.
+        fresh=self.node(first)['rect'];self.assertGreater(self.local()['canvas']['zoom'],zoom)
+        # Compare a world point in normalized node coordinates (DPI rounding bounded).
+        for axis in (0,1):self.assertAlmostEqual((point[axis]-old[axis])/old[2+axis],(point[axis]-fresh[axis])/fresh[2+axis],delta=.02)
+        self.desktop.send(owner,0x20A,((-120&65535)<<16),packed)
+        panned=self.node(first)['rect'];self.assertAlmostEqual(panned[1]-fresh[1],-48,delta=.1)
+        self.desktop.send(owner,0x20A,(120<<16)|4,packed)  # Shift+wheel pans horizontally.
+        horizontal=self.node(first)['rect'];self.assertAlmostEqual(horizontal[0]-panned[0],48,delta=.1)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.read('graph.get',includeState=False),saved)
+        user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
+        user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
+        self.assertTrue(user.SetWindowPos(owner,None,0,0,round(1040*scale),round(680*scale),0x16))
+        frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));previous=None
+        for identifier in (3822,3839,3840,3841,3815,3820):
+            rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect))
+            self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right)
+            if previous is not None:self.assertGreaterEqual(rect.left,previous)
+            previous=rect.right
+
     def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
         first,second,master=self.setup_mixer();third=self.buses()[2]['id']
         group=self.write('mixer.bus.add',kind='return',name='Branch')['bus']
@@ -209,6 +236,13 @@ class SongRoutingTests(unittest.TestCase):
         self.assertEqual(self.doc(),before);self.assertTrue(self.local()['draft'])
         self.choose_node(3802,second);self.assertEqual(self.local()['selected'],'')
         self.press(3820);self.start();self.assertTrue(self.local()['draft'])
+        # The failed cycle has no attributed return: inspect once, then reload.
+        # Neither Review nor a refused repeat may mutate the song or history.
+        retained=self.local()['completion'];self.assertIsNotNone(retained)
+        self.press(3813);self.assertEqual(self.local()['completion'],retained);self.assertEqual(self.doc(),before)
+        self.press(3815);self.assertIsNone(self.local()['completion']);self.assertTrue(self.local()['readbackNeedsReload']);self.assertTrue(self.local()['draft']);self.assertEqual(self.doc(),before)
+        self.press(3815);self.assertFalse(self.local()['readbackNeedsReload'])
+        self.choose_wire(lambda a:a.get('kind')=='send' and a.get('source')==first and a['index']==0);self.field(3807,-13)
         self.write('document.patch',title='External edit');before=self.doc();self.press(3813);self.assertEqual(self.doc(),before);self.assertTrue(self.local()['stale']);self.assertIn('Song changed',self.local()['status'])
         self.press(3815);self.choose_wire(lambda a:a.get('kind')=='send' and a.get('source')==first and a['index']==0);self.press(3814);self.assertEqual(self.bus(first)['sends'],[untouched])
 
@@ -225,7 +259,7 @@ class SongRoutingTests(unittest.TestCase):
         self.choose_node(3802,first);rect=self.node(first)['rect'];scale=self.read('workspace.get')['dpi']/96
         def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(int(x*scale)&65535)|((int(y*scale)&65535)<<16))
         mx,my=rect[0]+12,rect[1]+10;mouse(0x201,mx,my);mouse(0x200,mx+20,my+12);mouse(0x202,mx+20,my+12);self.assertTrue(self.local()['layoutDraft']);self.press(3835)
-        path=self.folder/'routing.screamseq';self.write('document.save',path=str(path));layout=self.read('graph.get',includeState=False)['layout'];self.write('graph.layout.set',reset=True);self.write('document.open',path=str(path),discard=True);self.press(3815)
+        path=self.folder/'routing.screamseq';self.write('document.save',path=str(path));layout=self.read('graph.get',includeState=False)['layout'];self.write('graph.layout.set',reset=True);self.write('document.open',path=str(path),discard=True);self.start();self.press(3815)
         self.assertEqual(self.read('graph.get',includeState=False)['layout'],layout);self.assertEqual(self.bus(first)['inserts'],[b,a])
 
     def test_bus_and_sample_instrument_graph_assignment_expand_and_inspect(self):
