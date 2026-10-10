@@ -570,3 +570,31 @@ on cancellation and one final write on explicit completion. These are authored
 regressions, not executed evidence. Include them through the existing target in
 checkpoint 02; no extra build or test invocation is needed. Source review and
 `git diff --check` only were performed for this addition.
+
+## Strip roles and checkpoint 02 preparation — unqualified
+
+The P1 visual criteria require distinguishing Track/Group/Return/Master even
+when bus names and colors are customized. Strips previously showed only the
+name. Each pooled strip now includes a native static role label below its name;
+slider names also include the role. An unavailable retained bus says Unavailable
+instead of displaying a stale role. The compact content height grows from 329
+to 347 DIPs, using the existing vertical scrollbar and focus reveal. Existing
+short-dock geometry, keyboard reachability and bounded-pool cases remain required;
+foreground and DPI/text-scaling checks are still outstanding. The native fixture
+now supplies the real `kind` field emitted by `encodeMixerMetadata`.
+
+Ignored local checkpoint helpers `bin/parity-evidence/run-p1-checkpoint-02.py`
+and `test-p1-checkpoint-02.py` are prepared, source-parsed and unexecuted. The build
+helper requires a full frozen commit argument, a clean tree, the source-specific
+P1 CMake cache, and the hourly interval recorded by checkpoint 01. It preserves
+checkpoint 01 and writes new logs/receipts. The test selection adds
+`workspace-mixer-hosted-tests` and `test_mixer_strips_ui.MixerStripsUITests` to the
+previous bounded selection; it refuses the failed checkpoint 01 executable.
+This preparation is not build or test evidence. The next normal local build
+remains no earlier than 2026-10-10 01:24:08.140793 UTC.
+
+Workspace-layout source review found that restoring existing layouts leaves the
+in-memory Strips/Details choice intact and retains existing owners. Named layouts
+do not serialize that choice separately. No workspace format change is included
+in this P1 batch; per-layout view preferences belong with the broader P3 workspace
+work and must preserve old layout compatibility and retained drafts.

@@ -270,7 +270,8 @@ private. See `../MIXER_GRAPH_PROGRESS.md` for current evidence and limits.
 
 The Mixer opens channel strips by default. **Strips** and **Details** are separate
 command-palette entries with configurable shortcuts; Details retains its bus
-draft when switching views. Strips expose pre/post gain and balance, width,
+draft when switching views. Each strip shows the bus name and its Track, Group,
+Return or Master role, so role remains visible after renaming. Strips expose pre/post gain and balance, width,
 mute/solo, stereo meters and a per-bus Details action. Dragging previews a value;
 release or Enter commits once, and Escape restores the current saved value.
 An uncertain result offers Review result and Use current without repeating the

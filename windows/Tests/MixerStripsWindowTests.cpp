@@ -34,7 +34,7 @@ struct Fixture {
       if(unknown)throw ScreamSeq::Api::ApiError(-32003,"Owned lost response",Tracker::WriteOutcome{});
       return {method,"owned-song",revision,{{"wouldChange",true}}};
     },[]{},[](const auto &){},[]{}) {
-    for(unsigned i=0;i<busCount;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},
+    for(unsigned i=0;i<busCount;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},{"kind",i+1==busCount?"master":"track"},
       {"name",i+1==busCount?"Master":"Track "+std::to_string(i+1)},{"gainDB",i==0?audible:0},
       {"pan",0},{"preGainDB",0},{"prePan",0},{"width",1},{"mute",false},{"solo",false}});
     ScreamSeq::Tests::ownGuiWindow(tool.window());tool.dock(owner);tool.dockBounds(0,0,528,260);tool.show();tool.update();

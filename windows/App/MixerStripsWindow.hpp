@@ -15,7 +15,7 @@ public:
 private:
   enum {previous=10,next=11,cancel=12,review=13,accept=14,base=100,stride=16};
   enum {name=0,fader=1,gain=2,pan=3,mute=4,solo=5,details=6,preGain=7,prePan=8,width=9,
-    preGainLabel=10,prePanLabel=11,widthLabel=12,lastPart=widthLabel};
+    preGainLabel=10,prePanLabel=11,widthLabel=12,role=13,lastPart=role};
   Read request_;Context context_;NativeWriteCompletion::Write write_;
   std::function<void()> admit_,reveal_;std::function<void(const std::string &)> details_;
   NativeWriteCompletion completion_;Tracker::MixerGesture gesture_;
@@ -26,7 +26,7 @@ private:
   bool previewInFlight_=false,deferredCommit_=false,completedWithNewerInput_=false;
   std::optional<uint64_t> deferredCancel_;
   int capturedControl_=0;
-  float stripTop_=34,sliderTop_=57,sliderHeight_=32;
+  float stripTop_=34,sliderTop_=75,sliderHeight_=32;
   int scrollOffset_=0,contentHeight_=0,wheelHorizontal_=0,wheelVertical_=0;bool layingOut_=false;
   HWND lastLayoutFocus_{};
   // 240 visible strips, two neighbors and distinct focus/gesture reservations.
@@ -208,7 +208,7 @@ private:
     const int id=base+int(index)*stride;
     bindings_.reserve(index+1);positions_.reserve(index+1);
     try {
-    label(id+name,L"");
+    label(id+name,L"");label(id+role,L"");
     add(id+fader,TRACKBAR_CLASSW,L"Gain / dB",TBS_VERT|TBS_NOTICKS);
     NativeInputGate::present(controls_.at(id+fader),TBM_SETRANGE,TRUE,MAKELPARAM(0,1200));
     NativeInputGate::present(controls_.at(id+fader),TBM_SETPAGESIZE,0,30);
@@ -242,13 +242,15 @@ private:
     if(focused&&!resetPresentation_)return;
     bindings_[index]=identity;setting_=true;
     try {
-      set(id+name,value.at("name"));set(id+gain,value.at("gainDB"));
+      const auto kind=value.value("kind",std::string());
+      const wchar_t *roleName=kind=="track"?L"Track":kind=="group"?L"Group":kind=="return"?L"Return":kind=="master"?L"Master":L"Bus";
+      set(id+name,value.at("name"));set(id+role,roleName);set(id+gain,value.at("gainDB"));
       set(id+preGain,value.at("preGainDB"));
       NativeInputGate::present(controls_.at(id+fader),TBM_SETPOS,TRUE,LPARAM(std::lround((24-value.at("gainDB").get<double>())*10)));
       NativeInputGate::present(controls_.at(id+pan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("pan").get<double>()+1)*100)));
       NativeInputGate::present(controls_.at(id+prePan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("prePan").get<double>()+1)*100)));
       NativeInputGate::present(controls_.at(id+width),TBM_SETPOS,TRUE,LPARAM(std::lround(value.at("width").get<double>()*100)));
-      const auto title=wide(value.at("name").get<std::string>());
+      const auto title=std::wstring(roleName)+L" "+wide(value.at("name").get<std::string>());
       set(id+fader,title+L" gain / dB");
       set(id+pan,title+L" balance / 0 left, 100 center, 200 right");
       set(id+prePan,title+L" pre balance / 0 left, 100 center, 200 right");
@@ -310,7 +312,7 @@ private:
       positions_[i]=next[i];
       if(protectedSlot[i]) {
         if(const auto *saved=bus(bindings_[i]))bind(i,*saved);
-        else set(base+int(i)*stride+name,L"Bus unavailable");
+        else {set(base+int(i)*stride+name,L"Bus unavailable");set(base+int(i)*stride+role,L"Unavailable");}
       }
     }
     lastVisibleCount_=count;
@@ -322,7 +324,7 @@ private:
     if(layingOut_)return;
     struct LayoutGuard {bool &value;LayoutGuard(bool &v):value(v){value=true;}~LayoutGuard(){value=false;}}guard(layingOut_);
     const auto [w,clientHeight]=size();const size_t total=data_.contains("buses")?data_["buses"].size():0;
-    contentHeight_=std::max(329,int(clientHeight));const float h=float(contentHeight_);
+    contentHeight_=std::max(347,int(clientHeight));const float h=float(contentHeight_);
     scrollOffset_=std::clamp(scrollOffset_,0,std::max(0,contentHeight_-int(clientHeight)));
     SCROLLINFO scroll{sizeof(scroll),SIF_RANGE|SIF_PAGE|SIF_POS|SIF_DISABLENOSCROLL};
     scroll.nMin=0;scroll.nMax=contentHeight_-1;scroll.nPage=UINT(std::max(1.0f,clientHeight));scroll.nPos=scrollOffset_;
@@ -334,7 +336,7 @@ private:
     position(previous,8,4,72,24,!completion_.retained());position(next,84,4,72,24,!completion_.retained());
     position(cancel,164,4,76,24,!completion_.retained());
     position(review,8,4,112,24,completion_.retained());position(accept,126,4,110,24,completion_.retained());
-    stripTop_=34;sliderTop_=57;
+    stripTop_=34;sliderTop_=75;
     EnableWindow(controls_.at(previous),first_>0);EnableWindow(controls_.at(next),first_+visibleCount()<viewportTotal_);
     EnableWindow(controls_.at(cancel),gesture_.active()&&!pending_&&!completion_.retained());
     EnableWindow(controls_.at(review),!pending_);EnableWindow(controls_.at(accept),observed_&&!pending_);
@@ -346,6 +348,7 @@ private:
       const int id=base+int(i)*stride;const bool show=positions_[i]!=SIZE_MAX;
       const float x=show?8+(float(positions_[i])-float(first_))*stripWidth:0;
       position(id+name,x,stripTop_,124,19,show);position(id+fader,x+6,sliderTop_,32,sliderHeight_,show);
+      position(id+role,x,stripTop_+20,124,18,show);
       position(id+gain,x+52,sliderTop_,67,24,show);position(id+pan,x+52,sliderTop_+35,67,25,show);
       position(id+mute,x,sliderTop_+sliderHeight_+5,60,24,show);position(id+solo,x+64,sliderTop_+sliderHeight_+5,60,24,show);
       position(id+details,x,sliderTop_+sliderHeight_+33,124,24,show);
@@ -379,7 +382,7 @@ private:
       const float x=8+(float(positions_[i])-float(first_))*132;
       if(x>=w||x+124<=0)continue;
       if(const auto *saved=bus(bindings_[i]))if(const auto color=saved->value("color",0u))
-        s.fill(x,stripTop_-float(scrollOffset_)+20,124,2,color);
+        s.fill(x,stripTop_-float(scrollOffset_)+38,124,2,color);
       const auto found=meters_.find(bindings_[i]);
       for(int channel=0;channel<2;++channel) {
         const float value=found==meters_.end()?0:(channel?found->second.right:found->second.left);
