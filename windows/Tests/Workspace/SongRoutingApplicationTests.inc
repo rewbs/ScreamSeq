@@ -199,9 +199,11 @@ void applicationGraphParameterInspector(){
   const auto pageClick=[&](int id){SendMessageW(pane,WM_COMMAND,id,LPARAM(GetDlgItem(pane,id)));};pageClick(3963);state=paged->snapshot();restoreCheck(state.at("page")==1&&state.at("rows")[0].at("index")==10,"Next page did not rebind controls to its stable parameters");
   const auto eqBefore=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});int changed=-1;double target=0;
   for(int i=0;i<10;++i){const auto f=ScreamSeq::PluginParameterField::read(eqBefore[size_t(10+i)]);if(f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum){changed=i;target=f.value==f.minimum?f.maximum:f.minimum;break;}}
-  restoreCheck(changed>=0,"EQ10 page has no numeric fixture");SetWindowTextW(GetDlgItem(pane,4002+changed*10),std::to_wstring(target).c_str());pageClick(3963);restoreCheck(paged->snapshot().at("page")==1,"Page navigation discarded typed value");pageClick(3964);
+  restoreCheck(changed>=0,"EQ10 page has no numeric fixture");const auto raw=GetDlgItem(pane,4002+changed*10);
+  SetWindowTextW(raw,L"-.");pageClick(3963);restoreCheck(paged->snapshot().at("page")==1&&restoreText(raw)==L"-."&&app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqBefore,"Page navigation lost invalid text or wrote an invalid value");
+  SetWindowTextW(raw,std::to_wstring(target).c_str());pageClick(3963);restoreCheck(paged->snapshot().at("page")==2&&!paged->snapshot().at("dirty").get<bool>(),"Page navigation did not save valid typed values automatically");
   const auto eqAfter=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});for(size_t i=0;i<count;++i)restoreCheck(i==size_t(10+changed)?eqAfter[i].at("value")==target:eqAfter[i]==eqBefore[i],"Page edit wrote a different parameter");
-  pageClick(3963);pageClick(3962);restoreCheck(paged->snapshot().at("rows")[size_t(changed)].at("value").get<std::string>()==eqAfter[size_t(10+changed)].at("value").dump(),"Page navigation lost committed parameter value");
+  pageClick(3962);restoreCheck(paged->snapshot().at("rows")[size_t(changed)].at("value").get<std::string>()==eqAfter[size_t(10+changed)].at("value").dump(),"Page navigation lost committed parameter value");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqBefore,"Page edit failed atomic Undo");pageClick(3955);
   app.edit("history.redo",{{"domain","all"}});pageClick(3955);saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqAfter,"Paged parameter values failed save/reopen");fixture.close();
 }
