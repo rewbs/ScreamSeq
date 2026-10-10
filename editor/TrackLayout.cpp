@@ -23,15 +23,15 @@ uint64_t groupNoteColumns(NativeSong &native, std::span<const uint16_t> channels
     track.columns.push_back(found->second.id);
   }
   ensureNativeMixer(native);
-  uint64_t commonOutput = 0;
+  std::optional<uint64_t> commonOutput;
   for (auto id : track.columns) {
     auto bus = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &b) { return b.id == id; });
     require(bus != native.mixer.buses.end(), "Note column mixer bus is missing");
-    require(output.has_value() || !commonOutput || bus->output == commonOutput,
+    require(output.has_value() || !commonOutput || bus->output == *commonOutput,
             "Columns have different outputs; choose an explicit track destination");
     commonOutput = bus->output;
   }
-  const auto destination = output.value_or(commonOutput);
+  const auto destination = output.value_or(*commonOutput);
   auto target = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &b) { return b.id == destination; });
   require(target != native.mixer.buses.end() && target->kind != MixerBusKind::Track, "Choose a group, return or Master destination");
   track.bus = native.makeEntity().id;
@@ -47,5 +47,62 @@ bool effectiveColumnMute(const NativeSong &native, const OpenMPT::CSoundFile &so
   if (track == native.tracks.end() || channel >= song.GetNumChannels()) return false;
   auto found = native.columnMutes.find(track->second.id);
   return found != native.columnMutes.end() ? found->second : song.ChnSettings[channel].dwFlags[OpenMPT::CHN_MUTE];
+}
+PreparedNoteTrackEdit prepareNoteTrackEdit(const NativeSong &native,
+  const OpenMPT::CSoundFile &song, const NoteTrackEdit &edit) {
+  PreparedNoteTrackEdit prepared{native};
+  auto &candidate = prepared.native;
+  if (const auto *group = std::get_if<GroupNoteTrack>(&edit)) {
+    prepared.affected = groupNoteColumns(candidate, group->channels, group->name, group->output);
+  } else if (const auto *create = std::get_if<CreateNoteTrack>(&edit)) {
+    const unsigned count = song.GetNumChannels();
+    const unsigned maximum = std::min<unsigned>(127, song.GetModSpecifications().channelsMax);
+    require(create->columns >= 1 && create->columns <= 127, "Choose 1..127 new note columns");
+    require(count <= maximum && create->columns <= maximum - count,
+      "New note columns exceed this module format's channel limit");
+    prepared.appendedColumns = create->columns;
+    std::vector<uint16_t> channels;
+    for (unsigned i = 0; i < create->columns; ++i) {
+      const auto channel = uint16_t(count + i);
+      require(!candidate.tracks.contains(channel), "New note column identity already exists");
+      candidate.tracks.emplace(channel, candidate.makeEntity());
+      channels.push_back(channel);
+    }
+    if (candidate.mixer.active()) {
+      const auto master = std::find_if(candidate.mixer.buses.begin(), candidate.mixer.buses.end(),
+        [](const auto &bus) { return bus.kind == MixerBusKind::Master; });
+      require(master != candidate.mixer.buses.end(), "Mixer Master is missing");
+      const auto masterID = master->id;
+      for (auto channel : channels)
+        candidate.mixer.buses.push_back({candidate.tracks.at(channel).id, masterID,
+          MixerBusKind::Track, "Column " + std::to_string(channel + 1)});
+    }
+    prepared.affected = groupNoteColumns(candidate, channels, create->name, create->output);
+  } else if (const auto *ungroup = std::get_if<UngroupNoteTrack>(&edit)) {
+    prepared.affected = ungroup->track;
+    const auto found = std::find_if(candidate.noteTracks.begin(), candidate.noteTracks.end(),
+      [&](const auto &track) { return track.bus == ungroup->track; });
+    require(found != candidate.noteTracks.end(), "Note track does not exist");
+    candidate.noteTracks.erase(found); // Routing survives removal of visual grouping.
+  } else {
+    const auto &mute = std::get<SetNoteColumnMute>(edit);
+    prepared.affected = mute.column;
+    const auto found = std::find_if(candidate.tracks.begin(), candidate.tracks.end(),
+      [&](const auto &track) { return track.second.id == mute.column; });
+    require(found != candidate.tracks.end() && found->first < song.GetNumChannels(), "Note column does not exist");
+    if (mute.muted == song.ChnSettings[found->first].dwFlags[OpenMPT::CHN_MUTE]) candidate.columnMutes.erase(mute.column);
+    else candidate.columnMutes[mute.column] = mute.muted;
+  }
+  if (!prepared.appendedColumns) candidate.validate(song);
+  else {
+    // The adapter resizes the embedded song in the same admitted transaction.
+    // Validate the projected bus identities before any structural mutation.
+    std::vector<uint64_t> ids;
+    for (const auto &[index, track] : candidate.tracks) ids.push_back(track.id);
+    candidate.mixer.validate(ids);
+  }
+  prepared.changed = candidate != native;
+  prepared.mixerChanged = candidate.mixer != native.mixer;
+  return prepared;
 }
 }
