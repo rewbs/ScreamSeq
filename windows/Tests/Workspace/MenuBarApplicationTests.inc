@@ -41,6 +41,14 @@ void applicationMenuBar(){
         menuChoose(app,songPropertiesCommand);restoreCheck(app.songPropertiesWindow&&app.songPropertiesWindow->visible(),"Playback/cursor movement prevented opening document properties");
         app.songPropertiesWindow->hide();SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=9;app.navigate(next);const auto before=songState(app);
         menuChoose(app,patternToolsCommand);restoreCheck(!app.patternToolsWindow&&songState(app)==before,"Stale selection menu opened an editor on a different target");
+        SetFocus(app.window);SetCapture(app.window);menuBegin(app);
+        const bool capturedDisabled=(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED)!=0;
+        SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);ReleaseCapture();
+        restoreCheck(capturedDisabled,"Non-menu mouse capture no longer protects document commands");
+        app.dragging=1;menuBegin(app);
+        const bool draggingDisabled=(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED)!=0;
+        SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);app.dragging=0;
+        restoreCheck(draggingDisabled,"Active editor drag no longer protects document commands");
         app.busy=true;SetFocus(app.window);menuBegin(app);restoreCheck(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED,"Busy native File command remained enabled");
         SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);app.busy=false;
     }

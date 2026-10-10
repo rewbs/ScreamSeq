@@ -114,6 +114,76 @@ class WorkspaceShortcutTests(unittest.TestCase):
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
 
+    def test_real_menu_loop_allows_new_song(self):
+        # Enter USER32's actual modal menu loop. Sending WM_ENTERMENULOOP alone
+        # does not acquire menu capture and missed the all-disabled regression.
+        self.focus_pattern()
+        owner = self.native_window()
+        before = self.doc()
+        root = user.GetMenu(owner)
+        file_menu = user.GetSubMenu(root, 0)
+        thread = user.GetWindowThreadProcessId(owner, None)
+
+        def gui():
+            info = private_desktop.GUI(cbSize=ctypes.sizeof(private_desktop.GUI))
+            private_desktop.check(user.GetGUIThreadInfo(thread, ctypes.byref(info)))
+            return info
+
+        private_desktop.check(user.PostMessageW(owner, 0x112, 0xF100, ord('f')))
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                info = gui()
+                if info.flags & 4 and info.hwndMenuOwner:
+                    break
+                time.sleep(.01)
+            else:
+                self.fail('USER32 did not enter the real File menu loop')
+            # A sent message is serviced after menu initialization; no simulated
+            # WM_INITMENU or direct command dispatch is used here.
+            self.desktop.send(owner, 0, 0)
+            print(f'Real menu: flags={info.flags} capture={info.hwndCapture} owner={info.hwndMenuOwner}')
+            for identifier in (624, 119, 625, 120, 121):
+                state = user.GetMenuState(file_menu, 32000 + identifier, 0)
+                self.assertNotEqual(state, 0xFFFFFFFF)
+                self.assertFalse(state & 3, f'File command {identifier} disabled during real menu tracking')
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x24, 1))  # Home
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x0D, 1))  # Enter
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and gui().flags & 4:
+                time.sleep(.01)
+            self.assertFalse(gui().flags & 4, 'Menu selection did not leave the modal loop')
+            self.ready()
+            after = self.doc()
+            self.assertNotEqual(after['documentId'], before['documentId'])
+            self.assertFalse(after['data']['canUndo'])
+            # The same real tracking loop must retain contextual Edit state.
+            title = after['data']['title']
+            self.write('document.patch', title='Undo through the real Edit menu')
+            self.focus_pattern()
+            private_desktop.check(user.PostMessageW(owner, 0x112, 0xF100, ord('e')))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not gui().flags & 4:
+                time.sleep(.01)
+            self.assertTrue(gui().flags & 4)
+            self.desktop.send(owner, 0, 0)
+            edit_menu = user.GetSubMenu(root, 1)
+            self.assertFalse(user.GetMenuState(edit_menu, 32000 + 122, 0) & 3)
+            self.assertTrue(user.GetMenuState(edit_menu, 32000 + 123, 0) & 3)
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x24, 1))
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x0D, 1))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and gui().flags & 4:
+                time.sleep(.01)
+            self.assertFalse(gui().flags & 4)
+            self.ready()
+            undone = self.doc()
+            self.assertEqual(undone['documentId'], after['documentId'])
+            self.assertEqual(undone['data']['title'], title)
+            self.assertTrue(undone['data']['canRedo'])
+        finally:
+            self.desktop.send(owner, 0x1F)  # WM_CANCELMODE, owned QA process only.
+
     def test_native_menu_catalogue_bindings_and_stale_history(self):
         owner = self.native_window()
         root = user.GetMenu(owner)

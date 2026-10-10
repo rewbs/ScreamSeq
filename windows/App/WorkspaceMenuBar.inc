@@ -34,7 +34,12 @@
         const bool localText=text&&(focusedEdit||id==undoCommand||id==redoCommand);
         if(preparingWorkspaceLayout||documentDrafts.departing()||(!localText&&(busy||recoveryRestoring)))refuse(L"Finish the current document operation first");
         if((id==pluginAutomate||id==pluginActivity)&&!hasPluginParameterTarget())refuse(L"Select an available plugin parameter in the rack first");
-        if(dragging||GetCapture())refuse(L"Finish the current mouse gesture first");
+        // USER32 captures this owner while tracking the native menu. That is
+        // not an editor drag; retain the guard for real drags and other capture.
+        const auto capture=GetCapture();GUITHREADINFO gui{sizeof(gui)};
+        const bool nativeMenuCapture=capture==window&&GetGUIThreadInfo(GetCurrentThreadId(),&gui)&&
+            (gui.flags&GUI_INMENUMODE)&&gui.hwndMenuOwner==window;
+        if(dragging||(capture&&!nativeMenuCapture))refuse(L"Finish the current mouse gesture first");
         if(text&&(focusedEdit||id==undoCommand||id==redoCommand)){
             const bool writable=IsWindowEnabled(focus)&&!(GetWindowLongPtrW(focus,GWL_STYLE)&ES_READONLY);
             DWORD first=0,last=0;SendMessageW(focus,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
