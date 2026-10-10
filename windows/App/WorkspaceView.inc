@@ -345,7 +345,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginProgramSearch) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginValueToggle) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
@@ -370,6 +370,7 @@
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
+            if(key==VK_RETURN&&GetFocus()==controls.at(pluginValueToggle)){SendMessageW(GetFocus(),BM_CLICK,0,0);return true;}
             if(key==VK_RETURN && _wcsicmp(klass,L"Button")==0) {command(GetDlgCtrlID(GetFocus()));return true;}
             // Space presses the focused button; it is not the transport key here.
             if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0) return false;

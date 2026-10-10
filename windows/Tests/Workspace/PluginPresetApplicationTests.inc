@@ -2,7 +2,7 @@ void applicationPluginPresetRecovery() {
     using Json=RestoreJson;
     {
         RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
-        app.selectedPlugin=plugin;app.revealWorkspaceMainEditor("plugins");app.layoutControls();app.refreshPluginDetails();
+        app.selectedPlugin=plugin;app.selectedParameter=1;app.revealWorkspaceMainEditor("plugins");app.refreshPluginDetails();app.layoutControls();
         const auto song=saveDepartureFixture(fixture),path=fixture.folder/L"native.screamseq-preset";
         unsigned choices=0;
         app.pluginPresetChooser=[&](bool save)->std::optional<std::filesystem::path>{
@@ -41,7 +41,7 @@ void applicationPluginPresetRecovery() {
     }
     {
         RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
-        app.selectedPlugin=plugin;app.revealWorkspaceMainEditor("plugins");app.layoutControls();app.refreshPluginDetails();
+        app.selectedPlugin=plugin;app.selectedParameter=1;app.revealWorkspaceMainEditor("plugins");app.refreshPluginDetails();app.layoutControls();
         const auto path=fixture.folder/L"load.screamseq-preset";
         app.pluginPresetChooser=[&](bool)->std::optional<std::filesystem::path>{return path;};
         app.pluginPresetFile(true);
@@ -63,7 +63,7 @@ void applicationPluginPresetRecovery() {
     }
     for(bool save:{true,false}) {
         RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
-        app.selectedPlugin=plugin;app.revealWorkspaceMainEditor("plugins");app.layoutControls();app.refreshPluginDetails();
+        app.selectedPlugin=plugin;app.selectedParameter=1;app.revealWorkspaceMainEditor("plugins");app.refreshPluginDetails();app.layoutControls();
         const auto path=fixture.folder/L"unknown.screamseq-preset";
         app.pluginPresetChooser=[&](bool)->std::optional<std::filesystem::path>{throw std::runtime_error("Unknown result reopened chooser");};
         Json params={{"plugin",plugin},{"path",utf8Path(path)},{"expectedRevision",app.view->session.revision}};

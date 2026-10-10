@@ -114,3 +114,55 @@ revision, identity or state code changes. No additional Mac build is needed sole
 for these Windows presentation changes; shared pending changes retain their Mac
 gates. This section records source inspection and prepared checks only: no build
 or test was run for the search batch.
+
+## Native discrete parameter values — prepared, unqualified
+
+The rack's parameter value row now interprets the existing catalog through
+`windows/App/PluginParameterField.hpp`. Named choices use a native dropdown;
+Boolean unit 2 uses a native checkbox with catalog labels such as Off/On or
+Normal/Inverted. Other fields retain numeric entry and Apply. The value column
+expands for labels without adding another row. Native accessible names identify
+the parameter and manual-value role; Enter/Space operate the checkbox. The
+retained-draft Review action focuses the visible numeric/program control or Apply
+when a discrete candidate is retained.
+
+Presentation reads `manualValue` when present, with legacy `value` fallback.
+Nonfinite, nonnumeric, inverted, inconsistent choice or fractional discrete
+metadata cannot enable editing or become an unchecked integer conversion.
+Read-only controls remain read-only. Choice IDs retain the API's zero-based
+numeric contract; labels are never used as persisted identities. Ranges and
+units are available in the parameter status. No audio/device/codec change or new
+public API field is introduced.
+
+A discrete selection stages its exact raw value and submits the existing
+`plugin.parameters.set` once using the persistent plugin identity. The draft
+captures the displayed catalogue revision/target, preventing a newly arrived
+revision from silently legitimizing old controls. A stale/failed edit retains its
+candidate and generation for Review/Apply/Escape. A second discrete change cannot
+replace that draft; busy/read-only/invalid requests restore the existing control
+presentation. Numeric raw forms retain their existing explicit Apply semantics.
+These changes do not yet implement slider audition, gesture history grouping,
+manual automation capture, activity navigation or dynamics telemetry; P4a/P4b
+remain open. In particular, the current Windows parameter API accepts no preview
+or gesture token. Slider work must establish a bounded preview/final/cancel
+contract or equivalent shared history boundary, not call the existing durable
+write for every thumb movement and claim one-gesture Undo.
+
+The existing `workspace-plugin-search-tests` group now also runs
+`applicationPluginValueControls`: invalid/untrusted metadata, manual versus
+effective value, real Gainer Enabled keyboard interaction, unchanged-value Redo
+preservation, real Digital Filter Shape names/selection, one-step Undo/Redo,
+unrelated plugin-state preservation, captured stale revision with retained
+candidate, and exact state/identity after native save/reopen. Its single existing
+workspace executable and private-desktop timeout remain unchanged. Existing
+preset-receipt, departure-census and actual-PID numeric-draft fixtures now select
+a real numeric parameter explicitly; none of their retention/history assertions
+was removed or weakened.
+
+At the next consolidated freeze, include the new group plus the existing
+preset/departure/actual-PID plugin gates and shared plugin/history tests already
+required by the build batch. Inspect native checkbox/combo focus, dropdown
+operation, label width, contrast and 100/150/200% DPI. The metadata interpreter is
+Windows presentation code; plugin validation/history remain shared host/session
+responsibilities. Mac build requirements come from the other pending shared
+changes, not these native controls alone. No build or test was run for this slice.

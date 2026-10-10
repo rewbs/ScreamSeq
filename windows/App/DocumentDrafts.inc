@@ -57,7 +57,7 @@
             });
         add("Plugin parameters and programs",[this]{return mainDraft(pluginDocument,pluginDraftRevision,
             Json::array({pluginDraftTarget,pluginDraftParameter,pluginProgramDraft?selectedProgram:std::string()}).dump(),
-            pluginDraftGeneration,pluginDraft);},[this]{reviewMainDraft("plugins",pluginValue);},[this]()noexcept{
+            pluginDraftGeneration,pluginDraft);},[this]{reviewMainDraft("plugins",pluginProgramDraft?pluginProgram:pluginValueControl()==pluginValue?pluginValue:pluginApply);},[this]()noexcept{
                 if(pluginPresetPending)return false;
                 ++pluginDraftGeneration;pluginDraft=pluginProgramDraft=pluginExtrasError=false;
                 pluginDocument.clear();pluginDraftRevision.clear();pluginDraftTarget.clear();pluginDetailsRevision.clear();pluginDetailsTarget.clear();

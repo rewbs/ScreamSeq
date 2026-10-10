@@ -166,7 +166,9 @@ void mainOwnersRetireAfterAdmission() {
         };
         for(const auto &[panel,control]:std::array<std::pair<const char *,int>,4>{{
             {"effects",effectValue},{"plugins",pluginValue},{"mixer",mixerPreGain},{"graph",graphPropertyValue}}}) {
-            openMain(panel);rawDraftText(app.controls.at(control),L"-");
+            openMain(panel);
+            if(control==pluginValue){app.selectedParameter=1;app.refreshPluginDetails();app.layoutControls();}
+            rawDraftText(app.controls.at(control),L"-");
         }
         app.revealWorkspaceMainEditor("samples");app.layoutControls();(void)app.sampleRange();
         rawDraftText(app.controls.at(sampleStartField),L"-");

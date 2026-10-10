@@ -11,6 +11,7 @@
     #include "PluginPresetIntegration.inc"
     std::map<std::string,std::string> pendingPluginTriggers; // Plugin ID -> created instrument ID awaiting assignment.
     uint32_t selectedParameter=0,pluginDraftParameter=0;
+    ScreamSeq::PluginParameterField pluginParameterField;
     bool settingPluginFields=false,pluginDraft=false,refreshingPlugins=false,pluginLibraryLoaded=false;
     std::unique_ptr<ScreamSeq::PluginInstrumentsWindow> pluginInstruments;
     std::unique_ptr<ScreamSeq::PluginLibraryWindow> pluginLibraryWindow;
@@ -48,11 +49,15 @@
             {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
             {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"},{pluginReconnect,L"Reconnect plugin…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
-        for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort})
+        for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort,pluginValueChoice})
             controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginList]=CreateWindowExW(0,L"LISTBOX",L"Plugin rack",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginList)),GetModuleHandleW(nullptr),nullptr);
         controls[pluginValue]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValue)),GetModuleHandleW(nullptr),nullptr);
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
+        controls[pluginValueToggle]=CreateWindowExW(0,L"BUTTON",L"Parameter switch",WS_CHILD|WS_TABSTOP|BS_AUTOCHECKBOX,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValueToggle)),GetModuleHandleW(nullptr),nullptr);
+        if(!controls.at(pluginValueToggle))throw std::runtime_error("Cannot create native parameter switch");
+        for(const int id:{pluginValueChoice,pluginValueToggle})
+            ScreamSeq::check(SetWindowPos(controls.at(id),controls.at(pluginValue),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order native parameter fields");
         for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{pluginParameterSearch,L"Search parameters by name, unit or ID"},{pluginProgramSearch,L"Search factory programs by name or group"}}) {
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             if(!controls[id])throw std::runtime_error("Cannot create plugin search field");
@@ -65,7 +70,7 @@
             ScreamSeq::check(ScreamSeq::NativeAccessibility::name(controls.at(id),label),"Name plugin field");
         for(auto label:{L"Parameters",L"Factory programs",L"Audio ports",L"Instrument assignments",L"Presets",L"Plugin location"})ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_SETCURSEL,0,0);
-        for(int id=pluginList;id<=pluginProgramSearch;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginValueToggle;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     static bool pluginSearchMatches(std::wstring_view text,std::wstring_view query) {
         if(query.empty())return true;
@@ -138,11 +143,72 @@
         if(!refreshingPlugins && (editors || (!pluginDraft && pluginEditorVisible() && (pluginDetailsRevision!=view->session.revision || pluginDetailsTarget!=selectedPlugin || !pluginLibraryLoaded))))
             SetTimer(window,1,editors?16:100,nullptr);
     }
+    int pluginValueControl()const {
+        if(!pluginParameterField.valid)return pluginValue;
+        return pluginParameterField.kind==ScreamSeq::PluginParameterField::Kind::Toggle?pluginValueToggle:
+            pluginParameterField.kind==ScreamSeq::PluginParameterField::Kind::Choice?pluginValueChoice:pluginValue;
+    }
     void setPluginParameterField() {
-        if(pluginDraft) return;
-        settingPluginFields=true;std::wstring value;
-        for(const auto &p:pluginParameters) if(p.at("id")==selectedParameter) {std::wostringstream stream;stream<<std::setprecision(9)<<p.at("value").get<double>();value=stream.str();break;}
-        ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());settingPluginFields=false;
+        if(pluginDraft)return;
+        pluginParameterField={};std::wstring value;
+        for(const auto &p:pluginParameters)if(p.at("id")==selectedParameter) {
+            pluginParameterField=ScreamSeq::PluginParameterField::read(p);
+            const auto current=p.contains("manualValue")?p.at("manualValue"):p.at("value");
+            if(current.is_number()){std::wostringstream stream;stream<<std::setprecision(9)<<current.get<double>();value=stream.str();}
+            break;
+        }
+        settingPluginFields=true;
+        try {
+            ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());
+            ScreamSeq::NativeInputGate::present(controls.at(pluginValueChoice),CB_RESETCONTENT);
+            const auto &field=pluginParameterField;
+            if(field.valid&&field.kind==ScreamSeq::PluginParameterField::Kind::Choice) {
+                for(const auto &choice:field.choices) {
+                    const auto label=wide(choice);const auto row=ScreamSeq::NativeInputGate::present(controls.at(pluginValueChoice),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+                    if(row==CB_ERR||row==CB_ERRSPACE)throw std::runtime_error("Cannot display parameter choices");
+                }
+                ScreamSeq::NativeInputGate::present(controls.at(pluginValueChoice),CB_SETCURSEL,WPARAM(field.value));
+            }
+            if(field.valid&&field.kind==ScreamSeq::PluginParameterField::Kind::Toggle) {
+                const bool on=field.value==1;const auto label=wide(field.choices[on?1:0]);
+                ScreamSeq::NativeInputGate::text(controls.at(pluginValueToggle),label.c_str());
+                ScreamSeq::NativeInputGate::present(controls.at(pluginValueToggle),BM_SETCHECK,on?BST_CHECKED:BST_UNCHECKED);
+            }
+            if(!field.name.empty()) {
+                if(!field.valid)pluginDetailStatus=L"Parameter metadata unavailable / no edit was made";
+                else {std::wostringstream range;range<<std::setprecision(6)<<field.minimum<<L" to "<<field.maximum;
+                    pluginDetailStatus=(field.writable?L"Manual value / ":L"Read-only value / ")+range.str()+L" "+wide(field.unit);}
+            }
+            const auto name=wide(field.name)+(field.valid?L" manual value":L" unavailable value");
+            for(const int id:{pluginValue,pluginValueChoice,pluginValueToggle})
+                ScreamSeq::check(ScreamSeq::NativeAccessibility::name(controls.at(id),name.c_str()),"Name native parameter value");
+        }catch(...){settingPluginFields=false;throw;}
+        settingPluginFields=false;
+    }
+    void syncPluginDiscreteCandidate() {
+        const auto &field=pluginParameterField;if(!field.valid)return;
+        wchar_t raw[66]{};GetWindowTextW(controls.at(pluginValue),raw,66);wchar_t *end=nullptr;const auto number=wcstod(raw,&end);
+        const auto value=end!=raw&&!*end&&std::isfinite(number)&&number>=field.minimum&&number<=field.maximum&&std::floor(number)==number?number:field.value;
+        if(field.kind==ScreamSeq::PluginParameterField::Kind::Choice)ScreamSeq::NativeInputGate::present(controls.at(pluginValueChoice),CB_SETCURSEL,WPARAM(value));
+        if(field.kind==ScreamSeq::PluginParameterField::Kind::Toggle) {
+            ScreamSeq::NativeInputGate::present(controls.at(pluginValueToggle),BM_SETCHECK,value==1?BST_CHECKED:BST_UNCHECKED);
+            const auto label=wide(field.choices[value==1?1:0]);ScreamSeq::NativeInputGate::text(controls.at(pluginValueToggle),label.c_str());
+        }
+    }
+    void pluginDiscreteValue(int id) {
+        if(settingPluginFields)return;
+        if(pluginDraft){syncPluginDiscreteCandidate();throw std::runtime_error("Apply or discard the retained parameter/program draft before changing a control");}
+        if(!pluginParameterField.editable()||pluginValueControl()!=id){syncPluginDiscreteCandidate();throw std::runtime_error("This parameter control is unavailable");}
+        const auto selected=id==pluginValueToggle?(SendMessageW(controls.at(id),BM_GETCHECK,0,0)==BST_CHECKED?1:0):SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
+        if(selected<0||size_t(selected)>=pluginParameterField.choices.size()){syncPluginDiscreteCandidate();throw std::runtime_error("Choose an available parameter value");}
+        const auto value=std::to_wstring(selected);
+        ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());
+        if(!pluginDraft)pluginFieldChanged();
+        // Capture the catalogue revision, not a newer revision which may have
+        // arrived while these controls were still showing the previous state.
+        pluginDraftRevision=pluginDetailsRevision;pluginDraftTarget=pluginDetailsTarget;syncPluginDiscreteCandidate();
+        pluginCommand(pluginApply);
+        refreshPluginDetails();
     }
     void refreshPluginLibrary(bool rescan=false) {
         const auto library=documentOperation("plugin.library.get",{{"rescan",rescan}});Json catalog=Json::array();
@@ -217,10 +283,12 @@
         place(pluginLibrary,r.x+8,y+35,r.w-254,250,show);place(pluginBrowse,r.x+r.w-240,y+35,78,24,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
         place(pluginList,r.x+8,y+67,210,std::max(24.0f,r.h-75),show);
         float bx=x;for(auto [id,w]:std::initializer_list<std::pair<int,float>>{{pluginEditor,66.0f},{pluginBypass,72.0f},{pluginRemove,68.0f},{pluginUp,44.0f},{pluginDown,52.0f}}) {place(id,bx,y+67,w,24,show);bx+=w+4;}
-        const float parameterWidth=std::max(80.0f,r.w-406);
+        const auto valueControl=pluginValueControl();
+        const float valueWidth=valueControl==pluginValue?86.0f:std::clamp(r.w*.22f,100.0f,260.0f);
+        const float parameterWidth=std::max(80.0f,r.w-320-valueWidth);
         place(pluginParameterSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==0&&r.h>=164);
         place(pluginProgramSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==1&&r.h>=164);
-        place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);place(pluginValue,x+parameterWidth+6,y+131,86,24,show && pluginDetailPage==0 && r.h>=164);place(pluginApply,x+parameterWidth+98,y+131,68,24,show && pluginDetailPage==0 && r.h>=164);
+        place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);for(const int id:{pluginValue,pluginValueChoice,pluginValueToggle})place(id,x+parameterWidth+6,y+131,valueWidth,id==pluginValueChoice?240:24,show&&pluginDetailPage==0&&r.h>=164&&valueControl==id);place(pluginApply,x+parameterWidth+valueWidth+12,y+131,68,24,show && pluginDetailPage==0 && r.h>=164);
         place(pluginProgram,x,y+131,r.w-360,300,show && pluginDetailPage==1 && r.h>=164);place(pluginLoadProgram,r.x+r.w-120,y+131,112,24,show && pluginDetailPage==1 && r.h>=164);
         place(pluginPort,x,y+99,r.w-360,300,show && pluginDetailPage==2 && r.h>=132);place(pluginTogglePort,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==2 && r.h>=132);
         place(pluginAliases,x,y+99,r.w-242,26,show&&pluginDetailPage==3&&r.h>=132);
@@ -242,8 +310,9 @@
         EnableWindow(controls.at(pluginReconnect),selected&&plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginUp),selected && slot>0);EnableWindow(controls.at(pluginDown),selected && size_t(slot+1)<listedPlugins.size());
         ScreamSeq::NativeControls::text(controls.at(pluginBypass),selected && plugin.value("bypass",false)?L"Enable":L"Bypass");
-        bool writable=false;for(const auto &p:pluginParameters)if(p.at("id")==selectedParameter)writable=p.value("writable",false);
-        EnableWindow(controls.at(pluginApply),selected && writable);EnableWindow(controls.at(pluginValue),selected && writable);
+        const bool writable=pluginParameterField.editable();
+        EnableWindow(controls.at(pluginApply),selected&&writable);EnableWindow(controls.at(pluginValue),selected&&writable);
+        for(const int id:{pluginValueChoice,pluginValueToggle})EnableWindow(controls.at(id),selected&&writable&&!pluginDraft);
         EnableWindow(controls.at(pluginUndo),view->session.document.value("canUndoPlugins",false));EnableWindow(controls.at(pluginRedo),view->session.document.value("canRedoPlugins",false));
         EnableWindow(controls.at(pluginAdd),!pluginCatalog.empty());
         bool loadable=false;for(const auto &p:pluginPrograms)if(p.at("id")==selectedProgram)loadable=p.at("loadable").get<bool>();
@@ -253,9 +322,10 @@
         ScreamSeq::NativeControls::text(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
     }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginReconnect)return false;
-        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(id<pluginList || id>pluginValueToggle)return false;
+        if(busy){if(id==pluginValueChoice||id==pluginValueToggle)syncPluginDiscreteCandidate();throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");}
         workspaceState.focus="plugins";
+        if(id==pluginValueChoice||id==pluginValueToggle){pluginDiscreteValue(id);return true;}
         if(id==pluginBrowse){openPluginLibrary();return true;}
         if(id==pluginReconnect){if(selectedPluginSlot()<0)throw std::runtime_error("Select a VST3 plugin");openPluginPath({{"plugin",selectedPlugin}});return true;}
         if(id==pluginSavePreset||id==pluginLoadPreset){pluginPresetFile(id==pluginSavePreset);return true;}
@@ -312,10 +382,11 @@
             pendingPluginTriggers.erase(selectedPlugin);pluginDetailsRevision.clear();
         } else if(id==pluginApply) {
             if(pluginDraft&&pluginProgramDraft)throw std::runtime_error("Load or discard the program selection first");
+            if(!pluginParameterField.editable())throw std::runtime_error("This parameter is read-only or its metadata is unavailable");
             if(pluginDraft && (pluginDraftRevision!=view->session.revision || pluginDraftTarget!=selectedPlugin || pluginDraftParameter!=selectedParameter))throw ScreamSeq::Api::ApiError(-32001,"The song or target changed. Escape discards the parameter draft; re-enter it against the current state.");
             wchar_t text[66]{};GetWindowTextW(controls.at(pluginValue),text,66);wchar_t *end=nullptr;auto value=wcstod(text,&end);
             if(end==text || *end || !std::isfinite(value))throw std::runtime_error("Enter a finite parameter value");
-            edit("plugin.parameters.set",{{"slot",slot},{"values",Json::array({{{"id",selectedParameter},{"value",value}}})}});pluginDraft=false;pluginDetailsRevision.clear();
+            edit("plugin.parameters.set",{{"plugin",selectedPlugin},{"values",Json::array({{{"id",selectedParameter},{"value",value}}})}});pluginDraft=false;pluginDetailsRevision.clear();
         } else if(id==pluginEditor)edit("plugin.editor.open",{{"slot",slot}});
         else if(id==pluginBypass)edit("plugin.bypass",{{"slot",slot},{"bypass",!view->session.document.at("nativePlugins")[slot].value("bypass",false)}});
         else if(id==pluginRemove)edit("plugin.remove",{{"slot",slot}});
