@@ -2,6 +2,7 @@
 import unittest
 import ctypes
 import time
+import plistlib
 import private_desktop
 import test_graph_mixer_app as support
 from client import ApiError
@@ -14,6 +15,46 @@ class MainIntegrationTests(unittest.TestCase):
     write = support.GraphMixerAppTests.write
     add_gain = support.GraphMixerAppTests.add_gain
     control = support.GraphMixerAppTests.control
+
+    def test_retained_load_report_preserves_source_warnings_after_save_copy(self):
+        source = self.folder / 'future-load-report.screamseq'
+        copy = self.folder / 'recovered-load-report.screamseq'
+        self.write('document.save', path=str(source))
+        tree = plistlib.loads(source.read_bytes())
+        tree['version'] = 7
+        original = plistlib.dumps(tree, fmt=plistlib.FMT_BINARY, sort_keys=False)
+        source.write_bytes(original)
+        self.write('document.open', path=str(source))
+        recovered = self.doc()
+        warnings = recovered['data']['loadWarnings']
+        self.assertTrue(warnings)
+        self.assertTrue(recovered['data']['requiresSaveAs'])
+        main = self.desktop.hwnd(self.pid)
+        self.desktop.send(main, 0x111, 626)
+        report = self.read('workspace.get')['loadReport']
+        self.assertTrue(report['visible'])
+        self.assertEqual(report['context']['warnings'], warnings)
+        self.assertEqual(report['context']['sourcePath'], str(source))
+        for warning in warnings:
+            self.assertIn(warning, report['text'])
+        self.assertEqual(self.doc(), recovered)
+        with self.assertRaises(ApiError):
+            self.write('document.save', path=str(source), overwrite=True)
+        self.assertEqual(source.read_bytes(), original)
+        self.write('document.save', path=str(copy))
+        report = self.read('workspace.get')['loadReport']
+        self.assertTrue(report['visible'])
+        self.assertFalse(report['context']['requiresSaveAs'])
+        self.assertEqual(report['context']['warnings'], warnings)
+        self.assertEqual(report['context']['sourcePath'], str(source))
+        self.assertEqual(report['context']['path'], str(copy))
+        self.write('document.new')
+        self.assertFalse(self.read('workspace.get')['loadReport']['visible'])
+        self.desktop.send(main, 0x111, 626)
+        report = self.read('workspace.get')['loadReport']
+        self.assertEqual(report['context']['warnings'], [])
+        self.assertEqual(report['context']['sourcePath'], '')
+        self.assertEqual(source.read_bytes(), original)
 
     def test_new_and_demo_identity_validation_replay_and_save_reopen(self):
         catalog = self.read('api.describe')

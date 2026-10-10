@@ -110,6 +110,7 @@
         place(soundChooser,10,484,146,230);
         place(playbackLoopCommand,10,516,146,25);
         refreshPlaybackLoopControl();
+        place(documentLoadReportCommand,10,548,146,25);updateDocumentLoadReport();
         EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
@@ -191,7 +192,7 @@
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {audioSettingsCommand,L"Audio settings…"},{scratchGesturesCommand,L"Scratch phrases…"},
-            {recoveryCommand,L"Recovery copies"},
+            {recoveryCommand,L"Recovery copies"},{documentLoadReportCommand,L"Load report…"},
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
             {noteColumnMuteCommand,L"Mute column"},
@@ -237,6 +238,7 @@
             if(typingInputCommand(id))return;
             if(id==effectPickerCommand){openEffectPicker();return;}
             if(id==newDocumentCommand||id==openDemoCommand){newFile(id==openDemoCommand);return;}
+            if(id==documentLoadReportCommand){openDocumentLoadReport();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;

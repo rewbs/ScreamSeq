@@ -156,7 +156,7 @@ void DocumentController::open(const std::filesystem::path &path) {
   Project::OpenedProject candidate;
   if(path.empty()) {candidate.document=Tracker::Document::demo();candidate.state=Project::newProjectState(*candidate.document);}
   else if(extension(path)==L".screamseq" || extension(path)==L".resonance") candidate=Project::openNativeProject(path);
-  else {candidate.document=Tracker::Document::open(utf8(path));candidate.state=Project::newProjectState(*candidate.document);candidate.state.path=path;}
+  else {candidate.document=Tracker::Document::open(utf8(path));candidate.state=Project::newProjectState(*candidate.document);candidate.state.path=path;candidate.state.loadSourcePath=path;}
   installCandidate(std::move(candidate));
 }
 void DocumentController::installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit) {

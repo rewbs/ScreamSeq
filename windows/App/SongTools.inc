@@ -56,6 +56,7 @@
         if(groupNoteTrackWindow)groupNoteTrackWindow->update();
         if(patternToolsWindow)patternToolsWindow->update();
         if(effectPickerWindow)effectPickerWindow->update();
+        updateDocumentLoadReport();
     }
     void returnToSongPattern() {
         deferredViews.clear();revealWorkspacePattern();workspaceState.focus="pattern";

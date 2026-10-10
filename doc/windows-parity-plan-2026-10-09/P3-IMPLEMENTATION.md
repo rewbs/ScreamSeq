@@ -624,3 +624,41 @@ recording and microphone guard suites remain necessary; synthetic native checks
 do not establish physical capture/device behavior. Mac source and project wire
 format are unchanged; its pending earlier shared-code gate is still required.
 P3c title/channel controls and retained load report remain outstanding.
+
+## Retained load report — prepared after checkpoint 02
+
+`DocumentLoadReportWindow.hpp` and `DocumentLoadReportIntegration.inc` present the
+loader's existing warnings, issues, original source path, current path,
+source-protection and editable status in a modeless native text view. Command 626
+is both in the File catalogue and beside the file controls, with a recovery
+caption while Save a copy is required. Read-only text uses standard selection,
+scrolling and keyboard operation. Unchanged refreshes avoid `WM_SETTEXT`, keeping
+selection/scroll/focus. Closing restores prior focus, and reopening retains the
+same report. Warnings survive Save As because the existing ProjectState already
+retains them; no parallel acknowledgement or source-protection policy is added.
+
+Ordinary tracker-module import now records its original `loadSourcePath`, just as
+native project import already does. The field remains runtime provenance, not a
+new serialized project field. Newly created/saved songs do not invent a source
+file. Save a copy posts a captured document identity to the main window and runs
+the existing Save As only after its report callback has returned. This avoids
+holding the tool's callback on the stack during a nested chooser or worker pump.
+Replacement retires the read-only owner and cancels queued actions before native
+refresh, preventing an old report from targeting the new song.
+
+Prepared `workspace-departure-tests` coverage opens a real future-version native
+fixture through the production loader, checks warning/source text and selectable
+read-only controls, unchanged-refresh selection/focus, protected-source rejection,
+Save As retaining warnings, minimum control bounds, close/reopen and queued-save
+retirement. The actual-PID
+`MainIntegrationTests.test_retained_load_report_preserves_source_warnings_after_save_copy`
+is explicitly selected in Windows CI and checks the same loader/pipe/native
+report/save/replacement path with exact preservation of the original file bytes.
+It does not operate a foreground file chooser or qualify Narrator/DPI rendering.
+
+Source/diff review and Python syntax parsing only; build/runtime qualification is
+pending. Include these cases in the next consolidated Windows batch with native
+departure, save/recovery, import/persistence and existing source-protection tests.
+No codec, Mac UI or musical edit semantics changed. Retain the P0/P8 reciprocal
+fixture and earlier shared-code Mac gates. P3c title/channel controls and the
+remaining P3a accessibility/visual work are still open.

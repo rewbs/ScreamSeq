@@ -96,6 +96,24 @@ Press F5 in the app to retry native cleanup/refresh without reopening the file
 or replaying the write. Stop remains available and preserves that recovery
 message. A successful retry restores normal editing.
 
+**Load report…** beside the file controls, and **File / Project load and recovery
+report** in the command palette (626), open a modeless native report. The button
+reads **Recovery report…** while Save a copy is required. The report displays the
+original source, current saved path, all deduplicated load warnings/import issues
+and preview-only status. Its text is read-only, selectable and scrollable;
+refreshing an unchanged report preserves selection and focus. Warnings remain
+reviewable after a successful Save As, while the completed Save-a-copy requirement
+disappears. Merely opening or closing the report never acknowledges a warning or
+changes source-overwrite protection.
+
+The report's **Save a copy…** uses the existing Save As workflow. It posts the
+action to the main window after the report callback returns and rechecks the
+document identity before opening a chooser. Replacing the document retires the
+old report and cancels its queued action. `workspace.get.loadReport` exposes
+`visible`, the report's `context` and its displayed `text`. Context includes
+`documentId`, `sourcePath`, `path`, `warnings`, `issues`, `requiresSaveAs`,
+`editable` and `busy`; these are existing loader facts, not a new recovery policy.
+
 The native sample recorder retains an unresolved Record/Stop/Discard operation
 in `workspace.get.data.sampleRecording.lifecycleReview`, including its method,
 captured document/revision, take identity and submitted parameters. While present,

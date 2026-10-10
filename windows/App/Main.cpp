@@ -53,6 +53,7 @@
 #include "ArrangementWindow.hpp"
 #include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
+#include "DocumentLoadReportWindow.hpp"
 #include "NoteTrackWindow.hpp"
 #include "PatternToolsWindow.hpp"
 #include "EffectPickerWindow.hpp"
@@ -80,6 +81,7 @@ constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphC
     graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,dockPreciseNotesCommand=567,
     editorPreciseNotesTab=568,notesInspectorCommand=569,graphWorkflowCommand=574,parameterActivityCommand=575,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
+constexpr UINT loadReportSaveCopyMessage=WM_APP+43;
 constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCreateCommand=584,noteTrackGroupCommand=585;
 constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand=588,playSelectionCursorCommand=589;
 constexpr int positionRulerCommand=590;
@@ -88,6 +90,7 @@ constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumen
 constexpr int effectPickerCommand=597;
 constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
 constexpr int newDocumentCommand=624,openDemoCommand=625;
+constexpr int documentLoadReportCommand=626;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -347,6 +350,7 @@ public:
             {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
             {"patternTools",patternToolsWindow?patternToolsWindow->snapshot():Json{{"visible",false}}},
             {"effectPicker",effectPickerWindow?effectPickerWindow->snapshot():Json{{"visible",false}}},
+            {"loadReport",documentLoadReportWindow?documentLoadReportWindow->snapshot():Json{{"visible",false}}},
             {"trackHeaders",noteTrackHeaderSnapshot()},
             {"noteTrackEditors",{{"create",createNoteTrackWindow?createNoteTrackWindow->snapshot():Json{{"visible",false}}},
                 {"group",groupNoteTrackWindow?groupNoteTrackWindow->snapshot():Json{{"visible",false}}}}},
@@ -662,6 +666,7 @@ public:
     #include "PatternToolsIntegration.inc"
     #include "WorkspaceRuler.inc"
     #include "EffectPickerIntegration.inc"
+    #include "DocumentLoadReportIntegration.inc"
 	void play() { playWorkspaceRegion(false,false); }
     bool supportsPlaybackLoop()const override{return true;}
     void refreshPlaybackLoopControl() {
@@ -995,6 +1000,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		switch(message) {
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
+        case loadReportSaveCopyMessage: app->performLoadReportSave();return 0;
 		case WM_CLOSE:
             app->recoveryClosePosted=false;
             if(app->recoverySaving||app->recoveryRestoring||app->recoveryReads||(app->recoveryCloseRequested&&(app->busy||app->libraryWaits))) {app->recoveryCloseRequested=true;return 0;}
