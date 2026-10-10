@@ -318,8 +318,7 @@ class PluginAppTests(unittest.TestCase):
         index, p = next((i, p) for i, p in enumerate(self.parameters())
                         if p['writable'] and not p.get('choices')
                         and p.get('unit') != 2 and p['max'] > p['min'])
-        self.desktop.send(user.GetDlgItem(self.hwnd, 311), 0x14E, index)
-        self.command(311, 1)
+        self.select(311, index)
         value = p['min'] if p['value'] != p['min'] else p['max']
         field = user.GetDlgItem(self.hwnd, 312)
         text = ctypes.create_unicode_buffer(str(value))

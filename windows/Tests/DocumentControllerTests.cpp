@@ -204,7 +204,7 @@ void liveParameterTests(const std::filesystem::path &directory) {
   // Use the application's exact admission boundary: saturation rejects before
   // saved state, revision, touch or chronological history can be adopted.
   std::vector<Tracker::ParameterChange> full(4096,{0,1,-12,0});need(playback->chain().enqueueParameters(full),"Fill live queue");
-  view=c.view();const auto touched=call(c,"automation.target.get",{});const auto beforeBatches=batches;
+  view=c.view();const auto touched=call(c,"automation.target.get",Json::object());const auto beforeBatches=batches;
   const auto refused=[&](auto action){
     bool classified=false;try{action();}catch(const Api::ApiError &e){
       classified=e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
@@ -213,7 +213,7 @@ void liveParameterTests(const std::filesystem::path &directory) {
   };
   refused([&]{edit(-24);});
   need(active&&stops==beforeStops&&batches==beforeBatches&&c.view()==view&&
-    call(c,"plugin.state.get",{{"slot",0}})==changed&&call(c,"automation.target.get",{})==touched,
+    call(c,"plugin.state.get",{{"slot",0}})==changed&&call(c,"automation.target.get",Json::object())==touched,
     "Full queue changed transport, accepted state, view, history or last-touched target");
   edit(-24,true);edit(-12);
   need(c.view()==view&&batches==beforeBatches,"Dry run and no-op must remain harmless with a full queue");

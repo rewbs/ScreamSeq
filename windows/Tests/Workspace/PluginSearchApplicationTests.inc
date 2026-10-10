@@ -1,5 +1,7 @@
 void applicationPluginSearch() {
     RestoreFixture fixture;auto &app=*fixture.app;
+    // Establish logical client size independently of desktop DPI/monitor caps.
+    resizeRestoreClient(app,1440,900);
     const auto plugin=addRestoreGain(app);
     app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.selectedPlugin=plugin;
     app.refreshPluginDetails();const auto before=songState(app);
@@ -11,7 +13,8 @@ void applicationPluginSearch() {
     app.pluginParameters=RestoreJson::array();
     for(unsigned i=0;i<200;++i)app.pluginParameters.push_back({{"id",1000+i},{"name",i==179?"Needle frequency":"Band "+std::to_string(i)},
         {"unitLabel","Hz"},{"min",0},{"max",200},{"value",double(i)},{"writable",true}});
-    app.selectedParameter=1000;app.filterPluginChoices(false);app.setPluginParameterField();
+    app.selectedParameter=1000;app.filterPluginChoices(false);app.setPluginParameterField();app.layoutControls();
+    restoreCheck(IsWindowVisible(query)&&IsWindowVisible(selector)&&IsWindowEnabled(selector),"Plugin search fixture did not expose its search/results controls");
     restoreCheck(GetNextDlgTabItem(app.window,query,FALSE)==selector,"Tab order does not lead from parameter search to results");
     SetFocus(query);rawDraftText(query,L"NEEDLE");
     restoreCheck(SendMessageW(selector,CB_GETCOUNT,0,0)==2&&app.selectedParameter==1000&&GetFocus()==query,
