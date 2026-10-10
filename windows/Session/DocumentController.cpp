@@ -537,7 +537,7 @@ std::function<void()> DocumentController::prepareRackPublication(const std::vect
 std::function<void()> DocumentController::prepareNativePublication(const Tracker::NativeSong &next) {
   const auto &before=document_->native();
   if(next.mixer==before.mixer&&Tracker::sameSignalProcessing(next.signal,before.signal)&&
-     next.automation==before.automation&&next.scratchGestures==before.scratchGestures)return {};
+     next.automation==before.automation&&next.scratchGestures==before.scratchGestures&&next.columnMutes==before.columnMutes)return {};
   return prepareNativeUpdate(document_->native(),next);
 }
 

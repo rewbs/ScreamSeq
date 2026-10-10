@@ -118,10 +118,30 @@ void appendAndCapacity() {
     }
   }
 }
+void rendererMuteFrames() {
+  for (bool imported : {false, true}) {
+    auto doc = Document::demo(MOD_TYPE_S3M);
+    doc->transaction([&](CSoundFile &song) { song.ChnSettings[0].dwFlags.set(CHN_MUTE, imported); });
+    auto renderer = std::make_unique<Renderer>(doc->snapshotData(), 48000);
+    const auto original = doc->native(); auto changed = original;
+    changed.columnMutes[original.tracks.at(0).id] = !imported;
+    auto frame = renderer->prepareColumnMuteUpdate(changed);
+    check(renderer->publishColumnMuteUpdate(frame) && !frame, "Renderer did not take ownership of the complete mute frame");
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == imported, "Mute publication changed callback-owned song state early");
+    std::array<float, 34> pcm{}; renderer->render(pcm.data(), 17);
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == !imported && !renderer->faulted(), "Render boundary lost the native mute override");
+    frame = renderer->prepareColumnMuteUpdate(original);
+    check(renderer->publishColumnMuteUpdate(frame), "Renderer could not publish removal of the override");
+    renderer->render(pcm.data(), 17);
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == imported,
+      "Mute reset derived its baseline from callback-mutated channel flags");
+    check(doc->native() == original, "Renderer publication modified the document");
+  }
+}
 }
 int main() {
   try {
-    groupingAndHistory(); outputAdmission(); columnMutes(); appendAndCapacity();
+    groupingAndHistory(); outputAdmission(); columnMutes(); appendAndCapacity(); rendererMuteFrames();
     std::cout << "PASS shared note-track candidates, destinations, column mute and structural history\n"; return 0;
   } catch (const std::exception &error) { std::cerr << "FAIL " << error.what() << '\n'; return 1; }
 }
