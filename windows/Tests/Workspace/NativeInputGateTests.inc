@@ -33,6 +33,9 @@ void nativeInputGate(HWND main) {
     require(SetWindowSubclass(h,InputGateProbe::procedure,77,reinterpret_cast<DWORD_PTR>(&probe)),"Install input-boundary probe");
   const std::array roots{main,floating.window()};
   const auto initialLayouts=docked.layouts;
+  NativeInputGate::present(combo,CB_SETDROPPEDWIDTH,480);
+  const auto initialDropWidth=SendMessageW(combo,CB_GETDROPPEDWIDTH,0,0);
+  require(initialDropWidth>=480,"Unguarded selector presentation did not set popup width");
   {
     NativeInputGate gate(roots);
     require(NativeInputGate::protectedWindow(edit)&&NativeInputGate::protectedWindow(other),"Input lease missed docked or floating controls");
@@ -51,6 +54,8 @@ void nativeInputGate(HWND main) {
     SendMessageW(docked.control(2),BM_CLICK,0,0);
     require(SendMessageW(combo,CB_SETCURSEL,0,0)==CB_ERR,"Direct combo selection bypassed input lease");
     require(SendMessageW(combo,CB_RESETCONTENT,0,0)==CB_ERR,"Combo destruction bypassed input lease");
+    require(SendMessageW(combo,CB_SETDROPPEDWIDTH,640,0)==CB_ERR&&
+        SendMessageW(combo,CB_GETDROPPEDWIDTH,0,0)==initialDropWidth,"Direct popup width change bypassed input lease");
     PostMessageW(edit,WM_CHAR,'q',0);MSG queued{};
     require(PeekMessageW(&queued,edit,WM_CHAR,WM_CHAR,PM_REMOVE)!=FALSE,"Queued character was not available");
     DispatchMessageW(&queued);
@@ -75,6 +80,10 @@ void nativeInputGate(HWND main) {
     require(NativeInputGate::present(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"New song target"))==0,"Guarded selector refresh could not add the new target");
     NativeInputGate::present(combo,CB_SETITEMDATA,0,123);
     NativeInputGate::present(combo,CB_SETCURSEL,0);
+    NativeInputGate::present(combo,CB_SETDROPPEDWIDTH,640);
+    require(SendMessageW(combo,CB_GETDROPPEDWIDTH,0,0)>=640&&probe.commands==0,"Guarded popup width refresh failed or leaked input");
+    require(SendMessageW(combo,CB_SETDROPPEDWIDTH,800,0)==CB_ERR&&
+        SendMessageW(combo,CB_GETDROPPEDWIDTH,0,0)<800,"Popup width permission survived its concrete send");
     require(SendMessageW(combo,CB_GETCOUNT,0,0)==1&&SendMessageW(combo,CB_GETITEMDATA,0,0)==123,"Guarded selector refresh lost item identity");
     SetWindowTextW(edit,L"after permitted call");
     require(text(edit)==L"New document value"&&probe.textCalls==1,"Refresh permit survived its concrete send");

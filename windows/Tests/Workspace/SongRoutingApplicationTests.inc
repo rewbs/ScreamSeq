@@ -15,7 +15,7 @@ void applicationSongRoutingPorts(){
   restoreCheck(app.view->session.revision==originalRevision&&tool->snapshot().at("completion").is_null(),"Routing guessed a plugin input before explicit selection");
   select(3837,1);SetWindowTextW(GetDlgItem(window,3807),L"-6");
   const auto before=app.documentOperation("mixer.get",RestoreJson::object());
-  app.sampleMutationCompletion=[&](const std::string &method,const RestoreJson &){if(method=="mixer.sidechains.set"){
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="mixer.sidechains.set"){
     SetWindowTextW(GetDlgItem(window,3807),L"-.");throw std::runtime_error("Drop routing completion after newer raw gain");
   }};click(3812);app.sampleMutationCompletion={};
   const auto after=app.documentOperation("mixer.get",RestoreJson::object());

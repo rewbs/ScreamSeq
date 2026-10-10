@@ -598,3 +598,53 @@ in-memory Strips/Details choice intact and retains existing owners. Named layout
 do not serialize that choice separately. No workspace format change is included
 in this P1 batch; per-layout view preferences belong with the broader P3 workspace
 work and must preserve old layout compatibility and retained drafts.
+
+## Checkpoint 02 — failed; fixes batched for the next build
+
+Frozen input: `a320bd9da71a492f61d2289a20b3f2f5e1aa52e7`. The ARM64 Release
+checkpoint completed at 2026-10-10 01:25:48 UTC. The application, VST3 scanner
+and fixture module built successfully. `workspace-restore-tests` failed to
+compile because PluginLibraryApplicationTests and SongRoutingApplicationTests
+supplied two arguments to the one-argument `sampleMutationCompletion` hook.
+The aggregate build remains **failed**, and its native test gate was **not run**.
+Build log SHA-256:
+`ee28e6d3bc5ccbb826268de21296a777cc64fd30ab99600e0c9f938c7d501cff`.
+
+The successful application target was reused without another build. Its SHA-256
+is `d551a7c21926352c3e8a0a0f6203911ba637e32d66e8762f5fd77f4f131fa436`.
+The actual native scanner generated the provider record for the built fixture;
+audio environment inspection completed without changing device defaults.
+The selected private-desktop application gate ran 51 cases in 75.753 seconds:
+35 passed, 12 failed, three errored, and one optional installed-Surge case skipped.
+This is bounded evidence for this frozen executable, not overall P1 acceptance.
+Application log SHA-256:
+`5371155b633a2a8fd5c14299f3f74ccae89f1b2adb41eec18e03ccb48f55232e`.
+Local receipts/logs are preserved under `bin/parity-evidence/p1-checkpoint-02.json`,
+`p1-build-02.log`, `p1-app-02.log` and `p1-audio-environment-02/report.json`.
+Source and executable fingerprints were checked across this run.
+
+All 12 Song Routing cases failed at opening the window. The status reported
+`Message is not a native presentation setter`; source inspection traced this
+to the routing layout's `CB_SETDROPPEDWIDTH` call missing from NativeInputGate's
+explicit setter catalog. The batched fix adds only that concrete setter. Native
+input-gate checks now cover ordinary and leased popup-width updates, rejected
+direct updates and permission expiry. Existing command/keyboard/recursive-send
+protection assertions remain intact. These new checks are **not yet executed**.
+
+The three mixer-strip errors were two disposable-file reopen requests after
+intentional saved-song mutations without `discard:true`, and a `mixer.get` read
+rejected while the document worker was busy. The reopen fixtures now explicitly
+discard those known mutations; the earlier retained-draft rejection is unchanged.
+The strip fixture retries only a read's explicit worker-busy response, with the
+same request ID and a five-second deadline. It does not retry writes, transport
+errors or other failures. Both completion-hook signatures are corrected without
+changing their injected postcommit failures or assertions.
+
+No immediate build/test retry follows these fixes. The next normal local build
+is **no earlier than 2026-10-10 02:25:48.842926 UTC**. Include the corrected native
+workspace target, native input-gate group, mixer/routing application cases and
+the existing shared/native P1 selection in one coherent checkpoint. Expand the
+common-command gate only for changes to shared dispatch, departure admission or
+worker behavior; those production paths were not altered by these fixes.
+P0 closure, native P1 checks, Mac protection, reciprocal projects, foreground
+visual/accessibility and required device/audio gates remain open.

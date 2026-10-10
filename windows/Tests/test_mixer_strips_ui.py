@@ -6,6 +6,7 @@ import ctypes
 from ctypes import wintypes
 import time
 import unittest
+import uuid
 
 import private_desktop
 import test_graph_mixer_app as support
@@ -15,8 +16,26 @@ class MixerStripsUITests(unittest.TestCase):
     # Reuse process/API helpers without inheriting another test inventory.
     setUp = support.GraphMixerAppTests.setUp
     doc = support.GraphMixerAppTests.doc
-    read = support.GraphMixerAppTests.read
     write = support.GraphMixerAppTests.write
+
+    def read(self, method, **fields):
+        # Timer-driven publication can start between settle() and a read.
+        # Retry only the explicit busy response, under one bounded deadline;
+        # writes and uncertain transport outcomes keep their single-send path.
+        self.assertIn(method, ('mixer.get',))
+        deadline = time.monotonic() + 5
+        request_id = uuid.uuid4().hex
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.fail('Mixer read stayed busy for five seconds')
+            observer = self.client.__class__(self.client.pipe, timeout=min(.5, remaining))
+            try:
+                return observer.call(method, fields, request_id=request_id)['data']
+            except support.ApiError as error:
+                if error.code != -32002 or 'Document worker is busy' not in str(error):
+                    raise
+                time.sleep(min(.01, max(0, deadline - time.monotonic())))
 
     def main_command(self, identifier):
         self.desktop.send(self.desktop.hwnd(self.pid), 0x111, identifier, 0)
@@ -134,7 +153,7 @@ class MixerStripsUITests(unittest.TestCase):
         path = self.folder / 'strip-history.screamseq'
         self.write('document.save', path=str(path), overwrite=False)
         self.write('mixer.bus.set', bus=bus, gainDB=-3)
-        self.write('document.open', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
         self.main_command(418)
         self.assertEqual(self.read('mixer.get'), saved)
         self.assertEqual(self.strip(bus)['bus'], bus)
@@ -183,7 +202,7 @@ class MixerStripsUITests(unittest.TestCase):
         self.assertEqual(self.doc(), before, 'A stale raw draft must not be rebased silently')
         self.press(12)
         self.assertFalse(self.settle()['mixerStrips']['gesture'])
-        self.write('document.open', path=str(path))
+        self.write('document.open', path=str(path), discard=True)
         self.main_command(418)
         self.assertFalse(self.settle()['mixerStrips']['gesture'])
         self.assertEqual(self.strip(bus)['bus'], bus)
