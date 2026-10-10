@@ -1004,3 +1004,78 @@ The annotation approach follows Microsoft's [native control naming guidance](htt
 and [direct annotation API](https://learn.microsoft.com/en-us/windows/win32/api/oleacc/nf-oleacc-iaccpropservices-sethwndpropstr).
 The private-desktop provider checks are deliberately narrower than a foreground
 screen-reader acceptance claim.
+
+### Prepared: virtual pattern UI Automation tree (not runtime-qualified)
+
+`NativePatternAccessibility.hpp` exposes an STA UIA fragment from the existing
+main HWND. The main window delegates its normal window, native child, menu and
+chrome properties to the Windows host provider. A virtual DataGrid contains
+on-demand row/channel DataItems, with Grid, GridItem, read-only Value and
+ScrollItem patterns. No HWND or provider is allocated for every song cell, and
+the custom grid has no second musical model or direct editing implementation.
+
+`WorkspaceAccessibility.inc` projects the current immutable document view,
+stable document/pattern/column identities and the same pattern viewport geometry
+used by drawing. Screen bounds account for DPI, horizontal scrolling, row density
+and clipping; undrawn partial rows stay offscreen. Cell descriptions include
+track/column names and mute state, legacy note/instrument/volume, precise onsets
+and velocity, and full typed FX descriptors (including fields omitted from narrow
+painted columns). Values retain descriptor precision and actual timing units.
+The current field and rectangular selection are described in HelpText.
+
+Explicit focus routes through native `navigate`, releases held musical typing
+and preserves retained inspectors. ScrollIntoView follows mouse-scroll behavior:
+it suspends viewport follow, changes viewport offsets, and retains cursor, block
+selection, keyboard focus and musical history. A held provider cannot navigate
+or scroll against a newer document revision. Pattern/column identity changes,
+hidden content, busy/replacement/layout admission, native menus and mouse capture
+also prevent unsafe navigation. Queries execute on the UI STA through
+`ProviderOptions_UseComThreading`; direct foreign-thread calls are rejected.
+Callbacks are cleared and the root disconnected on HWND retirement, so retained
+client references cannot access a destroyed Application.
+
+The render loop publishes structure, focus and layout notifications when UIA
+clients are listening. Notification failure cannot abort a frame or audio
+service. Event delivery, cached-client invalidation and performance with an
+active screen reader still need runtime evidence. No success is claimed from
+the presence of a provider or notification call alone.
+
+Prepared `workspace-pattern-accessibility-tests` uses the existing workspace
+executable and native-ui CI label. It covers typed/precise musical descriptions,
+dimensions, index rejection, clipped screen bounds and hit testing, offscreen
+scrolling, retained invalid inspector text, native focus, unchanged musical
+history, busy/revision guards, wrong-thread calls and post-destruction reads.
+An MTA `IUIAutomation2` client is also prepared to query the actual HWND, find
+both the virtual grid and native controls, read a cell and focus it through COM
+marshaling. It also reads the annotated Song title field's actual UIA Name, so
+the native naming bridge is checked alongside the virtual provider.
+Connections/transactions use 3-second timeouts, the client scenario
+has a 30-second deadline, and the isolated CTest has a 120-second outer limit.
+
+Only source inspection, SDK signature checks and `git diff --check` have run.
+Add **workspace-pattern-accessibility-tests** and **workspace-menu-bar-tests** to
+the next local consolidated helper's explicit CTest selection; there is no new
+executable target. Both Windows architectures need the new UIAutomationCore
+linkage and native UI checks. Retained-owner, shortcut, selection, draft/departure
+and manifest checks remain in that same gate. Mac/shared and reciprocal F01–F05
+gates are unchanged and remain required.
+
+Remaining accessibility scope is explicit: this slice does not expose per-field
+Value writes, UIA block-selection mutation, virtual headers/Table, graph nodes,
+automation/envelope points or other canvas providers. Existing keyboard/API
+editing remains available. Complete those surfaces and the remaining native
+field-name census; then qualify foreground Narrator/Accessibility Insights,
+menus, native/virtual focus transitions, event delivery, resize/mixed DPI and
+loaded playback. This is progress on P3a, not completion of accessibility parity.
+
+The host/virtual-child arrangement follows Microsoft's [server-side provider guide](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-serversideprovider).
+The STA boundary follows the documented [provider threading option](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcore/ne-uiautomationcore-provideroptions).
+
+Source dependency inspection also found that the installed ARM64 SDK import
+libraries do not define the annotation property GUIDs or `CLSID_AccPropServices`.
+`NativeAccessibilityGuids.cpp` instantiates their SDK definitions with
+`initguid.h` once per native executable. The native field helper now names both
+MSAA and UIA properties explicitly and clears both on retirement; its previous
+name is retained for recovery if updating the second property fails. The new
+client check uses the actual UIA Name property rather than assuming the legacy
+name mapping. This linkage correction was made before any build attempt.

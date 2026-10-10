@@ -14,6 +14,7 @@
 #include "CommandPalette.hpp"
 #include "NativeContextMenu.hpp"
 #include "NativeMenuBar.hpp"
+#include "NativePatternAccessibility.hpp"
 #include "WorkspaceShortcuts.hpp"
 #include "WorkspaceShortcutKey.hpp"
 #include "PatternClipboard.hpp"
@@ -744,6 +745,7 @@ public:
     #include "WorkspaceShortcutDispatch.inc"
     #include "WorkspaceContextMenus.inc"
     #include "WorkspaceMenuBar.inc"
+    #include "WorkspaceAccessibility.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -972,6 +974,7 @@ public:
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
 		previousSubmit = now;
+		if(patternAccessibility)patternAccessibility->notify();
 	}
 	void report(const std::filesystem::path &path, double seconds) {
 		if(path.empty()) return;
@@ -1009,6 +1012,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
        message==WM_MOUSEWHEEL || (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) app->frameRequested=true;
 	try {
 		switch(message) {
+		case WM_GETOBJECT: if(static_cast<LONG>(lp)==UiaRootObjectId&&app->patternAccessibility)return app->patternAccessibility->object(wp,lp);break;
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
         case loadReportSaveCopyMessage: app->performLoadReportSave();return 0;
@@ -1026,7 +1030,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 			}
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-		case WM_NCDESTROY: if(app->menuBar)app->menuBar->ownerDestroyed();RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+		case WM_NCDESTROY: if(app->patternAccessibility)app->patternAccessibility->retire();if(app->menuBar)app->menuBar->ownerDestroyed();RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
         case WM_ENTERMENULOOP:if(!wp)app->beginMenuBar();break;
         case WM_EXITMENULOOP:if(!wp)app->endMenuBar();break;
         case WM_INITMENU:if(app->menuBar&&reinterpret_cast<HMENU>(wp)==app->menuBar->handle())app->refreshMenuBar();break;

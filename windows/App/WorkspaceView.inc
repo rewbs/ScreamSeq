@@ -229,7 +229,7 @@
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();
-		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();
+		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
 	}
 	void command(int id) {
 		try {

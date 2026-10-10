@@ -28,7 +28,8 @@ endif()
 # an executable manifest through the portable engine or plugin libraries.
 add_library(ScreamSeqNativeUiOptions INTERFACE)
 target_sources(ScreamSeqNativeUiOptions INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ScreamSeq.manifest")
-target_link_libraries(ScreamSeqNativeUiOptions INTERFACE ole32 oleaut32 oleacc uuid)
+target_sources(ScreamSeqNativeUiOptions INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/App/NativeAccessibilityGuids.cpp")
+target_link_libraries(ScreamSeqNativeUiOptions INTERFACE ole32 oleaut32 oleacc uuid uiautomationcore)
 
 # Keep the engine configuration and shared editor source list aligned with mac/.
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
@@ -168,6 +169,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-song-properties-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-keyboard-settings-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-menu-bar-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-pattern-accessibility-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-pattern-accessibility-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;accessibility;pattern"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-accessibility" TIMEOUT 120)
     set_tests_properties(workspace-menu-bar-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;menus;keyboard"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=menu-bar" TIMEOUT 120)
     set_tests_properties(workspace-keyboard-settings-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;preferences;keyboard"
