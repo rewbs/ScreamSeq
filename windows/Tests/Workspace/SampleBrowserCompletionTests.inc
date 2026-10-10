@@ -9,7 +9,7 @@ void sampleBrowserCompletionReview(HWND main){
     const auto request=[&](const std::string &method,const Json &)->Json{
       if(method=="sample.library.preview.stop")return Json::object();
       if(method=="sample.library.search")return {{"items",Json::array({{{"path","C:/fixture/one.wav"},{"name","one"}}})},{"tags",Json::array()},{"total",1},{"libraryRevision","library:1"}};
-      if(method=="sample.library.inspect")return {{"peaks",Json::array()},{"rate",48000},{"channels",1},{"seconds",1.0}};
+      if(method=="sample.library.inspect"||method=="sample.library.preview")return {{"peaks",Json::array()},{"rate",48000},{"channels",1},{"seconds",1.0}};
       if(method=="sample.library.multisample.get")return {{"group",nullptr}};
       ++reads;if(failReview)throw std::runtime_error("Review unavailable");
       if(method=="synchronizeView")return Json::object();

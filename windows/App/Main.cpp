@@ -349,7 +349,7 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
             {"savedLayouts",savedLayouts.list()},{"layoutStorageStatus",savedLayouts.diagnostic()},
             {"lowerVisible",workspaceState.lowerVisible},{"lowerEditor",lowerEditorName()},
-            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
+            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingPatternPaste",pendingPatternPaste.has_value()},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"audioSettings",audioSettingsSnapshot()},
             {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
@@ -1268,6 +1268,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;
+            app.drainPatternPaste();
             app.drainViews();
             app.samplePreview.service();
             app.serviceRecovery();

@@ -18,7 +18,8 @@ private:
   Json state_,entries_=Json::array(),facets_=Json::array(),inspection_,group_;
   std::string selectedPath_,rootPath_,revision_;std::vector<std::string> selectedTags_;
   std::vector<float> peaks_;
-  bool setting_=false,pending_=false,queued_=true,mapped_=false,auto_=false;
+  bool setting_=false,pending_=false,queued_=true,mapped_=false,auto_=true;
+  bool reading_=false,inspectQueued_=false,inspectAudible_=false;
   size_t offset_=0,total_=0;uint64_t generation_=0;
   bool previewPlaying_=false;float previewPosition_=0;
   std::unique_ptr<MultisampleImportWindow> multisample_;
@@ -55,7 +56,7 @@ private:
     if(playing!=previewPlaying_){previewPlaying_=playing;set(preview,playing?L"Playing…":L"Preview");requestPaint();}
     if(position!=previewPosition_){previewPosition_=position;requestPaint();}
   }
-  void queue(){queued_=true;offset_=0;++generation_;SetTimer(window_,1,100,nullptr);}
+  void queue(){inspectQueued_=false;if(reading_)call("sample.library.preview.stop");queued_=true;offset_=0;++generation_;SetTimer(window_,1,100,nullptr);}
   void roots(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(root),CB_RESETCONTENT,0,0);ScreamSeq::NativeInputGate::present(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"All sample folders"));int choice=0;
     for(size_t i=0;i<state_.at("roots").size();++i){const auto path=state_.at("roots")[i].get<std::string>();const auto text=wide(path);ScreamSeq::NativeInputGate::present(controls_.at(root),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(path==rootPath_)choice=int(i+1);}if(!choice)rootPath_.clear();ScreamSeq::NativeInputGate::present(controls_.at(root),CB_SETCURSEL,choice,0);setting_=false;}
   std::vector<unsigned> selections(int id)const{const auto count=SendMessageW(controls_.at(id),LB_GETSELCOUNT,0,0);if(count<=0)return {};std::vector<int> items(size_t(count),0);SendMessageW(controls_.at(id),LB_GETSELITEMS,count,reinterpret_cast<LPARAM>(items.data()));return {items.begin(),items.end()};}
@@ -64,26 +65,26 @@ private:
     if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls_.at(id),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(id),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(id),nullptr,FALSE);
   }
   void load(){
-    if(pending_)return;queued_=false;const auto generation=generation_;pending_=true;layout();
+    if(pending_)return;queued_=false;const auto generation=generation_;pending_=reading_=true;layout();
     Json params={{"query",utf8(field(search))},{"tagQuery",utf8(field(tagSearch))},{"tags",selectedTags_},{"offset",offset_},{"limit",200}};if(!rootPath_.empty())params["root"]=rootPath_;
-    try{auto data=call("sample.library.search",params);pending_=false;if(generation!=generation_||!visible()){layout();return;}
-      const auto old=selectedPaths();entries_=data.at("items");facets_=data.at("tags");total_=data.at("total");revision_=data.at("libraryRevision").get<std::string>();list(files,entries_,old,"path");
+    try{auto data=call("sample.library.search",params);pending_=reading_=false;if(generation!=generation_||!visible()){layout();return;}
+      const auto old=selectedPaths();const auto oldFacets=facets_;const bool changed=entries_!=data.at("items");entries_=data.at("items");facets_=data.at("tags");total_=data.at("total");revision_=data.at("libraryRevision").get<std::string>();if(changed){list(files,entries_,old,"path");for(size_t i=0;i<entries_.size();++i)if(entries_[i].at("path")==selectedPath_)ScreamSeq::NativeInputGate::present(controls_.at(files),LB_SETCARETINDEX,i,FALSE);}
       // Keep selected facets visible even when no current result matches them.
       for(const auto &tag:selectedTags_)if(std::none_of(facets_.begin(),facets_.end(),[&](const auto &f){return f.at("name")==tag;}))facets_.push_back({{"name",tag},{"count",0}});
-      list(tags,facets_,selectedTags_,"name");if(std::none_of(entries_.begin(),entries_.end(),[&](const auto &e){return e.at("path")==selectedPath_;})){selectedPath_.clear();inspection_=group_=nullptr;peaks_.clear();set(detailLabel,L"Select a sample to inspect its waveform");call("sample.library.preview.stop");}
+      if(oldFacets!=facets_)list(tags,facets_,selectedTags_,"name");if(std::none_of(entries_.begin(),entries_.end(),[&](const auto &e){return e.at("path")==selectedPath_;})){selectedPath_.clear();inspection_=group_=nullptr;peaks_.clear();set(detailLabel,L"Select a sample to inspect its waveform");call("sample.library.preview.stop");}
       set(resultsLabel,std::to_wstring(total_)+L" samples / "+std::to_wstring(offset_+std::min<size_t>(1,entries_.size()))+L"–"+std::to_wstring(offset_+entries_.size()));
       status(data.value("indexing",false)?L"Refreshing folders / previous results remain available":L"Select to inspect / Space previews / Enter imports / folder tags are combined");
-    }catch(...){pending_=false;layout();throw;}layout();requestPaint();
+    }catch(...){pending_=reading_=false;layout();throw;}layout();requestPaint();
   }
   std::vector<std::string> selectedPaths()const{std::vector<std::string> paths;for(auto i:selections(files))if(i<entries_.size())paths.push_back(entries_[i].at("path"));return paths;}
   void inspect(bool audible){
-    if(selectedPath_.empty())return;const auto path=selectedPath_;const auto generation=++generation_;pending_=true;layout();
+    if(selectedPath_.empty())return;const auto path=selectedPath_;const auto generation=++generation_;pending_=reading_=true;layout();
     try{Json p={{"path",path}};if(audible){updateGain(true);p["gainDB"]=number(gain);}auto data=call(audible?"sample.library.preview":"sample.library.inspect",p);
-      auto group=call("sample.library.multisample.get",{{"path",path}});pending_=false;if(generation!=generation_||path!=selectedPath_||!visible()){layout();return;}
+      auto group=call("sample.library.multisample.get",{{"path",path}});pending_=reading_=false;if(generation!=generation_||path!=selectedPath_||!visible()){layout();return;}
       inspection_=std::move(data);group_=group.at("group");peaks_=inspection_.at("peaks").get<std::vector<float>>();
       set(detailLabel,wide(path));
       status(std::to_wstring(inspection_.at("rate").get<unsigned>())+L" Hz / "+std::to_wstring(inspection_.at("channels").get<unsigned>())+L" channels / "+std::to_wstring(inspection_.at("seconds").get<double>())+L" seconds"+(group_.is_object()?L" / multi-sample family found":L""));
-    }catch(...){pending_=false;layout();throw;}layout();playback();SetTimer(window_,1,previewPlaying_?50:200,nullptr);requestPaint();
+    }catch(...){pending_=reading_=false;layout();if(generation!=generation_||path!=selectedPath_)return;throw;}layout();playback();SetTimer(window_,1,previewPlaying_?50:200,nullptr);requestPaint();
   }
   HWND suspendImportFocus(){
     const auto focus=GetFocus();if(!owns(focus)||focus==window_)return nullptr;
@@ -189,13 +190,14 @@ private:
     pending_=libraryWorking_=false;submitLibrary("sample.library.roots.set",{{"roots",paths},{"expectedLibraryRevision",expected}});
   }
   void action(int id,unsigned notification)override{
-    if(setting_||!ready_)return;if(id==close){hide();return;}if(id==stop){++generation_;call("sample.library.preview.stop");playback();return;}
-    if(id==gain&&notification==EN_CHANGE){updateGain(false);return;}if(pending_)return;
+    if(setting_||!ready_)return;if(id==close){hide();return;}if(id==stop){inspectQueued_=false;++generation_;call("sample.library.preview.stop");playback();return;}
+    if(id==gain&&notification==EN_CHANGE){updateGain(false);return;}if(pending_&&!reading_)return;
     if(id==importSelection&&importFrozen()){reviewImport();return;}if(id==rescan&&libraryFrozen()){reviewLibrary();return;}requireBrowserResolved();
     if((id==search||id==tagSearch)&&notification==EN_CHANGE){queue();return;}
     if(id==root&&notification==CBN_SELCHANGE){const auto i=SendMessageW(controls_.at(root),CB_GETCURSEL,0,0);rootPath_=i>0&&size_t(i)<=state_.at("roots").size()?state_.at("roots")[size_t(i-1)].get<std::string>():"";queue();return;}
     if(id==tags&&notification==LBN_SELCHANGE){selectedTags_.clear();for(auto i:selections(tags))if(i<facets_.size())selectedTags_.push_back(facets_[i].at("name"));queue();return;}
-    if(id==files&&notification==LBN_SELCHANGE){const auto paths=selectedPaths();const auto caret=SendMessageW(controls_.at(files),LB_GETCARETINDEX,0,0);const auto path=caret>=0&&size_t(caret)<entries_.size()?entries_[size_t(caret)].at("path").get<std::string>():paths.empty()?"":paths.front();if(path!=selectedPath_){selectedPath_=path;call("sample.library.preview.stop");inspect(auto_);}return;}
+    if(id==files&&notification==LBN_SELCHANGE){const auto paths=selectedPaths();const auto caret=SendMessageW(controls_.at(files),LB_GETCARETINDEX,0,0);const auto path=caret>=0&&size_t(caret)<entries_.size()?entries_[size_t(caret)].at("path").get<std::string>():paths.empty()?"":paths.front();selectedPath_=path;if(reading_)queued_=true;++generation_;call("sample.library.preview.stop");inspectQueued_=!path.empty();inspectAudible_=auto_;SetTimer(window_,1,1,nullptr);return;}
+    if(pending_)return;
     if(id==files&&notification==LBN_DBLCLK){importPaths(selectedPaths(),context_(),mapped_);return;}
     if(notification!=BN_CLICKED)return;
     if(id==preview)inspect(true);else if(id==autoPreview){auto_=!auto_;if(!auto_)call("sample.library.preview.stop");}
@@ -209,10 +211,10 @@ private:
   }
   void timer(UINT_PTR id)override{
     if(id!=1||!visible())return;playback();if(pending_||browserFrozen())return;auto state=statusRead_();if(state_!=state){const bool changed=state_.is_null()||state_.value("libraryRevision",std::string{})!=state.value("libraryRevision",std::string{});state_=std::move(state);roots();if(changed){queued_=true;++generation_;}set(heading,L"Sample library / "+std::to_wstring(state_.at("count").get<unsigned>())+(state_.at("indexing").get<bool>()?L" / indexing…":L""));if(!state_.at("error").is_null())status(wide(state_.at("error").get<std::string>()));layout();}
-    if(queued_)load();SetTimer(window_,1,previewPlaying_?50:200,nullptr);
+    if(queued_)load();else if(inspectQueued_){inspectQueued_=false;inspect(inspectAudible_);}SetTimer(window_,1,previewPlaying_?50:200,nullptr);
   }
   bool key(WPARAM value,bool ctrl,bool)override{
-    if(value==VK_ESCAPE){++generation_;call("sample.library.preview.stop");playback();return true;}
+    if(value==VK_ESCAPE){inspectQueued_=false;++generation_;call("sample.library.preview.stop");playback();return true;}
     if(ctrl&&value=='F'){SetFocus(controls_.at(search));ScreamSeq::NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(ctrl&&value=='R'){action(rescan,BN_CLICKED);return true;}
     if(value==VK_SPACE&&GetFocus()==controls_.at(files)){action(preview,BN_CLICKED);return true;}
@@ -225,7 +227,9 @@ private:
     place(detailLabel,16,h-179,w-32,20);place(preview,16,h-145,78,26);place(stop,102,h-145,62,26);place(autoPreview,172,h-145,138,26);place(gainLabel,320,h-140,60,20);place(gain,381,h-145,55,26);place(previous,w-158,h-145,66,26);place(next,w-84,h-145,68,26);
     place(mapped,16,h-107,156,26);place(chooseFiles,180,h-107,100,26);place(family,w-430,h-107,148,26);place(importSelection,w-274,h-107,170,26);place(close,w-96,h-107,80,26);place(statusLabel,16,h-65,w-32,50);
     const bool available=!pending_&&!browserFrozen();
-    for(int id:{search,tagSearch,root,tags,files,addFolder,removeFolder,rescan,chooseFiles,mapped,autoPreview,previous,next})EnableWindow(controls_.at(id),available);
+    // Read-only decoding/search must not disable the focused text/list HWND.
+    for(int id:{search,tagSearch,root,tags,files})EnableWindow(controls_.at(id),(!pending_||reading_)&&!browserFrozen());
+    for(int id:{addFolder,chooseFiles,mapped,autoPreview})EnableWindow(controls_.at(id),available);
     EnableWindow(controls_.at(removeFolder),available&&!rootPath_.empty());set(rescan,libraryCompletion_.retained()?L"Review":libraryNeedsReload_?L"Reload":L"Rescan");EnableWindow(controls_.at(rescan),!pending_&&!importFrozen()&&(libraryFrozen()||!state_.value("indexing",true)));EnableWindow(controls_.at(preview),available&&!selectedPath_.empty());EnableWindow(controls_.at(family),available&&group_.is_object());set(importSelection,importCompletion_.retained()?L"Review import":importNeedsRebase_?L"Use current song":L"Import selection");EnableWindow(controls_.at(importSelection),!pending_&&!libraryFrozen()&&(importFrozen()||(!queued_&&!selectedPaths().empty())));EnableWindow(controls_.at(previous),available&&offset_>0);EnableWindow(controls_.at(next),available&&offset_+entries_.size()<total_);
     set(autoPreview,auto_?L"Auto-preview: on":L"Auto-preview: off");set(mapped,mapped_?L"Create instruments: on":L"Create instruments: off");}
   void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const float x=452,y=h-146,width=std::max(8.f,w-x-180),height=29;s.fill(x,y,width,height,0x111b25);const auto mid=y+height/2;s.line(x,mid,x+width,mid,0x344a57);for(size_t i=0;i+1<peaks_.size();i+=2){const float at=x+float(i/2)*width/float(peaks_.size()/2);s.line(at,mid-peaks_[i]*height*.45f,at,mid-peaks_[i+1]*height*.45f,0x79d8c8);}if(previewPlaying_){const float at=x+previewPosition_*width;s.line(at,y,at,y+height,0xf0bf72);}}
@@ -257,8 +261,8 @@ public:
   }
   void reviewFamily(const Json &group){requireBrowserResolved();multisampleEditor().open(group);}
   void show(){const bool wasVisible=visible();NativeToolWindow::show();if(!wasVisible&&!browserFrozen())queued_=true;SetTimer(window_,1,1,nullptr);SetFocus(controls_.at(search));}
-  void hide()override{++generation_;call("sample.library.preview.stop");playback();if(multisample_->visible())multisample_->hide();KillTimer(window_,1);NativeToolWindow::hide();}
+  void hide()override{inspectQueued_=false;++generation_;call("sample.library.preview.stop");playback();if(multisample_->visible())multisample_->hide();KillTimer(window_,1);NativeToolWindow::hide();}
   bool protectsClose()const noexcept{return libraryWorking_||libraryCompletion_.retained();}
-  Json snapshot()const{return {{"libraryCompletion",libraryCompletion_.snapshot()},{"libraryReport",libraryReport_},{"libraryNeedsReload",libraryNeedsReload_},{"choosingImport",choosingImport_},{"importCompletion",importCompletion_.snapshot()},{"importReport",importReport_},{"importNeedsRebase",importNeedsRebase_},{"visible",visible()},{"pending",pending_},{"queued",queued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_&&!multisample_->retired()?multisample_->snapshot():Json{{"visible",false}}}};}
+  Json snapshot()const{return {{"libraryCompletion",libraryCompletion_.snapshot()},{"libraryReport",libraryReport_},{"libraryNeedsReload",libraryNeedsReload_},{"choosingImport",choosingImport_},{"importCompletion",importCompletion_.snapshot()},{"importReport",importReport_},{"importNeedsRebase",importNeedsRebase_},{"visible",visible()},{"pending",pending_},{"queued",queued_||inspectQueued_},{"libraryRevision",revision_},{"search",utf8(field(search))},{"root",rootPath_},{"tags",selectedTags_},{"items",entries_},{"offset",offset_},{"total",total_},{"selectedPaths",selectedPaths()},{"selected",selectedPath_},{"inspection",inspection_},{"family",group_},{"createInstruments",mapped_},{"autoPreview",auto_},{"gainDB",utf8(field(gain))},{"previewPlaying",previewPlaying_},{"previewPosition",previewPosition_},{"status",utf8(status_)},{"multisample",multisample_&&!multisample_->retired()?multisample_->snapshot():Json{{"visible",false}}}};}
 };
 }

@@ -75,3 +75,37 @@ void applicationTypingNavigation() {
   app.octave=0;const auto lower=app.contextRevision;app.command(inputOctaveDownCommand);
   restoreCheck(app.octave==0&&app.contextRevision==lower,"Octave lower boundary changed context");
 }
+
+void applicationQueuedPatternPaste() {
+  RestoreFixture fixture;auto &app=*fixture.app;app.command(patternCommand);SetFocus(app.window);
+  app.edit("pattern.apply",{{"cells",RestoreJson::array({{{"pattern",0},{"row",0},{"channel",0},{"note",61}},{{"pattern",0},{"row",8},{"channel",0},{"note",0}}})}});
+  auto cursor=app.position();cursor["pattern"]=0;cursor["row"]=0;cursor["channel"]=0;cursor["column"]=0;cursor["following"]=false;app.navigate(cursor);
+  restoreCheck(app.copyCells(),"Prepare private paste clipboard");cursor["row"]=8;app.navigate(cursor);
+  const auto note=[&](unsigned row){return app.documentOperation("pattern.get",{{"pattern",0},{"startRow",row},{"rowCount",1},{"startChannel",0},{"channelCount",1}}).at("cells").at(0).at("note").get<unsigned>();};
+  // Exercise input inside the genuine busy wait, not a timing-dependent sleep.
+  std::promise<RestoreJson> gate;app.inputCompletion=&gate;
+  app.postedInput=[&]{restoreCheck(app.busy,"Paste fixture did not enter a worker wait");app.command(pasteCommand);restoreCheck(app.pendingPatternPaste.has_value(),"Busy paste was dropped instead of retaining its intent");};
+  restoreCheck(PostMessageW(app.window,restoreInputMessage,0,0)!=FALSE,"Queue paste during worker wait");
+  (void)app.await(gate.get_future());app.inputCompletion=nullptr;app.drainPatternPaste();
+  restoreCheck(!app.pendingPatternPaste&&note(8)==61,"Queued paste did not apply at its captured target");
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(note(8)==0,"Queued paste was not one undoable edit");
+  app.edit("history.redo",{{"domain","all"}});restoreCheck(note(8)==61,"Queued paste Redo lost its content");
+  app.edit("history.undo",{{"domain","all"}});
+  // Clipboard changes do not replace an already captured paste payload.
+  app.busy=true;app.pasteCells();app.busy=false;const auto clipboard=app.inspectionClipboard;app.inspectionClipboard="invalid replacement";
+  app.drainPatternPaste();restoreCheck(note(8)==61,"Queued paste read a later clipboard instead of its captured payload");
+  app.inspectionClipboard=clipboard;app.edit("history.undo",{{"domain","all"}});
+  // A busy Copy completes first; the queued Paste may consume only that copy.
+  app.copyingPatternClipboard=true;app.busy=true;app.pasteCells();app.busy=false;app.copyingPatternClipboard=false;++app.patternClipboardSerial;
+  app.drainPatternPaste();restoreCheck(note(8)==61,"Paste queued behind Copy missed its completed clipboard");
+  app.edit("history.undo",{{"domain","all"}});
+  app.copyingPatternClipboard=true;app.busy=true;app.pasteCells();app.busy=false;app.copyingPatternClipboard=false;
+  app.drainPatternPaste();restoreCheck(note(8)==0&&app.status.find(L"Pending copy")!=std::wstring::npos,"Failed pending Copy pasted older data");
+  // Navigation and edits invalidate queued intent instead of retargeting it.
+  app.busy=true;app.pasteCells();app.busy=false;cursor["row"]=9;app.navigate(cursor);const auto navigated=songState(app);app.drainPatternPaste();
+  restoreCheck(songState(app)==navigated&&app.status.find(L"Paste target changed")!=std::wstring::npos,"Queued paste followed a newer cursor");
+  app.busy=true;app.pasteCells();app.busy=false;app.edit("document.patch",{{"title","Newer song revision"}});const auto edited=songState(app);app.drainPatternPaste();
+  restoreCheck(songState(app)==edited,"Queued paste bypassed the revision guard");
+  app.busy=true;app.pasteCells();app.busy=false;app.edit("document.new",{{"discard",true}});const auto replaced=songState(app);app.drainPatternPaste();
+  restoreCheck(songState(app)==replaced,"Queued paste crossed document identity");
+}

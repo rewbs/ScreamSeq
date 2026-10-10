@@ -114,6 +114,17 @@ class WorkspaceShortcutTests(unittest.TestCase):
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
 
+    def test_pattern_backspace_clears_and_undo_restores(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=7, channel=0, note=61)])
+        self.focus_pattern()
+        self.navigate(row=7, channel=0, column=0, following=False)
+        self.key(0x08, hwnd=self.native_window())
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 0)
+        self.key(ord('Z'), hwnd=self.native_window(), ctrl=True)
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 61)
+
     def test_real_menu_loop_allows_new_song(self):
         # Enter USER32's actual modal menu loop. Sending WM_ENTERMENULOOP alone
         # does not acquire menu capture and missed the all-disabled regression.

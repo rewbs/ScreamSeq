@@ -107,3 +107,32 @@ void applicationDirectSampleImportRetention(){
   restoreCheck(app.view->samples.size()==before&&app.sampleDraft&&app.sampleDraftId==rawID&&restoreText(app.controls.at(sampleStartField))==L"-","Reviewed direct import lost draft or one Undo");
   fixture.close();
 }
+
+void applicationSampleBrowserInputDuringDecode(){
+  RestoreFixture fixture;auto &app=*fixture.app;
+  const auto folder=fixture.folder/L"navigation";std::filesystem::create_directory(folder);
+  auto source=Tracker::Document::demo();for(const auto name:{L"first.wav",L"second.wav"}){std::ofstream file(folder/name,std::ios::binary);restoreCheck(source->song().SaveWAVSample(1,file),"Write browser navigation fixture");}
+  app.prepareSampleLibrary();app.independentOperation("sample.library.roots.set",{{"roots",RestoreJson::array({utf8Path(folder)})},{"expectedLibraryRevision",app.sampleLibrary->status().at("libraryRevision")}});
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+  while(app.sampleLibrary->status().at("indexing").get<bool>()&&std::chrono::steady_clock::now()<deadline)std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  restoreCheck(!app.sampleLibrary->status().at("indexing").get<bool>(),"Index browser navigation fixture");
+  app.openSampleBrowser();const auto owner=app.sampleBrowser->window();ScreamSeq::Tests::ownGuiWindow(owner);SendMessageW(owner,WM_TIMER,1,0);
+  const auto list=GetDlgItem(owner,5404),search=GetDlgItem(owner,5401);SetFocus(list);
+  SendMessageW(list,LB_SETSEL,TRUE,0);SendMessageW(list,LB_SETCARETINDEX,0,FALSE);SendMessageW(owner,WM_COMMAND,MAKEWPARAM(5404,LBN_SELCHANGE),reinterpret_cast<LPARAM>(list));
+  std::promise<RestoreJson> gate;auto release=gate.get_future().share();std::atomic<bool> entered=false;
+  app.inputCompletion=&gate;
+  app.postedInput=[&]{
+    restoreCheck(app.sampleBrowser->snapshot().at("pending")==true&&IsWindowEnabled(list)&&IsWindowEnabled(search)&&GetFocus()==list,"Decode disabled or defocused browser input");
+    SendMessageW(list,WM_KEYDOWN,VK_DOWN,1);
+    restoreCheck(app.sampleBrowser->snapshot().at("selected")==app.sampleBrowser->snapshot().at("items").at(1).at("path"),"Arrow input during decode was dropped");
+  };
+  app.sampleDecoder=std::make_unique<ScreamSeq::Samples::PreviewDecoder>([&]{if(!entered.exchange(true)){
+    if(!PostMessageW(app.window,restoreInputMessage,0,0))throw std::runtime_error("Queue browser input during decode");
+    if(release.wait_for(std::chrono::seconds(5))!=std::future_status::ready)throw std::runtime_error("Browser input did not release decode");release.get();
+  }});
+  const auto before=songState(app);SendMessageW(owner,WM_TIMER,1,0);app.inputCompletion=nullptr;release.get();
+  for(unsigned i=0;i<4&&app.sampleBrowser->snapshot().at("queued")==true;++i)SendMessageW(owner,WM_TIMER,1,0);
+  const auto state=app.sampleBrowser->snapshot();
+  restoreCheck(state.at("selected")==state.at("items").at(1).at("path")&&state.at("inspection").at("path")==state.at("selected"),"Older decode replaced the newer browser selection");
+  restoreCheck(GetFocus()==list&&songState(app)==before,"Browsing changed focus or musical state");
+}

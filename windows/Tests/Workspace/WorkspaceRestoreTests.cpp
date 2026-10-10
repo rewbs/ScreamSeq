@@ -1148,7 +1148,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationPatternDisplay();applicationPatternRuler();applicationPatternRowHeight();std::cout<<"PASS native pattern and graph display: metrics, timing Undo, F04 values, ruler, row geometry, saved density and retained drafts\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-selection") {
-                    applicationWholePatternSelection();applicationTypingNavigation();std::cout<<"PASS whole-pattern selection and typing navigation: cursor/view/history, grouping bounds, retained focus/drafts and input admission\n";return;
+                    applicationWholePatternSelection();applicationTypingNavigation();applicationQueuedPatternPaste();std::cout<<"PASS whole-pattern selection and typing navigation: cursor/view/history, grouping bounds, retained focus/drafts and input admission\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"transport-controls") {
                     applicationPlaybackLoop();applicationPlaybackRegions();std::cout<<"PASS native playback controls: loop retention, stable region/occurrence, bounds, preparation guards and detached cursor\n";return;
@@ -1176,6 +1176,9 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
                     applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: receipts, staged refresh, domain readback and no replay\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"sample-browser-input") {
+                    applicationSampleBrowserInputDuringDecode();std::cout<<"PASS sample browser: active focus, arrows during decode and stale-preview cancellation\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
                     nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();applicationInstrumentCreationRecovery();

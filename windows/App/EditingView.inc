@@ -179,11 +179,25 @@
         edit("pattern.apply",{{"cells",Json::array({cell})}});
         if(column==0) advance();return true;
     }
+    bool copyingPatternClipboard=false;
+    uint64_t patternClipboardSerial=0;
+    DWORD patternClipboardSequence=0;
+    struct PendingPatternPaste {
+        std::string document,revision,mode;
+        Json origin,selection;
+        std::optional<std::string> text;
+        uint64_t copySerial=0;
+        HWND focus{};
+    };
+    std::optional<PendingPatternPaste> pendingPatternPaste;
     bool copyCells() {
+        if(copyingPatternClipboard)throw std::runtime_error("Pattern copy is already pending");
+        copyingPatternClipboard=true;
+        struct CopyGuard{bool &value;~CopyGuard(){value=false;}}copyGuard{copyingPatternClipboard};
         const auto region=selection();const auto clipboardSequence=inspection?0:GetClipboardSequenceNumber();
         auto data=await(std::async(std::launch::async,[snapshot=view,p=patternIndex,region]{return ScreamSeq::patternClipboardText(*snapshot,p,
             region.at("startRow"),region.at("endRow"),region.at("startChannel"),region.at("endChannel"));}));
-        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return true;}
+        if(inspection){inspectionClipboard=std::move(data);++patternClipboardSerial;status=L"Pattern selection copied";return true;}
         if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return false;}
         const auto text=wide(data);const auto bytes=(text.size()+1)*sizeof(wchar_t);
         auto memory=GlobalAlloc(GMEM_MOVEABLE,bytes);if(!memory) throw std::bad_alloc();
@@ -193,6 +207,7 @@
         if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return false;}
         const bool published=EmptyClipboard() && SetClipboardData(CF_UNICODETEXT,memory);
         CloseClipboard();if(!published) {GlobalFree(memory);throw std::runtime_error("Cannot publish pattern clipboard");}
+        ++patternClipboardSerial;patternClipboardSequence=GetClipboardSequenceNumber();
         status=L"Pattern selection copied / precise notes and all FX columns";return true;
     }
     void cutCells(){
@@ -206,8 +221,7 @@
         if(result==ScreamSeq::PatternCutResult::Stale)status=L"Copied / cut cancelled because the song or pattern changed";
         else if(result==ScreamSeq::PatternCutResult::Applied)status=L"Pattern selection cut / document Undo available";
     }
-    void pasteCells(const std::string &mode="overwrite") {
-        const auto origin=position();const auto revision=view->session.revision;
+    std::string readPatternClipboard() {
         std::string text=inspectionClipboard;
         if(!inspection) {
             if(!OpenClipboard(window)) throw std::runtime_error("Clipboard busy");
@@ -223,10 +237,37 @@
                 text.resize(bytes);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,value.data(),int(value.size()),text.data(),bytes,nullptr,nullptr);
             }
         }
+        return text;
+    }
+    void applyPatternPaste(PendingPatternPaste paste) {
+        if(documentId!=paste.document||view->session.revision!=paste.revision||position()!=paste.origin||selection()!=paste.selection||GetFocus()!=paste.focus)
+            throw std::runtime_error("Paste target changed while waiting / paste again at the intended selection");
+        if(!paste.text){
+            if(copyingPatternClipboard||patternClipboardSerial!=paste.copySerial||(!inspection&&GetClipboardSequenceNumber()!=patternClipboardSequence))
+                throw std::runtime_error("Pending copy did not publish this clipboard / copy and paste again");
+            paste.text=readPatternClipboard();
+        }
+        const auto origin=paste.origin;const auto revision=paste.revision;const auto mode=paste.mode;
+        auto text=std::move(*paste.text);
         auto payload=await(std::async(std::launch::async,[text=std::move(text)]{return ScreamSeq::parsePatternClipboard(text);}));
+        if(documentId!=paste.document||view->session.revision!=revision||position()!=origin||selection()!=paste.selection||GetFocus()!=paste.focus)
+            throw std::runtime_error("Paste target changed while decoding / paste again at the intended selection");
         payload["pattern"]=origin.at("pattern");payload["startRow"]=origin.at("row");payload["startChannel"]=origin.at("channel");
         payload["mode"]=mode;payload["clip"]=true;payload["expectedRevision"]=revision;
         documentOperation("pattern.paste",payload);status=L"Pattern pasted / document Undo available";
+    }
+    void drainPatternPaste() {
+        if(!pendingPatternPaste||busy||copyingPatternClipboard||departureInput||recoveryRestoring)return;
+        auto paste=std::move(*pendingPatternPaste);pendingPatternPaste.reset();
+        try{applyPatternPaste(std::move(paste));}catch(const std::exception &e){status=wide(e.what());}
+        frameRequested=true;
+    }
+    void pasteCells(const std::string &mode="overwrite") {
+        if(pendingPatternPaste)throw std::runtime_error("A paste is already waiting for the document");
+        PendingPatternPaste paste{documentId,view->session.revision,mode,position(),selection(),{},patternClipboardSerial+1,GetFocus()};
+        if(!copyingPatternClipboard)paste.text=readPatternClipboard();
+        if(busy||copyingPatternClipboard){pendingPatternPaste=std::move(paste);status=L"Paste queued for the current selection";return;}
+        applyPatternPaste(std::move(paste));
     }
     std::filesystem::path chooseFile(bool save) {
         std::vector<wchar_t> path(32768);if(save) wcscpy_s(path.data(),path.size(),L"Untitled.screamseq");
