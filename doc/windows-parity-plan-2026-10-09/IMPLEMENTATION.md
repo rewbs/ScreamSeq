@@ -2,6 +2,34 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Native menu hotfix — 10 October, 08:39 UTC
+
+User testing found all native menu commands disabled, including File → New.
+Reproduction in USER32's actual menu loop confirmed that its owner mouse capture
+was mistaken for an unfinished editor gesture. The earlier menu tests sent
+WM_ENTERMENULOOP/WM_INITMENU directly and did not exercise native modal tracking;
+the earlier bounded build result therefore did not establish menu usability.
+
+`WorkspaceMenuBar.inc` now excludes capture only when the current GUI thread is
+in native menu mode and both capture and menu ownership belong to this window.
+Editor drags, non-menu capture, busy state, stale targets and contextual history
+continue to gate commands. The native menu harness checks these guards. A real
+application regression enters USER32's loop, waits for actual owner capture,
+checks File commands, selects New, then selects Edit → Undo and checks document
+identity and history. It failed on the previous build and passes on the fix.
+The existing menu binding/stale-history and new/demo/save/reopen cases also pass.
+
+One batched ARM64 build produced the app and workspace harness from `c9d729e55`;
+only the Python test's capture synchronization was strengthened afterward and
+rerun on the identical executable. No second build was needed. The running
+application and its binary were left untouched. Launch the corrected executable
+from `bin/windows-parity-p1/MenuFix-Release/ScreamSeq.exe` in the integration
+checkout, keeping its adjacent scanner. The earlier `Release/ScreamSeq.exe`
+remains the old build. Save and close an existing session before switching.
+The [hotfix receipt](MENU-CAPTURE-FIX-2026-10-10.json) retains source/executable
+fingerprints, the original failure and all focused results. Mac/audio code was
+unchanged; broader parity work and qualification remain paused.
+
 ## Usable Windows build — 10 October, 07:44 UTC onward
 
 The user requested only the minimal steps to obtain a working build and commit /

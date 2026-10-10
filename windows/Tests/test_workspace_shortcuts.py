@@ -134,11 +134,11 @@ class WorkspaceShortcutTests(unittest.TestCase):
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
                 info = gui()
-                if info.flags & 4 and info.hwndMenuOwner:
+                if info.flags & 4 and info.hwndMenuOwner == owner and info.hwndCapture == owner:
                     break
                 time.sleep(.01)
             else:
-                self.fail('USER32 did not enter the real File menu loop')
+                self.fail('USER32 did not enter the real File menu loop with owner capture')
             # A sent message is serviced after menu initialization; no simulated
             # WM_INITMENU or direct command dispatch is used here.
             self.desktop.send(owner, 0, 0)

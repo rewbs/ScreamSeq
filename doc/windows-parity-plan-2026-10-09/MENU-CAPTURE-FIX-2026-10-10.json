@@ -1,0 +1,109 @@
+{
+  "scope": "Windows native menu capture hotfix; full parity remains paused",
+  "build": {
+    "commit": "c9d729e55a49e15256c2aef26e6fc1702d05b3d2",
+    "startedUTC": "2026-10-10T08:37:27.080287+00:00",
+    "oldAppSHA256": "dcab1851a2d2c90a56ff9871775b3a4606e0f4a14c7f4c5fb2168a9d3380ed55",
+    "scope": "Native menu capture fix, app and menu harness only; running app untouched",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\MenuFix-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T08:38:59.760274+00:00",
+    "exitCode": 0,
+    "logSHA256": "0eb9c4f89f1237454d72afde5ae3a7b45347a6b2bf89983df6bb79f90ed430f4",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\MenuFix-Release\\ScreamSeq.exe": "ce3219a7f14668cc0b738ce45ba51915f16451c8d09ce42f6fd06f2bce9b2f15",
+      "bin\\windows-parity-p1\\MenuFix-Release\\ScreamSeqVST3Scanner.exe": "429852f40d4e627c8e16f3a6195a456618c6be59a070087e995ae38da60b8970",
+      "bin\\windows-parity-p1\\MenuFix-Release\\workspace-restore-tests.exe": "66030c3c1623cdb1c08cda2822993365501d39d119cada63806cf0cb323fe50d"
+    }
+  },
+  "validation": {
+    "commit": "c9d729e55a49e15256c2aef26e6fc1702d05b3d2",
+    "buildReceiptSHA256": "2065df3dccab80e9ddfbd056aa1baf0965e8abc623e93017fb7331182d4bd03d",
+    "appSHA256": "ce3219a7f14668cc0b738ce45ba51915f16451c8d09ce42f6fd06f2bce9b2f15",
+    "gates": [
+      {
+        "name": "native",
+        "startedUTC": "2026-10-10T08:39:05.572798+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^workspace-menu-bar-tests$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T08:39:06.434054+00:00",
+        "log": "bin\\parity-evidence\\menu-fix-native-runner.log",
+        "sha256": "213947776249b1d50405f04b3403fa1bfd1abe8c090f3bc5c92a19de9fc37282"
+      },
+      {
+        "name": "app",
+        "startedUTC": "2026-10-10T08:39:06.444054+00:00",
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\menu-fix-app.log",
+          "--test",
+          "test_workspace_shortcuts.WorkspaceShortcutTests.test_real_menu_loop_allows_new_song",
+          "--test",
+          "test_workspace_shortcuts.WorkspaceShortcutTests.test_native_menu_catalogue_bindings_and_stale_history",
+          "--test",
+          "test_main_integration.MainIntegrationTests.test_new_and_demo_identity_validation_replay_and_save_reopen"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T08:39:10.333317+00:00",
+        "log": "bin\\parity-evidence\\menu-fix-app-runner.log",
+        "sha256": "9db2f3625a87037d805ad39a1b14d3293ea6a592e1a5ad5cf64c0a77b31e0995"
+      }
+    ],
+    "applicationLogSHA256": "ce05f64846cadd610d9906a9526a3a8d39f88eb986aa3f1902e924e6866a7695",
+    "appUnchanged": true
+  },
+  "beforeFailure": "Qualification desktop: ScreamSeqTest-b13f4ba507d748458d7d0dd6adff8ec7\ntest_real_menu_loop_allows_new_song (test_workspace_shortcuts.WorkspaceShortcutTests.test_real_menu_loop_allows_new_song) ... Real menu: flags=4 capture=292488580 owner=292488580\nFAIL\n\n======================================================================\nFAIL: test_real_menu_loop_allows_new_song (test_workspace_shortcuts.WorkspaceShortcutTests.test_real_menu_loop_allows_new_song)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\windows-parity-workspace\\ScreamSeq\\windows\\Tests\\test_workspace_shortcuts.py\", line 149, in test_real_menu_loop_allows_new_song\n    self.assertFalse(state & 3, f'File command {identifier} disabled during real menu tracking')\nAssertionError: 3 is not false : File command 624 disabled during real menu tracking\n\n----------------------------------------------------------------------\nRan 1 test in 0.588s\n\nFAILED (failures=1)\n",
+  "captureRegression": "Qualification desktop: ScreamSeqTest-0f3719440b8240afaf0a6460b49e8aa4\ntest_real_menu_loop_allows_new_song (test_workspace_shortcuts.WorkspaceShortcutTests.test_real_menu_loop_allows_new_song) ... Real menu: flags=4 capture=72418386 owner=72418386\nok\n\n----------------------------------------------------------------------\nRan 1 test in 1.312s\n\nOK\n",
+  "captureTestSHA256": "2f4ab77231c953db4bbc071bdd56c0daf364e72762015bbd322c1cd4f313b77e",
+  "logs": {
+    "menu-loop-before.log": "a572a4f84f4b4079be6e72fb701097128976ffbc6ed4e3040af259f490792fd5",
+    "menu-fix-build.log": "0eb9c4f89f1237454d72afde5ae3a7b45347a6b2bf89983df6bb79f90ed430f4",
+    "menu-fix-app.log": "ce05f64846cadd610d9906a9526a3a8d39f88eb986aa3f1902e924e6866a7695",
+    "menu-fix-native-runner.log": "213947776249b1d50405f04b3403fa1bfd1abe8c090f3bc5c92a19de9fc37282",
+    "menu-fix-capture.log": "81cc040a548c11e4f5d712ac928f332d5f97f050c08decca69ed24abee5653a4"
+  }
+}
