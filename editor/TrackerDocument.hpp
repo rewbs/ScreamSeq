@@ -20,6 +20,7 @@
 #include "SampleProcessing.hpp"
 #include "SampleWaveform.hpp"
 #include "SampleClipboard.hpp"
+#include "RealtimePlan.hpp"
 
 namespace Tracker
 {
@@ -287,6 +288,10 @@ struct PreviewNote
 	// Raw pattern channel; UINT16_MAX is an independent inspector audition.
 	uint16_t channel = UINT16_MAX;
 };
+struct ColumnMuteFrame {
+  std::array<bool, 192> muted{};
+  uint16_t columns = 0;
+};
 class Renderer
 {
  // Atomics make bounded snapshot retries race-free even if a consumer is delayed.
@@ -323,6 +328,9 @@ class Renderer
 	std::atomic<float> left_{0}, right_{0};
 	std::atomic<uint64_t> frames_{0};
 	std::array<std::atomic<bool>, 192> mute_{};
+  std::array<bool, 192> importedMutes_{}; // Immutable source flags, before native overrides.
+  uint16_t columnCount_ = 0;
+  RealtimePlan<ColumnMuteFrame> columnMuteUpdates_;
 	std::atomic<bool> fault_{false};
 	struct PreviewEvent { PreviewNote note; uint32_t epoch; };
 	std::array<PreviewEvent, 128> notes_{};
@@ -354,6 +362,12 @@ public:
  std::vector<VoicePosition> voicePositions() const; // Control thread only; bounded snapshot.
 	void mute(uint32_t ch, bool mute) noexcept;
 	void applyColumnMutes(const NativeSong &native, const CSoundFile &source) noexcept;
+  // Single control producer. A whole persistent-mute frame is prepared off
+  // callback and adopted together at the next render boundary. Use this path
+  // consistently for a live owner; legacy mute/applyColumnMutes are independent
+  // audition/startup controls and must not interleave pending persistent edits.
+  std::unique_ptr<ColumnMuteFrame> prepareColumnMuteUpdate(const NativeSong &native) const;
+  bool publishColumnMuteUpdate(std::unique_ptr<ColumnMuteFrame> &frame) noexcept;
 	bool faulted() const noexcept { return fault_.load(); }
 };
 }  // namespace Tracker

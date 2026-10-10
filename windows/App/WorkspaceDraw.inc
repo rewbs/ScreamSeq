@@ -21,8 +21,8 @@
 		s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
 		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,142,muted);s.uiText(L"SAMPLES",12,130,142,muted);
 		s.line(10,119,154,119,0x303b49);s.line(10,283,154,283,0x303b49);s.line(10,383,154,383,0x303b49);
-        if(height>630)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,519,142,muted);
-        if(inspection&&height>670)s.uiText(L"QA clipboard is private",12,541,142,muted);
+        if(height>662)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,551,142,muted);
+        if(inspection&&height>702)s.uiText(L"QA clipboard is private",12,573,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
         // The timing form is always reachable in the sidebar. Keep this optional
         // summary whole at narrow widths instead of drawing a clipped fragment.
@@ -40,20 +40,26 @@
             L"P"+std::to_wstring(patternIndex)+L" · "+std::to_wstring(patternRows())+L" rows",
             L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-(r.w>540?378:264),accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
+        const auto selectedEnd=patternSelectionEnd();
+        const auto metrics=view->patternGridMetrics.at(patternIndex);
+        drawNoteTrackNames();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 			float x=r.x+gutter+channelStart(c)-horizontalScroll;
-			if(c==channel) {s.fill(x-2,r.y+26,channelWidth(c)-1,gridHeader-26,0x2d3446);s.fill(x-2,r.y+gridHeader-2,channelWidth(c)-1,2,0x9f85c8);}
-			s.text(L"CH "+std::to_wstring(c+1),x,r.y+29,fxStart-4,c==channel ? 0xd5c5ee : muted);
+			if(c==channel) {s.fill(x-2,r.y+gridHeader-24,channelWidth(c)-1,24,0x2d3446);s.fill(x-2,r.y+gridHeader-2,channelWidth(c)-1,2,0x9f85c8);}
+            const auto &header=noteColumn(c);const bool columnMuted=header.at("mute").get<bool>();
+            auto title=header.at("track").is_null()?L"CH "+std::to_wstring(c+1):L"N"+std::to_wstring(header.at("noteColumn").get<unsigned>()+1);
+            if(columnMuted)title+=L" muted";
+			s.uiText(title,x,r.y+gridHeader-21,fxStart-4,columnMuted?gold:c==channel?0xd5c5ee:muted);
             for(unsigned fx=0;fx<view->effectColumns.at(c);++fx){const float start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
-                s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+29,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
-                for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+29,layout.widths[i],muted);
+                s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+gridHeader-21,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
+                for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+gridHeader-21,layout.widths[i],muted);
             }
 		}
 		s.unclip();
 		for(unsigned line=0;line<visibleRows() && firstRow+line<rows;++line) {
 			unsigned rr=firstRow+line;float y=r.y+gridHeader+line*rowHeight;
-			if(rr%4==0) s.fill(r.x,y,r.w,rowHeight,rr%16==0 ? 0x202d3c : 0x192431);
+			if(const auto accent=ScreamSeqPatternRowAccent(metrics,rr))s.fill(r.x,y,r.w,rowHeight,accent==2?0x202d3c:0x192431);
 			if(rr==row)s.fill(r.x,y,r.w,rowHeight,0x25283a);
 			const bool playhead=playing && playback.pattern==patternIndex && playback.row==rr;
 			if(playhead) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
@@ -62,7 +68,7 @@
 			s.clip(r.x+gutter,y,r.w-gutter,rowHeight);
 			for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 				float x=r.x+gutter+channelStart(c)-horizontalScroll;
-				if(selecting && rr>=std::min(row,anchorRow) && rr<=std::max(row,anchorRow) && c>=std::min(channel,anchorChannel) && c<=std::max(channel,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
+				if(selecting && rr>=std::min(selectedEnd.first,anchorRow) && rr<=std::max(selectedEnd.first,anchorRow) && c>=std::min(selectedEnd.second,anchorChannel) && c<=std::max(selectedEnd.second,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
 				if(rr==row && c==channel) {
 					s.fill(x+fieldStart(column)-1,y,fieldWidth(column)+2,rowHeight,0x56416f);
 					s.outline(x-2,y,channelWidth(c)-1,rowHeight,displayedFocus=="pattern" ? 0x9f85c8 : 0x6b627d);
@@ -80,7 +86,7 @@
                     const auto start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
                     s.text(rr==row&&c==channel&&column==3+2*fx&&!effectPrefix.empty()?wide(effectPrefix)+L"_":code,x+start,y,17,color);
                     const auto &fields=gridCommandFields(command);const auto payload=command?ScreamSeq::PatternFields::command(*command):Json::object();
-                    for(size_t i=0;i<layout.widths.size();++i){const auto text=command&&i<fields.size()?wide(ScreamSeq::PatternFields::text(payload,fields[i],view->patternRowsPerBeat.at(patternIndex),effectRows,true)):L"....";
+                    for(size_t i=0;i<layout.widths.size();++i){const auto text=command&&i<fields.size()?wide(ScreamSeq::PatternFields::text(payload,fields[i],metrics.rowsPerBeat,effectRows,true)):L"....";
                         s.text(text,x+start+layout.start(i),y,layout.widths[i],i<fields.size()?color:0x354353);}
 
                 }

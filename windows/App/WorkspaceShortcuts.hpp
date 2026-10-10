@@ -30,7 +30,12 @@ public:
       return result + key;
     }
   };
-  struct Definition { std::string id; std::vector<std::string> defaultKeys; };
+  struct Definition {
+    std::string id;std::vector<std::string> defaultKeys;
+    // On loading an older profile, an absent newly introduced command yields
+    // to an existing explicit binding. Explicit conflicts still reject atomically.
+    bool introducedDefault=false;
+  };
   struct Decision { bool consumed = false; std::string command; };
   using Sequence = std::vector<Stroke>;
   static constexpr size_t maximumCommands = 512;
@@ -40,6 +45,7 @@ public:
 private:
   using Bindings = std::map<std::string, Sequence>;
   Bindings defaults_, overrides_, active_;
+  std::set<std::string> introducedDefaults_;
   std::filesystem::path path_;
   std::optional<std::vector<std::byte>> diskBytes_;
   std::string diagnostic_;
@@ -182,7 +188,14 @@ private:
         result.emplace(entry.key(), std::move(sequence));
       }
     }
-    (void)effective(result); // Reject the entire file on a conflict, never partially apply it.
+    for(const auto &id:introducedDefaults_) {
+      if(values.contains(id))continue;
+      const auto &keys=known(id);if(keys.empty())continue;
+      bool occupied=false;
+      for(const auto &[other,sequence]:result)if(other!=id&&!sequence.empty()&&(startsWith(keys,sequence)||startsWith(sequence,keys))){occupied=true;break;}
+      if(occupied)result[id]={};
+    }
+    (void)effective(result); // Explicit conflicts still reject the entire profile.
     return result;
   }
   void publish(Bindings next) {
@@ -252,6 +265,7 @@ public:
     for(const auto &definition : definitions) {
       validateId(definition.id);
       need(defaults_.emplace(definition.id, parse(definition.defaultKeys)).second, "Duplicate command ID");
+      if(definition.introducedDefault)introducedDefaults_.insert(definition.id);
     }
     active_ = effective({});
   }

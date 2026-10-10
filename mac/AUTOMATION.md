@@ -1038,7 +1038,9 @@ Undo:
 - `track.group {channels:[0,1,2], name:"Chords", output?:"n…"}` groups adjacent,
   ascending, currently ungrouped columns. Notes, column IDs and existing
   column-level inserts/sends survive. The shared group uses the columns' common
-  output. Different outputs require an explicit destination.
+  output. Different outputs require an explicit destination, including a mix of
+  connected and disconnected columns in either order. Grouping disconnected
+  columns requires choosing a group, return or Master destination explicitly.
 - `track.create {columns:3, name:"Chords", output?:"n…"}` appends empty columns
   to every pattern and creates the shared track in one Undo step. Source format
   channel limits and mixer/assigned-instrument capacity are enforced.

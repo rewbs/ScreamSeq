@@ -7,7 +7,19 @@
 	float dragRight=0, dragLower=0;
 	bool selecting=false;
 	unsigned anchorRow=0,anchorChannel=0;
-    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=50, gutter=38;
+    std::optional<std::pair<unsigned,unsigned>> explicitSelectionEnd;
+    std::pair<unsigned,unsigned> patternSelectionEnd()const{return selecting&&explicitSelectionEnd?*explicitSelectionEnd:std::pair{row,channel};}
+    void setPatternSelection(bool active,unsigned startRow,unsigned startChannel,std::optional<std::pair<unsigned,unsigned>> end={}) {
+        const auto before=selection();const bool wasSelecting=selecting;
+        selecting=active;anchorRow=startRow;anchorChannel=startChannel;explicitSelectionEnd=active?end:std::nullopt;
+        if(wasSelecting!=selecting||before!=selection())++contextRevision;
+        frameRequested=true;
+    }
+    void resetPatternSelection(){setPatternSelection(false,row,channel);}
+    void selectWholePattern() {
+        rejectDepartureInput();setPatternSelection(true,0,0,std::pair{patternRows()-1,view->channels-1});
+    }
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72, gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
     float channelStart(unsigned c) const {float x=0;for(unsigned i=0;i<c;++i)x+=channelWidth(i);return x;}
@@ -82,6 +94,9 @@
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
         place(soundChooser,10,484,146,230);
+        place(playbackLoopCommand,10,516,146,25);
+        refreshPlaybackLoopControl();
+        EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
 		auto g=geometry(); bool show=workspaceInspectorVisible();
@@ -94,6 +109,11 @@
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
         const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230,trackerWorkspaceVisible());
         place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,trackerWorkspaceVisible());
+        place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,trackerWorkspaceVisible());
+        const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
+        ScreamSeq::NativeControls::text(controls.at(noteColumnMuteCommand),(columnMuted?L"Unmute ":L"Mute ")+std::to_wstring(channel+1));
+        ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
+        EnableWindow(controls.at(noteColumnMuteCommand),!busy&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
         place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
 		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
@@ -137,7 +157,7 @@
         refreshShortcutControlLabels();
         ScreamSeq::NativeControls::text(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
 		ScreamSeq::NativeControls::text(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
-        for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
+        for(int id:{playbackLoopCommand,liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
         layoutPatternNudgeEditor();
@@ -148,7 +168,7 @@
 			if(!h) throw std::runtime_error("Cannot create workspace control");controls.emplace(id,h);
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
-			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},
+			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
@@ -157,6 +177,7 @@
             {recoveryCommand,L"Recovery copies"},
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
+            {noteColumnMuteCommand,L"Mute column"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -234,6 +255,9 @@
             else if(id==previousSectionCommand||id==nextSectionCommand){navigateArrangementSection(id==nextSectionCommand);return;}
             else if(id==editSectionCommand||id==patternDetailsCommand){openArrangement(id==editSectionCommand?"section":"pattern");return;}
             else if(id==songTimingCommand){openSongTiming();return;}
+            else if(id==noteColumnMuteCommand){toggleNoteColumnMute();return;}
+            else if(id==noteTrackUngroupCommand){ungroupCurrentNoteTrack();return;}
+            else if(id==noteTrackCreateCommand||id==noteTrackGroupCommand){openNoteTrackEditor(id==noteTrackCreateCommand);return;}
             else if(id==midiArmCommand){toggleMidiArm();return;}
             else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
             else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}
@@ -270,7 +294,10 @@
                 }
             }
 			else if(id==playCommand) play();
+            else if(id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand)
+                playWorkspaceRegion(id!=playSelectionCommand,id!=playCursorCommand);
 			else if(id==stopCommand) stopAndFinishRecording();
+            else if(id==playbackLoopCommand)setPlaybackLoop(!playbackLoop);
 			else if(id==followCommand) { auto n=position();n["following"]=!follow;navigate(n); }
 			else if(id==composeCommand || id==patternCommand || id==soundCommand) workspace("workspace.layout",{{"name",id==composeCommand ? "Compose" : id==patternCommand ? "Pattern focus" : "Sound design"}});
 			else if(id==samplesCommand) {workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples");}
@@ -365,13 +392,13 @@
 		else if(key==VK_HOME) r=0;
 		else if(key==VK_END) r=rows-1;
 		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
-		else if(key==VK_LEFT) {if(moveEffectField(-1))return true; if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
-		else if(key==VK_RIGHT) {if(moveEffectField(1))return true; if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
+		else if(key==VK_LEFT) {if(moveEffectField(-1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
+		else if(key==VK_RIGHT) {if(moveEffectField(1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
 		else return enterCell(key,repeat);
 		const unsigned ar=selecting ? anchorRow : row,ac=selecting ? anchorChannel : channel;
 		n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;navigate(n);
         if(key==VK_LEFT&&col>=4&&col%2==0){const auto &fields=currentEffectFields();effectFieldIndex=fields.empty()?0:fields.size()-1;}
-		selecting=shift && key!=VK_TAB;anchorRow=ar;anchorChannel=ac;ensureCursorVisible();return true;
+		setPatternSelection(shift && key!=VK_TAB,ar,ac);ensureCursorVisible();return true;
 	}
 	bool gridClick(float x,float y,bool extend) {
 		if(!trackerWorkspaceVisible())return false;
@@ -386,11 +413,12 @@
         if(field>=fxStart){unsigned fx=0;while(fx+1<view->effectColumns.at(c)&&effectColumnStart(c,fx+1)<=field)++fx;const auto local=field-effectColumnStart(c,fx);col=3+2*fx+(local>=21.6f?1:0);selectedField=effectColumnLayout(c,fx).hit(local);}
 		unsigned ar=extend ? (selecting ? anchorRow : row) : r,ac=extend ? (selecting ? anchorChannel : channel) : c;
 		auto n=position();n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;
-		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();anchorRow=ar;anchorChannel=ac;selecting=extend;SetFocus(window);
+		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();setPatternSelection(extend,ar,ac);SetFocus(window);
 		return true;
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {
 		if(workspaceRegionMouseDown(x,y))return;
+		if(noteTrackHeaderClick(x,y))return;
 		auto g=geometry();dragRight=workspaceState.rightWidth;dragLower=workspaceState.lowerHeight;
 		if(graphLaneClick(x,y)||graphMouseDown(x,y)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
 		if(g.verticalDivider.contains(x,y)) dragging=1;
@@ -426,6 +454,8 @@
         if(effectInline)layoutControls();
     }
 	bool controlActive(int id) const {
+        if(id==playbackLoopCommand)return playbackLoop;
+        if(id==noteColumnMuteCommand)return noteColumn(channel).at("mute").get<bool>();
         if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();
         if(id==editorTrackerTab)return hasWorkspaceDock()&&trackerWorkspaceVisible();
         if(id==editorAutomationTab||id==editorInstrumentTab||id==editorGraphCurveTab||id==editorPreciseNotesTab){auto *tool=workspaceEditorWindow(id==editorAutomationTab?"automation":id==editorInstrumentTab?"instruments":id==editorGraphCurveTab?"graphCurve":"preciseNotes");return hasWorkspaceDock()&&tool&&tool->docked()&&tool->visible();}

@@ -7,11 +7,13 @@
 #include "PatternOperations.hpp"
 #include "EnvelopeOperations.hpp"
 #include "MixerOperations.hpp"
+#include "TrackOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "NativeCallReceipt.hpp"
 #include "../Project/NativeProject.hpp"
 #include "../Audio/PresentationClock.hpp"
 #include "editor/NoteRecording.hpp"
+#include "editor/PatternDisplay.h"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -61,7 +63,7 @@ struct DocumentView {
   std::shared_ptr<const NativePatternView> nativePattern;
   std::shared_ptr<const PatternGraphView> graphPattern;
   std::vector<uint8_t> effectColumns;
-  std::map<unsigned,unsigned> patternRowsPerBeat;
+  std::map<unsigned,ScreamSeqPatternGridMetrics> patternGridMetrics;
   size_t nativePatternBytes=0;
   std::filesystem::path path;
   bool dirty=false, hosted=false, hasOpenEditors=false;

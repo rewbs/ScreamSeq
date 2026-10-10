@@ -10,6 +10,7 @@ Json arrangementOrderIDs(const Tracker::Document &document,unsigned sequence) {
 void arrangementCatalogTests(const std::filesystem::path &directory) {
   auto document=std::make_unique<Tracker::Document>(OpenMPT::MOD_TYPE_MPT,4);
   document->transaction([](auto &song) {
+    song.m_nDefaultRowsPerBeat=3;song.m_nDefaultRowsPerMeasure=10;
     need(song.Patterns.Insert(1,32),"Arrangement second pattern fixture");
     auto &pattern=song.Patterns[1];
     need(pattern.SetSignature(16,64),"Arrangement pattern timing fixture");
@@ -34,6 +35,9 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   Project::saveNativeProject(*document,project,path,false);
   unsigned stops=0;DocumentController c(path,"arrangement-catalog",[&]{++stops;},[](const auto &){});
   const auto original=c.view();const auto &snapshot=original->session.document;
+  need(original->patternGridMetrics.at(0).rowsPerBeat==3&&original->patternGridMetrics.at(0).rowsPerMeasure==10&&
+    original->patternGridMetrics.at(1).rowsPerBeat==16&&original->patternGridMetrics.at(1).rowsPerMeasure==64,
+    "Published grid metrics ignored song defaults or an imported pattern signature");
   const auto expectedOrders=Json::array({0,0,unsigned(OpenMPT::PATTERNINDEX_INVALID),unsigned(OpenMPT::PATTERNINDEX_SKIP),1,unsigned(OpenMPT::PATTERNINDEX_SKIP)});
   need(snapshot.at("orders")==expectedOrders&&snapshot.at("orderMetadata")==originalMetadata,"Order identity snapshot trimmed End/Skip or lost slot identity");
   need(originalMetadata.size()==snapshot.at("orders").size(),"Order metadata does not parallel untrimmed orders");
@@ -95,12 +99,22 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   invoke(c,"document.open",{{"path",saved.generic_string()}});
   need(c.view()->session.document.at("orderMetadata")==created->session.document.at("orderMetadata")&&c.view()->session.document.at("sequences")==snapshot.at("sequences"),"Native save/reopen changed arrangement identities");
   const auto reopened=Project::openNativeProject(saved);
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==3&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==10&&
+    c.view()->patternGridMetrics.at(2).rowsPerBeat==16&&c.view()->patternGridMetrics.at(2).rowsPerMeasure==64,
+    "Reopen lost default or duplicated pattern display metrics");
   for(const auto index:{1,2}) {
     const auto &pattern=reopened.document->song().Patterns[index];
     need(pattern.GetOverrideSignature()&&pattern.GetRowsPerBeat()==16&&pattern.GetRowsPerMeasure()==64&&pattern.GetTempoSwing()==expectedGroove,"Native save/reopen altered exact duplicate timing");
     need(pattern.GetName()=="Imported phrase"&&pattern.GetColor()==0x123456,"Native save/reopen lost duplicate engine name/color");
   }
-  std::cout<<"PASS arrangement identities, repeated-pattern/sentinel reorder, catalog invalidation, history, sequence navigation and reopen\n";
+  invoke(c,"document.timing.set",{{"rowsPerBeat",5},{"rowsPerMeasure",15},{"groove",Json::array()}});
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==5&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==15&&
+    c.view()->patternGridMetrics.at(1).rowsPerBeat==16&&original->patternGridMetrics.at(0).rowsPerBeat==3,
+    "Timing edit changed an override/retained view or failed to publish new default metrics");
+  invoke(c,"history.undo",{{"domain","all"}});
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==3&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==10,
+    "Timing Undo did not restore grid metrics");
+  std::cout<<"PASS arrangement identities, repeated-pattern/sentinel reorder, catalog invalidation, timing projection, history, sequence navigation and reopen\n";
 }
 
 void arrangementLimitTests(const std::filesystem::path &directory) {

@@ -1,5 +1,42 @@
 # Windows local API subset
 
+`track.get {}` returns the shared note-track projection: stable column identities,
+effective per-column mute, visual group membership, note-column indexes, group
+bus names/colors/outputs, available destinations and the module's column limit.
+The same projection is cached as `document.get.data.trackLayout`. Existing
+`document.get.data.tracks` retains its original raw-column metadata contract.
+
+`track.group {channels, name?, output?}`, `track.create {columns, name?, output?}`,
+`track.ungroup {track}` and `track.column.set {column, mute}` require
+`expectedRevision` and accept `dryRun`. Their parameter/result definitions are
+shared with [the Mac API guide](../../mac/AUTOMATION.md). Group existing adjacent
+columns or append new ones within the actual module limit; an explicit destination
+is required when selected columns have different main outputs. Grouping retains
+inserts, sends and unrelated routing. Ungroup removes visual membership while
+retaining the group bus and all its processing/routes. Use `mixer.bus.set` for
+group name/color and `song.annotate` for raw-column metadata.
+
+Changed writes create one chronological Undo step and persist in the existing
+native project format. DryRun and successful no-ops preserve revision/history.
+Structural group/create edits use the existing safe transport-stop path. Pure
+column-mute edits and their Undo/Redo prepare a whole-column frame for live
+publication; a saturated queue or changed playback owner rejects before commit
+with `-32002`, preserving the document, transport and history. Reads expose the
+committed model; renderer adoption occurs at its next render boundary. These
+methods do not enable full API parity. This P2 source integration still requires
+the recorded native/pipe/audio and cross-platform qualification gates.
+
+The native grid shows saved column names and colored group spans above its note
+and effect headers. Click a span to select that group's columns at the current
+row; click a column header to select that column. The native **Mute N / Unmute N**
+button changes only the current note column. Mute and Ungroup are also registered
+commands in the palette and pattern context menu, with configurable shortcuts.
+Their uncertain results use the existing retained command Review flow, without
+repeating a write. `workspace.get.data.trackHeaders` reports visible columns and
+group rectangles in DIPs; `geometry.pattern.headerHeight` locates the first row
+without assuming a fixed header size. Native create/group draft forms remain
+pending in this checkpoint; the APIs support those edits now.
+
 Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
 `.parameters`, `.sources` and `.get` read actual host values and controlling sources.
 `parameter.activity.watch` is a transient replay-cached write without a song revision
@@ -443,6 +480,50 @@ unconfirmed play command. Propagate engine failure; do not report success.
 `stop()` should stop playback/capture through Application::stop(). Neither
 operation changes the document or its Undo history. Host callbacks must not
 partially mutate on validation failure.
+
+Hosts advertising `supportsPlaybackLoop()` also expose `transport.loop` with
+`expectedRevision` and a required boolean `enabled`. ScreamSeq's Windows app
+implements it through the shared renderer's atomic loop setter. It updates a
+running song/pattern region without restarting WASAPI, replacing the region,
+moving the edit cursor, changing history, or stopping/discarding a recording take.
+While stopped, it sets the default for the next Play; an explicit `transport.play`
+`loop` field overrides that default. `transport.get.loop` is the current setting;
+`region` retains the parameters of the request that started playback. Busy or
+document-replacement admission refuses before changing the loop setting.
+Hosts without this capability do not advertise it and return unknown-method.
+
+The Windows command palette and pattern context menu expose the loop toggle,
+along with a native `Playback loop: on/off` button below the typing selectors.
+The palette permits assigning a shortcut using the existing command ID scheme.
+Native editor focus and raw drafts survive shortcut activation. This parity
+slice adds no project field or saved preference format. Its new actual-app,
+native-control and shared renderer checks require qualification before a runtime
+parity claim; authored checks alone are not evidence of device behavior.
+
+Native Play starts at row zero of the selected occurrence of the edited pattern,
+falling back to its first occurrence. **Shift+Space** plays from the edit cursor;
+**Ctrl+Space** plays the selected rows, or the whole pattern when unselected;
+**Ctrl+Shift+Space** uses the cursor within that bounded range (its start when
+the cursor is outside). Bounds include the selected last row, represented as an
+exclusive `endRow` in `transport.get.region`. All these commands appear in the
+palette and pattern context menu. They retain the edit cursor, selection, viewport
+and Follow setting; native text/list controls and formula completion keep local
+ownership of these keys.
+
+Repeated orders use stable occurrence identity through preparation. A removed or
+reassigned occurrence refuses before device work, while a moved occurrence is
+resolved at its new index. Bounded Play also accepts a pattern absent from the
+arrangement; unbounded cursor Play reports that condition instead of playing a
+different pattern. Ordinary Play then uses the selected playable occurrence (or
+first playable order). API `transport.play` retains its explicit parameters and
+default order-zero behavior. No project migration accompanies these UI commands.
+
+Existing customized shortcut profiles retain conflicting explicit bindings when
+these defaults are introduced. Only the corresponding new command starts
+unbound; other new defaults remain active. This is reflected as an empty override
+in the palette/API, written only on the next explicit preference save. Clear the
+old binding and Reset the new command to enable its default. Explicit conflicts
+within a profile still reject the complete load.
 
 ## Workspace subset
 

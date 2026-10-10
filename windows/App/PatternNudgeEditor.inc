@@ -72,7 +72,7 @@
         for(const auto &item:view->session.document.at("patterns"))if(item.at("index")==patternIndex)next.patternID=item.at("id").get<std::string>();
         for(const auto &item:view->session.document.at("tracks"))if(item.at("index")==channel)next.trackID=item.at("id").get<std::string>();
         next.offset=wasNudge?existing->position%Tracker::performanceUnitsPerRow:0;
-        next.rowsPerBeat=view->patternRowsPerBeat.at(patternIndex);next.rows=effectRows;
+        next.rowsPerBeat=view->patternGridMetrics.at(patternIndex).rowsPerBeat;next.rows=effectRows;
         next.maximumDurationBeats=(double(patternRows()-row)-double(next.offset)/Tracker::performanceUnitsPerRow)/next.rowsPerBeat;
         next.originalValue=wasNudge?existing->value:.75;
         wchar_t strength[64]{},duration[64]{};swprintf_s(strength,L"%.15g",next.originalValue*100);

@@ -1,0 +1,199 @@
+#include "editor/TrackerDocument.hpp"
+#include "editor/TrackLayout.hpp"
+#include <functional>
+#include <iostream>
+#include <limits>
+
+using namespace Tracker;
+using namespace OpenMPT;
+namespace {
+void check(bool value, const char *message) { if (!value) throw std::runtime_error(message); }
+void rejects(const std::function<void()> &operation) {
+  try { operation(); } catch (const std::invalid_argument &) { return; }
+  throw std::runtime_error("Invalid note-track edit was accepted");
+}
+template<typename Native> auto &bus(Native &native, uint64_t id) {
+  auto found = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(),
+    [&](const auto &value) { return value.id == id; });
+  check(found != native.mixer.buses.end(), "Expected stable bus identity is absent");
+  return *found;
+}
+void groupingAndHistory() {
+  auto doc = Document::demo();
+  const auto original = doc->native(); const auto bytes = doc->snapshotData(); const auto revision = doc->revision;
+  const auto edit = GroupNoteTrack{{0, 1}, "Chords", {}};
+  const auto prepared = prepareNoteTrackEdit(original, doc->song(), edit);
+  check(prepared.changed && prepared.mixerChanged && prepared.appendedColumns == 0,
+    "Grouping must classify the newly materialized routing");
+  check(doc->native() == original && doc->revision == revision && doc->snapshotData() == bytes,
+    "Candidate preparation changed the live song, allocator or history");
+  check(prepared.native.tracks == original.tracks && prepared.native.noteTracks.size() == 1 &&
+    prepared.native.noteTracks[0].columns == std::vector<uint64_t>{original.tracks.at(0).id, original.tracks.at(1).id},
+    "Grouping changed stable columns or their order");
+  check(prepareNoteTrackEdit(original, doc->song(), edit).native == prepared.native,
+    "Repeated dry preparation consumed identities");
+  doc->annotate([&](NativeSong &native) { native = prepared.native; });
+  check(doc->snapshotData() == bytes, "Grouping changed embedded pattern or instrument data");
+  auto undone = original; undone.nextID = prepared.native.nextID;
+  doc->undo(); check(doc->native() == undone, "One Undo must restore song data while retaining the allocator high-water mark");
+  check(prepareNoteTrackEdit(doc->native(), doc->song(), edit).affected >= prepared.native.nextID,
+    "A new edit after Undo reused an allocated group identity");
+  doc->redo(); check(doc->native() == prepared.native, "Redo changed grouping identities");
+  const auto ungrouped = prepareNoteTrackEdit(doc->native(), doc->song(), UngroupNoteTrack{prepared.affected});
+  check(ungrouped.changed && !ungrouped.mixerChanged && ungrouped.native.noteTracks.empty() &&
+    ungrouped.native.mixer == prepared.native.mixer && ungrouped.native.tracks == original.tracks,
+    "Ungroup removed processing, routing or column identities");
+  for (const auto channels : {std::vector<uint16_t>{}, {1, 0}, {0, 2}, {0, 0}, {127}})
+    rejects([&] { prepareNoteTrackEdit(original, doc->song(), GroupNoteTrack{channels, "Invalid", {}}); });
+  rejects([&] { prepareNoteTrackEdit(doc->native(), doc->song(), edit); });
+  rejects([&] { prepareNoteTrackEdit(original, doc->song(), UngroupNoteTrack{prepared.affected}); });
+  rejects([&] { prepareNoteTrackEdit(original, doc->song(), GroupNoteTrack{{0}, std::string(257, 'x'), {}}); });
+  check(doc->native() == prepared.native, "Rejected preparation changed the accepted document");
+}
+void outputAdmission() {
+  auto doc = Document::demo(); auto native = doc->native(); native.ensureMixer();
+  const auto first = native.tracks.at(0).id, second = native.tracks.at(1).id;
+  const auto master = native.masterID;
+  // Zero is a real disconnected destination, not an uninitialized common output.
+  for (bool firstDisconnected : {false, true}) {
+    auto mixed = native;
+    bus(mixed, firstDisconnected ? first : second).output = 0;
+    mixed.validate(doc->song()); const auto before = mixed;
+    rejects([&] { prepareNoteTrackEdit(mixed, doc->song(), GroupNoteTrack{{0, 1}, "Ambiguous", {}}); });
+    check(mixed == before, "Destination rejection changed routing or IDs");
+    auto explicitRoute = prepareNoteTrackEdit(mixed, doc->song(), GroupNoteTrack{{0, 1}, "Chosen", master});
+    check(bus(explicitRoute.native, explicitRoute.affected).output == master &&
+      bus(explicitRoute.native, first).output == explicitRoute.affected &&
+      bus(explicitRoute.native, second).output == explicitRoute.affected,
+      "Explicit group destination did not govern both selected columns");
+    for (const auto &old : mixed.mixer.buses) {
+      auto expected = old;
+      if (old.id == first || old.id == second) expected.output = explicitRoute.affected;
+      check(bus(explicitRoute.native, old.id) == expected, "Grouping rewrote an unrelated control, route or insert");
+    }
+  }
+  rejects([&] { prepareNoteTrackEdit(native, doc->song(), GroupNoteTrack{{0, 1}, "Invalid", first}); });
+  rejects([&] { prepareNoteTrackEdit(native, doc->song(), GroupNoteTrack{{0, 1}, "Missing", NativeSong::maximumID - 1}); });
+}
+void columnMutes() {
+  for (bool imported : {false, true}) {
+    auto doc = Document::demo();
+    doc->transaction([&](CSoundFile &song) { song.ChnSettings[0].dwFlags.set(CHN_MUTE, imported); });
+    const auto original = doc->native(); const auto column = original.tracks.at(0).id;
+    const auto unchanged = prepareNoteTrackEdit(original, doc->song(), SetNoteColumnMute{column, imported});
+    check(!unchanged.changed && unchanged.native == original, "Imported mute state should need no native override");
+    const auto overridden = prepareNoteTrackEdit(original, doc->song(), SetNoteColumnMute{column, !imported});
+    check(overridden.changed && !overridden.mixerChanged && overridden.native.columnMutes.at(column) == !imported &&
+      effectiveColumnMute(overridden.native, doc->song(), 0) == !imported,
+      "Column mute failed to override the imported state independently of mixer controls");
+    check(!prepareNoteTrackEdit(overridden.native, doc->song(), SetNoteColumnMute{column, !imported}).changed,
+      "Repeated column mute was not a no-op");
+    const auto restored = prepareNoteTrackEdit(overridden.native, doc->song(), SetNoteColumnMute{column, imported});
+    check(restored.changed && restored.native == original, "Restoring imported mute failed to remove the native override");
+    rejects([&] { prepareNoteTrackEdit(original, doc->song(), SetNoteColumnMute{0, true}); });
+  }
+}
+void appendAndCapacity() {
+  for (auto type : {MOD_TYPE_MOD, MOD_TYPE_XM, MOD_TYPE_S3M, MOD_TYPE_IT, MOD_TYPE_MPT}) {
+    for (bool active : {false, true}) {
+      auto doc = Document::demo(type);
+      if (active) doc->annotate([](NativeSong &native) { native.ensureMixer(); });
+      const auto original = doc->native(); const auto count = doc->song().GetNumChannels();
+      const auto prepared = prepareNoteTrackEdit(original, doc->song(), CreateNoteTrack{2, "New columns", {}});
+      check(prepared.changed && prepared.mixerChanged && prepared.appendedColumns == 2 &&
+        prepared.native.tracks.size() == original.tracks.size() + 2, "Create did not prepare exactly the requested columns");
+      for (const auto &[channel, entry] : original.tracks)
+        check(prepared.native.tracks.at(channel) == entry, "Append changed an existing column identity");
+      for (const auto &old : original.mixer.buses) {
+        check(bus(prepared.native, old.id) == old, "Append changed existing bus controls or routing");
+      }
+      doc->transaction([&](CSoundFile &song, NativeSong &native) {
+        Document::resizeChannels(song, int(count + prepared.appendedColumns)); native = prepared.native;
+      });
+      check(doc->song().GetNumChannels() == count + 2 && doc->native() == prepared.native,
+        "Structural adoption did not retain the prepared identities");
+      auto undone = original; undone.nextID = prepared.native.nextID;
+      doc->undo(); check(doc->song().GetNumChannels() == count && doc->native() == undone,
+        "Append Undo must restore columns while retaining the allocator high-water mark");
+      const auto fresh = prepareNoteTrackEdit(doc->native(), doc->song(), CreateNoteTrack{2, "After Undo", {}});
+      check(fresh.native.tracks.at(count).id >= prepared.native.nextID && fresh.affected >= prepared.native.nextID,
+        "A new append after Undo reused column or group identities");
+      doc->redo(); check(doc->native() == prepared.native, "Append Redo changed stable IDs");
+      for (unsigned invalid : {0u, 128u, std::numeric_limits<unsigned>::max()})
+        rejects([&] { prepareNoteTrackEdit(original, doc->song(), CreateNoteTrack{invalid, "Invalid", {}}); });
+      const unsigned maximum = std::min<unsigned>(127, doc->song().GetModSpecifications().channelsMax);
+      rejects([&] { prepareNoteTrackEdit(doc->native(), doc->song(), CreateNoteTrack{maximum - unsigned(doc->song().GetNumChannels()) + 1, "Too many", {}}); });
+    }
+  }
+}
+void layoutProjection() {
+  auto doc = Document::demo(MOD_TYPE_S3M);
+  doc->transaction([](CSoundFile &song) { song.ChnSettings[0].dwFlags.set(CHN_MUTE); });
+  auto original = doc->native();
+  original.tracks.at(0).name = "Column label";
+  original.tracks.at(0).annotation = "Retained annotation";
+  original.tracks.at(0).color = 0x547886;
+  const auto plain = describeNoteTracks(original, doc->song());
+  check(plain.columns.size() == doc->song().GetNumChannels() && plain.tracks.empty() && plain.destinations.empty() &&
+    plain.columns[0].entity == original.tracks.at(0) && plain.columns[0].muted && !plain.columns[0].track &&
+    plain.columns[0].noteColumn == 0 && plain.maximumColumns == 32, "Implicit layout changed names, imported mute, limits or routing");
+  auto prepared = prepareNoteTrackEdit(original, doc->song(), GroupNoteTrack{{0, 1}, "Shared group", {}});
+  auto &native = prepared.native;
+  native.columnMutes[original.tracks.at(0).id] = false;
+  native.columnMutes[original.tracks.at(1).id] = true;
+  bus(native, prepared.affected).color = 0xabcdef;
+  bus(native, prepared.affected).output = 0; // Public serializers retain n0, not Master.
+  const auto snapshot = native;
+  const auto grouped = describeNoteTracks(native, doc->song());
+  check(native == snapshot && doc->native().noteTracks.empty(), "Layout inspection mutated the song or allocator");
+  check(grouped.tracks.size() == 1 && grouped.tracks[0].id == prepared.affected && grouped.tracks[0].name == "Shared group" &&
+    grouped.tracks[0].color == 0xabcdef && grouped.tracks[0].output == 0 &&
+    grouped.tracks[0].columns == std::vector<uint64_t>{original.tracks.at(0).id, original.tracks.at(1).id} &&
+    grouped.tracks[0].channels == std::vector<uint16_t>{0, 1}, "Track projection lost stable group data or disconnection");
+  check(!grouped.columns[0].muted && grouped.columns[1].muted && grouped.columns[0].track == prepared.affected &&
+    grouped.columns[1].track == prepared.affected && grouped.columns[1].noteColumn == 1 && !grouped.columns[2].track,
+    "Column projection mixed imported mute, override or membership");
+  check(grouped.destinations.size() == 2 && grouped.destinations[0].id == native.masterID &&
+    grouped.destinations[1].id == prepared.affected, "Projection changed destination order or included raw track buses");
+  bus(native, prepared.affected).name = "Later name";
+  check(grouped.tracks[0].name == "Shared group", "Published layout retained borrowed mutable state");
+  auto malformed = snapshot;
+  malformed.mixer.buses.erase(std::remove_if(malformed.mixer.buses.begin(), malformed.mixer.buses.end(),
+    [&](const auto &value) { return value.id == prepared.affected; }), malformed.mixer.buses.end());
+  rejects([&] { describeNoteTracks(malformed, doc->song()); });
+  malformed = snapshot; malformed.noteTracks[0].columns.push_back(0);
+  rejects([&] { describeNoteTracks(malformed, doc->song()); });
+  const auto append = prepareNoteTrackEdit(snapshot, doc->song(), CreateNoteTrack{2, "Appended", {}});
+  const auto projected = describeNoteTracks(append.native, doc->song());
+  const auto count = doc->song().GetNumChannels();
+  doc->transaction([&](CSoundFile &song, NativeSong &next) { Document::resizeChannels(song, int(count + 2)); next = append.native; });
+  check(describeNoteTracks(doc->native(), doc->song()) == projected,
+    "Dry append projection differed after resizing and adopting the same candidate");
+}
+void rendererMuteFrames() {
+  for (bool imported : {false, true}) {
+    auto doc = Document::demo(MOD_TYPE_S3M);
+    doc->transaction([&](CSoundFile &song) { song.ChnSettings[0].dwFlags.set(CHN_MUTE, imported); });
+    auto renderer = std::make_unique<Renderer>(doc->snapshotData(), 48000);
+    const auto original = doc->native(); auto changed = original;
+    changed.columnMutes[original.tracks.at(0).id] = !imported;
+    auto frame = renderer->prepareColumnMuteUpdate(changed);
+    check(renderer->publishColumnMuteUpdate(frame) && !frame, "Renderer did not take ownership of the complete mute frame");
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == imported, "Mute publication changed callback-owned song state early");
+    std::array<float, 34> pcm{}; renderer->render(pcm.data(), 17);
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == !imported && !renderer->faulted(), "Render boundary lost the native mute override");
+    frame = renderer->prepareColumnMuteUpdate(original);
+    check(renderer->publishColumnMuteUpdate(frame), "Renderer could not publish removal of the override");
+    renderer->render(pcm.data(), 17);
+    check(renderer->song().ChnSettings[0].dwFlags[CHN_MUTE] == imported,
+      "Mute reset derived its baseline from callback-mutated channel flags");
+    check(doc->native() == original, "Renderer publication modified the document");
+  }
+}
+}
+int main() {
+  try {
+    groupingAndHistory(); outputAdmission(); columnMutes(); appendAndCapacity(); layoutProjection(); rendererMuteFrames();
+    std::cout << "PASS shared note-track candidates, destinations, column mute and structural history\n"; return 0;
+  } catch (const std::exception &error) { std::cerr << "FAIL " << error.what() << '\n'; return 1; }
+}

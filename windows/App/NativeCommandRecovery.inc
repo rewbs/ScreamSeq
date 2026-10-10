@@ -43,6 +43,10 @@
             auto mixer=documentOperation("mixer.get",Json::object());
             if(!mixer.at("buses").is_array())throw std::runtime_error("Mixer readback is unavailable / result retained");
             observed["mixer"]=std::move(mixer);
+        }else if(domain=="track"){
+            auto layout=documentOperation("track.get",Json::object());
+            if(!layout.at("columns").is_array()||!layout.at("noteTracks").is_array())throw std::runtime_error("Track readback is unavailable / result retained");
+            observed["layout"]=std::move(layout);
         }else if(domain=="save"){
             const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
             observed["file"]=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path);}));observed["recoveryStatus"]=recoveryStatus();observed["recoveryCopies"]=recoveryCopies();
@@ -63,6 +67,7 @@
             nativeCommandReport={{"outcome","verified"},{"submission",nativeCommandTarget},{"result",result->result},{"revision",result->revision}};
             const auto domain=nativeCommandTarget.at("domain").get<std::string>();
             status=domain=="save"?L"Earlier Save completed / current file was not overwritten and recovery cleanup was not repeated":domain=="midi"?L"Earlier recording operation completed / current take retained / no operation repeated":domain=="mixer"?L"Earlier mixer operation completed / current draft retained / no write repeated":L"Earlier sample operation completed / current selection and raw fields retained / no write repeated";
+            if(domain=="track")status=L"Earlier track operation completed / current selection retained / no write repeated";
             if(domain=="midi")updateRecordingWindow();nativeCommandCompletion.finish();frameRequested=true;return;
         }
         nativeCommandReport=readNativeCommandState();const auto observation=nativeCommandReport;

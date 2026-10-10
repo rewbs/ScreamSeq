@@ -17,6 +17,7 @@
         case sampleImportCommand:return {"ctrl+i"};case composeCommand:return {"ctrl+1"};case patternCommand:return {"ctrl+2"};case soundCommand:return {"ctrl+3"};
         case pinCommand:return {"ctrl+p"};case cursorCommand:return {"ctrl+home"};case returnCommand:return {"alt+left"};
         case nextPanelCommand:return {"f6"};case followCommand:return {"f"};case togglePlaybackCommand:return {"space"};case stopCommand:return {"escape"};
+        case playCursorCommand:return {"shift+space"};case playSelectionCommand:return {"ctrl+space"};case playSelectionCursorCommand:return {"ctrl+shift+space"};
         case widerCommand:return {"ctrl+alt+left"};case narrowerCommand:return {"ctrl+alt+right"};
         case tallerCommand:return {"ctrl+alt+up"};case shorterCommand:return {"ctrl+alt+down"};
         default:return {};
@@ -30,7 +31,7 @@
             {pasteFocusedCommand,L"Edit / Paste into focused selection",L""},
             {cutFocusedCommand,L"Edit / Cut focused selection",L""},
             {deleteFocusedCommand,L"Edit / Delete focused selection",L""},
-            {selectAllFocusedCommand,L"Edit / Select all sample frames",L""},
+            {selectAllFocusedCommand,L"Edit / Select all in the focused editor",L""},
             {togglePlaybackCommand,L"Playback / Play or stop",L""},
             {redoAlternateCommand,L"Edit / Redo (alternate shortcut)",L""},
             {reloadShortcutsCommand,L"Workspace / Reload saved shortcuts",L""}});
@@ -44,7 +45,8 @@
             entry.shortcut.clear();
             if(entry.id==playCommand)entry.label=L"Playback / Play";
             if(entry.id==focusPatternCommand||entry.id==graphLanesFocus)entry.contextHint.clear();
-            definitions.push_back({shortcutCommandID(entry.id),std::move(keys)});
+            definitions.push_back({shortcutCommandID(entry.id),std::move(keys),
+                entry.id==playCursorCommand||entry.id==playSelectionCommand||entry.id==playSelectionCursorCommand});
         }
         workspaceShortcuts=std::make_unique<ScreamSeq::WorkspaceShortcuts>(std::move(definitions));
         workspaceShortcutHandler=[this](WPARAM key,bool repeat,bool prefixOnly){return workspaceShortcutKey(key,repeat,prefixOnly);};
@@ -165,7 +167,7 @@
         if((id==patternPasteMix||id==patternClearField||id==patternDeleteChannelRow)&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
             status=L"Focus the pattern selection before using this command";return;
         }
-        const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
+        const bool preserve=id==liveKeysCommand||id==togglePlaybackCommand||id==playbackLoopCommand||id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
         command(id);
         if(id==stopCommand&&!ScreamSeq::NativeToolWindow::belongsToTool(focus))command(focusPatternCommand);
         if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){setWorkspaceCanvasFocus(panel,inspector);SetFocus(focus);}
@@ -184,6 +186,7 @@
         if(ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the tracker or sample selection first");
         if(workspaceMainCanvasFocused("samples"))command(id==copyFocusedCommand?sampleCopyCommand:id==pasteFocusedCommand?samplePasteCommand:id==cutFocusedCommand?sampleCutCommand:id==deleteFocusedCommand?sampleClearCommand:sampleAllCommand);
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==cutFocusedCommand)cutCells();
+        else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==selectAllFocusedCommand)selectWholePattern();
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&(id==copyFocusedCommand||id==pasteFocusedCommand||id==deleteFocusedCommand))command(id==copyFocusedCommand?copyCommand:id==pasteFocusedCommand?pasteCommand:clearCommand);
         else throw std::runtime_error("Focus a matching pattern or sample selection first");
         return true;

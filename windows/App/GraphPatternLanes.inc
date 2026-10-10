@@ -45,11 +45,11 @@
         unsigned destination=row;if(key==VK_UP)destination=row?row-1:0;else if(key==VK_DOWN)destination=std::min(row+1,patternRows()-1);
         else if(key==VK_PRIOR)destination=row>visibleRows()?row-visibleRows():0;else if(key==VK_NEXT)destination=std::min(row+visibleRows(),patternRows()-1);
         else if(key==VK_HOME)destination=0;else if(key==VK_END)destination=patternRows()-1;else return false;
-        auto n=position();n["row"]=destination;n["following"]=false;navigate(n);selecting=false;return true;
+        auto n=position();n["row"]=destination;n["following"]=false;navigate(n);resetPatternSelection();return true;
     }
     bool graphLaneClick(float x,float y,bool doubleClick=false){
         const auto r=graphLanesRect();if(r.w<=0||!r.contains(x,y))return false;
-        graphLaneSelected=std::min(unsigned(view->graphPattern->lanes.size()-1),graphLaneFirst+unsigned((x-r.x)/graphLaneWidth));workspaceState.focus="graphLanes";SetFocus(window);selecting=false;
+        graphLaneSelected=std::min(unsigned(view->graphPattern->lanes.size()-1),graphLaneFirst+unsigned((x-r.x)/graphLaneWidth));workspaceState.focus="graphLanes";SetFocus(window);resetPatternSelection();
         if(y>=r.y+gridHeader){auto n=position();n["row"]=std::min(firstRow+unsigned((y-r.y-gridHeader)/rowHeight),patternRows()-1);n["following"]=false;navigate(n);}
         revealGraphLane();frameRequested=true;if(doubleClick)openGraphCommands(true);return true;
     }
@@ -58,17 +58,17 @@
         const auto prefix=c->position%65536?L"~":L"";if(c->kind==Tracker::SignalCommandKind::Clear)return std::wstring(prefix)+symbol;
         const auto number=view->graphPattern->numbers.contains(c->graph)?view->graphPattern->numbers.at(c->graph):0;wchar_t text[40]{};
         if(c->kind==Tracker::SignalCommandKind::Stop)swprintf_s(text,L"%s%s%03u",prefix,symbol,unsigned(number));
-        else swprintf_s(text,L"%s%s%03u %02X",prefix,symbol,unsigned(number),unsigned(std::lround((c->kind==Tracker::SignalCommandKind::Wet?c->wet:c->amount)*255)));
+        else swprintf_s(text,L"%s%s%03u %02X",prefix,symbol,unsigned(number),ScreamSeqGraphCommandDisplayByte(c->kind==Tracker::SignalCommandKind::Wet?c->wet:c->amount));
         return text;
     }
     void drawGraphLanes(const Tracker::Telemetry &playback){
         const bool focused=workspacePresentationFocus()=="graphLanes";
-        const auto r=graphLanesRect();if(r.w<=0)return;auto &s=*surface;const auto &lanes=view->graphPattern->lanes;const auto pattern=graphPatternID();
+        const auto r=graphLanesRect();if(r.w<=0)return;auto &s=*surface;const auto &lanes=view->graphPattern->lanes;const auto pattern=graphPatternID();const auto metrics=view->patternGridMetrics.at(patternIndex);
         s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x141b23);s.fill(r.x,r.y,r.w,gridHeader,0x29303a);
         for(unsigned i=graphLaneFirst;i<lanes.size()&&float(i-graphLaneFirst)*graphLaneWidth<r.w;++i){const auto &lane=lanes[i];const auto x=r.x+(i-graphLaneFirst)*graphLaneWidth;
             s.uiText(wide(lane.name),x+7,r.y+5,graphLaneWidth-14,0xdcb971);s.text(L"GRAPH "+std::to_wstring(lane.column+1),x+7,r.y+29,graphLaneWidth-14,0x8390a2);
             for(unsigned line=0;line<visibleRows()&&firstRow+line<patternRows();++line){const auto rr=firstRow+line;const auto y=r.y+gridHeader+line*rowHeight;
-                if(rr%4==0)s.fill(x,y,graphLaneWidth,rowHeight,rr%16==0?0x202d3c:0x192431);
+                if(const auto accent=ScreamSeqPatternRowAccent(metrics,rr))s.fill(x,y,graphLaneWidth,rowHeight,accent==2?0x202d3c:0x192431);
                 if(device.running()&&playback.pattern==patternIndex&&playback.row==rr)s.fill(x,y,graphLaneWidth,rowHeight,0x174238);
                 if(rr==row&&i==graphLaneSelected){s.fill(x+1,y,graphLaneWidth-2,rowHeight,focused?0x51452f:0x36362e);s.outline(x+1,y,graphLaneWidth-2,rowHeight,0x9b885b);}
                 auto c=view->graphPattern->at(pattern,rr,lane.target,lane.column);s.text(graphCommandText(c),x+7,y,graphLaneWidth-14,c?0xdcb971:0x49596a);
@@ -80,5 +80,5 @@
         for(const auto &l:view->graphPattern->lanes)lanes.push_back({{"target","n"+std::to_string(l.target)},{"column",l.column},{"name",l.name}});
         for(unsigned i=graphLaneFirst;i<view->graphPattern->lanes.size()&&float(i-graphLaneFirst)*graphLaneWidth<r.w;++i){const auto &l=view->graphPattern->lanes[i];
             for(unsigned rr=firstRow;rr<std::min(patternRows(),firstRow+visibleRows());++rr)if(const auto c=view->graphPattern->at(pattern,rr,l.target,l.column))cells.push_back({{"lane",i},{"row",rr},{"position",c->position},{"text",utf8Path(graphCommandText(c))}});}
-        return {{"rect",{r.x,r.y,r.w,r.h}},{"first",graphLaneFirst},{"selected",graphLaneSelected},{"lanes",lanes},{"visibleCommands",cells}};
+        return {{"rect",{r.x,r.y,r.w,r.h}},{"first",graphLaneFirst},{"selected",graphLaneSelected},{"lanes",lanes},{"visibleCommands",cells},{"gridTiming",patternGridTiming()}};
     }

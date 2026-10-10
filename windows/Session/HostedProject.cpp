@@ -96,10 +96,16 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
   if(before.patterns!=next.patterns || before.tracks!=next.tracks || before.samples!=next.samples ||
      before.instruments!=next.instruments || before.sequences!=next.sequences || before.masterID!=next.masterID ||
      before.performance!=next.performance || before.preciseNotes!=next.preciseNotes ||
-     before.noteTracks!=next.noteTracks || before.columnMutes!=next.columnMutes)return {};
+     before.noteTracks!=next.noteTracks)return {};
   if(nativeUpdateGeneration_==UINT64_MAX)throw std::runtime_error("Live update generation exhausted");
   auto prepared=std::make_unique<PreparedNativeUpdate>();
   prepared->owner_=this;prepared->generation_=nativeUpdateGeneration_;
+  if(before.columnMutes!=next.columnMutes) {
+    auto muteOnly=before;muteOnly.columnMutes=next.columnMutes;
+    if(muteOnly!=next)return {}; // One publication must not partially adopt a combined edit.
+    prepared->columnMutes_=renderer_->prepareColumnMuteUpdate(next);
+    return prepared;
+  }
   if(before.scratchGestures!=next.scratchGestures) {
     auto scratchOnly=before;scratchOnly.scratchGestures=next.scratchGestures;
     if(scratchOnly!=next)return {};
@@ -120,7 +126,7 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
 }
 bool HostedProjectPlayback::publishNativeUpdate(PreparedNativeUpdate &prepared) {
   if(prepared.owner_!=this || prepared.generation_!=nativeUpdateGeneration_ || prepared.published_)return false;
-  const bool accepted=prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
+  const bool accepted=prepared.columnMutes_?renderer_->publishColumnMuteUpdate(prepared.columnMutes_):prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
     prepared.routing_&&chain_->publishMixerRouting(prepared.routing_);
   if(accepted){prepared.published_=true;++nativeUpdateGeneration_;}
   return accepted;

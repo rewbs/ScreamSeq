@@ -102,6 +102,45 @@ void sessionTests() {
   check(wrongThread["error"]["code"]==-32002,"owner thread enforced before host access");
   std::cout << "PASS snapshot reads, pagination, strict params, revision guard, transport, dedupe, owner thread\n";
 }
+void playbackLoopTests() {
+  struct LoopHost : TestHost {
+    unsigned calls=0;bool refuse=false;
+    bool supportsPlaybackLoop() const override {return true;}
+    void setPlaybackLoop(bool enabled) override {
+      if(refuse)throw ApiError(-32002,"Document worker is busy; loop was not changed",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+      ++calls;state.transport["loop"]=enabled;
+    }
+  } host;
+  SessionAdapter api(host);
+  const auto description=api.handle(request("api.describe"))["result"]["data"];
+  check(std::find(description["writes"].begin(),description["writes"].end(),"transport.loop")!=description["writes"].end()&&
+    description["revisionGuards"]["transport.loop"]==json::array({"expectedRevision"}),"Loop capability missing its revision contract");
+  const auto initial=host.state.transport;
+  check(api.handle(request("transport.loop",{{"enabled",true}}))["error"]["code"]==-32602,"Loop needs revision");
+  check(api.handle(request("transport.loop",{{"enabled",true},{"expectedRevision","stale"}}))["error"]["code"]==-32001,"Loop ignores stale revision");
+  for(const auto &params:{json{{"expectedRevision",host.state.revision}},json{{"enabled",1},{"expectedRevision",host.state.revision}},
+      json{{"enabled",true},{"unknown",true},{"expectedRevision",host.state.revision}}})
+    check(api.handle(request("transport.loop",params))["error"]["code"]==-32602,"Invalid loop fields reached the host");
+  check(host.calls==0&&host.state.transport==initial,"Invalid loop request changed transport");
+  host.refuse=true;
+  check(api.handle(request("transport.loop",{{"enabled",true},{"expectedRevision",host.state.revision}},"refused-loop"))["error"]["code"]==-32002&&
+    host.calls==0&&host.state.transport==initial,"Busy loop mutation was not atomic");
+  host.refuse=false;
+  const auto set=request("transport.loop",{{"enabled",true},{"expectedRevision",host.state.revision}},"loop-on");
+  const auto applied=api.handle(set);
+  check(applied["result"]["data"]==json{{"loop",true}}&&applied["result"]["changed"]==false&&host.state.transport["loop"]==true,
+    "Stopped loop setting changed history or returned the wrong state");
+  check(api.handle(set)==applied&&host.calls==1,"Loop request replay repeated its host mutation");
+  host.state.transport["playing"]=true;const auto region=host.state.transport["region"];
+  const auto current=host.state.context;
+  const auto off=api.handle(request("transport.loop",{{"enabled",false},{"expectedRevision",host.state.revision}},"loop-off"));
+  check(off["result"]["playbackStopped"]==false&&host.state.transport["playing"]==true&&host.state.transport["loop"]==false&&
+    host.state.transport["region"]==region&&host.state.context==current&&host.plays==0&&host.stops==0,"Live loop restarted playback or redirected context");
+  TestHost unsupported;SessionAdapter other(unsupported);
+  check(other.handle(request("transport.loop",{{"enabled",true},{"expectedRevision",unsupported.state.revision}}))["error"]["code"]==-32601,
+    "Host without loop support fabricated a success");
+  std::cout<<"PASS playback loop capability, strict guards, stopped/live state, refusal and replay\n";
+}
 void pipeTests() {
   const auto name = L"\\\\.\\pipe\\ScreamSeq.Api.Test." + std::to_wstring(GetCurrentProcessId());
   PipeServer server(name, [](const json &q) { return json{{"jsonrpc","2.0"},{"id",q["id"]},{"result",q["params"]}}; });
@@ -293,6 +332,7 @@ int main(int argc, char **argv) {
     std::cout << "PASS minimal capabilities\n";
     check(session.handle(request("document.get"))["error"]["code"] == -32002, "unbound session must not invent document data");
     sessionTests();
+    playbackLoopTests();
     transientInputTests();
     pipeTests();
     serializationPipeTests();
