@@ -16,8 +16,6 @@ std::shared_ptr<const HostedSampleBindings> PluginChain::prepareSampleBindings(c
   for(const auto &assignment:native.signal.instrumentAssignments){
     const auto found=std::find_if(native.instruments.begin(),native.instruments.end(),[&](const auto &entry){return entry.second.id==assignment.target;});
     if(found==native.instruments.end()||found->first>musicalSong_->GetNumInstruments()||!musicalSong_->Instruments[found->first])throw std::invalid_argument("Instrument graph target is missing from the active renderer");
-    if(std::any_of(native.signal.noteRouting.triggerSources.begin(),native.signal.noteRouting.triggerSources.end(),[&](const auto &source){return source.instrument==assignment.target;}))throw std::invalid_argument("Sample instrument graph cannot process a plugin trigger source; route its plugin output instead");
-    for(const auto &entry:rack)if(entry->plugin->isInstrument())for(const auto &alias:pluginAssignments(entry->baseline))if(alias.instrument==found->first)throw std::invalid_argument("Sample instrument graph cannot process a plugin instrument; route its output bus instead");
     const auto *instrument=musicalSong_->Instruments[found->first];
     const auto &previous=lastGraphControls_?lastGraphControls_->signal:preparedSignal_;
     for(size_t i=0;i<next->groups.size();++i)if(next->groups[i]&&next->groups[i]!=assignment.target&&next->routes[i*stride].instrument==instrument){

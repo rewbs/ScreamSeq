@@ -317,7 +317,7 @@
       } else if([method isEqual:@"graph.instrument.assign"]) {
         allowed(@[@"instrument",@"graph",@"amount",@"wet",@"dryRun"]);const auto index=instrumentIndex();ensureMixer();const auto id=next.instruments.at(index).id;
         std::erase_if(graph.instrumentAssignments,[&](const auto &a){return a.target==id;});
-        if(p[@"graph"]!=NSNull.null){for(const auto &plugin:_plugins)for(const auto &a:pluginAssignments(plugin))require(a.instrument!=index,"Plugin instruments use their output bus graph; this assignment processes sample voices");affected=definition(p[@"graph"]).id;graph.instrumentAssignments.push_back({id,affected,number(p[@"amount"]?:@1,0,1),number(p[@"wet"]?:@1,0,1)});}
+        if(p[@"graph"]!=NSNull.null){affected=definition(p[@"graph"]).id;graph.instrumentAssignments.push_back({id,affected,number(p[@"amount"]?:@1,0,1),number(p[@"wet"]?:@1,0,1)});}
       } else if([method isEqual:@"graph.layout.set"]) {
         allowed(@[@"positions",@"groups",@"reset",@"dryRun"]);
         for(id raw:array(p[@"groups"]?:@[],128)){auto v=object(raw);keys(v,@[@"group",@"x",@"y"]);try{moveSongSignalGroup(graph,decodeNativeID(v[@"group"]),number(v[@"x"],0,100000),number(v[@"y"],0,100000));}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}}

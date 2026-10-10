@@ -259,6 +259,10 @@ public:
     // Retain search and selection when still compatible; never select another row.
     queue(true);layout();
   }
+  void browseInstruments(){
+    requireWritable();if(pending_||categoryDraft_)throw std::runtime_error("Finish the retained library operation first");
+    setDestination("","","");NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,2,0);queue(true);show();
+  }
   void show(){const bool existing=visible();NativeToolWindow::show();if(!existing){SetFocus(controls_.at(search));if(!categoryDraft_&&!unresolved()&&!readbackNeedsReload_)queue(true);}}
   bool protectsClose()const{return pending_||unresolved()||categoryDraft_;}
   Json snapshot()const{return {{"destination",{{"document",destinationDocument_},{"bus",destinationBus_},{"name",destinationName_}}},{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"generation",generation_},{"visible",visible()},{"pending",pending_},{"refreshQueued",refreshQueued_},{"selected",selected_},{"plugins",entries_},{"categories",categories_},{"libraryRevision",revision_},{"categoryDraft",categoryDraft_},{"search",utf8(field(search))},{"category",filterCategory_},{"favoritesOnly",favoritesOnly_},{"includeHidden",includeHidden_},{"status",utf8(status_)}};}

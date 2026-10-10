@@ -309,3 +309,23 @@ implicit serial contribution immediately before explicit main-input fan-in;
 raw observations remain warm. Stable semantic cable removal, reconnection and
 optional dragged/group positions share guarded API transactions and one Undo.
 Current rendered/adapter evidence belongs in the dated qualification report.
+
+### Layered instrument playback
+
+A native plugin assignment no longer suppresses the tracker instrument's sample
+keymap. Empty trigger instruments remain plugin-only. For mapped instruments the
+shared host preserves the samples and routes their PCM (and click-removal offsets)
+through their own instrument graph and original tracker channel; MIDI and plugin
+audio retain the plugin's independent output routes. Inspector sample audition is
+independent of track routing. This is implemented in the shared hosted code,
+including `mac/Audio/NativeInstrument.cpp`, which is also compiled on Windows.
+No upstream mixer code or project format changed. Existing projects with both a
+plugin assignment and a nonempty sample map will now sound both layers; clear the
+keymap explicitly for a plugin-only instrument.
+
+Windows exposes this through **Plugin…** beside the instrument picker, in compact
+and docked layouts as well as the full editor. The retained assignment window
+selects an existing instrument plugin and MIDI channel, and links to **Add
+plugin…** and **Plugin rack…**. The menu route is **Tools → Sound → Plugin rack**.
+The assignment uses the captured stable instrument identity/revision and the
+existing `instrument.plugin.set` transaction, preserving history and sample data.

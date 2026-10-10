@@ -1052,6 +1052,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PluginLibraryApplicationTests.inc"
 #include "MixerInstrumentApplicationTests.inc"
 #include "MixerHostedApplicationTests.inc"
+#include "InstrumentPluginApplicationTests.inc"
 #include "SongRoutingApplicationTests.inc"
 #include "SampleBrowserApplicationTests.inc"
 #include "SampleLibraryApplicationTests.inc"
@@ -1157,7 +1158,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationNoteTrackWindows();std::cout<<"PASS native track forms: captured selection, drafts, revision refusal, one Undo, completion Review, unknown observations and departure retirement\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"mixer-hosted") {
-                    applicationHostedMixerInstrumentRouting();std::cout<<"PASS native hosted instrument route: actual ports, retained result, fan-out preservation, state, history, save/reopen and offline PCM\n";return;
+                    applicationInstrumentPluginAssignment();applicationHostedMixerInstrumentRouting();std::cout<<"PASS native hosted instrument route: actual ports, retained result, fan-out preservation, state, history, save/reopen and offline PCM\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parity-fixture") {
                     applicationParityFixtureRecovery();std::cout<<"PASS original F04 and three Parity WAVs: retained results, no replay, exact PCM/identity history and save/reopen\n";return;

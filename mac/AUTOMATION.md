@@ -1629,7 +1629,7 @@ accepts beats within the row: multiply beats by the pattern's rows per beat
 and 65,536 to obtain the offset units. Timing follows actual tempo, speed and groove.
 
 `instrument.create {empty:true, name:"Lead trigger", expectedRevision:...}` creates
-an empty instrument with no sample mapping. Optional `dryRun:true` validates and
+an empty instrument with no sample mapping. Assigning an instrument plugin to an existing sample-mapped instrument preserves the keymap and plays both sources. The sample layer follows its sample-instrument graph and tracker channel; the plugin layer follows its plugin audio-output routes. `instrument.plugin.set` with an empty plugin ID removes only the plugin assignment. This layering also applies to ordinary notes, precise notes and instrument audition. Optional `dryRun:true` validates and
 returns the prospective slot. It preserves a sample-only song's existing playback
 by creating matching sample instruments before appending the empty trigger.
 Use the returned `instrument` and revision with `instrument.plugin.set` to assign

@@ -64,9 +64,6 @@ std::shared_ptr<const InstrumentSourceBindings> PluginChain::prepareInstrumentBi
     }
     binding->slot=slot;binding->midiChannel=trigger.midiChannel;binding->plugin=true;
   }
-  for(const auto &binding:result->instruments)if(binding.plugin)
-    if(std::any_of(native.signal.instrumentAssignments.begin(),native.signal.instrumentAssignments.end(),[&](const auto &assignment){return assignment.target==binding.identity;}))
-      throw std::invalid_argument("A plugin trigger source cannot own a sample-instrument graph; route the plugin output instead");
   return result;
 }
 void PluginChain::adoptInstrumentBindings(const InstrumentSourceBindings &next) noexcept {
@@ -85,8 +82,7 @@ void PluginChain::adoptInstrumentBindings(const InstrumentSourceBindings &next) 
     }
     auto &instrument=*binding.instrument;
     instrument.nMixPlug=OpenMPT::PLUGINDEX(binding.slot);instrument.nMidiChannel=binding.midiChannel;
-    if(binding.plugin)instrument.Keyboard.fill(0);
-    else std::copy(originalInstruments_[index].keyboard.begin(),originalInstruments_[index].keyboard.end(),instrument.Keyboard.begin());
+    std::copy(originalInstruments_[index].keyboard.begin(),originalInstruments_[index].keyboard.end(),instrument.Keyboard.begin());
   }
   for(size_t index=0;index<instrumentGenerators_.size();++index)
     if(!activeInstrumentBindings_ || activeInstrumentBindings_->generators[index]!=next.generators[index])

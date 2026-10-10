@@ -24,6 +24,7 @@ static void tracker_audit_end(uint64_t *a,uint64_t *f,uint64_t *locks){ScreamSeq
 #include "editor/Tests/LiveLatencyChecks.hpp"
 #include "editor/Tests/HostedRackPresetChecks.hpp"
 #include "editor/Tests/ColumnMuteOwnershipChecks.hpp"
+#include "editor/Tests/LayeredInstrumentChecks.hpp"
 int main(int argc,char **argv){try{
   check(argc==4,"Scanner, fixture and cache paths required");
   WindowsVST3::configure(argv[1],argv[3]);const auto descriptors=WindowsVST3::rescan(argv[2]);check(!descriptors.empty(),"Actual VST3 fixture discovered");
@@ -31,6 +32,13 @@ int main(int argc,char **argv){try{
   for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,511u})for(bool sample:{false,true})for(bool samePitch:{false,true})
     columnMuteOwnershipChecks(descriptors[1],rate,block,sample,samePitch);
   std::cout<<"PASS queued column mute: sample/plugin NNA, independent equal-pitch ownership and audition at 3 rates/3 callback partitions; host C++ allocation/free audit\n";
+  for(auto rate:{44100u,48000u,96000u}){
+    for(bool mixer:{false,true})for(bool preview:{false,true})layeredInstrumentChecks(descriptors[1],rate,mixer,false,preview);
+    layeredInstrumentChecks(descriptors[1],rate,true,true,false);
+    layeredInstrumentChecks(descriptors[1],rate,true,true,true);
+    layeredInstrumentChecks(descriptors[1],rate,true,false,false,true);layeredInstrumentChecks(descriptors[1],rate,true,false,false,false,true);
+  }
+  std::cout<<"PASS sample + plugin stems, ordinary/precise notes, independent audition, channel/sample graph routing; 3 rates and 17/128/4096-frame partitions, realtime host C++ audit\n";
   const auto wrongMachine=std::filesystem::u8path(argv[3]).parent_path()/L"audio-bus-wrong-machine.vst3";
   std::filesystem::copy_file(std::filesystem::u8path(argv[2]),wrongMachine,std::filesystem::copy_options::overwrite_existing);
   {std::fstream file(wrongMachine,std::ios::in|std::ios::out|std::ios::binary);file.seekg(0x3c);int32_t pe=0;file.read(reinterpret_cast<char*>(&pe),4);file.seekp(pe+4);const uint16_t machine=WindowsVST3::nativeMachine==IMAGE_FILE_MACHINE_ARM64?IMAGE_FILE_MACHINE_AMD64:IMAGE_FILE_MACHINE_ARM64;file.write(reinterpret_cast<const char*>(&machine),2);check(bool(file),"Prepare incompatible PE fixture");}

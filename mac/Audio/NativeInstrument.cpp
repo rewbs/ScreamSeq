@@ -546,9 +546,7 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
       auto &instrument = *song.Instruments[assignment.instrument];
       instrument.nMixPlug = PLUGINDEX(slotIndex);
       instrument.nMidiChannel = uint8_t(assignment.channel);
-      // All aliases share one processor and adapter. Preserve each tracker
-      // instrument's note map and velocity behavior; replace only its sample map.
-      std::fill(std::begin(instrument.Keyboard), std::end(instrument.Keyboard), SAMPLEINDEX(0));
+      // Sample keymaps remain active: the sample and plugin are independent layers.
     }
   }
   }
@@ -570,15 +568,24 @@ void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native
     // Inspector audio enters after the final mixer bus, so it cannot inherit
     // a channel, return or master graph. Its own instrument graph remains active.
     for(size_t i=0;i<sampleRoutes_.size();++i)if(!sampleRoutes_[i].target){auto &slot=song.m_MixPlugins[slotIndex];slot.Info={};slot.fDryRatio=0;slot.pMixPlugin=new SampleGraphAdapter(song,slot,*this,i);sampleRoutes_[i].slot=uint16_t(++slotIndex);}
-    song.nativeSampleContext=this;song.nativeSamplePlugin=[](void *context,const ModChannel &voice,CHANNELINDEX channel) noexcept -> PLUGINDEX {
-      const auto &chain=*static_cast<PluginChain *>(context);
-      const bool inspector=voice.isPreviewNote&&!voice.nMasterChn;
-      const auto parent=inspector?UINT16_MAX:voice.nMasterChn?voice.nMasterChn-1:channel;
-      if(chain.activeSampleBindings_)for(size_t i=0;i<chain.sampleRoutes_.size();++i){const auto &route=chain.sampleRoutes_[i];const auto &binding=chain.activeSampleBindings_->routes[i];if(route.channel==parent&&binding.instrument&&binding.instrument==voice.pModInstrument)return PLUGINDEX(route.slot);}
-      return 0;
-    };
     // Installs the combined observer even for songs without automation lanes.
     attachMusicalAutomation(renderer, *native);
   }
+  song.nativeSampleContext=this;song.nativeSamplePlugin=[](void *context,const ModChannel &voice,CHANNELINDEX channel) noexcept -> PLUGINDEX {
+    const auto &chain=*static_cast<PluginChain *>(context);
+    const bool inspector=voice.isPreviewNote&&!voice.nMasterChn;
+    const auto parent=inspector?UINT16_MAX:voice.nMasterChn?voice.nMasterChn-1:channel;
+    if(chain.activeSampleBindings_)for(size_t i=0;i<chain.sampleRoutes_.size();++i){const auto &route=chain.sampleRoutes_[i];const auto &binding=chain.activeSampleBindings_->routes[i];if(route.channel==parent&&binding.instrument&&binding.instrument==voice.pModInstrument)return PLUGINDEX(route.slot);}
+    if(voice.pModInstrument&&voice.pModInstrument->nMixPlug){
+      // MIDI adapters consume no sample PCM. Route the sample layer through its
+      // original channel (including NNA voices), or to the independent dry mix
+      // for inspector previews / the legacy implicit rack. Fastmix treats a
+      // nonzero out-of-range slot as an explicit dry override, for both PCM and
+      // click-removal offsets. No upstream mixer behavior is changed.
+      if(parent<chain.musicalSong_->GetNumChannels())if(const auto slot=chain.musicalSong_->ChnSettings[parent].nMixPlugin)return slot;
+      return PLUGINDEX(MAX_MIXPLUGINS+1);
+    }
+    return 0;
+  };
 }
 } // namespace Tracker

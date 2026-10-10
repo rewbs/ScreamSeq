@@ -18,7 +18,7 @@ static void columnMuteOwnershipChecks(const Tracker::PluginDescriptor &descripto
   source->transaction([&](CSoundFile &song) {
     for (auto &pattern : song.Patterns) if (pattern.IsValid()) for (auto &cell : pattern) cell.Clear();
     song.m_nInstruments = 1;
-    song.Instruments[1] = new ModInstrument(SAMPLEINDEX(1));
+    song.Instruments[1] = new ModInstrument(sample?SAMPLEINDEX(1):SAMPLEINDEX(0));
     song.Instruments[1]->nNNA = NewNoteAction::Continue;
     auto &wave = song.GetSample(1); wave.SetLoop(0, wave.nLength, true, false, song);
     for (unsigned c = 0; c < 2; ++c) for (unsigned row = 0; row < 3; ++row) {
