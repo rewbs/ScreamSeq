@@ -1,3 +1,20 @@
+    std::unique_ptr<ScreamSeq::NoteTrackWindow> createNoteTrackWindow,groupNoteTrackWindow;
+    Json noteTrackContext()const {
+        Json channels=Json::array(),ids=Json::array();const auto first=std::min(selecting?std::min(channel,anchorChannel):channel,view->channels-1);
+        const auto last=std::min(selecting?std::max(channel,anchorChannel):channel,view->channels-1);
+        for(auto c=first;c<=last;++c){channels.push_back(c);ids.push_back(noteColumn(c).at("id"));}
+        return {{"documentId",documentId},{"revision",view->session.revision},{"editable",view->session.document.at("editable")},
+            {"busy",busy||recoveryRestoring},{"channels",channels},{"columnIDs",ids},{"layout",view->session.document.at("trackLayout")}};
+    }
+    void openNoteTrackEditor(bool creating) {
+        if(busy||recoveryRestoring)throw std::runtime_error("Wait for the current document operation before opening track tools");
+        releaseTypedNotes();auto &tool=creating?createNoteTrackWindow:groupNoteTrackWindow;
+        if(!tool)tool=std::make_unique<ScreamSeq::NoteTrackWindow>(window,creating,ScreamSeq::NoteTrackWindow::Callbacks{
+            [this]{return noteTrackContext();},[this](const auto &method,const auto &params){return documentOperation(method,params);},
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
+            [this]{returnToSongPattern();}});
+        tool->open();
+    }
     const Json &noteColumn(unsigned index)const {
         const auto &columns=view->session.document.at("trackLayout").at("columns");
         for(const auto &item:columns)if(item.at("channel")==index)return item;

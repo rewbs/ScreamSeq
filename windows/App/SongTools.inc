@@ -52,6 +52,8 @@
         if(arrangementWindow)arrangementWindow->update(arrangementState());
         if(arrangementMatrixWindow)arrangementMatrixWindow->update(arrangementMatrixState());
         if(songTimingWindow)songTimingWindow->update(songTimingContext());
+        if(createNoteTrackWindow)createNoteTrackWindow->update();
+        if(groupNoteTrackWindow)groupNoteTrackWindow->update();
     }
     void returnToSongPattern() {
         deferredViews.clear();revealWorkspacePattern();workspaceState.focus="pattern";

@@ -141,6 +141,9 @@ if(BUILD_TESTING)
     set_tests_properties(workspace-asset-outcome-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=asset-outcomes" TIMEOUT 120)
     add_test(NAME workspace-command-result-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-note-track-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-note-track-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=note-tracks" TIMEOUT 120)
     set_tests_properties(workspace-command-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=command-results" TIMEOUT 120)
     add_test(NAME workspace-bank-result-tests COMMAND workspace-restore-tests)

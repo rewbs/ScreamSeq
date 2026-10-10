@@ -242,6 +242,7 @@
             else if(id==songTimingCommand){openSongTiming();return;}
             else if(id==noteColumnMuteCommand){toggleNoteColumnMute();return;}
             else if(id==noteTrackUngroupCommand){ungroupCurrentNoteTrack();return;}
+            else if(id==noteTrackCreateCommand||id==noteTrackGroupCommand){openNoteTrackEditor(id==noteTrackCreateCommand);return;}
             else if(id==midiArmCommand){toggleMidiArm();return;}
             else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
             else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}

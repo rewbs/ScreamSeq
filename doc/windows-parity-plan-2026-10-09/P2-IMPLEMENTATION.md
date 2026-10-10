@@ -256,3 +256,59 @@ new cursor without resending, and one Undo to restore mute. Its unknown-outcome
 matrix now includes track mute: readback observes the current layout, a revision
 change during acknowledgement retains review, and final acknowledgement cannot
 claim verified success. These additions are likewise unexecuted.
+
+## Native Create/Group forms — prepared, unqualified
+
+`windows/App/NoteTrackWindow.hpp` now supplies separate retained native Create
+and Group owners. `NoteTrackPresentation.inc` captures the selected contiguous
+column span, stable column IDs, document ID and revision from the worker's cached
+track layout. Moving the pattern cursor or reopening a form never recaptures it.
+Explicit Use current song/selection preserves raw name/count/output text while
+capturing a new revision. Duplicate destination labels retain their stable IDs;
+an explicitly chosen destination removed before recapture remains visibly
+unavailable rather than becoming the default output.
+
+The command palette and pattern context menu expose Create (584) and Group (585).
+Standard edit/combo/button controls use the existing Segoe UI, DPI sizing and
+native focus handling. F6 returns to Pattern; Escape hides the form and retains
+its draft; Ctrl+Enter submits or reviews. Both forms use bounded minimum client
+dimensions and first-open work-area placement, retaining later user placement.
+No macOS controls or third-party UI framework are introduced. These forms are
+currently floating retained tools; connected inspector/layout work remains P3.
+
+Preview sends the same revision-guarded `track.create`/`track.group` with dryRun
+and adopts its result only if the draft generation and document/revision still
+match. Apply uses the existing NativeWriteCompletion/worker receipt path. Newer
+text entered during completion survives; known-result Review refreshes without
+resending. Unknown-result Review reads track.get at one guarded revision and
+shows observed column/track counts. Accept observed state requires that revision
+still to match, preserves the raw draft, and explicitly leaves the earlier
+outcome unverified. Successful requests distinguish changed/no-op history.
+Another operation always requires an explicit new capture.
+
+The common document draft registry automatically includes the forms, including
+hidden raw drafts and pending/uncertain results. Admitted document replacement
+retires both owners in DocumentDepartureIntegration; no separate discard or
+departure policy is added. `workspace.get.noteTrackEditors` exposes captured
+targets, raw fields, completion/readback, stale state and the same status text
+shown by the native form. Existing worker API/Undo/persistence own all musical
+changes; form state is presentation-only.
+
+`NoteTrackApplicationTests.inc` runs the actual Application/worker/native controls
+under the new `workspace-note-track-tests` group in the existing workspace target.
+Prepared cases cover captured grouping after navigation; hide/reopen retention;
+dry preview; stale/invalid rejection; single Undo/Redo and stable layout; hidden
+draft departure review and owner retirement; lost postcommit receipt recovery
+without another write while preserving newer text; unknown-result observation
+and revision-refused acknowledgement; independent Create/Group owners; duplicate
+output labels; text changed during preview; minimum control bounds; and F6/Escape
+focus/retention. These are authored checks, **not executed results**, and do not
+replace foreground keyboard, accessibility or visual qualification.
+
+P2 remains unbuilt and unqualified. Add this group to the eventual grouped P2
+native selection alongside workspace-command-result-tests, document-controller-
+tracks, the portable/adapter tests, both platforms' native voice ownership tests,
+and the already registered PID-pipe track scenarios. Retain the prior grid/focus/
+docking/context-menu checks because header geometry changed. Mac shared-candidate
+and queued-mute ownership coverage, reciprocal F01–F05 project checks, and the
+plan's audio/UI gates remain required. Do not reuse P1's binary as P2 evidence.

@@ -1061,6 +1061,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SampleReadbackApplicationTests.inc"
 #include "BankClosureApplicationTests.inc"
 #include "NativeCommandApplicationTests.inc"
+#include "NoteTrackApplicationTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1116,6 +1117,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"note-tracks") {
+                    applicationNoteTrackWindows();std::cout<<"PASS native track forms: captured selection, drafts, revision refusal, one Undo, completion Review, unknown observations and departure retirement\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"mixer-hosted") {
                     applicationHostedMixerInstrumentRouting();std::cout<<"PASS native hosted instrument route: actual ports, retained result, fan-out preservation, state, history, save/reopen and offline PCM\n";return;
                 }

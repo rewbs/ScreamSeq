@@ -83,6 +83,7 @@
         graphTrimsWindow.reset();graphCommandsWindow.reset();graphWorkflowWindow.reset();songRoutingWindow.reset();mixerStrips.reset();
         pluginInstruments.reset();pluginPathWindow.reset();sampleDetailWindow.reset();absoluteAutomationWindow.reset();parameterActivityWindow.reset();
         sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();
+        createNoteTrackWindow.reset();groupNoteTrackWindow.reset();
         for(auto &panel:workspaceEditors){panel.document.clear();panel.patternID.clear();panel.trackID.clear();panel.origin=Json::object();panel.pinned=false;panel.configured=false;}
     }
     // Virtual only at the native presentation boundary so the actual-app

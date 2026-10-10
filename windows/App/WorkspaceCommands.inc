@@ -40,6 +40,8 @@
             {arrangementMatrixCommand,L"Song / Arrangement matrix and block copy",L""},
             {songTimingCommand,L"Song / Tempo, meter and groove",L""},
             {noteColumnMuteCommand,L"Track / Toggle current note column mute",L""},
+            {noteTrackCreateCommand,L"Track / New note track…",L""},
+            {noteTrackGroupCommand,L"Track / Group selected note columns…",L""},
             {noteTrackUngroupCommand,L"Track / Ungroup current note track (keep routing)",L""},
             {newPatternCommand,L"Pattern / New pattern and append order",L""},
             {duplicatePatternCommand,L"Pattern / Duplicate pattern and append order",L""},
