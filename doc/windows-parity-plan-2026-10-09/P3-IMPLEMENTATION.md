@@ -879,3 +879,38 @@ multi-column/multi-line owner-drawn lists, the accessibility root and virtual
 canvas elements, actual Narrator/keyboard-layout checks and foreground mixed-DPI
 captures. This is a common-control foundation, not a claim that P3a or application
 accessibility is complete.
+
+## Formula and specialized list appearance — prepared in the same UI batch
+
+`NativeRichText.hpp` now provides an explicitly plain-text-only color operation.
+It updates RichEdit's single default character format and background without
+selection replacement or history clearing. `FormulaWorkbenchWindow` applies it
+after font changes and, through its retained RichEdit subclass, after native
+appearance notifications. Applying it after the control's own message handling
+prevents RichEdit's default theme handling from restoring an unreadable automatic
+foreground. High contrast uses the current Windows Window/WindowText pair.
+Ordinary mode retains Consolas and the existing dark formula surface.
+
+The existing graph-curve typography fixture now explicitly exercises system
+colors without altering OS preferences, forwards all three theme/color/settings
+messages through the actual owner/control path, and verifies foreground,
+background, code font, full draft snapshot, caret, scroll, focus and the original
+single text Undo/Redo. These checks are prepared, not executed. Musical Apply
+must remain uncalled. The helper rejects rich-text mode rather than flattening
+a document's independent character formats.
+
+Formula reference rows, plugin-library columns and precise-note hit rows now
+consume a common selected/disabled/system list palette. Secondary text uses the
+same system foreground as primary text in high contrast, retaining readability
+on arbitrary user highlight colors. Native item geometry, selection, accessible
+item strings and type-ahead are preserved. Formula snippets and plugin labels
+draw ampersands literally. Shared saved-DC lifetime protects early-return and
+exception paths; focus suppression is respected. The Instrument envelope page
+indicator now uses system highlight in high contrast.
+
+This extends the pending UI batch rather than creating another build cycle.
+In addition to the previous gate, retain graph-curve formula typography,
+precise-note hit-list, instrument short-dock and plugin-library draft/completion
+checks. Source/diff inspection only has occurred. Actual Windows high-contrast,
+Narrator, custom canvas semantics and cross-platform integration gates remain
+open. No API, shared music, codec, native plugin state or Mac source changed.

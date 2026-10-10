@@ -63,8 +63,21 @@ inline std::wstring itemText(HWND h,UINT item){
   std::wstring text(size_t(length)+1,0);SendMessageW(h,CB_GETLBTEXT,item,reinterpret_cast<LPARAM>(text.data()));text.resize(size_t(length));return text;
 }
 inline void fill(HDC dc,const RECT &r,COLORREF color){SetDCBrushColor(dc,color);FillRect(dc,&r,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));}
+struct SavedDC {
+  HDC dc;int saved;
+  explicit SavedDC(HDC value):dc(value),saved(SaveDC(value)){}
+  ~SavedDC(){if(saved)RestoreDC(dc,saved);}
+  SavedDC(const SavedDC &)=delete;SavedDC &operator=(const SavedDC &)=delete;
+};
+struct ListColors {COLORREF background,text,detail;};
+inline ListColors listColors(bool selected,bool disabled,bool contrast=highContrast()) {
+  if(contrast){const auto foreground=GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT);
+    return {GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW),foreground,foreground};}
+  const auto foreground=disabled?RGB(111,126,140):selected?RGB(164,240,221):RGB(218,232,241);
+  return {selected?RGB(43,73,80):RGB(24,34,45),foreground,disabled?foreground:selected?RGB(164,240,221):RGB(153,181,196)};
+}
 inline void buttonItem(const DRAWITEMSTRUCT &d,Surface surface,bool active=false,bool contrast=highContrast()) {
-  const int saved=SaveDC(d.hDC);if(!saved)return;const auto palette=colors(surface,contrast);
+  const SavedDC saved(d.hDC);if(!saved.saved)return;const auto palette=colors(surface,contrast);
   const bool disabled=(d.itemState&ODS_DISABLED)!=0,pressed=!disabled&&(d.itemState&ODS_SELECTED)!=0;
   const auto retained=state(d.hwndItem);const bool hot=!disabled&&retained&&retained->hot;
   const bool highlighted=(active||(retained&&retained->active))&&!disabled;
@@ -85,17 +98,15 @@ inline void buttonItem(const DRAWITEMSTRUCT &d,Surface surface,bool active=false
   if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)) {
     rect=d.rcItem;const int focusInset=std::max(2,MulDiv(3,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-focusInset,-focusInset);DrawFocusRect(d.hDC,&rect);
   }
-  if(saved)RestoreDC(d.hDC,saved);
 }
 inline void listItem(const DRAWITEMSTRUCT &d,std::wstring_view text,bool contrast=highContrast()) {
-  const int saved=SaveDC(d.hDC);if(!saved)return;const bool selected=(d.itemState&ODS_SELECTED)!=0,disabled=(d.itemState&ODS_DISABLED)!=0;
-  fill(d.hDC,d.rcItem,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):selected?RGB(43,73,80):RGB(22,31,41));
-  SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,contrast?GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT):disabled?RGB(111,126,140):selected?RGB(164,240,221):RGB(199,214,227));
+  const SavedDC saved(d.hDC);if(!saved.saved)return;
+  const auto palette=listColors((d.itemState&ODS_SELECTED)!=0,(d.itemState&ODS_DISABLED)!=0,contrast);
+  fill(d.hDC,d.rcItem,palette.background);SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,palette.text);
   if(const auto font=reinterpret_cast<HFONT>(SendMessageW(d.hwndItem,WM_GETFONT,0,0)))SelectObject(d.hDC,font);
   auto rect=d.rcItem;const int inset=std::max(1,MulDiv(7,GetDpiForWindow(d.hwndItem),96));rect.left+=inset;rect.right-=inset;
   DrawTextW(d.hDC,text.data(),int(text.size()),&rect,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
   if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){InflateRect(&rect,-1,-1);DrawFocusRect(d.hDC,&rect);}
-  if(saved)RestoreDC(d.hDC,saved);
 }
 inline void comboItem(const DRAWITEMSTRUCT &d){
   const int saved=SaveDC(d.hDC);

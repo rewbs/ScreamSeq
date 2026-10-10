@@ -217,13 +217,15 @@ class PluginLibraryWindow final : public NativeToolWindow {
   void fontsChanged()override{if(controls_.contains(plugins))SendMessageW(controls_.at(plugins),LB_SETITEMHEIGHT,0,LPARAM(29*GetDpiForWindow(window_)/96));}
   void drawControl(const DRAWITEMSTRUCT &d)override{
     if(d.CtlID!=plugins){NativeToolWindow::drawControl(d);return;}
-    const bool chosen=(d.itemState&ODS_SELECTED)!=0;RECT row=d.rcItem;SetDCBrushColor(d.hDC,chosen?RGB(36,77,89):RGB(24,34,45));FillRect(d.hDC,&row,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+    NativeControls::recordDraw(d.hwndItem);const NativeControls::SavedDC saved(d.hDC);if(!saved.saved)return;
+    const auto palette=NativeControls::listColors((d.itemState&ODS_SELECTED)!=0,(d.itemState&ODS_DISABLED)!=0);
+    RECT row=d.rcItem;NativeControls::fill(d.hDC,row,palette.background);
     if(d.itemID>=entries_.size())return;const auto &p=entries_[d.itemID];SetBkMode(d.hDC,TRANSPARENT);SelectObject(d.hDC,font_);
     const auto width=row.right-row.left;const auto inset=LONG(8*GetDpiForWindow(window_)/96);
-    const auto cell=[&](const std::wstring &text,float left,float right,COLORREF color){auto r=row;r.left+=LONG(width*left)+inset;r.right=row.left+LONG(width*right)-inset;SetTextColor(d.hDC,color);DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);};
-    cell((p.at("favorite").get<bool>()?L"★  ":L"")+wide(p.at("name").get<std::string>())+(p.at("hidden").get<bool>()?L" [hidden]":L""),0,.5f,RGB(218,232,241));
-    cell(wide(p.at("format").get<std::string>())+(p.at("isInstrument").get<bool>()?L" / Instrument":L" / Effect"),.5f,.77f,RGB(153,181,196));
-    cell(wide(p.at("category").get<std::string>()),.77f,1,RGB(153,181,196));if(d.itemState&ODS_FOCUS){InflateRect(&row,-2,-2);DrawFocusRect(d.hDC,&row);}
+    const auto cell=[&](const std::wstring &text,float left,float right,COLORREF color){auto r=row;r.left+=LONG(width*left)+inset;r.right=row.left+LONG(width*right)-inset;SetTextColor(d.hDC,color);DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);};
+    cell((p.at("favorite").get<bool>()?L"★  ":L"")+wide(p.at("name").get<std::string>())+(p.at("hidden").get<bool>()?L" [hidden]":L""),0,.5f,palette.text);
+    cell(wide(p.at("format").get<std::string>())+(p.at("isInstrument").get<bool>()?L" / Instrument":L" / Effect"),.5f,.77f,palette.detail);
+    cell(wide(p.at("category").get<std::string>()),.77f,1,palette.detail);if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){InflateRect(&row,-2,-2);DrawFocusRect(d.hDC,&row);}
   }
 public:
   PluginLibraryWindow(HWND owner,Request request,Context context,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)){

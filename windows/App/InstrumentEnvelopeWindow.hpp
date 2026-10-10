@@ -335,7 +335,7 @@ private:
   }
   void drawControl(const DRAWITEMSTRUCT &d)override{
     NativeToolWindow::drawControl(d);if(d.CtlType!=ODT_BUTTON||d.CtlID!=unsigned(pageEnvelope+page_))return;
-    RECT r=d.rcItem;r.top=r.bottom-std::max(2,int(2*GetDpiForWindow(window_)/96));SetDCBrushColor(d.hDC,RGB(110,218,197));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+    RECT r=d.rcItem;r.top=r.bottom-std::max(2,int(2*GetDpiForWindow(window_)/96));SetDCBrushColor(d.hDC,NativeControls::highContrast()?GetSysColor(COLOR_HIGHLIGHT):RGB(110,218,197));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
   }
   void paint(RenderSurface &s)override{
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);if(compact_){if(!shortDock_)s.line(12,134,w-12,134,0x334757);s.line(12,h-(shortDock_?52:88),w-12,h-(shortDock_?52:88),0x334757);}if(!canvasVisible_)return;const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,0x101923);s.clip(r.x,r.y,r.w,r.h);

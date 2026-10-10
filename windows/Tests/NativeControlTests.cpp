@@ -117,6 +117,11 @@ void nativeControlAppearance(HWND parent,HFONT font){
   draw.CtlType=ODT_LISTBOX;draw.itemState=ODS_SELECTED;listItem(draw,L"Selected list item",true);
   require(bitmap.at(10,3)==GetSysColor(COLOR_HIGHLIGHT),"High-contrast list selection ignores system colors");
   draw.itemState=0;listItem(draw,L"Unselected list item",true);require(bitmap.at(10,3)==GetSysColor(COLOR_WINDOW),"High-contrast list background ignores system colors");
+  for(const bool selected:{false,true})for(const bool disabled:{false,true}){
+    const auto palette=listColors(selected,disabled,true);
+    const auto expected=GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT);
+    require(palette.text==expected&&palette.detail==expected,"High-contrast secondary list text does not retain the system foreground");
+  }
   require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE,"Native list draw leaked DC state");
   const auto brush=controlColor(bitmap.dc,button.window,Surface::main,true);
   require(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&GetTextColor(bitmap.dc)==GetSysColor(COLOR_WINDOWTEXT)&&GetBkColor(bitmap.dc)==GetSysColor(COLOR_WINDOW),"Native field ignores system text/background roles");

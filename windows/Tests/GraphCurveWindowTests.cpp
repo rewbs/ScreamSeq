@@ -294,16 +294,18 @@ void formulaCodeColorAndUndo(Owner &owner){
     },[]{return true;},[&](const std::string &){++writes;return true;});
   ScreamSeq::Tests::ownGuiWindow(tool.window());tool.show();KillTimer(tool.window(),3);KillTimer(tool.window(),4);
   const auto code=GetDlgItem(tool.window(),2001);require(code&&IsWindowVisible(code),"Missing Formula RichEdit");
-  auto appearance=[&]{
+  auto appearance=[&](bool contrast=ScreamSeq::NativeControls::highContrast()){
     CHARRANGE retained{};SendMessageW(code,EM_EXGETSEL,0,reinterpret_cast<LPARAM>(&retained));
     POINT scroll{};SendMessageW(code,EM_GETSCROLLPOS,0,reinterpret_cast<LPARAM>(&scroll));
     auto verify=[&](WPARAM scope){CHARFORMAT2W format{};format.cbSize=sizeof(format);
       SendMessageW(code,EM_GETCHARFORMAT,scope,reinterpret_cast<LPARAM>(&format));
-      require((format.dwMask&CFM_COLOR)&&!(format.dwEffects&CFE_AUTOCOLOR)&&format.crTextColor==RGB(218,232,241),"Formula RichEdit lost explicit readable foreground");
+      require((format.dwMask&CFM_COLOR)&&!(format.dwEffects&CFE_AUTOCOLOR)&&format.crTextColor==(contrast?GetSysColor(COLOR_WINDOWTEXT):RGB(218,232,241)),"Formula RichEdit lost explicit readable foreground");
       require(std::wstring_view(format.szFaceName)==L"Consolas","Formula RichEdit lost its code typeface");};
     verify(SCF_DEFAULT);verify(SCF_SELECTION);
     CHARRANGE all{0,-1};SendMessageW(code,EM_EXSETSEL,0,reinterpret_cast<LPARAM>(&all));verify(SCF_SELECTION);
     SendMessageW(code,EM_EXSETSEL,0,reinterpret_cast<LPARAM>(&retained));SendMessageW(code,EM_SETSCROLLPOS,0,reinterpret_cast<LPARAM>(&scroll));
+    const auto expectedBackground=contrast?GetSysColor(COLOR_WINDOW):RGB(16,23,31);
+    require(COLORREF(SendMessageW(code,EM_SETBKGNDCOLOR,0,expectedBackground))==expectedBackground,"Formula RichEdit background does not match its foreground policy");
   };
   appearance();require(!SendMessageW(code,EM_CANUNDO,0,0),"Initial Formula formatting created an Undo item");
   const auto initial=tool.snapshot().at("source");type(code,L"mix(start,end,t) * .75");
@@ -313,9 +315,14 @@ void formulaCodeColorAndUndo(Owner &owner){
   const auto retained=tool.snapshot();const auto focused=GetFocus();appearance();
   for(unsigned pass=0;pass<3;++pass){
     FontRefreshAccess::refresh(tool);appearance();
+    // Exercise the system palette without changing the user's OS settings,
+    // then let the real retained child theme path restore the actual policy.
+    require(ScreamSeq::NativeRichText::applyPlainTextColors(code,true),"Apply plain-text system colors");appearance(true);
+    const std::array<UINT,3> messages={WM_THEMECHANGED,WM_SYSCOLORCHANGE,WM_SETTINGCHANGE};
+    SendMessageW(tool.window(),messages[pass],0,0);appearance();
     CHARRANGE after{};SendMessageW(code,EM_EXGETSEL,0,reinterpret_cast<LPARAM>(&after));
     POINT afterScroll{};SendMessageW(code,EM_GETSCROLLPOS,0,reinterpret_cast<LPARAM>(&afterScroll));
-    require(tool.snapshot()==retained&&after.cpMin==4&&after.cpMax==9&&afterScroll.x==scroll.x&&afterScroll.y==scroll.y&&GetFocus()==focused,"Typography refresh changed draft, caret, scroll or focus");
+    require(tool.snapshot()==retained&&after.cpMin==4&&after.cpMax==9&&afterScroll.x==scroll.x&&afterScroll.y==scroll.y&&GetFocus()==focused,"Typography/theme refresh changed draft, caret, scroll or focus");
   }
   require(SendMessageW(code,EM_UNDO,0,0)&&tool.snapshot().at("source")==initial,"Font refresh consumed or damaged the sole raw-text Undo");
   require(!SendMessageW(code,EM_CANUNDO,0,0),"Font refresh added unexpected Undo history");
