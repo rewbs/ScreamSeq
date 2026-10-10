@@ -7,6 +7,7 @@
 #include "PatternOperations.hpp"
 #include "EnvelopeOperations.hpp"
 #include "MixerOperations.hpp"
+#include "TrackOperations.hpp"
 #include "../Api/SessionAdapter.hpp"
 #include "NativeCallReceipt.hpp"
 #include "../Project/NativeProject.hpp"

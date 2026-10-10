@@ -5,6 +5,11 @@ own worktree for checkpoint 02. These changes are not included in that checkpoin
 and have not been compiled or executed. P0b/P0c and P1 gates remain open; this
 document does not claim that their prerequisites or P2 parity are complete.
 
+The sections below record successive source checkpoints. The latest worker/API
+integration is described at the end; earlier statements that dispatch is pending
+describe the earlier checkpoint, not the current tree. Native track UI and all
+P2 execution gates remain pending.
+
 ## Shared candidates and Mac adoption
 
 `editor/TrackLayout.hpp/.cpp` now declares typed `GroupNoteTrack`,
@@ -146,3 +151,52 @@ All these checks remain unexecuted. Application dispatch, worker/pipe history
 tests, queued-frame NNA/plugin ownership scenarios, both platform builds and the
 affected Mac realtime/note-track regression gates are still required. No builds
 or tests ran for this source batch. P1 remains frozen at `a320bd9da`.
+
+## Worker dispatch and actual-pipe scenarios — source only
+
+`DocumentController` now dispatches all five track methods using the existing
+revision guard and serial worker. `Application::additionalDocumentReads/Writes`
+advertises those same methods, so the real host's `api.describe` includes them
+and their expectedRevision guards. `document.get.data.trackLayout` contains the
+same projection as `track.get`, without replacing raw `tracks` metadata. Cache
+accounting and catalog invalidation include that projection. Mixer/graph writes
+also budget changes to its destination/group names before mutation.
+
+Append preflights a private document with resized channels and candidate native
+metadata, checking the complete resulting cache before stopping transport.
+Other track edits validate native cache growth and plugin capacity before
+adoption. Live mute uses the prepared publication callback from the preceding
+checkpoint. History admission now normalizes its candidate nextID to the
+document's current allocator floor, matching actual history adoption. Pure
+visual ungroup history needs no renderer publication; mute history uses the
+same frame admission as a direct write. Structural changes retain their normal
+stop/reprepare behavior. A failed track write with unchanged song revision is
+explicitly classified as notCommitted; a postcommit view/completion failure
+retains the existing committed-result receipt and recovery path.
+
+`windows/Tests/TrackControllerTests.inc` adds `document-controller-tracks` to the
+native worker test modes. It covers cached projection, missing/stale revisions,
+invalid/dry requests, append preserving all old musical cells, structural
+Undo/Redo identities, ungroup routing, live mute and chronological alias history,
+three pending mute frames/full-queue rejection, forced publication refusal,
+save/reopen, and cache rejection before stop/history. It uses native prepared
+playback with controlled feedback and manual render calls, not a hardware clock.
+
+`windows/Tests/test_note_tracks.py` adds three actual-PID-pipe cases to the
+existing Windows application CI batch: advertised methods/guards and strict
+inputs; dry append retaining IDs and one-step Undo/Redo; grouping and ungrouping
+with insert/send/plugin preservation; mute no-op retaining Redo and native
+save/reopen; and mixed disconnected/connected destinations in both column orders.
+It reuses only launch/read/write helpers, without inheriting another test suite.
+The private inspection desktop is functional evidence, not foreground visual,
+device/audio or reciprocal Mac evidence. The Windows API guide documents the
+newly wired contracts and their qualification limits.
+
+No P2 builds or tests have run. Add `document-controller-tracks` and
+`test_note_tracks.NoteTrackAppTests` to the eventual P2 checkpoint along with the
+previously listed portable, adapter and hosted tests. P1 remains frozen and its
+evidence cannot qualify these changed shared/Windows inputs. Remaining P2 work:
+native grouping/column headers and keyboard commands with retained drafts,
+queued-frame NNA/plugin ownership coverage, and both platforms' required
+fixture/persistence/audio/UI gates. Continue on temporary dependent branches
+that converge on shared main; no long-lived platform fork is introduced.

@@ -1,5 +1,31 @@
 # Windows local API subset
 
+`track.get {}` returns the shared note-track projection: stable column identities,
+effective per-column mute, visual group membership, note-column indexes, group
+bus names/colors/outputs, available destinations and the module's column limit.
+The same projection is cached as `document.get.data.trackLayout`. Existing
+`document.get.data.tracks` retains its original raw-column metadata contract.
+
+`track.group {channels, name?, output?}`, `track.create {columns, name?, output?}`,
+`track.ungroup {track}` and `track.column.set {column, mute}` require
+`expectedRevision` and accept `dryRun`. Their parameter/result definitions are
+shared with [the Mac API guide](../../mac/AUTOMATION.md). Group existing adjacent
+columns or append new ones within the actual module limit; an explicit destination
+is required when selected columns have different main outputs. Grouping retains
+inserts, sends and unrelated routing. Ungroup removes visual membership while
+retaining the group bus and all its processing/routes. Use `mixer.bus.set` for
+group name/color and `song.annotate` for raw-column metadata.
+
+Changed writes create one chronological Undo step and persist in the existing
+native project format. DryRun and successful no-ops preserve revision/history.
+Structural group/create edits use the existing safe transport-stop path. Pure
+column-mute edits and their Undo/Redo prepare a whole-column frame for live
+publication; a saturated queue or changed playback owner rejects before commit
+with `-32002`, preserving the document, transport and history. Reads expose the
+committed model; renderer adoption occurs at its next render boundary. These
+methods do not enable full API parity. This P2 source integration still requires
+the recorded native/pipe/audio and cross-platform qualification gates.
+
 Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
 `.parameters`, `.sources` and `.get` read actual host values and controlling sources.
 `parameter.activity.watch` is a transient replay-cached write without a song revision
