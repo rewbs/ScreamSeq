@@ -16,9 +16,9 @@ void applicationSongProperties() {
         restoreCheck(songState(app)==before&&restoreText(GetDlgItem(window,8602))==L"-","Invalid channel text changed the song or was discarded");
         SetFocus(GetDlgItem(window,8602));app.updateSongTools();app.command(songPropertiesCommand);
         restoreCheck(GetFocus()==GetDlgItem(window,8602)&&restoreText(GetDlgItem(window,8602))==L"-","Refresh/reopen overwrote a raw song draft or stole focus");
-        rawDraftText(GetDlgItem(window,8602),std::to_wstring(original.at("formatLimits").at("channelsMax").get<unsigned>()+1));press(window,8605);
+        rawDraftText(GetDlgItem(window,8602),std::to_wstring(original.at("formatLimits").at("channelsMax").get<unsigned>()+1).c_str());press(window,8605);
         restoreCheck(songState(app)==before,"Out-of-format channel count reached musical mutation");
-        rawDraftText(GetDlgItem(window,8602),std::to_wstring(count+1));
+        rawDraftText(GetDlgItem(window,8602),std::to_wstring(count+1).c_str());
         app.edit("document.patch",{{"title","External title"}});const auto changed=songState(app);press(window,8605);
         restoreCheck(songState(app)==changed&&tool->snapshot().at("stale")==true,"Stale song form silently rebased its draft");
         press(window,8603);press(window,8605);

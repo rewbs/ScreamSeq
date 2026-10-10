@@ -801,3 +801,35 @@ reciprocal project gates are unchanged.
 Implementation references: [Windows process DPI policy](https://learn.microsoft.com/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process),
 [application manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests)
 and [CMake's Windows MSVC generator support](https://github.com/Kitware/CMake/blob/master/Modules/Platform/Windows-MSVC.cmake).
+
+## Consolidated checkpoint 03 — app links; workspace fixture compile failed
+
+One Windows ARM64 configure/build ran on frozen integration commit
+`c1c4f3387b60320fc2e31f08d3c6e34f029a9be6` from 2026-10-10 04:36:24 to
+04:38:07 UTC. It began more than one hour after checkpoint 02 finished, used the
+existing cache with two build jobs and selected 53 targets. The source receipt
+confirms unchanged inputs throughout. The shared `ScreamSeqSession` library and
+`ScreamSeq.exe` linked successfully. Workspace compilation then failed with two
+C2664 diagnostics: `SongPropertiesApplicationTests.inc` passed temporary
+`std::wstring` values to the existing `rawDraftText(HWND,const wchar_t *)`
+fixture helper. Both calls now pass `.c_str()` for the synchronous helper call;
+the fixture expectations and production song-properties code are unchanged.
+
+Retained evidence in the integration checkout:
+`bin/parity-evidence/integration-checkpoint-03.json` and
+`bin/parity-evidence/integration-build-03.log`. Build exit is 1. Log SHA-256 is
+`1e07d2a7032b90e5451d39d943e0fa207fb56aa840cd0aa3126dc86708174279`;
+the linked app SHA-256 is
+`cae08087af5d0e0819ec74eebc6d1355ac23f22a103eec695104f6c34e673ef9`.
+This is app compile/link evidence, not a runtime pass or completion of all
+selected targets. The build stopped before reaching the prior audio-bus target,
+so its prepared include fix is not newly qualified either.
+
+The complete native/application test helper was not run against the incomplete
+build. No immediate rebuild was started. The next normal local build is no
+earlier than 2026-10-10 05:38:07 UTC (22:38:07 Pacific on October 9). Batch these
+fixture corrections with the prepared native activation/DPI foundation and
+other reviewed changes for that checkpoint. Reuse the linked app evidence only
+for its exact source; the manifest changes invalidate executable/UI evidence
+for the next candidate. Preserve every pending native, actual-pipe, x64, Mac and
+reciprocal integration gate, with no relaxed assertions.
