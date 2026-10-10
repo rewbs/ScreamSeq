@@ -1,0 +1,148 @@
+{
+  "scope": "Mixing graph click/move selection locks and independent plugin parameter inspectors; broader parity goal remains paused",
+  "build": {
+    "commit": "27e882271d5f2adcc5e4929e355e2f447b292cde",
+    "startedUTC": "2026-10-10T10:06:52.678453+00:00",
+    "oldAppSHA256": "c0149612ccf93e3bc4e9112dd5e91d5486cd71bc878a52c61610154a11c8a69c",
+    "scope": "Graph move gestures and independent parameter editors; batched app/native harness build; musician PID 26744 unchanged",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\GraphFlow-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T10:08:26.817593+00:00",
+    "exitCode": 0,
+    "logSHA256": "6139266fab15fb7076fd9074777ce8774ba5642130bfcb4dc4e9ccd99a161627",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\GraphFlow-Release\\ScreamSeq.exe": "aa7f7120177bf13ec5029aa565e85344e14a18d8e526d5458f895afa52542fbe",
+      "bin\\windows-parity-p1\\GraphFlow-Release\\ScreamSeqVST3Scanner.exe": "e03c71895a1c0e621e7baf525d3c95b0481738da678a44f993d0e6782b8b967a",
+      "bin\\windows-parity-p1\\GraphFlow-Release\\workspace-restore-tests.exe": "a67b797bc74c57ee73111dbde4a3c0f6ec1bd62bce8a04a876c3878a55ebd4c0"
+    }
+  },
+  "initialValidation": {
+    "commit": "27e882271d5f2adcc5e4929e355e2f447b292cde",
+    "buildReceiptSHA256": "d24af2b458a59d770ee13675593c6a49d02e2c0eb61b41b1bb437dee5172b485",
+    "appSHA256": "aa7f7120177bf13ec5029aa565e85344e14a18d8e526d5458f895afa52542fbe",
+    "gates": [
+      {
+        "name": "native",
+        "startedUTC": "2026-10-10T10:08:40.353643+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(workspace-command-result-tests|workspace-plugin-search-tests|workspace-draft-census-tests)$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T10:09:53.031808+00:00",
+        "log": "bin\\parity-evidence\\graph-flow-native-runner.log",
+        "sha256": "fe551e3532b666c7b1f5d52b0d3feed0b41fc99507d729e2c0daf08ce41e9388"
+      },
+      {
+        "name": "app",
+        "startedUTC": "2026-10-10T10:09:53.044808+00:00",
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\graph-flow-app.log",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_graph_click_jitter_and_completed_moves_do_not_lock_selection",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_insert_order_layout_keyboard_mouse_history_and_reopen",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_overview_stages_default_inserts_filter_and_connections",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_graph_wheel_navigation_is_anchored_and_new_actions_fit",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_minimum_native_control_bounds_focus_and_layout_history",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_plugin_sidechains_auxiliary_output_and_disconnection",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts"
+        ],
+        "exitCode": 1,
+        "finishedUTC": "2026-10-10T10:10:35.410217+00:00",
+        "log": "bin\\parity-evidence\\graph-flow-app-runner.log",
+        "sha256": "c91182d92e4e42783e18e83e971394fc1769d791c6b63c83d314fe6fa5d0e089"
+      }
+    ],
+    "applicationLogSHA256": "195260cfa5bf77f84e81f5716e8c10995a6862b2e420f6bc8a12d7d5302b26cd",
+    "appUnchanged": true
+  },
+  "qualificationCommit": "bb52ee5c13b0dce9b8a692cc9422d957b9a946b8",
+  "binaryInputsUnchangedAfterBuild": true,
+  "postBuildChanges": [
+    "windows/Tests/test_song_routing.py"
+  ],
+  "reproduction": "New actual-app test on prior GraphUsability binary: a one-pixel mouse move during a click left layoutDraft=true and blocked selection. Failure preserved.",
+  "results": {
+    "nativeGroups": {
+      "workspace-draft-census-tests": "passed, 7.06 seconds",
+      "workspace-command-result-tests": "passed, 61.48 seconds; includes applicationGraphParameterInspector and graph usability/recovery",
+      "workspace-plugin-search-tests": "passed, 4.02 seconds"
+    },
+    "actualApplication": "8 distinct cases pass: 5 initial and 3 focused cases; no skipped cases",
+    "focusedSeconds": 18.626,
+    "fixtureChanges": "The old overview case expected rack-list selection; it now verifies the new inspector target and full parameter catalogue. Two cases overlapped automatic graph readback after history/document mutations. Writes now wait for clean retained views to finish refresh, with no write retries; read-only .get calls have bounded busy retries. All musical state, history and persistence assertions remain."
+  },
+  "logs": {
+    "bin/parity-evidence/graph-flow-build.log": {
+      "sha256": "6139266fab15fb7076fd9074777ce8774ba5642130bfcb4dc4e9ccd99a161627"
+    },
+    "bin/parity-evidence/graph-flow-prior-app.log": {
+      "sha256": "f7a3df98b36c163ce0efbcae584bd893338de22cbaa189ea521ad837edd645cd"
+    },
+    "bin/parity-evidence/graph-flow-native-runner.log": {
+      "sha256": "fe551e3532b666c7b1f5d52b0d3feed0b41fc99507d729e2c0daf08ce41e9388"
+    },
+    "bin/parity-evidence/graph-flow-app.log": {
+      "sha256": "195260cfa5bf77f84e81f5716e8c10995a6862b2e420f6bc8a12d7d5302b26cd"
+    },
+    "bin/parity-evidence/graph-flow-focused-app.log": {
+      "sha256": "68160336626b54cfea1ed6997182405d0df3a660c9132cfc12b84630b1fe253e"
+    }
+  },
+  "limits": [
+    "Owned private-desktop native interaction/geometry, not foreground visual or physical speaker qualification",
+    "No Mac build: Windows-only UI/tests, existing shared graph.layout.set and plugin.parameters.set operations; no DSP/API/schema/storage changes",
+    "Explicit typed route and parameter drafts still require Apply or Reload; stale and uncertain operations retain their original targets and fields",
+    "Numeric values use Enter/Apply or step buttons; choices/toggles apply directly. Vendor custom interfaces remain in the existing rack."
+  ]
+}

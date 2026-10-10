@@ -2,6 +2,66 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Graph movement and independent parameters — 10 October, 10:08 UTC
+
+The next user report identified repeated Apply/Reload selection blocks and difficulty
+editing plugin parameters while using the graph. An actual-application regression
+on the previous GraphUsability binary reproduced the selection lock after just a
+one-pixel mouse move during a click.
+
+`SongRoutingWindow.hpp` now ignores movement below four device-independent pixels
+before starting a move. A completed drag saves its layout through `graph.layout.set`;
+keyboard repeats form one move saved on arrow-key release. Arrange saves immediately.
+Each completed gesture has one Undo; normal selection can continue without Save layout
+or Reload. Failed/stale operations retain their layout and existing result-review
+protection. Deliberately typed routing fields retain their Apply/Reload semantics.
+
+Opening a plugin node now raises `PluginParametersWindow.hpp`, a modeless native
+inspector attached to that stable plugin identity. It initially appears beside the
+mixing graph, keeps the graph visible and has its own retained raw fields. Multiple
+plugin inspectors can coexist; switching graph selection cannot redirect a typed
+parameter. The native parameter selector, numeric entry with Enter/Apply and step
+buttons, and choice/on-off controls use `PluginParameterField` metadata and the
+existing `plugin.parameters.get/set` APIs. Manual values, native units, ranges,
+read-only flags and stable parameter IDs are retained. The existing rack remains
+available for vendor custom interfaces and other rack workflows.
+
+The new owner registers with document draft/departure protection. Reads check the
+captured document, revision and field generation; clean inspectors follow completed
+external edits. Raw drafts are not silently rebased. Exact lost write completions
+can be reviewed without resubmitting; later text survives. Unattributed outcomes
+require inspection and explicit Reload. Successful document replacement retires
+the old inspector HWND. `MixerEditor.inc` owns these windows and `Main.cpp` exposes
+their bounded workspace snapshots for inspection/testing.
+
+One ARM64 Release application/native-harness build at `27e882271` passed. Three
+native groups pass (draft census, command results and plugin search/value controls,
+72.56 seconds total). The added native case checks the actual inspector controls,
+toggle/numeric edits, unrelated-plugin preservation, graph navigation with raw
+parameter text, invalid and stale refusal, one-step Undo/Redo, retained completion
+with newer text, departure protection and save/reopen. Eight distinct application
+cases pass across the initial and focused runs: click jitter and two successive
+moves with reciprocal Undo/Redo, insert/layout persistence, the independent inspector
+catalogue, navigation/geometry, minimum-size bounds, retained routing fields, plugin
+sidechains and graph stage-role restrictions.
+
+The initial application run exposed one obsolete rack-selection expectation and
+two automation races with automatic readback. The fixture now verifies the independent
+inspector and waits for clean retained views to refresh before issuing its next write.
+Only read-only `.get` calls retry a bounded busy refusal; writes are never replayed.
+All state/history/persistence assertions remain. The three affected cases passed in
+18.626 seconds. `bb52ee5c1` changes only the Python qualification file; no second
+application or harness build was performed.
+
+The [bounded receipt](GRAPH-FLOW-2026-10-10.json) preserves source/executable hashes,
+reproduction and initial failures. The new application is
+`bin/windows-parity-p1/GraphFlow-Release/ScreamSeq.exe` in the integration checkout,
+with its adjacent scanner. The musician's GraphUsability process (PID 26744 at this
+checkpoint) and its binary were preserved. Qualification used owned private desktops;
+foreground visual quality and physical audio were not measured. No shared model,
+DSP, API schema, project format or Mac source changed; no Mac build was required for
+this Windows UI batch. Broader parity work remains paused.
+
 ## Prioritized mixing-graph usability — 10 October, 09:42 UTC
 
 The user prioritized graph usability from the remaining P5 scope. Current source
