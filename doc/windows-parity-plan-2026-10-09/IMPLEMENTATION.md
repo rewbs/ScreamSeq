@@ -2,6 +2,52 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Browser and pattern input fixes — 10 October, 09:24 UTC
+
+The user's browser reports were traced to disabling all controls during every
+search/decode, which loses Win32 focus and repeatedly repaints the controls.
+Selection preview also defaulted off. The pattern command catalogue omitted
+Backspace, and paste arriving during a pumped worker wait was rejected as busy.
+New real-application tests reproduced search-focus loss and Backspace doing
+nothing on the prior menu-fix build.
+
+`SampleLibraryWindow.hpp` keeps search, filters and sample-list HWNDs enabled
+during independent reads; mutations remain blocked while pending. Selection
+inspection is coalesced on the browser timer, newer selections cancel old
+previews, and stale decode results cannot replace current selection metadata.
+Auto-preview now defaults on, with a retained off choice and explicit Space
+preview. Unchanged lists are not reset and retained caret identity is restored
+when filtering changes the list. Redundant enable/disable transitions were
+removed. The tests establish focus/input continuity; sustained visual flicker
+and physical speaker output were not independently measured.
+
+`WorkspaceShortcutDispatch.inc` binds Backspace to the existing pattern Clear
+command, retaining native text-field ownership and configurable bindings.
+`EditingView.inc` holds at most one pending paste while busy, captures its song,
+revision, cursor, selection, focus, mode and clipboard text, and checks the target
+before and after parsing. A paste queued behind Copy can consume only that
+successful copy, never an older clipboard if Copy failed. The main loop drains
+it when idle through the original revision-guarded `pattern.paste` operation.
+No song-format or shared editing/API semantics changed.
+
+One ARM64 application/native-harness/preview build from `86e29e954` succeeded.
+Five targeted native groups pass: sample-browser input during a deliberately
+blocked decode, pattern selection/queued paste, retained receipts, asset outcomes,
+and preview voice/decoder PCM. Nine actual-application cases pass, including
+per-character search focus, real list clicks and arrows, explicit Space preview,
+Backspace/Undo, import/history, preview gain and retained family/editor drafts.
+The paste fixture's first run used `pattern.get` at the worker boundary where
+that API-level read is unavailable; it now reads the published pattern snapshot.
+Only the test executable was rebuilt, and that failed group alone was repeated.
+All assertions remain; the application binary stayed unchanged.
+
+The [bounded receipt](BROWSER-PATTERN-FIX-2026-10-10.json) retains the initial
+failures and exact build/test fingerprints. The new application is
+`bin/windows-parity-p1/InteractionFix-Release/ScreamSeq.exe` in the integration
+checkout, with its adjacent scanner. The earlier MenuFix build and running
+session were not replaced. Save/close that session before switching. Broader
+parity work stays paused.
+
 ## Native menu hotfix — 10 October, 08:39 UTC
 
 User testing found all native menu commands disabled, including File → New.
