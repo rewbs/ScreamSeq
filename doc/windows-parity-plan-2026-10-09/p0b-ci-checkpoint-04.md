@@ -78,3 +78,23 @@ error mapping, Mac fixture correction and ready P1 source before that checkpoint
 Run the affected arrangement, graph-interface and mixer cases plus the required
 common command/owner regression group once against the frozen candidate. Keep
 the Windows endpoint and recovery-cleanup issues visible until directly resolved.
+
+## Intel terminal result — inspected 10 October, 00:16 UTC
+
+The original job **114066597619** is now complete with failure, at the unchanged
+source `d39ec5548fc6224f5d395dbf02d6b0eca35b48ac`. The build, all **122/122**
+native tests, Swift recovery/picker and sample-library steps passed. The interface
+harness passed **34/35** groups. Its only failure is the same `signal-graph`
+host-control drop assertion reported by Apple Silicon: exactly one zero-depth
+connection with stable source/processor/parameter identities.
+
+The actual socket API baseline matched, with `parityComplete: false` and zero
+reported preservation failures. This does not qualify the later Mac fixture
+correction, P1 source, or a reciprocal exchange. Both architectures now have
+terminal results for this checkpoint; neither job was restarted.
+
+The decoded full job log is retained at
+`bin/parity-evidence/macos-intel-gate-04.log` (SHA-256
+`7dfa8705998397707f0bc1b9f7cd1216cbeb784f6656b79a9cf6c5264dff750e`).
+The structured receipt's older `intel` observation remains historical; this
+terminal log and the corresponding workflow job supersede its live status.
