@@ -121,6 +121,9 @@ jobs:
           try {
             python -m unittest -v `
               test_workspace_shortcuts.WorkspaceShortcutTests `
+              test_mixer_strips_ui.MixerStripsUITests `
+              test_graph_mixer_app.GraphMixerAppTests.test_native_mixer_draft_stale_selection_undo_and_reload `
+              test_graph_mixer_app.GraphMixerAppTests.test_native_mixer_controls_fit_small_window `
               test_recording.RecordingTests `
               test_midi_recording_ui.MidiRecordingUITests `
               test_sample_capture_ui.SampleCaptureUiTests `

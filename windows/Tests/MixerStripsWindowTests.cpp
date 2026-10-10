@@ -135,6 +135,31 @@ void inputAndWidth(HWND owner) {
   bool master=false;for(int i=0;i<16;++i){auto title=GetDlgItem(f.tool.window(),100+i*16);if(title&&IsWindowVisible(title)&&text(title)==L"Master")master=true;}
   check(master,"Late Master is unreachable through native mixer navigation");
 }
+void pendingSliderInput(HWND owner) {
+  for(bool keyboard:{false,true}) {
+    Fixture f(owner);bool injected=false;f.slide(330);
+    f.duringRead=[&](const auto &method){if(method=="mixer.bus.set"&&!injected){
+      injected=true;f.slide(360);
+      if(keyboard)SendMessageW(f.control(101),WM_KEYUP,VK_DOWN,0);else f.slide(360,TB_ENDTRACK);
+      check(f.writes==0,"A pending preview recursively submitted a durable write");
+    }};
+    f.tool.update();
+    check(injected&&f.previews==1&&f.writes==1&&f.lastWrite.at("gainDB")==-12&&
+      f.find("n1")["gainDB"]==-12&&!f.tool.hasGesture(),
+      "Release or key-up during preview lost the latest slider value or its one final commit");
+  }
+  Fixture f(owner);f.slide(360);
+  f.duringWrite=[&]{f.slide(420);f.slide(420,TB_ENDTRACK);};
+  f.slide(360,TB_ENDTRACK);
+  check(f.writes==1&&f.find("n1")["gainDB"]==-12&&f.tool.hasGesture()&&
+    text(f.control(102))==L"-18"&&!f.tool.documentDraft()->uncertain,
+    "Final completion lost a newer slider gesture or recursively committed it");
+  f.tool.update();check(f.writes==1&&f.previews==0,"Completed write replayed a newer gesture against its stale revision");
+  SendMessageW(f.control(101),WM_CAPTURECHANGED,0,0);f.tool.hide();f.tool.show();f.tool.update();
+  check(f.tool.hasGesture()&&text(f.control(102))==L"-18"&&f.writes==1&&f.previews==0,
+    "Hiding or capture loss discarded newer slider input after an earlier final completed");
+  f.press(12);check(f.writes==1&&!f.tool.hasGesture()&&f.audible==-12,"Cancel failed to reset the newer slider to current saved state");
+}
 void pendingTextRetention(HWND owner) {
   for(unsigned scenario=0;scenario<3;++scenario) {
     Fixture f(owner);SetFocus(f.control(102));SetWindowTextW(f.control(102),L"-9");
@@ -241,6 +266,6 @@ void viewportPool(HWND owner) {
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -481,3 +481,39 @@ gesture/history/save/reopen coverage, adapting Details tests to enter the explic
 Details command now that Mixer defaults to strips, and reviewing pending trackbar
 notifications separately from text notifications. The known Mac/shared, native
 presentation/accessibility, hosted instrument and reciprocal gates remain open.
+
+## Pending slider input and application integration — prepared, unexecuted
+
+The strip owner now records notifications from its captured trackbar during a
+pumped worker call. A release or key-up during preview defers the single final
+write until that preview returns, using the newest value. It never recursively
+enters the worker. A newer gesture arriving during an already submitted final
+is retained for explicit cancellation/reload; it cannot trigger another final,
+preview against the old revision, or disappear on hide/capture loss. Native
+fixtures cover pointer release and keyboard key-up during preview, newer input
+during final write, one durable commit and subsequent explicit reset.
+
+`windows/Tests/test_mixer_strips_ui.py` adds three actual Application/pipe/native
+control scenarios using an owned private desktop and disposable project files:
+
+- Coalesced preview leaves the document/history unchanged; the final drag is
+  undone once, redone, saved, changed, and reopened with stable bus identity.
+- Typed pre-gain, keyboard-finished width, cancellation and navigation to Details
+  preserve independent controls and the captured bus.
+- A hidden invalid raw draft refuses API document replacement, survives a later
+  bus insertion and view switch, rejects stale Enter, then releases replacement
+  only after explicit Cancel.
+
+The existing Details tests now assert the default strips view before explicitly
+opening Details (command 419). Their compact-window checks include the added
+return/color/effect/instrument-routing controls; no old assertion is removed.
+Both Details cases and the three new application cases are scheduled in the
+existing Windows CI integration batch, without adding another build.
+
+Python source parsing and `git diff --check` were performed. **No new build or
+test was run.** The application scenarios use the shipped default song and
+same-platform disposable save/reopen; they are not F04 PCM, reciprocal, foreground
+visual, Narrator, physical-device or hosted-instrument qualification. The next
+checkpoint must add this new test class to its bounded local application group
+alongside the prepared provider/routing and common command checks. The build
+cadence remains no earlier than 01:24:08 UTC after checkpoint 01.

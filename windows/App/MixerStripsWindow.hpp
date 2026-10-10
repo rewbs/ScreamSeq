@@ -22,6 +22,7 @@ private:
   std::vector<std::string> bindings_;std::vector<size_t> positions_;size_t first_=0,lastVisibleCount_=0,viewportTotal_=0;
   std::map<std::string,Tracker::MixerMeter> meters_;
   bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false,resetPresentation_=false;
+  bool previewInFlight_=false,deferredCommit_=false,completedWithNewerInput_=false;
   int capturedControl_=0;
   float stripTop_=34,sliderTop_=57,sliderHeight_=32;
   int scrollOffset_=0,contentHeight_=0,wheelHorizontal_=0,wheelVertical_=0;bool layingOut_=false;
@@ -97,21 +98,23 @@ private:
     const auto *saved=bus(target);if(!saved)throw std::runtime_error("Mixer bus is unavailable");
     const auto &value=saved->at(Tracker::mixerControlKey(control));
     gesture_.begin({document_,revision_,target},control,value.is_boolean()?(value.get<bool>()?1.:0.):value.get<double>());
-    capturedControl_=id;rawDirty_=false;observed_=false;previewBlocked_=false;
+    capturedControl_=id;rawDirty_=false;observed_=false;previewBlocked_=false;deferredCommit_=false;completedWithNewerInput_=false;
     enableEdits();
   }
   void enableEdits() {
     for(size_t i=0;i<bindings_.size();++i)for(int part:{fader,gain,pan,mute,solo,preGain,prePan,width}) {
       const int id=base+int(i)*stride+part;
       const bool available=bus(bindings_[i])!=nullptr;
-      const bool capturedText=gesture_.active()&&id==capturedControl_&&(part==gain||part==preGain);
-      EnableWindow(controls_.at(id),capturedText||(!pending_&&!completion_.retained()&&
+      const bool capturedInput=gesture_.active()&&id==capturedControl_&&
+        (part==gain||part==preGain||pending_);
+      EnableWindow(controls_.at(id),capturedInput||(!pending_&&!completion_.retained()&&
         (gesture_.active()?id==capturedControl_:available)));
     }
     for(size_t i=0;i<bindings_.size();++i)
       EnableWindow(controls_.at(base+int(i)*stride+details),bus(bindings_[i])!=nullptr&&!retained());
   }
   void checkCurrent()const {
+    if(completedWithNewerInput_)throw std::runtime_error("Earlier edit completed / newer input retained; Cancel reloads current saved state");
     const auto now=context_();
     if(!gesture_.current({now.first,now.second,gesture_.context().bus}))
       throw std::runtime_error("Song changed / captured gesture retained; Cancel restores the current saved value");
@@ -134,6 +137,7 @@ private:
     reload();
     const bool unchanged=gesture_.generation()==completion_.generation()&&
       std::pair(document_,revision_)==std::pair(returned->document,returned->revision);
+    deferredCommit_=false;captureLost_=false;completedWithNewerInput_=!unchanged;
     if(unchanged){gesture_.finish();rawDirty_=false;captureLost_=false;resetPresentation_=true;}
     else previewBlocked_=true;
     report_=std::move(report);completion_.finish();observed_=false;
@@ -162,7 +166,7 @@ private:
     }
     if(gesture_.generation()!=generation||context_()!=std::pair(document_,revision_))
       throw std::runtime_error("Song or input changed while restoring / newer input retained; Cancel again to reload");
-    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;
+    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;deferredCommit_=false;completedWithNewerInput_=false;
     status_=acknowledge?L"Current saved state accepted / the edit was not repeated":L"Gesture cancelled / current saved value restored";
   }
   void reviewResult() {
@@ -176,8 +180,10 @@ private:
   void preview() {
     if(pending_||completion_.retained()||rawDirty_||previewBlocked_||!gesture_.needsPreview())return;
     checkCurrent();admit_();Pending guard(pending_);const auto value=gesture_.value();
+    previewInFlight_=true;
+    struct PreviewGuard{bool &flag;~PreviewGuard(){flag=false;}}previewGuard{previewInFlight_};
     try {request_("mixer.bus.set",params(value,true,gesture_.context()));}
-    catch(...){previewBlocked_=true;throw;}
+    catch(...){previewBlocked_=true;deferredCommit_=false;throw;}
     gesture_.previewAccepted(value);
   }
   void createStrip(size_t index) {
@@ -416,7 +422,8 @@ private:
     }
     const int id=GetDlgCtrlID(control),index=slot(id);if(index<0)return false;
     const int part=(id-base)%stride;if(part!=fader&&part!=pan&&part!=prePan&&part!=width)return false;
-    if(setting_||pending_||completion_.retained())return true;
+    if(setting_||(completion_.retained()&&!pending_))return true;
+    if(pending_&&(!gesture_.active()||id!=capturedControl_))return true;
     const auto position=double(SendMessageW(control,TBM_GETPOS,0,0));
     if(!gesture_.active()) {
       if(LOWORD(event)==TB_ENDTRACK)return true;
@@ -425,16 +432,20 @@ private:
         part==width?std::lround(saved->at("width").get<double>()*100):std::lround((saved->at(part==pan?"pan":"prePan").get<double>()+1)*100);
       if(position==double(rounded))return true; // Clicking a rounded thumb is not an edit.
     }
-    begin(id,part==fader?Tracker::MixerControl::Gain:part==pan?Tracker::MixerControl::Pan:
+    if(!pending_)begin(id,part==fader?Tracker::MixerControl::Gain:part==pan?Tracker::MixerControl::Pan:
       part==prePan?Tracker::MixerControl::PrePan:Tracker::MixerControl::Width);
     gesture_.update(part==fader?24-position/10:part==width?position/100:position/100-1);
     previewBlocked_=false;
     if(part==fader){setting_=true;try{set(base+index*stride+gain,Json(gesture_.value()));}catch(...){setting_=false;throw;}setting_=false;}
-    if(LOWORD(event)==TB_ENDTRACK){captureLost_=false;commit();layout();}
+    if(LOWORD(event)==TB_ENDTRACK){
+      captureLost_=false;
+      if(pending_){if(previewInFlight_)deferredCommit_=true;}
+      else {commit();layout();}
+    }
     requestPaint();return true;
   }
   void controlCaptureChanged(HWND control)override {
-    if(gesture_.active()&&GetDlgCtrlID(control)==capturedControl_){captureLost_=true;SetTimer(window_,3,1,nullptr);}
+    if(gesture_.active()&&!completedWithNewerInput_&&GetDlgCtrlID(control)==capturedControl_){captureLost_=true;SetTimer(window_,3,1,nullptr);}
   }
   void timer(UINT_PTR id)override {
     if(id!=3)return;
@@ -454,6 +465,7 @@ private:
   }
   bool keyUp(WPARAM key)override {
     if(gesture_.active()&&!rawDirty_&&(key==VK_LEFT||key==VK_RIGHT||key==VK_UP||key==VK_DOWN||key==VK_HOME||key==VK_END||key==VK_PRIOR||key==VK_NEXT)) {
+      if(pending_){if(previewInFlight_)deferredCommit_=true;return true;}
       commit();layout();return true;
     }
     return false;
@@ -501,7 +513,7 @@ public:
   void hide()override {
     // Reset after the current native notification stack unwinds. Do not call
     // the worker from workspace layout or wait for a visible-only meter timer.
-    if(gesture_.active()&&!rawDirty_&&!completion_.retained()) {
+    if(gesture_.active()&&!rawDirty_&&!completion_.retained()&&!completedWithNewerInput_) {
       captureLost_=true;SetTimer(window_,3,1,nullptr);
       if(owns(GetCapture()))ReleaseCapture();
     }
@@ -516,9 +528,13 @@ public:
     if(retired()||!visible()||pending_)return;
     try {
       bool relayout=GetFocus()!=lastLayoutFocus_;
-      if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();relayout=true;}
+      if(deferredCommit_&&gesture_.active()&&!completion_.retained()){deferredCommit_=false;commit();relayout=true;}
+      else if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();relayout=true;}
       else if(gesture_.active())preview();
       else if(!completion_.retained()&&context_()!=std::pair(document_,revision_)){Pending guard(pending_);reload();relayout=true;}
+      // A release/key-up can arrive while preview() pumps the worker wait.
+      // Submit its newest value only after the preview's pending guard unwinds.
+      if(deferredCommit_&&gesture_.active()&&!completion_.retained()){deferredCommit_=false;commit();relayout=true;}
       if(relayout||resetPresentation_)layout();requestPaint();
     }catch(const std::exception &e){error(e);}
   }

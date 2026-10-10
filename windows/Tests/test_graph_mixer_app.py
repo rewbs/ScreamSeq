@@ -80,6 +80,8 @@ class GraphMixerAppTests(unittest.TestCase):
 
     def test_native_mixer_draft_stale_selection_undo_and_reload(self):
         self.command(400)
+        self.assertTrue(self.read('workspace.get')['mixerStrips']['visible'])
+        self.command(419)  # Explicit retained Details view.
         self.assertTrue(self.read('workspace.get')['mixerEditor']['visible'])
         self.assertEqual(self.desktop.focus(self.desktop.hwnd(self.pid)), self.control(401))
         self.command(402)  # Enable.
@@ -158,10 +160,12 @@ class GraphMixerAppTests(unittest.TestCase):
         hwnd = self.desktop.hwnd(self.pid)
         self.assertTrue(user.SetWindowPos(hwnd, None, 0, 0, int(900*dpi), int(620*dpi), 0x16))
         self.command(400)
+        self.assertTrue(self.read('workspace.get')['mixerStrips']['visible'])
+        self.command(419)
         self.command(402)
         frame = wintypes.RECT()
         user.GetWindowRect(hwnd, ctypes.byref(frame))
-        for identifier in range(401, 417):
+        for identifier in range(401, 424):
             with self.subTest(control=identifier):
                 control = self.control(identifier)
                 self.assertTrue(user.IsWindowVisible(control))
