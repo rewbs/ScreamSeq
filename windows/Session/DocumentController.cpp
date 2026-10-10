@@ -834,13 +834,14 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
         Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()},completedCall_);
     }
     if(returned)throw Api::ApiError(-32003,"Operation returned but completion identity could not be retained; read state before retrying.",Tracker::WriteOutcome{});
-    // These operations publish one prepared document import or track edit. The real
+    // These operations publish one prepared document import, track edit or pattern
+    // transform. The real
     // recorder's Keep consumes its take only after that import succeeds; an
     // unchanged revision on failure proves no Keep/import was committed.
     // This does not classify recording start/stop/discard, files or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set") {
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

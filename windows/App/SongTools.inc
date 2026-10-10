@@ -54,6 +54,7 @@
         if(songTimingWindow)songTimingWindow->update(songTimingContext());
         if(createNoteTrackWindow)createNoteTrackWindow->update();
         if(groupNoteTrackWindow)groupNoteTrackWindow->update();
+        if(patternToolsWindow)patternToolsWindow->update();
     }
     void returnToSongPattern() {
         deferredViews.clear();revealWorkspacePattern();workspaceState.focus="pattern";

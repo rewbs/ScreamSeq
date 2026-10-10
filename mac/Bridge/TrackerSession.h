@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#include "../../editor/PatternDisplay.h"
+#include "../../editor/NativePresentation.h"
 NS_ASSUME_NONNULL_BEGIN
 @interface TrackerSession : NSObject
 @property(nonatomic, readonly) BOOL playing;

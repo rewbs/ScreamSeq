@@ -315,3 +315,85 @@ native timing and relevant pattern-grid interface checks. F04 and repeat/flow
 fixtures still need both real UI inspections; screenshots and source assertions
 do not prove visual clarity. No compiler, build, application or test was run for
 this batch. The prior failed build's hourly cooldown is still respected.
+
+## Retained Pattern Tools workbench — prepared, unqualified
+
+`windows/App/PatternToolsWindow.hpp` and `PatternToolsIntegration.inc` add the
+native command 591 to the palette and pattern context menu. The form uses the
+existing `pattern.transform` operation; it does not create a second editing
+engine. Its shared C-compatible `editor/PatternToolCatalog.h` supplies operation
+names and option flags to both this form and `mac/App/PatternTools.swift`.
+`NativePresentation.h` makes the display/catalogue headers available to the
+Mac bridge and standalone interface harness. Native control/layout ownership,
+JSON dictionaries, host validation, history and audio boundaries remain intact.
+
+The 14 operations and five scopes include group identity, field masks, numeric
+filters, interpolation curve, seed, remap/swap and explicit data-loss permission.
+Opening captures document/revision, stable pattern/column, note track and the
+selection. Navigation and reopening do not retarget it. Capture explicitly
+adopts the current target and preserves settings. Any option or text change
+invalidates Preview. Apply submits the exact prepared arguments/revision;
+stale targets require a new capture/preview. Scope song includes unused patterns.
+Native keyboard handling offers Tab, Ctrl+Enter, Escape and F6 back to Pattern.
+The resizable window has a scrollable detailed change list and a minimum size;
+foreground DPI, actual tab/focus behavior and accessibility remain unverified.
+
+Draft registration includes hidden raw text, valid previews, pending operations
+and unresolved results. Successful departure retires the HWND and owner through
+the existing registry. NativeWriteCompletion preserves exact worker receipts,
+original target and later typing. Review performs read-side synchronization,
+never a repeat write. A missing receipt uses a separately labelled unverified
+observation and explicit acknowledgement at its original document/revision.
+The musician can inspect music through F6; acknowledgement makes no authorship
+or Undo claim. Later writes still require capture and Preview.
+
+`DocumentController::invokeOperation` now classifies rejected `pattern.transform`
+as NotCommitted only when the worker revision/path/save state is unchanged and
+the operation did not return. This method validates a complete candidate, stops
+before commit, and performs one atomic document edit. The existing earlier
+postcommit branch still reports committed outcomes. This classification is not
+extended to arbitrary vendor, recording or filesystem calls.
+
+Source inspection also found that Mac enabled Apply only for nonzero module-cell
+changes, even when the engine reported native-only changes. The Mac form now
+accepts `effectsChanged:true` and explains native-note/FX changes in its summary.
+No musical transform semantics changed: row operations move precise notes and
+native FX; existing numeric/transpose operations act on module cells on both
+platforms. A future extension to numeric precise-note transforms must be an
+explicit shared behavior change with its own fixtures, not an accidental port.
+
+Prepared checks, not executed:
+
+- `document-controller-pattern-transform` in the existing worker executable:
+  native-note-only row reverse, exact fractional onset, dry-run purity, invalid
+  field/unknown-key refusal, throwing Stop before commit, absent receipt and
+  NotCommitted classification; one Undo/Redo, no-op preserving Redo and reopen.
+- `workspace-pattern-tools-tests` in the existing workspace executable: F04-like
+  rows 8–23 interpolation 4→64, exact API preview agreement, all 14 operations and
+  five scopes, masks, detached cursor, stale/invalid/late previews, retained newer
+  text, native-only Apply/Undo/Redo, minimum geometry, departure retirement,
+  known receipt Review, unknown observation and stale acknowledgement.
+- Actual PID `test_pattern_tools.PatternToolsAppTests`: native command, API
+  agreement, captured column after cursor navigation, unrelated-column retention,
+  Undo/Redo/save/reopen and invalid/stale draft retention. Added to the Windows
+  integration workflow. Cases use private desktops and disposable songs.
+- Existing Mac pattern-grid interface group: zero module changes plus native
+  changes enable Apply, and Apply consumes the preview. Existing late preview,
+  later typing and completion assertions remain required.
+
+Include those groups in the next consolidated Windows gate with outstanding
+P1/P2/P3 coverage. Build `pattern-tools-tests` and `pattern-timeline-tests` along
+with the existing app/worker/workspace targets; shared `pattern-tools`, precise
+note and native command checks protect musical behavior. Build Mac with the
+changed Swift/C imports and run pattern-tools, native-note/command and pattern-grid
+interface checks together. Reuse the same qualified binaries for supplied F04
+Mac/Windows identical-argument preview comparison and reciprocal save/reopen.
+The synthetic local checks do not replace the supplied fixture acceptance.
+
+Only source review, diff whitespace checks and Python syntax parsing were done
+for this batch. No compiler, app or test was invoked. The prior integration
+build failed on TrackLayout includes; its source fix remains unqualified and its
+old executable cannot validate this work. Next normal build remains no earlier
+than **2026-10-10 03:28:34 UTC**, in the frozen integration checkout after a
+deliberate source update. P0b/P0c qualification and the remaining P3–P8 scope stay
+open; this source batch is not phase completion.

@@ -315,6 +315,12 @@ extension InterfaceTests {
     tools.amount.stringValue = "5"; tools.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
     replies.removeFirst()(success)
     try require(!tools.applyButton.isEnabled && tools.summary.stringValue == "Preview a change before applying it.", "A stale preview still cannot be applied")
+    tools.preview()
+    replies.removeFirst()(["result":["revision":"native-only", "data":["changedCells":0,"effectsChanged":true,"changes":[[String:Any]]()]]])
+    try require(tools.applyButton.isEnabled && tools.summary.stringValue.contains("Native note or FX"),
+      "A transform affecting only native notes or extra FX remains applicable")
+    tools.apply();replies.removeFirst()(["result":["revision":"native-applied", "data":["changedCells":0,"effectsChanged":true,"changes":[[String:Any]]()]]])
+    try require(!tools.applyButton.isEnabled,"Applying native-only data still consumes its prepared preview")
     try patternCursorEditingChecks()
     print("PASS pattern grid: modifier-safe typing, busy key queue, audition release, repeat handling, clamped navigation, plus-key shortcuts, palette validation, apply reporting, background paste, cursor-only field clear and channel row deletion")
   }

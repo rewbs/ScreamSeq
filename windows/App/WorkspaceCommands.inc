@@ -14,6 +14,7 @@
             {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
             {playbackLoopCommand,L"Playback / Toggle region or song loop",L""},
             {positionRulerCommand,L"Pattern / Cycle ruler: rows, beats, pattern time, song time",L""},
+            {patternToolsCommand,L"Pattern / Tools: preview transforms",L""},
             {playCursorCommand,L"Playback / Play from edit cursor",L""},
             {playSelectionCommand,L"Playback / Play selection or pattern",L""},
             {playSelectionCursorCommand,L"Playback / Play selection or pattern from edit cursor",L""},

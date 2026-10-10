@@ -1311,3 +1311,39 @@ late completions cannot fill a different view. Pending, failed and unreachable
 times display `--:--.---`, not invented zeroes. Failed queries retain a diagnostic
 and do not retry continuously. Switching mode or changing the source allows a
 fresh query. No device/renderer work happens in the ruler or during drawing.
+
+### Retained Pattern tools
+
+The native **Pattern / Tools: preview transforms** command (591) opens a retained
+Win32 workbench over the existing `pattern.transform` API. It exposes all 14
+operations, selection/column/pattern/song/note-track scopes, field masks, numeric
+filters, curves, seeds and explicit permission for destructive row edits. The
+Mac and Windows forms use `editor/PatternToolCatalog.h` for operation names and
+applicable options; musical validation remains in the shared PatternTools engine.
+There is no new transform method or project representation.
+
+Opening captures the document, revision, pattern, column/note track and selection.
+Navigation and reopening retain that target. **Use current selection** explicitly
+captures a new target while retaining raw settings. Preview must succeed for the
+current settings before Apply; changing any setting invalidates it. A revision
+change requires recapture and a new preview. Apply uses the exact preview request
+with `dryRun:false`, preserves the edit cursor, and creates one Undo operation.
+Both module-cell changes and native-only row changes enable Apply. Numeric
+operations retain the shared engine's module-cell behavior; row operations also
+transform precise notes and the selected native FX layer.
+
+`workspace.get.patternTools` reports `visible`, `captured`, `draft`, `preview`,
+`prepared`, `dirty`, `pending`, `completed`, `generation`, `stale`, `applyEnabled`,
+`completion`, `observation` and `status` while the owner exists; an absent owner
+reports only `visible:false`. These diagnostics are session state, not a portable
+project or a replacement mutation API. Raw incomplete fields, previews and
+unresolved results participate in the document-departure guard, including when
+the window is hidden. Successful document replacement retires the owner.
+
+A fallible native completion retains its worker receipt and later raw text.
+**Review result** never repeats a write. Without an exact receipt, Review
+synchronizes the original document and offers an explicitly unverified state
+observation; **Accept observed state** requires its unchanged revision. Inspect
+the affected music using **Pattern / F6** before accepting it. New operations
+still require explicit capture and Preview. Tab/Shift+Tab use native navigation,
+Ctrl+Enter applies a prepared preview, and Escape hides the retained window.
