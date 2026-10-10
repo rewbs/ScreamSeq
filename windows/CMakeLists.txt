@@ -144,6 +144,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-note-track-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-transport-control-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-pattern-selection-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-pattern-display-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-pattern-display-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;presentation"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-display" TIMEOUT 120)
     set_tests_properties(workspace-pattern-selection-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;selection"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-selection" TIMEOUT 120)
     set_tests_properties(workspace-transport-control-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;transport"
@@ -335,6 +338,11 @@ if(BUILD_TESTING)
   add_test(NAME playback-regions COMMAND playback-region-tests)
   set_tests_properties(playback-regions PROPERTIES LABELS "portable;functional;transport;host-cpp-allocation-audit" TIMEOUT 120)
   add_dependencies(portable-tests playback-region-tests)
+  add_executable(pattern-display-tests "${ROOT}/editor/Tests/PatternDisplayTests.cpp")
+  target_link_libraries(pattern-display-tests PRIVATE ScreamSeqBuildOptions)
+  add_test(NAME pattern-display COMMAND pattern-display-tests)
+  set_tests_properties(pattern-display PROPERTIES LABELS "portable;functional;presentation" TIMEOUT 15)
+  add_dependencies(portable-tests pattern-display-tests)
   add_dependencies(portable-tests native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests
     scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests recording-device-tests sample-preview-tests)
   add_executable(document-history-allocation-tests "${ROOT}/editor/Tests/DocumentHistoryAllocationTests.cpp")

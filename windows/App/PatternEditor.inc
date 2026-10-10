@@ -46,7 +46,7 @@
         InitialEffects initial;initial.source=view;initial.document=documentId;initial.revision=view->session.revision;
         initial.context=contextRevision;initial.generation=effectDraftGeneration;initial.cursor=position();
         initial.pattern=patternIndex;initial.row=row;initial.channel=channel;initial.column=column>=3?(column-3)/2:0;
-        initial.rows=effectRows;initial.rowsPerBeat=view->patternRowsPerBeat.at(patternIndex);
+        initial.rows=effectRows;initial.rowsPerBeat=view->patternGridMetrics.at(patternIndex).rowsPerBeat;
         initial.plugin=selectedPlugin;initial.parameter=selectedParameter;initial.parameterCatalog=pluginParameters;
         initial.previousFields=initialEffectFields();initial.previousSelections={SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0),SendMessageW(controls.at(effectBinding),CB_GETCURSEL,0,0)};
         if(!initial.source->patterns.contains(initial.pattern)||initial.row>=initial.source->pattern(initial.pattern).rows||
@@ -181,7 +181,7 @@
         if(effectDraftExists&&effectDraftDirty&&!reload){effectEditorOpen=true;workspaceState.show("notes",position(),cursorSample(),false);layoutControls();focusEffectField();effectEditorStatus=L"Existing draft retained / Use cursor to edit another cell";return;}
         effectEditorOpen=effectDraftExists=true;workspaceState.show("notes",position(),cursorSample(),false);
         effectDraftPattern=patternIndex;effectDraftRow=row;effectDraftChannel=channel;effectDraftColumn=column>=3?(column-3)/2:0;
-        ++effectDraftGeneration;effectDraftRevision=view->session.revision;effectDraftDocument=documentId;effectDraftRowsPerBeat=view->patternRowsPerBeat.at(patternIndex);
+        ++effectDraftGeneration;effectDraftRevision=view->session.revision;effectDraftDocument=documentId;effectDraftRowsPerBeat=view->patternGridMetrics.at(patternIndex).rowsPerBeat;
         effectChoices=view->commands.at("effect");for(const auto &entry:view->commands.at("native"))effectChoices.push_back(entry);
         const auto current=view->effect(patternIndex,row,channel,effectDraftColumn);const auto currentCode=current?effectText(current).first:L"..";
         effectSelected=0;for(size_t i=0;i<effectChoices.size();++i)if(wide(effectChoices[i].at("displayCode").get<std::string>())==(code.empty()?currentCode:wide(code))){effectSelected=int(i);break;}

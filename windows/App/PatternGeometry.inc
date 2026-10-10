@@ -25,3 +25,7 @@
         const auto selected=selectedEffectField();if(direction>0&&selected+1<fields.size()){effectFieldIndex=selected+1;ensureCursorVisible();frameRequested=true;return true;}
         if(direction<0&&selected){effectFieldIndex=selected-1;ensureCursorVisible();frameRequested=true;return true;}return false;
     }
+    Json patternGridTiming()const {
+        const auto metrics=view->patternGridMetrics.at(patternIndex);
+        return {{"rowsPerBeat",metrics.rowsPerBeat},{"rowsPerMeasure",metrics.rowsPerMeasure}};
+    }

@@ -5,7 +5,7 @@ struct GraphPatternCommand {
   var position:Int,column:Int,number:Int
   var amount:Double
   var row:Int{position/65536}
-  var display:String{let offset=position%65536==0 ? "" : "~";let symbol=["row":"R","start":"S","stop":"X","clear":"CLR","amount":"A","wet":"W"][kind] ?? "?";return offset + (kind=="clear" ? symbol : String(format:"%@%03d %@",symbol,number,["stop"].contains(kind) ? "" : String(format:"%02X",Int((amount.isFinite ? max(0,min(1,amount)) : 0)*255))))}
+  var display:String{let offset=position%65536==0 ? "" : "~";let symbol=["row":"R","start":"S","stop":"X","clear":"CLR","amount":"A","wet":"W"][kind] ?? "?";return offset + (kind=="clear" ? symbol : String(format:"%@%03d %@",symbol,number,["stop"].contains(kind) ? "" : String(format:"%02X",Int(ScreamSeqGraphCommandDisplayByte(amount)))))}
 }
 struct GraphPatternLane {var target:String,name:String,column:Int}
 final class GraphLaneStrip:NSView {

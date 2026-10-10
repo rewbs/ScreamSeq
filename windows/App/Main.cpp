@@ -319,7 +319,7 @@ public:
         auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;
 		return {{"geometry",{{"pattern",patternRect},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
-			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
+			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},{"gridTiming",patternGridTiming()},
 			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},

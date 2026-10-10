@@ -1,7 +1,7 @@
     std::unique_ptr<ScreamSeq::ScratchGestureWindow> scratchGestureWindow;
     std::optional<ScreamSeq::ScratchPatternTarget> scratchTargetAt(unsigned p,unsigned r,unsigned c,unsigned fx)const{
         if(busy||!view->session.document.value("editable",false)||!view->patterns.contains(p)||r>=view->pattern(p).rows||c>=view->channels||fx>=view->effectColumns.at(c))return {};
-        ScreamSeq::ScratchPatternTarget target;target.document=documentId;target.revision=view->session.revision;target.pattern=p;target.row=r;target.channel=c;target.column=fx;target.rows=view->pattern(p).rows;target.rowsPerBeat=view->patternRowsPerBeat.at(p);
+        ScreamSeq::ScratchPatternTarget target;target.document=documentId;target.revision=view->session.revision;target.pattern=p;target.row=r;target.channel=c;target.column=fx;target.rows=view->pattern(p).rows;target.rowsPerBeat=view->patternGridMetrics.at(p).rowsPerBeat;
         for(const auto &[id,index]:view->nativePattern->patternIndexes)if(index==p){target.patternID=id;break;}
         for(const auto &[id,index]:view->nativePattern->trackChannels)if(index==c){target.trackID=id;break;}
         if(!target.patternID||!target.trackID)return {};

@@ -277,8 +277,9 @@ struct PatternModel {
     tempo = (dictionary["tempo"] as? NSNumber)?.doubleValue ?? tempo
     let beat = dictionary["displayRowsPerBeat"] as? Int ?? 4
     let measure = dictionary["displayRowsPerMeasure"] as? Int ?? 16
-    rowsPerBeat = beat > 0 ? beat : 4
-    rowsPerMeasure = max(rowsPerBeat, measure > 0 ? measure : 16)
+    let metrics = ScreamSeqPatternGridMetricsMake(UInt32(clamping:beat),UInt32(clamping:measure))
+    rowsPerBeat = Int(metrics.rowsPerBeat)
+    rowsPerMeasure = Int(metrics.rowsPerMeasure)
     speed = dictionary["speed"] as? Int ?? speed
     if let data = dictionary["cells"] as? Data { cells = Array(data) }
     for row in 0..<max(0, rows) {for channel in 0..<max(0, channels) {let key=(row*channels+channel)*8,c=drawCell(row,channel)

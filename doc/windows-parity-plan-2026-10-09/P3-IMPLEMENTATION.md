@@ -166,3 +166,38 @@ transport/recording integration. Both-platform shared renderer checks from the
 prior slice remain necessary; this native command mapping does not alter DSP or
 the Mac application. The remaining timeline/ruler, full transform workbench,
 command/UI foundation, File/song entry points and later phases remain open.
+
+## Shared musical display rules — prepared, unqualified
+
+F24 source drift is addressed by `editor/PatternDisplay.h`, a small C-compatible
+header consumed directly by both C++ and Swift's Clang importer. It defines
+legacy metric fallback (4/16), measure precedence even for non-divisible beat/bar
+lengths, and bounded/truncated graph-lane hex display. F04's 70% Start is B2 and
+35% Amount is 59; Wet uses its independent wet field. This does not quantize stored
+doubles, change row units or approximate elapsed musical time. Non-finite display
+values retain Mac's neutral zero fallback.
+
+Windows `DocumentController` now publishes one `patternGridMetrics` map containing
+both beat and measure lengths, resolving imported pattern signatures before song
+defaults. Both grids and the existing beat-unit effect/Scratch adapters consume
+that immutable map. Nothing queries the document worker while drawing. Each map
+entry is conservatively charged before allocation/publication; controller cache
+budget checks must be rerun. `workspace.get.gridTiming` and graph-lane `gridTiming`
+expose the effective pair used by drawing. No serialized project field changes.
+
+Mac retains its existing colors, spacing and grid behavior while `PatternModel`,
+`PatternView` and graph command text consume these shared rules. The existing
+bridge header imports the C header; the standalone interface-test compiler imports
+that same lightweight header instead of requiring the application session bridge.
+This is platform-independent display logic only; native drawing and controls stay
+with their respective frontends. The Mac graph strip's existing visual treatment
+is unchanged.
+
+Prepared coverage includes a shared `pattern-display` target on both platforms,
+Windows worker default/override, clone, retained snapshot, save/reopen and Undo
+checks, actual Application projection/formatter checks under
+`workspace-pattern-display-tests`, and Mac's existing pattern-grid interface group.
+Add these plus controller budget/history tests and both native app builds to the
+combined gate. Inspect F04 in both real UIs and inspect 3-row beats/10-row measures
+at that gate; authored value/state checks do not establish pixel clarity or visual
+parity. No build or test has run for this display slice.

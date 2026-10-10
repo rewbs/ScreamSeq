@@ -41,6 +41,7 @@
             L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-(r.w>540?378:264),accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
         const auto selectedEnd=patternSelectionEnd();
+        const auto metrics=view->patternGridMetrics.at(patternIndex);
         drawNoteTrackNames();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
@@ -58,7 +59,7 @@
 		s.unclip();
 		for(unsigned line=0;line<visibleRows() && firstRow+line<rows;++line) {
 			unsigned rr=firstRow+line;float y=r.y+gridHeader+line*rowHeight;
-			if(rr%4==0) s.fill(r.x,y,r.w,rowHeight,rr%16==0 ? 0x202d3c : 0x192431);
+			if(const auto accent=ScreamSeqPatternRowAccent(metrics,rr))s.fill(r.x,y,r.w,rowHeight,accent==2?0x202d3c:0x192431);
 			if(rr==row)s.fill(r.x,y,r.w,rowHeight,0x25283a);
 			const bool playhead=playing && playback.pattern==patternIndex && playback.row==rr;
 			if(playhead) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
@@ -85,7 +86,7 @@
                     const auto start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
                     s.text(rr==row&&c==channel&&column==3+2*fx&&!effectPrefix.empty()?wide(effectPrefix)+L"_":code,x+start,y,17,color);
                     const auto &fields=gridCommandFields(command);const auto payload=command?ScreamSeq::PatternFields::command(*command):Json::object();
-                    for(size_t i=0;i<layout.widths.size();++i){const auto text=command&&i<fields.size()?wide(ScreamSeq::PatternFields::text(payload,fields[i],view->patternRowsPerBeat.at(patternIndex),effectRows,true)):L"....";
+                    for(size_t i=0;i<layout.widths.size();++i){const auto text=command&&i<fields.size()?wide(ScreamSeq::PatternFields::text(payload,fields[i],metrics.rowsPerBeat,effectRows,true)):L"....";
                         s.text(text,x+start+layout.start(i),y,layout.widths[i],i<fields.size()?color:0x354353);}
 
                 }

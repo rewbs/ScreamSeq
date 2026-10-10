@@ -303,7 +303,13 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     cache->notes.reserve(native.preciseNotes.size());for(const auto &n:native.preciseNotes)cache->notes.push_back({patternIndexes.at(n.pattern),channels.at(n.track),n});
     std::sort(cache->notes.begin(),cache->notes.end(),[](const auto &a,const auto &b){return std::tie(a.pattern,a.channel,a.note.position)<std::tie(b.pattern,b.channel,b.note.position);});next->nativePattern=std::move(cache);
   }
-  for(OpenMPT::PATTERNINDEX p=0;p<song.Patterns.Size();++p)if(song.Patterns.IsValidPat(p))next->patternRowsPerBeat[p]=std::max(1u,song.Patterns[p].GetOverrideSignature()?unsigned(song.Patterns[p].GetRowsPerBeat()):song.m_nDefaultRowsPerBeat?unsigned(song.m_nDefaultRowsPerBeat):4u);
+  for(OpenMPT::PATTERNINDEX p=0;p<song.Patterns.Size();++p)if(song.Patterns.IsValidPat(p)) {
+    const auto &pattern=song.Patterns[p];const bool hasSignature=pattern.GetOverrideSignature();
+    charge(128); // Owned map node, key and metrics; budget before allocation.
+    next->patternGridMetrics[p]=ScreamSeqPatternGridMetricsMake(
+      hasSignature?unsigned(pattern.GetRowsPerBeat()):unsigned(song.m_nDefaultRowsPerBeat),
+      hasSignature?unsigned(pattern.GetRowsPerMeasure()):unsigned(song.m_nDefaultRowsPerMeasure));
+  }
   for(unsigned c=0;c<song.GetNumChannels();++c){const auto track=native.tracks.at(c).id;next->effectColumns.push_back(native.performance.columns.contains(track)?native.performance.columns.at(track):1);}
   next->channels=song.GetNumChannels();next->instruments=song.GetNumInstruments();next->path=project.path;
   next->dirty=project.recoveredUnsaved || document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
