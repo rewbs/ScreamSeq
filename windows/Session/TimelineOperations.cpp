@@ -3,6 +3,7 @@
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/PatternCommands.hpp"
+#include "editor/PatternTimeline.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/EnvelopeBank.hpp"
@@ -68,11 +69,25 @@ Json preciseEffects(OpenMPT::MODTYPE format){
 }
 }
 TimelineOperations::TimelineOperations(Tracker::Document &d,std::function<void()> stop):document_(d),stopPlayback_(std::move(stop)){}
-std::vector<std::string> TimelineOperations::reads(){return {"pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"};}
+std::vector<std::string> TimelineOperations::reads(){return {"pattern.timeline.get","pattern.notes.get","document.timing.get","automation.formula.reference","automation.formula.preview"};}
 std::vector<std::string> TimelineOperations::writes(){return {"pattern.notes.set","document.timing.set"};}
 Json TimelineOperations::invoke(const std::string &method,const Json &p){
   using namespace Tracker;
   auto &song=document_.song();
+  if(method=="pattern.timeline.get") {
+    keys(p,{"pattern","order"});
+    const auto pattern=uint16_t(integer(field(p,"pattern"),0,UINT16_MAX));
+    const auto order=p.contains("order")?std::optional<uint32_t>(uint32_t(integer(p.at("order"),0,UINT32_MAX))):std::nullopt;
+    try {
+      const auto timeline=patternTimeline(document_,pattern,order);
+      auto positions=Json::array();
+      for(const auto &entry:timeline.positions)positions.push_back({{"row",entry.row},{"beat",entry.beat},
+        {"patternSeconds",entry.patternSeconds?Json(*entry.patternSeconds):Json(nullptr)},
+        {"songSeconds",entry.songSeconds?Json(*entry.songSeconds):Json(nullptr)}});
+      return {{"pattern",timeline.pattern},{"order",timeline.order?Json(*timeline.order):Json(nullptr)},
+        {"positions",std::move(positions)},{"semantics",patternTimelineSemantics}};
+    }catch(const std::invalid_argument &error){throw Api::ApiError(-32602,error.what());}
+  }
   if(method=="automation.formula.reference"){
     keys(p,{});Json symbols=Json::array();for(const auto &s:curveFormulaSymbols)
       symbols.push_back({{"name",std::string(s.name)},{"insert",std::string(s.insert)},{"category",std::string(s.category)},{"description",std::string(s.description)}});

@@ -14,6 +14,64 @@ class TransportLoopTests(unittest.TestCase):
     read = support.GraphMixerAppTests.read
     write = support.GraphMixerAppTests.write
 
+    def test_timeline_pipe_contract_occurrence_guards_and_purity(self):
+        self.assertIn('pattern.timeline.get', self.read('api.describe')['reads'])
+        self.write('order.edit', order=0, operation='after', pattern=0)
+        before, context = self.doc(), self.read('context.get')
+        transport = self.read('transport.get')
+        first = self.read('pattern.timeline.get', pattern=0)
+        second = self.read('pattern.timeline.get', pattern=0, order=1)
+        self.assertEqual(first['order'], 0)
+        self.assertEqual(second['order'], 1)
+        self.assertEqual(len(first['positions']), len(second['positions']))
+        self.assertEqual(first['positions'][0]['songSeconds'], 0)
+        self.assertGreater(second['positions'][0]['songSeconds'], 0)
+        self.assertEqual(second['positions'][0]['patternSeconds'], 0)
+        for params in ({}, {'pattern': True}, {'pattern': .5}, {'pattern': 65535},
+                       {'pattern': 0, 'order': True}, {'pattern': 0, 'order': -1},
+                       {'pattern': 0, 'order': 4294967295}, {'pattern': 0, 'order': None},
+                       {'pattern': 0, 'unknown': True}):
+            with self.assertRaises(ApiError) as caught:
+                self.read('pattern.timeline.get', **params)
+            self.assertEqual(caught.exception.code, -32602)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.read('context.get'), context)
+        # Presentation counters advance while read requests are serviced.
+        self.assertEqual({k: v for k, v in self.read('transport.get').items() if k != 'presentation'},
+                         {k: v for k, v in transport.items() if k != 'presentation'})
+
+        # Native view state has no song/context revision guard and is not history.
+        viewport = self.read('workspace.get')['viewport']
+        result = self.client.call('workspace.ruler', {'mode': 'songTime'})
+        self.assertEqual(result['data'], {'mode': 'songTime'})
+        self.assertFalse(result['changed'])
+        self.assertFalse(result['playbackStopped'])
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            ruler = self.read('workspace.get')['ruler']
+            if ruler['ready']:
+                break
+            time.sleep(.03)
+        else:
+            self.fail('Native time ruler did not complete its worker query')
+        self.assertEqual(ruler['mode'], 'songTime')
+        self.assertEqual(ruler['gutterWidth'], 104)
+        self.assertFalse(ruler['error'])
+        window = self.desktop.hwnd(self.pid)
+        control = private_desktop.user.GetDlgItem(window, 590)
+        self.assertTrue(control)
+        self.assertTrue(private_desktop.user.IsWindowVisible(control))
+        self.desktop.send(window, 0x111, 590, control)
+        self.assertEqual(self.read('workspace.get')['positionMode'], 'rows')
+        self.assertEqual(self.read('workspace.get')['geometry']['pattern']['gutterWidth'], 38)
+        for params in ({}, {'mode': True}, {'mode': 'seconds'}, {'mode': 'rows', 'extra': True}):
+            with self.assertRaises(ApiError) as caught:
+                self.client.call('workspace.ruler', params)
+            self.assertEqual(caught.exception.code, -32602)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.read('context.get'), context)
+        self.assertEqual(self.read('workspace.get')['viewport'], viewport)
+
     def test_stopped_loop_guards_native_toggle_replay_and_history(self):
         description = self.read('api.describe')
         self.assertIn('transport.loop', description['writes'])
@@ -71,6 +129,19 @@ class TransportLoopTests(unittest.TestCase):
     def test_native_playback_commands_capture_occurrence_range_and_detached_cursor(self):
         self.write('order.edit', order=0, operation='after', pattern=0)
         self.start_live('native-regions')
+        # The engine query runs on the document worker, independently of WASAPI.
+        live_before = self.read('transport.get')
+        document_before, context_before = self.doc(), self.read('context.get')
+        self.assertEqual(self.read('pattern.timeline.get', pattern=0, order=1)['order'], 1)
+        live_after = self.read('transport.get')
+        self.assertTrue(live_after['audioActive'])
+        self.assertFalse(live_after['fault'])
+        self.assertEqual(live_after['region'], live_before['region'])
+        self.assertEqual(live_after['playbackEpoch'], live_before['playbackEpoch'])
+        self.assertEqual(live_after['recordingClock']['generation'], live_before['recordingClock']['generation'])
+        self.assertGreaterEqual(live_after['frames'], live_before['frames'])
+        self.assertEqual(self.doc(), document_before)
+        self.assertEqual(self.read('context.get'), context_before)
         window = self.desktop.hwnd(self.pid)
         self.desktop.send(window, 0x111, 105)  # Pattern focus layout.
         order = private_desktop.user.GetDlgItem(window, 131)

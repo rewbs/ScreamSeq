@@ -25,6 +25,7 @@
 #include "editor/InstrumentEnvelopeTools.hpp"
 #include "editor/PatternCommands.hpp"
 #include "editor/TrackLayout.hpp"
+#include "editor/PatternTimeline.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/NoteRecording.hpp"

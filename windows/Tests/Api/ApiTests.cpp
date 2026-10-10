@@ -327,7 +327,7 @@ int main(int argc, char **argv) {
     std::cout << "PASS envelope validation\n";
     auto described = session.handle(request("api.describe"));
     check(described.contains("result"), "api.describe must work without a host");
-    check(described["result"]["data"]["writes"] == json::array({"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}), "only implemented navigation/workspace/transport methods advertised");
+    check(described["result"]["data"]["writes"] == json::array({"transport.play","transport.stop","context.set","workspace.input","workspace.ruler","workspace.panel","workspace.layout","workspace.shortcut.set"}), "only implemented navigation/workspace/transport methods advertised");
     check(session.handle(request("api.describe",{{"unknown",1}}))["error"]["code"] == -32602, "describe rejects params");
     std::cout << "PASS minimal capabilities\n";
     check(session.handle(request("document.get"))["error"]["code"] == -32002, "unbound session must not invent document data");

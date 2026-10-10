@@ -80,6 +80,7 @@ constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphC
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCreateCommand=584,noteTrackGroupCommand=585;
 constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand=588,playSelectionCursorCommand=589;
+constexpr int positionRulerCommand=590;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -316,10 +317,11 @@ public:
         }
 		auto g=geometry();
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
-        auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;
+        auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;patternRect["gutterWidth"]=gutter;
 		return {{"geometry",{{"pattern",patternRect},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},{"gridTiming",patternGridTiming()},
+            {"positionMode",positionMode},{"ruler",rulerSnapshot()},
 			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
@@ -381,6 +383,10 @@ public:
         if(method!="workspace.get"&&method!="workspace.commands.get")rejectDepartureInput();
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
+        if(method=="workspace.ruler") {
+            require(p.size()==1&&p.contains("mode")&&p.at("mode").is_string(),"workspace.ruler requires only mode");
+            setPositionMode(p.at("mode").get<std::string>());return {{"mode",positionMode}};
+        }
         if(method=="workspace.input") {
             for(auto it=p.begin();it!=p.end();++it)require(it.key()=="expectedRevision"||it.key()=="expectedContext"||it.key()=="instrument"||it.key()=="octave","Unknown input field");
             require(p.contains("instrument")||p.contains("octave"),"Supply instrument and/or octave");
@@ -644,6 +650,7 @@ public:
     #include "SongTools.inc"
     #include "NoteTrackPresentation.inc"
     #include "WorkspaceTransport.inc"
+    #include "WorkspaceRuler.inc"
 	void play() { playWorkspaceRegion(false,false); }
     bool supportsPlaybackLoop()const override{return true;}
     void refreshPlaybackLoopControl() {
@@ -1197,7 +1204,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, app.rulerFuture.valid()?25:drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
@@ -1211,6 +1218,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             app.samplePreview.service();
             app.serviceRecovery();
             app.serviceMidi();
+            app.servicePatternRuler();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) {
 				// A frame counts only when it was really presented: draw() returns

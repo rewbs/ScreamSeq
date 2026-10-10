@@ -249,3 +249,69 @@ Source hashes remained unchanged across compilation. Existing executable hashes
 in that failed-build receipt do not establish new app binaries: the shared library
 failed before the app could link. Do not run those stale binaries as P2/P3 evidence.
 All grouped native/application and cross-platform qualification gates remain open.
+
+## Shared first-visit timeline and native ruler — prepared, unqualified
+
+`editor/PatternTimeline.hpp/.cpp` now owns the previous Mac engine-row observation
+algorithm. The typed result contains pattern, optional order and row/beat/optional
+seconds entries. Explicit orders must contain the requested pattern; omitted
+orders select its first current-sequence occurrence. Unarranged patterns retain
+their rows with null times. `GetLength(eNoAdjust)` supplies first visits, including
+flow, tempo/speed, groove and native timing after `NativeSong::prepareEffects`.
+The engine's existing loop/complexity bounds remain. No fixed-BPM approximation,
+playback seek, plugin preparation or persistent field was introduced.
+
+The shared function runs on the document/control owner. It reuses the engine's
+independent length-walk state and prepares only derived lookup data on that
+owner's song, preserving the existing Mac implementation's ownership. This avoids
+copying sample payloads into a second document for every ruler refresh; neither
+platform's active renderer uses that document instance. Mac serializes the typed
+result to its unchanged dictionary contract. Windows `TimelineOperations` and
+`SessionAdapter` expose the matching read and catalogue entry, with strict request
+validation and matching `-32602` errors. The existing public schema already covers
+both requests; both API guides now describe the shared implementation.
+
+`windows/App/WorkspaceRuler.inc` owns Windows view state and completion handling.
+Native button/command 590, the palette/context menu and `workspace.ruler` select
+rows, beats, pattern time or song time. The ruler uses 38/72/104-DIP gutters, with
+the same member consumed by drawing, hit testing, scrolling and inline editors.
+`workspace.get` exposes positionMode and a ruler diagnostic plus actual gutter
+geometry. The button keeps native keyboard focus when cycling. No new default
+shortcut conflicts with tracker, text or Formula input; customization uses the
+existing command system. Mode is session view state, outside song/history, and
+does not change cursor, selection, scroll or retained editor drafts.
+
+Only one asynchronous query is outstanding. Its requested document, revision,
+sequence, stable pattern, occurrence and mode are checked before adopting cached
+labels. Edits, Undo, order selection and document replacement make old labels
+unavailable immediately; late completions are discarded. Drawing never queries
+the worker. Pending/unreachable times show `--:--.---`; failure retains a status
+and diagnostic without a tight retry loop. The main message wait polls at 25 ms
+only while that future exists, retaining its ordinary idle wait afterward.
+
+Prepared checks (not executed):
+
+- Shared `pattern-timeline` on both platforms: repeated occurrence absolute time,
+  tempo transitions, current sequence, unarranged/mismatched orders, unreachable
+  flow rows, native tempo, groove/signature, snapshot/identity/history purity.
+- `document-controller-timeline`: actual worker validation including bool,
+  fractional, null, out-of-range and unknown fields; unchanged view/history/Stop
+  count; timing edit, Undo/Redo and native save/reopen.
+- Existing `workspace-pattern-display-tests` now includes real Application ruler
+  button focus/geometry, beat/time labels, stale asynchronous completion, repeated
+  occurrence, viewport/selection retention, invalid modes and departure refusal.
+- Existing `TransportLoopTests` now includes real PID-pipe catalogue/shape/errors,
+  native ruler command and completion, unchanged document/context/viewport, plus
+  timeline reads while the private silent WASAPI stream remains active.
+
+At the next eligible consolidated checkpoint, add `pattern-timeline-tests` to
+the integrated build targets and include `pattern-timeline`,
+`document-controller-timeline`, `workspace-pattern-display-tests` and the existing
+actual-PID transport class. Keep the full outstanding P1/P2 groups and cache,
+history, shortcut, native-control, grid/docking/context-menu coverage because
+gutter geometry and a common message wait changed. Mac must build the shared
+source and run `pattern-timeline`, existing `playback-display`, `playback-regions`,
+native timing and relevant pattern-grid interface checks. F04 and repeat/flow
+fixtures still need both real UI inspections; screenshots and source assertions
+do not prove visual clarity. No compiler, build, application or test was run for
+this batch. The prior failed build's hourly cooldown is still respected.

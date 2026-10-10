@@ -158,7 +158,7 @@ class SessionAdapter {
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
       {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get","workspace.commands.get"}},
-      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
+      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.ruler","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
       {"audioPortTrims","graph.trim.get/set use stable port keys, -48..48 dB gains, inverse input/output links and dB source modulation. Recipe or song nodes, buses, stages and group boundaries; dryRun, revision guards and unified Undo. Audio followers are not trim sources."},{"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
@@ -184,7 +184,7 @@ class SessionAdapter {
       result["revisionGuards"]["transport.loop"]={"expectedRevision"};
     }
     if(host_ && host_->supportsDocumentOperations()) {
-      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
+      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","pattern.timeline.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
       for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
@@ -306,14 +306,14 @@ public:
     if(std::this_thread::get_id()!=owner_) return errorResponse(q["id"],-32002,"Dispatch onto the session control thread");
     const std::string method=q["method"];
     const auto &p=q["params"];
-    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input";
+    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input" || method=="workspace.ruler";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
     const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};
     const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
-    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
+    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="pattern.timeline.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
     const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
     const bool liveLoop=method=="transport.loop" && host_ && host_->supportsPlaybackLoop();
     const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || liveLoop || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");

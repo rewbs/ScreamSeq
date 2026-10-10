@@ -42,6 +42,7 @@
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
         const auto selectedEnd=patternSelectionEnd();
         const auto metrics=view->patternGridMetrics.at(patternIndex);
+        const bool rulerTimingCurrent=rulerUsesTime()&&rulerReadyKey==currentRulerKey();
         drawNoteTrackNames();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
@@ -64,7 +65,9 @@
 			const bool playhead=playing && playback.pattern==patternIndex && playback.row==rr;
 			if(playhead) {s.fill(r.x,y,r.w,rowHeight,0x174238);s.fill(r.x,y,3,rowHeight,accent);}
 			if(rr==row)s.fill(r.x+gutter-4,y,2,rowHeight,0xb498de);
-			wchar_t number[8]{};swprintf_s(number,L"%03u",rr);s.text(number,r.x+7,y,gutter-9,playhead ? accent : rr==row ? 0xd5c5ee : muted);
+            s.clip(r.x,y,gutter-4,rowHeight);
+            s.text(rulerRowText(rr,rulerTimingCurrent),r.x+7,y,gutter-9,playhead ? accent : rr==row ? 0xd5c5ee : muted);
+            s.unclip();
 			s.clip(r.x+gutter,y,r.w-gutter,rowHeight);
 			for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 				float x=r.x+gutter+channelStart(c)-horizontalScroll;

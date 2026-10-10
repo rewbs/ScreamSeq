@@ -19,7 +19,8 @@
     void selectWholePattern() {
         rejectDepartureInput();setPatternSelection(true,0,0,std::pair{patternRows()-1,view->channels-1});
     }
-    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72, gutter=38;
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72;
+    float gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
     float channelStart(unsigned c) const {float x=0;for(unsigned i=0;i<c;++i)x+=channelWidth(i);return x;}
@@ -108,6 +109,8 @@
         place(dockToggle,g.lowerTabs.x+g.lowerTabs.w-102,g.lowerTabs.y+3,96,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
         const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230,trackerWorkspaceVisible());
+        place(positionRulerCommand,grid.x+1,grid.y+gridHeader-24,gutter-3,23,trackerWorkspaceVisible());
+        ScreamSeq::NativeControls::text(controls.at(positionRulerCommand),positionMode=="rows"?L"Row":positionMode=="beats"?L"Beat":positionMode=="patternTime"?L"Pattern time":L"Song time");
         place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,trackerWorkspaceVisible());
         place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,trackerWorkspaceVisible());
         const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
@@ -169,6 +172,7 @@
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
 			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
+            {positionRulerCommand,L"Row"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
@@ -214,6 +218,7 @@
 	void command(int id) {
 		try {
             if(focusedEditingCommand(id))return;
+            if(id==positionRulerCommand){cyclePositionMode();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;

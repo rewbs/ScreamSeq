@@ -439,22 +439,17 @@
     } else if ([method isEqual:@"pattern.timeline.get"]) {
       allowed(@[@"pattern",@"order"]);
       const auto pattern=PATTERNINDEX(integer(p[@"pattern"],0,UINT16_MAX));
-      require(song.Patterns.IsValidPat(pattern),"Pattern does not exist");
-      ORDERINDEX order=ORDERINDEX_INVALID;
-      if(p[@"order"]) { order=ORDERINDEX(integer(p[@"order"],0,song.Order().size()-1));require(song.Order()[order]==pattern,"Order does not contain this pattern"); }
-      else for(ORDERINDEX i=0;i<song.Order().size();++i) if(song.Order()[i]==pattern){order=i;break;}
-      const auto rows=song.Patterns[pattern].GetNumRows();
-      std::vector<double> times(rows,-1.0);double origin=-1;
-      if(order!=ORDERINDEX_INVALID) {
-        GetLengthTarget target;
-        target.onRow=[&](ORDERINDEX o,ROWINDEX row,double seconds){if(o==order && row<times.size() && times[row]<0 && std::isfinite(seconds)){times[row]=seconds;if(origin<0)origin=seconds;}};
-        _document->native().prepareEffects(song);
-        song.GetLength(eNoAdjust,target);
-      }
-      const auto beat=song.Patterns[pattern].GetOverrideSignature()?song.Patterns[pattern].GetRowsPerBeat():song.m_nDefaultRowsPerBeat;
+      const auto timeline=[&] {
+        try {return patternTimeline(*_document,pattern,p[@"order"]
+          ?std::optional<uint32_t>(uint32_t(integer(p[@"order"],0,UINT32_MAX))):std::nullopt);}
+        catch(const std::invalid_argument &error){throw Error(-32602,error.what());}
+      }();
       NSMutableArray *entries=[NSMutableArray array];
-      for(ROWINDEX row=0;row<rows;++row) [entries addObject:@{@"row":@(row),@"beat":@(double(row)/std::max(1u,uint32_t(beat))),@"patternSeconds":times[row]<0?(id)NSNull.null:@(times[row]-origin),@"songSeconds":times[row]<0?(id)NSNull.null:@(times[row])}];
-      result=@{@"pattern":@(pattern),@"order":order==ORDERINDEX_INVALID?(id)NSNull.null:@(order),@"positions":entries,@"semantics":@"First visit to each row in this order occurrence; unreachable rows have null times."};
+      for(const auto &entry:timeline.positions) [entries addObject:@{@"row":@(entry.row),@"beat":@(entry.beat),
+        @"patternSeconds":entry.patternSeconds?@(*entry.patternSeconds):(id)NSNull.null,
+        @"songSeconds":entry.songSeconds?@(*entry.songSeconds):(id)NSNull.null}];
+      result=@{@"pattern":@(timeline.pattern),@"order":timeline.order?@(*timeline.order):(id)NSNull.null,
+        @"positions":entries,@"semantics":@(patternTimelineSemantics)};
     } else if ([method isEqual:@"pattern.get"]) {
       allowed(@[ @"pattern", @"startRow", @"rowCount", @"startChannel", @"channelCount" ]);
       int pattern = int(integer(p[@"pattern"], 0, UINT16_MAX));

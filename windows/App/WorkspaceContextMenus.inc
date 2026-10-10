@@ -71,6 +71,7 @@
         const bool enabled=!busy;
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
             {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
+            {positionRulerCommand,L"Cycle position ruler",enabled},
             {playCursorCommand,L"Play from edit cursor",enabled&&!recoveryRestoring},
             {playSelectionCommand,L"Play selection or pattern",enabled&&!recoveryRestoring},
             {playSelectionCursorCommand,L"Play selection or pattern from edit cursor",enabled&&!recoveryRestoring},

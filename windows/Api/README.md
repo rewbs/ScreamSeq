@@ -1280,3 +1280,34 @@ preset, bypass and auxiliary configuration into a fresh plugin identity. The
 result includes `slot`, `plugin`, `detached`, and `dryRun`. It copies no instrument
 assignments, recorded points, or song cables; effect copies start detached. The
 rack and optional canvas position join one unified history operation and persist.
+
+### Pattern time ruler
+
+`pattern.timeline.get {pattern, order?}` is a document-worker read advertised by
+`api.describe`. It uses the same shared engine walk as Mac, in the current
+sequence. Omit `order` for the first occurrence, or specify the zero-based order
+containing the requested pattern. `positions` contains `row`, zero-based `beat`,
+`patternSeconds` and `songSeconds`. Times describe first visits, account for
+tempo/speed, groove, native timing and flow, and remain null for unreachable rows
+or unarranged patterns. Pattern time starts at the first reached row. Invalid
+patterns, mismatched orders, booleans/fractions and extra parameters reject with
+`-32602`. Reads do not edit music, advance revisions, stop playback or add history.
+The shared schema already defines this Mac-compatible request.
+
+`workspace.ruler {mode}` accepts `rows`, `beats`, `patternTime` or `songTime`.
+Like Mac, it is session view state and accepts no revision tokens; the result is
+`{mode}` with `changed:false`. `workspace.get.positionMode` reports the choice.
+The native pattern header button and command palette cycle the same modes; its
+command is customizable without reserving another default shortcut. Mode changes
+preserve the edit cursor, selection, scroll and focus, and do not modify projects.
+
+`workspace.get.ruler` additionally reports `mode`, selected `order`, `pending`,
+`ready`, `error` and `gutterWidth`. Pattern geometry exposes `gutterWidth` as well
+as `headerHeight` for clients doing hit testing. The native display uses the
+selected order when it contains the edited pattern, otherwise its first
+occurrence. One asynchronous worker read supplies cached labels. Document,
+revision, sequence, pattern, occurrence and mode changes invalidate the result;
+late completions cannot fill a different view. Pending, failed and unreachable
+times display `--:--.---`, not invented zeroes. Failed queries retain a diagnostic
+and do not retry continuously. Switching mode or changing the source allows a
+fresh query. No device/renderer work happens in the ruler or during drawing.

@@ -52,7 +52,7 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
   PRIVATE shlwapi ole32 rpcrt4)
 
 set(EDITOR_SOURCES
-  TrackLayout PatternCommands NativePatternCommands AutomationTools TrackerDocument PatternTools NativeSong
+  TrackLayout PatternTimeline PatternCommands NativePatternCommands AutomationTools TrackerDocument PatternTools NativeSong
   ArrangementTools MixerGraph MixerRuntime MixerTransition MixerDryBridge MixerPluginRouting NativeEffects SampleImport SongTiming
   PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
@@ -339,6 +339,13 @@ if(BUILD_TESTING)
   add_test(NAME pattern-display COMMAND pattern-display-tests)
   set_tests_properties(pattern-display PROPERTIES LABELS "portable;functional;presentation" TIMEOUT 15)
   add_dependencies(portable-tests pattern-display-tests)
+  add_executable(pattern-timeline-tests "${ROOT}/editor/Tests/PatternTimelineTests.cpp")
+  target_link_libraries(pattern-timeline-tests PRIVATE TrackerEditor)
+  target_compile_options(pattern-timeline-tests PRIVATE "/FI${ROOT}/windows/cmake/WindowsTestPreamble.hpp")
+  target_link_options(pattern-timeline-tests PRIVATE /STACK:8388608)
+  add_test(NAME pattern-timeline COMMAND pattern-timeline-tests)
+  set_tests_properties(pattern-timeline PROPERTIES LABELS "portable;functional;timing" TIMEOUT 30)
+  add_dependencies(portable-tests pattern-timeline-tests)
   add_dependencies(portable-tests native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests
     scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests recording-device-tests sample-preview-tests)
   add_executable(document-history-allocation-tests "${ROOT}/editor/Tests/DocumentHistoryAllocationTests.cpp")
@@ -566,7 +573,7 @@ if(BUILD_TESTING)
   set_property(TEST document-controller-publication APPEND PROPERTY FIXTURES_REQUIRED document-controller-unicode)
   screamseq_worker_test(document-controller-cache document-controller document-controller-tests --cache "${controller_scratch}")
   set_property(TEST document-controller-cache APPEND PROPERTY FIXTURES_REQUIRED document-controller-large)
-  foreach(mode sampling assets live-parameters live-rack-publication live-graph-publication live-recorded-publication trigger-instruments pattern-performance pattern-clipboard graph-recipes mixer-integration unified-plugin-history parameter-activity recovery recording arrangement annotations matrix departure tracks)
+  foreach(mode sampling assets live-parameters live-rack-publication live-graph-publication live-recorded-publication trigger-instruments pattern-performance pattern-clipboard graph-recipes mixer-integration unified-plugin-history parameter-activity recovery recording arrangement annotations matrix departure tracks timeline)
     screamseq_worker_test(document-controller-${mode} document-controller document-controller-tests --${mode} "${controller_scratch}")
   endforeach()
   add_test(NAME document-controller-graph-pattern-view COMMAND document-controller-tests --graph-pattern-view)
