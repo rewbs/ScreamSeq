@@ -434,3 +434,37 @@ ruler changes. No additional build for this adapter correction. Schema JSON and
 Python syntax parsing plus diff review are source checks only; the new acceptance
 cases have not run. Drag-to-reorder and other native Arrangement ergonomics are
 not claimed by this API change.
+
+## Musical input navigation — prepared, unqualified
+
+`MusicalTyping.inc::typingInputCommand` adds native commands 592–596 for octave
+down/up, previous/next instrument or sample, and Use instrument at cursor. The
+palette exposes all five through existing shortcut customization; the pattern
+menu and Enter on an instrument cell expose the cursor action. No new default
+global bindings interfere with native text editing or user shortcuts. Instrument
+selection uses the existing guarded `workspace.input` path. Octave adjustment
+retains the Windows chooser's existing 0–9 range; the API's existing Mac-compatible
+0–8 range is unchanged. This is a pre-existing range difference, not a new API
+parity claim or a reason to remove Windows' highest native octave.
+
+The cursor action prefers the module cell's instrument, then the first nonzero
+precise-note instrument in that row and column. Stepping includes empty slots
+1–255. Empty cells and limit-clamped steps are no-ops. The commands return before
+the generic command focus reset, and preserve selection, edit/playback position,
+raw inspector drafts, song/history and already-held note destinations. They
+refuse a busy/replacing document before changing input state. Only input-context
+identity changes for a real adjustment.
+
+Prepared checks reuse `workspace-pattern-selection-tests`: Enter, module/precise
+instrument selection, empty/maximum slots, octave boundaries, no-op context
+identity, invalid retained workbench text, captured target/focus/selection/song
+retention, busy refusal and departure admission. Existing actual-PID
+`MainIntegrationTests.test_input_is_atomic_context_only_and_supports_empty_slots`
+adds native-command stepping and cursor selection; it is explicitly selected in
+Windows CI. Run both plus shortcut, audition/note-release and typing cases in
+the same consolidated checkpoint as the other P3 changes. No renderer or shared
+musical state changed, so this slice adds no separate audio build cycle. Keyboard
+layout/display customization and the near-cursor FX picker remain outstanding.
+
+Only source/diff review and Python syntax parsing are claimed for this slice;
+the Windows build and actual native checks remain pending.

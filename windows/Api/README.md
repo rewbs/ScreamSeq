@@ -1364,3 +1364,23 @@ mutation. Mac now also rejects an unused destination on remove; previously that
 branch bypassed the existing move-only parameter check. The shared schema
 expresses the same conditional requirement. Existing before/after/assign/up/down
 and remove operations retain their meanings.
+
+### Musical input navigation
+
+The native command palette exposes **Lower/Raise input octave**, **Previous/Next
+input instrument or sample**, and **Use instrument at edit cursor** (commands
+592–596). Each can receive a shortcut through the existing customization UI;
+no new global default overrides a text editor or existing shortcut. Enter on a
+pattern instrument cell also uses its instrument. If that cell is empty, the
+first precise note in that row/column with a nonzero instrument supplies it;
+an empty result leaves input unchanged. The pattern context menu exposes the
+same action.
+
+These commands change future note input only. They preserve the edit cursor,
+selection, focus, raw drafts, song revision and history. Already held notes keep
+their original destinations for release. Instrument stepping includes empty
+slots 1–255 and stops at either boundary; octave stepping retains the native
+chooser's existing 0–9 range. Boundary no-ops do not revise the input context.
+Busy/replacing documents refuse changes. The existing `workspace.input` API
+remains the guarded API for instrument and octave setup, with its existing
+Mac-compatible octave range 0–8; this batch does not expand that wire contract.

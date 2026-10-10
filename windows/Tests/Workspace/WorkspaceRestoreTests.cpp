@@ -1128,7 +1128,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationPatternDisplay();applicationPatternRuler();std::cout<<"PASS native pattern and graph display: effective metrics, timing Undo, F04 values, native ruler and stale completion\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-selection") {
-                    applicationWholePatternSelection();std::cout<<"PASS whole-pattern selection: cursor/view/history, grouping bounds, resize and gesture reset\n";return;
+                    applicationWholePatternSelection();applicationTypingNavigation();std::cout<<"PASS whole-pattern selection and typing navigation: cursor/view/history, grouping bounds, retained focus/drafts and input admission\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"transport-controls") {
                     applicationPlaybackLoop();applicationPlaybackRegions();std::cout<<"PASS native playback controls: loop retention, stable region/occurrence, bounds, preparation guards and detached cursor\n";return;

@@ -134,6 +134,27 @@ class MainIntegrationTests(unittest.TestCase):
         self.assertIn('255', text.value)
         self.assertIn('empty slot', text.value)
 
+        window = self.desktop.hwnd(self.pid)
+        at_limit = self.read('context.get')
+        self.desktop.send(window, 0x111, 595)
+        self.assertEqual(self.read('context.get'), at_limit)
+        self.desktop.send(window, 0x111, 594)
+        self.assertEqual(self.read('context.get')['instrument'], 254)
+        self.desktop.send(window, 0x111, 593)
+        self.assertEqual(self.read('context.get')['octave'], 7)
+        self.desktop.send(window, 0x111, 592)
+        self.assertEqual(self.read('context.get')['octave'], 6)
+        self.assertEqual(self.doc(), before)
+        self.write('pattern.apply', cells=[dict(pattern=0, row=12, channel=0, instrument=3)])
+        context = self.client.call('context.get')
+        self.client.call('context.set', dict(expectedRevision=context['revision'], expectedContext=context['data']['contextRevision'],
+                                             pattern=0, row=12, channel=0, column=1, following=False))
+        music = self.doc()
+        self.desktop.send(window, 0x111, 596)
+        self.assertEqual(self.read('context.get')['instrument'], 3)
+        self.assertEqual(self.read('context.get')['row'], 12)
+        self.assertEqual(self.doc(), music)
+
     def test_activity_is_truthful_before_preparation_and_ui_opens(self):
         plugin = self.add_gain()
         before = self.doc()

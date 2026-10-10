@@ -83,6 +83,7 @@ constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCre
 constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand=588,playSelectionCursorCommand=589;
 constexpr int positionRulerCommand=590;
 constexpr int patternToolsCommand=591;
+constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumentPreviousCommand=594,inputInstrumentNextCommand=595,inputInstrumentAtCursorCommand=596;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,

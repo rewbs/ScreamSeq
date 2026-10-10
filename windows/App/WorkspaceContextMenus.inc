@@ -73,6 +73,7 @@
             {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
             {positionRulerCommand,L"Cycle position ruler",enabled},
             {patternToolsCommand,L"Pattern tools…",enabled},
+            {inputInstrumentAtCursorCommand,L"Use instrument at cursor",enabled},
             {playCursorCommand,L"Play from edit cursor",enabled&&!recoveryRestoring},
             {playSelectionCommand,L"Play selection or pattern",enabled&&!recoveryRestoring},
             {playSelectionCursorCommand,L"Play selection or pattern from edit cursor",enabled&&!recoveryRestoring},

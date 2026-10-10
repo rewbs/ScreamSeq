@@ -41,3 +41,37 @@ void applicationWholePatternSelection() {
   app.edit("history.undo",{{"domain","all"}});
   restoreCheck(app.pattern(pattern).cells==cells,"Whole-pattern Delete did not restore with one Undo");
 }
+
+void applicationTypingNavigation() {
+  RestoreFixture fixture;auto &app=*fixture.app;app.command(patternCommand);
+  app.edit("pattern.apply",{{"cells",RestoreJson::array({{{"pattern",0},{"row",12},{"channel",0},{"instrument",3}},
+    {{"pattern",0},{"row",13},{"channel",0},{"instrument",0}}})}});
+  app.edit("pattern.notes.set",{{"pattern",0},{"events",RestoreJson::array({{{"channel",0},{"position",13*65536+123},{"note",61},{"instrument",7}}})}});
+  auto cursor=app.position();cursor["row"]=12;cursor["channel"]=0;cursor["column"]=1;cursor["following"]=false;app.navigate(cursor);
+  SetFocus(app.window);restoreCheck(app.key(VK_RETURN)&&app.inputInstrumentOverride==3,"Enter in an instrument cell did not select its sound for future notes");
+  app.setPatternSelection(true,10,0,std::pair{14u,1u});
+  app.openPatternTools();auto *tool=app.patternToolsWindow.get();const auto edit=GetDlgItem(tool->window(),8006);
+  ScreamSeq::Tests::ownGuiWindow(tool->window());rawDraftText(edit,L"-");SetFocus(edit);
+  const auto draft=tool->snapshot().at("draft"),target=tool->snapshot().at("captured");
+  const auto before=songState(app),position=app.position(),selection=app.selection();const auto focus=GetFocus();
+  app.inputInstrumentOverride=255;app.refreshTypingSounds();const auto edge=app.contextRevision;
+  app.command(inputInstrumentNextCommand);restoreCheck(app.contextRevision==edge,"Instrument upper boundary changed context");
+  app.command(inputInstrumentPreviousCommand);restoreCheck(app.inputInstrumentOverride==254,"Previous input instrument skipped the empty slot");
+  app.command(inputInstrumentAtCursorCommand);restoreCheck(app.inputInstrumentOverride==3,"Use instrument at cursor ignored the module cell");
+  app.octave=9;const auto upper=app.contextRevision;app.command(inputOctaveUpCommand);
+  restoreCheck(app.octave==9&&app.contextRevision==upper,"Octave upper boundary changed context");
+  app.command(inputOctaveDownCommand);restoreCheck(app.octave==8,"Lower input octave did not update");
+  restoreCheck(songState(app)==before&&app.position()==position&&app.selection()==selection&&GetFocus()==focus&&
+    tool->snapshot().at("draft")==draft&&tool->snapshot().at("captured")==target,"Typing navigation moved the edit context, stole focus or changed a retained draft/song");
+  app.busy=true;app.command(inputInstrumentNextCommand);app.command(inputOctaveDownCommand);app.busy=false;
+  restoreCheck(app.octave==8&&app.inputInstrumentOverride==3,"Busy input navigation partially applied");
+  app.departureInput=std::make_unique<ScreamSeq::NativeInputGate>(app.departureRoots());
+  requireDepartureRefusal([&]{app.typingInputCommand(inputOctaveDownCommand);});app.departureInput.reset();
+  cursor["row"]=13;app.navigate(cursor);app.command(inputInstrumentAtCursorCommand);
+  restoreCheck(app.inputInstrumentOverride==7,"Use instrument at cursor did not find the precise-note instrument");
+  cursor["row"]=14;app.navigate(cursor);app.edit("pattern.apply",{{"cells",RestoreJson::array({{{"pattern",0},{"row",14},{"channel",0},{"instrument",0}}})}});
+  const auto empty=app.contextRevision;app.command(inputInstrumentAtCursorCommand);
+  restoreCheck(app.inputInstrumentOverride==7&&app.contextRevision==empty,"Empty instrument cell changed future input");
+  app.octave=0;const auto lower=app.contextRevision;app.command(inputOctaveDownCommand);
+  restoreCheck(app.octave==0&&app.contextRevision==lower,"Octave lower boundary changed context");
+}

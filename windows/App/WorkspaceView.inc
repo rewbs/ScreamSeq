@@ -220,6 +220,7 @@
             if(focusedEditingCommand(id))return;
             if(id==positionRulerCommand){cyclePositionMode();return;}
             if(id==patternToolsCommand){openPatternTools();return;}
+            if(typingInputCommand(id))return;
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;
@@ -387,7 +388,7 @@
         }
 		if(ctrl || alt) return false;
 		if(workspaceState.focus!="pattern"||!trackerWorkspaceVisible()) return false;
-		if(key==VK_RETURN) {if(beginPatternNudgeEdit())return true;if(workspaceState.focus=="pattern"&&column>=4&&column%2==0)openInlineEffect();else command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
+		if(key==VK_RETURN) {if(workspaceState.focus=="pattern"&&column==1){command(inputInstrumentAtCursorCommand);return true;}if(beginPatternNudgeEdit())return true;if(workspaceState.focus=="pattern"&&column>=4&&column%2==0)openInlineEffect();else command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
         if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
 		const unsigned rows=patternRows(),channels=view->channels;
