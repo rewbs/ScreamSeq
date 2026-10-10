@@ -141,7 +141,8 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.assertGreater(len(catalogue), 80)
         for identifier, keys in ((112, ['ctrl+k']), (513, ['ctrl+alt+w']), (507, ['ctrl+alt+l']),
                                  (526, ['ctrl+j']), (545, ['space']), (102, ['escape']),
-                                 (540, ['ctrl+c']), (541, ['ctrl+v']), (543, ['delete'])):
+                                 (540, ['ctrl+c']), (541, ['ctrl+v']), (543, ['delete']),
+                                 (587, ['shift+space']), (588, ['ctrl+space']), (589, ['ctrl+shift+space'])):
             entry = catalogue[f'windows.command.{identifier}']
             self.assertEqual(entry['keys'], keys)
             self.assertEqual(entry['defaults'], keys)

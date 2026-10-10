@@ -112,3 +112,57 @@ These checks have not run. Add them to the same next Windows build/checkpoint,
 including existing shortcut, context-menu, grid/docking and native input-gate
 groups because common selection/control handling changed. Mac source is unchanged
 by this selection slice; the prior shared P2/P3 checks still require a Mac build.
+
+## Native playback entry points — prepared, unqualified
+
+`WorkspaceTransport.inc` maps native edit/selection state to the existing shared
+renderer/controller's region contract. Command 587 is Play from edit cursor,
+588 is Play selection or pattern, and 589 is its cursor variant. Their defaults
+are Shift+Space, Ctrl+Space and Ctrl+Shift+Space. Existing native-control and
+formula-local ownership still wins. Palette and pattern context-menu entries
+expose all three. Ordinary native Play now starts from row zero of the selected
+occurrence of the current pattern, falling back to its first occurrence, as in
+Mac `main.swift::playbackSettings`. The API's empty Play request remains order zero.
+
+Bounded Play captures selected inclusive rows as an exclusive end, or the whole
+pattern if unselected. Its cursor variant uses the current row only when inside
+the range. Windows keeps the existing Follow setting and detached edit position;
+it does not force Follow on as Mac's completion currently does. This follows the
+plan's independent edit/playback acceptance requirement. An unarranged pattern
+can use bounded Play; unbounded cursor Play reports the missing occurrence rather
+than silently playing a different pattern. Ordinary Play falls back to a selected
+playable occurrence/first playable order. A sequence with no playable order
+refuses before preparation; no synthetic order is inserted.
+
+Captured targets contain document, sequence, pattern and occurrence identities.
+The native-only resolver runs again after the existing plugin-editor flush, which
+can pump input, and before WASAPI close/open. A moved occurrence resolves to its
+new slot; deletion, reassignment, document/sequence replacement or invalidated row
+bounds refuse. Later edit navigation does not redirect the originally requested
+playback. UI choice/capture remains native; musical range execution, recording,
+audio lifetime and DSP use the existing shared/native owners without a new path.
+
+`WorkspaceShortcuts::Definition::introducedDefault` supports these additive
+defaults without invalidating older customized profiles. On load only, an absent
+new command yields to an explicitly stored exact/prefix binding as an empty
+override. The file is not rewritten by loading. Subsequent explicit saves retain
+that override, and explicit Reset can restore the default after its conflict is
+removed. Explicit conflicts still fail atomically; the stored format stays v1.
+
+Prepared checks extend the existing transport Application group with whole-pattern,
+8–23 selection, inside/outside cursor, duplicate order, moved/removed/reassigned
+occurrence, original capture after navigation, actual post-flush refusal, unarranged
+pattern, range and departure cases. Actual-PID tests invoke the native commands on
+a private silent WASAPI instance, asserting exact region, stable document, detached
+context and viewport. They use real Shift-click selection, require an endpoint,
+and do not change device defaults. The shortcut pure target covers old-profile
+exact/prefix migration, unchanged disk bytes, unrelated bindings, save/reopen,
+Reset and continued rejection of malformed/conflicting profiles. Existing Formula
+and native shortcut ownership cases remain required with the new defaults.
+
+No build or test has run for this batch. Add these cases to the same grouped P3
+checkpoint, including workspace-shortcuts, native shortcut/Formula ownership and
+transport/recording integration. Both-platform shared renderer checks from the
+prior slice remain necessary; this native command mapping does not alter DSP or
+the Mac application. The remaining timeline/ruler, full transform workbench,
+command/UI foundation, File/song entry points and later phases remain open.

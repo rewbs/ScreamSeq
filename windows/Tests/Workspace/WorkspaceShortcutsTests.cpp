@@ -287,6 +287,34 @@ void invalidReloadAndInspection(const std::filesystem::path &base) {
   check(shortcuts.reload() && !shortcuts.overridden("graph") && shortcuts.keys("graph").empty(), "missing-file reload did not restore defaults");
   check(!shortcuts.load("relative-shortcuts.json"), "relative storage path was accepted");
 }
+void introducedTransportDefaults(const std::filesystem::path &base) {
+  auto expanded=definitions();expanded.push_back({"selection",{"ctrl+space"},true});
+  expanded.push_back({"cursor",{"shift+space"},true});expanded.push_back({"selectionCursor",{"ctrl+shift+space"},true});
+  const auto path=base/"introduced.json";
+  for(const auto &existing:std::vector<std::vector<std::string>>{{"ctrl+space"},{"ctrl+space","m"}}) {
+    write(path,Shortcuts::Json{{"version",1},{"overrides",{{"graph",existing}}}}.dump());
+    const auto oldBytes=contents(path);Shortcuts migrated(expanded);
+    check(migrated.load(path)&&migrated.keys("graph")==existing&&migrated.keys("selection").empty()&&migrated.overridden("selection"),
+      "New transport default invalidated a previous exact or prefix binding");
+    check(migrated.keys("cursor")==std::vector<std::string>{"shift+space"}&&migrated.keys("selectionCursor")==std::vector<std::string>{"ctrl+shift+space"},
+      "Migration disabled unrelated new defaults");
+    check(contents(path)==oldBytes,"Loading an older shortcut profile rewrote it");
+    rejected([&]{migrated.reset("selection");});
+    migrated.set("other",{"ctrl+alt+x"});Shortcuts reopened(expanded);
+    check(reopened.load(path)&&reopened.keys("selection").empty()&&reopened.keys("graph")==existing,
+      "Saving another binding lost the migrated override or original shortcut");
+    reopened.reset("graph");reopened.reset("selection");
+    check(reopened.keys("selection")==std::vector<std::string>{"ctrl+space"},"Explicit Reset did not restore an available transport default");
+    const auto valid=contents(path);
+    for(const auto &invalid:std::vector<std::string>{
+        R"({"version":1,"overrides":{"graph":["ctrl+space"],"selection":["ctrl+space"]}})",
+        R"({"version":1,"overrides":{"graph":["ctrl+space"],"mixer":["ctrl+space"]}})"}) {
+      write(path,invalid);check(!reopened.reload()&&reopened.keys("selection")==std::vector<std::string>{"ctrl+space"},
+        "Migration accepted an explicit conflict or discarded active bindings");
+      write(path,valid);check(reopened.reload(),"Reload after explicit conflict did not recover");
+    }
+  }
+}
 } // namespace
 int main() {
   try {
@@ -297,6 +325,7 @@ int main() {
     sequenceLifecycle();
     persistenceAndConflicts(scratch.path);
     invalidReloadAndInspection(scratch.path);
+    introducedTransportDefaults(scratch.path);
     std::cout << "Workspace shortcut parser, conflicts, sequences, atomic persistence and reload guards passed\n";
     return 0;
   } catch(const std::exception &error) {

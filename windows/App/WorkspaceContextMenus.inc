@@ -71,6 +71,9 @@
         const bool enabled=!busy;
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
             {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
+            {playCursorCommand,L"Play from edit cursor",enabled&&!recoveryRestoring},
+            {playSelectionCommand,L"Play selection or pattern",enabled&&!recoveryRestoring},
+            {playSelectionCursorCommand,L"Play selection or pattern from edit cursor",enabled&&!recoveryRestoring},
             {selectAllFocusedCommand,L"Select &all pattern cells",enabled&&!recoveryRestoring},
             {copyCommand,L"&Copy selection\tCtrl+C",enabled},{cutFocusedCommand,L"Cu&t selection\tCtrl+X",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
             {0,L"Paste special",enabled,false,{{patternPasteMix,L"Mix into empty fields",enabled},{patternPasteMerge,L"Merge nonempty fields",enabled}}},

@@ -50,12 +50,12 @@ class TransportLoopTests(unittest.TestCase):
         self.assertEqual(self.doc(), before)
         self.assertEqual(self.read('context.get'), context)
 
-    def test_live_loop_preserves_region_device_cursor_and_recording_take(self):
-        path = self.folder / 'loop-region.screamseq'
+    def start_live(self, name):
+        path = self.folder / f'{name}.screamseq'
         self.write('document.save', path=str(path))
         self.pid = self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'], '--audio-test-silent', '--automation',
-                                       '--audio-test-allow-stop', '--seconds', '30', '--project', str(path),
-                                       '--recovery-test-directory', str(self.folder / 'LoopRecovery')])
+                                       '--audio-test-allow-stop', '--seconds', '60', '--project', str(path),
+                                       '--recovery-test-directory', str(self.folder / f'{name}-recovery')])
         self.client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(self.pid), timeout=20)
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
@@ -66,7 +66,63 @@ class TransportLoopTests(unittest.TestCase):
                 pass
             time.sleep(.03)
         else:
-            self.fail('Owned loop fixture did not start WASAPI; an endpoint is required')
+            self.fail('Owned transport fixture did not start WASAPI; an endpoint is required')
+
+    def test_native_playback_commands_capture_occurrence_range_and_detached_cursor(self):
+        self.write('order.edit', order=0, operation='after', pattern=0)
+        self.start_live('native-regions')
+        window = self.desktop.hwnd(self.pid)
+        self.desktop.send(window, 0x111, 105)  # Pattern focus layout.
+        order = private_desktop.user.GetDlgItem(window, 131)
+        self.assertTrue(order)
+        self.desktop.send(order, 0x14E, 1)  # Select the second occurrence of P0.
+        self.desktop.send(window, 0x111, 131 | (1 << 16), order)
+        context = self.read('context.get')
+        self.client.call('context.set', dict(expectedRevision=self.doc()['revision'], expectedContext=context['contextRevision'],
+                                             pattern=0, row=16, channel=0, column=0, following=False))
+        self.write('transport.loop', enabled=True)
+        rows = self.read('pattern.get', pattern=0, rowCount=1, channelCount=1)['rows']
+
+        def play(identifier, expected):
+            document, context = self.doc(), self.read('context.get')
+            viewport = self.read('workspace.get')['viewport']
+            self.desktop.send(window, 0x111, identifier)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                current = self.read('transport.get')
+                if current['playing'] and current['region'] == expected:
+                    break
+                time.sleep(.02)
+            self.assertTrue(current['playing'])
+            self.assertEqual(current['region'], expected)
+            self.assertTrue(current['audioActive'])
+            self.assertFalse(current['fault'])
+            self.assertEqual(self.doc(), document)
+            self.assertEqual(self.read('context.get'), context)
+            self.assertEqual(self.read('workspace.get')['viewport'], viewport)
+
+        play(587, dict(order=1, cursorRow=16, loop=True))
+        play(101, dict(order=1, cursorRow=0, loop=True))
+        self.desktop.send(window, 0x111, 544)  # Select All keeps row 16 in place.
+        play(588, dict(order=1, pattern=0, startRow=0, endRow=rows, cursorRow=0, loop=True))
+        play(589, dict(order=1, pattern=0, startRow=0, endRow=rows, cursorRow=16, loop=True))
+        self.write('transport.stop')
+        context = self.read('context.get')
+        self.client.call('context.set', dict(expectedRevision=self.doc()['revision'], expectedContext=context['contextRevision'], row=8))
+        state = self.read('workspace.get')
+        grid, scale = state['geometry']['pattern'], state['dpi'] / 96
+        x = round((grid['x'] + 44) * scale)
+        y = round((grid['y'] + grid['headerHeight'] + (23 - state['viewport']['firstRow']) * 18 + 5) * scale)
+        self.assertLess(y, (grid['y'] + grid['height']) * scale)
+        self.desktop.send(window, 0x201, 1 | 4, x | (y << 16))  # Shift-click row 23.
+        self.desktop.send(window, 0x202, 4, x | (y << 16))
+        self.assertEqual(self.read('context.get')['selection'], dict(startRow=8, endRow=23, startChannel=0, endChannel=0))
+        play(588, dict(order=1, pattern=0, startRow=8, endRow=24, cursorRow=8, loop=True))
+        play(589, dict(order=1, pattern=0, startRow=8, endRow=24, cursorRow=23, loop=True))
+        self.write('transport.stop')
+
+    def test_live_loop_preserves_region_device_cursor_and_recording_take(self):
+        self.start_live('loop-region')
         context = self.read('context.get')
         self.client.call('context.set', dict(expectedRevision=self.doc()['revision'], expectedContext=context['contextRevision'],
                                              pattern=0, row=16, following=False))

@@ -79,7 +79,7 @@ constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphC
     editorPreciseNotesTab=568,notesInspectorCommand=569,graphWorkflowCommand=574,parameterActivityCommand=575,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
 constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCreateCommand=584,noteTrackGroupCommand=585;
-constexpr int playbackLoopCommand=586;
+constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand=588,playSelectionCursorCommand=589;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -643,7 +643,8 @@ public:
     #include "RecordingIntegration.inc"
     #include "SongTools.inc"
     #include "NoteTrackPresentation.inc"
-	void play() { play(Json::object()); }
+    #include "WorkspaceTransport.inc"
+	void play() { playWorkspaceRegion(false,false); }
     bool supportsPlaybackLoop()const override{return true;}
     void refreshPlaybackLoopControl() {
         if(auto found=controls.find(playbackLoopCommand);found!=controls.end()) {
@@ -660,11 +661,14 @@ public:
         playbackLoop=enabled;frameRequested=true;refreshPlaybackLoopControl();
     }
     void play(const Json &settings) override {rejectDepartureInput();startPlayback(settings,false);startRecordingIfArmed();}
-    void startPlayback(const Json &settings,bool audition) {
+    void startPlayback(Json settings,bool audition,std::function<Json()> resolveSettings={}) {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         // Audition uses the saved baseline and must not commit an editor draft.
         if(!audition)documentOperation("flushPluginEditors",{{"force",true}});
+        // The plugin flush can pump native input. Resolve the originally chosen
+        // stable pattern/order again before opening or stopping any device.
+        if(resolveSettings)settings=resolveSettings();
         if(audition&&!pendingAuditionCount)throw ScreamSeq::Api::ApiError(-32003,"Audition cancelled during preparation");
         if(!audition)pendingAuditionCount=0;
 		if(inspection) throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
@@ -699,7 +703,7 @@ public:
         midiNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
-		if(!departureAdopted)status = L"Stopped / Play starts at the song beginning / cursor remains independent";
+		if(!departureAdopted)status = L"Stopped / Play starts at the selected pattern occurrence / cursor remains independent";
 	}
     #include "WorkspaceLayouts.inc"
     #include "WorkspaceDocking.inc"

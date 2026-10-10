@@ -294,6 +294,8 @@
                 }
             }
 			else if(id==playCommand) play();
+            else if(id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand)
+                playWorkspaceRegion(id!=playSelectionCommand,id!=playCursorCommand);
 			else if(id==stopCommand) stopAndFinishRecording();
             else if(id==playbackLoopCommand)setPlaybackLoop(!playbackLoop);
 			else if(id==followCommand) { auto n=position();n["following"]=!follow;navigate(n); }

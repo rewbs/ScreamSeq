@@ -500,6 +500,31 @@ slice adds no project field or saved preference format. Its new actual-app,
 native-control and shared renderer checks require qualification before a runtime
 parity claim; authored checks alone are not evidence of device behavior.
 
+Native Play starts at row zero of the selected occurrence of the edited pattern,
+falling back to its first occurrence. **Shift+Space** plays from the edit cursor;
+**Ctrl+Space** plays the selected rows, or the whole pattern when unselected;
+**Ctrl+Shift+Space** uses the cursor within that bounded range (its start when
+the cursor is outside). Bounds include the selected last row, represented as an
+exclusive `endRow` in `transport.get.region`. All these commands appear in the
+palette and pattern context menu. They retain the edit cursor, selection, viewport
+and Follow setting; native text/list controls and formula completion keep local
+ownership of these keys.
+
+Repeated orders use stable occurrence identity through preparation. A removed or
+reassigned occurrence refuses before device work, while a moved occurrence is
+resolved at its new index. Bounded Play also accepts a pattern absent from the
+arrangement; unbounded cursor Play reports that condition instead of playing a
+different pattern. Ordinary Play then uses the selected playable occurrence (or
+first playable order). API `transport.play` retains its explicit parameters and
+default order-zero behavior. No project migration accompanies these UI commands.
+
+Existing customized shortcut profiles retain conflicting explicit bindings when
+these defaults are introduced. Only the corresponding new command starts
+unbound; other new defaults remain active. This is reflected as an empty override
+in the palette/API, written only on the next explicit preference save. Clear the
+old binding and Reset the new command to enable its default. Explicit conflicts
+within a profile still reject the complete load.
+
 ## Workspace subset
 
 `context.set` uses the existing shared schema fields `expectedRevision`,

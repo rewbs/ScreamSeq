@@ -1123,7 +1123,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationWholePatternSelection();std::cout<<"PASS whole-pattern selection: cursor/view/history, grouping bounds, resize and gesture reset\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"transport-controls") {
-                    applicationPlaybackLoop();std::cout<<"PASS native playback loop: retained focus/draft/take, unchanged song and busy refusal\n";return;
+                    applicationPlaybackLoop();applicationPlaybackRegions();std::cout<<"PASS native playback controls: loop retention, stable region/occurrence, bounds, preparation guards and detached cursor\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"note-tracks") {
                     applicationNoteTrackWindows();std::cout<<"PASS native track forms: captured selection, drafts, revision refusal, one Undo, completion Review, unknown observations and departure retirement\n";return;
