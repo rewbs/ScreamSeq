@@ -2,6 +2,17 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Automatic Windows edits — 10 October, 12:56 UTC
+
+Routine instrument, plugin, mixer, trim, sample-setting/loop and automation edits
+now use their existing guarded writes automatically. Text settles after a short
+pause, completed drags use one Undo step, and invalid/stale drafts remain visible.
+Redundant Apply controls are hidden; previews and deliberate operations retain
+specific CTAs. See [interaction policy and exceptions](DIRECT-EDITS-2026-10-10.md)
+and [qualification receipt](DIRECT-EDITS-2026-10-10.json): 16 targeted groups passed.
+The current build is `bin/windows-parity-p1/DirectEditsFinal-Release/ScreamSeq.exe`.
+The broad parity goal remains paused; Mac/shared audio/model code is unchanged.
+
 ## Instrument plugin assignment and sample layering — 10 October, 11:36 UTC
 
 The user-requested follow-up adds **Plugin…** beside the standard instrument

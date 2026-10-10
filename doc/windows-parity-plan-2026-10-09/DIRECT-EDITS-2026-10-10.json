@@ -1,0 +1,177 @@
+{
+  "productCommit": "1dcd2aeb15acb06b41b113578a059a47ff307793",
+  "testCommit": "120c2636a347da697e7edf49454142d3e1bb3e37",
+  "platform": "Windows ARM64 Release",
+  "app": "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\DirectEditsFinal-Release\\ScreamSeq.exe",
+  "appSHA256": "ecb0824c4a2784c23d8549429c8655173451c06636916f1136924ca9a819eba7",
+  "sourceManifestSHA256": "c6ca592d1cf4ae43141b82e2483b4931540888bc00b44c1f08a20b30ecae0348",
+  "builds": {
+    "initial": "1e00c9f3e5d4a3e5058fd988af4c0fff26c358c0",
+    "final": {
+      "startedUTC": "2026-10-10T12:47:29.400574+00:00",
+      "finishedUTC": "2026-10-10T12:49:49.340977+00:00",
+      "receiptSHA256": "0d34df45927a282479fb2b606d24b6399ffd45a28a5e50254d39a558438e59fb"
+    },
+    "testOnlyRepair": {
+      "commit": "120c2636a347da697e7edf49454142d3e1bb3e37",
+      "startedUTC": "2026-10-10T12:53:40.854087+00:00",
+      "changedInputs": [
+        "windows/Tests/Workspace/SongRoutingApplicationTests.inc"
+      ],
+      "sourceHash": "c853f799fedc3739ade23dee1e6bd087f2c09f0fc35bdcc64fb8cfb0b8c2fdaf",
+      "appSHA256": "ecb0824c4a2784c23d8549429c8655173451c06636916f1136924ca9a819eba7",
+      "priorBuildSHA256": "0d34df45927a282479fb2b606d24b6399ffd45a28a5e50254d39a558438e59fb",
+      "steps": [
+        {
+          "name": "build",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "workspace-restore-tests"
+          ],
+          "startedUTC": "2026-10-10T12:53:40.855087+00:00",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T12:54:28.838934+00:00",
+          "logSHA256": "620ec795d284b6cd7bb29a5fd27bde1c422434911a5d0fa380ba3e1b6206ca8f"
+        },
+        {
+          "name": "test",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+            "--test-dir",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-C",
+            "Release",
+            "--output-on-failure",
+            "--no-tests=error",
+            "-R",
+            "^workspace-command-result-tests$"
+          ],
+          "startedUTC": "2026-10-10T12:54:28.854451+00:00",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T12:55:40.977304+00:00",
+          "logSHA256": "5d20897e4e100fb75752280e2350c1e2e85b6921a2af96c0072bf9e581d29cc6"
+        }
+      ],
+      "finishedUTC": "2026-10-10T12:55:40.988324+00:00",
+      "appUnchanged": true,
+      "testExecutableSHA256": "b5e7ac945e0ef66212918ee25497541b60f049036bb270c601bd7359e310b26a"
+    }
+  },
+  "tests": {
+    "graph-workflow-window-tests": {
+      "passed": true,
+      "seconds": 0.9,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "graph-curve-window-tests": {
+      "passed": true,
+      "seconds": 2.99,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "precise-note-window-tests": {
+      "passed": true,
+      "seconds": 7.2,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "instrument-short-dock-window-tests": {
+      "passed": true,
+      "seconds": 2.57,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "song-timing-window-tests": {
+      "passed": true,
+      "seconds": 0.83,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "native-tool-window-tests": {
+      "passed": true,
+      "seconds": 5.55,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "workspace-mixer-hosted-tests": {
+      "passed": true,
+      "seconds": 3.47,
+      "log": "direct-edits-final-native-ui.log"
+    },
+    "workspace-draft-census-tests": {
+      "passed": true,
+      "seconds": 7.08,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-departure-tests": {
+      "passed": true,
+      "seconds": 17.45,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-receipt-tests": {
+      "passed": true,
+      "seconds": 39.31,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-song-properties-tests": {
+      "passed": true,
+      "seconds": 3.39,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-plugin-search-tests": {
+      "passed": true,
+      "seconds": 4.11,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-bank-result-tests": {
+      "passed": true,
+      "seconds": 24.06,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-sample-readback-tests": {
+      "passed": true,
+      "seconds": 70.36,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-sample-result-tests": {
+      "passed": true,
+      "seconds": 9.4,
+      "log": "direct-edits-final-retention.log"
+    },
+    "workspace-command-result-tests": {
+      "passed": true,
+      "seconds": 72.02,
+      "log": "direct-edits-test-repair-test.log"
+    }
+  },
+  "testGroupsPassed": 16,
+  "testSeconds": 270.69,
+  "logs": {
+    "direct-edits-final-native-ui.log": "b97cb783daffb71a9cee541f2d0229f4f63b600eeb6eb5cbb4a7f95fdf6b0dbc",
+    "direct-edits-final-retention.log": "c8230e46feed0abbf6ab9a8c4a897d592277062b45e982ead306c5aa70456b78",
+    "direct-edits-test-repair-test.log": "5d20897e4e100fb75752280e2350c1e2e85b6921a2af96c0072bf9e581d29cc6"
+  },
+  "evidenceReuse": {
+    "previous": "INSTRUMENT-LAYERS-2026-10-10.json",
+    "unchangedSharedAndHostSourceFiles": 1054,
+    "reason": "No shared model, native audio/device hosting or serialization input changed; previous audio/model results retained without rerunning broad suites."
+  },
+  "musicianSession": {
+    "pid": 31748,
+    "executableUnchanged": true,
+    "sha256": "b6601778c729bb4becb84ba2a70e92fc0cb1c6e4fe3ff6d0dd658d976469790b",
+    "systemAudioDefaultsChanged": false
+  },
+  "limits": [
+    "Private-desktop native controls and real document worker APIs; no foreground visual or physical audio qualification.",
+    "Mac UI/build not run; no Mac/shared code changed.",
+    "Plugin sliders retain commit-on-release; intermediate audible preview was not added."
+  ],
+  "resolvedTestMismatches": [
+    "Loop fixture was already enabled; the corrected test preserves its initial enable state.",
+    "Curve Ramp is on the Tools page; the test now navigates there.",
+    "Valid typed plugin parameters now save on page navigation; invalid text still blocks navigation and remains intact."
+  ]
+}
