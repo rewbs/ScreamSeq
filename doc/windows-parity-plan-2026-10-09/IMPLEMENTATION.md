@@ -2,6 +2,55 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Instrument plugin assignment and sample layering — 10 October, 11:36 UTC
+
+The user-requested follow-up adds **Plugin…** beside the standard instrument
+picker in short docks and compact floating windows, and at the top of the full
+editor. Its retained native window assigns an existing instrument plugin and MIDI
+channel, with **Add plugin…** opening the instrument-filtered rack library and
+**Plugin rack…** revealing the rack. The actual menu path is **Tools → Sound →
+Plugin rack**. The chooser refreshes from the adopted document snapshot when clean;
+dirty and uncertain assignments retain their captured instrument identity and
+revision. Assignment uses `instrument.plugin.set`, one chronological Undo, and the
+native completion receipt. Reload reviews an ambiguous return without repeating
+its write. The child participates in document draft/departure protection.
+
+Both shared host attachment paths previously erased the playback copy's sample
+keymap for plugin instruments. They now preserve it. Sample PCM and click-removal
+offsets follow sample-instrument graphs and the original track (including NNA
+voices); inspector sample previews use independent routing. MIDI/plugin audio
+keeps its own output routes. The existing native sample routing hook provides an
+explicit dry override for the implicit rack; upstream `soundlib/` is unchanged.
+The Mac and Windows API adapters now allow a sample graph on a layered instrument.
+
+No format migration is required. Existing projects with a plugin assignment and
+nonempty sample map now play both layers. Empty triggers remain plugin-only;
+clearing a keymap is the explicit way to retain plugin-only behavior on a formerly
+mapped instrument. Unassigning the plugin preserves the samples.
+
+One batched ARM64 Release build ran 11:33:09–11:35:51 UTC (163 seconds), starting
+approximately one hour after the preceding build. App, native UI harness, short
+instrument dock harness and audio harnesses all compiled. **Five targeted CTest
+groups passed in 28.22 seconds**: instrument short dock, workspace draft census,
+workspace hosted mixer/instrument, native audio bus and hosted project. The actual
+Application/worker test covers panel entry, filtered browser and rack access,
+new-plugin refresh, MIDI assignment, mapping preservation, Undo/Redo, stale draft,
+lost completion recovery and save/reopen. The shared layered PCM test compares the
+combined render against independently rendered stems at 44.1/48/96 kHz with
+17/128/4096-frame partitions, ordinary and precise notes, Continue NNA, key-off/cut,
+implicit/explicit mixing, audition and a sample graph. Existing provider routing,
+latency, sample-graph migration and column-mute checks also pass. Host C++ callback
+allocation/free counters remain zero; direct malloc/free, locks and vendor-private
+operations are outside the Windows probe's coverage.
+
+The same layered test is wired into Mac AU/VST3 qualification but not run on this
+Windows host. No foreground visual, commercial plugin or physical audio-device
+claim is made. The musician's PID 31748 and GraphDirect executable were preserved.
+The new executable is `bin/windows-parity-p1/InstrumentLayers-Release/ScreamSeq.exe`
+in the integration checkout. [Receipt](INSTRUMENT-LAYERS-2026-10-10.json) records
+hashes, commands and limitations; detailed local logs remain in
+`bin/parity-evidence/instrument-layers-*`. Broad parity work remains paused.
+
 ## Direct graph editing and paged parameters — 10 October, 10:34 UTC
 
 The next user-requested batch adds direct removal, cable gestures and a replacement
