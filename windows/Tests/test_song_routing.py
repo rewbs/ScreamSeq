@@ -124,14 +124,14 @@ class SongRoutingTests(unittest.TestCase):
         # Socket hit regions extend outside the node. A plain socket click is
         # neither an edit nor a failed self-connection.
         before=self.doc();p=socket(first,True);mouse(0x201,p);mouse(0x202,p);self.idle();self.assertEqual(self.doc(),before);self.assertFalse(self.local()['draft'])
-        drag(socket(second,True),socket(group,False));self.assertEqual(self.bus(second)['output'],group)
+        drag(socket(second,True),socket(group,False));self.assertEqual(self.bus(second)['output'],master);self.assertEqual([s['target'] for s in self.bus(second)['sends']],[group])
         self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
         handle=self.edges()[self.local()['wire']]['targetHandle']
-        drag(handle,socket(master,False));self.assertEqual(self.bus(second)['output'],master)
+        drag(handle,socket(first,False));self.assertEqual(self.bus(second)['output'],first)
         self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
         handle=self.edges()[self.local()['wire']]['targetHandle'];v=self.local()['canvas']['viewport'];empty=(v[0]+v[2]-14,v[1]+v[3]-14)
         drag(handle,empty);self.assertEqual(self.bus(second)['output'],'')
-        self.write('history.undo',domain='all');self.assertEqual(self.bus(second)['output'],master)
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(second)['output'],first)
         # A serial cable cut preserves the processor and chain order. Its
         # original sockets restore the exact implicit input in one operation.
         self.choose_wire(lambda a:a.get('kind')=='insert' and a.get('plugin')==plugin)
