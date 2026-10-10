@@ -764,3 +764,40 @@ retained-editor keyboard suite; a failure there broadens ownership inspection,
 not assertion relaxation. Hardware/foreground keyboard layouts, accessibility
 and mixed-DPI evidence remain required. Existing Mac and reciprocal gates remain
 open, with no new shared-source build requirement introduced by this slice.
+
+## Native activation and DPI foundation — prepared after checkpoint 03 freeze
+
+Source inspection found that `Resources/ScreamSeq.rc` contained only the icon;
+the app relied on a runtime PerMonitorV2 call and had no Common Controls v6
+manifest dependency. `Resources/ScreamSeq.manifest` now supplies the native
+activation context and initial DPI policy. `ScreamSeqNativeUiOptions` carries
+that manifest input to the app, renderer probe and HWND test executables through
+CMake. Engine, session, scanner, plugin and device targets do not inherit an
+executable UI policy. The existing runtime DPI call remains a fallback.
+
+This selects Windows' themed native controls and per-monitor layout behavior;
+it does not introduce a custom macOS-like widget layer. The fragment retains
+asInvoker privilege and does not alter filesystem paths, text encoding, project
+storage, plugin identities or audio integration. CMake's Windows generator owns
+manifest merging and embedding rather than a second manually assigned resource.
+
+The native-control fixture now checks the initial PerMonitorV2 context before
+the runtime fallback, verifies the Common Controls activation-context entry,
+and requires the loaded library's reported major version to be at least six.
+These are prepared assertions, not runtime evidence. Existing control pixel,
+focus and geometry checks remain unchanged. If themed controls expose a sizing
+or focus defect, fix the relevant layout or interaction rather than relaxing
+the assertion.
+
+This change is intentionally outside checkpoint 03's frozen source. Its next
+cohesive Windows UI gate must inspect generated manifest inputs and the actual
+app's embedded manifest, build the app and affected native harnesses on ARM64
+and x64, and run retained-editor, native-control, command palette and workspace
+geometry/focus checks. Foreground Windows theme, high contrast, Narrator and
+mixed-DPI movement remain separate required observations. No Mac/shared source
+changes require an extra Mac build for this slice; outstanding integration and
+reciprocal project gates are unchanged.
+
+Implementation references: [Windows process DPI policy](https://learn.microsoft.com/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process),
+[application manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests)
+and [CMake's Windows MSVC generator support](https://github.com/Kitware/CMake/blob/master/Modules/Platform/Windows-MSVC.cmake).

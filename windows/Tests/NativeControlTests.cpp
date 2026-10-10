@@ -1,6 +1,7 @@
 #include "../App/NativeControls.hpp"
 #include "../App/NativeReportList.hpp"
 #include "PrivateGuiTest.hpp"
+#include <shlwapi.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9,6 +10,20 @@
 
 namespace {
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+void manifestedNativePolicy() {
+  // Check before the test's runtime DPI fallback can hide a missing manifest.
+  require(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)!=FALSE,
+    "Native UI executable did not start with its manifested PerMonitorV2 policy");
+  ACTCTX_SECTION_KEYED_DATA binding{sizeof(binding)};
+  require(FindActCtxSectionStringW(0,nullptr,ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION,L"comctl32.dll",&binding)!=FALSE,
+    "Native Common Controls dependency is not active");
+  struct Module{HMODULE value;~Module(){if(value)FreeLibrary(value);}} controls{LoadLibraryW(L"comctl32.dll")};
+  require(controls.value!=nullptr,"Load manifested Common Controls");
+  const auto version=reinterpret_cast<HRESULT(CALLBACK *)(DLLVERSIONINFO *)>(GetProcAddress(controls.value,"DllGetVersion"));
+  DLLVERSIONINFO info{sizeof(info)};
+  require(version&&SUCCEEDED(version(&info))&&info.dwMajorVersion>=6,"Native control fixture loaded the classic Common Controls library");
+  std::cout<<"Native manifest active: PerMonitorV2, Common Controls "<<info.dwMajorVersion<<'.'<<info.dwMinorVersion<<'\n';
+}
 struct FixtureResources {
   HWND window{};HFONT font{};
   ~FixtureResources(){if(window)DestroyWindow(window);if(font)DeleteObject(font);}
@@ -162,6 +177,7 @@ void privateGuiFailureChecks(){
 }
 int main(int argc,char **argv){
   try {
+    manifestedNativePolicy();
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ScreamSeq::Tests::runPrivateGui(L"ScreamSeqControlTest",[&]{
     FixtureResources fixture;
