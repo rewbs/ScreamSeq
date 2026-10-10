@@ -19,6 +19,7 @@ extern "C" void tracker_audit_begin();
 extern "C" void tracker_audit_end(uint64_t *, uint64_t *, uint64_t *);
 #endif
 static void check(bool ok, const char *message) { if (!ok) throw std::runtime_error(message); }
+#include "editor/Tests/ColumnMuteOwnershipChecks.hpp"
 static std::vector<float> render(Document &doc, uint32_t rate, uint32_t block, bool withMixer) {
   Renderer renderer(doc.snapshotData(), rate);
   renderer.applyColumnMutes(doc.native(), doc.song());
@@ -106,6 +107,10 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
   // A shared VST3 instrument must retain the other column's notes, including
   // identical pitches. The fixture counts note-on/off pairs independently.
   auto descriptors = NativePlugin::discoverVST3(argv[1]);
+  check(descriptors.size()>1&&descriptors[1].instrument,"Queued mute fixture instrument is missing");
+  for(auto rate:{44100u,48000u,96000u})for(auto block:{17u,128u,511u})for(bool sample:{false,true})for(bool samePitch:{false,true})
+    columnMuteOwnershipChecks(descriptors[1],rate,block,sample,samePitch);
+  std::cout<<"PASS queued column mute: sample/plugin NNA, independent equal-pitch ownership and audition at 3 rates/3 callback partitions\n";
   for (bool samePitch : {false, true}) {
     auto source = Document::demo();
     source->transaction([&](CSoundFile &s) {

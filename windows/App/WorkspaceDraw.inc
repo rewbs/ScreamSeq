@@ -40,14 +40,18 @@
             L"P"+std::to_wstring(patternIndex)+L" · "+std::to_wstring(patternRows())+L" rows",
             L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-(r.w>540?378:264),accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
+        drawNoteTrackNames();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 			float x=r.x+gutter+channelStart(c)-horizontalScroll;
-			if(c==channel) {s.fill(x-2,r.y+26,channelWidth(c)-1,gridHeader-26,0x2d3446);s.fill(x-2,r.y+gridHeader-2,channelWidth(c)-1,2,0x9f85c8);}
-			s.text(L"CH "+std::to_wstring(c+1),x,r.y+29,fxStart-4,c==channel ? 0xd5c5ee : muted);
+			if(c==channel) {s.fill(x-2,r.y+gridHeader-24,channelWidth(c)-1,24,0x2d3446);s.fill(x-2,r.y+gridHeader-2,channelWidth(c)-1,2,0x9f85c8);}
+            const auto &header=noteColumn(c);const bool columnMuted=header.at("mute").get<bool>();
+            auto title=header.at("track").is_null()?L"CH "+std::to_wstring(c+1):L"N"+std::to_wstring(header.at("noteColumn").get<unsigned>()+1);
+            if(columnMuted)title+=L" muted";
+			s.uiText(title,x,r.y+gridHeader-21,fxStart-4,columnMuted?gold:c==channel?0xd5c5ee:muted);
             for(unsigned fx=0;fx<view->effectColumns.at(c);++fx){const float start=effectColumnStart(c,fx);const auto &layout=effectColumnLayout(c,fx);
-                s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+29,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
-                for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+29,layout.widths[i],muted);
+                s.text(L"F"+std::to_wstring(fx+1),x+start,r.y+gridHeader-21,20,muted);const auto &fields=gridCommandFields(view->effect(patternIndex,row,c,fx));
+                for(size_t i=0;i<fields.size();++i)s.uiText(wide(fields[i].at("name").get<std::string>()),x+start+layout.start(i),r.y+gridHeader-21,layout.widths[i],muted);
             }
 		}
 		s.unclip();

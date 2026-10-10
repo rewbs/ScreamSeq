@@ -4,6 +4,7 @@ Functional API/history/codec evidence only: no device or foreground UI claim.
 """
 import unittest
 
+import private_desktop
 import test_graph_mixer_app as support
 from client import ApiError
 
@@ -117,6 +118,49 @@ class NoteTrackAppTests(unittest.TestCase):
         self.write('mixer.bus.set', bus=columns[0]['id'], output=None)
         grouped = self.write('track.group', channels=[0, 1], output=master)
         self.assertEqual(next(t for t in self.layout()['noteTracks'] if t['id'] == grouped['affectedID'])['output'], master)
+
+    def test_native_group_header_selection_mute_command_and_ungroup_keep_context(self):
+        columns = self.layout()['columns']
+        self.write('song.annotate', id=columns[2]['id'], name='Bass / 低音', color=0x547886)
+        group = self.write('track.group', channels=[0, 1], name='Chords')['affectedID']
+        self.write('mixer.bus.set', bus=group, color=0x486E83)
+        self.client.call('workspace.layout', {'name': 'Pattern focus'})
+        window = self.desktop.hwnd(self.pid)
+        state = self.read('workspace.get')
+        header = next(t for t in state['trackHeaders']['groups'] if t['id'] == group)
+        self.assertEqual((header['name'], header['color'], header['channels']), ('Chords', 0x486E83, [0, 1]))
+        before = self.read('context.get')
+        x, y, width, height = header['rect']
+        scale = state['dpi'] / 96
+        point = (round((x + min(width / 2, 24)) * scale) & 65535) | (round((y + height / 2) * scale) << 16)
+        self.desktop.send(window, 0x201, 1, point)
+        self.desktop.send(window, 0x202, 0, point)
+        context = self.read('context.get')
+        self.assertEqual((context['pattern'], context['row']), (before['pattern'], before['row']))
+        self.assertEqual((context['selection']['startChannel'], context['selection']['endChannel']), (0, 1))
+        self.assertEqual(self.read('workspace.get')['focus'], 'pattern')
+        command = state['trackHeaders']['muteCommand']
+        control = private_desktop.user.GetDlgItem(window, command)
+        self.assertTrue(control)
+        self.assertTrue(private_desktop.user.IsWindowVisible(control))
+        self.desktop.send(window, 0x111, command, control)
+        muted = self.layout()['columns']
+        self.assertFalse(muted[0]['mute'])
+        self.assertTrue(muted[1]['mute'])
+        after = self.read('context.get')
+        for key in ('pattern', 'row', 'channel', 'column', 'selection'):
+            self.assertEqual(after[key], context[key], key)
+        self.write('history.undo')
+        self.assertFalse(self.layout()['columns'][1]['mute'])
+        routes = self.read('mixer.get')
+        self.desktop.send(window, 0x111, state['trackHeaders']['ungroupCommand'])
+        self.assertFalse(self.layout()['noteTracks'])
+        self.assertEqual(self.read('mixer.get'), routes)
+        self.assertFalse(self.read('workspace.get')['trackHeaders']['groups'])
+        self.write('history.undo')
+        self.assertEqual(self.read('workspace.get')['trackHeaders']['groups'][0]['id'], group)
+        catalog = self.read('workspace.commands.get')['commands']
+        self.assertTrue(any(c['id'] == f'windows.command.{command}' for c in catalog))
 
 
 if __name__ == '__main__':

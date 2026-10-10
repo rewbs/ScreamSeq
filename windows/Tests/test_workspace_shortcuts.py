@@ -90,7 +90,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         state = self.ready()
         rect, scale = state['geometry']['pattern'], state['dpi'] / 96
         x = round((rect['x'] + 44) * scale)
-        y = round((rect['y'] + 56) * scale)
+        y = round((rect['y'] + rect['headerHeight'] + 6) * scale)
         self.desktop.send(self.native_window(), 0x201, 1, x | (y << 16))
         self.desktop.send(self.native_window(), 0x202, 0, x | (y << 16))
         self.assertEqual(self.desktop.focus(self.native_window()), self.native_window())

@@ -39,6 +39,8 @@
             {arrangementCommand,L"Song / Arrange pattern orders",L""},
             {arrangementMatrixCommand,L"Song / Arrangement matrix and block copy",L""},
             {songTimingCommand,L"Song / Tempo, meter and groove",L""},
+            {noteColumnMuteCommand,L"Track / Toggle current note column mute",L""},
+            {noteTrackUngroupCommand,L"Track / Ungroup current note track (keep routing)",L""},
             {newPatternCommand,L"Pattern / New pattern and append order",L""},
             {duplicatePatternCommand,L"Pattern / Duplicate pattern and append order",L""},
             {previousSectionCommand,L"Song / Previous named section",L""},

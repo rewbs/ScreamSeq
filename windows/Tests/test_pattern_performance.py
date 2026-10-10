@@ -126,7 +126,7 @@ class PatternPerformanceTests(unittest.TestCase):
         self.navigate(row=0, channel=0, column=0)
         workspace=self.read('workspace.get')
         grid,scale=workspace['geometry']['pattern'],workspace['dpi']/96
-        x,y=grid['x']+44,grid['y']+56
+        x,y=grid['x']+44,grid['y'] + grid['headerHeight'] + 6
         for message,px,py,flags in ((0x201,x,y,1),(0x200,x+264,y+18,1),(0x202,x+264,y+18,0)):
             self.desktop.send(self.desktop.hwnd(self.pid), message, flags, round(px*scale)|(round(py*scale)<<16))
         context=self.read('context.get')

@@ -45,7 +45,7 @@ class WorkspaceContextMenuTests(unittest.TestCase):
         rect = state['geometry']['pattern']
         offset = (0, 28.8, 50.4, 79.2, 100.8)[column]
         return (rect['x'] + 44 + channel * 169.6 + offset - state['viewport']['horizontalScroll'],
-                rect['y'] + 56 + (row - state['viewport']['firstRow']) * 18)
+                rect['y'] + rect['headerHeight'] + 6 + (row - state['viewport']['firstRow']) * 18)
 
     def select_cells(self, first, last):
         self.mouse(0x201, self.cell_point(*first), 1)

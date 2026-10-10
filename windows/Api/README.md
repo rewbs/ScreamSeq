@@ -26,6 +26,17 @@ committed model; renderer adoption occurs at its next render boundary. These
 methods do not enable full API parity. This P2 source integration still requires
 the recorded native/pipe/audio and cross-platform qualification gates.
 
+The native grid shows saved column names and colored group spans above its note
+and effect headers. Click a span to select that group's columns at the current
+row; click a column header to select that column. The native **Mute N / Unmute N**
+button changes only the current note column. Mute and Ungroup are also registered
+commands in the palette and pattern context menu, with configurable shortcuts.
+Their uncertain results use the existing retained command Review flow, without
+repeating a write. `workspace.get.data.trackHeaders` reports visible columns and
+group rectangles in DIPs; `geometry.pattern.headerHeight` locates the first row
+without assuming a fixed header size. Native create/group draft forms remain
+pending in this checkpoint; the APIs support those edits now.
+
 Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
 `.parameters`, `.sources` and `.get` read actual host values and controlling sources.
 `parameter.activity.watch` is a transient replay-cached write without a song revision

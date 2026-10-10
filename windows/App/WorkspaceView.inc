@@ -7,7 +7,7 @@
 	float dragRight=0, dragLower=0;
 	bool selecting=false;
 	unsigned anchorRow=0,anchorChannel=0;
-    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=50, gutter=38;
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72, gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
     float channelStart(unsigned c) const {float x=0;for(unsigned i=0;i<c;++i)x+=channelWidth(i);return x;}
@@ -94,6 +94,11 @@
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
         const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230,trackerWorkspaceVisible());
         place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,trackerWorkspaceVisible());
+        place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,trackerWorkspaceVisible());
+        const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
+        ScreamSeq::NativeControls::text(controls.at(noteColumnMuteCommand),(columnMuted?L"Unmute ":L"Mute ")+std::to_wstring(channel+1));
+        ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
+        EnableWindow(controls.at(noteColumnMuteCommand),!busy&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
         place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
 		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
@@ -157,6 +162,7 @@
             {recoveryCommand,L"Recovery copies"},
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
+            {noteColumnMuteCommand,L"Mute column"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -234,6 +240,8 @@
             else if(id==previousSectionCommand||id==nextSectionCommand){navigateArrangementSection(id==nextSectionCommand);return;}
             else if(id==editSectionCommand||id==patternDetailsCommand){openArrangement(id==editSectionCommand?"section":"pattern");return;}
             else if(id==songTimingCommand){openSongTiming();return;}
+            else if(id==noteColumnMuteCommand){toggleNoteColumnMute();return;}
+            else if(id==noteTrackUngroupCommand){ungroupCurrentNoteTrack();return;}
             else if(id==midiArmCommand){toggleMidiArm();return;}
             else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
             else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}
@@ -391,6 +399,7 @@
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {
 		if(workspaceRegionMouseDown(x,y))return;
+		if(noteTrackHeaderClick(x,y))return;
 		auto g=geometry();dragRight=workspaceState.rightWidth;dragLower=workspaceState.lowerHeight;
 		if(graphLaneClick(x,y)||graphMouseDown(x,y)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
 		if(g.verticalDivider.contains(x,y)) dragging=1;
@@ -426,6 +435,7 @@
         if(effectInline)layoutControls();
     }
 	bool controlActive(int id) const {
+        if(id==noteColumnMuteCommand)return noteColumn(channel).at("mute").get<bool>();
         if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();
         if(id==editorTrackerTab)return hasWorkspaceDock()&&trackerWorkspaceVisible();
         if(id==editorAutomationTab||id==editorInstrumentTab||id==editorGraphCurveTab||id==editorPreciseNotesTab){auto *tool=workspaceEditorWindow(id==editorAutomationTab?"automation":id==editorInstrumentTab?"instruments":id==editorGraphCurveTab?"graphCurve":"preciseNotes");return hasWorkspaceDock()&&tool&&tool->docked()&&tool->visible();}

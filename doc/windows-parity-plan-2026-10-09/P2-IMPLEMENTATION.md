@@ -200,3 +200,51 @@ native grouping/column headers and keyboard commands with retained drafts,
 queued-frame NNA/plugin ownership coverage, and both platforms' required
 fixture/persistence/audio/UI gates. Continue on temporary dependent branches
 that converge on shared main; no long-lived platform fork is introduced.
+
+## Native header presentation and shared ownership checks — source only
+
+The grid now reserves a 22-DIP name/group band above the existing note/FX header.
+Saved names and color accents identify ungrouped columns and logical group spans;
+the note row shows group-local column numbers and explicit muted text. Text keeps
+the native Windows font/palette contrast instead of using user colors as text.
+Names/spans clip to the actual horizontally scrolled viewport. Clicking a group
+span selects its existing columns at the current row; clicking a column header
+selects that column without changing sound. A native Mute/Unmute button, palette
+command and context-menu item perform the guarded column write. Ungroup is also
+in the palette/context menu and retains routing. Both actions use Main's retained
+command receipt/Review owner, including track readback for an unknown outcome.
+No new parallel command-history or document-departure mechanism is introduced.
+
+`NoteTrackPresentation.inc` owns this Windows presentation. The existing shared
+gridHeader governs row drawing, graph lanes, hit testing, inline editing and
+scrolling. `workspace.get` reports its value as `geometry.pattern.headerHeight`
+and exposes visible header rectangles/data under `trackHeaders`. Existing mouse
+tests now calculate row positions from that public geometry rather than the old
+50-DIP constant; their focus, selection and invalid-hit assertions remain intact.
+The new actual-app header case selects a group, toggles only its last/current
+column, checks retained row/selection, undoes mute, ungroups without routing loss,
+and restores the stable group through Undo. Real display, DPI and accessibility
+qualification remain required; a snapshot assertion is not visual evidence.
+
+`editor/Tests/ColumnMuteOwnershipChecks.hpp` supplies the same prepared-frame
+scenario to the existing Mac `note-track` and Windows `native-audio-bus` native
+provider targets. It uses real continued sample/plugin NNA notes in two columns,
+equal and different pitches, 44.1/48/96 kHz and 17/128/511-frame blocks. It requires
+only the muted parent's foreground/background plugin notes to release, the other
+column to remain audible, sample NNA unmute to restore surviving voices, manual
+audition to remain independent, and final plugin release without stuck sound.
+Rendering uses each suite's existing realtime audit. Windows coverage remains
+host C++ allocation/free only, without direct malloc/free or lock instrumentation;
+the Mac audit retains its existing boundaries and sanitizer exclusions. The
+existing Mac legacy-setter scenarios remain present beside these queued checks.
+
+Source review corrected two new shared-candidate test expectations: Undo must
+retain nextID's allocation high-water mark. Assertions still compare all native
+song data, now also requiring a subsequent group/append to allocate fresh IDs.
+No product ID-allocation rule or pre-existing assertion was relaxed.
+
+All changes in this section remain unbuilt/unexecuted. The next P2 native/pipe
+checkpoint must include the changed grid/context-menu/docking/shortcut and graph
+lane scenarios, plus both native ownership targets. Native create/group forms,
+their captured target/count/name/output drafts and runtime/fixture qualification
+are still outstanding. P1 checkpoint 02 continues to use frozen `a320bd9da`.

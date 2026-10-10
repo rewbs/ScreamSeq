@@ -79,6 +79,8 @@
                 {0,L""},{patternInsertRows,L"Insert rows",enabled},{patternDeleteRows,L"Delete rows",enabled}}},
             {0,L"Record selection",enabled,false,{{patternRenderSampleCommand,selecting?L"To sample":L"Current row to sample",enabled},{patternRenderInstrumentCommand,selecting?L"To instrument":L"Current row to instrument",enabled},{patternRenderOptionsCommand,L"Render options…",enabled}}},
             {scratchGesturesCommand,L"Scratch phrases…",enabled},
+            {noteColumnMuteCommand,noteColumn(channel).at("mute").get<bool>()?L"Unmute current note column":L"Mute current note column",enabled&&view->session.document.value("editable",false)},
+            {noteTrackUngroupCommand,L"Ungroup current note track (keep routing)",enabled&&view->session.document.value("editable",false)&&noteTrack(channel)!=nullptr},
             {0,L"Inspect",enabled,false,{{notesCommand,L"Precise notes",enabled},{effectsCommand,L"Effects and parameter bindings",enabled},
                 {parameterAutomationCommand,L"Parameter automation…",enabled},{instrumentEnvelopeCommand,L"Instrument…",enabled}}},
             {0,L""},{undoCommand,L"&Undo\tCtrl+Z",enabled&&view->session.document.value("canUndo",false)},

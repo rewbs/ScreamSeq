@@ -34,7 +34,10 @@ void groupingAndHistory() {
     "Repeated dry preparation consumed identities");
   doc->annotate([&](NativeSong &native) { native = prepared.native; });
   check(doc->snapshotData() == bytes, "Grouping changed embedded pattern or instrument data");
-  doc->undo(); check(doc->native() == original, "One Undo did not restore the complete original native song");
+  auto undone = original; undone.nextID = prepared.native.nextID;
+  doc->undo(); check(doc->native() == undone, "One Undo must restore song data while retaining the allocator high-water mark");
+  check(prepareNoteTrackEdit(doc->native(), doc->song(), edit).affected >= prepared.native.nextID,
+    "A new edit after Undo reused an allocated group identity");
   doc->redo(); check(doc->native() == prepared.native, "Redo changed grouping identities");
   const auto ungrouped = prepareNoteTrackEdit(doc->native(), doc->song(), UngroupNoteTrack{prepared.affected});
   check(ungrouped.changed && !ungrouped.mixerChanged && ungrouped.native.noteTracks.empty() &&
@@ -109,7 +112,12 @@ void appendAndCapacity() {
       });
       check(doc->song().GetNumChannels() == count + 2 && doc->native() == prepared.native,
         "Structural adoption did not retain the prepared identities");
-      doc->undo(); check(doc->song().GetNumChannels() == count && doc->native() == original, "Append needed more than one Undo");
+      auto undone = original; undone.nextID = prepared.native.nextID;
+      doc->undo(); check(doc->song().GetNumChannels() == count && doc->native() == undone,
+        "Append Undo must restore columns while retaining the allocator high-water mark");
+      const auto fresh = prepareNoteTrackEdit(doc->native(), doc->song(), CreateNoteTrack{2, "After Undo", {}});
+      check(fresh.native.tracks.at(count).id >= prepared.native.nextID && fresh.affected >= prepared.native.nextID,
+        "A new append after Undo reused column or group identities");
       doc->redo(); check(doc->native() == prepared.native, "Append Redo changed stable IDs");
       for (unsigned invalid : {0u, 128u, std::numeric_limits<unsigned>::max()})
         rejects([&] { prepareNoteTrackEdit(original, doc->song(), CreateNoteTrack{invalid, "Invalid", {}}); });
