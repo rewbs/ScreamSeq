@@ -77,6 +77,7 @@ class SongRoutingTests(unittest.TestCase):
         self.fail(str(self.local()))
     def press(self,identifier):self.idle();self.desktop.send(self.window(),0x111,identifier,self.control(identifier));self.idle()
     def select(self,identifier,index):
+        self.idle()
         self.desktop.send(self.control(identifier),0x14E,index);self.desktop.send(self.window(),0x111,identifier|(1<<16),self.control(identifier));self.idle()
     def field(self,identifier,value):
         text=ctypes.create_unicode_buffer(str(value));self.desktop.send(self.control(identifier),0xC,0,ctypes.addressof(text))
