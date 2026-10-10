@@ -10,6 +10,9 @@ void applicationPatternTools() {
     auto position=app.position();position["row"]=23;position["channel"]=0;app.navigate(position);app.setPatternSelection(true,8,0);
     app.command(patternToolsCommand);auto *tool=app.patternToolsWindow.get();restoreCheck(tool!=nullptr,"Pattern tools command is unreachable");
     const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+    const std::array<const wchar_t *,9> fieldNames{L"Pattern operation",L"Apply to",L"Value to transform",L"Interpolation curve",L"Cells to affect",L"From value",L"To value",L"Amount",L"Random seed"};
+    for(size_t i=0;i<fieldNames.size();++i)restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,8001+int(i)))==fieldNames[i],"Pattern Tools provider omitted an explicit field name");
+    restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,8022))==L"Pattern operation preview","Pattern preview lacks a native accessible name");
     const auto before=app.pattern(0).cells;const auto song=songState(app);const auto captured=tool->snapshot().at("captured");
     press(window,8018);restoreCheck(app.pattern(0).cells==before,"Apply without a preview edited music");
     choose(window,8005,2); // All cells, so interpolation fills the captured 8..23 rows.

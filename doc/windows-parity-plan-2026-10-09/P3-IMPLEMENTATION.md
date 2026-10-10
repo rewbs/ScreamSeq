@@ -1146,3 +1146,22 @@ results only where executable/relevant transitive inputs remain unchanged.
 Do not inherit the eight GUI passes wholesale across a relink with shared audio
 changes. Cross-platform CI, full application integration, foreground/accessibility,
 hardware and reciprocal F01–F05 save/reopen gates remain open.
+
+### Prepared native names for timing, transformations and note tracks
+
+Twenty-one additional HWND fields now use the existing native MSAA/UIA naming
+bridge: eight in `SongTimingWindow.hpp` (including the preview), ten in
+`PatternToolsWindow.hpp` (including curve, cell filter and preview), and three in
+`NoteTrackWindow.hpp` for both Create and Group. Names are assigned when controls
+are created; refresh/reopen does not rewrite their text, cursor, draft, selection
+or captured target. Native edit/combo providers retain their value and interaction
+patterns. Checkbox/button captions continue to supply their own names.
+
+Existing timing, Pattern Tools and note-track native scenarios now inspect the
+actual accessibility-provider names before exercising their retained drafts,
+preview/Apply and history behavior. These additions are unbuilt and unrun. Include
+`song-timing-window-tests`, `workspace-pattern-tools-tests` and
+`workspace-note-track-tests` in the next consolidated gate; these registered
+names were checked against source and the generated CTest inventory. No Mac source, API, musical state
+or file representation changes in this slice. Remaining native forms and custom
+canvases still need the full accessibility census and foreground qualification.

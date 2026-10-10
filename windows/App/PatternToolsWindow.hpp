@@ -204,7 +204,10 @@ public:
     add(swap,L"BUTTON",L"Swap the two instruments",BS_AUTOCHECKBOX);add(allowLoss,L"BUTTON",L"Allow existing notes or fields to be discarded",BS_AUTOCHECKBOX);
     add(details,L"EDIT",L"",ES_READONLY|ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL);SendMessageW(controls_.at(details),EM_SETLIMITTEXT,262144,0);
     button(captureSelection,L"Use current selection");button(preview,L"Preview");button(apply,L"Apply changes");button(acceptState,L"Accept observed state");button(returnPattern,L"Pattern / F6");button(close,L"Close");
-    baseline_=raw();setting_=false;finish();
+    accessibleName(operation,L"Pattern operation");accessibleName(scope,L"Apply to");accessibleName(target,L"Value to transform");
+    accessibleName(curve,L"Interpolation curve");accessibleName(filter,L"Cells to affect");
+    accessibleName(from,L"From value");accessibleName(to,L"To value");accessibleName(amount,L"Amount");accessibleName(seed,L"Random seed");
+    accessibleName(details,L"Pattern operation preview");baseline_=raw();setting_=false;finish();
   }
   void open(){const auto focus=GetFocus();const bool wasVisible=visible();if(!opened_){clampToOwnerWorkArea();opened_=true;}show();if(captured_.empty())capture();
     if(wasVisible&&owns(focus)&&IsWindowEnabled(focus))SetFocus(focus);else SetFocus(controls_.at(operation));layout();}

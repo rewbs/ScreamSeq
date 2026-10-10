@@ -202,7 +202,10 @@ public:
     label(help,L"Groove needs Musical timing. Durations are normalized to keep the beat length. Set swing and Straight edit this draft. Applying changed timing stops playback and creates one Undo.");
     add(previewLabel,L"EDIT",L"",ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY|WS_VSCROLL);label(statusLabel,L"");button(preview,L"Preview");button(apply,L"Apply");button(reload,L"Reload");button(returnPattern,L"Return to pattern / F6");button(close,L"Close");
     for(const auto id:{heading,scope,modeLabel,tempoLabel,speedLabel,beatLabel,barLabel,grooveLabel,swingLabel,help,statusLabel})SetWindowLongPtrW(controls_.at(id),GWL_STYLE,GetWindowLongPtrW(controls_.at(id),GWL_STYLE)|SS_NOPREFIX);
-    baseline_=raw();finish();
+    accessibleName(mode,L"Timing mode");accessibleName(tempo,L"Tempo / BPM");accessibleName(speed,L"Ticks per row");
+    accessibleName(beat,L"Rows per beat");accessibleName(bar,L"Rows per bar");
+    accessibleName(groove,L"Groove / comma-separated row durations");accessibleName(swing,L"Swing / percent");
+    accessibleName(previewLabel,L"Timing preview");baseline_=raw();finish();
   }
   void update(const Json &context){validateContext(context);if(!sameTarget(current_,context))++contextGeneration_;current_=context;layout();requestPaint();}
   void open(const Json &context){const auto focus=GetFocus();const bool wasVisible=visible();update(context);if(!opened_){clampToOwnerWorkArea();opened_=true;}show();

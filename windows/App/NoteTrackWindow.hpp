@@ -170,7 +170,9 @@ public:
     label(countLabel,L"Note columns");edit(count,L"3",20);label(outputLabel,L"Shared track output");combo(output);
     label(helpLabel,L"Columns keep their own notes and commands. Grouping retains inserts and sends. Structural edits stop playback; Undo restores the song.");label(statusLabel,L"");
     button(captureSelection,creating?L"Use current song":L"Use current selection");button(preview,L"Preview");button(apply,creating?L"Create track":L"Group columns");
-    button(acceptState,L"Accept observed state");button(returnPattern,L"Pattern / F6");button(close,L"Close");baseline_=raw();finish();
+    button(acceptState,L"Accept observed state");button(returnPattern,L"Pattern / F6");button(close,L"Close");
+    accessibleName(name,L"Track name");accessibleName(count,L"Number of note columns");accessibleName(output,L"Shared track output");
+    baseline_=raw();finish();
   }
   void open(){const auto focus=GetFocus();const bool wasVisible=visible();if(!opened_){clampToOwnerWorkArea();opened_=true;}show();if(!captured_)capture();
     if(wasVisible&&owns(focus)&&IsWindowEnabled(focus))SetFocus(focus);else SetFocus(controls_.at(name));layout();}

@@ -28,6 +28,9 @@ void applicationNoteTrackWindows() {
   {
     RestoreFixture fixture;auto &app=*fixture.app;app.openNoteTrackEditor(true);
     auto *tool=app.createNoteTrackWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+    restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,7901))==L"Track name"&&
+      ScreamSeq::Tests::accessibleName(GetDlgItem(window,7902))==L"Number of note columns"&&
+      ScreamSeq::Tests::accessibleName(GetDlgItem(window,7903))==L"Shared track output","Note-track provider omitted field names");
     rawDraftText(GetDlgItem(window,7901),L"Pads");rawDraftText(GetDlgItem(window,7902),L"-");
     const auto before=app.documentOperation("track.get",RestoreJson::object());const auto revision=app.view->session.revision;
     press(window,7906);restoreCheck(app.view->session.revision==revision&&restoreText(GetDlgItem(window,7902))==L"-","Invalid count changed music or was overwritten");
