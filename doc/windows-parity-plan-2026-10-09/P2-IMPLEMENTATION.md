@@ -72,3 +72,38 @@ cadence applies across worktrees.
    Preserve the existing stable-bus note-track scope in `PatternTransform.inc`.
 4. Qualify against A03/F04 and reciprocal fixtures after P0/P1 prerequisites pass;
    both platforms converge on shared main through temporary review branches.
+
+## Windows adapter prepared, application dispatch still pending
+
+`windows/Session/TrackOperations.hpp/.cpp` now decodes the five existing track
+methods into the shared candidate interface and produces the Mac-compatible
+layout/result fields. Numeric booleans, fractional/out-of-range counts, unknown
+keys and noncanonical stable identities are rejected. The name and native-ID
+rules follow the current adapters; no public schema extension is introduced.
+
+Result JSON is prepared before document adoption. DryRun and successful no-op
+avoid publication/history; grouping/append retains the established structural
+stop path. Ungroup retains routing. Persistent column mute uses a prepared
+publication callback passed to `Document::annotate`, so admission failure leaves
+history and the native document unchanged. Host hooks reserve plugin/cache
+capacity validation and live mute publication for the document controller.
+
+`track-operations-tests`, included in `worker-tests`, exercises that adapter
+offline. Its authored cases cover result projection, strict input failures,
+dryRun/no-op, refused publication with unchanged history, mute Undo, and in-memory
+native codec round trips of grouping/mute/append/ungroup in all five module
+formats. These are unexecuted functional checks, not actual pipe, device, realtime,
+or reciprocal evidence. Add this target/test to the eventual P2 checkpoint.
+
+The adapter is intentionally not yet wired into `DocumentController` or the
+Application method inventory; no newly advertised method runs with empty live
+hooks. Complete that wiring together with renderer publication and history.
+`prepareNativePublication` currently ignores column-mute differences in its
+fast no-change path, and `HostedProject::prepareNativeUpdate` refuses them.
+Both paths need the same prepared contract for writes and Undo/Redo. The existing
+renderer applies imported/native mute flags and releases owned plugin/NNA notes
+at render boundaries, but its per-channel atomic setters do not by themselves
+establish all-column transactional publication. Preserve imported mute baselines
+when removing overrides; renderer `ChnSettings` is updated by playback and is not
+a safe replacement for the document's imported state. No build/test ran for this
+adapter; P1's frozen source is unchanged.
