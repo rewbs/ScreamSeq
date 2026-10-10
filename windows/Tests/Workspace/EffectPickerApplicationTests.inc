@@ -6,6 +6,8 @@ void applicationEffectPicker() {
     const auto before=songState(app),selection=app.selection();SetFocus(app.window);
     restoreCheck(app.key(VK_F4)&&app.effectPickerWindow,"F4 did not expose the near-cursor picker");
     auto *picker=app.effectPickerWindow.get();const auto window=picker->window();ScreamSeq::Tests::ownGuiWindow(window);
+    restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,8201))==L"Search pattern effects"&&
+      ScreamSeq::Tests::accessibleName(GetDlgItem(window,8202))==L"Matching pattern effects","Effect search/results lack native accessible names");
     auto descriptor=RestoreJson::object();for(const auto &entry:app.view->commands.at("native"))if(entry.value("native",std::string())=="vibrato")descriptor=entry;
     restoreCheck(!descriptor.empty(),"Fixture has no native vibrato descriptor");
     const auto query=wide(descriptor.at("displayCode").get<std::string>()+"  "+descriptor.at("name").get<std::string>());

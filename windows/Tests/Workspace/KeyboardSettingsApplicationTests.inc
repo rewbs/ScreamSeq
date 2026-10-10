@@ -2,6 +2,9 @@ void applicationKeyboardSettings() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto original=songState(app);
     const auto press=[](HWND owner,int id){SendMessageW(owner,WM_COMMAND,id,reinterpret_cast<LPARAM>(GetDlgItem(owner,id)));};
     app.command(keyboardSettingsCommand);auto *tool=app.keyboardSettingsWindow.get();const auto owner=tool->window();ScreamSeq::Tests::ownGuiWindow(owner);
+    restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(owner,8701))==L"Lower octave / 12 physical keys"&&
+        ScreamSeq::Tests::accessibleName(GetDlgItem(owner,8702))==L"Upper octave / 12 keys, optional top C"&&
+        ScreamSeq::Tests::accessibleName(GetDlgItem(owner,8703))==L"Play / Stop shortcut","Keyboard fields lack native accessible names");
     rawDraftText(GetDlgItem(owner,8701),L"incomplete");press(owner,8704);
     restoreCheck(songState(app)==original&&app.workspaceShortcuts->noteKeys()==ScreamSeq::MusicalKeyMap{}&&restoreText(GetDlgItem(owner,8701))==L"incomplete","Invalid keyboard draft changed song/preferences or was overwritten");
     SetFocus(GetDlgItem(owner,8701));app.command(keyboardSettingsCommand);

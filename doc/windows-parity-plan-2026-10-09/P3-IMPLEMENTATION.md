@@ -965,3 +965,42 @@ synthetic menu messages as foreground evidence. Include workspace geometry,
 shortcut/local-input, draft/departure and song-history cases in the next Windows
 UI gate. Mac musical sources are unchanged; existing Mac/shared and reciprocal
 requirements remain open.
+
+### Prepared: explicit native field names (not runtime-qualified)
+
+`NativeAccessibility.hpp` adds HWND-bound `IAccPropServices` name annotations for
+standard Windows providers. `NativeToolWindow::accessibleName` is the opt-in
+entry point. This does not install a replacement provider or manufacture a
+control role/value. Twelve fields in Song Properties, Keyboard Settings, the
+Effect Picker and Formula Workbench now have explicit names, independent of
+dynamic heading text or control creation order. Existing visible labels and
+native text/list/selector behavior remain the presentation and interaction path.
+
+The annotation validates window/thread ownership, owns a balanced COM reference
+when needed, accepts an existing apartment, replaces names without accumulating
+subclasses, and clears its property before HWND destruction. Name changes emit
+the standard accessibility event. The native UI CMake interface supplies the
+Windows COM/accessibility libraries to the app and affected GUI harnesses. No
+shared musical, file-format, audio or Mac source was changed.
+
+Prepared checks query `IAccessible` from the actual Windows provider. The native
+control case covers initial/replaced names while retaining raw invalid field
+text, caret, focus, local Undo and combo selection; it also rejects empty names
+and destroyed handles. Existing workspace song-properties, keyboard-settings
+and effect-picker groups assert their concrete field names. The graph-curve
+case checks the real Formula RichEdit name alongside its existing raw-text
+retention and appearance checks. These extend already selected executables and
+CTest groups; no extra build or test process was run for this slice.
+
+Source inspection and `git diff --check` are the only completed checks here.
+The next consolidated Windows gate must compile the new linkage and execute
+these cases plus retained owner/draft/departure cases. Actual UIA bridge behavior,
+Narrator announcements, name-change events, foreground keyboard use and HWND
+retirement remain runtime qualification requirements. This first field set does
+not close the remaining editor naming census or the separate virtual-cell/
+selection/action providers required for custom pattern and graph canvases.
+
+The annotation approach follows Microsoft's [native control naming guidance](https://learn.microsoft.com/en-us/accessibility-tools-docs/items/win32/control_name)
+and [direct annotation API](https://learn.microsoft.com/en-us/windows/win32/api/oleacc/nf-oleacc-iaccpropservices-sethwndpropstr).
+The private-desktop provider checks are deliberately narrower than a foreground
+screen-reader acceptance claim.

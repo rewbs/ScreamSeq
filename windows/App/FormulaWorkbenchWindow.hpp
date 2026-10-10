@@ -206,6 +206,8 @@ public:
     setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();ScreamSeq::NativeInputGate::present(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
     const auto reference=request_("automation.formula.reference",Json::object());reference_=reference.at("symbols");auto noteText=wide(reference.at("notes").get<std::string>());std::wstring lines;for(auto c:noteText){if(c=='\n')lines+='\r';lines+=c;}set(notes,lines);
     if(!referenceOnly_){if(!params_.contains("points")||point_>=params_.at("points").size())throw std::runtime_error("Formula point no longer exists");params_["samples"]=1024;canvas_.start=0;canvas_.end=params_.value("span",params_.at("rows").get<double>()*256);previewNeeded_=true;}
+    accessibleName(code,L"Formula source");accessibleName(search,L"Search formula values and functions");
+    accessibleName(symbols,L"Formula values and functions");accessibleName(suggestions,L"Formula completions");accessibleName(notes,L"Formula reference notes");
     finish();filter();status(L"Checking formula…");
   }
   ~FormulaWorkbenchWindow()override{if(codeFont_)DeleteObject(codeFont_);}

@@ -28,6 +28,7 @@ endif()
 # an executable manifest through the portable engine or plugin libraries.
 add_library(ScreamSeqNativeUiOptions INTERFACE)
 target_sources(ScreamSeqNativeUiOptions INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ScreamSeq.manifest")
+target_link_libraries(ScreamSeqNativeUiOptions INTERFACE ole32 oleaut32 oleacc uuid)
 
 # Keep the engine configuration and shared editor source list aligned with mac/.
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS

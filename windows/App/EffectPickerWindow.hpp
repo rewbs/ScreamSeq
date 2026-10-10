@@ -86,7 +86,8 @@ public:
     label(heading,L"Choose a pattern effect");edit(search,L"",256);
     SendMessageW(controls_.at(search),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Search code, name or description"));
     add(results,L"LISTBOX",L"Pattern effects",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_BORDER);
-    label(detail,L"");label(statusLabel,L"");button(chooseButton,L"Edit values");button(recaptureButton,L"Use current cursor");button(closeButton,L"Close");setting_=false;finish();
+    label(detail,L"");label(statusLabel,L"");button(chooseButton,L"Edit values");button(recaptureButton,L"Use current cursor");button(closeButton,L"Close");
+    accessibleName(search,L"Search pattern effects");accessibleName(results,L"Matching pattern effects");setting_=false;finish();
   }
   void open(Json captured,Json choices,POINT anchor,bool recapture=false) {
     if(visible()&&!recapture){show();SetFocus(controls_.at(search));return;}

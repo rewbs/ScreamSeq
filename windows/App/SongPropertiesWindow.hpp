@@ -117,7 +117,7 @@ public:
     label(statusLabel,L"");button(captureRevision,L"Use current revision");button(reloadValues,L"Reload values");button(apply,L"Apply / Ctrl+Enter");
     button(acceptState,L"Accept observed state");button(returnPattern,L"Pattern / F6");button(close,L"Close");
     for(int id:{heading,titleLabel,channelsLabel,helpLabel,statusLabel})SetWindowLongPtrW(controls_.at(id),GWL_STYLE,GetWindowLongPtrW(controls_.at(id),GWL_STYLE)|SS_NOPREFIX);
-    finish();
+    accessibleName(title,L"Song title");accessibleName(channels,L"Channel count");finish();
   }
   void open(){const auto focus=GetFocus();const bool existing=visible();if(target_.empty())capture(true);show();if(existing&&owns(focus)&&IsWindowEnabled(focus))SetFocus(focus);else SetFocus(controls_.at(title));}
   void update(){layout();requestPaint();}

@@ -1,6 +1,7 @@
 // Native ownership and retention tests on a process-owned private desktop.
 #include "GraphCurveWindow.hpp"
 #include "PrivateGuiProcessTest.hpp"
+#include "AccessibleControl.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -294,6 +295,7 @@ void formulaCodeColorAndUndo(Owner &owner){
     },[]{return true;},[&](const std::string &){++writes;return true;});
   ScreamSeq::Tests::ownGuiWindow(tool.window());tool.show();KillTimer(tool.window(),3);KillTimer(tool.window(),4);
   const auto code=GetDlgItem(tool.window(),2001);require(code&&IsWindowVisible(code),"Missing Formula RichEdit");
+  require(ScreamSeq::Tests::accessibleName(code)==L"Formula source","Formula RichEdit lacks a native accessible name");
   auto appearance=[&](bool contrast=ScreamSeq::NativeControls::highContrast()){
     CHARRANGE retained{};SendMessageW(code,EM_EXGETSEL,0,reinterpret_cast<LPARAM>(&retained));
     POINT scroll{};SendMessageW(code,EM_GETSCROLLPOS,0,reinterpret_cast<LPARAM>(&scroll));

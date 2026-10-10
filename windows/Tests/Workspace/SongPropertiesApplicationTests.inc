@@ -10,6 +10,8 @@ void applicationSongProperties() {
         app.command(songPropertiesCommand);auto *tool=app.songPropertiesWindow.get();
         restoreCheck(tool!=nullptr,"Song settings command did not create its native owner");
         const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+        restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,8601))==L"Song title"&&
+            ScreamSeq::Tests::accessibleName(GetDlgItem(window,8602))==L"Channel count","Song fields lack native accessible names");
         const auto original=app.view->session.document;const auto count=app.view->channels;
         rawDraftText(GetDlgItem(window,8601),L"Retained title & channels");rawDraftText(GetDlgItem(window,8602),L"-");
         const auto before=songState(app);press(window,8605);

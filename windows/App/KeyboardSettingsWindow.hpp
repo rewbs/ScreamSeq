@@ -60,7 +60,9 @@ public:
     label(heading,L"Musical keyboard settings");label(helpLabel,L"Use US unshifted physical key labels (or < for the extra ISO key), in chromatic order C through B. Lower: 12 keys. Upper: 12, or 13 including top C. Keys must be distinct. Text fields keep normal Windows typing.");
     label(lowerLabel,L"Lower octave / 12 physical keys");edit(lower,L"",32);label(upperLabel,L"Upper octave / 12 keys, optional top C");edit(upper,L"",32);
     label(transportLabel,L"Play / Stop");combo(transport);for(const auto *text:{L"Space",L"Enter",L"Keep command-palette binding"})NativeInputGate::present(controls_.at(transport),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    label(statusLabel,L"");button(apply,L"Apply");button(reload,L"Reload preferences");button(defaults,L"Use defaults");button(close,L"Close");finish();
+    label(statusLabel,L"");button(apply,L"Apply");button(reload,L"Reload preferences");button(defaults,L"Use defaults");button(close,L"Close");
+    accessibleName(lower,L"Lower octave / 12 physical keys");accessibleName(upper,L"Upper octave / 12 keys, optional top C");
+    accessibleName(transport,L"Play / Stop shortcut");finish();
   }
   void open(){const auto focus=GetFocus();const bool existing=visible();if(!existing)previousFocus_=focus;if(captured_.empty())load();show();if(existing&&owns(focus))SetFocus(focus);else SetFocus(controls_.at(lower));}
   void hide()override{const bool focused=owns(GetFocus());NativeToolWindow::hide();if(focused&&IsWindow(previousFocus_)&&IsWindowVisible(previousFocus_)&&IsWindowEnabled(previousFocus_))SetFocus(previousFocus_);}

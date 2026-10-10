@@ -1,4 +1,6 @@
 #include "../App/NativeControls.hpp"
+#include "../App/NativeAccessibility.hpp"
+#include "AccessibleControl.hpp"
 #include "../App/NativeReportList.hpp"
 #include "PrivateGuiTest.hpp"
 #include <shlwapi.h>
@@ -10,6 +12,34 @@
 
 namespace {
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+void nativeAccessibleNames(HWND parent,HWND combo) {
+  const auto previous=GetFocus();
+  auto edit=CreateWindowW(L"EDIT",L"raw -",WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL,10,250,220,28,parent,
+    reinterpret_cast<HMENU>(987),GetModuleHandleW(nullptr),nullptr);
+  require(edit,"Create accessible field fixture");ScreamSeq::Tests::ownGuiWindow(edit);
+  struct Destroy{HWND value;~Destroy(){if(IsWindow(value))DestroyWindow(value);}} destroy{edit};
+  ScreamSeq::NativeControls::install(edit,true);SetFocus(edit);
+  SendMessageW(edit,EM_SETSEL,5,5);SendMessageW(edit,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"?"));
+  SendMessageW(edit,EM_SETSEL,1,4);
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(edit,L"Raw channel count")),"Annotate native edit");
+  require(ScreamSeq::Tests::accessibleName(edit)==L"Raw channel count","Windows provider lost explicit edit name");
+  DWORD first=0,last=0;SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+  wchar_t text[32]{};GetWindowTextW(edit,text,32);
+  require(std::wstring_view(text)==L"raw -?"&&first==1&&last==4&&GetFocus()==edit&&SendMessageW(edit,EM_CANUNDO,0,0),
+    "Accessible naming changed raw text, caret, focus or local Undo");
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(edit,L"Retained draft / channel count")),"Rename native field");
+  require(ScreamSeq::Tests::accessibleName(edit)==L"Retained draft / channel count","Provider retained an old name");
+  SendMessageW(edit,WM_UNDO,0,0);GetWindowTextW(edit,text,32);
+  require(std::wstring_view(text)==L"raw -","Accessible naming altered the local Undo transaction");
+  const auto selected=SendMessageW(combo,CB_GETCURSEL,0,0);
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(combo,L"Pattern selection")),"Annotate native combo");
+  require(ScreamSeq::Tests::accessibleName(combo)==L"Pattern selection"&&SendMessageW(combo,CB_GETCURSEL,0,0)==selected&&GetFocus()==edit,
+    "Combo provider naming changed selection or focus");
+  require(ScreamSeq::NativeAccessibility::name(edit,L"")==E_INVALIDARG,"Empty accessible name accepted");
+  require(DestroyWindow(edit)!=FALSE,"Destroy annotated edit");
+  require(ScreamSeq::NativeAccessibility::name(edit,L"Gone")==E_INVALIDARG,"Destroyed HWND accepted an annotation");
+  SetFocus(previous);
+}
 void manifestedNativePolicy() {
   // Check before the test's runtime DPI fallback can hide a missing manifest.
   require(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)!=FALSE,
@@ -244,7 +274,7 @@ int main(int argc,char **argv){
       if(argc>1){std::filesystem::path out=argv[1];std::filesystem::create_directories(out);image.save(out/(std::string(name)+".bmp"));}
     };
     render("normal",RGB(53,68,82));
-    ShowWindow(parent,SW_SHOWNOACTIVATE);nativeEditSelection(parent);SetFocus(combo);render("focused",RGB(104,193,178));
+    ShowWindow(parent,SW_SHOWNOACTIVATE);nativeEditSelection(parent);nativeAccessibleNames(parent,combo);SetFocus(combo);render("focused",RGB(104,193,178));
     EnableWindow(combo,FALSE);render("disabled",RGB(53,68,82));EnableWindow(combo,TRUE);
     SendMessageW(combo,WM_KEYDOWN,VK_DOWN,0);require(SendMessageW(combo,CB_GETCURSEL,0,0)==2,"Arrow-key selection");
     SendMessageW(combo,WM_KEYDOWN,VK_F4,0);require(SendMessageW(combo,CB_GETDROPPEDSTATE,0,0),"F4 popup");

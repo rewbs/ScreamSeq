@@ -2,6 +2,7 @@
 #include "RenderSurface.hpp"
 #include "AutomationCanvas.hpp"
 #include "NativeControls.hpp"
+#include "NativeAccessibility.hpp"
 #include "DocumentDraftRegistry.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
@@ -218,6 +219,7 @@ protected:
   void edit(int id,const wchar_t *text,int limit){auto h=add(id,L"EDIT",text,ES_AUTOHSCROLL);SendMessageW(h,EM_SETLIMITTEXT,limit,0);}
   void combo(int id){add(id,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL);}
   void label(int id,const wchar_t *text){add(id,L"STATIC",text,SS_LEFT);}
+  void accessibleName(int id,const wchar_t *text){check(NativeAccessibility::name(controls_.at(id),text),"Name native editor control");}
   void set(int id,const std::wstring &s){NativeControls::text(controls_.at(id),s);}
   void set(int id,const wchar_t *s){set(id,std::wstring(s));}
   void set(int id,const Api::Json &v){set(id,wide(v.is_string()?v.get<std::string>():v.dump()));}
