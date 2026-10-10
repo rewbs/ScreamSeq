@@ -20,6 +20,7 @@
 #include "editor/GraphTrims.hpp"
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/ParameterEdits.hpp"
 #include "editor/PluginNoteSources.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"

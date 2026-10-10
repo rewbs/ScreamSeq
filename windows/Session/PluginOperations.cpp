@@ -1,6 +1,8 @@
 #include "PluginOperations.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/ParameterEdits.hpp"
+#include <limits>
 #include "editor/PluginNoteSources.hpp"
 #include "editor/SignalGroupBypass.hpp"
 #include "windows/Api/SessionAdapter.hpp"
@@ -485,8 +487,11 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     if(method=="plugin.state.set"){keys(p,{"slot","data","dryRun"});next.state=unbase64(field(p,"data"));}
     else keys(p,{"slot","plugin","values","dryRun"});
     NativePlugin probe(next,48000);
-    if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> prepared;
-      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
+    if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");
+      std::vector<std::pair<uint32_t,double>> requested;requested.reserve(values.size());
+      for(const auto &v:values){keys(v,{"id","value"});requested.emplace_back(uint32_t(integer(field(v,"id"),0,UINT32_MAX)),number(field(v,"value"),-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max())));}
+      std::vector<std::pair<uint32_t,float>> prepared;
+      try{prepared=Tracker::prepareParameterEdits(available,requested);}catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
       for(auto [id,value]:prepared){need(probe.parameter(id,value),"Plugin rejected parameter");liveChanges.push_back({uint32_t(index),id,value,0});}if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
     }
     const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;

@@ -203,3 +203,37 @@ unchanged musical history/cursor and menu availability. Existing
 draft preservation and frozen-trace preservation. Keep the existing actual-PID
 activity/provenance cases in the next consolidated gate. No build or test was run
 for these changes; P4a remains open for slider gestures and other listed work.
+
+## Shared parameter batch preparation — after checkpoint 05, unqualified
+
+`editor/hosted/ParameterEdits.hpp::prepareParameterEdits` replaces duplicated
+rack parameter validation in Windows `PluginOperations::invoke` and Mac
+`TrackerSessionAPI.inc`. It accepts immutable native catalog metadata plus
+parsed stable-ID/double requests, validates the complete 1–4096-entry batch, and
+returns native-ID/float values in request order. Missing/read-only/duplicate
+parameters, nonfinite/inverted ranges and nonfinite/out-of-range values fail
+before either host applies or publishes any value. Constant ranges remain valid;
+float narrowing follows range validation. Quantization stays in existing plugin
+processing; the helper does not invent parameter steps or normalize native units.
+
+Wire type/unknown-key/revision parsing remains platform-specific. Both adapters
+translate shared validation failures into their existing invalid-parameter code
+`-32602`; diagnostic wording is now shared for the extracted checks. Probe/state,
+queue admission, no-op detection, history and native device publication retain
+their current owners. The helper allocates only on the control owner and must not
+be called from rendering. This is a small shared boundary for subsequent gesture
+work, not a new preview API, history coalescer or manual-recording implementation.
+
+The new `parameter-edit` test target is registered in both builds and the Windows
+portable aggregate. Prepared cases cover stable IDs including UINT32_MAX, native
+units and request order, immutability, a later invalid entry, duplicates, absent
+and read-only targets, finite range endpoints, constant ranges, malformed metadata,
+nonfinite values and the exact 4096-entry bound. Existing platform API/worker
+checks remain necessary for JSON type rejection, no-op, queue failure, unified
+Undo/Redo and persistence; a pure candidate test cannot prove those behaviors.
+
+This source is deliberately **outside frozen checkpoint 05 (`85a90f095`)**. It
+must join the next cohesive shared batch and receive Windows/Mac builds plus the
+new candidate test and existing targeted parameter/API/history suites. It does
+not invalidate checkpoint 05's attribution or authorize an early extra build.
+No build or test has been run for this extraction.

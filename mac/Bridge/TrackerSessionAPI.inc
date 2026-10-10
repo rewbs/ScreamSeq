@@ -1308,17 +1308,15 @@
       std::vector<std::pair<uint32_t, float>> values;
       if (!state) {
         const auto parameters = _audio->pluginParameters(slot);
-        std::set<uint32_t> seen;
+        std::vector<std::pair<uint32_t,double>> requested;
         for (id raw in array(p[@"values"], 4096)) {
           NSDictionary *v = object(raw);
           keys(v, @[ @"id", @"value" ]);
-          auto id = uint32_t(integer(v[@"id"], 0, UINT32_MAX));
-          require(seen.insert(id).second, "Duplicate parameter");
-          auto found = std::find_if(parameters.begin(), parameters.end(), [&](const auto &v) { return v.id == id; });
-          require(found != parameters.end() && found->writable, "Plugin parameter does not exist, is read-only or unavailable");
-          values.emplace_back(id, float(number(v[@"value"], found->min, found->max)));
+          requested.emplace_back(uint32_t(integer(v[@"id"],0,UINT32_MAX)),
+            number(v[@"value"],-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max())));
         }
-        require(!values.empty(), "Parameter batch cannot be empty");
+        try { values=Tracker::prepareParameterEdits(parameters,requested); }
+        catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
       }
       NSData *bytes = preset ? loadedPreset[@"state"] : state ? base64(p[@"data"], 16 * 1024 * 1024) : nil;
       if (!state) {

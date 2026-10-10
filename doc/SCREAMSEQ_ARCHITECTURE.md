@@ -64,6 +64,13 @@ Quit must drain document/recovery work asynchronously, then call `TrackerSession
 
 `BuildInfo.json` records source hashes in the app bundle. `mac/Tools/build_manifest.py` includes currently untracked native additions. `mac/Tools/bundle_notices.py` packages attribution and user/API guides. Required VST3 interface sources are in `mac/ThirdParty/vst3/`; do not replace them with an unpinned machine-local SDK dependency.
 
+Rack parameter write preparation is shared by
+`editor/hosted/ParameterEdits.hpp`: adapters parse their wire types, then validate
+all stable IDs, writable catalog entries and native-unit ranges before any host
+publication. The helper returns a bounded candidate and owns no document, plugin,
+history or audio callback. Windows and Mac retain their native publication/state
+and history adapters; extraction does not change the public parameter API.
+
 ## Editing and API invariants
 
 - Native IDs are stable across insert/reorder; indices are transient views. Whole-collection API writes need read/merge/write.
