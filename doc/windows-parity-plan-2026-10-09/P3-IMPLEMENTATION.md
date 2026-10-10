@@ -713,3 +713,54 @@ the Save As row, with compact Report/Warnings/Recovery captions and full names i
 the command catalogue. The retained OpenMPT credit is placed on the bottom row
 so it no longer overlaps Live Loop at the minimum frame height. Foreground text
 legibility and mixed-DPI qualification remain pending.
+
+## Musical keyboard preferences — prepared after checkpoint 02
+
+The inspected Mac `KeyboardSettings.swift` permits note-row customization and
+Space/Return transport. Windows previously duplicated fixed rows in Main's
+`MusicalTyping.inc` and `AuditionWindow.hpp`. `MusicalKeyMap.hpp` now owns their
+shared Windows mapping/validation; Main, connected sample/instrument/precise-note
+typing and native audition consume it. Physical translation stays in the native
+host, including unshifted punctuation and the extra ISO key. The unchanged
+Windows default has an optional top C on I; the UI supports the reference's
+12+12 arrangement without silently removing that established key.
+
+`WorkspaceShortcuts` extends its existing profile with optional `noteKeys`, so
+mapping plus transport selection use one validation/conflict/atomic-file commit
+and the same unchanged-file guard and cross-session mutex. All other shortcut
+edits preserve the map. Old profiles load defaults without rewrite; default maps
+omit the field. Old executable readers reject the extension safely rather than
+discard it. Return is allowed only for definitions explicitly permitting it
+(Main's Play/Stop), preserving the existing Ctrl/Alt rule for other custom
+bindings. Keyboard changes affect future notes; held-key target/pitch and release
+ownership remain untouched. Mapped keys yield from global unmodified bindings
+only in the pattern note column; local editor and text ownership remain native.
+
+Command 628 opens `KeyboardSettingsWindow.hpp`, with retained fields, atomic
+Apply, explicit Reload, defaults in draft and a keep-custom-binding option.
+This global preference owner survives song replacement and does not masquerade
+as a musical draft. `workspace.keyboard.set` plus `workspace.get.keyboard` expose
+the same contract with `expectedKeyboard` configuration guarding. Describe,
+schema and guide are updated. No project metadata, musical history, plugin state
+or Mac/shared model code changes.
+
+Prepared checks: the existing shortcut executable covers legacy profiles,
+case normalization, punctuation/ISO positions, invalid/duplicate rows, transport
+conflicts, no-op disk preservation, reload failures and concurrent writers.
+`workspace-keyboard-settings-tests` shares the existing native workspace binary
+and covers raw/stale field retention, focus, bounds, mapped F versus Follow,
+held-note release across a mapping change, global draft lifetime, and a
+deterministic audition host's note-on/off parameters. The latter is input-owner
+evidence, not audio-device qualification. The actual-PID
+`WorkspaceShortcutTests.test_keyboard_preferences_atomic_guard_replay_and_native_entry`
+is selected by the existing CI class invocation and covers pipe validation,
+exact request replay, native form retention and mapped physical key entry.
+
+Only source/diff review, Python syntax and JSON parsing are completed. Queue
+shortcut/session-adapter, the new native group, actual-pipe shortcut tests and
+existing musical-typing/audition/local-focus cases for the next consolidated
+Windows validation. The common native physical-key helper warrants the existing
+retained-editor keyboard suite; a failure there broadens ownership inspection,
+not assertion relaxation. Hardware/foreground keyboard layouts, accessibility
+and mixed-DPI evidence remain required. Existing Mac and reciprocal gates remain
+open, with no new shared-source build requirement introduced by this slice.

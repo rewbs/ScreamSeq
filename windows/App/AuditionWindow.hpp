@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "MusicalKeyMap.hpp"
 #include "editor/TrackerDocument.hpp"
 
 namespace ScreamSeq {
@@ -12,6 +13,7 @@ private:
   enum:int {kind=5101,asset,note,velocity,noteOn,noteOff,panic,fromCursor,reload,close,octaveDown,octaveUp,heading=5150,targetLabel,statusLabel,helpLabel,noteLabel,velocityLabel};
   struct Held {unsigned note;uint64_t epoch;bool pending;};
   Request request_;std::function<Context()> context_;Context captured_;
+  std::function<MusicalKeyMap()> noteKeys_;
   std::map<WPARAM,Held> held_;std::string identity_;unsigned index_=0,firstNote_=49;
   bool sample_=true,setting_=false,preparing_=false;WorkspaceRect keyboard_;
   std::vector<WorkspaceRect> white_,black_;std::vector<unsigned> whiteNotes_,blackNotes_;
@@ -64,9 +66,8 @@ private:
     if(value==VK_ESCAPE){releaseAll();return true;}if(value==VK_F6){SetFocus(GetFocus()==window_?controls_.at(note):window_);return true;}
     if(ctrl||GetKeyState(VK_MENU)&0x8000||GetFocus()!=window_)return false;
     if(value==VK_SPACE){begin(value,integer(note,1,120));return true;}// Piano rows are physical key positions; held_ stays keyed by the message's own key.
-    const auto physical=physicalMusicalKey(value);if(!physical||physical>127)return false;
-    const std::string lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";const auto low=lower.find(char(physical)),high=upper.find(char(physical));
-    if(low!=std::string::npos){begin(value,std::min(120u,firstNote_+unsigned(low)));return true;}if(high!=std::string::npos){begin(value,std::min(120u,firstNote_+12+unsigned(high)));return true;}return false;
+    const auto offset=noteKeys_().offset(unsigned(physicalMusicalKey(value)));if(offset<0)return false;
+    begin(value,std::min(120u,firstNote_+unsigned(offset)));return true;
   }
   bool keyUp(WPARAM key)override{if(!held_.contains(key))return false;release(key);return true;}
   void deactivate()override{releaseAll();}
@@ -82,13 +83,14 @@ private:
   }
   void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);auto active=[&](unsigned pitch){return std::any_of(held_.begin(),held_.end(),[&](const auto &v){return v.second.note==pitch;});};for(size_t i=0;i<white_.size();++i){const auto r=white_[i];s.fill(r.x,r.y,r.w,r.h,active(whiteNotes_[i])?0x6edac5:0xc7d4db);if((whiteNotes_[i]-1)%12==0)s.uiText(L"C"+std::to_wstring((whiteNotes_[i]-1)/12),r.x+5,r.y+r.h-22,r.w-10,0x162330);}for(size_t i=0;i<black_.size();++i){const auto r=black_[i];s.fill(r.x,r.y,r.w,r.h,active(blackNotes_[i])?0x58b5a6:0x0c141c);}s.outline(keyboard_.x,keyboard_.y,keyboard_.w,keyboard_.h,GetFocus()==window_?0x6edac5:0x344757);}
 public:
-  AuditionWindow(HWND owner,Request request,std::function<Context()> context):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)){
+  AuditionWindow(HWND owner,Request request,std::function<Context()> context,std::function<MusicalKeyMap()> noteKeys=[] {return MusicalKeyMap{};}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),noteKeys_(std::move(noteKeys)){
     minimumWidth_=800;minimumHeight_=380;create(L"ScreamSeq.Audition",L"Sample & instrument audition",980,450);combo(kind);combo(asset);for(auto text:{L"Sample",L"Instrument"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));edit(note,L"49",3);edit(velocity,L"100",3);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{noteOn,L"Note on"},{noteOff,L"Note off"},{panic,L"Panic"},{fromCursor,L"From cursor"},{reload,L"Reload"},{close,L"Close"},{octaveDown,L"Octave −"},{octaveUp,L"Octave +"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"AUDITION"},{targetLabel,L""},{noteLabel,L"Note / 120"},{velocityLabel,L"Velocity"},{statusLabel,L""},{helpLabel,L"F6: piano focus · ZSXDCVGBHNJM / Q2W3ER5T6Y7UI · Space: chosen note · Escape: release"}})label(id,text);finish();
   }
   ~AuditionWindow(){releaseAll();}
-  void openAt(bool sample=true,std::string identity={}){if(preparing_){show();return;}if(identity_.empty()||!identity.empty()){releaseAll();sample_=sample;load(true,std::move(identity));}show();SetFocus(window_);}
+  void refreshKeyboard(){const auto keys=noteKeys_();set(helpLabel,L"F6: piano focus / "+wide(keys.lower)+L" / "+wide(keys.upper)+L" / Space: chosen note / Escape: release");}
+  void openAt(bool sample=true,std::string identity={}){refreshKeyboard();if(preparing_){show();return;}if(identity_.empty()||!identity.empty()){releaseAll();sample_=sample;load(true,std::move(identity));}show();SetFocus(window_);}
   bool releaseKey(WPARAM key){return keyUp(key);}
   Json snapshot()const{Json held=Json::array(),keys=Json::array();for(const auto &[key,value]:held_)held.push_back({{"key",key},{"note",value.note},{"epoch",value.epoch},{"pending",value.pending}});for(size_t i=0;i<white_.size();++i){const auto r=white_[i];keys.push_back({{"note",whiteNotes_[i]},{"black",false},{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}});}for(size_t i=0;i<black_.size();++i){const auto r=black_[i];keys.push_back({{"note",blackNotes_[i]},{"black",true},{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}});}return {{"visible",visible()},{"kind",sample_?"sample":"instrument"},{"index",index_},{"id",identity_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"preparing",preparing_},{"held",held},{"keys",keys},{"firstNote",firstNote_},{"note",utf8(field(note))},{"velocity",utf8(field(velocity))},{"status",utf8(status_)}};}
 };

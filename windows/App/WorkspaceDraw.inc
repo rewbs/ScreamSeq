@@ -21,7 +21,7 @@
 		s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
 		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,70,muted);s.uiText(L"SAMPLES",12,130,142,muted);
 		s.line(10,119,154,119,0x303b49);s.line(10,283,154,283,0x303b49);s.line(10,383,154,383,0x303b49);
-        if(height>662)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,551,142,muted);
+        if(height>662)s.uiText(busy ? L"Document worker busy" : workspaceShortcuts->noteKeys()==ScreamSeq::MusicalKeyMap{}?L"Z-M / Q-U: selected sound":L"Custom note keys active",12,551,142,muted);
         if(inspection&&height>702)s.uiText(L"QA clipboard is private",12,573,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-19,142,muted);
         // The timing form is always reachable in the sidebar. Keep this optional

@@ -752,7 +752,8 @@ Enter on an FX cell; it is not another configurable global binding.
 `workspace.shortcut.set` accepts exactly `command` (a catalog ID) and `keys`
 (an array of zero to four strings). An empty array clears a binding. One stroke
 sets a shortcut; two to four form a sequence, for example `["ctrl+alt+g", "r"]`.
-The first custom stroke needs Ctrl or Alt to preserve note entry. Sending the
+The first custom stroke needs Ctrl or Alt to preserve note entry, except that
+the Play/Stop command also accepts a single unmodified Return. Sending the
 exact `defaults` array for that same command restores its trusted default,
 including built-in unmodified bindings such as Space or F6. Canonical
 strings are lowercase, with modifiers in `ctrl+alt+shift+` order, followed by
@@ -775,6 +776,38 @@ describes unchanged song history even when the preference changes.
 The operation leaves playback running (`playbackStopped:false`). Successful writes use
 the adapter's existing request-ID replay. `workspace.get.shortcuts` reports
 only the current sequence `pending` and `hint` presentation state.
+
+**Preferences / Musical keyboard and Play-Stop key** (command 628) opens the
+retained native keyboard form. Use US unshifted physical key labels, including
+letters, numbers and punctuation; `<` denotes the extra ISO key. These describe
+positions, so QWERTZ/AZERTY keep their physical piano geometry. Lower requires 12
+keys (C through B); upper takes 12, or 13 including top C. All keys across both
+rows must be distinct. Defaults preserve Windows' existing
+`ZSXDCVGBHNJM` / `Q2W3ER5T6Y7UI`, including its top C on I. Mapped keys take
+priority in the pattern note column; ordinary fields keep native text editing,
+and modified command chords keep their existing behavior. Held notes release
+their original pitch even if settings change before key-up.
+
+`workspace.get.keyboard` returns `lower`, `upper`, `playStopKeys` and an opaque
+`revision` token describing that configuration. `workspace.keyboard.set` accepts
+exactly `expectedKeyboard` (that token), `lower`, `upper` and `playStopKeys` (zero
+to four command strokes). `[]` disables the global toggle, `['space']` or
+`['return']` select a native single-key binding, and existing modified
+shortcuts/sequences remain supported. The native form can keep a custom palette
+binding while changing note rows. A stale token, invalid mapping or conflicting
+transport shortcut rejects the whole change. Its normal result envelope reports
+unchanged song history/playback; request-ID replay covers successful writes.
+
+Both settings share the existing guarded, atomic shortcut preference write.
+Optional `noteKeys: {lower, upper}` in `workspace-shortcuts-v1.json` is emitted
+only for a nondefault map; old profiles keep the current Windows defaults and
+are not rewritten on load. Older executables reject this added field rather
+than silently erase it. Invalid/unreadable files retain the active configuration
+and block changes until an explicit successful reload; concurrent disk edits
+also require reload. Inspection instances remain memory-only. Reopening the
+form retains unfinished text; **Reload preferences** explicitly replaces it.
+This global preference draft survives song replacement. Pattern row-density
+commands and saved workspace layouts remain independent presentation settings.
 
 Open **Commands** with its default Ctrl+K binding to search, select a command,
 then **Set shortcut**, **Set sequence**, **Clear**, or **Reset default**.
@@ -811,7 +844,7 @@ for current qualification and remaining scope.
 The base adapter catalog includes `api.describe`, `document.get`, `pattern.get`,
 `context.get`, `transport.get`, `transport.play`, `transport.stop`, `context.set`,
 `workspace.get`, `workspace.panel`, `workspace.layout`, `workspace.commands.get`
-and `workspace.shortcut.set`. Attached document hosts
+and `workspace.shortcut.set`, `workspace.keyboard.set`. Attached document hosts
 can enable additional operations; use the live catalog, not a hard-coded superset.
 Unsupported methods return `-32601`. The adapter uses the existing
 string-ID JSON-RPC envelope, revision guard (-32001), parameter errors (-32602),

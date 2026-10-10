@@ -46,7 +46,8 @@
             if(entry.id==playCommand)entry.label=L"Playback / Play";
             if(entry.id==focusPatternCommand||entry.id==graphLanesFocus)entry.contextHint.clear();
             definitions.push_back({shortcutCommandID(entry.id),std::move(keys),
-                entry.id==newDocumentCommand||entry.id==playCursorCommand||entry.id==playSelectionCommand||entry.id==playSelectionCursorCommand});
+                entry.id==newDocumentCommand||entry.id==playCursorCommand||entry.id==playSelectionCommand||entry.id==playSelectionCursorCommand,
+                entry.id==togglePlaybackCommand});
         }
         workspaceShortcuts=std::make_unique<ScreamSeq::WorkspaceShortcuts>(std::move(definitions));
         workspaceShortcutHandler=[this](WPARAM key,bool repeat,bool prefixOnly){return workspaceShortcutKey(key,repeat,prefixOnly);};
@@ -78,6 +79,7 @@
     void workspaceShortcutChanged() {
         shortcutTimer();
         if(palette)palette->refreshShortcuts();
+        if(auditionWindow)auditionWindow->refreshKeyboard();
         refreshShortcutControlLabels();
     }
     void refreshShortcutControlLabels() {
@@ -106,6 +108,25 @@
         std::vector<std::string> keys;for(const auto &key:p["keys"]){if(!key.is_string())throw ScreamSeq::Api::ApiError(-32602,"Shortcut strokes must be strings");keys.push_back(key.get<std::string>());}
         const auto id=p["command"].get<std::string>();workspaceShortcuts->set(id,keys);workspaceShortcutChanged();
         return {{"command",id},{"keys",workspaceShortcuts->keys(id)}};
+    }
+    Json keyboardSettings()const{return workspaceShortcuts->keyboard(shortcutCommandID(togglePlaybackCommand));}
+    Json setKeyboardSettings(const Json &p) {
+        rejectDepartureInput();
+        if(!p.is_object()||p.size()!=4||!p.contains("expectedKeyboard")||!p.at("expectedKeyboard").is_string()||
+            !p.contains("lower")||!p.at("lower").is_string()||!p.contains("upper")||!p.at("upper").is_string()||
+            !p.contains("playStopKeys")||!p.at("playStopKeys").is_array()||p.at("playStopKeys").size()>4)
+            throw ScreamSeq::Api::ApiError(-32602,"Supply expectedKeyboard, lower, upper and playStopKeys");
+        std::vector<std::string> keys;for(const auto &key:p.at("playStopKeys")){if(!key.is_string())throw ScreamSeq::Api::ApiError(-32602,"Transport shortcut strokes must be strings");keys.push_back(key.get<std::string>());}
+        workspaceShortcuts->setKeyboard(shortcutCommandID(togglePlaybackCommand),p.at("expectedKeyboard").get<std::string>(),p.at("lower").get<std::string>(),p.at("upper").get<std::string>(),keys);
+        workspaceShortcutChanged();frameRequested=true;return keyboardSettings();
+    }
+    std::unique_ptr<ScreamSeq::KeyboardSettingsWindow> keyboardSettingsWindow;
+    void openKeyboardSettings() {
+        rejectDepartureInput();
+        if(!keyboardSettingsWindow)keyboardSettingsWindow=std::make_unique<ScreamSeq::KeyboardSettingsWindow>(window,ScreamSeq::KeyboardSettingsWindow::Callbacks{
+            [this]{return keyboardSettings();},[this](const Json &params){return setKeyboardSettings(params);},
+            [this]{if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();}});
+        keyboardSettingsWindow->open();
     }
     uint64_t workspaceShortcutContext() {
         const auto identity=documentId+"|"+view->session.revision+"|"+std::to_string(contextRevision)+"|"+selection().dump()+"|"+workspaceState.focus+"|"+std::to_string(inspectorCanvasFocus)+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetFocus()))+"|"+std::to_string(reinterpret_cast<uintptr_t>(GetActiveWindow()))+"|"+preciseNoteOperationGuard().dump();
@@ -149,6 +170,10 @@
         }
         const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0;
         if(!workspaceShortcuts->pending()&&nativeOwnsShortcut(key,ctrl,alt))return false;
+        // A deliberately mapped piano key owns the pattern's note column,
+        // including F after customization. Modified command chords still win.
+        if(!workspaceShortcuts->pending()&&!ctrl&&!alt&&GetFocus()==window&&trackerWorkspaceVisible()&&
+            workspaceState.focus=="pattern"&&column==0&&musicalOffset(key)>=0)return false;
         // Unmodified F is a hexadecimal digit outside the note column.
         if(!workspaceShortcuts->pending()&&!ctrl&&!alt&&key=='F'&&GetFocus()==window&&trackerWorkspaceVisible()&&workspaceState.focus=="pattern"&&column!=0)return false;
         ScreamSeq::WorkspaceShortcuts::Stroke stroke;

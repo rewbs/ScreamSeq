@@ -104,6 +104,58 @@ class WorkspaceShortcutTests(unittest.TestCase):
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
 
+    def test_keyboard_preferences_atomic_guard_replay_and_native_entry(self):
+        before = self.doc()
+        original = self.state()['keyboard']
+        self.assertIn('workspace.keyboard.set', self.read('api.describe')['writes'])
+        params = dict(expectedKeyboard=original['revision'], lower='FSXDCVGBHNJM',
+                      upper='Q2W3ER5T6Y7UI', playStopKeys=['return'])
+        for change in (dict(lower='duplicate'), dict(upper='Q2W3ER5T6Y7UM'),
+                       dict(playStopKeys=['ctrl+k']), dict(extra=True), dict(expectedKeyboard='stale')):
+            with self.subTest(change=change), self.assertRaises(ApiError):
+                self.client.call('workspace.keyboard.set', dict(params, **change))
+            self.assertEqual(self.state()['keyboard'], original)
+            self.assertEqual(self.doc(), before)
+        response = self.client.call('workspace.keyboard.set', params, request_id='keyboard-once')
+        self.assertFalse(response['changed'])
+        self.assertFalse(response['playbackStopped'])
+        self.assertEqual(self.doc(), before)
+        applied = self.state()['keyboard']
+        self.assertEqual(applied['lower'], 'FSXDCVGBHNJM')
+        self.assertEqual(applied['playStopKeys'], ['return'])
+        self.assertEqual(self.client.call('workspace.keyboard.set', params, request_id='keyboard-once'), response)
+        with self.assertRaises(ApiError):
+            self.client.call('workspace.keyboard.set', params)
+        self.command(628)
+        tool = self.native_window('ScreamSeq.KeyboardSettings')
+        text = self.field(tool, 8701, 'unfinished mapping')
+        self.focus_control(text)
+        self.command(628)
+        self.assertEqual(self.desktop.focus(tool), text)
+        self.assertEqual(self.text(text), 'unfinished mapping')
+        self.desktop.send(tool, 0x111, 8704, self.control(tool, 8704))
+        self.ready()
+        self.assertEqual(self.state()['keyboard'], applied)
+        self.assertEqual(self.text(text), 'unfinished mapping')
+        self.desktop.send(tool, 0x111, 8707, self.control(tool, 8707))
+        self.focus_pattern()
+        self.navigate(row=7, channel=0, column=0, following=False)
+        # Use the target thread's layout to identify physical F, independent
+        # of letter legends on AZERTY/QWERTZ keyboards.
+        user.GetKeyboardLayout.argtypes = [w.DWORD]
+        user.GetKeyboardLayout.restype = w.HANDLE
+        user.MapVirtualKeyExW.argtypes = [w.UINT, w.UINT, w.HANDLE]
+        user.MapVirtualKeyExW.restype = w.UINT
+        layout = user.GetKeyboardLayout(user.GetWindowThreadProcessId(self.native_window(), None))
+        key = user.MapVirtualKeyExW(0x21, 3, layout)
+        self.assertTrue(key)
+        octave = self.read('context.get')['octave']
+        self.key(key, hwnd=self.native_window())
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 1 + octave * 12)
+        self.assertFalse(self.read('context.get')['following'])
+        self.assertEqual(self.state()['musicalTyping']['held'], [])
+
     def test_pattern_select_all_keeps_cursor_view_and_native_text_ownership(self):
         self.focus_pattern()
         self.navigate(row=8, channel=1, column=0, following=False)

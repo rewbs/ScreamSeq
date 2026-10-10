@@ -29,6 +29,12 @@ inline WPARAM physicalMusicalKey(WPARAM key){
   if(scan>=0x10&&scan<=0x19)return WPARAM(top[scan-0x10]);
   if(scan>=0x1E&&scan<=0x26)return WPARAM(home[scan-0x1E]);
   if(scan>=0x2C&&scan<=0x32)return WPARAM(bottom[scan-0x2C]);
+  switch(scan) {
+    case 0x0C:return '-';case 0x0D:return '=';case 0x1A:return '[';case 0x1B:return ']';
+    case 0x27:return ';';case 0x28:return '\'';case 0x29:return '`';case 0x2B:return '\\';
+    case 0x33:return ',';case 0x34:return '.';case 0x35:return '/';case 0x56:return '<';
+    default:break;
+  }
   return 0;
 }
 // Modeless native editor shell. Repaint is requested by edits and window events;

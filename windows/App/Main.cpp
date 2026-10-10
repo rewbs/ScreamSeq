@@ -55,6 +55,7 @@
 #include "SongTimingWindow.hpp"
 #include "DocumentLoadReportWindow.hpp"
 #include "SongPropertiesWindow.hpp"
+#include "KeyboardSettingsWindow.hpp"
 #include "NoteTrackWindow.hpp"
 #include "PatternToolsWindow.hpp"
 #include "EffectPickerWindow.hpp"
@@ -93,6 +94,7 @@ constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
 constexpr int newDocumentCommand=624,openDemoCommand=625;
 constexpr int documentLoadReportCommand=626;
 constexpr int songPropertiesCommand=627;
+constexpr int keyboardSettingsCommand=628;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -354,6 +356,7 @@ public:
             {"effectPicker",effectPickerWindow?effectPickerWindow->snapshot():Json{{"visible",false}}},
             {"loadReport",documentLoadReportWindow?documentLoadReportWindow->snapshot():Json{{"visible",false}}},
             {"songProperties",songPropertiesWindow?songPropertiesWindow->snapshot():Json{{"visible",false}}},
+            {"keyboard",keyboardSettings()},{"keyboardSettingsWindow",keyboardSettingsWindow?keyboardSettingsWindow->snapshot():Json{{"visible",false}}},
             {"trackHeaders",noteTrackHeaderSnapshot()},
             {"noteTrackEditors",{{"create",createNoteTrackWindow?createNoteTrackWindow->snapshot():Json{{"visible",false}}},
                 {"group",groupNoteTrackWindow?groupNoteTrackWindow->snapshot():Json{{"visible",false}}}}},
@@ -418,6 +421,7 @@ public:
         }
         if(method=="workspace.commands.get"){require(p.empty(),"workspace.commands.get accepts no parameters");return workspaceCommandSnapshot();}
         if(method=="workspace.shortcut.set")return setWorkspaceShortcut(p);
+        if(method=="workspace.keyboard.set")return setKeyboardSettings(p);
 		if(method=="workspace.panel"&&p.contains("panel")&&p["panel"].is_string()&&isWorkspaceEditor(p["panel"].get<std::string>())){workspaceEditorRequest(p);return workspaceSnapshot();}
 		if(method=="workspace.layout") {
 			require(p.contains("name") && p["name"].is_string(),"Supply a workspace layout name");
@@ -774,7 +778,7 @@ public:
         if(!document.empty()&&(document!=documentId||revision!=view->session.revision))throw std::runtime_error("Audition source changed / Reload the captured editor");
         const auto &catalog=view->session.document.at(sample?"samples":"instruments");
         if(slot||!identity.empty()){const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot&&(identity.empty()||v.at("id")==identity);});if(found==catalog.end())throw std::runtime_error("Audition target is unavailable");identity=found->at("id");}
-        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return pianoOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};});
+        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return pianoOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};},[this]{return workspaceShortcuts->noteKeys();});
         auditionWindow->openAt(sample,std::move(identity));
     }
     bool releaseAuditionKey(WPARAM key){const bool typed=releaseTypedKey(key);return (auditionWindow&&auditionWindow->releaseKey(key))||typed;}

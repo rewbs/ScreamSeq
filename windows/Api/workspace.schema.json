@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ScreamSeq Windows workspace requests",
-  "description": "Workspace presentation and input context only; no musical Undo or playback stop. workspace.input requires expectedRevision and expectedContext; other workspace methods accept neither token. Editor placement retains existing fields and drafts.",
+  "description": "Workspace presentation and input preferences only; no musical Undo or playback stop. workspace.input requires expectedRevision and expectedContext; workspace.keyboard.set uses expectedKeyboard from workspace.get.keyboard.revision. Other workspace methods accept neither song/context token. Editor placement retains existing fields and drafts.",
   "type": "object",
   "properties": {
     "jsonrpc": {
@@ -19,7 +19,8 @@
         "workspace.layout",
         "workspace.commands.get",
         "workspace.shortcut.set",
-        "workspace.input"
+        "workspace.input",
+        "workspace.keyboard.set"
       ]
     },
     "params": {
@@ -131,6 +132,49 @@
                 "octave"
               ]
             }
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "method": {
+          "const": "workspace.keyboard.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedKeyboard": {
+              "type": "string"
+            },
+            "lower": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 12,
+              "description": "Distinct physical positions using US unshifted letters, digits and punctuation; < denotes the extra ISO key. Duplicates across both rows are rejected."
+            },
+            "upper": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 13,
+              "description": "Distinct physical positions using US unshifted letters, digits and punctuation; < denotes the extra ISO key. Duplicates across both rows are rejected."
+            },
+            "playStopKeys": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            }
+          },
+          "required": [
+            "expectedKeyboard",
+            "lower",
+            "upper",
+            "playStopKeys"
           ],
           "additionalProperties": false
         }

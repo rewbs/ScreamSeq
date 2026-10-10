@@ -2,6 +2,7 @@
 
 #include "../Api/SessionAdapter.hpp"
 #include "../Project/ProjectIO.hpp"
+#include "MusicalKeyMap.hpp"
 #include <iterator>
 #include <limits>
 #include <map>
@@ -35,6 +36,7 @@ public:
     // On loading an older profile, an absent newly introduced command yields
     // to an existing explicit binding. Explicit conflicts still reject atomically.
     bool introducedDefault=false;
+    bool allowsReturn=false; // Native transport only; never general data-key shortcuts.
   };
   struct Decision { bool consumed = false; std::string command; };
   using Sequence = std::vector<Stroke>;
@@ -46,6 +48,8 @@ private:
   using Bindings = std::map<std::string, Sequence>;
   Bindings defaults_, overrides_, active_;
   std::set<std::string> introducedDefaults_;
+  std::set<std::string> returnCommands_;
+  MusicalKeyMap noteKeys_;
   std::filesystem::path path_;
   std::optional<std::vector<std::byte>> diskBytes_;
   std::string diagnostic_;
@@ -67,7 +71,8 @@ private:
     for(const auto &stroke : sequence) result.push_back(stroke.encoded());
     return result;
   }
-  static void validateCustomFirst(const Sequence &sequence) {
+  void validateCustomFirst(const std::string &id,const Sequence &sequence)const {
+    if(returnCommands_.contains(id)&&sequence==Sequence{Stroke{"return",0}})return;
     if(!sequence.empty())
       need((sequence.front().modifiers & (control | alt)) != 0,
         "The first shortcut stroke needs Ctrl or Alt to preserve note entry");
@@ -153,7 +158,7 @@ private:
       "Shortcut preferences must be a regular file");
     return Project::readProjectBytes(path, maximumBytes);
   }
-  Bindings decode(std::span<const std::byte> bytes) const {
+  Bindings decode(std::span<const std::byte> bytes,MusicalKeyMap &noteKeys) const {
     std::vector<std::set<std::string>> objectKeys;
     size_t events = 0;
     auto check = [&](int depth, Json::parse_event_t event, Json &value) {
@@ -166,10 +171,16 @@ private:
       return true;
     };
     const auto root = Json::parse(bytes.begin(), bytes.end(), check);
-    need(root.is_object() && root.size() == 2 && root.contains("version") && root.contains("overrides"),
+    need(root.is_object() && root.size() == 2+size_t(root.contains("noteKeys")) && root.contains("version") && root.contains("overrides"),
       "Shortcut preferences must contain version and overrides");
     need(root.at("version").is_number_integer() && root.at("version") == 1,
       "Unsupported shortcut preference version");
+    noteKeys=MusicalKeyMap{};
+    if(root.contains("noteKeys")) {
+      const auto &keys=root.at("noteKeys");need(keys.is_object()&&keys.size()==2&&keys.contains("lower")&&keys.contains("upper")&&keys.at("lower").is_string()&&keys.at("upper").is_string(),"Note keys require lower and upper strings");
+      try{noteKeys=MusicalKeyMap::validated(keys.at("lower").get<std::string>(),keys.at("upper").get<std::string>());}
+      catch(const std::invalid_argument &error){throw Api::ApiError(-32602,error.what());}
+    }
     const auto &values = root.at("overrides");
     need(values.is_object() && values.size() <= maximumCommands, "Too many shortcut overrides");
     Bindings result;
@@ -184,7 +195,7 @@ private:
       auto sequence = parse(keys);
       // Writing the trusted default is equivalent to removing its override.
       if(sequence != known(entry.key())) {
-        validateCustomFirst(sequence);
+        validateCustomFirst(entry.key(),sequence);
         result.emplace(entry.key(), std::move(sequence));
       }
     }
@@ -198,14 +209,16 @@ private:
     (void)effective(result); // Explicit conflicts still reject the entire profile.
     return result;
   }
-  void publish(Bindings next) {
+  void publish(Bindings next,MusicalKeyMap noteKeys) {
     auto active = effective(next);
     Json overrides = Json::object();
     for(const auto &[id, keys] : next) overrides[id] = encoded(keys);
-    const auto bytes = Json{{"version", 1}, {"overrides", std::move(overrides)}}.dump();
+    Json profile={{"version", 1}, {"overrides", std::move(overrides)}};
+    if(noteKeys!=MusicalKeyMap{})profile["noteKeys"]={{"lower",noteKeys.lower},{"upper",noteKeys.upper}};
+    const auto bytes = profile.dump();
     need(bytes.size() <= maximumBytes, "Shortcut preferences exceed the 256 KiB storage limit");
     const auto span = std::as_bytes(std::span(bytes.data(), bytes.size()));
-    (void)decode(span);
+    MusicalKeyMap checked;(void)decode(span,checked);
     if(!path_.empty()) {
       if(!readable_) throw Api::ApiError(-32001, "Shortcut preferences could not be read; reload before changing them");
       FileLock lock(path_);
@@ -220,6 +233,7 @@ private:
     }
     overrides_.swap(next);
     active_.swap(active);
+    std::swap(noteKeys_,noteKeys);
     diagnostic_.clear();
     cancel();
   }
@@ -266,6 +280,7 @@ public:
       validateId(definition.id);
       need(defaults_.emplace(definition.id, parse(definition.defaultKeys)).second, "Duplicate command ID");
       if(definition.introducedDefault)introducedDefaults_.insert(definition.id);
+      if(definition.allowsReturn)returnCommands_.insert(definition.id);
     }
     active_ = effective({});
   }
@@ -278,11 +293,11 @@ public:
   bool set(const std::string &id, const std::vector<std::string> &keys) {
     const auto &original = known(id);
     auto parsed = parse(keys);
-    if(parsed != original) validateCustomFirst(parsed);
+    if(parsed != original) validateCustomFirst(id,parsed);
     if(parsed == active_.at(id)) return false;
     auto next = overrides_;
     if(parsed == original) next.erase(id); else next[id] = std::move(parsed);
-    publish(std::move(next));
+    publish(std::move(next),noteKeys_);
     return true;
   }
   bool reset(const std::string &id) {
@@ -290,7 +305,7 @@ public:
     if(!overrides_.contains(id)) return false;
     auto next = overrides_;
     next.erase(id);
-    publish(std::move(next));
+    publish(std::move(next),noteKeys_);
     return true;
   }
   // An empty path keeps inspection edits entirely in memory. Invalid loads keep
@@ -304,10 +319,11 @@ public:
       readable_ = false;
       FileLock lock(path_);
       auto bytes = readDisk(path_);
-      auto next = bytes ? decode(*bytes) : Bindings{};
+      MusicalKeyMap noteKeys;auto next = bytes ? decode(*bytes,noteKeys) : Bindings{};
       auto active = effective(next);
-      const bool changed = active != active_;
+      const bool changed = active != active_ || noteKeys!=noteKeys_;
       overrides_.swap(next); active_.swap(active);
+      std::swap(noteKeys_,noteKeys);
       diskBytes_ = std::move(bytes); readable_ = true; diagnostic_.clear();
       if(changed) cancel();
       return true;
@@ -322,6 +338,20 @@ public:
     try { const auto path = path_; return load(path); } catch(...) { return false; }
   }
   const std::string &diagnostic() const { return diagnostic_; }
+  const MusicalKeyMap &noteKeys()const noexcept{return noteKeys_;}
+  Json keyboard(const std::string &transport)const {
+    Json value={{"lower",noteKeys_.lower},{"upper",noteKeys_.upper},{"playStopKeys",keys(transport)}};
+    value["revision"]=value.dump();return value;
+  }
+  bool setKeyboard(const std::string &transport,const std::string &expected,const std::string &lower,const std::string &upper,const std::vector<std::string> &keys) {
+    need(returnCommands_.contains(transport),"Choose the configured transport command");
+    if(keyboard(transport).at("revision")!=expected)throw Api::ApiError(-32001,"Keyboard settings changed; reload before applying your draft");
+    MusicalKeyMap noteKeys;try{noteKeys=MusicalKeyMap::validated(lower,upper);}catch(const std::invalid_argument &error){throw Api::ApiError(-32602,error.what());}
+    const auto &original=known(transport);auto parsed=parse(keys);if(parsed!=original)validateCustomFirst(transport,parsed);
+    if(noteKeys==noteKeys_&&parsed==active_.at(transport))return false;
+    auto next=overrides_;if(parsed==original)next.erase(transport);else next[transport]=std::move(parsed);
+    publish(std::move(next),std::move(noteKeys));return true;
+  }
   bool pending() const { return !prefix_.empty(); }
   uint64_t deadline() const { return deadline_; }
   std::string hint() const {

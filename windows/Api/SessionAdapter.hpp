@@ -158,7 +158,7 @@ class SessionAdapter {
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
       {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get","workspace.commands.get"}},
-      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.ruler","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
+      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.ruler","workspace.panel","workspace.layout","workspace.shortcut.set","workspace.keyboard.set"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
       {"audioPortTrims","graph.trim.get/set use stable port keys, -48..48 dB gains, inverse input/output links and dB source modulation. Recipe or song nodes, buses, stages and group boundaries; dryRun, revision guards and unified Undo. Audio followers are not trim sources."},{"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
@@ -172,13 +172,13 @@ class SessionAdapter {
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
         {"workspace.input",{"expectedRevision","expectedContext"}},
-        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()}}},
+        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()},{"workspace.keyboard.set",{"expectedKeyboard"}}}},
       {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"placements",{"right","hide"}},
         {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}},{"graphCurve",{"right","bottom","secondary","float","hide"}},{"preciseNotes",{"right","bottom","secondary","float","hide"}}}},
         {"layouts",{"Compose","Pattern focus","Sound design","Connected","Graph editing","Save custom","Restore custom","Delete custom","Reload saved"}},
         {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
         {"schema","windows/Api/workspace.schema.json"}}},
-      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; other workspace operations accept neither token. Unsupported parameters reject."}};
+      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; workspace.keyboard.set guards its separate expectedKeyboard token. Other workspace operations accept neither song/context token. Unsupported parameters reject."}};
     if(host_ && host_->supportsPlaybackLoop()) {
       result["writes"].push_back("transport.loop");
       result["revisionGuards"]["transport.loop"]={"expectedRevision"};
@@ -310,7 +310,7 @@ public:
     if(std::this_thread::get_id()!=owner_) return errorResponse(q["id"],-32002,"Dispatch onto the session control thread");
     const std::string method=q["method"];
     const auto &p=q["params"];
-    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input" || method=="workspace.ruler";
+    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.keyboard.set" || method=="workspace.input" || method=="workspace.ruler";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
     const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};

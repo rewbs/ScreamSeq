@@ -15,12 +15,9 @@
     unsigned typingSound=0;
     // The rows are physical key positions (US letters shown). Held notes stay
     // keyed by the message's own virtual key, which key-up repeats unchanged.
-    static int musicalOffset(WPARAM key) {
+    int musicalOffset(WPARAM key)const {
         const auto physical=ScreamSeq::physicalMusicalKey(key);
-        if(!physical||physical>127)return -1;
-        const std::string_view lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";
-        const auto low=lower.find(char(physical)),high=upper.find(char(physical));
-        return low!=lower.npos?int(low):high!=upper.npos?12+int(high):-1;
+        return workspaceShortcuts?workspaceShortcuts->noteKeys().offset(unsigned(physical)):ScreamSeq::MusicalKeyMap{}.offset(unsigned(physical));
     }
     static bool typingButtonControl(HWND focus) {
         wchar_t name[64]{};GetClassNameW(focus,name,64);
