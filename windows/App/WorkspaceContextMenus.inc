@@ -71,6 +71,7 @@
         const bool enabled=!busy;
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
             {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
+            {selectAllFocusedCommand,L"Select &all pattern cells",enabled&&!recoveryRestoring},
             {copyCommand,L"&Copy selection\tCtrl+C",enabled},{cutFocusedCommand,L"Cu&t selection\tCtrl+X",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
             {0,L"Paste special",enabled,false,{{patternPasteMix,L"Mix into empty fields",enabled},{patternPasteMerge,L"Merge nonempty fields",enabled}}},
             {clearCommand,L"&Clear selection\tDelete",enabled},{patternClearField,L"Clear current field\t.",enabled},{patternDeleteChannelRow,L"Delete channel row\tShift+Delete",enabled},{0,L""},
@@ -212,7 +213,7 @@
                 hitChannel>=selected.at("startChannel").get<unsigned>()&&hitChannel<=selected.at("endChannel").get<unsigned>();
             if(!keyboard&&!inside) {
                 auto next=position();next["row"]=hitRow;next["channel"]=hitChannel;next["column"]=hitColumn;next["following"]=false;
-                navigate(next);effectFieldIndex=hitField;selecting=false;anchorRow=hitRow;anchorChannel=hitChannel;
+                navigate(next);effectFieldIndex=hitField;resetPatternSelection();anchorRow=hitRow;anchorChannel=hitChannel;
             }
             workspaceState.focus="pattern";
         } else if(surfaceName=="sample")setWorkspaceCanvasFocus("samples");

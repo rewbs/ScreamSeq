@@ -45,11 +45,11 @@
         unsigned destination=row;if(key==VK_UP)destination=row?row-1:0;else if(key==VK_DOWN)destination=std::min(row+1,patternRows()-1);
         else if(key==VK_PRIOR)destination=row>visibleRows()?row-visibleRows():0;else if(key==VK_NEXT)destination=std::min(row+visibleRows(),patternRows()-1);
         else if(key==VK_HOME)destination=0;else if(key==VK_END)destination=patternRows()-1;else return false;
-        auto n=position();n["row"]=destination;n["following"]=false;navigate(n);selecting=false;return true;
+        auto n=position();n["row"]=destination;n["following"]=false;navigate(n);resetPatternSelection();return true;
     }
     bool graphLaneClick(float x,float y,bool doubleClick=false){
         const auto r=graphLanesRect();if(r.w<=0||!r.contains(x,y))return false;
-        graphLaneSelected=std::min(unsigned(view->graphPattern->lanes.size()-1),graphLaneFirst+unsigned((x-r.x)/graphLaneWidth));workspaceState.focus="graphLanes";SetFocus(window);selecting=false;
+        graphLaneSelected=std::min(unsigned(view->graphPattern->lanes.size()-1),graphLaneFirst+unsigned((x-r.x)/graphLaneWidth));workspaceState.focus="graphLanes";SetFocus(window);resetPatternSelection();
         if(y>=r.y+gridHeader){auto n=position();n["row"]=std::min(firstRow+unsigned((y-r.y-gridHeader)/rowHeight),patternRows()-1);n["following"]=false;navigate(n);}
         revealGraphLane();frameRequested=true;if(doubleClick)openGraphCommands(true);return true;
     }

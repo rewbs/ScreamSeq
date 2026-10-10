@@ -273,8 +273,9 @@ public:
         return *it->second;
     }
 	Json selection() const {
-		return {{"startRow",selecting ? std::min(row,anchorRow) : row},{"endRow",selecting ? std::max(row,anchorRow) : row},
-			{"startChannel",selecting ? std::min(channel,anchorChannel) : channel},{"endChannel",selecting ? std::max(channel,anchorChannel) : channel}};
+        const auto [endRow,endChannel]=patternSelectionEnd();
+		return {{"startRow",selecting ? std::min(endRow,anchorRow) : row},{"endRow",selecting ? std::max(endRow,anchorRow) : row},
+			{"startChannel",selecting ? std::min(endChannel,anchorChannel) : channel},{"endChannel",selecting ? std::max(endChannel,anchorChannel) : channel}};
 	}
 	Json position() const { return {{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow}}; }
     void validatePosition(const Json &value) const {
@@ -457,7 +458,7 @@ public:
 		patternIndex=p; row=r; channel=c; column=col; follow=f; ++contextRevision;
 
 		updateInspector();
-		if(moved) selecting=false; ensureCursorVisible(); layoutControls();
+		if(moved) resetPatternSelection(); ensureCursorVisible(); layoutControls();
 	}
     unsigned patternRows() const {return view->pattern(patternIndex).rows;}
 
@@ -507,15 +508,16 @@ public:
     void refreshDocument(bool force=false) {
         if(departureAdopted&&!departureRefreshing){completeNativeDeparture();return;}
         auto next=controller->view();if(next==view&&!force) return;
-        auto oldPosition=position();
+        auto oldPosition=position(),oldSelection=selection();
         auto previous=view->session.documentId;const auto previousTake=view->recording.value("take",std::string());view=std::move(next);documentId=view->session.documentId;
         if(previousTake!=view->recording.value("take",std::string()))discardPendingMidi();
-        if(!view->patterns.contains(patternIndex)) patternIndex=view->patterns.begin()->first;
+        if(!view->patterns.contains(patternIndex)){patternIndex=view->patterns.begin()->first;resetPatternSelection();}
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
-        else if(oldPosition!=position()) ++contextRevision;
+        if(explicitSelectionEnd){explicitSelectionEnd->first=std::min(explicitSelectionEnd->first,patternRows()-1);explicitSelectionEnd->second=std::min(explicitSelectionEnd->second,view->channels-1);}
+        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();resetPatternSelection();workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
+        else if(oldPosition!=position()||oldSelection!=selection()) ++contextRevision;
         resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
         if(sampleRecordingWindow)sampleRecordingWindow->documentChanged();
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();

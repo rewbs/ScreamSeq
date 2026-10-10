@@ -22,7 +22,7 @@
             [this](const auto &target){return resolveScratchTarget(target);},
             [this](const auto &target,bool preview){const auto resolved=resolveScratchTarget(target);if(!resolved)throw std::runtime_error("The captured pattern cell no longer exists");
                 if(preview)play({{"pattern",resolved->pattern},{"startRow",resolved->row},{"endRow",resolved->rows},{"cursorRow",resolved->row},{"loop",playbackLoop}});
-                else{auto n=position();n["pattern"]=resolved->pattern;n["row"]=resolved->row;n["channel"]=resolved->channel;n["column"]=3+2*resolved->column;n["following"]=false;navigate(n);selecting=false;ensureCursorVisible();SetForegroundWindow(window);SetFocus(window);}});
+                else{auto n=position();n["pattern"]=resolved->pattern;n["row"]=resolved->row;n["channel"]=resolved->channel;n["column"]=3+2*resolved->column;n["following"]=false;navigate(n);resetPatternSelection();ensureCursorVisible();SetForegroundWindow(window);SetFocus(window);}});
         scratchGestureWindow->openAt();
     }
     bool scratchDoubleClick(float x,float y){

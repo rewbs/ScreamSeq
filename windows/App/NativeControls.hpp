@@ -12,7 +12,7 @@ namespace ScreamSeq::NativeControls {
 // actual window height is its closed height, not the requested dropdown height.
 struct State {
   std::array<int,4> bounds{};
-  bool placed=false,active=false,combo=false,inspect=false,contrast=false;
+  bool placed=false,active=false,combo=false,edit=false,inspect=false,contrast=false;
 };
 inline constexpr UINT_PTR subclassID=0x534351;
 inline constexpr wchar_t inspectionProperty[]=L"ScreamSeq.ControlInspection";
@@ -73,6 +73,10 @@ inline LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DW
     for(auto name:{inspectionProperty,L"ScreamSeq.PaintCount",L"ScreamSeq.LayoutCount",L"ScreamSeq.TextCount",L"ScreamSeq.SelectionCount",L"ScreamSeq.EnableCount",L"ScreamSeq.DrawCount"})RemovePropW(h,name);
     delete s;return DefSubclassProc(h,m,w,l);
   }
+  // Classic EDIT has no uniform Select All key across Windows versions/styles.
+  // Handle its translated Ctrl+A locally; RichEdit keeps its own implementation.
+  // The ordinary EM_SETSEL send remains subject to any active departure lease.
+  if(s->edit&&m==WM_CHAR&&w==1){SendMessageW(h,EM_SETSEL,0,-1);return 0;}
   if(s->combo&&(m==WM_SETTINGCHANGE||m==WM_THEMECHANGED||m==WM_SYSCOLORCHANGE)){s->contrast=highContrast();InvalidateRect(h,nullptr,FALSE);}
   if(s->combo&&!s->contrast){
     if(m==WM_ERASEBKGND)return 1;
@@ -94,7 +98,7 @@ inline LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DW
 inline void install(HWND h,bool inspect=false){
   if(state(h))return;
   wchar_t name[32]{};GetClassNameW(h,name,32);
-  auto *s=new State;s->combo=_wcsicmp(name,L"COMBOBOX")==0&&(GetWindowLongPtrW(h,GWL_STYLE)&3)==CBS_DROPDOWNLIST;s->inspect=inspect;s->contrast=highContrast();
+  auto *s=new State;s->combo=_wcsicmp(name,L"COMBOBOX")==0&&(GetWindowLongPtrW(h,GWL_STYLE)&3)==CBS_DROPDOWNLIST;s->edit=_wcsicmp(name,L"EDIT")==0;s->inspect=inspect;s->contrast=highContrast();
   if(!SetWindowSubclass(h,procedure,subclassID,reinterpret_cast<DWORD_PTR>(s))){delete s;return;}
   if(inspect)SetPropW(h,inspectionProperty,reinterpret_cast<HANDLE>(1));
 }

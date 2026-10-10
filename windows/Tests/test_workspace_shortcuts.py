@@ -104,6 +104,38 @@ class WorkspaceShortcutTests(unittest.TestCase):
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
 
+    def test_pattern_select_all_keeps_cursor_view_and_native_text_ownership(self):
+        self.focus_pattern()
+        self.navigate(row=8, channel=1, column=0, following=False)
+        before, context = self.doc(), self.read('context.get')
+        viewport = self.state()['viewport']
+        pattern = self.read('pattern.get', pattern=context['pattern'], rowCount=1, channelCount=1)
+        self.key(ord('A'), ctrl=True)
+        selected = self.read('context.get')
+        self.assertEqual(selected['selection'], dict(startRow=0, endRow=pattern['rows'] - 1,
+                                                     startChannel=0, endChannel=before['data']['channels'] - 1))
+        for key in ('pattern', 'row', 'channel', 'column', 'following'):
+            self.assertEqual(selected[key], context[key], key)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.state()['viewport'], viewport)
+        self.key(ord('A'), ctrl=True)
+        self.assertEqual(self.read('context.get')['contextRevision'], selected['contextRevision'])
+        self.key(0x28)  # Down starts ordinary cursor navigation again.
+        moved = self.read('context.get')
+        self.assertEqual(moved['selection'], dict(startRow=9, endRow=9, startChannel=1, endChannel=1))
+        self.command(584)
+        tool = self.native_window('ScreamSeq.CreateNoteTrack')
+        field = self.field(tool, 7901, 'Keep this native draft')
+        self.focus_control(field)
+        self.desktop.send(field, 0xB1, 4, 4)
+        context = self.read('context.get')
+        self.key(ord('A'), hwnd=field, ctrl=True)
+        span = self.desktop.send(field, 0xB0)
+        self.assertEqual((span & 0xFFFF, (span >> 16) & 0xFFFF), (0, len('Keep this native draft')))
+        self.assertEqual(self.read('context.get'), context)
+        self.assertEqual(self.text(field), 'Keep this native draft')
+        self.assertEqual(self.doc(), before)
+
     def test_api_catalogue_validation_conflicts_and_atomic_presentation_only_edits(self):
         catalogue = self.catalogue()
         self.assertGreater(len(catalogue), 80)

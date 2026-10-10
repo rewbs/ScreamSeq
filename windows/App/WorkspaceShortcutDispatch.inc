@@ -30,7 +30,7 @@
             {pasteFocusedCommand,L"Edit / Paste into focused selection",L""},
             {cutFocusedCommand,L"Edit / Cut focused selection",L""},
             {deleteFocusedCommand,L"Edit / Delete focused selection",L""},
-            {selectAllFocusedCommand,L"Edit / Select all sample frames",L""},
+            {selectAllFocusedCommand,L"Edit / Select all in the focused editor",L""},
             {togglePlaybackCommand,L"Playback / Play or stop",L""},
             {redoAlternateCommand,L"Edit / Redo (alternate shortcut)",L""},
             {reloadShortcutsCommand,L"Workspace / Reload saved shortcuts",L""}});
@@ -184,6 +184,7 @@
         if(ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the tracker or sample selection first");
         if(workspaceMainCanvasFocused("samples"))command(id==copyFocusedCommand?sampleCopyCommand:id==pasteFocusedCommand?samplePasteCommand:id==cutFocusedCommand?sampleCutCommand:id==deleteFocusedCommand?sampleClearCommand:sampleAllCommand);
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==cutFocusedCommand)cutCells();
+        else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==selectAllFocusedCommand)selectWholePattern();
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&(id==copyFocusedCommand||id==pasteFocusedCommand||id==deleteFocusedCommand))command(id==copyFocusedCommand?copyCommand:id==pasteFocusedCommand?pasteCommand:clearCommand);
         else throw std::runtime_error("Focus a matching pattern or sample selection first");
         return true;

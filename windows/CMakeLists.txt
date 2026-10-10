@@ -143,6 +143,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-command-result-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-note-track-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-transport-control-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-pattern-selection-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-pattern-selection-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;selection"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-selection" TIMEOUT 120)
     set_tests_properties(workspace-transport-control-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;transport"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=transport-controls" TIMEOUT 120)
     set_tests_properties(workspace-note-track-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts"

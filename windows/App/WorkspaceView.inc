@@ -7,6 +7,18 @@
 	float dragRight=0, dragLower=0;
 	bool selecting=false;
 	unsigned anchorRow=0,anchorChannel=0;
+    std::optional<std::pair<unsigned,unsigned>> explicitSelectionEnd;
+    std::pair<unsigned,unsigned> patternSelectionEnd()const{return selecting&&explicitSelectionEnd?*explicitSelectionEnd:std::pair{row,channel};}
+    void setPatternSelection(bool active,unsigned startRow,unsigned startChannel,std::optional<std::pair<unsigned,unsigned>> end={}) {
+        const auto before=selection();const bool wasSelecting=selecting;
+        selecting=active;anchorRow=startRow;anchorChannel=startChannel;explicitSelectionEnd=active?end:std::nullopt;
+        if(wasSelecting!=selecting||before!=selection())++contextRevision;
+        frameRequested=true;
+    }
+    void resetPatternSelection(){setPatternSelection(false,row,channel);}
+    void selectWholePattern() {
+        rejectDepartureInput();setPatternSelection(true,0,0,std::pair{patternRows()-1,view->channels-1});
+    }
     static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=72, gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
@@ -378,13 +390,13 @@
 		else if(key==VK_HOME) r=0;
 		else if(key==VK_END) r=rows-1;
 		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
-		else if(key==VK_LEFT) {if(moveEffectField(-1))return true; if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
-		else if(key==VK_RIGHT) {if(moveEffectField(1))return true; if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
+		else if(key==VK_LEFT) {if(moveEffectField(-1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
+		else if(key==VK_RIGHT) {if(moveEffectField(1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
 		else return enterCell(key,repeat);
 		const unsigned ar=selecting ? anchorRow : row,ac=selecting ? anchorChannel : channel;
 		n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;navigate(n);
         if(key==VK_LEFT&&col>=4&&col%2==0){const auto &fields=currentEffectFields();effectFieldIndex=fields.empty()?0:fields.size()-1;}
-		selecting=shift && key!=VK_TAB;anchorRow=ar;anchorChannel=ac;ensureCursorVisible();return true;
+		setPatternSelection(shift && key!=VK_TAB,ar,ac);ensureCursorVisible();return true;
 	}
 	bool gridClick(float x,float y,bool extend) {
 		if(!trackerWorkspaceVisible())return false;
@@ -399,7 +411,7 @@
         if(field>=fxStart){unsigned fx=0;while(fx+1<view->effectColumns.at(c)&&effectColumnStart(c,fx+1)<=field)++fx;const auto local=field-effectColumnStart(c,fx);col=3+2*fx+(local>=21.6f?1:0);selectedField=effectColumnLayout(c,fx).hit(local);}
 		unsigned ar=extend ? (selecting ? anchorRow : row) : r,ac=extend ? (selecting ? anchorChannel : channel) : c;
 		auto n=position();n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;
-		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();anchorRow=ar;anchorChannel=ac;selecting=extend;SetFocus(window);
+		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();setPatternSelection(extend,ar,ac);SetFocus(window);
 		return true;
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {

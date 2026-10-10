@@ -76,3 +76,39 @@ adapter; a subsequent renderer change would invalidate that boundary.
 The standing earliest next local build remains 2026-10-10 02:25:48.842926 UTC,
 based on P1 checkpoint 02. Reuse current results only for unchanged relevant
 inputs; the new shared region checks and P3 native/API paths are unqualified.
+
+## Pattern and native-text Select All — prepared, unqualified
+
+Mac `PatternView.swift` selects all rows/channels without moving its edit cursor.
+Windows command 544 previously selected sample frames only. It now selects all
+pattern cells when that canvas owns focus, with a pattern context-menu entry and
+the existing customizable Ctrl+A binding. The cursor, follow flag and viewport
+stay put. `context.get.selection` and drawing use an independent selection end;
+copy, clear, transforms, sample rendering and note-track grouping consume those
+same bounds. No new musical operation, project field or independent Undo exists.
+
+`WorkspaceView.inc` owns selection state and its context revision. Ordinary
+navigation, a fresh click (including at the existing cursor), graph-lane focus,
+scratch Return and document replacement reset that state. Shift navigation and
+group headers replace it using their own anchors. Appending columns preserves the
+captured range; explicit Select All includes new columns, and shrink/Undo clamps
+it and updates the context guard. Repeat Select All on unchanged bounds is a no-op.
+The reset helper is deliberately distinct from the existing
+`EditingView.inc::clearPatternSelection`, which deletes musical content.
+
+Native text fields retain shortcut ownership. `NativeControls.hpp` handles the
+translated Ctrl+A character for classic EDIT through ordinary EM_SETSEL; RichEdit
+retains its native implementation. The send grants no presentation permission and
+remains subject to the existing document-departure input lease. The sidebar's
+typing/private-clipboard hints move below the new loop control to avoid overlap.
+
+Prepared checks: `workspace-pattern-selection-tests` covers cursor/viewport/song
+preservation, repeat no-op, grouping bounds, append/shrink, same-cursor reset,
+departure refusal and edge-to-edge Delete with one Undo. The existing PID-pipe
+workspace-shortcut suite gains real queued Ctrl+A, cursor navigation and retained
+text ownership checks. `native-control-tests` adds single-line, multiline and
+read-only text selection, unchanged text/Undo/focus and departure-lease refusal.
+These checks have not run. Add them to the same next Windows build/checkpoint,
+including existing shortcut, context-menu, grid/docking and native input-gate
+groups because common selection/control handling changed. Mac source is unchanged
+by this selection slice; the prior shared P2/P3 checks still require a Mac build.

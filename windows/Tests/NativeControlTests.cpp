@@ -13,6 +13,30 @@ struct FixtureResources {
   HWND window{};HFONT font{};
   ~FixtureResources(){if(window)DestroyWindow(window);if(font)DeleteObject(font);}
 };
+void nativeEditSelection(HWND parent) {
+  for(const DWORD style:{DWORD(0),DWORD(ES_MULTILINE),DWORD(ES_READONLY)}) {
+    const auto edit=CreateWindowW(L"EDIT",L"Retained draft",WS_CHILD|WS_VISIBLE|WS_TABSTOP|style,
+      10,10,260,60,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    require(edit!=nullptr,"Create native text-selection fixture");ScreamSeq::Tests::ownGuiWindow(edit);
+    ScreamSeq::NativeControls::install(edit);SetFocus(edit);
+    SendMessageW(edit,EM_SETSEL,2,4);const auto undo=SendMessageW(edit,EM_CANUNDO,0,0);
+    SendMessageW(edit,WM_CHAR,1,0);DWORD first=0,last=0;
+    SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    require(first==0&&last==14,"Ctrl+A did not select the native field's complete text");
+    SendMessageW(edit,EM_SETSEL,2,4);
+    {
+      const std::array roots{edit};ScreamSeq::NativeInputGate gate(roots);
+      SendMessageW(edit,WM_CHAR,1,0);
+      SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+      require(first==2&&last==4,"Native Select All bypassed document-departure input protection");
+    }
+    wchar_t text[64]{};GetWindowTextW(edit,text,64);
+    require(std::wstring_view(text)==L"Retained draft"&&SendMessageW(edit,EM_CANUNDO,0,0)==undo&&GetFocus()==edit,
+      "Native Select All changed text, Undo or focus");
+    DestroyWindow(edit);
+  }
+  SetFocus(parent);
+}
 std::wstring reportCell(size_t row,unsigned column){
   if(column==0)return row==0?L"Alpha / Café / 旋律 / a long native label that must be ellipsized":row==1?L"Beta":L"Row "+std::to_wstring(row);
   if(column==2)return L"64";
@@ -161,7 +185,7 @@ int main(int argc,char **argv){
       if(argc>1){std::filesystem::path out=argv[1];std::filesystem::create_directories(out);image.save(out/(std::string(name)+".bmp"));}
     };
     render("normal",RGB(53,68,82));
-    ShowWindow(parent,SW_SHOWNOACTIVATE);SetFocus(combo);render("focused",RGB(104,193,178));
+    ShowWindow(parent,SW_SHOWNOACTIVATE);nativeEditSelection(parent);SetFocus(combo);render("focused",RGB(104,193,178));
     EnableWindow(combo,FALSE);render("disabled",RGB(53,68,82));EnableWindow(combo,TRUE);
     SendMessageW(combo,WM_KEYDOWN,VK_DOWN,0);require(SendMessageW(combo,CB_GETCURSEL,0,0)==2,"Arrow-key selection");
     SendMessageW(combo,WM_KEYDOWN,VK_F4,0);require(SendMessageW(combo,CB_GETDROPPEDSTATE,0,0),"F4 popup");

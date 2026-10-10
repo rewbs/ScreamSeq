@@ -1,7 +1,8 @@
     std::unique_ptr<ScreamSeq::NoteTrackWindow> createNoteTrackWindow,groupNoteTrackWindow;
     Json noteTrackContext()const {
-        Json channels=Json::array(),ids=Json::array();const auto first=std::min(selecting?std::min(channel,anchorChannel):channel,view->channels-1);
-        const auto last=std::min(selecting?std::max(channel,anchorChannel):channel,view->channels-1);
+        const auto selected=selection();Json channels=Json::array(),ids=Json::array();
+        const auto first=std::min(selected.at("startChannel").get<unsigned>(),view->channels-1);
+        const auto last=std::min(selected.at("endChannel").get<unsigned>(),view->channels-1);
         for(auto c=first;c<=last;++c){channels.push_back(c);ids.push_back(noteColumn(c).at("id"));}
         return {{"documentId",documentId},{"revision",view->session.revision},{"editable",view->session.document.at("editable")},
             {"busy",busy||recoveryRestoring},{"channels",channels},{"columnIDs",ids},{"layout",view->session.document.at("trackLayout")}};
@@ -51,7 +52,7 @@
             first=track->at("channels").front().get<unsigned>();last=track->at("channels").back().get<unsigned>();
         }
         auto next=position();next["channel"]=last;next["column"]=0;next["following"]=false;
-        workspaceState.focus="pattern";navigate(next);anchorRow=row;anchorChannel=first;selecting=first!=last;
+        workspaceState.focus="pattern";navigate(next);setPatternSelection(first!=last,row,first);
         ensureCursorVisible();SetFocus(window);frameRequested=true;return true;
     }
     Json noteTrackHeaderSnapshot()const {

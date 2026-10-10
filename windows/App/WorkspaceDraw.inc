@@ -21,8 +21,8 @@
 		s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
 		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,142,muted);s.uiText(L"SAMPLES",12,130,142,muted);
 		s.line(10,119,154,119,0x303b49);s.line(10,283,154,283,0x303b49);s.line(10,383,154,383,0x303b49);
-        if(height>630)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,519,142,muted);
-        if(inspection&&height>670)s.uiText(L"QA clipboard is private",12,541,142,muted);
+        if(height>662)s.uiText(busy ? L"Document worker busy" : L"Z-M / Q-U: selected sound",12,551,142,muted);
+        if(inspection&&height>702)s.uiText(L"QA clipboard is private",12,573,142,muted);
 		s.uiText(L"OpenMPT audio engine",12,height-68,142,muted);
         // The timing form is always reachable in the sidebar. Keep this optional
         // summary whole at narrow widths instead of drawing a clipped fragment.
@@ -40,6 +40,7 @@
             L"P"+std::to_wstring(patternIndex)+L" · "+std::to_wstring(patternRows())+L" rows",
             L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-(r.w>540?378:264),accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
+        const auto selectedEnd=patternSelectionEnd();
         drawNoteTrackNames();
 		s.clip(r.x+gutter,r.y+gridHeader-23,r.w-gutter,r.h-gridHeader+23);
 		for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
@@ -66,7 +67,7 @@
 			s.clip(r.x+gutter,y,r.w-gutter,rowHeight);
 			for(unsigned c=first;c<count && c<first+visibleChannels();++c) {
 				float x=r.x+gutter+channelStart(c)-horizontalScroll;
-				if(selecting && rr>=std::min(row,anchorRow) && rr<=std::max(row,anchorRow) && c>=std::min(channel,anchorChannel) && c<=std::max(channel,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
+				if(selecting && rr>=std::min(selectedEnd.first,anchorRow) && rr<=std::max(selectedEnd.first,anchorRow) && c>=std::min(selectedEnd.second,anchorChannel) && c<=std::max(selectedEnd.second,anchorChannel)) s.fill(x-2,y,channelWidth(c)-1,rowHeight,0x304359);
 				if(rr==row && c==channel) {
 					s.fill(x+fieldStart(column)-1,y,fieldWidth(column)+2,rowHeight,0x56416f);
 					s.outline(x-2,y,channelWidth(c)-1,rowHeight,displayedFocus=="pattern" ? 0x9f85c8 : 0x6b627d);
