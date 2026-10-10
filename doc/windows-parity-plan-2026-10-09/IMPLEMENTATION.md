@@ -2,6 +2,71 @@
 
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
+## Prioritized mixing-graph usability — 10 October, 09:42 UTC
+
+The user prioritized graph usability from the remaining P5 scope. Current source
+confirmed that song routing, reusable recipes and advanced graph workflows already
+existed, but the song canvas had no context menu, double-click inspection, wheel
+navigation or direct new-plugin browser. Mac `GraphAddMenu.swift` and
+`GraphActionCatalog.swift` provide the search-first and contextual action reference.
+This batch makes the existing Windows operations easier to reach; it does not
+claim complete Mac graph parity.
+
+- Mixer now exposes **Mixing graph…**, and the separate reusable canvas is labelled
+  **Graph recipes**. The command catalogue identifies their different purposes.
+- The mixing graph has visible **Add effect…**, **Add group** and **Add return**
+  buttons. Select a bus or regular effect and use Add effect / Insert to open the
+  existing native plugin library with that stable bus captured as destination.
+  `plugin.add` still inserts and routes atomically, with one Undo. New group/return
+  buses become the selection; these actions reuse `mixer.bus.add`.
+- Native right-click / keyboard context menus expose inspection, effect browsing,
+  insert-chain and recipe assignment pages, wire disconnection and layout actions.
+  Selection/revision/generation are checked again after the native menu loop.
+  Double-click or Enter opens the selected bus, plugin or recipe inspector.
+- Wheel pans vertically, Shift+wheel horizontally, and Ctrl+wheel zooms around the
+  pointer. Home fits the graph. Ctrl+Y joins Ctrl+Shift+Z for local Redo. Visible
+  hints explain the gestures. Navigation does not change song data or history.
+- Plugin-library search accepts Up/Down and Enter without requiring a focus change
+  to the results list. It applies pending local filtering before choosing and
+  restores focus after a completed pending operation when focus was not moved.
+- The visible graph follows completed external edits (including library insertion)
+  while preserving raw route/layout drafts, node selection and navigation. Busy work,
+  gestures, menu tracking and unresolved results defer refresh. Existing Review,
+  revision guards, stage-role restrictions and native draft registration remain.
+
+Implementation is in `windows/App/SongRoutingWindow.hpp`, `MixerEditor.inc`,
+`PluginLibraryWindow.hpp`, `WorkspaceCommands.inc` and `WorkspaceDocking.inc`.
+No shared model, DSP, public API, native storage or Mac source changed.
+
+One ARM64 Release build of the application and native test harness at `eef65e5bb`
+passed. Two native groups pass (receipts and command results, 97.00 seconds total).
+The new `applicationMixingGraphUsability` case checks actual native controls,
+filtered keyboard insertion, stable destination, atomic Undo/Redo, automatic graph
+refresh without stealing browser focus, draft preservation, group/return actions,
+USER32 menu tracking, double-click registration/inspection and save/reopen.
+Eleven distinct actual-application cases pass across the initial and focused runs,
+covering route fan-out, stage protection, sidechains, insert order, graph assignments,
+plugin preferences, anchored zoom/pan and minimum-size control bounds.
+
+Two old fixture sequences failed both on the new app and the previous unchanged
+InteractionFix app: they bypassed the current required Review after an unattributed
+cycle failure, and used a routing HWND retired by document replacement. The fixtures
+now explicitly verify no replay/no mutation during Review and reopen the tool after
+song replacement. Their original state/history/persistence assertions remain.
+Only those cases and the added navigation/bounds test were run afterward; no second
+build was needed. `08a5f60ed` changes only the Python qualification file.
+
+The [bounded receipt](GRAPH-USABILITY-2026-10-10.json) preserves fingerprints and
+initial failures. The deliverable is
+`bin/windows-parity-p1/GraphUsability-Release/ScreamSeq.exe` in the integration
+checkout, with the adjacent scanner. The previous build remains intact. These are
+private-desktop interaction/geometry checks, not foreground visual or physical-audio
+qualification. No Mac build was run for Windows-only UI changes.
+
+P5 still includes convergence of song/recipe graph surfaces, unified searchable
+canvas insertion (including cable insertion), and direct access to the wider graph
+workflow. Those are future batches; the broader parity goal remains paused.
+
 ## Browser and pattern input fixes — 10 October, 09:24 UTC
 
 The user's browser reports were traced to disabling all controls during every
