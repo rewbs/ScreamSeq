@@ -480,7 +480,7 @@ void sevenFieldLegacyRetainsExistingEditors() {
 void resizeRestoreClient(RestoreApplication &app,int width,int height) {
     const auto dpi=GetDpiForWindow(app.window);
     RECT bounds{0,0,MulDiv(width,int(dpi),96),MulDiv(height,int(dpi),96)};
-    restoreCheck(AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(app.window,GWL_STYLE)),FALSE,
+    restoreCheck(AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(app.window,GWL_STYLE)),GetMenu(app.window)!=nullptr,
         DWORD(GetWindowLongPtrW(app.window,GWL_EXSTYLE)),dpi)!=FALSE,"Calculate restore fixture client frame");
     // SetWindowPos still obeys the monitor-derived maximum tracking size.
     // This private fixture needs exact virtual client sizes on small CI
