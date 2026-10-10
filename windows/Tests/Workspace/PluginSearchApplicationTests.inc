@@ -1,7 +1,7 @@
 void applicationPluginSearch() {
     RestoreFixture fixture;auto &app=*fixture.app;
     // Establish logical client size independently of desktop DPI/monitor caps.
-    resizeRestoreClient(app,1440,900);
+    resizeRestoreClient(app,1440,800);
     const auto plugin=addRestoreGain(app);
     app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.selectedPlugin=plugin;
     app.refreshPluginDetails();const auto before=songState(app);
@@ -75,7 +75,7 @@ void applicationPluginValueControls() {
     invalid=metadata;invalid["manualValue"]=.5;restoreCheck(!Field::read(invalid).editable(),"Fractional choice silently selected a different value");
     invalid=metadata;invalid["writable"]=false;restoreCheck(!Field::read(invalid).editable(),"Read-only parameter became writable");
     invalid=metadata;invalid["min"]=false;restoreCheck(!Field::read(invalid).editable(),"Boolean range metadata became numeric");
-    RestoreFixture fixture;auto &app=*fixture.app;const auto gain=addRestoreGain(app);
+    RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);const auto gain=addRestoreGain(app);
     app.selectedPlugin=gain;app.selectedParameter=0;app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.refreshPluginDetails();app.layoutControls();
     const auto toggle=app.controls.at(pluginValueToggle);
     restoreCheck(app.pluginValueControl()==pluginValueToggle&&IsWindowVisible(toggle)&&!IsWindowVisible(app.controls.at(pluginValue)),"Boolean did not use the native checkbox");
@@ -121,7 +121,7 @@ void applicationPluginValueControls() {
 }
 
 void applicationPluginParameterNavigation() {
-    RestoreFixture fixture;auto &app=*fixture.app;const auto first=addRestoreGain(app),second=addRestoreGain(app);
+    RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);const auto first=addRestoreGain(app),second=addRestoreGain(app);
     app.edit("automation.pattern.set",{{"pattern",0},{"plugin",second},{"parameter",1},{"points",RestoreJson::array({{{"position",0},{"value",.5}}})}});
     app.selectedPlugin=first;app.selectedParameter=1;app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.refreshPluginDetails();app.layoutControls();
     restoreCheck(app.menuCommandState(pluginAutomate).enabled&&app.menuCommandState(pluginActivity).enabled,"Selected parameter actions are unavailable in native menus");
