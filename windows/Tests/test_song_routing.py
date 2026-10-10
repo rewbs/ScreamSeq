@@ -48,7 +48,9 @@ class SongRoutingTests(unittest.TestCase):
                 time.sleep(.02)
     def write(self,method,**fields):
         self.idle()
-        return support.GraphMixerAppTests.write(self,method,**fields)
+        result=support.GraphMixerAppTests.write(self,method,**fields)
+        self.idle()
+        return result
     add_gain=support.GraphMixerAppTests.add_gain
     def main_command(self,identifier):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier))
