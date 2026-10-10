@@ -11,7 +11,7 @@ import time
 import unittest
 import private_desktop
 import test_graph_mixer_app as support
-from client import Client, TransportError
+from client import Client, ApiError, TransportError
 
 
 class SongRoutingTests(unittest.TestCase):
@@ -37,8 +37,18 @@ class SongRoutingTests(unittest.TestCase):
         self.fail('routing app did not start')
 
     doc=support.GraphMixerAppTests.doc
-    read=support.GraphMixerAppTests.read
-    write=support.GraphMixerAppTests.write
+    def read(self,method,**fields):
+        deadline=time.monotonic()+8
+        while True:
+            try:return support.GraphMixerAppTests.read(self,method,**fields)
+            except ApiError as error:
+                # Reads can overlap the retained graph/parameter refresh. Never
+                # replay writes or uncertain deliveries through this helper.
+                if error.code!=-32002 or not method.endswith('.get') or time.monotonic()>=deadline:raise
+                time.sleep(.02)
+    def write(self,method,**fields):
+        self.idle()
+        return support.GraphMixerAppTests.write(self,method,**fields)
     add_gain=support.GraphMixerAppTests.add_gain
     def main_command(self,identifier):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier))
@@ -54,10 +64,13 @@ class SongRoutingTests(unittest.TestCase):
     def control(self,identifier):
         hwnd=private_desktop.user.GetDlgItem(self.window(),identifier);self.assertTrue(hwnd);return hwnd
     def idle(self):
-        end=time.monotonic()+8;quiet=None
+        end=time.monotonic()+8;quiet=None;revision=self.doc()['revision']
         while time.monotonic()<end:
             ws=self.read('workspace.get')
-            if ws['documentBusy'] or ws['songRouting'].get('pending'):quiet=None
+            routing=ws['songRouting']
+            refresh_due=routing.get('visible') and routing.get('stale') and not any(routing.get(k) for k in ('draft','layoutDraft','completion','readbackNeedsReload'))
+            parameter_due=any(p.get('visible') and not any(p.get(k) for k in ('dirty','completion','needsReload')) and (p.get('pending') or p.get('revision')!=revision) for p in ws.get('graphPluginParameters',[]))
+            if ws['documentBusy'] or routing.get('pending') or refresh_due or parameter_due:quiet=None
             elif quiet is None:quiet=time.monotonic()
             elif time.monotonic()-quiet>=.1:return
             time.sleep(.02)
@@ -186,8 +199,9 @@ class SongRoutingTests(unittest.TestCase):
         ids={n['id'] for n in self.nodes()};self.assertTrue({first,group,master}<=ids);self.assertNotIn(second,ids)
         self.assertTrue(any(e['action']==dict(kind='output',source=first) for e in self.edges()))
         self.select(3801,0);self.choose_node(3802,'plugin:'+b);self.press(3821)
-        control=private_desktop.user.GetDlgItem(self.desktop.hwnd(self.pid),300)
-        self.assertEqual(self.desktop.send(control,0x188),1)
+        inspector=next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==b)
+        self.assertTrue(inspector['visible']);self.assertEqual(inspector['selected'],0)
+        self.assertEqual(inspector['parameters'],self.read('plugin.parameters.get',plugin=b));self.assertGreater(len(inspector['parameters']),0)
         self.record('song-routing-scene',canvas=self.local()['canvas'],graph=self.read('graph.get',includeState=False))
 
     def test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts(self):
