@@ -18,7 +18,7 @@ private:
   Read request_;Context context_;NativeWriteCompletion::Write write_;
   std::function<void()> admit_,reveal_;std::function<void(const std::string &)> details_;
   NativeWriteCompletion completion_;Tracker::MixerGesture gesture_;
-  Json data_=Json::object();std::string document_,revision_;
+  Json data_=Json::object(),report_=Json::object();std::string document_,revision_;
   std::vector<std::string> bindings_;std::vector<size_t> positions_;size_t first_=0,lastVisibleCount_=0,viewportTotal_=0;
   std::map<std::string,Tracker::MixerMeter> meters_;
   bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false,resetPresentation_=false;
@@ -104,8 +104,9 @@ private:
     for(size_t i=0;i<bindings_.size();++i)for(int part:{fader,gain,pan,mute,solo,preGain,prePan,width}) {
       const int id=base+int(i)*stride+part;
       const bool available=bus(bindings_[i])!=nullptr;
-      EnableWindow(controls_.at(id),!pending_&&!completion_.retained()&&
-        (gesture_.active()?id==capturedControl_:available));
+      const bool capturedText=gesture_.active()&&id==capturedControl_&&(part==gain||part==preGain);
+      EnableWindow(controls_.at(id),capturedText||(!pending_&&!completion_.retained()&&
+        (gesture_.active()?id==capturedControl_:available)));
     }
     for(size_t i=0;i<bindings_.size();++i)
       EnableWindow(controls_.at(base+int(i)*stride+details),bus(bindings_[i])!=nullptr&&!retained());
@@ -126,8 +127,18 @@ private:
     ~Pending(){value=false;}
   };
   void finishReadback() {
-    reload();gesture_.finish();rawDirty_=false;captureLost_=false;completion_.finish();observed_=false;resetPresentation_=true;
-    status_=L"Mixer edit applied / Undo restores the previous value";
+    const auto returned=completion_.returned();
+    if(!returned)throw std::runtime_error("Mixer result is uncertain / Review result before continuing");
+    auto report=Json{{"outcome","returned"},{"method",returned->method},{"documentId",returned->document},
+      {"revision",returned->revision},{"result",returned->result},{"fields",completion_.fields()}};
+    reload();
+    const bool unchanged=gesture_.generation()==completion_.generation()&&
+      std::pair(document_,revision_)==std::pair(returned->document,returned->revision);
+    if(unchanged){gesture_.finish();rawDirty_=false;captureLost_=false;resetPresentation_=true;}
+    else previewBlocked_=true;
+    report_=std::move(report);completion_.finish();observed_=false;
+    status_=unchanged?L"Mixer edit applied / Undo restores the previous value":
+      L"Earlier mixer edit completed / newer input retained. Cancel reloads the current saved value";
   }
   void commit() {
     if(!gesture_.active()||pending_||completion_.retained())return;
@@ -143,12 +154,14 @@ private:
   void restoreCurrent(bool acknowledge=false) {
     if(!gesture_.active()||pending_)return;
     if(completion_.retained()&&!acknowledge)throw std::runtime_error("Review the uncertain mixer result before cancelling");
-    Pending guard(pending_);reload();
+    const auto generation=gesture_.generation();Pending guard(pending_);reload();
     if(document_==gesture_.context().document)if(const auto *saved=bus(gesture_.context().bus)) {
       const auto &v=saved->at(Tracker::mixerControlKey(gesture_.control()));
       const auto value=v.is_boolean()?(v.get<bool>()?1.:0.):v.get<double>();
       request_("mixer.bus.set",params(value,true,{document_,revision_,gesture_.context().bus}));
     }
+    if(gesture_.generation()!=generation||context_()!=std::pair(document_,revision_))
+      throw std::runtime_error("Song or input changed while restoring / newer input retained; Cancel again to reload");
     gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;
     status_=acknowledge?L"Current saved state accepted / the edit was not repeated":L"Gesture cancelled / current saved value restored";
   }
@@ -251,7 +264,7 @@ private:
       bool reserved=false;
       for(size_t i=0;i<bindings_.size();++i)if(used[i]&&next[i]==at){reserved=true;break;}
       if(reserved)continue;
-      for(size_t i=0;i<bindings_.size();++i)if(!used[i]&&bindings_[i]==data_["buses"][at].at("id")) {
+      for(size_t i=0;i<bindings_.size();++i)if(!used[i]&&bindings_[i]==data_["buses"][at].at("id").get<std::string>()) {
         used[i]=true;next[i]=at;break;
       }
     }
@@ -354,8 +367,21 @@ private:
       s.uiText(L"dB",x+100,top+24,24,0xabbacb);
     }
   }
+  void error(const std::exception &e)override {
+    NativeToolWindow::error(e);
+    // A failed pumped operation may have laid out controls while pending.
+    // Restore Review/Cancel availability after its pending guard unwinds.
+    try{layout();}catch(...){}
+  }
   void action(int id,unsigned notification)override {
-    if(setting_||pending_)return;
+    if(setting_)return;
+    // EDIT mutates before EN_CHANGE. A pending completion must observe newer
+    // text already accepted by the captured native control.
+    if(gesture_.active()&&id==capturedControl_&&notification==EN_CHANGE&&
+       ((id-base)%stride==gain||(id-base)%stride==preGain)) {
+      rawDirty_=true;gesture_.rawChanged();return;
+    }
+    if(pending_)return;
     if(id==previous||id==next){page(id==previous?-1:1);return;}
     if(id==cancel){restoreCurrent();return;}if(id==review){reviewResult();return;}
     if(id==accept){if(!observed_)throw std::runtime_error("Inspect the result first");restoreCurrent(true);return;}
@@ -469,7 +495,8 @@ public:
       strips.push_back({{"bus",bindings_[i]},{"controlBase",base+int(i)*stride},{"position",positions_[i]},
         {"pinned",pinned(i)},{"inViewport",positions_[i]>=first_&&positions_[i]<first_+visibleCount()}});
     return {{"visible",visible()},{"firstBus",first_},{"visibleCapacity",visibleCount()},{"allocatedStrips",bindings_.size()},
-      {"strips",strips},{"gesture",gesture_.active()},{"pending",pending_},{"completion",completion_.snapshot()}};
+      {"strips",strips},{"gesture",gesture_.active()},{"generation",gesture_.generation()},{"pending",pending_},
+      {"completion",completion_.snapshot()},{"report",report_}};
   }
   void hide()override {
     // Reset after the current native notification stack unwinds. Do not call

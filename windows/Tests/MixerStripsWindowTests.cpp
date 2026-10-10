@@ -19,6 +19,8 @@ struct Fixture {
   Json data={{"active",true},{"buses",Json::array()}};
   std::string revision="r1";unsigned writes=0,previews=0;bool unknown=false;Json lastWrite,lastPreview;
   double audible=-6.123456789;
+  std::function<void()> duringWrite;
+  std::function<void(const std::string &)> duringRead;
   ScreamSeq::MixerStripsWindow tool;
   explicit Fixture(HWND owner,unsigned busCount=12):tool(owner,
     [this](const auto &method,const auto &params){return read(method,params);},
@@ -28,6 +30,7 @@ struct Fixture {
       ++writes;lastWrite=params;auto &bus=find(params.at("bus").get<std::string>());
       for(const auto &[key,value]:params.items())if(bus.contains(key)&&key!="id")bus[key]=value;
       audible=bus.at("gainDB").get<double>();revision="r"+std::to_string(writes+1);
+      if(duringWrite){auto callback=std::exchange(duringWrite,{});callback();}
       if(unknown)throw ScreamSeq::Api::ApiError(-32003,"Owned lost response",Tracker::WriteOutcome{});
       return {method,"owned-song",revision,{{"wouldChange",true}}};
     },[]{},[](const auto &){},[]{}) {
@@ -38,6 +41,7 @@ struct Fixture {
   }
   Json &find(const std::string &id){for(auto &value:data["buses"])if(value["id"]==id)return value;throw std::runtime_error("Unknown captured mixer bus");}
   Json read(const std::string &method,const Json &params) {
+    if(duringRead)duringRead(method);
     if(method=="mixer.get")return data;
     if(method=="synchronizeView")return Json::object();
     check(method=="mixer.bus.set"&&params.value("preview",false),"Unexpected preview operation");
@@ -131,6 +135,45 @@ void inputAndWidth(HWND owner) {
   bool master=false;for(int i=0;i<16;++i){auto title=GetDlgItem(f.tool.window(),100+i*16);if(title&&IsWindowVisible(title)&&text(title)==L"Master")master=true;}
   check(master,"Late Master is unreachable through native mixer navigation");
 }
+void pendingTextRetention(HWND owner) {
+  for(unsigned scenario=0;scenario<3;++scenario) {
+    Fixture f(owner);SetFocus(f.control(102));SetWindowTextW(f.control(102),L"-9");
+    const auto generation=f.tool.documentDraft()->generation;
+    const auto newer=[&](const wchar_t *raw){SetWindowTextW(f.control(102),raw);SendMessageW(f.control(102),EM_SETSEL,1,2);};
+    if(scenario==0)f.duringWrite=[&]{newer(L"--");};
+    if(scenario==1)f.duringRead=[&](const auto &method){if(method=="mixer.get")newer(L"--");};
+    if(scenario==2){f.unknown=true;f.duringWrite=[&]{newer(L"--");};}
+    SendMessageW(f.control(102),WM_KEYDOWN,VK_RETURN,0);
+    DWORD start=0,end=0;SendMessageW(f.control(102),EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));
+    check(f.writes==1&&f.find("n1")["gainDB"]==-9&&text(f.control(102))==L"--"&&start==1&&end==2&&GetFocus()==f.control(102)&&
+      f.tool.documentDraft()->dirty&&f.tool.documentDraft()->generation>generation,
+      "Final completion lost newer native raw text, caret, generation or original committed value");
+    if(scenario!=0) {
+      check(f.tool.documentDraft()->uncertain,"Failed readback or unknown completion did not retain its original outcome");
+      f.duringRead=[&](const auto &method){if(method=="mixer.get")newer(L"-.");};
+      f.press(13);
+      check(f.writes==1&&f.tool.documentDraft()->uncertain&&text(f.control(102))==L"-.",
+        "Review discarded newer input or repeated the original write");
+      f.duringRead={};f.press(13);
+      if(scenario==2) {
+        check(f.tool.documentDraft()->uncertain,"Unknown observation was promoted to a verified write");
+        f.press(14);check(f.writes==1&&!f.tool.hasGesture()&&f.audible==-9,"Explicit current acknowledgement repeated the write");
+        continue;
+      }
+    }
+    check(!f.tool.documentDraft()->uncertain&&f.tool.snapshot().at("report").at("outcome")=="returned",
+      "Exact receipt was lost when newer input survived its completion");
+    SendMessageW(f.control(102),WM_KEYDOWN,VK_RETURN,0);
+    check(f.writes==1&&f.tool.hasGesture(),"Newer input silently rebased itself onto the earlier completion");
+    f.duringRead=[&](const auto &method){if(method=="mixer.bus.set")newer(L"newer");};
+    f.press(12);
+    check(f.tool.hasGesture()&&text(f.control(102))==L"newer"&&f.writes==1,
+      "Cancel's pumped reset discarded newer raw input");
+    f.duringRead={};f.press(12);
+    check(!f.tool.hasGesture()&&text(f.control(102))==L"-9"&&f.audible==-9&&f.writes==1,
+      "Explicit Cancel failed to restore the current saved value without a second write");
+  }
+}
 void viewportPool(HWND owner) {
   Fixture f(owner,240);
   auto bound=[&](const std::string &bus) {
@@ -198,6 +241,6 @@ void viewportPool(HWND owner) {
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);viewportPool(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

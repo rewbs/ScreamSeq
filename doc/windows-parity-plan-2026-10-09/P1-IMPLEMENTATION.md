@@ -443,3 +443,41 @@ checks. Source and executable hashes pin all results. The earliest start remains
 cohesive correction batch, without an automatic build retry. Native popup/UIA,
 foreground aesthetics, physical devices, Mac P1 and reciprocal fixtures remain
 separate required gates.
+
+## Checkpoint 01 result and corrective batch — 10 October, 00:24 UTC
+
+Frozen `90bcbdbd8d7e6a100a7c768f6ff505c30605f70e` configured successfully in
+`bin/windows-parity-p1`, then failed its single consolidated build. The build ran
+00:20:23–00:24:07 UTC; source hashes were unchanged. MSVC rejected the string/JSON
+comparison in `MixerStripsWindow.hpp::bindViewport` (C7692). The application was
+not produced and **no tests ran**; the remaining requested targets are not
+qualified by this attempt. Existing SVN-version and PluginChain conversion
+warnings remain visible in the log. Receipt: `bin/parity-evidence/p1-checkpoint-01.json`;
+log: `p1-build-01.log`, SHA-256
+`c50de2b3f6a0279bc4853efae23fc17264f5cbe409e773f7de70afa4b97c3b9f`.
+Next normal local build: **2026-10-10 01:24:08.140793 UTC**, with no automatic retry.
+
+Prepared corrections explicitly extract the JSON bus identity as a string and
+preserve captured gain/pre-gain raw edits during a pumped final/Review/reset.
+Previously the native EDIT could accept text before EN_CHANGE was ignored due to
+pending state. The captured text field now retains input and focus; generation
+changes are tracked even while the result is unresolved. Exact receipt completion
+only finishes the gesture when both submitted generation and returned document/
+revision still match. Otherwise the exact report and newer draft remain visible;
+the old revision guard prevents silently applying that draft over an intervening
+accepted edit. Cancel explicitly reloads current saved values and refuses to
+discard additional input received during its own reset. Failure presentation
+restores Review/Cancel availability after the pending guard unwinds.
+
+`pendingTextRetention` adds real native HWND cases for newer text during final
+write, successful write with failed readback, unknown completion, newer text during
+Review, and a further edit during Cancel. They assert exact committed value,
+single durable write, raw/caret/focus/generation retention, stale final refusal,
+exact versus unknown outcome, and explicit current-state reset. These are
+**unexecuted tests**, not a runtime claim that the bug is fixed.
+
+Remaining follow-up before qualification includes actual Application strip
+gesture/history/save/reopen coverage, adapting Details tests to enter the explicit
+Details command now that Mixer defaults to strips, and reviewing pending trackbar
+notifications separately from text notifications. The known Mac/shared, native
+presentation/accessibility, hosted instrument and reciprocal gates remain open.
