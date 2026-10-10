@@ -116,3 +116,26 @@ void applicationPluginValueControls() {
     const auto saved=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,saved));
     restoreCheck(app.documentOperation("plugin.state.get",{{"plugin",plugin}})==filterAfter&&app.documentOperation("plugin.state.get",{{"plugin",gain}})==changed,"Native discrete controls lost stable identities or opaque state on save/reopen");
 }
+
+void applicationPluginParameterNavigation() {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto first=addRestoreGain(app),second=addRestoreGain(app);
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",second},{"parameter",1},{"points",RestoreJson::array({{{"position",0},{"value",.5}}})}});
+    app.selectedPlugin=first;app.selectedParameter=1;app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.refreshPluginDetails();app.layoutControls();
+    restoreCheck(app.menuCommandState(pluginAutomate).enabled&&app.menuCommandState(pluginActivity).enabled,"Selected parameter actions are unavailable in native menus");
+    const auto music=songState(app),cursor=app.position();app.pluginCommand(pluginAutomate);
+    const auto owner=app.parameterAutomationWindow->window();
+    restoreCheck(app.parameterAutomationWindow->snapshot().at("plugin")==first&&app.parameterAutomationWindow->snapshot().at("parameter")==1,"Rack automation action did not open its explicit parameter");
+    SendMessageW(owner,WM_TIMER,3,0);
+    app.workspaceEditors[0].pinned=true;const auto pinned=app.parameterAutomationWindow->snapshot();
+    app.selectedPlugin=second;app.refreshPluginDetails();restoreRejected([&]{app.pluginCommand(pluginAutomate);});
+    restoreCheck(app.parameterAutomationWindow->snapshot()==pinned&&app.workspaceEditors[0].pinned,"Rack action retargeted an independently pinned automation editor");
+    app.workspaceEditors[0].pinned=false;app.pluginCommand(pluginAutomate);
+    restoreCheck(app.parameterAutomationWindow->window()==owner&&app.parameterAutomationWindow->snapshot().at("plugin")==second,"Explicit rack navigation left a clean retained editor on its old target");
+    SendMessageW(owner,WM_TIMER,3,0);rawDraftText(GetDlgItem(owner,4208),L"-.");const auto draft=app.parameterAutomationWindow->snapshot();
+    app.selectedPlugin=first;app.refreshPluginDetails();restoreRejected([&]{app.pluginCommand(pluginAutomate);});
+    restoreCheck(app.parameterAutomationWindow->snapshot()==draft,"Rack action erased a retained curve draft");
+    app.selectedPlugin=second;app.refreshPluginDetails();app.pluginCommand(pluginAutomate);
+    restoreCheck(app.parameterAutomationWindow->snapshot().at("generation")==draft.at("generation")&&app.parameterAutomationWindow->snapshot().at("fieldDraft")==true,"Returning to the same parameter reloaded its draft");
+    restoreCheck(songState(app)==music&&app.position()==cursor,"Parameter navigation changed musical history or moved the editing cursor");
+    app.selectedPlugin.clear();restoreCheck(!app.menuCommandState(pluginAutomate).enabled&&!app.menuCommandState(pluginActivity).enabled,"Missing rack target remained actionable");
+}

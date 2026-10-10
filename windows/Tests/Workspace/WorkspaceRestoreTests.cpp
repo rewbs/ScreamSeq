@@ -1130,7 +1130,7 @@ int wmain(int argc,wchar_t **argv) {
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
-                    applicationPluginSearch();applicationPluginValueControls();std::cout<<"PASS native plugin search/value controls: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
+                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();std::cout<<"PASS native plugin search/value controls: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;

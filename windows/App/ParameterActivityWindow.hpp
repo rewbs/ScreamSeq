@@ -74,15 +74,16 @@ private:
   void recorded(){recorded(offset_);}
   void sources(){const auto c=context_();const auto generation=generation_;auto r=readSources(target_,parameter_,c,generation);guardRead(c,generation);sources_=std::move(r.sources);sourceRevision_=c.revision;set(ruleLabel,r.rule);}
   void watch(bool clearCapture){require(parameter_.has_value(),"Choose a prepared processor and parameter");const auto c=context_();auto token=readWatch(target_,*parameter_,clearCapture,c,generation_);token_=std::move(token);cursor_=dropped_=0;points_.clear();}
-  void load(std::string wanted={},std::optional<uint32_t> parameter={},bool explicitRefresh=false){
+  void load(std::string wanted={},std::optional<uint32_t> parameter={},bool explicitRefresh=false,bool strictTarget=false){
     require(!fields_||explicitRefresh,"Save or Refresh the recorded-point draft before changing target");const auto c=context_();const auto generation=generation_;require(captured_.document.empty()||captured_.document==c.document||explicitRefresh,"Captured song is unavailable / Refresh");
     auto r=request_("parameter.activity.targets",Json::object());guardRead(c,generation);auto targets=r.at("targets");require(targets.is_array(),"Incomplete prepared processor list");const auto engine=r.at("engine").get<uint64_t>();const auto active=r.at("active").get<bool>();
     for(const auto &t:targets){(void)t.at("key").get<std::string>();(void)t.at("name").get<std::string>();(void)t.at("plugin").get<std::string>();}
     const auto desired=wanted.empty()?target_:wanted;auto found=std::find_if(targets.begin(),targets.end(),[&](const auto &t){return t.at("key")==desired||(!wanted.empty()&&t.at("plugin")==wanted);});
     if(found==targets.end()&&!desired.empty()&&!targets.empty())throw std::runtime_error("Captured processor copy is unavailable / reopen after preparing playback");
+    if(strictTarget)require(!wanted.empty()&&parameter&&found!=targets.end(),"This processor is not prepared / start playback, then inspect activity again");
     if(found==targets.end()&&desired.empty())found=targets.begin();Json catalog=Json::array();std::string target,plugin,token;
     if(found!=targets.end()) {target=found->at("key");plugin=found->at("plugin");catalog=request_("parameter.activity.parameters",{{"target",target}}).at("parameters");guardRead(c,generation);require(catalog.is_array(),"Incomplete parameter catalogue");}
-    if(!parameter)parameter=parameter_;std::optional<uint32_t> selected;for(const auto &p:catalog){const auto id=p.at("id").get<uint32_t>();(void)p.at("name").get<std::string>();(void)p.value("unitLabel",std::string());if(parameter&&id==*parameter)selected=id;}if(!selected&&!catalog.empty())selected=catalog.front().at("id").get<uint32_t>();
+    if(!parameter)parameter=parameter_;std::optional<uint32_t> selected;for(const auto &p:catalog){const auto id=p.at("id").get<uint32_t>();(void)p.at("name").get<std::string>();(void)p.value("unitLabel",std::string());if(parameter&&id==*parameter)selected=id;}if(strictTarget)require(selected.has_value(),"The requested parameter is unavailable in this prepared processor");if(!selected&&!catalog.empty())selected=catalog.front().at("id").get<uint32_t>();
     auto sourceData=readSources(target,selected,c,generation);auto lane=readRecorded(plugin,selected,0,c,generation);
     // Starting the transient watch is last: all document reads are staged first.
     if(selected)token=readWatch(target,*selected,false,c,generation);guardRead(c,generation);
@@ -172,6 +173,14 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{freeze,L"Freeze"},{clear,L"Clear capture"},{openSource,L"Open source"},{openLane,L"Song automation…"},{previous,L"‹"},{next,L"›"},{newPoint,L"New"},{savePoint,L"Save point"},{removePoint,L"Delete"},{zoomOut,L"−"},{zoomIn,L"+"},{fit,L"Fit"},{close,L"Close"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Parameter activity"},{targetLabel,L"Choose a prepared processor copy"},{ruleLabel,L"Observe the final parameter value and the sources that control it."},{statusLabel,L""},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{pageLabel,L""}})label(id,text);finish();SetTimer(window_,3,100,nullptr);}
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||fields_;show();if(!retain){beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
+  void openSourceAt(std::string plugin,uint32_t parameter) {
+    const auto c=context_();const bool same=captured_.document==c.document&&plugin_==plugin&&parameter_&&*parameter_==parameter;
+    require(!pending_&&!c.busy,"Finish the current activity read or document operation first");
+    if(same){show();SetFocus(controls_.at(parameters));return;}
+    require(!fields_&&!frozen_,"The activity editor retains a point draft or frozen trace. Save/Refresh it before choosing another parameter.");
+    beginPending();try{load(std::move(plugin),parameter,false,true);pending_=false;}catch(...){pending_=false;throw;}
+    show();SetFocus(controls_.at(parameters));
+  }
   Json snapshot()const{return {{"visible",visible()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"target",target_},{"plugin",plugin_},{"parameter",parameter_?Json(*parameter_):Json()},{"engine",engine_},{"token",token_},{"cursor",cursor_},{"pointCount",points_.size()},{"sourceCount",sources_.size()},{"targets",targets_},{"parameters",parameters_},{"sources",sources_},{"recorded",recorded_},{"recordedTotal",total_},{"recordedOffset",offset_},{"selectedPoint",selected_},{"fieldDraft",fields_},{"generation",generation_},{"rawTime",utf8(field(time))},{"rawValue",utf8(field(value))},{"pending",pending_},{"frozen",frozen_},{"active",active_},{"stale",!current()},{"dropped",dropped_},{"page",page_},{"traceMode",traceMode_},{"trace",traceSnapshot()},{"seconds",seconds_},{"status",utf8(status_)}};}
 };
 }

@@ -129,7 +129,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
-    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,
+    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
     effectFieldBase=700,effectChoiceBase=720,
@@ -858,12 +858,13 @@ public:
         }
         throw std::runtime_error("This event has no editable source location");
     }
-    void openParameterActivity(std::string plugin={},std::optional<uint32_t> parameter={}) {
+    void openParameterActivity(std::string plugin={},std::optional<uint32_t> parameter={},bool exact=false) {
         if(!parameterActivityWindow)parameterActivityWindow=std::make_unique<ScreamSeq::ParameterActivityWindow>(window,
             [this](const auto &method,const auto &p){return documentOperation(method,p);},
             [this]{return ScreamSeq::ParameterActivityWindow::Context{documentId,view->session.revision,busy||recoveryRestoring};},
             [this](const Json &source){inspectParameterSource(source);});
-        parameterActivityWindow->openAt(std::move(plugin),parameter);
+        if(exact){if(!parameter)throw std::runtime_error("Select a plugin parameter");parameterActivityWindow->openSourceAt(std::move(plugin),*parameter);}
+        else parameterActivityWindow->openAt(std::move(plugin),parameter);
     }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
         if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter,bool pattern){
@@ -886,9 +887,19 @@ public:
         else if(!selectedPlugin.empty()){plugin=selectedPlugin;parameter=selectedParameter;}}
         return {std::move(plugin),parameter};
     }
-    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={}){
+    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={},bool exact=false){
         if(!parameterAutomationWindow)parameterAutomationWindow=makeParameterAutomationWindow();
         const auto [plugin,parameter]=initialParameterAutomationTarget(std::move(requestedPlugin),requestedParameter);
+        if(exact) {
+            if(plugin.empty()||!parameter)throw std::runtime_error("Select a plugin parameter");
+            const auto state=parameterAutomationWindow->snapshot();
+            const bool same=state.at("document")==documentId&&state.at("plugin")==plugin&&state.at("parameter")==*parameter&&state.at("pattern")==patternIndex;
+            const bool retained=state.value("retainedDraft",false),pinned=!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned;
+            if(!same&&(retained||pinned))throw std::runtime_error("The automation editor retains another target. Apply/Reload its draft or unpin it before opening this parameter.");
+            if(!same||(!retained&&!pinned&&state.value("stale",false)))parameterAutomationWindow->openSourceAt(plugin,*parameter);
+            else parameterAutomationWindow->show();
+            configureWorkspaceEditor("automation");finishWorkspaceEditorOpen("automation");return;
+        }
         configureWorkspaceEditor("automation");
         if(!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned){parameterAutomationWindow->show();SetFocus(parameterAutomationWindow->window());}
         else parameterAutomationWindow->openAt(plugin,parameter);

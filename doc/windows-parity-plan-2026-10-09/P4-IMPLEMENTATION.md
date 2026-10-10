@@ -166,3 +166,40 @@ operation, label width, contrast and 100/150/200% DPI. The metadata interpreter 
 Windows presentation code; plugin validation/history remain shared host/session
 responsibilities. Mac build requirements come from the other pending shared
 changes, not these native controls alone. No build or test was run for this slice.
+
+## Parameter navigation — prepared, unqualified
+
+The selected rack parameter now has Automation and Activity buttons, searchable
+commands and native Tools/Automation menu entries. The actions pass stable plugin
+and parameter identities explicitly, avoiding an unrelated pattern-cursor target.
+The menu's captured context now includes the rack target and draft generation, so
+an open menu cannot silently act on a different rack selection. Missing targets
+have a disabled reason. Navigation itself does not save, discard or apply a rack
+parameter draft.
+
+`Application::openParameterAutomation` gains an explicit-target mode for these
+actions. It uses the existing strict `ParameterAutomationWindow::openSourceAt`
+read path, preserves the single native owner, and leaves the editing cursor in
+place. A clean unpinned owner may open the requested target. Another pinned or
+dirty target is refused; opening the same target raises its retained draft without
+reloading it. Existing generic open/raise behavior and source-navigation callers
+retain their defaults. Native pins and raw fields are not silently overridden.
+
+`ParameterActivityWindow::openSourceAt` adds corresponding exact observation
+navigation. Its staged reads reject an unprepared processor or missing parameter
+before installing a watch; there is no fallback to a different first parameter.
+Recorded-point drafts and frozen traces prevent retargeting, while the same target
+can be raised intact. The ordinary global Activity command still opens its chooser.
+Existing live observation and recorded-point services provide the data; this work
+adds no telemetry/audio provider or physical-device claim.
+
+The parameter action row is visible at 196 DIPs; an instrument assignment row now
+needs 228 DIPs. Parameter status follows the final visible row, avoiding button
+and status overlap. This is another explicit minimum-size/DPI qualification item.
+The prepared workspace group checks exact target navigation, one retained HWND,
+independent pin refusal, raw curve-draft preservation, same-target reopening,
+unchanged musical history/cursor and menu availability. Existing
+`parameter-activity-window-tests` now checks strict prepared/missing targets,
+draft preservation and frozen-trace preservation. Keep the existing actual-PID
+activity/provenance cases in the next consolidated gate. No build or test was run
+for these changes; P4a remains open for slider gestures and other listed work.

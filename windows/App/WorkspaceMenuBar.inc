@@ -7,7 +7,8 @@
     Json menuTarget() {
         Json result={{"document",documentId},{"revision",view->session.revision},{"context",contextRevision},
             {"position",position()},{"selection",selection()},{"panel",workspaceState.focus},{"inspector",inspectorCanvasFocus},
-            {"loop",playbackLoop},{"live",liveKeyboard},{"playing",device.running()&&!auditionOnly}};
+            {"loop",playbackLoop},{"live",liveKeyboard},{"playing",device.running()&&!auditionOnly},
+            {"rack",{selectedPlugin,selectedParameter,pluginDetailsTarget,pluginDetailsRevision,pluginDraftGeneration}}};
         if(menuTextControl(menuFocus)){
             const auto length=GetWindowTextLengthW(menuFocus);std::wstring text(size_t(length)+1,0);GetWindowTextW(menuFocus,text.data(),int(text.size()));text.resize(size_t(length));
             DWORD first=0,last=0;SendMessageW(menuFocus,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
@@ -32,6 +33,7 @@
         const bool text=menuTextControl(focus),focusedEdit=id>=copyFocusedCommand&&id<=selectAllFocusedCommand;
         const bool localText=text&&(focusedEdit||id==undoCommand||id==redoCommand);
         if(preparingWorkspaceLayout||documentDrafts.departing()||(!localText&&(busy||recoveryRestoring)))refuse(L"Finish the current document operation first");
+        if((id==pluginAutomate||id==pluginActivity)&&!hasPluginParameterTarget())refuse(L"Select an available plugin parameter in the rack first");
         if(dragging||GetCapture())refuse(L"Finish the current mouse gesture first");
         if(text&&(focusedEdit||id==undoCommand||id==redoCommand)){
             const bool writable=IsWindowEnabled(focus)&&!(GetWindowLongPtrW(focus,GWL_STYLE)&ES_READONLY);
@@ -72,7 +74,7 @@
             {0,L"&Tools",true,false,{
                 {0,L"Pattern",true,false,commands({effectPickerCommand,effectsCommand,notesCommand,graphCommandsCommand,scratchGesturesCommand,patternRenderOptionsCommand,0,positionRulerCommand,patternRowsLargerCommand,patternRowsSmallerCommand})},
                 {0,L"Sound",true,false,commands({sampleBrowseCommand,sampleImportCommand,sampleDetailCommand,sampleRecordCommand,instrumentEnvelopeCommand,instrumentImportCommand,pluginsCommand,pluginBrowse,0,mixerCommand,mixerRouting,graphCommand,graphWorkflowCommand})},
-                {0,L"Automation",true,false,commands({parameterAutomationCommand,absoluteAutomationCommand,parameterActivityCommand,curveReference})},
+                {0,L"Automation",true,false,commands({parameterAutomationCommand,absoluteAutomationCommand,parameterActivityCommand,0,pluginAutomate,pluginActivity,0,curveReference})},
                 {0,L"Preferences",true,false,commands({audioSettingsCommand,keyboardSettingsCommand,reloadShortcutsCommand})}}}};
         menuBar=std::make_unique<ScreamSeq::NativeMenuBar>(window,std::move(menus));refreshMenuBar();
     }

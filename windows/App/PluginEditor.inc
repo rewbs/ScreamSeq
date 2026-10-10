@@ -46,7 +46,7 @@
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
             {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo"},{pluginRedo,L"Redo"},
-            {pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
+            {pluginAutomate,L"Automation…"},{pluginActivity,L"Activity…"},{pluginApply,L"Apply"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
             {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"},{pluginReconnect,L"Reconnect plugin…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{pluginLibrary,pluginParameter,pluginInstrument,pluginPage,pluginProgram,pluginPort,pluginValueChoice})
@@ -70,7 +70,7 @@
             ScreamSeq::check(ScreamSeq::NativeAccessibility::name(controls.at(id),label),"Name plugin field");
         for(auto label:{L"Parameters",L"Factory programs",L"Audio ports",L"Instrument assignments",L"Presets",L"Plugin location"})ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
         ScreamSeq::NativeInputGate::present(controls.at(pluginPage),CB_SETCURSEL,0,0);
-        for(int id=pluginList;id<=pluginValueToggle;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
+        for(int id=pluginList;id<=pluginActivity;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     static bool pluginSearchMatches(std::wstring_view text,std::wstring_view query) {
         if(query.empty())return true;
@@ -289,6 +289,9 @@
         place(pluginParameterSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==0&&r.h>=164);
         place(pluginProgramSearch,x,y+99,r.w-242,24,show&&pluginDetailPage==1&&r.h>=164);
         place(pluginParameter,x,y+131,parameterWidth,240,show && pluginDetailPage==0 && r.h>=164);for(const int id:{pluginValue,pluginValueChoice,pluginValueToggle})place(id,x+parameterWidth+6,y+131,valueWidth,id==pluginValueChoice?240:24,show&&pluginDetailPage==0&&r.h>=164&&valueControl==id);place(pluginApply,x+parameterWidth+valueWidth+12,y+131,68,24,show && pluginDetailPage==0 && r.h>=164);
+        place(pluginAutomate,x,y+163,132,24,show&&pluginDetailPage==0&&r.h>=196);
+        place(pluginActivity,x+140,y+163,112,24,show&&pluginDetailPage==0&&r.h>=196);
+        for(const int id:{pluginAutomate,pluginActivity})EnableWindow(controls.at(id),hasPluginParameterTarget()&&!busy&&!pluginPresetPending);
         place(pluginProgram,x,y+131,r.w-360,300,show && pluginDetailPage==1 && r.h>=164);place(pluginLoadProgram,r.x+r.w-120,y+131,112,24,show && pluginDetailPage==1 && r.h>=164);
         place(pluginPort,x,y+99,r.w-360,300,show && pluginDetailPage==2 && r.h>=132);place(pluginTogglePort,r.x+r.w-120,y+99,112,24,show && pluginDetailPage==2 && r.h>=132);
         place(pluginAliases,x,y+99,r.w-242,26,show&&pluginDetailPage==3&&r.h>=132);
@@ -303,7 +306,7 @@
         ScreamSeq::NativeControls::text(controls.at(pluginLoadPreset),retainedPreset?L"Use current state":L"Load preset…");
         EnableWindow(controls.at(pluginSavePreset),!pluginPresetPending&&(selected||retainedPreset));
         EnableWindow(controls.at(pluginLoadPreset),!pluginPresetPending&&(retainedPreset?pluginPresetNeedsReload:selected));
-        place(pluginInstrument,x,y+163,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=196);place(pluginNewInstrument,r.x+r.w-188,y+163,108,24,show && instrument && pluginDetailPage==0 && r.h>=196);place(pluginAssign,r.x+r.w-76,y+163,68,24,show && instrument && pluginDetailPage==0 && r.h>=196);
+        place(pluginInstrument,x,y+195,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginNewInstrument,r.x+r.w-188,y+195,108,24,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginAssign,r.x+r.w-76,y+195,68,24,show && instrument && pluginDetailPage==0 && r.h>=228);
         EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
         EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
@@ -321,11 +324,20 @@
         EnableWindow(controls.at(pluginPort),!pluginPorts.empty());EnableWindow(controls.at(pluginTogglePort),!port.is_null()&&port.at("index")!=0&&port.at("supported").get<bool>());
         ScreamSeq::NativeControls::text(controls.at(pluginTogglePort),!port.is_null()&&port.at("active").get<bool>()?L"Disable port":L"Enable port");
     }
+    bool hasPluginParameterTarget()const {
+        return selectedPluginSlot()>=0&&std::any_of(pluginParameters.begin(),pluginParameters.end(),[&](const auto &p){return p.at("id")==selectedParameter;});
+    }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginValueToggle)return false;
+        if(id<pluginList || id>pluginActivity)return false;
         if(busy){if(id==pluginValueChoice||id==pluginValueToggle)syncPluginDiscreteCandidate();throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");}
         workspaceState.focus="plugins";
         if(id==pluginValueChoice||id==pluginValueToggle){pluginDiscreteValue(id);return true;}
+        if(id==pluginAutomate||id==pluginActivity) {
+            if(!hasPluginParameterTarget())throw std::runtime_error("Select an available plugin parameter first");
+            if(id==pluginAutomate)openParameterAutomation(selectedPlugin,selectedParameter,true);
+            else openParameterActivity(selectedPlugin,selectedParameter,true);
+            return true;
+        }
         if(id==pluginBrowse){openPluginLibrary();return true;}
         if(id==pluginReconnect){if(selectedPluginSlot()<0)throw std::runtime_error("Select a VST3 plugin");openPluginPath({{"plugin",selectedPlugin}});return true;}
         if(id==pluginSavePreset||id==pluginLoadPreset){pluginPresetFile(id==pluginSavePreset);return true;}
@@ -399,6 +411,9 @@
         s.uiText(L"PLUGINS  /  "+std::to_wstring(listedPlugins.size())+L" in rack",r.x+12,r.y+8,210,0x72dcc6);
         if(listedPlugins.empty())s.uiText(L"Add an effect or instrument",r.x+18,r.y+76,194,0x8fa8ba);
         if(r.h>=(pluginDetailPage==1?193:161) && pluginDetailPage!=0)s.uiText(pluginDetailPage==4&&!pluginPresetStatus.empty()?pluginPresetStatus:pluginExtrasError?pluginDetailStatus:pluginDraft?L"Program selection / Load applies / Escape discards":pluginDetailPage==1?L"Factory settings replace the saved state in one Undo step":pluginDetailPage==2?L"Enable auxiliary ports here; routing remains a separate assignment":pluginDetailPage==3?L"Share one plugin across tracker instruments and MIDI channels":pluginDetailPage==4?L"Save and load sounds / routing and instrument assignments stay in the song":L"Reconnect a moved or Mac-origin VST3 to its matching Windows module",r.x+230,r.y+(pluginDetailPage==1?166:134),r.w-242,pluginDraft||pluginExtrasError?0xe2b86c:0x8fa8ba);
-        else if(r.h>=193 && (selectedPluginSlot()<0 || !view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false)))
-            s.uiText(pluginDraft?L"Parameter draft / Enter applies / Escape discards":pluginDetailStatus,r.x+230,r.y+166,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
+        else if(pluginDetailPage==0) {
+            const bool instrument=selectedPluginSlot()>=0&&view->session.document.at("nativePlugins")[selectedPluginSlot()].value("isInstrument",false);
+            const float statusY=instrument?230.0f:198.0f;
+            if(r.h>=statusY+27)s.uiText(pluginDraft?L"Parameter draft / Apply retries / Escape discards":pluginDetailStatus,r.x+230,r.y+statusY,r.w-242,pluginDraft?0xe2b86c:0x8fa8ba);
+        }
     }
