@@ -160,6 +160,57 @@ void pendingSliderInput(HWND owner) {
     "Hiding or capture loss discarded newer slider input after an earlier final completed");
   f.press(12);check(f.writes==1&&!f.tool.hasGesture()&&f.audible==-12,"Cancel failed to reset the newer slider to current saved state");
 }
+void pendingKeyboardIntent(HWND owner) {
+  for(bool cancel:{false,true}) {
+    Fixture f(owner);bool injected=false;f.slide(330);
+    f.duringRead=[&](const auto &method){if(method=="mixer.bus.set"&&!injected){
+      injected=true;
+      SendMessageW(f.control(101),WM_KEYDOWN,cancel?VK_ESCAPE:VK_RETURN,0);
+      if(cancel) { // The physical release following Escape must not commit.
+        f.slide(330,TB_ENDTRACK);
+        SendMessageW(f.control(101),WM_KEYUP,VK_DOWN,0);
+      }
+      check(f.writes==0&&f.previews==0,"Pending keyboard intent recursively called the worker");
+    }};
+    f.tool.update();
+    check(injected&&!f.tool.hasGesture(),"Enter or Escape during preview left an unfinished gesture");
+    if(cancel)check(f.writes==0&&f.previews==2&&f.audible==-6.123456789&&f.revision=="r1",
+      "Escape during preview committed or failed to restore the exact saved gain");
+    else check(f.writes==1&&f.previews==1&&f.audible==-9&&f.lastWrite.at("gainDB")==-9,
+      "Enter during preview lost or repeated its one durable commit");
+  }
+  for(bool release:{false,true}) {
+    Fixture f(owner);bool injected=false;f.slide(330);
+    f.duringRead=[&](const auto &method){if(method=="mixer.bus.set"&&!injected){
+      injected=true;SendMessageW(f.control(101),WM_KEYDOWN,VK_ESCAPE,0);
+      f.slide(360);if(release)f.slide(360,TB_ENDTRACK);
+    }};
+    f.tool.update();
+    if(release){
+      check(f.writes==1&&!f.tool.hasGesture()&&f.lastWrite.at("gainDB")==-12&&f.audible==-12,
+        "Escape for older input suppressed the explicit release of a newer gesture");
+      continue;
+    }
+    check(f.writes==0&&f.tool.hasGesture()&&text(f.control(102))==L"-12"&&f.previews==1,
+      "Queued Escape discarded or committed newer unfinished input");
+    f.duringRead={};f.tool.update();
+    check(f.writes==0&&f.tool.hasGesture()&&f.audible==-12,"Newer retained input was not available for preview");
+    SendMessageW(f.control(101),WM_KEYDOWN,VK_ESCAPE,0);
+    check(f.writes==0&&!f.tool.hasGesture()&&f.audible==-6.123456789,
+      "Explicit second Escape did not cancel the newer retained input");
+  }
+  {
+    Fixture f(owner);bool injected=false;f.slide(330);
+    f.duringRead=[&](const auto &method){if(method=="mixer.bus.set"&&!injected){
+      injected=true;SendMessageW(f.control(101),WM_KEYDOWN,VK_ESCAPE,0);
+      throw std::runtime_error("Owned preview failure after Escape");
+    }};
+    f.tool.update();check(f.tool.hasGesture()&&f.writes==0,"Failed preview silently discarded its draft");
+    f.duringRead={};f.tool.update();
+    check(!f.tool.hasGesture()&&f.writes==0&&f.previews==1&&f.audible==-6.123456789,
+      "Preview failure lost queued cancellation or retried a durable operation");
+  }
+}
 void pendingTextRetention(HWND owner) {
   for(unsigned scenario=0;scenario<3;++scenario) {
     Fixture f(owner);SetFocus(f.control(102));SetWindowTextW(f.control(102),L"-9");
@@ -266,6 +317,6 @@ void viewportPool(HWND owner) {
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingKeyboardIntent(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

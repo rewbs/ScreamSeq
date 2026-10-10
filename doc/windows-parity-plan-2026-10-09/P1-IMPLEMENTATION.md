@@ -550,3 +550,23 @@ cross-platform reciprocal saves. It is scheduled by the existing native-ui CI
 selection. Add `workspace-mixer-hosted-tests` to the next local bounded CTest
 selection. Only source inspection and `git diff --check` were performed here;
 **no configure, build or test was run**.
+
+## Pending preview keyboard intent — prepared, unexecuted
+
+Source inspection found that Enter/Escape in a captured strip were consumed
+while a preview worker call was pending: `commit`/`restoreCurrent` returned early,
+losing the requested action. The native strip now defers Enter or Escape until
+the pending guard unwinds. Escape captures the input generation, restores the
+fresh saved value without history, and wins over the trailing release of that
+same value. Input entered after Escape is retained; an explicit release of that
+newer value can still commit once. An already-submitted durable write continues
+to use the existing exact/unknown completion and Review paths.
+
+`pendingKeyboardIntent` in the existing `mixer-strips-window-tests` adds native
+message scenarios for Enter, Escape plus trailing release, newer unfinished
+input, newer input explicitly released, and preview failure after Escape. The
+checks require no recursive worker calls, exact reset gain, unchanged history
+on cancellation and one final write on explicit completion. These are authored
+regressions, not executed evidence. Include them through the existing target in
+checkpoint 02; no extra build or test invocation is needed. Source review and
+`git diff --check` only were performed for this addition.

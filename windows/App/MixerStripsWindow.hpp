@@ -2,6 +2,7 @@
 #include "NativeToolWindow.hpp"
 #include "NativeWriteCompletion.hpp"
 #include "../../editor/MixerGesture.hpp"
+#include <optional>
 
 namespace ScreamSeq {
 // Native strips share the existing mixer API and history; Details remains a
@@ -23,6 +24,7 @@ private:
   std::map<std::string,Tracker::MixerMeter> meters_;
   bool setting_=false,pending_=false,captureLost_=false,rawDirty_=false,observed_=false,previewBlocked_=false,resetPresentation_=false;
   bool previewInFlight_=false,deferredCommit_=false,completedWithNewerInput_=false;
+  std::optional<uint64_t> deferredCancel_;
   int capturedControl_=0;
   float stripTop_=34,sliderTop_=57,sliderHeight_=32;
   int scrollOffset_=0,contentHeight_=0,wheelHorizontal_=0,wheelVertical_=0;bool layingOut_=false;
@@ -98,7 +100,7 @@ private:
     const auto *saved=bus(target);if(!saved)throw std::runtime_error("Mixer bus is unavailable");
     const auto &value=saved->at(Tracker::mixerControlKey(control));
     gesture_.begin({document_,revision_,target},control,value.is_boolean()?(value.get<bool>()?1.:0.):value.get<double>());
-    capturedControl_=id;rawDirty_=false;observed_=false;previewBlocked_=false;deferredCommit_=false;completedWithNewerInput_=false;
+    capturedControl_=id;rawDirty_=false;observed_=false;previewBlocked_=false;deferredCommit_=false;deferredCancel_.reset();completedWithNewerInput_=false;
     enableEdits();
   }
   void enableEdits() {
@@ -137,7 +139,7 @@ private:
     reload();
     const bool unchanged=gesture_.generation()==completion_.generation()&&
       std::pair(document_,revision_)==std::pair(returned->document,returned->revision);
-    deferredCommit_=false;captureLost_=false;completedWithNewerInput_=!unchanged;
+    deferredCommit_=false;deferredCancel_.reset();captureLost_=false;completedWithNewerInput_=!unchanged;
     if(unchanged){gesture_.finish();rawDirty_=false;captureLost_=false;resetPresentation_=true;}
     else previewBlocked_=true;
     report_=std::move(report);completion_.finish();observed_=false;
@@ -166,8 +168,24 @@ private:
     }
     if(gesture_.generation()!=generation||context_()!=std::pair(document_,revision_))
       throw std::runtime_error("Song or input changed while restoring / newer input retained; Cancel again to reload");
-    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;deferredCommit_=false;completedWithNewerInput_=false;
+    gesture_.finish();completion_.finish();rawDirty_=false;captureLost_=false;observed_=false;resetPresentation_=true;deferredCommit_=false;deferredCancel_.reset();completedWithNewerInput_=false;
     status_=acknowledge?L"Current saved state accepted / the edit was not repeated":L"Gesture cancelled / current saved value restored";
+  }
+  bool finishDeferredInput() {
+    if(pending_||!gesture_.active()||completion_.retained())return false;
+    if(deferredCancel_) {
+      const auto generation=*deferredCancel_;deferredCancel_.reset();
+      // Escape applies only to input already present when it was pressed.
+      // A later release for that same value cannot turn cancellation into a write.
+      captureLost_=false;
+      if(generation!=gesture_.generation()) {
+        if(deferredCommit_){deferredCommit_=false;commit();}
+        else status_=L"Input changed after Escape / newer gesture retained; finish or cancel it";
+      } else {deferredCommit_=false;restoreCurrent();}
+      return true;
+    }
+    if(deferredCommit_){deferredCommit_=false;commit();return true;}
+    return false;
   }
   void reviewResult() {
     if(pending_||!completion_.retained())return;
@@ -451,6 +469,7 @@ private:
     if(id!=3)return;
     KillTimer(window_,3);
     if(pending_){SetTimer(window_,3,50,nullptr);return;}
+    if(finishDeferredInput()){layout();requestPaint();return;}
     if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();layout();requestPaint();}
   }
   bool key(WPARAM key,bool control,bool shift)override {
@@ -459,8 +478,14 @@ private:
       return true;
     }
     if(control&&(key==VK_PRIOR||key==VK_NEXT)){page(key==VK_PRIOR?-1:1);return true;}
-    if(key==VK_ESCAPE&&gesture_.active()){restoreCurrent();layout();return true;}
-    if(key==VK_RETURN&&gesture_.active()){commit();layout();return true;}
+    if(key==VK_ESCAPE&&gesture_.active()){
+      if(pending_){if(previewInFlight_){deferredCancel_=gesture_.generation();deferredCommit_=false;}return true;}
+      restoreCurrent();layout();return true;
+    }
+    if(key==VK_RETURN&&gesture_.active()){
+      if(pending_){if(previewInFlight_){deferredCancel_.reset();deferredCommit_=true;}return true;}
+      commit();layout();return true;
+    }
     return false;
   }
   bool keyUp(WPARAM key)override {
@@ -528,13 +553,13 @@ public:
     if(retired()||!visible()||pending_)return;
     try {
       bool relayout=GetFocus()!=lastLayoutFocus_;
-      if(deferredCommit_&&gesture_.active()&&!completion_.retained()){deferredCommit_=false;commit();relayout=true;}
+      if(finishDeferredInput())relayout=true;
       else if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();relayout=true;}
       else if(gesture_.active())preview();
       else if(!completion_.retained()&&context_()!=std::pair(document_,revision_)){Pending guard(pending_);reload();relayout=true;}
-      // A release/key-up can arrive while preview() pumps the worker wait.
-      // Submit its newest value only after the preview's pending guard unwinds.
-      if(deferredCommit_&&gesture_.active()&&!completion_.retained()){deferredCommit_=false;commit();relayout=true;}
+      // Release, Enter or Escape can arrive while preview pumps the worker wait.
+      // Resolve that intent only after the preview's pending guard unwinds.
+      if(finishDeferredInput())relayout=true;
       if(relayout||resetPresentation_)layout();requestPaint();
     }catch(const std::exception &e){error(e);}
   }
