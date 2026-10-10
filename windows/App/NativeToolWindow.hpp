@@ -261,6 +261,16 @@ protected:
     surface.fill(0,0,w,h,NativeControls::renderColor(
       NativeControls::colors(NativeControls::Surface::inspector,NativeControls::highContrast()).background));
   }
+  static void paintCurveHandle(RenderSurface &surface,float x,float y,bool selected,const NativeControls::CurveColors &colors,UINT32 ordinary) {
+    // Selection remains visible by size and outline when colors coincide.
+    const float radius=selected?5.f:4.f;
+    surface.fill(x-radius,y-radius,radius*2,radius*2,selected?colors.selected:ordinary);
+    if(selected)surface.outline(x-radius,y-radius,radius*2,radius*2,colors.curve);
+  }
+  static void paintCurveBorder(RenderSurface &surface,const WorkspaceRect &bounds,bool active,const NativeControls::CurveColors &colors) {
+    surface.outline(bounds.x,bounds.y,bounds.w,bounds.h,active?colors.focus:colors.border);
+    if(active&&bounds.w>4&&bounds.h>4)surface.outline(bounds.x+2,bounds.y+2,bounds.w-4,bounds.h-4,colors.focus);
+  }
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}

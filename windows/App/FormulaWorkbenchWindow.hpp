@@ -187,7 +187,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){rect=d.rcItem;InflateRect(&rect,-2,-2);DrawFocusRect(d.hDC,&rect);}
   }
   void paint(RenderSurface &surface)override{
-    const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);if(referenceOnly_)return;const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,0x10171f);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3948);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,0x68d3bc,2);surface.unclip();surface.uiText(L"100%",r.x-38,r.y,36,0x94a4b4);surface.uiText(L"0%",r.x-38,r.y+r.h-16,36,0x94a4b4);
+    NativeToolWindow::paint(surface);const auto colors=NativeControls::curveColors();if(referenceOnly_)return;const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,colors.background);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,colors.curve,2);surface.unclip();paintCurveBorder(surface,r,false,colors);surface.uiText(L"100%",r.x-38,r.y,36,colors.text);surface.uiText(L"0%",r.x-38,r.y+r.h-16,36,colors.text);
   }
 public:
   FormulaWorkbenchWindow(HWND owner,const std::wstring &title,const std::string &sourceText,Json params,int selected,Request request,std::function<bool()> sourceCurrent={},std::function<bool(const std::string &)> applySource={})

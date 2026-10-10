@@ -97,17 +97,17 @@
     if(focused&&IsChild(window_,focused)&&!IsWindowVisible(focused)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))focusPage();
   }
   void paint(RenderSurface &surface)override{
-    const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);
+    NativeToolWindow::paint(surface);const auto colors=NativeControls::curveColors();
     if(!canvasVisible_)return;
-    const auto r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,0x10171f);surface.clip(r.x,r.y,r.w,r.h);
-    for(int i=0;i<=4;++i){const auto y=r.y+r.h*i/4;surface.line(r.x,y,r.x+r.w,y,0x273541);}
+    const auto r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,colors.background);surface.clip(r.x,r.y,r.w,r.h);
+    for(int i=0;i<=4;++i){const auto y=r.y+r.h*i/4;surface.line(r.x,y,r.x+r.w,y,colors.grid);}
     const auto step=std::max(256.,double(rowsPerBeat_)*256*std::ceil((canvas_.end-canvas_.start)/(double(rowsPerBeat_)*256)/16));
-    for(double p=std::ceil(canvas_.start/step)*step;p<=canvas_.end;p+=step){const auto at=canvas_.screen(p,0);surface.line(at.x,r.y,at.x,r.y+r.h,0x273541);}
-    for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,enabled_?0x68d3bc:0x63727f,2);
-    for(size_t i=0;i<canvas_.handles.size();++i){const auto at=canvas_.handles[i];surface.fill(at.x-4,at.y-4,8,8,int(i)==selected_?0xf3dfb0:0x7ce5cd);}
-    if(!hasTarget())surface.uiText(L"Choose a source in Graph, then Load selection",r.x+8,r.y+12,r.w-16,0xa4b7c7);
-    surface.unclip();surface.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?0x6edac5:0x334757);
-    surface.uiText(L"100%",r.x-38,r.y-3,36,0x94a4b4);surface.uiText(L"0%",r.x-38,r.y+r.h-15,36,0x94a4b4);
+    for(double p=std::ceil(canvas_.start/step)*step;p<=canvas_.end;p+=step){const auto at=canvas_.screen(p,0);surface.line(at.x,r.y,at.x,r.y+r.h,colors.grid);}
+    for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,enabled_?colors.curve:colors.disabled,2);
+    for(size_t i=0;i<canvas_.handles.size();++i){const auto at=canvas_.handles[i];paintCurveHandle(surface,at.x,at.y,int(i)==selected_,colors,colors.point);}
+    if(!hasTarget())surface.uiText(L"Choose a source in Graph, then Load selection",r.x+8,r.y+12,r.w-16,colors.text);
+    surface.unclip();paintCurveBorder(surface,r,GetFocus()==window_,colors);
+    surface.uiText(L"100%",r.x-38,r.y-3,36,colors.text);surface.uiText(L"0%",r.x-38,r.y+r.h-15,36,colors.text);
     wchar_t text[128]{};swprintf_s(text,L"Rows %.2f–%.2f · 1/256 precision",canvas_.start/256,canvas_.end/256);
-    surface.uiText(text,r.x,r.y-17,r.w,0x94a4b4);
+    surface.uiText(text,r.x,r.y-17,r.w,colors.text);
   }

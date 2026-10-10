@@ -40,6 +40,21 @@ inline ControlColors colors(Surface surface,bool contrast) {
     surface==Surface::main?RGB(42,51,63):RGB(35,49,63),RGB(66,80,94),RGB(51,65,79),
     RGB(46,67,77),RGB(125,228,206)};
 }
+struct CurveColors {
+  UINT32 background,grid,text,curve,secondary,disabled,point,selected,border,focus,loop,sustain,release,playback;
+  bool contrast;
+};
+inline CurveColors curveColors(bool contrast=highContrast()) {
+  if(contrast) {
+    const auto foreground=renderColor(GetSysColor(COLOR_WINDOWTEXT));
+    const auto highlight=renderColor(GetSysColor(COLOR_HIGHLIGHT));
+    return {renderColor(GetSysColor(COLOR_WINDOW)),renderColor(GetSysColor(COLOR_GRAYTEXT)),foreground,
+      foreground,foreground,renderColor(GetSysColor(COLOR_GRAYTEXT)),foreground,highlight,
+      foreground,highlight,foreground,foreground,foreground,highlight,true};
+  }
+  return {0x10171f,0x2a3947,0x93aabd,0x6edac5,0xe8ba76,0x647c89,0x6edac5,0xffd08a,
+    0x334757,0x6edac5,0xb9a46a,0x638dce,0xc787a4,0xe4eff6,false};
+}
 inline LRESULT controlColor(HDC dc,HWND control,Surface surface,bool contrast=highContrast()) {
   const auto palette=colors(surface,contrast);
   SetTextColor(dc,IsWindowEnabled(control)?palette.text:palette.disabled);

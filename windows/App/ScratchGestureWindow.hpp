@@ -201,11 +201,11 @@ private:
     for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);
   }
   void paint(RenderSurface &s)override{
-    const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);
-    for(unsigned lane=0;lane<2;++lane){const auto &canvas=canvases_[lane];const auto &r=canvas.viewport;s.uiText(lane?L"FADER · 100% open / 0% closed":L"RECORD MOTION · rising forward / falling reverse / flat held",r.x,r.y-23,r.w,0x9fb7c9);s.fill(r.x,r.y,r.w,r.h,0x10171f);s.clip(r.x,r.y,r.w,r.h);
-      for(int i=0;i<=4;++i){s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3948);s.line(r.x+r.w*i/4,r.y,r.x+r.w*i/4,r.y+r.h,0x2a3948);}
-      const auto &path=canvas.curve.empty()?canvas.handles:canvas.curve;for(size_t i=1;i<path.size();++i)s.line(path[i-1].x,path[i-1].y,path[i].x,path[i].y,lane?0xe8ba76:0x68d3bc,2);
-      for(size_t i=0;i<canvas.handles.size();++i){const auto p=canvas.handles[i];s.fill(p.x-4,p.y-4,8,8,int(i)==state_.selected[lane]?0xffffff:lane?0xe8ba76:0x68d3bc);}s.unclip();s.outline(r.x,r.y,r.w,r.h,state_.lane==lane?0x68d3bc:0x344858);s.uiText(L"100%",r.x-40,r.y,38,0x9fb7c9);s.uiText(L"0%",r.x-32,r.y+r.h-17,30,0x9fb7c9);
+    NativeToolWindow::paint(s);const auto colors=NativeControls::curveColors();
+    for(unsigned lane=0;lane<2;++lane){const auto &canvas=canvases_[lane];const auto &r=canvas.viewport;s.uiText(lane?L"FADER · 100% open / 0% closed":L"RECORD MOTION · rising forward / falling reverse / flat held",r.x,r.y-23,r.w,colors.text);s.fill(r.x,r.y,r.w,r.h,colors.background);s.clip(r.x,r.y,r.w,r.h);
+      for(int i=0;i<=4;++i){s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);s.line(r.x+r.w*i/4,r.y,r.x+r.w*i/4,r.y+r.h,colors.grid);}
+      const auto &path=canvas.curve.empty()?canvas.handles:canvas.curve;for(size_t i=1;i<path.size();++i)s.line(path[i-1].x,path[i-1].y,path[i].x,path[i].y,lane?colors.secondary:colors.curve,2);
+      for(size_t i=0;i<canvas.handles.size();++i){const auto p=canvas.handles[i];paintCurveHandle(s,p.x,p.y,int(i)==state_.selected[lane],colors,lane?colors.secondary:colors.curve);}s.unclip();paintCurveBorder(s,r,state_.lane==lane,colors);s.uiText(L"100%",r.x-40,r.y,38,colors.text);s.uiText(L"0%",r.x-32,r.y+r.h-17,30,colors.text);
     }
   }
 public:

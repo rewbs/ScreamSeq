@@ -1190,3 +1190,39 @@ Foreground high-contrast inspection of the forms remains necessary; source
 palette use and private-desktop checks alone do not establish visual parity.
 No additional Mac/audio validation is introduced by this Windows paint change;
 the shared audition repair in the same pending batch still has its own gates.
+
+### Prepared curve presentation palette and non-color cues
+
+`NativeControls::CurveColors` gives the seven curve surfaces shared background,
+grid, text, enabled/disabled curve, point, selection, border/focus, marker and
+playback roles. Normal mode keeps the dark Windows workspace with consistent
+teal curves and gold selections; high-contrast mode uses the current system
+Window, WindowText, GrayText and Highlight colors. `NativeToolWindow` now shares
+point and border drawing: selected points are larger and outlined; an active
+canvas has a double border, so neither state relies solely on a color difference.
+
+Consumers are Absolute Automation, Parameter Automation, Graph Curve (its
+`GraphCurveOwnerLayout.inc`), Instrument Envelope, Envelope Bank, Formula
+Workbench preview and Scratch Gesture. The read-only Formula preview keeps an
+ordinary border; the scratch editor retains separate labelled motion/fader lanes.
+Instrument-envelope high-contrast markers add LS/LE, SS/SE, R and P labels for
+loop endpoints, sustain endpoints, release and playback, with a corresponding
+legend in the full layout. Distinct marker labels use separate vertical offsets
+when multiple roles share a point. Normal-mode marker colors remain available.
+
+This change is limited to painting. Point coordinates, hit testing, musical
+values, preview computation, draft ownership and gesture/Apply/history paths are
+unchanged. The recorded-automation canvas now uses the same 8-DIP ordinary and
+10-DIP selected handles as the other point editors; hit-test tolerances are not
+reduced. Diff checks and source review completed; no build, pixel inspection or
+runtime test has run for this candidate.
+
+Include native-tool, graph-curve, parameter-automation-dock and
+instrument-short-dock checks in the next consolidated native UI gate, plus the
+existing actual-app curve/envelope/bank/scratch scenarios. Foreground acceptance
+must inspect normal and system high-contrast palettes, selected/unselected and
+enabled/disabled states, overlapping envelope markers, focused/unfocused
+canvases, compact docks and mixed DPI. Confirm readable grid/curve separation
+and marker labels, with no hidden Apply/status or loss of keyboard focus/drafts.
+Do not infer that all custom painting is now covered: pattern, waveform,
+graph-routing and mixer/meter surfaces remain separate parity work.
