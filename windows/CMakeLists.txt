@@ -419,6 +419,14 @@ if(BUILD_TESTING)
   target_include_directories(ScreamSeqVST3Fixture PRIVATE "${SCREAMSEQ_VST3_SDK}")
   target_link_libraries(ScreamSeqVST3Fixture PRIVATE ScreamSeqBuildOptions user32)
   set_target_properties(ScreamSeqVST3Fixture PROPERTIES PREFIX "" SUFFIX ".vst3")
+  if(TARGET workspace-restore-tests)
+    add_dependencies(workspace-restore-tests ScreamSeqVST3Fixture ScreamSeqVST3Scanner)
+    add_test(NAME workspace-mixer-hosted-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-mixer-hosted-tests PROPERTIES
+      LABELS "workspace;native-ui;private-desktop;hosted;native-vst3;functional;no-realtime-audit"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=mixer-hosted;SCREAMSEQ_WORKSPACE_VST3_SCANNER=$<TARGET_FILE:ScreamSeqVST3Scanner>;SCREAMSEQ_WORKSPACE_VST3_FIXTURE=$<TARGET_FILE:ScreamSeqVST3Fixture>"
+      TIMEOUT 120)
+  endif()
   add_executable(native-audio-bus-tests Tests/Plugins/AudioBusTests.cpp Tests/HostedProject/CallbackAudit.cpp)
   target_link_libraries(native-audio-bus-tests PRIVATE TrackerHosted)
   target_compile_definitions(native-audio-bus-tests PRIVATE SCREAMSEQ_WASAPI_ALLOCATION_AUDIT=1)

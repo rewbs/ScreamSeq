@@ -517,3 +517,36 @@ visual, Narrator, physical-device or hosted-instrument qualification. The next
 checkpoint must add this new test class to its bounded local application group
 alongside the prepared provider/routing and common command checks. The build
 cadence remains no earlier than 01:24:08 UTC after checkpoint 01.
+
+## Hosted instrument Route Here — prepared, unexecuted
+
+`MixerHostedApplicationTests.inc` adds a required `workspace-mixer-hosted-tests`
+CTest group in the existing workspace executable. CMake makes the scanner and
+redistributable VST3 fixture explicit build dependencies and supplies their exact
+target paths. The fixture uses a unique private cache and the normal Application,
+document worker and provider; a missing scanner/module is a failure, not a skip.
+The existing 120-second CTest and 90-second owned-child bounds are unchanged.
+
+The real fixture instrument declares 32 outputs. This scenario creates a trigger
+instrument, assigns MIDI channel 1, and writes a pattern note. Output 3 initially
+fans out to Master and a return; output 1 has a separate retained route. The
+normal Mixer Details command chooses output 3 from the actual port catalog and
+moves it to an attenuated group. Only popup selection is supplied by the native
+test callback; popup presentation/keyboard behavior still needs its native gate.
+
+Assertions cover unchanged unrelated branches/buses/inserts, saved opaque plugin
+state and instrument assignments; a deliberately lost postcommit completion;
+exact Review without another chooser/write; repeated no-op without revision or
+dirty-state changes; one Undo and Redo; stable identities and state after native
+save/reopen. Offline rendering uses the real hosted project path at 48 kHz for
+8,192 frames: the route must measurably affect PCM, Undo/Redo must restore exact
+deterministic PCM, and 17/128-frame partitions must agree within 1e-6 per sample.
+No device/default route is opened or changed by this scenario.
+
+This is functional provider/native integration coverage, explicitly labeled
+`no-realtime-audit`; it does not establish callback allocation/lock safety,
+physical latency, commercial-plugin compatibility, foreground presentation or
+cross-platform reciprocal saves. It is scheduled by the existing native-ui CI
+selection. Add `workspace-mixer-hosted-tests` to the next local bounded CTest
+selection. Only source inspection and `git diff --check` were performed here;
+**no configure, build or test was run**.

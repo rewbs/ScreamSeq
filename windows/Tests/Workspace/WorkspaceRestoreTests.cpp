@@ -1050,6 +1050,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "DocumentDepartureApplicationTests.inc"
 #include "PluginLibraryApplicationTests.inc"
 #include "MixerInstrumentApplicationTests.inc"
+#include "MixerHostedApplicationTests.inc"
 #include "SongRoutingApplicationTests.inc"
 #include "SampleBrowserApplicationTests.inc"
 #include "SampleLibraryApplicationTests.inc"
@@ -1115,6 +1116,9 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"mixer-hosted") {
+                    applicationHostedMixerInstrumentRouting();std::cout<<"PASS native hosted instrument route: actual ports, retained result, fan-out preservation, state, history, save/reopen and offline PCM\n";return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parity-fixture") {
                     applicationParityFixtureRecovery();std::cout<<"PASS original F04 and three Parity WAVs: retained results, no replay, exact PCM/identity history and save/reopen\n";return;
                 }
