@@ -1,22 +1,28 @@
 #pragma once
 #include "NativeToolWindow.hpp"
 #include "SongRoutingCanvas.hpp"
+#include "NativeWriteCompletion.hpp"
 namespace ScreamSeq {
 class SongRoutingWindow final:public NativeToolWindow {
   using Json=Api::Json;using Node=SongRoutingCanvas::Node;
   using Request=std::function<Json(const std::string &,const Json &)>;using Context=std::function<std::pair<std::string,std::string>()>;
   enum:int {filter=3801,nodePicker,wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,reload,fit,zoomOut,zoomIn,arrange,close,open,enable,page,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,saveLayout,verify,
-    title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
+    inputPorts,outputPorts,title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
   Request request_;Context context_;std::function<void(const Node &)> inspect_;
+  NativeWriteCompletion::Write write_;NativeWriteCompletion completion_;
+  std::string operation_,operationDocument_,operationRevision_;Json operationParams_,report_;bool readbackNeedsReload_=false;
+  bool unresolved()const noexcept{return completion_.retained();}
+  void requireResolved()const{if(unresolved())throw std::runtime_error("Review the previous routing result before another action");}
   Json data_=Json::object();SongRoutingCanvas canvas_;std::string document_,revision_,selected_,filter_;int wire_=-1,page_=0;
   bool setting_=false,pending_=false,dirty_=false,layoutDirty_=false,pre_=false,enabled_=true;uint64_t generation_=0;
   std::map<int,std::vector<std::string>> choices_;int drag_=0;std::string dragNode_;SongRoutingCanvas::Point dragStart_,dragOrigin_,pointer_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(unresolved())return describeDraft(operationDocument_,operationRevision_,operationParams_.dump(),generation_,dirty_||layoutDirty_,pending_,!pending_);
     return describeDraft(document_,revision_,Json::array({selected_,wire_}).dump(),generation_,dirty_||layoutDirty_||drag_==3||drag_==4||drag_==5,pending_);
   }
   void status(const std::wstring &s){status_=s;set(statusLabel,s);requestPaint();}
-  void error(const std::exception &e)override{status(wide(e.what()));}
-  void current()const{if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / draft retained. Reload before applying");}
+  void error(const std::exception &e)override{status(wide(e.what())+(unresolved()?L" / Review result before another edit":L""));}
+  void current()const{requireResolved();if(readbackNeedsReload_)throw std::runtime_error("Reload the reviewed routing state before another write");if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / draft retained. Reload before applying");}
   void clean()const{if(dirty_||layoutDirty_)throw std::runtime_error("Apply or reload the captured draft before changing selection");}
   void changed(){if(setting_)return;if(layoutDirty_)throw std::runtime_error("Save layout or Reload before editing routes");dirty_=true;++generation_;status(L"Captured route / Apply to save · Reload discards");}
   std::string choice(int id)const{auto index=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);const auto &list=choices_.at(id);return index>=0&&size_t(index)<list.size()?list[size_t(index)]:"";}
@@ -27,6 +33,7 @@ class SongRoutingWindow final:public NativeToolWindow {
   static std::string busID(const Node &n){if(n.bus.empty())throw std::runtime_error("This route requires a bus or channel stage");return n.bus;}
   static std::string pluginID(const Node &n){if(n.plugin.empty())throw std::runtime_error("This route requires a plugin node");return n.plugin;}
   unsigned port(int control)const{const auto v=number(control);if(v<0||v>63||v!=std::floor(v))throw std::runtime_error("Enter a port from 0 to 63");return unsigned(v);}
+  #include "SongRoutingPorts.inc"
   void inspectFields(){
     setting_=true;auto n=canvas_.find(selected_);set(title,n?n->name:L"Song routing");
     std::vector<std::pair<std::wstring,std::string>> inserts,effects,graphs{{L"Dry / no ordinary graph",""}};Json assignment=Json::object();
@@ -50,22 +57,47 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(resetFields){set(gain,L"0");set(input,L"1");set(output,L"0");pre_=false;enabled_=true;}
     setting_=false;inspectFields();layout();requestPaint();
   }
-  void load(){
-    if(pending_)return;const auto doc=context_().first;pending_=true;layout();try{auto data=request_("graph.get",{{"includeState",false}});if(context_().first!=doc)throw std::runtime_error("Document changed while loading routing; Reload again");data_=std::move(data);document_=doc;revision_=context_().second;dirty_=layoutDirty_=false;++generation_;pending_=false;rebuild();status(L"Drag sockets to add · selected wire target handle rewires · select a node to inspect");}catch(...){pending_=false;layout();throw;}
+  void load(bool completing=false){
+    if(!completing)requireResolved();if(pending_)return;const auto captured=context_();const auto generation=generation_;pending_=true;layout();
+    try{auto data=request_("graph.get",{{"includeState",false}});if(context_()!=captured||generation_!=generation)throw std::runtime_error("Document or draft changed while loading routing; Reload again");data_=std::move(data);document_=captured.first;revision_=captured.second;dirty_=layoutDirty_=readbackNeedsReload_=false;++generation_;pending_=false;resetPluginPorts();rebuild();status(L"Drag sockets to add · select declared plugin ports before connecting · select a node to inspect");}catch(...){pending_=false;layout();throw;}
+  }
+  void finishResult(){
+    const auto result=completion_.returned();if(!result)throw std::runtime_error("Routing result is uncertain / use Review result");
+    auto report=Json{{"outcome","returned"},{"submission",{{"method",operation_},{"document",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"result",result->result}};
+    if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation())load(true);
+    report_=std::move(report);completion_.finish();operation_.clear();
+    status(dirty_||layoutDirty_?L"Earlier routing edit completed / newer draft retained / no write repeated":L"Routing edit completed / document Undo available");
+  }
+  void reviewResult(){
+    if(pending_||!unresolved())return;pending_=true;layout();
+    try{
+      request_("synchronizeView",Json::object());pending_=false;
+      if(completion_.returned())finishResult();
+      else{
+        const auto captured=context_();const auto generation=generation_;if(captured.first!=operationDocument_)throw std::runtime_error("Original routing song is unavailable / result retained");
+        pending_=true;auto observed=request_("graph.get",{{"includeState",false}});
+        if(context_()!=captured||generation_!=generation)throw std::runtime_error("Song or draft changed during Review / result retained");
+        if(!observed.at("mixer").at("buses").is_array()||!observed.at("plugins").is_array())throw std::runtime_error("Malformed routing observation / result retained");
+        report_={{"outcome","unverified"},{"submission",{{"method",operation_},{"document",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"observed",std::move(observed)}};
+        readbackNeedsReload_=true;completion_.finish();operation_.clear();status(L"Current routing inspected / earlier outcome unverified / draft retained; Reload before another write");
+      }
+    }catch(...){pending_=false;layout();throw;}pending_=false;layout();
   }
   void mutate(const std::string &method,Json p,bool dry=false){
     if(pending_)return;current();p["expectedRevision"]=revision_;if(dry)p["dryRun"]=true;const auto gen=generation_;pending_=true;layout();
-    try{auto result=request_(method,p);pending_=false;if(context_().first!=document_)throw std::runtime_error("Document changed during the request; captured view retained");
-      if(dry){status(L"Route validated / song unchanged");}
-      else if(gen==generation_){load();status(L"Saved / document Undo restores this edit");}
-    }catch(...){pending_=false;layout();throw;}layout();
+    try{
+      if(dry){request_(method,p);status(L"Route validated / song unchanged");}
+      else{operation_=method;operationParams_=std::move(p);operationDocument_=document_;operationRevision_=revision_;
+        completion_.submit(write_,method,operationParams_,operationDocument_,gen,{{"selected",selected_},{"wire",wire_},{"gain",utf8(field(gain))},{"input",utf8(field(input))},{"output",utf8(field(output))}});
+        pending_=false;finishResult();}
+    }catch(...){if(!unresolved())operation_.clear();pending_=false;layout();throw;}pending_=false;layout();
   }
-  void selectNode(const std::string &id){clean();selected_=id;wire_=-1;rebuild(false);choose(source,id);SetFocus(window_);}
+  void selectNode(const std::string &id){clean();selected_=id;wire_=-1;rebuild(false);choose(source,id);refreshRoutePorts();SetFocus(window_);}
   void selectWire(int index){
-    clean();wire_=index;setting_=true;choose(wirePicker,index<0?"":std::to_string(index));if(index<0){setting_=false;return;}selected_.clear();choose(nodePicker,"");set(title,L"Connection");
+    clean();wire_=index;resetPluginPorts();setting_=true;choose(wirePicker,index<0?"":std::to_string(index));if(index<0){setting_=false;return;}selected_.clear();choose(nodePicker,"");set(title,L"Connection");
     const auto &e=canvas_.edges.at(size_t(index));choose(source,e.source);choose(destination,e.target);set(output,Json(e.output));set(input,Json(e.input));const auto &a=e.action;const auto type=a.value("kind",std::string{});Json settings=Json::object();
     int mode=0;if(type=="send"){mode=1;settings=bus(a.at("source")).at("sends").at(a.at("index").get<size_t>());}else if(type=="graph-input"){mode=2;settings=data_.at("inputs").at(a.at("index").get<size_t>());}else if(type=="graph-output")mode=3;else if(type=="plugin-input"){mode=4;settings=data_.at("mixer").at("sidechains").at(a.at("index").get<size_t>());}else if(type=="plugin-output")mode=5;else if(type=="plugin-connection"){mode=6;for(const auto &r:data_.at("mixer").at("pluginConnections"))if(r.at("source")==a.at("source")&&r.at("target")==a.at("target")&&r.at("output")==a.at("output")&&r.at("input")==a.at("input")){settings=r;break;}}
-    ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,mode,0);page_=0;ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);set(gain,settings.value("gainDB",0.0));pre_=settings.value("preFader",false);enabled_=settings.value("enabled",true);setting_=false;status(type.empty()?L"This wire follows the chain order / use Inserts or open the subgraph":L"Selected wire / edit its settings then Update wire");layout();
+    ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,mode,0);page_=0;ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);set(gain,settings.value("gainDB",0.0));pre_=settings.value("preFader",false);enabled_=settings.value("enabled",true);setting_=false;status(type.empty()?L"This wire follows the chain order / use Inserts or open the subgraph":L"Selected wire / edit its settings then Update wire");refreshRoutePorts();layout();
   }
   std::pair<std::string,Json> route(bool remove,bool updating){
     if(layoutDirty_)throw std::runtime_error("Save layout or Reload before editing routes");const auto *edge=wire_>=0?&canvas_.edges.at(size_t(wire_)):nullptr;
@@ -84,7 +116,7 @@ class SongRoutingWindow final:public NativeToolWindow {
       return {"graph.routes.set",{{key,list}}};
     }
     if(type=="plugin-output"){
-      const auto plugin=remove?a.at("plugin").get<std::string>():pluginID(*from);const auto out=remove?a.at("output").get<unsigned>():port(output);
+      const auto plugin=remove?a.at("plugin").get<std::string>():pluginID(*from);const auto out=remove?a.at("output").get<unsigned>():selectedPluginPort(output);
       if(updating&&(a.at("plugin")!=plugin||a.at("output")!=out))throw std::runtime_error("Remove and reconnect to change the plugin output port");
       std::string implicitMain;for(const auto &p:data_.at("plugins"))if(p.at("id")==plugin&&p.value("isInstrument",false))for(const auto &b:data_.at("mixer").at("buses"))if(b.at("kind")=="master")implicitMain=b.at("id").get<std::string>();
       const auto oldTarget=(remove||updating)?std::optional<std::string>(edge->target):std::nullopt;
@@ -93,11 +125,11 @@ class SongRoutingWindow final:public NativeToolWindow {
     }
     if(type=="plugin-connection"){
       if(remove)return {"graph.connections.remove",{{"connections",Json::array({a})}}};
-      Json params={{"source",pluginID(*from)},{"output",port(output)},{"target",pluginID(*to)},{"input",port(input)},{"gainDB",number(gain)},{"enabled",enabled_}};
+      Json params={{"source",pluginID(*from)},{"output",selectedPluginPort(output)},{"target",pluginID(*to)},{"input",selectedPluginPort(input)},{"gainDB",number(gain)},{"enabled",enabled_}};
       if(updating){auto old=a;old.erase("kind");params["replace"]=std::move(old);}return {"mixer.plugin.connection.set",std::move(params)};
     }
     if(type=="plugin-input"){
-      const auto &all=data_.at("mixer").at("sidechains");const auto old=(updating||remove)?all.at(a.at("index").get<size_t>()):Json::object();const auto plugin=remove?old.at("plugin").get<std::string>():pluginID(*to);const auto in=remove?old.at("input").get<unsigned>():port(input);
+      const auto &all=data_.at("mixer").at("sidechains");const auto old=(updating||remove)?all.at(a.at("index").get<size_t>()):Json::object();const auto plugin=remove?old.at("plugin").get<std::string>():pluginID(*to);const auto in=remove?old.at("input").get<unsigned>():selectedPluginPort(input);
       if(updating&&(old.at("plugin")!=plugin||old.at("input")!=in))throw std::runtime_error("Remove and reconnect to change the sidechain destination");Json sources=Json::array();
       for(size_t i=0;i<all.size();++i)if(all[i].at("plugin")==plugin&&all[i].at("input")==in){if(remove&&i==a.at("index").get<size_t>())continue;auto item=all[i];item.erase("plugin");item.erase("input");if(updating&&i==a.at("index").get<size_t>())item={{"source",busID(*from)},{"gainDB",number(gain)},{"preFader",pre_},{"enabled",enabled_}};sources.push_back(item);}
       if(!remove&&!updating)sources.push_back({{"source",busID(*from)},{"gainDB",number(gain)},{"preFader",pre_},{"enabled",enabled_}});return {"mixer.sidechains.set",{{"plugin",plugin},{"input",in},{"sources",sources}}};
@@ -115,15 +147,19 @@ class SongRoutingWindow final:public NativeToolWindow {
     std::map<unsigned,float> y;for(size_t i=0;i<canvas_.nodes.size();++i){auto &n=canvas_.nodes[i];n.x=std::min(100000.0f,28+levels[i]*236.0f);n.y=28+y[levels[i]];y[levels[i]]+=112;}layoutDirty_=true;++generation_;canvas_.fit();status(L"Arranged layout draft / Save layout or Reload");layout();}
   void scale(float multiplier){auto centre=canvas_.world(canvas_.viewport.x+canvas_.viewport.w/2,canvas_.viewport.y+canvas_.viewport.h/2);canvas_.zoom=std::clamp(canvas_.zoom*multiplier,.15f,2.0f);canvas_.panX=canvas_.viewport.w/2-centre.x*canvas_.zoom;canvas_.panY=canvas_.viewport.h/2-centre.y*canvas_.zoom;canvas_.geometry();requestPaint();}
   void action(int id,unsigned note)override{
-    if(setting_)return;if(id==close&&note==BN_CLICKED){hide();return;}if(pending_)return;
+    if(setting_)return;if(id==close&&note==BN_CLICKED){hide();return;}
+    if(note==EN_CHANGE){changed();return;}if(pending_)return;
+    if(id==reload&&note==BN_CLICKED&&unresolved()){reviewResult();return;}requireResolved();
+    if(note==CBN_DROPDOWN&&(id==inputPorts||id==outputPorts)){refreshPluginPorts(id==inputPorts?input:output);return;}
     if(note==CBN_SELCHANGE){
+      if(id==inputPorts||id==outputPorts){choosePluginPort(id);return;}
       if(id==filter){const auto next=choice(filter);if(dirty_||layoutDirty_){choose(filter,filter_);clean();}filter_=next;rebuild();canvas_.fit();return;}
       if(id==nodePicker){const auto next=choice(id);if(dirty_||layoutDirty_){choose(id,selected_);clean();}selectNode(next);return;}
       if(id==wirePicker){const auto selected=choice(id);if(dirty_||layoutDirty_){choose(id,wire_<0?"":std::to_string(wire_));clean();}selectWire(selected.empty()?-1:std::stoi(selected));return;}
       if(id==page){const auto next=int(SendMessageW(controls_.at(page),CB_GETCURSEL,0,0));if(dirty_||layoutDirty_){ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,page_,0);clean();}page_=next;inspectFields();return;}
-      if(id==kind||id==source||id==destination||id==graphPicker)changed();return;
+      if(id==kind||id==source||id==destination||id==graphPicker){changed();if(id!=graphPicker)refreshRoutePorts();}return;
     }
-    if(note==EN_CHANGE){changed();return;}if(note!=BN_CLICKED)return;
+    if(note!=BN_CLICKED)return;
     if(id==reload)load();else if(id==fit){canvas_.fit();requestPaint();}else if(id==zoomIn||id==zoomOut)scale(id==zoomIn?1.25f:.8f);else if(id==arrange)arrangeNodes();else if(id==saveLayout)savePositions();
     else if(id==enable){clean();mutate("mixer.enable",Json::object());}
     else if(id==pre||id==enabled){changed();if(id==pre)pre_=!pre_;else enabled_=!enabled_;}
@@ -133,8 +169,8 @@ class SongRoutingWindow final:public NativeToolWindow {
     else if(id==open){clean();current();inspect_(chosenNode(nodePicker));}
   }
   bool key(WPARAM key,bool ctrl,bool shift)override{
-    if(key==VK_ESCAPE){if(dirty_||layoutDirty_)load();else hide();return true;}if(pending_)return false;
-    if(ctrl&&key=='R'){load();return true;}if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(nodePicker):window_);return true;}
+    if(key==VK_ESCAPE){if(pending_||unresolved())hide();else if(dirty_||layoutDirty_)load();else hide();return true;}if(pending_)return false;
+    if(ctrl&&key=='R'){if(unresolved())reviewResult();else load();return true;}requireResolved();if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(nodePicker):window_);return true;}
     if(ctrl&&key==VK_RETURN){if(layoutDirty_)savePositions();else action(page_==2?assign:wire_>=0?update:connect,BN_CLICKED);return true;}
     if(GetFocus()!=window_)return false;
     if(ctrl&&key=='Z'){clean();mutate(shift?"history.redo":"history.undo",{{"domain","document"}});return true;}
@@ -143,7 +179,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(key>=VK_LEFT&&key<=VK_DOWN){if(dirty_)clean();if(auto n=canvas_.find(selected_)){const float amount=shift?16:4;n->x=std::clamp(n->x+(key==VK_RIGHT?amount:key==VK_LEFT?-amount:0),0.0f,100000.0f);n->y=std::clamp(n->y+(key==VK_DOWN?amount:key==VK_UP?-amount:0),0.0f,100000.0f);layoutDirty_=true;++generation_;canvas_.geometry();status(L"Moved layout draft / Save layout or Reload");layout();}return true;}return false;
   }
   void mouse(UINT message,float x,float y,WPARAM)override{
-    pointer_={x,y};if(message==WM_CAPTURECHANGED){drag_=0;return;}if(pending_)return;
+    pointer_={x,y};if(message==WM_CAPTURECHANGED){drag_=0;return;}if(pending_||unresolved()||readbackNeedsReload_)return;
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)){SetFocus(window_);
       if(wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty()){
         const auto &edge=canvas_.edges.at(size_t(wire_));const auto h=edge.points[28];
@@ -168,19 +204,26 @@ class SongRoutingWindow final:public NativeToolWindow {
           const int routeKind=GraphCableEdits::freshSongRoute(!from.plugin.empty(),!to.plugin.empty(),!from.graph.empty(),!to.graph.empty(),previous,dirty_);
           const bool keepDraft=dirty_&&previous==routeKind;
           setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,routeKind,0);
-          if(!keepDraft){set(gain,L"0");set(input,L"0");set(output,L"0");pre_=false;enabled_=true;}setting_=false;
+          wire_=-1;choose(wirePicker,"");
+          if(!keepDraft){resetPluginPorts();set(gain,L"0");set(input,L"0");set(output,L"0");pre_=false;enabled_=true;}setting_=false;
         }
-        dirty_=true;++generation_;auto [method,p]=route(false,mode==4);mutate(method,p);
+        dirty_=true;++generation_;refreshRoutePorts();auto [method,p]=route(false,mode==4);mutate(method,p);
       }}else if(layoutDirty_)status(L"Moved layout draft / Save layout or Reload");layout();}
     requestPaint();
   }
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const float x=w-322,cw=306;canvas_.viewport={12,82,w-352,h-146};canvas_.geometry();
-    place(filter,12,12,220,240);place(enable,240,12,114,26);place(reload,w-186,12,80,26);place(close,w-98,12,86,26);
+    place(filter,12,12,220,240);place(enable,240,12,114,26);place(reload,w-226,12,120,26);place(close,w-98,12,86,26);
     place(fit,12,46,52,26);place(zoomOut,70,46,32,26);place(zoomIn,108,46,32,26);place(arrange,148,46,82,26);place(saveLayout,238,46,108,26);place(title,x,48,cw,24);
     place(nodeLabel,x,82,cw,18);place(nodePicker,x,104,cw-78,260);place(open,x+cw-72,104,72,26);place(page,x,140,cw,240);
     for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel})ShowWindow(controls_.at(id),SW_HIDE);
     if(page_==0){place(wireLabel,x,182,cw,18);place(wirePicker,x,204,cw,260);place(kind,x,240,cw,220);place(sourceLabel,x,278,cw,18);place(source,x,300,cw,240);place(destinationLabel,x,336,cw,18);place(destination,x,358,cw,240);place(gainLabel,x,397,92,18);place(outputLabel,x+104,397,92,18);place(inputLabel,x+208,397,92,18);place(gain,x,419,94,26);place(output,x+104,419,94,26);place(input,x+208,419,98,26);place(pre,x,456,146,26);place(enabled,x+154,456,152,26);place(connect,x,494,146,26);place(update,x+154,494,152,26);place(verify,x,530,146,26);place(disconnect,x+154,530,152,26);}
+    for(int id:{input,output}){
+      NativeInputGate::present(controls_.at(pickerForPort(id)),CB_SETDROPPEDWIDTH,WPARAM(360*GetDpiForWindow(window_)/96),0);
+      const bool pluginPort=page_==0&&pluginPortMode(id);
+      if(pluginPort){ShowWindow(controls_.at(id),SW_HIDE);place(pickerForPort(id),x+(id==input?208:104),419,id==input?98:94,260);}
+      else ShowWindow(controls_.at(pickerForPort(id)),SW_HIDE);
+    }
     if(page_==1){place(insertLabel,x,188,cw,36);place(insertPicker,x,230,cw,240);place(insertUp,x,266,72,26);place(insertDown,x+78,266,72,26);place(insertRemove,x+158,266,148,26);place(effectLabel,x,310,cw,40);place(effectPicker,x,358,cw,260);place(insertAdd,x,398,cw,26);}
     if(page_==2){place(graphLabel,x,188,cw,40);place(graphPicker,x,238,cw,260);place(amountLabel,x,283,145,18);place(wetLabel,x+158,283,145,18);place(amount,x,307,145,26);place(wet,x+158,307,148,26);place(assign,x,350,145,26);place(clear,x+158,350,148,26);}
     place(statusLabel,12,h-52,w-24,42);for(const auto &[id,control]:controls_)if(id<title&&id!=close)EnableWindow(control,!pending_);
@@ -188,7 +231,10 @@ class SongRoutingWindow final:public NativeToolWindow {
     const bool editable=wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty();for(int id:{update,disconnect})EnableWindow(controls_.at(id),!pending_&&editable);ScreamSeq::NativeInputGate::text(controls_.at(pre),pre_?L"Pre-fader: on":L"Pre-fader: off");ScreamSeq::NativeInputGate::text(controls_.at(enabled),enabled_?L"Route enabled":L"Route disabled");
     const auto mode=SendMessageW(controls_.at(kind),CB_GETCURSEL,0,0);EnableWindow(controls_.at(gain),!pending_&&(mode==1||mode==2||mode==4||mode==6));EnableWindow(controls_.at(pre),!pending_&&(mode==1||mode==2||mode==4));EnableWindow(controls_.at(enabled),!pending_&&(mode==1||mode==4||mode==6));EnableWindow(controls_.at(input),!pending_&&(mode==2||mode==4||mode==6));EnableWindow(controls_.at(output),!pending_&&(mode==3||mode==5||mode==6));
     if(layoutDirty_)for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear})EnableWindow(controls_.at(id),FALSE);
+    if(layoutDirty_)for(int id:{inputPorts,outputPorts})EnableWindow(controls_.at(id),FALSE);
     EnableWindow(controls_.at(open),!pending_&&n&&(!n->bus.empty()||!n->plugin.empty()||!n->graph.empty()));
+    if(unresolved()||readbackNeedsReload_)for(const auto &[id,control]:controls_)if(id<title&&id!=reload&&id!=close)EnableWindow(control,FALSE);
+    set(reload,unresolved()?L"Review result":L"Reload");EnableWindow(controls_.at(reload),!pending_);
   }
   void paint(RenderSurface &s)override{
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto v=canvas_.viewport;s.fill(v.x,v.y,v.w,v.h,0x111b25);s.clip(v.x,v.y,v.w,v.h);
@@ -205,9 +251,9 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(canvas_.nodes.empty())s.uiText(L"Enable routing to connect channels, instruments and effects",v.x+20,v.y+24,v.w-40,0x8fa8ba);s.unclip();s.outline(v.x,v.y,v.w,v.h,GetFocus()==window_?0x6edac5:0x334757);
   }
 public:
-  SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
+  SongRoutingWindow(HWND owner,Request request,Context context,std::function<void(const Node &)> inspect,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),write_(std::move(write)){
     minimumWidth_=1040;minimumHeight_=680;create(L"ScreamSeq.SongRouting",L"Song routing",1280,800);
-    for(int id:{filter,nodePicker,wirePicker,kind,source,destination,page,insertPicker,effectPicker,graphPicker})combo(id);
+    for(int id:{filter,nodePicker,wirePicker,kind,source,destination,page,insertPicker,effectPicker,graphPicker,inputPorts,outputPorts})combo(id);
     for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,0,0);
     for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})ScreamSeq::NativeInputGate::present(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);
     for(int id:{gain,input,output,amount,wet})edit(id,L"",32);
@@ -216,6 +262,9 @@ public:
     finish();load();canvas_.fit();
   }
   void show(){NativeToolWindow::show();SetFocus(window_);}
-  Json snapshot()const{return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",context_()!=std::pair(document_,revision_)},{"pending",pending_},{"draft",dirty_},{"layoutDraft",layoutDirty_},{"selected",selected_},{"wire",wire_},{"filter",filter_},{"page",page_},{"status",utf8(status_)},{"canvas",canvas_.snapshot()}};}
+  Json snapshot()const{
+    const auto catalog=[](const PortCatalog &value){return Json{{"plugin",value.plugin},{"document",value.document},{"revision",value.revision},{"error",value.error},{"ports",value.ports},{"indices",value.indices}};};
+    return {{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"inputPorts",catalog(inputCatalog_)},{"outputPorts",catalog(outputCatalog_)},{"generation",generation_},{"fields",{{"gain",utf8(field(gain))},{"input",utf8(field(input))},{"output",utf8(field(output))}}},{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",context_()!=std::pair(document_,revision_)},{"pending",pending_},{"draft",dirty_},{"layoutDraft",layoutDirty_},{"selected",selected_},{"wire",wire_},{"filter",filter_},{"page",page_},{"status",utf8(status_)},{"canvas",canvas_.snapshot()}};
+  }
 };
 }

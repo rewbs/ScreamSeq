@@ -451,6 +451,15 @@ Ctrl+F focuses search and Ctrl+R reloads. Category drafts survive Close; Escape
 discards a draft. Unavailable preferences leave insertion usable. See
 `../PLUGIN_LIBRARY_PROGRESS.md` for native/API and isolated live-audio evidence.
 
+Prepared P1 routing controls use declared `plugin.buses.get` catalogs for plugin
+inputs and outputs. New connections require an explicit named port; unsupported
+or unavailable ports cannot be guessed. Existing saved wires retain their port
+identity. Generic plugin socket gestures retain a draft until ports are chosen.
+The routing owner also retains typed write outcomes: **Review result** reconciles
+an exact receipt or inspects current state without replay, preserving newer raw
+drafts. Unknown observations require Reload before another write. This source
+and its new native/application checks are not yet built or qualified.
+
 The mixer toolbar's **Routing…** button and command palette open a modeless song
 routing canvas alongside the pattern editor. It shows track/group/master buses,
 row/persistent/ordinary graph stages, explicit/default-master inserts, instrument

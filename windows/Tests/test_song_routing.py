@@ -89,7 +89,12 @@ class SongRoutingTests(unittest.TestCase):
     def route(self,kind,source,target,gain=None,input=None,output=None):
         self.select(3804,kind);self.choose_node(3805,source);self.choose_node(3806,target)
         for identifier,value in [(3807,gain),(3808,input),(3809,output)]:
-            if value is not None:self.field(identifier,value)
+            if value is None:continue
+            if identifier==3808 and kind in (4,6):
+                self.select(3837,self.local()['inputPorts']['indices'].index(value)+1)
+            elif identifier==3809 and kind in (5,6):
+                self.select(3838,self.local()['outputPorts']['indices'].index(value)+1)
+            else:self.field(identifier,value)
 
     def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
         first,second,master=self.setup_mixer();third=self.buses()[2]['id']

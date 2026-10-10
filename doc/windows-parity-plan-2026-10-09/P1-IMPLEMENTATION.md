@@ -286,7 +286,7 @@ Because common command dispatch changed, that checkpoint must also include the
 workspace/departure/shortcut/typing/recovery application group, in addition to P1
 native strip/model/PCM checks. No build or test was run for these changes.
 
-Remaining bounded P1 feature work includes sidechain catalogs. Physical
+The bounded P1 feature slices below are prepared but unqualified. Physical
 UI/accessibility and reciprocal
 Mac fixture checks remain open; prepared source does not close them.
 
@@ -367,3 +367,56 @@ multi-output instrument and audible routing remains required at the P1 gate.
 No build/test was started for this slice. At 2026-10-10 00:00:07 UTC the existing
 Intel job 114066597619 had completed its build successfully and was executing
 native model/host tests at frozen d39; it does not qualify this P1 source.
+
+## Declared routing ports and retained routing outcomes — source only
+
+`SongRoutingPorts.inc` gives the retained Song Routing owner native input/output
+selectors (3837/3838) populated by `plugin.buses.get {plugin:<stable ID>}`. Rows
+show actual logical port indices, names, channel counts, unsupported layouts and
+inactive ports that enable on playback. There is no invented input 1 or default
+auxiliary output. New plugin sidechain, output and cable routes require an explicit
+catalog choice; existing selected wires recover their saved port if available.
+Unavailable saved ports remain visible as unavailable and their connections may
+still be removed. Graph-stage numeric ports remain unchanged for the later P5
+graph-catalog work.
+
+Catalog reads are scoped to document/revision/plugin/draft generation. A read
+that pumps newer raw input cannot replace that draft. Empty, unavailable,
+unsupported, wrong-identity or malformed catalogs cannot submit a connection.
+Fresh generic plugin socket gestures now retain a route draft until declared
+ports are chosen; they cannot guess a destination input. Compatible explicitly
+selected port drafts retain their choice. The existing exact-edge merge helpers
+continue to preserve other sidechain sources and output branches.
+
+Discovery also exposed an unsafe completion boundary in this existing owner.
+`SongRoutingWindow` now accepts the actual typed write callback from Application
+and uses `NativeWriteCompletion` for every musical/layout/history write. Exact
+receipts are retained through presentation failures; uncertain writes block
+resubmission and document departure. **Review result** reads current graph state
+without repeating a write. Unknown observation is labeled unverified and requires
+explicit Reload before another write. Newer raw drafts survive exact/unknown
+Review; changed-generation, malformed and failed observations retain the pending
+result. Reload itself now stages its document/revision/generation before adopting
+readback. A retired routing owner is recreated on the next open after successful
+document replacement.
+
+Prepared tests in `SongRoutingApplicationTests.inc` run in the existing workspace
+command-result group. They use the actual Built-in Gain input catalog and worker
+for explicit port selection, sidechain commit, lost exact completion, newer raw
+gain retention, departure refusal, no resubmission, single Undo/Redo, native
+save/reopen and owner recreation. Separate transport-boundary cases exercise
+unknown outcomes, failed/malformed/changed-generation Review and mandatory Reload.
+Catalog variants cover unavailable, unsupported and empty inputs and newer input
+during catalog reads. The actual-app `test_song_routing.py` helper now chooses
+named catalog rows rather than writing hidden numeric controls; its existing
+provider-backed sidechain/auxiliary, branch-preservation and PCM assertions remain.
+
+No build or test was run for this preparation. The next consolidated checkpoint
+must include the workspace command-result group and the routing application suite,
+with provider/instrument fixture caches supplied for its hosted cases; absent
+fixture/device prerequisites do not qualify those cases. Native popup/dropdown
+presentation, keyboard traversal, UIA and mixed-DPI checks remain open. No Mac,
+shared musical operation, project format or audio/device implementation changed
+in this slice. At 00:07:44 UTC the original Intel d39 job had passed its native,
+Swift recovery/picker and sample-library steps and was running the interface
+harness; final conformance and job disposition were still pending.
