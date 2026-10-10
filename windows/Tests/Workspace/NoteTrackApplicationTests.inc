@@ -102,4 +102,21 @@ void applicationNoteTrackWindows() {
     restoreCheck(tracks.size()==1&&tracks[0].at("output")==output&&tracks[0].at("name")=="Typed during preview",
       "Native Create resolved duplicate output labels by name or lost the newer draft");
   }
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;
+    app.edit("mixer.enable",RestoreJson::object());app.edit("mixer.bus.add",{{"kind","return"},{"name","Temporary output"}});
+    app.openNoteTrackEditor(true);auto *tool=app.createNoteTrackWindow.get();const auto window=tool->window();
+    ScreamSeq::Tests::ownGuiWindow(window);
+    const auto destinations=tool->snapshot().at("captured").at("layout").at("destinations");const auto removed=destinations.back().at("id");
+    const auto combo=GetDlgItem(window,7903);SendMessageW(combo,CB_SETCURSEL,destinations.size(),0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(7903,CBN_SELCHANGE),LPARAM(combo));rawDraftText(GetDlgItem(window,7901),L"Keep my output choice");
+    app.edit("mixer.bus.remove",{{"bus",removed}});press(window,7904);
+    const auto before=songState(app);press(window,7906);
+    restoreCheck(tool->snapshot().at("draft").at("output")==removed&&songState(app)==before&&tool->snapshot().at("completion").is_null(),
+      "Recapturing a deleted output silently selected Master, wrote a track or reported uncertain outcome");
+    SendMessageW(combo,CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(7903,CBN_SELCHANGE),LPARAM(combo));press(window,7906);
+    const auto layout=app.documentOperation("track.get",RestoreJson::object());
+    restoreCheck(layout.at("noteTracks").size()==1&&tool->snapshot().at("completed")==true,
+      "Explicit default-output selection failed to recover an unavailable destination draft");
+  }
 }

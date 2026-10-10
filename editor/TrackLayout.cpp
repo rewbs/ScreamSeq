@@ -48,6 +48,37 @@ bool effectiveColumnMute(const NativeSong &native, const OpenMPT::CSoundFile &so
   auto found = native.columnMutes.find(track->second.id);
   return found != native.columnMutes.end() ? found->second : song.ChnSettings[channel].dwFlags[OpenMPT::CHN_MUTE];
 }
+NoteTrackLayoutView describeNoteTracks(const NativeSong &native, const OpenMPT::CSoundFile &song) {
+  NoteTrackLayoutView result;
+  result.maximumColumns = std::min<unsigned>(127, song.GetModSpecifications().channelsMax);
+  std::map<uint64_t, size_t> columnByID;
+  result.columns.reserve(native.tracks.size());
+  for (const auto &[channel, entry] : native.tracks) {
+    require(columnByID.emplace(entry.id, result.columns.size()).second, "Duplicate note column identity");
+    result.columns.push_back({entry, channel, effectiveColumnMute(native, song, channel), {}, 0});
+  }
+  std::map<uint64_t, const MixerBus *> buses;
+  for (const auto &bus : native.mixer.buses) {
+    require(buses.emplace(bus.id, &bus).second, "Duplicate mixer bus identity");
+    if (bus.kind != MixerBusKind::Track) result.destinations.push_back({bus.id, bus.name});
+  }
+  result.tracks.reserve(native.noteTracks.size());
+  for (const auto &track : native.noteTracks) {
+    const auto bus = buses.find(track.bus);
+    require(bus != buses.end(), "Note track mixer bus is missing");
+    NoteTrackView item{track.bus, bus->second->output, bus->second->name, bus->second->color, track.columns, {}};
+    for (auto id : track.columns) {
+      const auto found = columnByID.find(id);
+      require(found != columnByID.end(), "Note track column is missing");
+      auto &column = result.columns[found->second];
+      require(!column.track, "Note column belongs to more than one track");
+      column.track = track.bus; column.noteColumn = unsigned(item.channels.size());
+      item.channels.push_back(column.channel);
+    }
+    result.tracks.push_back(std::move(item));
+  }
+  return result;
+}
 PreparedNoteTrackEdit prepareNoteTrackEdit(const NativeSong &native,
   const OpenMPT::CSoundFile &song, const NoteTrackEdit &edit) {
   PreparedNoteTrackEdit prepared{native};

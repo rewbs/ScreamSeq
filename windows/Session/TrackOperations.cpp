@@ -37,31 +37,26 @@ uint64_t identity(const Json &value) {
 }
 }
 Json noteTrackLayout(const Tracker::NativeSong &native, const OpenMPT::CSoundFile &song) {
+  const auto layout = Tracker::describeNoteTracks(native, song);
   auto columns = Json::array(), tracks = Json::array(), destinations = Json::array();
-  for (const auto &[channel, entry] : native.tracks) {
+  for (const auto &column : layout.columns) {
+    const auto &entry = column.entity;
     Json item = {{"id", id(entry.id)}, {"name", entry.name}, {"annotation", entry.annotation}, {"color", entry.color},
-      {"channel", channel}, {"mute", Tracker::effectiveColumnMute(native, song, channel)}, {"track", nullptr}, {"noteColumn", 0}};
-    for (const auto &track : native.noteTracks) {
-      const auto found = std::find(track.columns.begin(), track.columns.end(), entry.id);
-      if (found != track.columns.end()) { item["track"] = id(track.bus); item["noteColumn"] = found - track.columns.begin(); break; }
-    }
+      {"channel", column.channel}, {"mute", column.muted}, {"track", column.track ? Json(id(*column.track)) : Json(nullptr)},
+      {"noteColumn", column.noteColumn}};
     columns.push_back(std::move(item));
   }
-  for (const auto &track : native.noteTracks) {
-    const auto bus = std::find_if(native.mixer.buses.begin(), native.mixer.buses.end(), [&](const auto &value) { return value.id == track.bus; });
-    need(bus != native.mixer.buses.end(), "Note track mixer bus is missing");
+  for (const auto &track : layout.tracks) {
     auto ids = Json::array(), channels = Json::array();
-    for (auto column : track.columns) {
-      ids.push_back(id(column));
-      for (const auto &[channel, entry] : native.tracks) if (entry.id == column) { channels.push_back(channel); break; }
-    }
-    tracks.push_back({{"id", id(track.bus)}, {"name", bus->name}, {"color", bus->color},
-      {"columns", ids}, {"channels", channels}, {"output", id(bus->output)}});
+    for (auto column : track.columns) ids.push_back(id(column));
+    for (auto channel : track.channels) channels.push_back(channel);
+    tracks.push_back({{"id", id(track.id)}, {"name", track.name}, {"color", track.color},
+      {"columns", ids}, {"channels", channels}, {"output", id(track.output)}});
   }
-  for (const auto &bus : native.mixer.buses) if (bus.kind != Tracker::MixerBusKind::Track)
+  for (const auto &bus : layout.destinations)
     destinations.push_back({{"id", id(bus.id)}, {"name", bus.name}});
   return {{"destinations", destinations}, {"columns", columns}, {"noteTracks", tracks},
-    {"maximumColumns", std::min<unsigned>(127, song.GetModSpecifications().channelsMax)}};
+    {"maximumColumns", layout.maximumColumns}};
 }
 TrackOperations::TrackOperations(Tracker::Document &document, std::function<void()> stop, TrackHostHooks host)
   : document_(document), stop_(std::move(stop)), host_(std::move(host)) {}

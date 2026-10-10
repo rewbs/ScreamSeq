@@ -312,3 +312,30 @@ and the already registered PID-pipe track scenarios. Retain the prior grid/focus
 docking/context-menu checks because header geometry changed. Mac shared-candidate
 and queued-mute ownership coverage, reciprocal F01–F05 project checks, and the
 plan's audio/UI gates remain required. Do not reuse P1's binary as P2 evidence.
+
+## Shared layout projection — prepared, unqualified
+
+The remaining Mac `TrackLayout.inc` and Windows `noteTrackLayout` membership,
+mute, destination and group-resolution loops now use
+`editor/TrackLayout::describeNoteTracks`. Its owned typed view carries numeric
+stable IDs, full column annotations, group controls, ordered channels/destinations
+and the format limit. Native adapters only serialize that view to their existing
+Foundation/JSON fields. Public `n0` disconnected outputs, null ungrouped membership,
+field names, ordering and project metadata remain unchanged. No UI geometry or
+device ownership enters the shared module. The projection runs on the document
+owner, never the audio callback, and accepts the prepared append before resize.
+
+The existing shared note-track-edit target gains explicit checks for implicit
+layout without mixer materialization, imported mute and overrides, stable group
+membership/annotations/color, disconnected output, destination order, immutable
+snapshot ownership, missing references, and equality between dry append and its
+adopted layout. Both native builds and both track/API suites are required because
+both serializers changed. Existing persistence and voice ownership checks remain
+required; projection tests do not establish audio or codec correctness by themselves.
+
+The native form group additionally checks a selected destination deleted before
+explicit recapture: its stable unavailable choice survives, Apply rejects without
+mutation or an uncertain receipt, and only an explicit default selection permits
+creation. This and all projection changes remain source-only until the grouped
+checkpoint. Latest remote main was refreshed during this batch and remains
+`16cab100b`; the local primary checkout's older main ref was not modified.

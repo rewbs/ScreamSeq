@@ -126,6 +126,50 @@ void appendAndCapacity() {
     }
   }
 }
+void layoutProjection() {
+  auto doc = Document::demo(MOD_TYPE_S3M);
+  doc->transaction([](CSoundFile &song) { song.ChnSettings[0].dwFlags.set(CHN_MUTE); });
+  auto original = doc->native();
+  original.tracks.at(0).name = "Column label";
+  original.tracks.at(0).annotation = "Retained annotation";
+  original.tracks.at(0).color = 0x547886;
+  const auto plain = describeNoteTracks(original, doc->song());
+  check(plain.columns.size() == doc->song().GetNumChannels() && plain.tracks.empty() && plain.destinations.empty() &&
+    plain.columns[0].entity == original.tracks.at(0) && plain.columns[0].muted && !plain.columns[0].track &&
+    plain.columns[0].noteColumn == 0 && plain.maximumColumns == 32, "Implicit layout changed names, imported mute, limits or routing");
+  auto prepared = prepareNoteTrackEdit(original, doc->song(), GroupNoteTrack{{0, 1}, "Shared group", {}});
+  auto &native = prepared.native;
+  native.columnMutes[original.tracks.at(0).id] = false;
+  native.columnMutes[original.tracks.at(1).id] = true;
+  bus(native, prepared.affected).color = 0xabcdef;
+  bus(native, prepared.affected).output = 0; // Public serializers retain n0, not Master.
+  const auto snapshot = native;
+  const auto grouped = describeNoteTracks(native, doc->song());
+  check(native == snapshot && doc->native().noteTracks.empty(), "Layout inspection mutated the song or allocator");
+  check(grouped.tracks.size() == 1 && grouped.tracks[0].id == prepared.affected && grouped.tracks[0].name == "Shared group" &&
+    grouped.tracks[0].color == 0xabcdef && grouped.tracks[0].output == 0 &&
+    grouped.tracks[0].columns == std::vector<uint64_t>{original.tracks.at(0).id, original.tracks.at(1).id} &&
+    grouped.tracks[0].channels == std::vector<uint16_t>{0, 1}, "Track projection lost stable group data or disconnection");
+  check(!grouped.columns[0].muted && grouped.columns[1].muted && grouped.columns[0].track == prepared.affected &&
+    grouped.columns[1].track == prepared.affected && grouped.columns[1].noteColumn == 1 && !grouped.columns[2].track,
+    "Column projection mixed imported mute, override or membership");
+  check(grouped.destinations.size() == 2 && grouped.destinations[0].id == native.masterID &&
+    grouped.destinations[1].id == prepared.affected, "Projection changed destination order or included raw track buses");
+  bus(native, prepared.affected).name = "Later name";
+  check(grouped.tracks[0].name == "Shared group", "Published layout retained borrowed mutable state");
+  auto malformed = snapshot;
+  malformed.mixer.buses.erase(std::remove_if(malformed.mixer.buses.begin(), malformed.mixer.buses.end(),
+    [&](const auto &value) { return value.id == prepared.affected; }), malformed.mixer.buses.end());
+  rejects([&] { describeNoteTracks(malformed, doc->song()); });
+  malformed = snapshot; malformed.noteTracks[0].columns.push_back(0);
+  rejects([&] { describeNoteTracks(malformed, doc->song()); });
+  const auto append = prepareNoteTrackEdit(snapshot, doc->song(), CreateNoteTrack{2, "Appended", {}});
+  const auto projected = describeNoteTracks(append.native, doc->song());
+  const auto count = doc->song().GetNumChannels();
+  doc->transaction([&](CSoundFile &song, NativeSong &next) { Document::resizeChannels(song, int(count + 2)); next = append.native; });
+  check(describeNoteTracks(doc->native(), doc->song()) == projected,
+    "Dry append projection differed after resizing and adopting the same candidate");
+}
 void rendererMuteFrames() {
   for (bool imported : {false, true}) {
     auto doc = Document::demo(MOD_TYPE_S3M);
@@ -149,7 +193,7 @@ void rendererMuteFrames() {
 }
 int main() {
   try {
-    groupingAndHistory(); outputAdmission(); columnMutes(); appendAndCapacity(); rendererMuteFrames();
+    groupingAndHistory(); outputAdmission(); columnMutes(); appendAndCapacity(); layoutProjection(); rendererMuteFrames();
     std::cout << "PASS shared note-track candidates, destinations, column mute and structural history\n"; return 0;
   } catch (const std::exception &error) { std::cerr << "FAIL " << error.what() << '\n'; return 1; }
 }
