@@ -84,15 +84,26 @@ target_include_directories(ScreamSeqProject PRIVATE "${ROOT}/include/pugixml/src
 target_include_directories(ScreamSeqProject PUBLIC "${ROOT}/include/nlohmann-json/include")
 target_link_libraries(ScreamSeqProject PUBLIC TrackerEditor PRIVATE crypt32 bcrypt)
 
+# These translation units have identical flags and runtime-injected test hooks
+# in the app, Application harness and document-worker tests. Compile them once
+# per configuration; keep each native main/test entry point in its own target.
+if(SCREAMSEQ_BUILD_APP OR BUILD_TESTING)
+  add_library(ScreamSeqSession STATIC
+    Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp
+    Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp
+    Session/GraphOperations.cpp Session/MixerOperations.cpp Session/TrackOperations.cpp
+    Session/EnvelopeOperations.cpp Session/SampleRecordingOperations.cpp)
+  target_link_libraries(ScreamSeqSession PUBLIC ScreamSeqProject ScreamSeqPlayback ScreamSeqAudio)
+endif()
+
 if(SCREAMSEQ_BUILD_APP)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/App/Main.cpp" AND TARGET ScreamSeqAudio)
-    add_executable(ScreamSeq WIN32 App/Main.cpp Samples/Library.cpp Samples/LibraryIndex.cpp Samples/Preview.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/TrackOperations.cpp Session/EnvelopeOperations.cpp Api/PipeServer.cpp Resources/ScreamSeq.rc)
-    target_sources(ScreamSeq PRIVATE Session/SampleRecordingOperations.cpp)
+    add_executable(ScreamSeq WIN32 App/Main.cpp Samples/Library.cpp Samples/LibraryIndex.cpp Samples/Preview.cpp Api/PipeServer.cpp Resources/ScreamSeq.rc)
     if(MSVC)
       target_link_options(ScreamSeq PRIVATE /STACK:8388608)
     endif()
     target_include_directories(ScreamSeq PRIVATE Resources "${ROOT}/include/nlohmann-json/include")
-    target_link_libraries(ScreamSeq PRIVATE ScreamSeqProject ScreamSeqAudio ScreamSeqPlayback
+    target_link_libraries(ScreamSeq PRIVATE ScreamSeqSession
       d3d11 d2d1 dwrite dxgi dwmapi shell32 comdlg32 comctl32 advapi32 normaliz)
     add_dependencies(ScreamSeq ScreamSeqVST3Scanner)
     add_custom_command(TARGET ScreamSeq POST_BUILD
@@ -125,7 +136,7 @@ if(BUILD_TESTING)
     list(REMOVE_ITEM workspace_restore_sources App/Main.cpp Resources/ScreamSeq.rc)
     add_executable(workspace-restore-tests Tests/Workspace/WorkspaceRestoreTests.cpp ${workspace_restore_sources})
     target_include_directories(workspace-restore-tests PRIVATE Resources "${ROOT}/include/nlohmann-json/include")
-    target_link_libraries(workspace-restore-tests PRIVATE ScreamSeqProject ScreamSeqAudio ScreamSeqPlayback
+    target_link_libraries(workspace-restore-tests PRIVATE ScreamSeqSession
       d3d11 d2d1 dwrite dxgi dwmapi shell32 comdlg32 comctl32 advapi32 normaliz)
     if(MSVC)
       target_link_options(workspace-restore-tests PRIVATE /STACK:8388608)
@@ -508,9 +519,8 @@ if(BUILD_TESTING)
   target_link_libraries(project-preservation-tests PRIVATE ScreamSeqBuildOptions)
   add_test(NAME project-preservation-tests COMMAND project-preservation-tests)
   set_tests_properties(project-preservation-tests PROPERTIES LABELS "worker;project-native" TIMEOUT 120)
-  add_executable(document-controller-tests Tests/DocumentControllerTests.cpp Session/DocumentController.cpp Session/DocumentOperations.cpp Session/TimelineOperations.cpp Session/AssetOperations.cpp Session/PluginOperations.cpp Session/PatternOperations.cpp Session/GraphOperations.cpp Session/MixerOperations.cpp Session/TrackOperations.cpp Session/EnvelopeOperations.cpp)
-  target_sources(document-controller-tests PRIVATE Session/SampleRecordingOperations.cpp)
-  target_link_libraries(document-controller-tests PRIVATE ScreamSeqProject ScreamSeqPlayback ScreamSeqAudio)
+  add_executable(document-controller-tests Tests/DocumentControllerTests.cpp)
+  target_link_libraries(document-controller-tests PRIVATE ScreamSeqSession)
   # The completion boundary affects every bank operation. Reuse the existing
   # standalone scenarios in this build so CI and the app share current libraries.
   add_executable(envelope-operations-tests Tests/Envelopes/EnvelopeTests.cpp Session/EnvelopeOperations.cpp)

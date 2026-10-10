@@ -5,6 +5,9 @@
 #include <filesystem>
 #include "editor/hosted/HostedAudio.hpp"
 #include "windows/Audio/RealtimeAudit.hpp"
+#include "editor/TrackerDocument.hpp"
+#include "soundlib/ModInstrument.h"
+#include "soundlib/plugins/PlugInterface.h"
 #include <windows.h>
 #include <iostream>
 #include <stdexcept>

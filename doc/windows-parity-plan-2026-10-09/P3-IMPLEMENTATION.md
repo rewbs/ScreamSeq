@@ -504,3 +504,38 @@ groups. Mac has no source change in this chooser slice; retain the pending Mac
 gate for the earlier shared/catalogue work. Foreground placement, DPI, high
 contrast, screen-reader behavior and keyboard ergonomics still require direct
 qualification; private native tests do not establish those properties.
+
+## Consolidated checkpoint 02 and build reuse
+
+The ARM64 integration candidate `607154901ad29ec58043c7842098b114810d2314`
+was frozen separately from subsequent work. Its consolidated build ran from
+2026-10-10 03:29:40 to 03:36:12 UTC and exited 1. Source fingerprints were unchanged.
+The app, workspace harness and document-worker targets linked, but
+`native-audio-bus-tests` failed compiling `AudioBusTests.cpp`: inclusion of
+`PlugInterface.h` after `using namespace Tracker` made `mpt` ambiguous in
+`aligned_array.hpp` (Tracker imports OpenMPT). No runtime gate was run and no
+phase is qualified by these partial outputs. Retained evidence in the integration
+checkout: `bin/parity-evidence/integration-checkpoint-02.json` and
+`integration-build-02.log`; log SHA-256
+`03b52ff7ac33680346380f9673c78af78586945dbb7429f6ed952afca4645601`.
+
+The next source batch moves the audio-bus test's engine dependencies above its
+namespace directive, preserving the existing provider, ownership and allocation
+assertions. It also introduces the Windows-only `ScreamSeqSession` static library
+in `windows/CMakeLists.txt`. The same eleven session translation units previously
+compiled separately for the app, workspace harness and worker tests now compile
+once per configuration. Their dependency-provided definitions/options remain
+identical; fault injection remains runtime-based. Native entry points, app
+resources, scanner dependency, 8-MiB executable stacks and test registrations
+remain on the existing targets. Isolated operation tests retain their narrower
+source/link scope. Shared model sources and Mac build configuration are unchanged.
+
+The refactor is prepared, not built. Its main risks are transitive link dependency
+or compiler-option drift and missing registration after deriving workspace
+sources from the app. At the next eligible consolidated build (not before
+2026-10-10 04:36:12 UTC), compare the registered test inventory and qualify the
+app, workspace and worker targets together, including the chooser outside the
+previous freeze. Keep the full pending P1/P2/P3 and provider checks; this change
+reduces compilation duplication, not coverage. Windows x64 and ARM64 builds are
+required for the build-graph change. Earlier shared/catalogue edits still require
+their pending Mac gates. No assertion or timeout has been relaxed.
