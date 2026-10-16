@@ -183,10 +183,24 @@ void liveParameterTests(const std::filesystem::path &directory) {
     });
   auto library=call(c,"plugin.discover",{{"format","Built-in"}});
   invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
+  // Imported/default plugin states may be empty. Re-serializing the same manual
+  // values must not materialize vendor state or consume an Undo/Redo entry.
+  const auto coldPath=directory/"live-parameters-cold.screamseq";
+  invoke(c,"document.save",{{"path",coldPath.generic_string()}});
+  auto cold=Project::decodePlist(Project::readProjectBytes(coldPath));
+  cold["plugins"][0]["state"]=Json::binary(std::vector<uint8_t>{});
+  Project::writeProjectFile(coldPath,Project::encodePlist(cold),true);
+  invoke(c,"document.open",{{"path",coldPath.generic_string()}});
   auto prepared=c.prepare(48000,Json::object(),true,true);playback=prepared.get();active=true;const auto beforeStops=stops;
   auto gain=[&]{for(auto p:playback->chain().parameters(0))if(p.id==1)return p.value;throw std::runtime_error("Missing playback gain");};
   auto edit=[&](float value,bool dry=false){return invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",value}},{{"id",2},{"value",25}}})},{"dryRun",dry}});};
   auto baseline=call(c,"plugin.state.get",{{"slot",0}});auto view=c.view();
+  need(baseline.at("data")=="","Cold fixture did not retain empty saved plugin state");
+  const auto plugin=c.view()->session.document.at("nativePlugins")[0].at("instanceID");
+  auto noop=[&](bool dry=false){return invoke(c,"plugin.parameters.set",{{"plugin",plugin},{"values",Json::array({{{"id",0},{"value",1}},{{"id",1},{"value",0}}})},{"dryRun",dry}});};
+  for(bool dry:{true,false}){const auto result=noop(dry);need(!result.at("wouldChange").get<bool>()&&c.view()==view&&stops==beforeStops&&batches==0&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Cold parameter no-op changed state, history or publication");}
+  bool invalidNoop=false;try{invoke(c,"plugin.parameters.set",{{"plugin",plugin},{"values",Json::array({{{"id",0},{"value",1}},{{"id",UINT32_MAX},{"value",0}}})}});}catch(const Api::ApiError &){invalidNoop=true;}
+  need(invalidNoop&&c.view()==view&&stops==beforeStops&&batches==0,"No-op prefix skipped validation of a later invalid parameter");
   edit(-12,true);need(c.view()==view&&stops==beforeStops&&batches==0,"Dry run must not stop, publish or dirty");
   bool failed=false;
   try{invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",-12}},{{"id",UINT32_MAX},{"value",0}}})}});}catch(const Api::ApiError &){failed=true;}
@@ -204,6 +218,8 @@ void liveParameterTests(const std::filesystem::path &directory) {
   edit(-24);need(!active&&stops==beforeStops+1,"Whole-batch queue failure stops instead of partially publishing");
   invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Undo recovers the pre-overflow saved baseline");
   invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==baseline,"One live batch is one plugin Undo step");
+  view=c.view();const auto undoStops=stops,undoBatches=batches;
+  noop();need(c.view()==view&&stops==undoStops&&batches==undoBatches&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Cold no-op after Undo consumed Redo or published parameters");
   invoke(c,"history.redo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Redo restores the whole live batch");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"plugin.state.get",{{"slot",0}})==changed&&!c.view()->dirty,"Save/reopen retains the live-edited baseline");

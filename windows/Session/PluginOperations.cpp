@@ -486,7 +486,15 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     else keys(p,{"slot","plugin","values","dryRun"});
     NativePlugin probe(next,48000);
     if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> prepared;
-      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
+      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");const auto value=float(number(field(v,"value"),found->min,found->max));
+        // This disposable processor was restored from the saved manual baseline,
+        // never from the playing processor's automated/effective value. Preserve
+        // its original opaque bytes when the requested API value is unchanged.
+        if(value!=float(found->manualValue.value_or(found->value)))prepared.emplace_back(id,value);
+      }
+      // Validate every entry above, including unchanged ones, before returning.
+      // Capturing a default or legacy state here would manufacture an edit.
+      if(prepared.empty())return {{"wouldChange",false},{"dryRun",dry}};
       for(auto [id,value]:prepared){need(probe.parameter(id,value),"Plugin rejected parameter");liveChanges.push_back({uint32_t(index),id,value,0});}if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
     }
     const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;

@@ -288,41 +288,9 @@
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-PLUGIN-NOOP",
-      "phase": "P4b",
       "documentUnchanged": {
-        "windows": false,
+        "windows": true,
         "macos": true
-      },
-      "changedPaths": {
-        "windows": [
-          "/data/canUndo",
-          "/data/canUndoPlugins",
-          "/revision"
-        ]
-      },
-      "persistedDifference": {
-        "windows": {
-          "equal": false,
-          "differenceCount": 1,
-          "truncated": false,
-          "differences": [
-            {
-              "path": "/plugins/0/state",
-              "kind": "value",
-              "before": [
-                "data",
-                0,
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-              ],
-              "after": [
-                "data",
-                75,
-                "3796b14339cc9d2841696f21001eb9a9c9121968a239e3377971c0b7bcf6b993"
-              ]
-            }
-          ]
-        }
       }
     },
     {
