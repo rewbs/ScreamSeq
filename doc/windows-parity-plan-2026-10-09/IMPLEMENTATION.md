@@ -12,6 +12,28 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Windows host qualification - 16 October 2026
+
+The clean Windows parity checkout was fast-forwarded to `d11b9cbbc` and built
+once for ARM64 (03:47:45-03:49:31 UTC), preserving prior binaries and the musician's
+separate running session. **21/21 targeted native/model checks, 8/8 additional
+closure-owner groups, and 30/30 actual application cases passed**, with no skips.
+This executes all ten workspace groups on the rebuilt harness, including the
+supplied F04/Parity WAVs, and qualifies the order-admission correction locally.
+
+The verified archived x64 app from `d39ec5548` also passed **30/30 application
+cases** under x64 emulation on this ARM64 host, including recovery-save cleanup.
+The Cirrus Logic endpoint is available and silent playback-clock cases passed.
+This does not explain every old CI failure, qualify current-head x64, or measure
+physical audio. Current x64 CI and final cross-platform gates remain separate.
+
+**Foreground UI/screenshots remain blocked:** the exposed Computer Use tool has
+native APIs disabled and no `node_repl` entry point is available for the installed
+Windows skill. No foreground screenshot or mouse/keyboard validation is claimed.
+See the [qualification report](p0b-windows-2026-10-16.md) and
+[receipt](p0b-windows-2026-10-16.json) for exact source/binary/log identities,
+completed checks and remaining gates. P0b/P0c and P1-P8 remain open.
+
 ## Resumed admission and graph inspection correction — 16 October
 
 The remote draft PR was rechecked at `d39ec5548fc6224f5d395dbf02d6b0eca35b48ac`.

@@ -6,6 +6,17 @@ This is the finite remaining-work checklist for the implementation authorized af
 
 This checkpoint used source and retained evidence only. No build, test, application launch or device operation was run. [closure-inspection.json](closure-inspection.json) pins the inspected files and evidence comparisons before the subsequent, unbuilt C4/C5 preparation recorded in IMPLEMENTATION.md. An implementation found in source is not a current runtime qualification. The owner census below establishes coverage of ownership registration, not proof that every field is represented.
 
+## Subsequent qualification status - 16 October 2026
+
+The census and C1-C5 findings below are the historical closure design, not newly
+rediscovered omissions. Their implementation and subsequent corrections are
+recorded in IMPLEMENTATION.md. The [Windows host report](p0b-windows-2026-10-16.md)
+adds current-head ARM64 evidence: all ten workspace groups, affected native/model
+checks, and the 30-case actual application gate pass. The retained old x64 app
+also passes that application gate on this ARM64 host. C6 remains open for final
+cross-platform and foreground qualification. Native Computer Use is unavailable
+in the delegated session; no screenshots or physical-device passes are claimed.
+
 ## Exit requirements and remaining work
 
 | Original requirement | Present implementation | Remaining closure work |
