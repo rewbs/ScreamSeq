@@ -55,6 +55,17 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   invoke(c,"history.undo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==originalMetadata&&c.view()->catalogRevision==moved->catalogRevision+1,"Undo did not restore order identities and invalidate the catalog");
   const auto undone=c.view();const auto beforeNoopStops=stops;
+  for(const auto &params:std::vector<Json>{
+      {{"order",0},{"operation","assign"},{"pattern",UINT16_MAX}},
+      {{"order",0},{"operation","before"},{"pattern",UINT16_MAX}},
+      {{"order",0},{"operation","up"}},
+      {{"order",5},{"operation","down"}}}) {
+    bool rejected=false;
+    try{invoke(c,"order.edit",params);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&c.view()==undone&&stops==beforeNoopStops&&!c.publicationPending()
+      &&c.view()->session.document.at("canRedo")==true,
+      "Order admission refusal escaped the API contract, stopped playback or consumed redo");
+  }
   invoke(c,"order.edit",{{"order",0},{"operation","assign"},{"pattern",0}});
   need(c.view()==undone&&stops==beforeNoopStops&&c.view()->session.document.at("canRedo")==true,"Same-pattern assign republished catalog or consumed redo");
   invoke(c,"history.redo",{{"domain","document"}});

@@ -12,6 +12,60 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Resumed admission and graph inspection correction — 16 October
+
+The remote draft PR was rechecked at `d39ec5548fc6224f5d395dbf02d6b0eca35b48ac`.
+There were no discussion/review threads or running branch CI jobs. Work uses an
+isolated Mac checkout; the existing main checkout and its uncommitted UI reference
+pack remain untouched. These are bounded corrections within C6/P0c, not closure
+of P0b or the later parity phases.
+
+The terminal results supersede the earlier pending-build descriptions:
+
+* [Windows 38003410537](https://github.com/rewbs/ScreamSeq/actions/runs/38003410537)
+  built successfully, passed 136/137 portable/worker tests, all 29 native UI groups,
+  scratch checks and typed conformance. The arrangement worker failed because
+  `orderEditChanges` threw `std::invalid_argument` outside the adapter's existing
+  `-32602` translation. The integration group retained 12 failure records across
+  nine cases, including audio startup/clock and recovery cleanup. Its read-only
+  audio probe reported an empty device list; that does not establish the cause of
+  the independent recovery failure.
+* [Mac 38003412848](https://github.com/rewbs/ScreamSeq/actions/runs/38003412848)
+  built both architectures and passed 122/122 native tests, recovery/picker,
+  sample library and typed conformance. Both interface runs passed 34/35 groups;
+  the remaining group failed at the host parameter-drop assertion. The preceding
+  four interface failures are no longer the latest result.
+
+Windows order admission now translates shared-model validation refusals to the
+same API error as candidate validation, before Stop or mutation. Existing capacity
+checks remain unchanged; added worker cases reject missing patterns and list-edge
+moves with an available Redo, preserving the exact view, publication state and
+Stop count. Exact no-op assignment and subsequent Redo remain required.
+
+The Mac parameter-drop fixture explicitly answers and validates inspector trim
+reads for the captured song/recipe target, instead of counting those reads as
+writes. Every unexpected request still enters the exact mutation assertions, and
+the host drop additionally asserts zero minimum depth. Passing that check exposed
+the next provenance assertion: a display-only source reference was sent to the
+audio-trim API. The inspector now hides/retires trims for such references. The
+original no-request/no-mutation navigation assertion remains intact, with an added
+check that the previous processor's trim controls are hidden.
+
+Local ARM64 qualification passed **35/35 interface groups** and **5/5 harness
+runner tests**, using only the standalone interface harness. No app build, audio
+device or musician session has been changed. The first sandboxed run could not
+access Metal/screens. That same compiled harness with native desktop access
+passed 34/35 groups and exposed the provenance case above. Both first-failure
+logs are retained; the corrected source then passed the complete suite without
+relaxing assertions or deadlines. These are AppKit/Metal handler checks, not
+foreground visual, frame-rate or hardware qualification.
+
+The [correction receipt](p0b-correction-2026-10-16.json) records the compiled source,
+compiler, executable and log hashes. Windows execution and Intel confirmation
+of these corrections remain pending. Existing CI can build the changed Windows
+candidate once and run the Mac interface-only job on both architectures; the
+older archived product apps are not relabelled as this corrected source.
+
 ## Cross-platform correction batch — prepared, 9 October, 23:02 UTC
 
 **23:09 UTC update:** the frozen Windows x64 → Intel Mac → Windows x64

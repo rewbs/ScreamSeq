@@ -356,7 +356,12 @@ Json DocumentOperations::invoke(const std::string &method, const Json &p) {
     const int order=int(integer(field(p,"order"),0,document_.song().Order().size()));
     const int pattern=p.contains("pattern") ? int(integer(p.at("pattern"),0,UINT16_MAX)) : 0;
     require(order<int(document_.song().Order().size()),"Select a valid order");
-    if(!document_.orderEditChanges(order,pattern,operation))return Json::object();
+    // Admission runs before candidate validation so exact no-ops preserve
+    // transport and Redo. Keep its refusals in the same API error domain as
+    // validateStructural's shared-model validation below.
+    try {
+      if(!document_.orderEditChanges(order,pattern,operation))return Json::object();
+    } catch(const std::invalid_argument &e) { throw Api::ApiError(-32602,e.what()); }
     const auto change=[&](Document &d){d.editOrder(order,pattern,operation);};
     validateStructural(document_,change,validateCandidate_);
     if(stopPlayback_) stopPlayback_();

@@ -1,0 +1,37 @@
+{
+  "sourceBaseRevision": "d39ec5548fc6224f5d395dbf02d6b0eca35b48ac",
+  "changedSourceHashes": {
+    "windows/Session/DocumentOperations.cpp": "225def24fbf952655d63690e07eff81d1ee723f4d9eafe4b195dd5d9917263a1",
+    "windows/Tests/ArrangementControllerTests.inc": "919b7581ff8d00074272918983d430207845f38f2c89ddcd92c73b02d1e8c3fd",
+    "mac/App/SignalGraphEditor.swift": "0cc8f10d86347289cf0377039591ff54f10f9d6c34c9ac69d368ff41f9152d40",
+    "mac/Tests/SignalGraphInterfaceTests.swift": "5cf81e46bc15954ea2656c16cb686fe759cbc8b5bd7b7df6dc508bffa4717149",
+    "mac/Tests/GraphProvenanceInterfaceTests.swift": "af1ee8b45fda7b29ff542329aa32743b14d6ac4c2c9d3beca64ad03e2f6b5a67"
+  },
+  "platform": "macOS 26.5.2 ARM64",
+  "compiler": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+  "target": "arm64-apple-macosx14.0",
+  "executable": {
+    "path": "bin/mac-parity-20261016/interface-tests",
+    "sha256": "a07ed194584b9bbf84e26d4fe0ae240c0b6c5722464bb455aaf2c91c91f5b2d6"
+  },
+  "sourceManifest": {
+    "path": "bin/mac-parity-20261016/InterfaceSource.json",
+    "sha256": "993493789f834d5a01eacf3bdd2932d2630de0fe7da70191c0658c9378d60049"
+  },
+  "logs": {
+    "mac-interface-20261016.log": "0af1bae2cdd2249d23713859cc465671b7720199cfdd00e2b62cd89932bfdab6",
+    "mac-interface-20261016-native.log": "8c316347e4fa61907250c1ffff17fc78e5bcd16196def479c6baec1e15813f5d",
+    "mac-interface-20261016-final.log": "a192285e58f3832a9eae9c9891381200678eb31ace8fff010a22a9baf4c23f02"
+  },
+  "results": {
+    "interfaceGroups": "35/35 passed",
+    "portableRunnerTests": "5/5 passed",
+    "windows": "Pending native CI; not executable on this Mac",
+    "intel": "Pending interface CI"
+  },
+  "limits": [
+    "Standalone native handler qualification only; no app build or physical audio/device check",
+    "Initial sandbox run 22/35; native-access rerun 34/35 exposed provenance; corrected full run 35/35",
+    "No test assertions or deadlines relaxed"
+  ]
+}

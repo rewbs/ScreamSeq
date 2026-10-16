@@ -489,7 +489,9 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     let context=object,libraryTarget="\(projectionDocument)/library/\(graphID ?? "")"
     defer {fieldDraft=hasUncommittedFields}
     defer {if changedObject{layoutSubtreeIfNeeded();inspectorScroll.contentView.scroll(to:.zero);inspectorScroll.reflectScrolledClipView(inspectorScroll.contentView)}}
-    trimControls.context(graph:graphID,node:canvas.selectedEdge==nil ? selectedID:nil,revision:revision)
+    // Provenance cards reference existing automation; their display identities
+    // are not audio processors and cannot own port trims.
+    trimControls.context(graph:graphID,node:canvas.selectedEdge==nil && selectedProvenance==nil ? selectedID:nil,revision:revision)
     inspectParameterProvenance()
     visualControls.isHidden=selectedVisualRegion==nil;visualControls.context(selectedVisualRegion)
     nodeSection.isHidden=canvas.selectedEdge != nil || selectedID == nil || selectedVisualRegion != nil || selectedProvenance != nil
