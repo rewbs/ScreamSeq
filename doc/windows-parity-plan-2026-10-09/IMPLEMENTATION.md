@@ -97,6 +97,48 @@ runner tests**. Its separate hashes are under `integratedCandidate` in the recei
 the earlier source/binary evidence is preserved. Windows and Intel CI remain the
 next execution gates.
 
+### CI follow-up — 16 October
+
+The pushed combined candidate is `d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9`.
+[Mac run 38846128358](https://github.com/rewbs/ScreamSeq/actions/runs/38846128358)
+completed successfully on Apple Silicon and Intel: **35/35 interface groups and
+5/5 runner tests on each architecture**. Both downloaded harness hashes match
+their archived hash files, and all 1,246 entries in each source manifest match
+the candidate checkout. The source fingerprints are identical across the two
+jobs. Artifact identities, executable/manifest/log hashes and expiry dates are
+under `ciQualification` in the [correction receipt](p0b-correction-2026-10-16.json).
+
+This closes the observed Mac interface failures for that source. These jobs only
+built the standalone interface harness; they do not qualify a rebuilt product
+app, foreground presentation, physical audio or the remaining parity gates.
+
+[Windows run 38846111553](https://github.com/rewbs/ScreamSeq/actions/runs/38846111553)
+is also terminal on the same candidate. The native build, **137/137 portable/worker
+tests**, **29/29 native editor/preference/recovery tests**, **3/3 scratch checks**,
+five typed roundtrip fixtures and scheduling inventory passed. In particular,
+`document-controller-arrangement` now passes with the preflight error mapping and
+rejection/Redo checks. The API and codec vectors matched their recorded baselines;
+both still report `parityComplete: false`, including the known Windows plugin
+parameter no-op preservation difference.
+
+The actual-application integration stage failed: **22/30 cases passed**, with
+**11 failure records across eight cases**. Four recording cases did not obtain a
+valid playback clock; the remapped-transport case and three audition cases exited
+with code `0x1` during audio startup. Each failed audition also produced a teardown
+failure because its window was absent. Both audio services started successfully,
+but the read-only probe reported `devices: []`. This is a material hosted-runner
+limitation, not evidence that those paths work on a device-equipped machine.
+
+All three integration recovery cases passed, including
+`test_native_browser_save_reload_restore_and_file_save_cleanup`. The previous
+timeout remains historical and unexplained; no recovery fix or deadline change
+was made here. The Windows continuation owns native/device diagnosis and any
+Windows corrections. No duplicate build was dispatched. The retained Windows
+app archive, executable and build receipt hashes were verified; the run's
+`screamseq-windows-logs` artifact includes that reusable app and diagnostics.
+The correction receipt records exact failures and artifact identities. P0b and
+the later parity gates remain open; the PR remains draft and unmerged.
+
 ## Consolidated checkpoint 04 — 9 October, 23:22 UTC
 
 **23:42 UTC remote result update:** Windows x64 and Mac ARM64 are terminal; Intel
