@@ -1,0 +1,122 @@
+{
+  "sourceCommit": "adce8a486a554c41078b7f126c2caee5e6c59eea",
+  "architecture": "Windows ARM64 Release",
+  "executableSHA256": "74226eaa92656b43cfccaef088819795e926231bf95a696ebf9daf5dd48f416e",
+  "workerSHA256": "851e1bc533d3829896764c8cb6811d388c8e09052d0632656aecad16014a2843",
+  "build": {
+    "name": "build",
+    "command": [
+      "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+      "--build",
+      "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\windows-parity-p0",
+      "--config",
+      "Release",
+      "--parallel",
+      "2",
+      "--target",
+      "ScreamSeq",
+      "document-controller-tests"
+    ],
+    "cwd": "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq",
+    "startedUTC": "2026-10-16T04:49:32.542237+00:00",
+    "exitCode": 0,
+    "finishedUTC": "2026-10-16T04:50:12.516929+00:00",
+    "logSHA256": "a5331497cc142c073c86ed5cbc7c05f862b1877a0399d8e0fee304b2288138bc"
+  },
+  "testCounts": {
+    "nativeCTestIncludingFixtures": 6,
+    "application": 5,
+    "originalRoundtripFixtures": 5,
+    "apiVectors": 28
+  },
+  "apiPreservationFailures": [],
+  "pluginNoop": {
+    "id": "plugin-parameter-stable-identity",
+    "observed": "success",
+    "expected": "success",
+    "baselineMatched": true,
+    "documentUnchanged": {
+      "equal": true,
+      "differenceCount": 0,
+      "truncated": false,
+      "differences": []
+    },
+    "preservationPassed": true,
+    "knownDifference": null,
+    "resolutionPhase": null
+  },
+  "negativeControl": {
+    "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+    "architecture": "x64 under ARM64 emulation",
+    "executableSHA256": "5c8f1a5c8f3ebe8be9dbca9b47a2a123fdcd7efcdade9b9cb3237ac5278d830d",
+    "expectedFailure": "wouldChange was true for unchanged imported parameter",
+    "logSHA256": "b63489901332f9cce8c8dd210aa310cca3d3f7ff4e4d4f820fcf08737d5b4735"
+  },
+  "sourceInputs": 1919,
+  "sourcesUnchanged": true,
+  "executablesUnchanged": true,
+  "logs": {
+    "application.log": "8d09cae9953e8183fd5eaaef9a907329e15f60463e2adb17520900cec0c1741f",
+    "build.log": "a5331497cc142c073c86ed5cbc7c05f862b1877a0399d8e0fee304b2288138bc",
+    "conformance.log": "2b57b36a78e92ac28c4fdb31f0db802cd0b3e3c61edc08729d3407ca5ad020ab",
+    "missing-target-build.log": "45ca95f26a184007aed24bb908d5be7afa712aa7a8575fc13cc96c9c36bc384f",
+    "missing-target-test.log": "67888afa91a292adfb6e7961b52ab60b00770cb571e300bbb58d6485ede6394e",
+    "native.log": "55fde858813d6a062e48bdb6f63e5612632f6783d4950f95d8cbc2103b591a36",
+    "negative-regression.log": "b63489901332f9cce8c8dd210aa310cca3d3f7ff4e4d4f820fcf08737d5b4735"
+  },
+  "fullReceiptSHA256": "10527d774a4848b6170553a48cb50bd4ad4d61f42c58bfeec1a04f86b31327d9",
+  "apiReportSHA256": "44828335f70157b59198af788d114ce60e77a42cd6a1759912215b464161dfe2",
+  "roundtripReportSHA256": "a64304ca0a59dcd14fe0973eb190e102ebf14c793e4847aa884ec7ab26ae06c4",
+  "integrationAuditSHA256": "ddf8f7e2f0ad97f3e53e61a67b2f9a27159cba5f0c7a193f679119ea11022617",
+  "limitations": [
+    "Owned private desktops, real PID-pipe API and short silent WASAPI functional checks; no foreground computer-use screenshots or physical device validation.",
+    "Current fix has not been rebuilt for Windows x64 or Mac; remaining API/codec differences and final reciprocal qualification are open.",
+    "P1-P5 follow-on branch audited read-only; not integrated. Publication remains pending approval."
+  ],
+  "resolvedSetupFailure": {
+    "sourceCommit": "adce8a486a554c41078b7f126c2caee5e6c59eea",
+    "reason": "Gate setup omitted live-parameter-tests from build targets; original CTest entry was Not Run. Build only that missing target, then execute only that entry.",
+    "steps": [
+      {
+        "name": "missing-target-build",
+        "command": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+          "--build",
+          "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\windows-parity-p0",
+          "--config",
+          "Release",
+          "--parallel",
+          "2",
+          "--target",
+          "live-parameter-tests"
+        ],
+        "startedUTC": "2026-10-16T04:51:13.693491+00:00",
+        "exitCode": 0,
+        "finishedUTC": "2026-10-16T04:51:26.315877+00:00",
+        "logSHA256": "45ca95f26a184007aed24bb908d5be7afa712aa7a8575fc13cc96c9c36bc384f"
+      },
+      {
+        "name": "missing-target-test",
+        "command": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\windows-parity-p0",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^live-parameter-tests$"
+        ],
+        "startedUTC": "2026-10-16T04:51:26.333924+00:00",
+        "exitCode": 0,
+        "finishedUTC": "2026-10-16T04:51:26.761160+00:00",
+        "logSHA256": "67888afa91a292adfb6e7961b52ab60b00770cb571e300bbb58d6485ede6394e"
+      }
+    ],
+    "executableSHA256": "00b053f66519c3b62d00325711370bf258c0bcdf8a716b9830b540962d51d73c",
+    "sourcesUnchanged": true,
+    "productExecutablesUnchanged": true
+  },
+  "missingTargetRepairSHA256": "d64e4bcbba3e8b642592e324739bcb0c06cfdc3056c54d23e0aeb8a419e5b92f"
+}

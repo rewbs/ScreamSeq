@@ -12,6 +12,22 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Windows parameter no-op correction - 16 October 2026
+
+Candidate `adce8a486` preserves the original saved plugin bytes and history when
+an imported/default parameter batch is unchanged. The retained d11 x64 app fails
+the new regression; the corrected ARM64 app passes it. Six CTest entries (including
+scratch setup), five real app cases and five original typed roundtrips pass. The
+28-case API corpus now has zero preservation failures; six other known contract
+differences keep parity open. The initially omitted hosted-test target was built
+and its Not Run entry repaired without changing product source or assertions.
+
+See [qualification and remaining gates](parameter-noop-2026-10-16.md),
+[machine-readable receipt](parameter-noop-2026-10-16.json) and the
+[read-only P1-P8 integration audit](integration-audit-2026-10-16.md).
+Publication is pending. No foreground, physical-device, x64-fix or full parity
+qualification is claimed; the existing follow-on integration branch is preserved.
+
 ## Fresh x64 CI binary on the Windows host - 16 October 2026
 
 The fresh archived x64 app from run **38846111553**, built at `d11b9cbbc`,

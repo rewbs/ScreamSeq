@@ -892,8 +892,8 @@
     {
       "id": "API-PLUGIN-NOOP",
       "phase": "P4b",
-      "status": "unresolved",
-      "finding": "On original F04, Windows accepts a stable plugin identity, but assigning the already-current Enabled parameter creates a plugin Undo entry and revision. Preserve this as a defect; inspect retained after-save bytes before changing commit semantics. Mac no-op behavior remains a runtime prediction.",
+      "status": "windows-corrected",
+      "finding": "Corrected at adce8a486: compare complete validated batches with the saved manual baseline before capturing plugin state. Windows ARM64 cold-state, dry-run, saved-byte, publication/history and Undo/no-op/Redo regressions pass; the 28-case API corpus has zero preservation failures. Retained d11 x64 fails the new regression. Current-fix x64 and final cross-platform/reciprocal qualification remain open. See doc/windows-parity-plan-2026-10-09/parameter-noop-2026-10-16.md.",
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
