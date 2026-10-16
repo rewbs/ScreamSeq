@@ -843,7 +843,7 @@
       "id": "API-ORDER-MOVE",
       "phase": "P3a",
       "status": "unresolved",
-      "finding": "Windows order.edit omits move/destination; Mac supports them. The actual Mac destination=order no-op creates Undo and changes the document revision although the saved typed tree is unchanged. The no-op assertion remains failing; actual reorder and history remain P3a acceptance cases.",
+      "finding": "Windows order.edit on the safety branch omits move/destination; the existing follow-on integration commit 446bc84e3 implements them with regressions. The earlier Mac no-op history/revision failure is historical: current TrackerSession.mm uses shared orderEditChanges before stopping/editing. Final current-candidate native execution and the Windows integration decision remain open; see contract-triage-2026-10-16.md.",
       "sources": [
         "windows/Session/DocumentOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"

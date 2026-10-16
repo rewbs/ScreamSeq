@@ -12,6 +12,18 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Remaining contract triage - 16 October 2026
+
+[The six-API/21-codec triage](contract-triage-2026-10-16.md) distinguishes planned
+capabilities and deliberate type/cache/recovery policies from demonstrated loss.
+F25's zero-effect parameter and missing PitchSlide duration are invalid model
+cases. The next genuine preservation gap is Mac dropping inert unknown metadata;
+its four existing vectors already reproduce it. A Mac/P6 retention slice with
+native/reciprocal execution, or prior integration of the prepared domain work,
+is the next sequencing boundary. No product or test expectation changed, and no
+new build/test was run. Two stale evidence descriptions were corrected without
+rewriting historical observed classifications. Publication remains pending.
+
 ## Windows parameter no-op correction - 16 October 2026
 
 Candidate `adce8a486` preserves the original saved plugin bytes and history when

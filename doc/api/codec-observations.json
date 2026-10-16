@@ -544,7 +544,7 @@
     },
     {
       "id": "F25-missing-duration",
-      "finding": "Windows recovers the incomplete non-nudge command by dropping the entry, with warning/source protection. Mac defaulting behavior remains a current socket/load observation question.",
+      "finding": "The actual vector removes duration from a PitchSlide (kind 3). Windows diagnoses the missing field; Mac defaults to zero then rejects the invalid slide. Recorded native observations on both hosts drop that incompatible entry with a warning and source protection. Other optional-field default policy still belongs to P6; this vector does not demonstrate a valid-edit loss.",
       "sources": [
         "windows/Project/NativeMetadataAutomation.inc",
         "mac/Bridge/PatternPerformanceMetadata.inc"

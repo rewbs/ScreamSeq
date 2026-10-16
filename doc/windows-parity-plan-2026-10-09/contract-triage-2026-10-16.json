@@ -1,0 +1,475 @@
+{
+  "auditedUTC": "2026-10-16T04:58:54.450392+00:00",
+  "sourceCommit": "74fdd7bf5ac3d7226e1e35ac9c6693a660134a57",
+  "scope": "Read-only source and retained-evidence triage; no new native execution or product change",
+  "actualWindowsApiReportSHA256": "44828335f70157b59198af788d114ce60e77a42cd6a1759912215b464161dfe2",
+  "actualWindowsApiCases": 28,
+  "actualWindowsApiPreservationFailures": [],
+  "knownApiDifferences": [
+    "API-GRAPH-GESTURE",
+    "API-INTEGER-TYPES",
+    "API-ORDER-MOVE",
+    "API-PLUGIN-DRY-RUN",
+    "API-PLUGIN-POSITION",
+    "API-REPLAY-ERROR"
+  ],
+  "codecBaselineBeforeDocumentationSHA256": "78c13beefcff322a4a1f2f3bd898c16f5c3fbec7f90235e7c31eb1881b6923b5",
+  "codecSourceCommit": "5358a8ebcaafae88c071cd7ed8fd27c227c747db",
+  "macosCodecEvidence": {
+    "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
+    "executableSHA256": "a7cac5d20c52cb3a9e3a4ae1c0c54068f13be2c92f0cd98711b1d3943db4a9f9",
+    "run": "https://github.com/rewbs/ScreamSeq/actions/runs/37995159221",
+    "reportSHA256": "72fb4bfc9e693393473d5c68fd92426f60881ac544e8f06a7962e8e612b646ce",
+    "loadPath": "recovery.restore of exact staged bytes; same-session rejection checks and effective-source overwrite protection",
+    "preservation": "Unknown root/native/track/node extension fields are warned, protected and dropped by canonical Mac save; Windows preserves them. This is a P6 convergence gap, not a loss waiver."
+  },
+  "codecCases": [
+    {
+      "id": "unknown-root",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Ignored unsupported project field: parityUnknown"
+        ]
+      }
+    },
+    {
+      "id": "unknown-native",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 0,
+        "loadWarnings": [
+          "Unrecognized native metadata properties were retained without interpretation"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Ignored unsupported metadata field: parityUnknown"
+        ]
+      }
+    },
+    {
+      "id": "unknown-track",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 0,
+        "loadWarnings": [
+          "Unrecognized native metadata properties were retained without interpretation"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Ignored unsupported metadata field: parityUnknown"
+        ]
+      }
+    },
+    {
+      "id": "unknown-node",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 0,
+        "loadWarnings": [
+          "Unrecognized native metadata properties were retained without interpretation"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Ignored unsupported metadata field: parityUnknown"
+        ]
+      }
+    },
+    {
+      "id": "reordered-tracks",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 30,
+        "loadWarnings": []
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 30,
+        "loadWarnings": []
+      }
+    },
+    {
+      "id": "duplicate-track-id",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 68,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Invalid or duplicate native identity",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 82,
+        "loadWarnings": [
+          "Native identities could not be recovered (Invalid or duplicate native song identity); recovered the embedded song without its optional native metadata."
+        ]
+      }
+    },
+    {
+      "id": "deleted-track-record",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 66,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Native metadata does not match the song structure",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 80,
+        "loadWarnings": [
+          "Native identities could not be recovered (Native metadata does not match the song structure); recovered the embedded song without its optional native metadata."
+        ]
+      }
+    },
+    {
+      "id": "future-container",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Unsupported project container version; recovered understood fields"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Read known fields from an incompatible project container version (current: 6)."
+        ]
+      }
+    },
+    {
+      "id": "future-native",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Unsupported native metadata version; recovered understood fields"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 1,
+        "loadWarnings": [
+          "Read known fields from incompatible native metadata version 18 (current: 17)."
+        ]
+      }
+    },
+    {
+      "id": "precise-zero-effect-parameter",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 26,
+        "loadWarnings": [
+          "Skipped incompatible metadata entry /preciseNotes/0"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 25,
+        "loadWarnings": [
+          "Skipped preciseNotes[0]: Invalid or duplicate precise note event"
+        ]
+      }
+    },
+    {
+      "id": "missing-non-nudge-duration",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 63,
+        "loadWarnings": [
+          "Skipped incompatible metadata entry /performance/commands/0"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 62,
+        "loadWarnings": [
+          "Skipped performance.commands[0]: Invalid or duplicate FX-column command"
+        ]
+      }
+    },
+    {
+      "id": "missing-scratch-library",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 36,
+        "loadWarnings": [
+          "Skipped incompatible metadata entry /performance/commands/3",
+          "Skipped incompatible metadata entry /performance/commands/7"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 35,
+        "loadWarnings": [
+          "Skipped performance.commands[3]: Scratch command references a missing gesture; remove or change its uses first",
+          "Skipped performance.commands[7]: Scratch command references a missing gesture; remove or change its uses first"
+        ]
+      }
+    },
+    {
+      "id": "integer-real-next-id",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 68,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 1,
+        "loadWarnings": []
+      }
+    },
+    {
+      "id": "boolean-next-id",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 68,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 82,
+        "loadWarnings": [
+          "Native identities could not be recovered (Expected a number, not a boolean); recovered the embedded song without its optional native metadata."
+        ]
+      }
+    },
+    {
+      "id": "fractional-next-id",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 68,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 82,
+        "loadWarnings": [
+          "Native identities could not be recovered (Expected an integer); recovered the embedded song without its optional native metadata."
+        ]
+      }
+    },
+    {
+      "id": "unsafe-next-id",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 68,
+        "loadWarnings": [
+          "Native identities do not match the embedded song; native sections kept inactive: Metadata integer out of range",
+          "Skipped native section automation because its identities could not be recovered",
+          "Skipped native section mixer because its identities could not be recovered",
+          "Skipped native section noteTracks because its identities could not be recovered",
+          "Skipped native section columnMutes because its identities could not be recovered",
+          "Skipped native section performance because its identities could not be recovered",
+          "Skipped native section preciseNotes because its identities could not be recovered",
+          "Skipped native section signalGraph because its identities could not be recovered",
+          "Skipped native section envelopeBank because its identities could not be recovered",
+          "Skipped native section scratchGestures because its identities could not be recovered"
+        ]
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": 82,
+        "loadWarnings": [
+          "Native identities could not be recovered (Number outside its allowed range); recovered the embedded song without its optional native metadata."
+        ]
+      }
+    },
+    {
+      "id": "supplementary-unicode",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      }
+    },
+    {
+      "id": "corrupt-required-module",
+      "windows": {
+        "accepted": false,
+        "requiresSaveAs": null,
+        "differenceCount": null,
+        "loadWarnings": null
+      },
+      "macos": {
+        "accepted": false,
+        "requiresSaveAs": null,
+        "differenceCount": null,
+        "loadWarnings": null
+      }
+    },
+    {
+      "id": "missing-au",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      }
+    },
+    {
+      "id": "missing-vst3",
+      "windows": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": false,
+        "differenceCount": 0,
+        "loadWarnings": []
+      }
+    },
+    {
+      "id": "invalid-ascii-string",
+      "windows": {
+        "accepted": false,
+        "requiresSaveAs": null,
+        "differenceCount": null,
+        "loadWarnings": null
+      },
+      "macos": {
+        "accepted": true,
+        "requiresSaveAs": true,
+        "differenceCount": null,
+        "loadWarnings": [
+          "Ignored unsupported project field: parityInvalidEncoding"
+        ]
+      }
+    }
+  ],
+  "sourceHashes": {
+    "windows/Api/SessionAdapter.hpp": "eb17f038ea659e08a2e5f843d4422524677bf45e7536c9986827d85d0b795a5a",
+    "windows/Session/DocumentOperations.cpp": "6d6e5d29cbb86c9998858f3f64d7621fdadd62d1945ebfe8c0c4fe845f6ed7d7",
+    "windows/Session/PluginOperations.cpp": "2118d0ca64f00d6d9bc8586a0381485edc097f7e17a6c950e156f1bd251d1466",
+    "windows/Session/GraphPluginOperations.inc": "2e88c3b99106afce48019f0623faf76f780ee191357e5f84f03013ecd39bc584",
+    "mac/Bridge/AutomationValidation.hpp": "7baeda0596f47c6477bbd55991fff68f0bda2a00024b13ecada96ef654c78758",
+    "mac/Bridge/TrackerSession.mm": "f055ec34e86210d37f08297d30463ee1c9ca7b9528aada93f296263fca2dc6aa",
+    "mac/Bridge/TrackerSessionAPI.inc": "e9f9a6d62c762ea4f7d0b68ceadf5b19f156f610ed4674c0dcd4ef7a4be127b4",
+    "mac/App/AutomationServer.swift": "1afb94a65507014c1e83b7d30ed9fc2d5596c12c02fa71c8cb47ea31084b79a9",
+    "mac/Bridge/NativeSongMetadata.inc": "29cadc2d243a4f4e098779033406d738f45f38c8da40be937759e5aec5560361",
+    "mac/Bridge/PatternPerformanceMetadata.inc": "212ecb68cc45670b4798082a8140ad1907150f8f2e7ce5d674fa004089bada0c",
+    "mac/Bridge/ProjectLoadRecovery.inc": "49b5c2b151477b8c82e71030edc8ce93467347e5dc91537363e0a7cceac988c3",
+    "windows/Project/NativeMetadata.cpp": "7262bc6a13fd8273c5e3f57d5973d3e524eb53f7d28eb367e745bdff4d6661de",
+    "windows/Project/NativeMetadataAutomation.inc": "13a710d08096f6470d70c3bf3007977239198a4efe4dcc30b7dd46d4c13562e6",
+    "windows/Project/ProjectPreservation.hpp": "4a462855e0cc4a158e6e3ddb34c81d8fbd56fb1284cd6bbcacafa113c378d4cd",
+    "editor/NativeSong.cpp": "7a86cbf4e53e8543ce620c8c7d4c52fe8e96a179aa6d330249e670e393f3365f",
+    "soundlib/NativeNoteEffects.h": "bd1b49f596554a62fc9a37044b02e2971a7132ef4af4aea6612f5059db7dcdb4"
+  }
+}
