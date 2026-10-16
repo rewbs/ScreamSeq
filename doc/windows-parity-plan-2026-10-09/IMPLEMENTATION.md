@@ -12,6 +12,27 @@ and repeat only checks invalidated by changes or unresolved failures. Source aud
 implementation and fixture preparation continue between checkpoints. The cadence
 does not waive necessary tests or authorize a narrower parity result.
 
+## Fresh x64 CI binary on the Windows host - 16 October 2026
+
+The fresh archived x64 app from run **38846111553**, built at `d11b9cbbc`,
+passed **30/30 application cases in 62.954 seconds with no skips** on the Windows
+ARM64 host under x64 emulation. This includes all eight audio-dependent cases
+that failed in hosted CI and all three recovery cases. Artifact, nested archive,
+build receipt, executable and source-manifest identities were verified against
+the committed CI receipt. No application rebuild or assertion change was needed.
+
+Three existing audition cases retained actual silent WASAPI reports at 48 kHz
+and 480-frame periods with zero device errors, starvation or deadline overruns
+in their short observation windows. Realtime audit and sustained presentation
+remain explicitly unqualified; no physical input/output claim is made. The
+musician's app and system audio settings were preserved.
+
+See the [fresh-x64 report](p0b-fresh-x64-2026-10-16.md) and
+[receipt](p0b-fresh-x64-2026-10-16.json). This adds current-candidate host evidence
+without turning the CI failure into a pass. Native foreground Computer Use,
+physical/native-x64 device and vendor checks, current-candidate reciprocal
+compatibility, known API/codec differences and the remaining P1-P8 work stay open.
+
 ## Windows host qualification - 16 October 2026
 
 The clean Windows parity checkout was fast-forwarded to `d11b9cbbc` and built
