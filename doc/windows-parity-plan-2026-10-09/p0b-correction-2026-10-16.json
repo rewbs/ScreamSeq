@@ -33,5 +33,37 @@
     "Standalone native handler qualification only; no app build or physical audio/device check",
     "Initial sandbox run 22/35; native-access rerun 34/35 exposed provenance; corrected full run 35/35",
     "No test assertions or deadlines relaxed"
-  ]
+  ],
+  "integratedCandidate": {
+    "parents": [
+      "97858792d9a371f2e026b648d1cf2e8def0952f2",
+      "20acf9f836cc922ee16893bae7cad6064f024dcf"
+    ],
+    "changedSourceHashes": {
+      "windows/Session/DocumentOperations.cpp": "d991d2407bb33a177f5d9b80762059347c5e5115dcee3d6f63af953a8a8cd388",
+      "windows/Tests/ArrangementControllerTests.inc": "919b7581ff8d00074272918983d430207845f38f2c89ddcd92c73b02d1e8c3fd",
+      "mac/App/SignalGraphEditor.swift": "0cc8f10d86347289cf0377039591ff54f10f9d6c34c9ac69d368ff41f9152d40",
+      "mac/Tests/SignalGraphInterfaceTests.swift": "7203011ae862daec3985221ef8c0f89cbd0442e636144db0569733a44a2b5893",
+      "mac/Tests/GraphProvenanceInterfaceTests.swift": "af1ee8b45fda7b29ff542329aa32743b14d6ac4c2c9d3beca64ad03e2f6b5a67"
+    },
+    "executable": {
+      "path": "bin/mac-parity-20261016-merged/interface-tests",
+      "sha256": "b3756aac89bc4195d411b1bc05f3b4e75dc77aa883a05b8c239dfbb33b8fdcf2"
+    },
+    "sourceManifest": {
+      "path": "bin/mac-parity-20261016-merged/InterfaceSource.json",
+      "sha256": "4791613084e6121ef3ba0f8ed0688617e14d7549993e60edbe6b8998bac450db"
+    },
+    "log": {
+      "path": "bin/parity-evidence/mac-interface-20261016-merged.log",
+      "sha256": "b30055e8564e1cdff300f147a3ea526f792cb5974fe28d4ba895878b909004e4"
+    },
+    "results": {
+      "interfaceGroups": "35/35 passed",
+      "portableRunnerTests": "5/5 passed",
+      "windows": "Pending native CI",
+      "intel": "Pending interface CI"
+    },
+    "scope": "Combined remote preflight and fixture checks with local captured-target, rejection/Redo and provenance regressions; existing checkpoint documents preserved."
+  }
 }

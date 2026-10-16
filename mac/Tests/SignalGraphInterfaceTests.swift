@@ -1310,6 +1310,7 @@ extension InterfaceTests {
       else{writes.append((method,p));reply(["error":["message":"captured"]])}
     }
     editor.update(song);editor.selectedID="plugin:rack-a";editor.canvas.selected=editor.selectedID;editor.inspect()
+    try require(writes.isEmpty,"Inspecting the parameter-drop target only reads its parameter and trim catalogs")
     let continuous=editor.rackControls.parameterDropTarget(row:0)!,stepped=editor.rackControls.parameterDropTarget(row:1)!,readonly=editor.rackControls.parameterDropTarget(row:2)!
     let surface=GraphRackControls(frame:NSRect(x:0,y:0,width:320,height:420))
     surface.onRequest={_,_,reply in reply(["result":["revision":"surface:1","data":parameters]])};surface.context(["id":"visible-processor"])
@@ -1322,7 +1323,9 @@ extension InterfaceTests {
     try require(editor.beginParameterDrop(source:"source:n20"),"A source drag captures the currently visible rack parameter surface")
     editor.completeParameterDrop(continuous)
     try require(trimReads.count==1 && trimReads[0]["node"] as? String=="plugin:rack-a" && trimReads[0]["graph"] is NSNull,"Inspecting the host drop target reads exactly its song trim context: \(trimReads)")
-    try require(writes.count==1 && writes[0].0=="graph.song.modulation.set" && writes[0].1["source"] as? String=="n20" && writes[0].1["plugin"] as? String=="rack-a" && writes[0].1["parameter"] as? UInt32==777 && writes[0].1["minimum"] as? Int==0 && writes[0].1["maximum"] as? Int==0,"A host control drop creates one zero-depth connection using stable source, processor and parameter identities: \(writes)")
+    try require(writes.count==1,"A host control drop submits exactly one mutation, including after rejection")
+    try require(writes[0].0=="graph.song.modulation.set" && writes[0].1["source"] as? String=="n20" && writes[0].1["plugin"] as? String=="rack-a" && writes[0].1["parameter"] as? UInt32==777,"A host control drop uses stable source, processor and parameter identities")
+    try require(writes[0].1["minimum"] as? Int==0 && writes[0].1["maximum"] as? Int==0 && writes[0].1["quantized"] as? Bool==false,"A continuous host control drop starts at zero depth without discrete quantization")
     writes=[];try require(editor.beginParameterDrop(source:"source:n20"),"Source drag can repeat after a failed transaction")
     editor.completeParameterDrop(readonly);try require(writes.isEmpty && editor.status.stringValue.contains("read-only"),"Dropping onto a read-only parameter is explained without writing")
     _=editor.beginParameterDrop(source:"source:n20");editor.completeParameterDrop(stepped)
