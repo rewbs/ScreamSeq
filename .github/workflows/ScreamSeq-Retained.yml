@@ -1,0 +1,99 @@
+name: ScreamSeq retained binary qualification
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      app-run:
+        required: true
+        type: string
+      app-artifact:
+        required: true
+        type: string
+      input-run:
+        default: ''
+        type: string
+      input-artifact:
+        default: ''
+        type: string
+      input-layout:
+        default: windows
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  retained:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Validate explicit artifact selectors
+        shell: bash
+        env:
+          APP_RUN: ${{ inputs.app-run }}
+          INPUT_RUN: ${{ inputs.input-run }}
+          INPUT_ARTIFACT: ${{ inputs.input-artifact }}
+          INPUT_LAYOUT: ${{ inputs.input-layout }}
+        run: |
+          python - <<'PY'
+          import os
+          if not os.environ['APP_RUN'].isdigit():
+              raise SystemExit('Use an explicit numeric app run ID')
+          if os.environ['INPUT_RUN'] and (not os.environ['INPUT_RUN'].isdigit() or not os.environ['INPUT_ARTIFACT']):
+              raise SystemExit('A fixture run requires its numeric ID and exact artifact name')
+          if os.environ['INPUT_LAYOUT'] not in {'windows', 'exchange'}:
+              raise SystemExit('Unknown preceding artifact layout')
+          PY
+      - name: Download the explicit built candidate from this repository
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ inputs.app-artifact }}
+          run-id: ${{ inputs.app-run }}
+          github-token: ${{ github.token }}
+          path: bin/retained-app
+      - name: Download the explicit preceding fixture leg
+        if: inputs.input-run != ''
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: ${{ inputs.input-artifact }}
+          run-id: ${{ inputs.input-run }}
+          github-token: ${{ github.token }}
+          path: bin/retained-input
+      - name: Verify identities and run owned native checks without building
+        shell: bash
+        env:
+          INPUT_RUN: ${{ inputs.input-run }}
+          INPUT_LAYOUT: ${{ inputs.input-layout }}
+          APP_RUN: ${{ inputs.app-run }}
+          APP_ARTIFACT: ${{ inputs.app-artifact }}
+          INPUT_ARTIFACT: ${{ inputs.input-artifact }}
+          SCREAMSEQ_FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          args=(--app-artifact bin/retained-app --output bin/retained-result)
+          if [[ -n "$INPUT_RUN" ]]; then
+            args+=(--input-artifact bin/retained-input --input-layout "$INPUT_LAYOUT")
+          fi
+          python -B editor/Tests/Conformance/reuse_native.py "${args[@]}" 2>&1 | tee bin/retained-native.log
+      - name: Retain every result, including failed or incomplete legs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-retained-${{ inputs.runner }}
+          path: |
+            bin/retained-native.log
+            bin/retained-result/**
+            !bin/retained-result/app/**
+          if-no-files-found: warn
+          retention-days: 14

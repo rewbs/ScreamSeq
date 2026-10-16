@@ -31,10 +31,10 @@
     auto source=[this,target,document,token]{return context_().document==document&&document_==document&&
       sameIdentity(target_,target)&&generation_==*token&&!pointFields_;};
     auto context=[this]{const auto now=context_();return std::pair(now.document,now.revision);};
-    auto request=[this,target,document,source,token](const std::string &method,const Json &params){
+    auto dispatch=[this,target,document,source,token](const std::string &method,const Json &params,const std::shared_ptr<NativeCallReceipt> &receipt){
       const bool owned=source(),wasPending=pending_;if(owned){pending_=true;layout();}
-      Json result;
-      try{result=request_(method,params);}catch(...){pending_=wasPending;layout();throw;}
+      Api::CompletedCall completed;Json result;
+      try{if(receipt){completed=bankWrite_(method,params,receipt);if(!receipt->read())receipt->publish(std::make_shared<const Api::CompletedCall>(completed));result=completed.result;}else result=request_(method,params);}catch(...){pending_=wasPending;layout();throw;}
       pending_=wasPending;layout();
       if(params.contains("expectedRevision")&&owned&&source()){
         const auto now=context_();require(now.document==document,"Document changed during envelope operation");
@@ -47,13 +47,15 @@
           if(!draft()&&generation_==previous+1)*token=generation_;
         }
       }
-      return result;
+      if(receipt)return completed;return Api::CompletedCall{method,document,context_().revision,std::move(result)};
     };
+    auto request=[dispatch](const auto &method,const auto &params){return dispatch(method,params,{}).result;};
+    auto write=[dispatch](const auto &method,const auto &params,const auto &receipt){return dispatch(method,params,receipt);};
     Json bankTarget={{"kind","graph"},{"graph",target.graph.empty()?Json(nullptr):Json(target.graph)},{"node",target.node},{"pattern",target.pattern}},shape;
     if(!points_.empty())shape={{"span",uint64_t(rows_)*256},{"rowsPerBeat",rowsPerBeat_},{"points",points_}};
     OpeningChild opening(*this);
     auto next=std::make_unique<EnvelopeBankWindow>(window_,std::move(bankTarget),std::move(shape),document,revision_,
-      title_+L" · Pattern "+std::to_wstring(target.pattern),std::move(request),std::move(context),std::move(source));
+      title_+L" · Pattern "+std::to_wstring(target.pattern),std::move(request),std::move(context),std::move(source),std::move(write));
     bank_=std::move(next);bank_->show();
   }
 

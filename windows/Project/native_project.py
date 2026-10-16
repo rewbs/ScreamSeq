@@ -7,8 +7,10 @@ import plistlib
 import struct
 
 
-MAX_CONTAINER_VERSION = 5
-MAX_NATIVE_VERSION = 14
+# Framing qualification only. Native applications separately own best-effort
+# historical recovery and strict canonical project 6 / metadata 17 saves.
+MAX_CONTAINER_VERSION = 6
+MAX_NATIVE_VERSION = 17
 MAX_PROJECT_BYTES = 600 * 1024 * 1024
 MAX_MODULE_BYTES = 512 * 1024 * 1024
 SNAPSHOT_MAGICS = (b"RSONGS1\0", b"RSONGS2\0")
@@ -28,7 +30,9 @@ def split_snapshot(data: bytes) -> tuple[memoryview, memoryview, memoryview]:
     if len(data) < header_size:
         raise ValueError("Truncated native song snapshot header")
     lengths = struct.unpack_from("<III" if timed else "<II", data, 8)
-    if not all(lengths) or header_size + sum(lengths) != len(data):
+    # Current SampleArchive.cpp permits an empty timing archive in RSONGS2.
+    # Module and sample sections remain required, with exact total framing.
+    if not lengths[0] or not lengths[1] or header_size + sum(lengths) != len(data):
         raise ValueError("Invalid native song snapshot lengths")
     module_end = header_size + lengths[0]
     samples_end = module_end + lengths[1]

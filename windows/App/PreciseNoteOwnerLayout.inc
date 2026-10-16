@@ -59,12 +59,12 @@
     // owner/layout claim that null focus; restore only if it is still unclaimed.
     if(pending_&&focused&&IsChild(window_,focused)&&!GetFocus())pendingFocus_=focused;
     if(retainListEntry&&!GetFocus()&&pendingFocus_==listControl&&restoreListTop>=0&&!draft_.empty())
-      SendMessageW(listControl,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
+      ScreamSeq::NativeInputGate::present(listControl,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
     if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;
       if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT)){
         SetFocus(restore);
         if(restore==controls_.at(list)&&GetFocus()==restore&&restoreListTop>=0&&!draft_.empty())
-          SendMessageW(restore,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
+          ScreamSeq::NativeInputGate::present(restore,LB_SETTOPINDEX,std::min<size_t>(size_t(restoreListTop),draft_.size()-1),0);
       }}
     if(focused&&IsChild(window_,focused)&&!IsWindowVisible(focused)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))focusPage();
   }

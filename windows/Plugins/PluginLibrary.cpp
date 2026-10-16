@@ -68,7 +68,7 @@ std::string PluginLibrary::identifier(const Json &d){
 PluginLibrary::Json PluginLibrary::read() const {pathCheck(path_);Lock lock(*path_);return readFile(*path_);}
 PluginLibrary::Json PluginLibrary::set(const std::string &expected,const std::string &id,const Json &patch,bool dry) const {
   need(!text(Json(expected),80).empty(),"Provide the current library revision");validID(id);keys(patch,{"favorite","hidden","category"});need(!patch.empty(),"Provide a library preference");pathCheck(path_);Lock lock(*path_);auto root=readFile(*path_);
-  if(root.at("revision").get<std::string>()!=expected)throw Api::ApiError(-32001,"Plugin library changed; reload before editing preferences");
+  if(root.at("revision").get<std::string>()!=expected)throw Api::ApiError(-32001,"Plugin library changed; reload before editing preferences",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
   auto &entries=root["entries"];const auto old=entries.value(id,defaults());auto next=old;
   for(auto k:{"favorite","hidden"})if(patch.contains(k))next[k]=boolean(patch.at(k));if(patch.contains("category"))next["category"]=trim(patch.at("category"));
   const bool changed=next!=old;if(next==defaults())entries.erase(id);else entries[id]=next;need(entries.size()<=4096,"Plugin library exceeds 4096 customized entries");

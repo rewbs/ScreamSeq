@@ -21,6 +21,10 @@ struct EnvelopeHostHooks {
   // Refusal precedes audio publication, history and document mutation.
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
   std::function<std::function<void()>(const Tracker::NativeSong &)> preparePublication;
+  // Allocate exact result attribution before the document/file effect. The
+  // returned notification must not throw or mutate music; true means one
+  // document revision, false means an independent catalogue write.
+  std::function<std::function<void()>(const Json &,bool)> prepareCompletion;
 };
 // Control-thread only. Caller checks/removes expectedRevision; invoke returns
 // result.data. Read hooks must not mutate Document; stopPlayback must not throw

@@ -16,9 +16,12 @@ private:
   Cursor captured_;std::string patternID_,bus_;unsigned rows_=0,column_=0;
   Json data_=Json::object();bool dirty_=false,pending_=false,setting_=false,tails_=false;
   uint64_t generation_=0;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({patternID_,bus_,column_,captured_.row}).dump(),generation_,dirty_,pending_);
+  }
   static constexpr std::array<const char *,6> kinds={"row","start","stop","clear","amount","wet"};
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void select(int id,int index){SendMessageW(controls_.at(id),CB_SETCURSEL,index,0);}
+  void select(int id,int index){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,index,0);}
   void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   bool current()const{auto c=context_();return c.document==captured_.document&&c.revision==captured_.revision;}
@@ -28,10 +31,10 @@ private:
   std::string selectedGraph()const{auto index=selection(graph);const auto &library=data_.at("library");return index>=0&&size_t(index)<library.size()?library.at(index).at("id").get<std::string>():"";}
   unsigned count()const{for(const auto &l:data_.value("lanes",Json::array()))if(l.at("target")==bus_)return l.at("count");return 0;}
   void choices(){
-    setting_=true;SendMessageW(controls_.at(target),CB_RESETCONTENT,0,0);int i=0,chosen=-1;
-    for(const auto &b:buses()){auto name=wide(b.at("name").get<std::string>());SendMessageW(controls_.at(target),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(b.at("id")==bus_)chosen=i;++i;}
-    select(target,chosen);SendMessageW(controls_.at(graph),CB_RESETCONTENT,0,0);
-    for(const auto &g:data_.at("library")){auto name=std::to_wstring(g.at("number").get<unsigned>())+L" · "+wide(g.at("name").get<std::string>());SendMessageW(controls_.at(graph),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(target),CB_RESETCONTENT,0,0);int i=0,chosen=-1;
+    for(const auto &b:buses()){auto name=wide(b.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(target),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(b.at("id")==bus_)chosen=i;++i;}
+    select(target,chosen);ScreamSeq::NativeInputGate::present(controls_.at(graph),CB_RESETCONTENT,0,0);
+    for(const auto &g:data_.at("library")){auto name=std::to_wstring(g.at("number").get<unsigned>())+L" · "+wide(g.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(graph),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
     select(graph,data_.at("library").empty()?-1:0);select(lane,int(column_));setting_=false;
   }
   void cell(){
@@ -122,8 +125,8 @@ public:
   GraphCommandsWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumWidth_=660;minimumHeight_=660;create(L"ScreamSeq.GraphCommands",L"Pattern graph commands",760,700);
     for(int id:{target,lane,kind,graph})combo(id);
-    for(unsigned i=1;i<=8;++i){auto name=L"Graph lane "+std::to_wstring(i);SendMessageW(controls_.at(lane),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
-    for(auto name:{L"R · This row",L"S · Start / persistent",L"X · Stop named graph",L"CLR · Clear persistent graphs",L"A · Set Amount",L"W · Set Wet"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));
+    for(unsigned i=1;i<=8;++i){auto name=L"Graph lane "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls_.at(lane),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
+    for(auto name:{L"R · This row",L"S · Start / persistent",L"X · Stop named graph",L"CLR · Clear persistent graphs",L"A · Set Amount",L"W · Set Wet"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));
     for(int id:{row,offset,amount,wet})edit(id,L"0",32);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{tails,L"Tails off"},{apply,L"Apply command"},{remove,L"Remove"},{verify,L"Verify"},{reload,L"Reload cell"},{cursor,L"From cursor"},{enableLane,L"Enable lane"},{enableMixer,L"Enable mixer"},{open,L"Open graph"},{close,L"Close"},{loadCell,L"Load row"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Graph commands"},{targetLabel,L"Channel / group"},{laneLabel,L"Lane"},{kindLabel,L"Action"},{graphLabel,L"Reusable graph"},{rowLabel,L"Pattern row"},{offsetLabel,L"Offset %"},{amountLabel,L"Amount %"},{wetLabel,L"Wet %"},{help,L"R lasts one row; S stays active until X or CLR. Repeated S updates its existing chain.\nProcessing order: row → persistent → ordinary graph.\nCtrl+Enter applies · Ctrl+R reloads · F6 switches target/row · Close keeps drafts."},{statusLabel,L""}})label(id,name);

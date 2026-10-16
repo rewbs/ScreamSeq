@@ -34,7 +34,7 @@ public:
     titleLabel=9120,rowLabel,valueLabel,formulaLabel,statusLabel,helpLabel};
 private:
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
-  Request request_;
+  Request request_;NativeWriteCompletion::Write bankWrite_;
   ContextProvider context_;
   std::function<void()> return_;
   Target target_;
@@ -92,8 +92,10 @@ private:
 #include "GraphCurveOwnerLayout.inc"
 
 public:
+  void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   GraphCurveWindow(HWND owner,Request request,ContextProvider context,std::function<void()> returnToPattern)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),return_(std::move(returnToPattern)){
+    bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};
     require(bool(request_)&&bool(context_),"Curve editor needs request and context callbacks");
     minimumClientWidth_=440;minimumClientHeight_=500;
     create(L"ScreamSeq.GraphCurve",L"Graph source pattern curve",760,650);
@@ -108,8 +110,8 @@ public:
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
       {titleLabel,L"Choose a graph automation source"},{rowLabel,L"Row"},{valueLabel,L"Value %"},
       {formulaLabel,L"Formula"},{statusLabel,L""},{helpLabel,L""}})label(id,text);
-    for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    for(auto text:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     setting_=true;selection(kind,1);selection(snap,0);set(pointRow,L"0");set(pointValue,L"50");set(formula,L"mix(start,end,t)");setting_=false;
     status_=L"Choose a source in Graph / Tools → Load selection";finish();
   }
@@ -125,6 +127,10 @@ public:
       (workbench_&&(workbench_->visible()||workbench_->retainedDraft()));
   }
   bool pending()const noexcept{return pending_||openingChild_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({target_.graph,target_.node,target_.patternID}).dump(),
+      generation_,draft()||dragging_,pending_||openingChild_);
+  }
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}
   Json formulaWorkbenchSnapshot()const{return workbench_?workbench_->snapshot():Json{{"visible",false}};}

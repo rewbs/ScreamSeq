@@ -2,6 +2,7 @@
 #include "LibraryIndex.hpp"
 #include <future>
 
+namespace ScreamSeq {class NativeCallReceipt;}
 namespace ScreamSeq::Samples {
 // Separate from Document and musical Undo. The request owner and scanner have
 // independent queues so searches keep using the old index during a rescan.
@@ -15,7 +16,7 @@ public:
   ~Library();
   Library(const Library &)=delete;
   Library &operator=(const Library &)=delete;
-  std::future<Json> invoke(std::string method,Json params);
+  std::future<Json> invoke(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt={},std::string document={});
   Json status() const;
   static std::vector<std::string> reads();
   static std::vector<std::string> writes();

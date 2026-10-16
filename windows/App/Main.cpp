@@ -43,6 +43,8 @@
 #include "SampleLibraryWindow.hpp"
 #include "AudioSettingsWindow.hpp"
 #include "../Project/RecoveryStore.hpp"
+#include "../Project/ProjectIO.hpp"
+#include "mpt/crypto/hash.hpp"
 #include "RecoveryWriter.hpp"
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
@@ -201,9 +203,10 @@ void offlineHostedTest(const std::filesystem::path &project,const std::filesyste
        <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":"<<(audition?2:1)<<",\"audition\":"<<audition<<",\"songPositionStationary\":"<<stationary<<",\"renders\":"<<renders.dump()<<"}";
     out.close();if(!out||!finite||maxDelta>=1e-6||!unchanged||!stationary) throw std::runtime_error("Hosted application offline qualification failed");
 }
-class Application : public ScreamSeq::Api::SessionHost {
+class Application : public ScreamSeq::Api::SessionHost, public ScreamSeq::DocumentReplacementAdmission {
 public:
 	HWND window{};
+	ScreamSeq::DocumentDraftRegistry documentDrafts;
 	std::unique_ptr<ScreamSeq::RenderSurface> surface;
 	std::unique_ptr<ScreamSeq::DocumentController> controller;
 	std::shared_ptr<const ScreamSeq::DocumentView> view;
@@ -233,10 +236,10 @@ public:
 	Json playbackRegion = Json::object();
 	ScreamSeq::Api::SessionSnapshot snapshot() override {
         serviceRecovery();
-        if(!busy && controller->publicationPending()) {await(controller->invoke("synchronizeView",Json::object()));refreshDocument();}
+        if(!departureInput&&!busy && controller->publicationPending()) {await(controller->invoke("synchronizeView",Json::object()));refreshDocument();}
 		auto t = renderer ? renderer->telemetry() : Tracker::Telemetry{};
 		auto audio = device.stats();
-		auto result=view->session;
+		auto result=departureAdopted?controller->view()->session:view->session;
 		result.context = {{"documentId",documentId},{"contextRevision",documentId + ":context:" + std::to_string(contextRevision) + ":" + selection().dump()},
 			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"instrument",inputInstrumentOverride.value_or(typingSound)},{"octave",octave},{"following",follow},{"follow",follow},{"selection",selection()},
 			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},{"autosave",recoveryStatus()},
@@ -255,11 +258,13 @@ public:
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
                 {"sampleFrame",v.sampleFrame},{"generation",v.generation},{"envelopeTicks",v.envelopeTicks}});
+		if(departureAdopted){result.context["documentId"]=result.documentId;result.context["contextRevision"]=result.documentId+":native-refresh-pending";result.context["nativeRefreshPending"]=true;}
 		return result;
 	}
 	ScreamSeq::Api::PatternSnapshot pattern(unsigned index) override {
-        auto it=view->patterns.find(index);
-        if(it==view->patterns.end()) throw ScreamSeq::Api::ApiError(-32602,"Pattern does not exist");
+        const auto current=departureAdopted?controller->view():view;
+        auto it=current->patterns.find(index);
+        if(it==current->patterns.end()) throw ScreamSeq::Api::ApiError(-32602,"Pattern does not exist");
         return *it->second;
     }
 	Json selection() const {
@@ -347,7 +352,10 @@ public:
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
-            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
+            {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
+                {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
+            {"nativeCommandResult",{{"pending",nativeCommandPending},{"completion",nativeCommandCompletion.snapshot()},{"target",nativeCommandTarget},{"report",nativeCommandReport}}},
+            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"completion",directSampleRenderCompletion.snapshot()},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
@@ -359,6 +367,7 @@ public:
             {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
+        if(method!="workspace.get"&&method!="workspace.commands.get")rejectDepartureInput();
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
         if(method=="workspace.input") {
@@ -425,6 +434,7 @@ public:
 		return workspaceSnapshot();
 	}
 	void navigate(const Json &value) override {
+        rejectDepartureInput();
         validatePosition(value);
 		const auto p=value.at("pattern").get<unsigned>(), r=value.at("row").get<unsigned>();
 		const auto c=value.at("channel").get<unsigned>(), col=value.at("column").get<unsigned>();
@@ -461,14 +471,15 @@ public:
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
-        busy=true;updateTitle();updateSongTools();
-        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();app.updateSongTools();}} guard{*this};
+        busy=true;updateTitle();if(!departureInput)updateSongTools();
+        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();if(!app.departureInput)app.updateSongTools();}} guard{*this};
         std::exception_ptr presentationError;
         while(future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready) {
             controller->service();
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
+                if(filterDepartureMessage(message))continue;
                 if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
@@ -483,8 +494,9 @@ public:
         if(presentationError) status=L"Document operation completed; display presentation failed";
         return result;
     }
-    void refreshDocument() {
-        auto next=controller->view();if(next==view) return;
+    void refreshDocument(bool force=false) {
+        if(departureAdopted&&!departureRefreshing){completeNativeDeparture();return;}
+        auto next=controller->view();if(next==view&&!force) return;
         auto oldPosition=position();
         auto previous=view->session.documentId;const auto previousTake=view->recording.value("take",std::string());view=std::move(next);documentId=view->session.documentId;
         if(previousTake!=view->recording.value("take",std::string()))discardPendingMidi();
@@ -503,19 +515,56 @@ public:
     std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
+        guardDepartureOperation(method);
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
-        if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
+        if(busy||(recoveryRestoring&&!departureRefreshing)) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
+        return documentOperationWithOutcome(method,params).result;
+    }
+    ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
+        guardDepartureOperation(method);
+        if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        struct ClearConsent {Application &app;bool open;~ClearConsent(){if(open)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"};
+        ScreamSeq::Api::CompletedCall call;call.method=method;
+        bool completed=false;
         try {
-            auto result=await(controller->invoke(method,params));refreshDocument();
-            if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
-            // A dropped vendor editor never blocks the operation; say what happened.
-            if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
-                pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
-            }
-            return result;
+            call=await(controller->invokeCompleted(method,params,receipt));completed=true;
+            finishDocumentOperation(method,call.result);
+            return call;
         }
-        catch(...) {refreshDocument();throw;}
+        catch(...) {
+            // Repair presentation without replacing the worker's outcome with
+            // a second refresh exception. A returned worker operation may have
+            // changed files/takes/catalogues even when the song token is equal.
+            const auto failure=std::current_exception();
+            try {refreshDocument();} catch(...) {}
+            try {std::rethrow_exception(failure);}
+            catch(const ScreamSeq::Api::ApiError &error) {
+                if(!completed)throw;
+                // An outcome from a later callback can describe its own work,
+                // not the worker operation that already returned. Do not
+                // transplant a rejection or another document's identity.
+                throw ScreamSeq::Api::ApiError(error.code,error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+            catch(const std::exception &error) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,std::string("Operation completed but native completion failed; read state before retrying. ")+error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+            catch(...) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,"Operation completed but native completion failed; read state before retrying.",Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+        }
+    }
+    // Keep presentation/recovery completion separate from worker success. The
+    // owned native fixture injects faults here after the real worker has run.
+    virtual void finishDocumentOperation(const std::string &method,const Json &result) {
+        refreshDocument();
+        if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
+        // A dropped vendor editor never blocks the operation; say what happened.
+        if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
+            pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
+        }
     }
     std::wstring pluginEditorWarning;
     // Internal first-open reads must not refresh presentation until the whole
@@ -562,12 +611,12 @@ public:
             if(device.running() && preparedPlayback && !preparedPlayback->chain().enqueueParameters(changes)) {
                 stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
             }
-        },std::move(playback),std::move(catalogue),std::move(library));
+        },std::move(playback),std::move(catalogue),std::move(library),this);
         view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;resolveArrangementSelection();
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
-	~Application() { api.reset();shutdownMidi();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
+	~Application() { api.reset();shutdownMidi();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();auditionWindow.reset();controller.reset();cancelNativeDeparture();palette.reset();if(controlFont)DeleteObject(controlFont); }
 	static void renderAudio(void *context, float *samples, uint32_t frames,const ScreamSeq::RenderTime &time) noexcept {
 		auto &self = *static_cast<Application *>(context);
 		self.preparedPlayback->render(samples, frames,time);
@@ -578,10 +627,11 @@ public:
 	}
     #include "Audition.inc"
     #include "MusicalTyping.inc"
+    #include "NativeCommandRecovery.inc"
     #include "RecordingIntegration.inc"
     #include "SongTools.inc"
 	void play() { play(Json::object()); }
-    void play(const Json &settings) override {startPlayback(settings,false);startRecordingIfArmed();}
+    void play(const Json &settings) override {rejectDepartureInput();startPlayback(settings,false);startRecordingIfArmed();}
     void startPlayback(const Json &settings,bool audition) {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
@@ -611,9 +661,9 @@ public:
     void stop() override {
         frameRequested=true;
         if(controller&&view&&view->recording.value("capturing",false)&&!recordingFinishing&&!midiClosing&&!recoveryRestoring) {
-            if(!busy&&!midiBusy&&!midiServicing) {
+            if(!busy&&!midiBusy&&!midiServicing&&!nativeCommandPending&&!nativeCommandCompletion.retained()) {
                 const auto target=recordingTarget();
-                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}});}
+                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}},{{"take",target.take}});}
                 catch(const std::exception &e){recordingError=e.what();recordingStopRequested=target;}
             }else recordingStopRequested=recordingTarget();
         }
@@ -621,7 +671,7 @@ public:
         midiNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
-		status = L"Stopped / Play starts at the song beginning / cursor remains independent";
+		if(!departureAdopted)status = L"Stopped / Play starts at the song beginning / cursor remains independent";
 	}
     #include "WorkspaceLayouts.inc"
     #include "WorkspaceDocking.inc"
@@ -643,9 +693,10 @@ public:
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
     #include "SampleCaptureIntegration.inc"
+    #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
-        return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
+        return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){if(method=="document.get")return view->session.document;return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
     }
     void connectInstrumentEnvelopeTyping(){
         auto *tool=instrumentEnvelopeWindow.get();
@@ -682,7 +733,7 @@ public:
     }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
-        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();});
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){if(method=="document.get")return view->session.document;return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         connectTyping(*sampleDetailWindow,[this]{return sampleDetailWindow->musicalTarget();});
         sampleDetailWindow->openAt();
     }
@@ -753,10 +804,11 @@ public:
     }
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> parameterAutomationWindow;
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> makeParameterAutomationWindow(std::shared_ptr<bool> preparing={}){
-        return std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
+        auto editor=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("The captured plugin is unavailable");
             selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         },[this](const auto &plugin,uint32_t parameter){openAbsoluteAutomation(plugin,parameter);});
+        editor->bankWriter([this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});return editor;
     }
     std::pair<std::string,std::optional<uint32_t>> initialParameterAutomationTarget(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={})const{
         std::string plugin=std::move(requestedPlugin);auto parameter=requestedParameter;
@@ -773,33 +825,34 @@ public:
         finishWorkspaceEditorOpen("automation");
     }
 	#include "WorkspaceDraw.inc"
-	// The one close decision for WM_CLOSE and WM_QUERYENDSESSION. It never
-	// throws. A failed save keeps the song open and says why; when unsaved
-	// work cannot even be checked, the user decides whether to close anyway,
-	// so a broken document worker cannot make the window unclosable.
+    #include "DocumentDepartureIntegration.inc"
+	// Close/session-end admission fails closed if saved state or retained raw
+    // work cannot be checked. A canceled OS shutdown rolls the lease back.
 	bool canClose() noexcept {
 		std::wstring reason=L"unexpected error";
 		unsavedChecked=false;
 		try {
+			if(departureInput)return departureClosing;
 			// A prompt or chooser is already showing: do not stack another.
 			if(modalActive()||recoverySaving||recoveryRestoring||recoveryReads) return false;
 			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
-			if(!protectRecordingTake()||!protectUnsaved())return false;
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){
+                pluginLibraryWindow->show();status=L"Not closed / review the plugin-library result, or apply/discard its category draft";frameRequested=true;return false;
+            }
+			if(!protectSampleLibraryClose()||!protectRecordingTake()||!protectUnsaved()||!reviewNativeDeparture())return false;
             // A save/discard prompt pumps messages; an API client could have
             // begun a take after the first check. Do not lose that take.
-            return protectRecordingTake();
+            if(!protectRecordingTake()){nativeDepartureConsent.reset();return false;}
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){nativeDepartureConsent.reset();pluginLibraryWindow->show();return false;}
+            if(!protectSampleLibraryClose()){nativeDepartureConsent.reset();return false;}
+            admit(documentId,view->session.revision);departureClosing=true;return true;
 		} catch(const std::exception &e) {
 			try {reason=wide(e.what());} catch(...) {}
 		} catch(...) {}
 		frameRequested=true;
 		try {
+			cancelNativeDeparture();
 			status=L"Not closed / "+reason;
-			if(hasRecordingTake()||recordingTakeKnown||(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()))return false;
-			// The song is known to be dirty and its save (or prompt) failed:
-			// keep it. Closing again offers Save/Discard/Cancel once more.
-			if(unsavedChecked) return false;
-			const auto text=L"Could not check for unsaved changes: "+reason+L".\nClose anyway? Unsaved changes will be lost.";
-			return modalMessage(text.c_str(),L"ScreamSeq",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)==IDYES;
 		} catch(...) {}
 		return false;
 	}
@@ -882,6 +935,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	if(message == WM_NCCREATE) {
 		app = static_cast<Application *>(reinterpret_cast<CREATESTRUCTW *>(lp)->lpCreateParams);
 		SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app)); app->window = window;
+		if(!SetPropW(window,ScreamSeq::documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&app->documentDrafts)))return FALSE;
 	}
 	if(!app) return DefWindowProcW(window, message, wp, lp);
     if(message==WM_PAINT || message==WM_SIZE || message==WM_DPICHANGED || message==WM_SETFOCUS || message==WM_KILLFOCUS ||
@@ -897,13 +951,15 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             app->recoveryCloseRequested=false;if(!app->canClose())return 0;break;
 		case WM_QUERYENDSESSION: return app->canClose() ? TRUE : FALSE;
 		case WM_ENDSESSION:
+			if(!wp){if(app->departureClosing)app->cancelNativeDeparture();return 0;}
+			if(!app->departureClosing)return 0;
 			if(wp) {
                 app->releaseTypedNotes();app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();
                 if(!app->busy&&!app->libraryWaits&&!app->recoverySaving&&!app->recoveryRestoring&&!app->recoveryReads&&!app->modalActive()) DestroyWindow(window);
 			}
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+		case WM_NCDESTROY: RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
@@ -1113,6 +1169,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
+                if(app.filterDepartureMessage(message))continue;
 				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
 				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.handleKeyUp(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);

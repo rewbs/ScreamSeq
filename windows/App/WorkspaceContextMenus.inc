@@ -219,7 +219,7 @@
                 if(graphFieldDirty||graphPending||busy)targetReady=false;
                 else {
                     if(differentNode){graphNode=graphCanvas.nodes[size_t(hitNode)].id;graphWireIndex=-1;}
-                    else {const auto &wire=graphCanvas.wires[size_t(hitWire)];graphWireIndex=int(wire.index);graphWireModulation=wire.modulation;graphPageIndex=wire.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);}
+                    else {const auto &wire=graphCanvas.wires[size_t(hitWire)];graphWireIndex=int(wire.index);graphWireModulation=wire.modulation;graphPageIndex=wire.modulation?2:1;ScreamSeq::NativeInputGate::present(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);}
                     loadGraphFields();layoutControls();
                 }
             }

@@ -43,6 +43,10 @@ private:
   bool setting_=false,pending_=false,dirty_=false,spectrum_=false,dryRun_=false;
   HWND pendingFocus_{};
   std::string message_,error_,observedRevision_;bool observedDraft_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.value("documentId",std::string()),captured_.value("revision",std::string()),
+      graph_.dump(),generation_,dirty_,pending_);
+  }
   static constexpr std::array<const wchar_t *,8> pages_{L"Processing groups",L"Processors and patching",L"Song control sources",L"Parameter modulation",L"Frames and comments",L"Cable reroutes",L"Signal scope and listening",L"Existing parameter sources"};
   static void require(bool ok,const char *why){if(!ok)throw std::runtime_error(why);}
   bool current()const {const auto c=callbacks_.context();return !captured_.empty()&&c.at("documentId")==captured_.at("documentId")&&c.at("revision")==captured_.at("revision");}
@@ -59,14 +63,14 @@ private:
   void fill(int id,const std::vector<std::pair<std::wstring,Json>> &values,Json selected=nullptr) {
     const bool list=id==nodes||id==provenanceList;auto h=controls_.at(id);SendMessageW(h,list?LB_RESETCONTENT:CB_RESETCONTENT,0,0);auto &out=choices_[id];out.clear();
     int select=-1;for(const auto &[label,value]:values){const auto at=SendMessageW(h,list?LB_ADDSTRING:CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));require(at>=0,"Cannot fill graph choices");out.push_back(value);if(value==selected)select=int(out.size()-1);}
-    if(list){if(select>=0)SendMessageW(h,LB_SETSEL,TRUE,select);if(id==nodes){acceptedNodes_.clear();if(select>=0)acceptedNodes_.push_back(select);}}else {const auto index=select>=0?select:values.empty()?-1:0;SendMessageW(h,CB_SETCURSEL,index,0);acceptedSelection_[id]=index;}
+    if(list){if(select>=0)ScreamSeq::NativeInputGate::present(h,LB_SETSEL,TRUE,select);if(id==nodes){acceptedNodes_.clear();if(select>=0)acceptedNodes_.push_back(select);}}else {const auto index=select>=0?select:values.empty()?-1:0;ScreamSeq::NativeInputGate::present(h,CB_SETCURSEL,index,0);acceptedSelection_[id]=index;}
   }
   void boolField(int id,unsigned p,const wchar_t *label,bool initial) {combo(id,p,label);fill(id,{{L"Yes",true},{L"No",false}},initial);}
   void editField(int id,unsigned p,const wchar_t *label,const wchar_t *initial=L"",int limit=256){edit(id,initial,limit);fields_.push_back({id,int(p),label});}
   void combo(int id,unsigned p,const wchar_t *label){add(id,L"COMBOBOX",L"",CBS_DROPDOWNLIST|WS_VSCROLL|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS);fields_.push_back({id,int(p),label,true});}
   void actionButton(int id,unsigned p,const wchar_t *label){button(id,label);actions_.push_back({id,int(p),label});}
   void rememberPendingSelections(){pendingSelections_.clear();for(auto [id,h]:controls_){wchar_t kind[20]{};GetClassNameW(h,kind,20);if(_wcsicmp(kind,L"ComboBox")==0)pendingSelections_[id]=SendMessageW(h,CB_GETCURSEL,0,0);}pendingNodes_.clear();for(int i=0;i<SendMessageW(controls_.at(nodes),LB_GETCOUNT,0,0);++i)if(SendMessageW(controls_.at(nodes),LB_GETSEL,i,0)>0)pendingNodes_.push_back(i);}
-  void restorePendingSelection(int id){if(const auto i=pendingSelections_.find(id);i!=pendingSelections_.end())SendMessageW(controls_.at(id),CB_SETCURSEL,i->second,0);if(id==nodes){SendMessageW(controls_.at(nodes),LB_SETSEL,FALSE,-1);for(int i:pendingNodes_)SendMessageW(controls_.at(nodes),LB_SETSEL,TRUE,i);}}
+  void restorePendingSelection(int id){if(const auto i=pendingSelections_.find(id);i!=pendingSelections_.end())ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,i->second,0);if(id==nodes){ScreamSeq::NativeInputGate::present(controls_.at(nodes),LB_SETSEL,FALSE,-1);for(int i:pendingNodes_)ScreamSeq::NativeInputGate::present(controls_.at(nodes),LB_SETSEL,TRUE,i);}}
   static bool rawChoice(int id){return id==parent||id==sourceKind||id==audioBus||id==audioPlugin||id==noteTarget||id==noteInstrument||id==preFader||id==modSource||id==modParameter||id==enabled||id==quantized||id==regionKind||id==regionScope||id==regionCollapsed;}
   Json call(const std::string &method,Json params,bool write) {
     if(write)requireWrite();else require(available(),"Document is busy");

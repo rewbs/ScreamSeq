@@ -154,6 +154,7 @@ void jsonGuards() {
   CHECK(f.doc->revision==revision);CHECK(f.doc->historyBytes()==history);CHECK(f.stops==stops);
   // Read-only import rejects before filesystem creation or transport mutation.
   Fixture readOnly(MOD_TYPE_MDL);CHECK(!readOnly.doc->editable());Files absent;
+  CHECK(absent.folder!=files.folder);CHECK(!std::filesystem::exists(absent.folder));
   ScreamSeq::EnvelopeOperations readOnlyAPI(*readOnly.doc,[&]{++readOnly.stops;},{},absent.path);
   expectError(readOnlyAPI,"envelope.catalogue.import",{{"catalogueID",root["entries"][0]["id"]},{"expectedCatalogueRevision","catalogue:0"}});
   CHECK(readOnly.stops==0);CHECK(!std::filesystem::exists(absent.folder));

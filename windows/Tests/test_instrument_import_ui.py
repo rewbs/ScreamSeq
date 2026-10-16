@@ -11,7 +11,7 @@ import unittest
 import private_desktop
 import test_instrument_envelope_ui as support
 import test_sample_settings_ui as files
-from client import Client, TransportError
+from client import ApiError, Client, TransportError
 
 
 class InstrumentImportUITests(unittest.TestCase):
@@ -90,11 +90,22 @@ class InstrumentImportUITests(unittest.TestCase):
         self.post(4455);self.cancel('Import instrument');self.assertEqual(self.doc(),before)
         bad=self.folder/'Broken.sfz';bad.write_bytes(b'not an instrument')
         self.post(4455);self.choose(bad,'Import instrument');self.assertEqual(self.doc(),before)
+        # This API has no typed precommit receipt. Review the captured domain,
+        # then acknowledge its unverified outcome before opening another chooser.
+        self.assertIsNotNone(self.state()['creationCompletion'])
+        self.press(4451);self.assertEqual(self.state()['creationReport']['outcome'],'unverified')
+        self.assertTrue(self.state()['creationNeedsAcknowledgement'])
+        self.press(4452);self.assertIsNone(self.state()['creationCompletion'])
+        self.assertEqual(self.doc(),before)
         self.post(4455);self.dialog(SimpleNamespace(pid=self.pid),'Import instrument');self.write('document.patch',title='Changed with chooser open');before=self.doc();self.choose(path)
-        self.assertEqual(self.doc(),before);self.assertIn('changed while choosing',self.state()['status'])
+        self.assertEqual(self.doc(),before);self.assertIn('changed while preparing',self.state()['status'])
         project=self.folder/'replacement.screamseq';self.write('document.save',path=str(project))
-        self.post(4455);self.dialog(SimpleNamespace(pid=self.pid),'Import instrument');self.write('document.open',path=str(project),discard=True);before=self.doc();self.choose(path)
-        self.assertEqual(self.doc(),before);self.assertIn('changed while choosing',self.state()['status'])
+        self.post(4455);self.dialog(SimpleNamespace(pid=self.pid),'Import instrument');before=self.doc()
+        with self.assertRaises(ApiError) as caught:
+            self.write('document.open',path=str(project),discard=True)
+        self.assertIn('native editor work',str(caught.exception))
+        self.assertEqual(self.doc(),before)
+        self.cancel('Import instrument');self.assertEqual(self.doc(),before)
 
     def test_import_buttons_keep_instrument_and_bank_drafts(self):
         self.create();self.field(4439,'Uncommitted instrument');before=self.doc();self.press(4455)

@@ -3,6 +3,11 @@
 #include <stdexcept>
 
 namespace ScreamSeq::NativeReportList {
+inline void setItemCount(HWND h,int count,DWORD flags){NativeInputGate::present(h,LVM_SETITEMCOUNT,WPARAM(count),LPARAM(flags));}
+inline void setItemState(HWND h,int index,UINT state,UINT mask){LVITEMW item{};item.state=state;item.stateMask=mask;NativeInputGate::present(h,LVM_SETITEMSTATE,WPARAM(index),reinterpret_cast<LPARAM>(&item));}
+inline void ensureVisible(HWND h,int index,BOOL partial){NativeInputGate::present(h,LVM_ENSUREVISIBLE,WPARAM(index),LPARAM(partial));}
+inline void scroll(HWND h,int x,int y){NativeInputGate::present(h,LVM_SCROLL,WPARAM(x),LPARAM(y));}
+inline void setColumnWidth(HWND h,int index,int width){NativeInputGate::present(h,LVM_SETCOLUMNWIDTH,WPARAM(index),MAKELPARAM(width,0));}
 // Paint the retained native report, not a replacement list. Windows continues
 // to own selection, accessibility, type-ahead, scrolling and column geometry.
 struct Palette {

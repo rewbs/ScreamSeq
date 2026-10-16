@@ -30,14 +30,6 @@
     if(!dry){require(loops_.acceptApplied(submittedTarget,submittedRaw,workflowTarget()),"Loop draft changed during Apply / newer fields retained");syncLoops();}
     const auto changed=report_.value("loopsChanged",false);status(dry?(changed?L"Preview: normal and sustain loops change together / PCM and history unchanged":L"Preview: both loops already match the saved sample"):(changed?L"Both loops applied / one Undo restores them / PCM unchanged":L"Loops unchanged / no history entry created"));
   }
-  void reloadLoopFields(){
-    const auto before=context_(true);require(before.document==captured_.document,"Document replaced / use From cursor to capture the new sample");
-    require(std::any_of(before.samples.begin(),before.samples.end(),[&](const auto &v){return v.at("index")==slot_&&v.at("id")==id_;}),"Captured sample is unavailable / use From cursor");
-    const auto token=generation_;busy([&]{const auto data=request_("sample.get",{{"sample",slot_}});const auto now=context_(true);require(now.document==before.document&&now.revision==before.revision&&token==generation_,"Song or fields changed while reloading loops / draft retained");
-      captured_=now;info_=data;region_.frames=data.at("frames");clamp();if(!edited_.contains(rangeStart)&&!edited_.contains(rangeEnd)&&!edited_.contains(viewStart)&&!edited_.contains(viewEnd))syncFields();
-      resetLoops();refreshSavedSettings();sampleChoices();describeTarget();readWave();
-    });++generation_;report_=Json::object();invalidatePaste();status(L"Loop fields reloaded / other raw fields retained at their captured revision");
-  }
   Json snapParams(unsigned first,unsigned last)const{
     const bool grid=choice(snapMode)==1;Json p={{"sample",slot_},{"positions",Json::array({first,last})},{"mode",grid?"grid":"zero"},{"direction",choice(snapDirection)==1?"before":choice(snapDirection)==2?"after":"nearest"}};
     if(grid){const auto step=integerField(snapSize,268435456);require(step>0,"Grid step must be at least one frame");p["step"]=step;p["origin"]=integerField(snapOrigin,region_.frames);}else{p["radius"]=integerField(snapSize,65536);p["channels"]=channelName();}return p;
@@ -84,7 +76,7 @@
   void createWorkflowControls(){
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageDraw,L"Drawing"},{pageProcess,L"Process"},{pageLoops,L"Loops"},{pageClipboard,L"Paste"},{pageSnap,L"Snap"},{normalEnabled,L"Disabled"},{sustainEnabled,L"Disabled"},{snapNormal,L"Snap normal"},{snapSustain,L"Snap sustain"},{previewLoops,L"Preview loops"},{applyLoops,L"Apply loops"},{reloadLoops,L"Reload loops"},{previewPaste,L"Preview paste"},{autoSnap,L"Snap after selecting: Off"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{normalStart,L"0"},{normalEnd,L"0"},{sustainStart,L"0"},{sustainEnd,L"0"},{pasteSourceGain,L"0"},{pasteDestinationGain,L"0"},{snapOrigin,L"0"}})edit(id,text,24);
-    auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
+    auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
     options(normalDirection,{L"Forward",L"Ping pong",L"Reverse"});options(sustainDirection,{L"Forward",L"Ping pong",L"Reverse"});options(pasteRate,{L"Resample to target",L"Keep frame count"});
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{normalTitle,L"NORMAL"},{sustainTitle,L"SUSTAIN"},{loopStartLabel,L"Start frame"},{loopEndLabel,L"End (exclusive)"},{loopDirectionLabel,L"Direction"},{loopHelp,L"Apply saves both loops in one Undo step.\nCrossfade uses saved forward loops."},{pasteModeLabel,L"Paste mode"},{pasteRateLabel,L"Rate conversion"},{pasteSourceLabel,L"Clipboard gain (dB)"},{pasteDestinationLabel,L"Existing audio (dB)"},{pasteHelp,L"Insert adds time. Overwrite replaces frames in place. Mix combines audio. Replace substitutes the selection.\nResample preserves pitch; Keep frame count preserves the clipboard's number of frames."},{snapModeLabel,L"Snap mode"},{snapDirectionLabel,L"Direction"},{snapSizeLabel,L"Search radius (frames)"},{snapOriginLabel,L"Grid origin (frame)"},{snapHelp,L"Snap moves selection or loop draft boundaries; audio stays unchanged.\nZero crossings use the selected channels. Grid positions are measured from the origin."},{amountLabel,L"Amount"},{exponentLabel,L"Exponent"},{curveLabel,L"Fade curve"},{processHelp,L"Amount is gain / target dB, or an odd smoothing window (3–255 frames).\nExponent applies to exponential and logarithmic fades. Preview leaves audio and Undo history unchanged."},{crossFramesLabel,L"Frames"},{drawHelp,L"Zoom to individual frames to draw in the waveform, or stage exact frame / amplitude pairs.\nApply drawing saves the full stroke in one Undo step. Escape cancels the current gesture."}})label(id,text);
   }
@@ -133,9 +125,15 @@
     }
     for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,!pending_||id==close);}
     EnableWindow(controls_.at(paste),!pending_&&pasteReady());
+    if(mutationFrozen()){
+      for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,id==close||(id>=pageDraw&&id<=pageSnap));}
+      EnableWindow(controls_.at(reload),!pending_&&!mutationWorking_);
+      EnableWindow(controls_.at(fromCursor),!pending_&&!mutationWorking_&&mutationNeedsAcknowledgement_);
+    }
+    set(reload,mutationCompletion_.retained()?L"Review":L"Reload");set(fromCursor,mutationCompletion_.retained()?L"Accept state":L"From cursor");
     // Disabling native controls clears their focus during worker requests.
     // Restore only that lost focus, never a newer choice or inactive window.
     if(pending_&&previousFocus&&IsChild(window_,previousFocus)&&!GetFocus())pendingFocus_=previousFocus;
-    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+    if(!pending_&&!mutationFrozen()&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
     layoutPending_=pending_;
   }

@@ -1,0 +1,78 @@
+{
+  "format": "screamseq-reciprocal-checkpoint-v1",
+  "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
+  "scope": "Windows x64 native render/import and first-save outputs through Mac ARM64 normal launch/save/reopen and return to the same archived Windows x64 app",
+  "parityComplete": false,
+  "fixtures": [
+    {
+      "fixture": "01-midnight-circuit.screamseq",
+      "sourceSHA256": "b5ee14dce18dec7399ddf1b9758edaa92fcbe9a31c3e2513967b420150e8bb9f",
+      "returnSHA256": "b5ee14dce18dec7399ddf1b9758edaa92fcbe9a31c3e2513967b420150e8bb9f",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "02-editors-and-effects.screamseq",
+      "sourceSHA256": "c604b8c4881134daa1aab48960b5a53eb5f6cf3fd74727c2a22aa7d0e6a8bc11",
+      "returnSHA256": "c604b8c4881134daa1aab48960b5a53eb5f6cf3fd74727c2a22aa7d0e6a8bc11",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "03-routing-and-modulation.screamseq",
+      "sourceSHA256": "751802b151a61edeb094106843864f40228e43bf0b179f03894d39e30969828d",
+      "returnSHA256": "751802b151a61edeb094106843864f40228e43bf0b179f03894d39e30969828d",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "04-complete-reference.screamseq",
+      "sourceSHA256": "cea638339845c67217d1e15f3632fc2540e43a9c7335041c8621d56d25f08993",
+      "returnSHA256": "cea638339845c67217d1e15f3632fc2540e43a9c7335041c8621d56d25f08993",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "05-arrangement-copy-after.screamseq",
+      "sourceSHA256": "d71ebaeeef5b6385424c1610f65469a4953948c132053e720efe58111bd75d83",
+      "returnSHA256": "d71ebaeeef5b6385424c1610f65469a4953948c132053e720efe58111bd75d83",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "imported.screamseq",
+      "sourceSHA256": "0f54250ec961669b679e1ae61e8fb1f6a6e8cd6f6f8ea59471d9bde3e4935635",
+      "returnSHA256": "0f54250ec961669b679e1ae61e8fb1f6a6e8cd6f6f8ea59471d9bde3e4935635",
+      "exactTypedEqual": true
+    },
+    {
+      "fixture": "rendered.screamseq",
+      "sourceSHA256": "123ff7947b6c5e0bd64869bdb0162698e48898b00c11a83685bb985060c9e349",
+      "returnSHA256": "123ff7947b6c5e0bd64869bdb0162698e48898b00c11a83685bb985060c9e349",
+      "exactTypedEqual": true
+    }
+  ],
+  "runs": {
+    "windowsBuild": 37991809865,
+    "macBuild": 37991809860,
+    "macExchange": 37995384823,
+    "windowsReturn": 37995525893
+  },
+  "windowsIdentity": {
+    "buildReceiptSHA256": "26a19b926d0b430988edf66f6582c58c2eee7f6bacbfa67f822b87150a2ce8e8",
+    "executableSHA256": "6ab18fb83491f13603ef7c64f852bc5985b17bb5a7c6b33de0d8b038ececea9a",
+    "qualification": "Built candidate; test results are separate and may fail.",
+    "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
+    "archiveSHA256": "3d0f7ec74db2ef4c40522ab123fbb6d682b9e8ac76d635b270d11e890a2f6531"
+  },
+  "macIdentity": {
+    "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
+    "executableSHA256": "a7cac5d20c52cb3a9e3a4ae1c0c54068f13be2c92f0cd98711b1d3943db4a9f9",
+    "archiveSHA256": "9d556fca862184ab4c9134bf868b87c472c5d644e1515da5f9394d859f0281c1",
+    "buildReceiptSHA256": "7d7395c3db0796ca6b4f024246de84fccdc7114bcd57c97cbde7f4bac564d4e4",
+    "qualification": "Built candidate; test results are separate and may fail."
+  },
+  "exchangeReportSHA256": "0762a0b0b01279632a0d3d6b61b3d9294c9596402554dda99275f36aee3c50eb",
+  "returnReportSHA256": "942533b277bf868a6c6b4835b22af4333b9769526b047ceadaf51f1f400663a7",
+  "limits": [
+    "Intel Mac not yet qualified",
+    "No foreground/physical audio claim",
+    "Native UI and full interface gates remain failing",
+    "This checkpoint predates the unbuilt native UI corrections"
+  ]
+}

@@ -51,7 +51,7 @@
       else if(id==replaceRow){replaceLegacy_=!replaceLegacy_;++generation_;}
       else if(id==addHit)duplicate();else if(id==removeHit)remove();else if(id==fillRow)retrigger();
       else if(id==applyDraft||id==checkDraft)apply(id==checkDraft);
-    }catch(const std::exception &e){if(id==list)SendMessageW(controls_.at(list),LB_SETCURSEL,selected_,0);if(id==units)selection(units,int(units_));error(e);}
+    }catch(const std::exception &e){if(id==list)ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);if(id==units)selection(units,int(units_));error(e);}
   }
   unsigned snapStep()const{return snap_==0?256:std::max(1u,unitsPerRow*rowsPerBeat_/(snap_==1?16:snap_==2?32:64));}
   unsigned positionAt(float x,bool free)const{

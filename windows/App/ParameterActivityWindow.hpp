@@ -21,6 +21,10 @@ private:
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,frozen_=false,fields_=false,active_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({target_,plugin_,parameter_?Json(*parameter_):Json(),originalFrame_}).dump(),
+      generation_,fields_,pending_);
+  }
   WorkspaceRect plot_{};
   std::map<int,LRESULT> pendingSelections_;
   void beginPending(){pendingSelections_.clear();for(int id:{processors,parameters,mode,details})pendingSelections_[id]=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);pendingSelections_[items]=SendMessageW(controls_.at(items),LB_GETCURSEL,0,0);pending_=true;}
@@ -30,17 +34,17 @@ private:
   void status(std::wstring text){status_=std::move(text);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void choose(int id,int i){SendMessageW(controls_.at(id),CB_SETCURSEL,i,0);}
-  void append(int id,const std::wstring &s){SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));}
-  void choices(){setting_=true;SendMessageW(controls_.at(processors),CB_RESETCONTENT,0,0);int index=-1;for(size_t i=0;i<targets_.size();++i){const auto &t=targets_[i];append(processors,wide(t.at("name"))+L" · "+wide(t.at("key")));if(t.at("key")==target_)index=int(i);}choose(processors,index);
-    SendMessageW(controls_.at(parameters),CB_RESETCONTENT,0,0);index=-1;for(size_t i=0;i<parameters_.size();++i){const auto &p=parameters_[i];append(parameters,wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string())));if(parameter_&&p.at("id")==*parameter_)index=int(i);}choose(parameters,index);setting_=false;}
+  void choose(int id,int i){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,i,0);}
+  void append(int id,const std::wstring &s){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));}
+  void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(processors),CB_RESETCONTENT,0,0);int index=-1;for(size_t i=0;i<targets_.size();++i){const auto &t=targets_[i];append(processors,wide(t.at("name"))+L" · "+wide(t.at("key")));if(t.at("key")==target_)index=int(i);}choose(processors,index);
+    ScreamSeq::NativeInputGate::present(controls_.at(parameters),CB_RESETCONTENT,0,0);index=-1;for(size_t i=0;i<parameters_.size();++i){const auto &p=parameters_[i];append(parameters,wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string())));if(parameter_&&p.at("id")==*parameter_)index=int(i);}choose(parameters,index);setting_=false;}
   void showFields(){setting_=true;if(selected_>=0&&size_t(selected_)<recorded_.size()){const auto &p=recorded_[size_t(selected_)];originalFrame_=p.at("frame");set(time,double(originalFrame_)/48000);set(value,p.at("value"));}else{originalFrame_=0;set(time,L"0");set(value,L"0");}fields_=false;setting_=false;}
-  void list(){const auto old=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));SendMessageW(controls_.at(items),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(items),LB_RESETCONTENT,0,0);listed_.clear();
-    const auto add=[&](size_t index,const std::wstring &text){listed_.push_back(index);SendMessageW(controls_.at(items),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));};
+  void list(){const auto old=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));SendMessageW(controls_.at(items),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(items),LB_RESETCONTENT,0,0);listed_.clear();
+    const auto add=[&](size_t index,const std::wstring &text){listed_.push_back(index);ScreamSeq::NativeInputGate::present(controls_.at(items),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));};
     if(page_==0)for(size_t i=0;i<sources_.size();++i)add(i,wide(sources_[i].value("title",std::string()))+(sources_[i].value("enabled",true)?L"":L" · disabled"));
     else if(page_==1){for(size_t i=points_.size()>512?points_.size()-512:0;i<points_.size();++i){const auto &p=points_[i];add(i,std::to_wstring(p.at("seconds").get<double>())+L" s · "+wide(p.at("source").at("kind"))+L" · "+wide(p.at("value").dump())+(p.at("source").at("kind")=="graph-source"?L" normalized contribution":L" native units"));}}
     else for(size_t i=0;i<recorded_.size();++i){const auto &p=recorded_[i];add(i,std::to_wstring(p.at("frame").get<double>()/48000)+L" s · "+wide(p.at("value").dump()));}
-    SendMessageW(controls_.at(items),LB_SETCURSEL,page_==2?selected_:old,0);SendMessageW(controls_.at(items),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(items),nullptr,FALSE);
+    ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,page_==2?selected_:old,0);SendMessageW(controls_.at(items),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(items),nullptr,FALSE);
     set(pageLabel,page_==2?std::to_wstring(offset_)+L"–"+std::to_wstring(offset_+recorded_.size())+L" of "+std::to_wstring(total_)+L" recorded points":std::to_wstring(listed_.size())+L" entries");}
   struct RecordedRead {Json points=Json::array();size_t offset=0,total=0;int selected=-1;};
   struct SourcesRead {Json sources=Json::array();std::wstring rule;};
@@ -140,7 +144,7 @@ private:
         else if(id==fit||id==zoomIn||id==zoomOut){seconds_=id==fit?std::max(1.,points_.empty()?8.:points_.back().at("seconds").get<double>()-points_.front().at("seconds").get<double>()):std::clamp(seconds_*(id==zoomIn?.5:2),.05,604800.);requestPaint();}
       }
       pending_=false;
-    }catch(...){pending_=false;choices();if(page_==2)SendMessageW(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
+    }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
   void timer(UINT_PTR id)override{if(id==3)poll();}
   bool key(WPARAM key,bool ctrl,bool)override{if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}if(key==VK_RETURN&&(GetFocus()==controls_.at(time)||GetFocus()==controls_.at(value))){action(savePoint,BN_CLICKED);return true;}return false;}

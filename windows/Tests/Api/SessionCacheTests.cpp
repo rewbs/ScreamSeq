@@ -236,14 +236,13 @@ void serializationFailure() {
   const auto seed=edit(host,"seed"), seeded=api.handle(seed);
   host.invalidUtf8=true;
   const auto q=edit(host,"invalid-host-data"), reply=api.handle(q);
-  check(reply.contains("result") && reply["result"]["changed"]==true && reply["result"]["revision"]==host.state.revision && host.commits==2,
-    "cache serialization failure cannot return an unchanged/pre-commit error for a committed write");
-  bool throws=false; try { reply.dump(); } catch(const Json::type_error &) { throws=true; }
-  check(throws,"fixture actually forces strict JSON serialization failure");
-  usage(api,1,charge(seed,seeded));
-  error(api.handle(q),-32001,"unserializable success was not retained");
+  check(reply["error"]["code"]==-32003 && reply["id"]==q["id"] &&
+    reply["error"]["data"]==Json({{"writeOutcome","unknown"}}) && host.commits==2,
+    "unserializable completion must retain request identity without advertising pre-write revision or rejection");
+  usage(api,2,charge(seed,seeded)+charge(q,reply));
+  check(api.handle(q)==reply && host.commits==2,"retained serialization failure re-executed write");
   check(api.handle(seed)==seeded,"serialization failure does not discard earlier retained success");
-  std::cout<<"PASS cache serialization failure skips retention without falsifying commit outcome\n";
+  std::cout<<"PASS serialization failure retains classified outcome without falsifying commit or pre-write revision\n";
 }
 void independentServices() {
   struct LibraryHost : CacheHost {
@@ -276,10 +275,66 @@ void independentServices() {
   check(host.snapshots==0&&host.calls==0&&host.state.revision==before.revision,"independent service used song snapshot/operation/history");
   std::cout<<"PASS independent revision/envelope, guarded write replay and absence of song ownership\n";
 }
+void completionOutcomes() {
+  struct OutcomeHost : CacheHost {
+    enum Stage { None, Before, After, Snapshot } stage=None;
+    bool snapshotFailure=false;
+    SessionSnapshot snapshot()override {
+      if(snapshotFailure){snapshotFailure=false;throw ApiError(-32003,"Injected completion failure");}
+      return CacheHost::snapshot();
+    }
+    Json documentOperation(const std::string &method,const Json &params)override {
+      if(stage==Before) {
+        ++calls;
+        throw ApiError(-32003,"Injected completion failure",
+          Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted,state.documentId,state.revision});
+      }
+      auto result=CacheHost::documentOperation(method,params);
+      if(stage==After)throw ApiError(-32003,"Injected completion failure",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,state.documentId,state.revision});
+      if(stage==Snapshot)snapshotFailure=true;
+      return result;
+    }
+  }host;
+  SessionAdapter api(host);
+  const auto q=edit(host,"outcome");
+  host.stage=OutcomeHost::Before;
+  auto rejected=api.handle(q);
+  check(rejected["error"]["data"]["writeOutcome"]=="notCommitted" && host.commits==0,
+    "explicit precommit outcome lost");
+  check(api.handle(q)==rejected && host.calls==2,"proven rejection should remain retryable");
+  usage(api,0,0);
+  host.stage=OutcomeHost::After;
+  auto committed=api.handle(q);
+  check(committed["error"]["code"]==-32003 && committed["error"]["data"]["writeOutcome"]=="committed",
+    "same engine code and message must not collapse precommit and postcommit outcomes");
+  check(committed["error"]["data"]["revision"]==host.state.revision &&
+    committed["error"]["data"]["revision"]!=q["params"]["expectedRevision"] &&
+    committed["error"]["data"]["documentId"]==host.state.documentId,"committed error lost authoritative identity/revision");
+  check(api.handle(q)==committed && host.calls==3 && host.commits==1,"retained committed error repeated the write");
+  auto changed=q;changed["params"]["cells"][0]["note"]=62;
+  error(api.handle(changed),-32600,"classified error must bind request content as strictly as success");
+  usage(api,1,charge(q,committed));
+  host.stage=OutcomeHost::Snapshot;
+  const auto unknownRequest=edit(host,"unknown"),unknown=api.handle(unknownRequest);
+  check(unknown["error"]["data"]==Json({{"writeOutcome","unknown"}}),
+    "failed post-write snapshot must not advertise a pre-write revision");
+  check(api.handle(unknownRequest)==unknown && host.commits==2 && host.calls==4,"unknown completion replay repeated host call");
+  const auto read=api.handle(request("document.get",Json::object(),"reconcile"));
+  check(read["result"]["revision"]==host.state.revision,"readback cannot reconcile post-write snapshot failure");
+  // No-op/externally revisioned work cannot be inferred from a song token.
+  host.noOp=true;
+  const auto noDelta=edit(host,"unknown-no-delta"),noDeltaReply=api.handle(noDelta);
+  check(noDeltaReply["error"]["data"]["writeOutcome"]=="unknown" && host.state.revision==noDelta["params"]["expectedRevision"],
+    "unchanged revision must not fabricate noChange after completion failed");
+  check(api.handle(noDelta)==noDeltaReply && host.calls==5,"unchanged-revision unknown result reentered host");
+  check(api.handle(q)==committed && host.commits==2,"later read/write displaced retained committed receipt");
+  std::cout<<"PASS typed precommit/committed/unknown results, authoritative revision, readback and exact error replay\n";
+}
 }
 int main() {
   try {
     discovery(); byteEviction(); entryEviction(); boundariesAndOversize(); failuresAndExactReplay();
-    noOpDryRunAndContext(); serializationFailure(); independentServices();return 0;
+    noOpDryRunAndContext(); serializationFailure(); independentServices();completionOutcomes();return 0;
   } catch(const std::exception &e) { std::cerr<<"FAIL: "<<e.what()<<'\n'; return 1; }
 }

@@ -8,7 +8,7 @@
         unsigned pattern=0,row=0,channel=0,fx=0,offset=0,rowsPerBeat=4;
         double maximumDurationBeats=0;
         double originalValue=.75;
-        std::wstring originalStrength,message;
+        std::wstring originalStrength,originalDuration,message;
         Json navigation;
     } patternNudge;
     bool patternNudgeOwnsFocus()const {
@@ -26,6 +26,16 @@
         return pattern&&track;
     }
     bool patternNudgeCurrent()const {return patternNudgeTargetCurrent()&&patternNudge.revision==view->session.revision;}
+    void reviewPatternNudge(){
+        if(!patternNudge.active)return;
+        // Reveal the captured cell without reloading its fields or treating
+        // navigation as permission to rebase a stale musical edit.
+        revealWorkspacePattern();workspaceState.focus="pattern";
+        if(patternNudgeTargetCurrent())navigate(patternNudge.navigation);
+        ensureCursorVisible();layoutControls();layoutPatternNudgeEditor();
+        SetFocus(controls.contains(nudgeStrengthField)&&IsWindowVisible(controls.at(nudgeStrengthField))?controls.at(nudgeStrengthField):window);
+        status=patternNudgeCurrent()?patternNudge.message:L"Captured nudge target changed / raw draft retained; copy the values or cancel before reopening";
+    }
     void installPatternNudgeControls(){
         if(controls.contains(nudgeStrengthField))return;
         for(int id:{nudgeStrengthField,nudgeDurationField}){
@@ -56,7 +66,8 @@
         if(busy||recoveryRestoring){status=L"Document busy / nudge draft unchanged";return true;}
         if(patternNudge.active){layoutPatternNudgeEditor();SetFocus(controls.at(nudgeStrengthField));status=patternNudge.message;return true;}
         installPatternNudgeControls();
-        PatternNudgeDraft next;next.active=true;next.kind=std::move(kind);next.document=documentId;next.revision=view->session.revision;
+        PatternNudgeDraft next;next.active=true;next.generation=patternNudge.generation+1;
+        next.kind=std::move(kind);next.document=documentId;next.revision=view->session.revision;
         next.pattern=patternIndex;next.row=row;next.channel=channel;next.fx=(column-3)/2;
         for(const auto &item:view->session.document.at("patterns"))if(item.at("index")==patternIndex)next.patternID=item.at("id").get<std::string>();
         for(const auto &item:view->session.document.at("tracks"))if(item.at("index")==channel)next.trackID=item.at("id").get<std::string>();
@@ -66,14 +77,14 @@
         next.originalValue=wasNudge?existing->value:.75;
         wchar_t strength[64]{},duration[64]{};swprintf_s(strength,L"%.15g",next.originalValue*100);
         swprintf_s(duration,L"%.15g",(wasNudge?existing->durationBeats:std::min(1.0,next.maximumDurationBeats))*(next.rows?next.rowsPerBeat:1));
-        next.originalStrength=strength;
+        next.originalStrength=strength;next.originalDuration=duration;
         next.navigation=position();next.navigation["column"]=4+2*next.fx;next.navigation["following"]=false;
         next.message=std::wstring(L"Strength (%) / duration (")+(next.rows?L"rows":L"beats")+L") · Tab switches · Enter saves and advances · Esc cancels";
         patternNudge=std::move(next);patternNudge.setting=true;
-        SetWindowTextW(controls.at(nudgeStrengthField),replacing.empty()?strength:replacing.c_str());
-        SetWindowTextW(controls.at(nudgeDurationField),duration);SendMessageW(controls.at(nudgeDurationField),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(patternNudge.rows?L"Duration (rows)":L"Duration (beats)"));patternNudge.setting=false;
+        ScreamSeq::NativeInputGate::text(controls.at(nudgeStrengthField),replacing.empty()?strength:replacing.c_str());
+        ScreamSeq::NativeInputGate::text(controls.at(nudgeDurationField),duration);SendMessageW(controls.at(nudgeDurationField),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(patternNudge.rows?L"Duration (rows)":L"Duration (beats)"));patternNudge.setting=false;
         navigate(patternNudge.navigation);layoutPatternNudgeEditor();SetFocus(controls.at(nudgeStrengthField));
-        SendMessageW(controls.at(nudgeStrengthField),EM_SETSEL,replacing.empty()?0:WPARAM(-1),-1);status=patternNudge.message;return true;
+        ScreamSeq::NativeInputGate::present(controls.at(nudgeStrengthField),EM_SETSEL,replacing.empty()?0:WPARAM(-1),-1);status=patternNudge.message;return true;
     }
     void finishPatternNudge(bool advanceRow){
         const bool owned=patternNudgeOwnsFocus(),same=position()==patternNudge.navigation;
@@ -111,7 +122,7 @@
         if(!patternNudge.active||!patternNudgeOwnsFocus())return false;
         if(key==VK_ESCAPE){if(!patternNudge.pending){finishPatternNudge(false);status=L"Nudge draft cancelled";}return true;}
         if(key==VK_RETURN){commitPatternNudge();return true;}
-        if(key==VK_TAB){auto h=controls.at(GetFocus()==controls.at(nudgeStrengthField)?nudgeDurationField:nudgeStrengthField);SetFocus(h);SendMessageW(h,EM_SETSEL,0,-1);return true;}
+        if(key==VK_TAB){auto h=controls.at(GetFocus()==controls.at(nudgeStrengthField)?nudgeDurationField:nudgeStrengthField);SetFocus(h);ScreamSeq::NativeInputGate::present(h,EM_SETSEL,0,-1);return true;}
         return false;
     }
     bool patternNudgeDoubleClick(float x,float y){

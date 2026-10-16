@@ -1,4 +1,5 @@
 #pragma once
+#include "ProtocolLimits.hpp"
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <memory>
@@ -13,8 +14,8 @@ namespace ScreamSeq::Api {
 class PipeServer {
 public:
   using Handler = std::function<nlohmann::json(const nlohmann::json &)>;
-  static constexpr std::size_t maxRequestBytes = 32 * 1024 * 1024;
-  static constexpr std::size_t maxResponseBytes = 32 * 1024 * 1024;
+  static constexpr std::size_t maxRequestBytes = maxProtocolRequestBytes;
+  static constexpr std::size_t maxResponseBytes = maxProtocolResponseBytes;
   explicit PipeServer(std::wstring name, Handler handler, unsigned ioTimeoutMs = 5000);
   ~PipeServer();
   PipeServer(const PipeServer &) = delete;

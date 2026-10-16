@@ -6,7 +6,15 @@ namespace ScreamSeq {
 // painting and hit tests; no project access or processor work occurs in either.
 struct SongRoutingCanvas {
   using Json=Api::Json;using Point=GraphCanvas::Point;
-  struct Node {std::string id,bus,plugin,graph,instrument,kind;unsigned instrumentIndex=0;std::wstring name,detail;float x{},y{};WorkspaceRect rect;};
+  enum class StageRole {None,Row,Persistent,Ordinary,Instrument};
+  static const char *roleName(StageRole role){switch(role){case StageRole::Row:return "row";case StageRole::Persistent:return "persistent";case StageRole::Ordinary:return "ordinary";case StageRole::Instrument:return "instrument";default:return "none";}}
+  struct Node {
+    std::string id,bus,plugin,graph,instrument,kind;unsigned instrumentIndex=0;std::wstring name,detail;float x{},y{};WorkspaceRect rect;StageRole role=StageRole::None;
+    bool commandStage()const{return role==StageRole::Row||role==StageRole::Persistent;}
+    bool canEditInserts()const{return !bus.empty()&&role==StageRole::None;}
+    bool canAssignGraph()const{return (!bus.empty()&&(role==StageRole::None||role==StageRole::Ordinary))||
+      (!instrument.empty()&&(role==StageRole::None||role==StageRole::Instrument));}
+  };
   struct Edge {std::string source,target;std::wstring label;Json action;unsigned output{},input{};bool enabled=true;std::array<Point,33> points;WorkspaceRect bounds;};
   WorkspaceRect viewport;float zoom=1,panX=16,panY=16;
   std::vector<Node> nodes;std::vector<Edge> edges;std::unordered_map<std::string,size_t> index;
@@ -38,14 +46,14 @@ struct SongRoutingCanvas {
       }
     }
     std::map<std::string,Point> saved;for(const auto &p:data.at("layout"))saved[p.at("node")]={p.at("x").get<float>(),p.at("y").get<float>()};
-    auto add=[&](std::string id,std::string name,std::string detail,float x,float y,std::string kind,std::string bus={},std::string p={},std::string graph={},std::string instrument={},unsigned instrumentIndex=0){
-      if(index.contains(id))return;Node n;n.id=id;n.bus=bus;n.plugin=p;n.graph=graph;n.instrument=instrument;n.instrumentIndex=instrumentIndex;n.kind=kind;n.name=GraphCanvas::wide(name);n.detail=GraphCanvas::wide(detail);n.x=x;n.y=y;if(auto pos=saved.find(id);pos!=saved.end()){n.x=pos->second.x;n.y=pos->second.y;}index[id]=nodes.size();nodes.push_back(std::move(n));};
+    auto add=[&](std::string id,std::string name,std::string detail,float x,float y,std::string kind,std::string bus={},std::string p={},std::string graph={},std::string instrument={},unsigned instrumentIndex=0,StageRole role=StageRole::None){
+      if(index.contains(id))return;Node n;n.id=id;n.bus=bus;n.plugin=p;n.graph=graph;n.instrument=instrument;n.instrumentIndex=instrumentIndex;n.role=role;n.kind=kind;n.name=GraphCanvas::wide(name);n.detail=GraphCanvas::wide(detail);n.x=x;n.y=y;if(auto pos=saved.find(id);pos!=saved.end()){n.x=pos->second.x;n.y=pos->second.y;}index[id]=nodes.size();nodes.push_back(std::move(n));};
     auto edge=[&](const std::string &a,const std::string &b,std::string label,Json action=Json::object(),unsigned out=0,unsigned in=0,bool enabled=true){if(find(a)&&find(b))edges.push_back({a,b,GraphCanvas::wide(label),std::move(action),out,in,enabled});};
     auto graphName=[&](const std::string &g){const auto d=definition.find(g);return d==definition.end()?std::string("Unavailable subgraph"):std::to_string(d->second->at("number").get<unsigned>())+" · "+d->second->at("name").get<std::string>();};
     std::unordered_map<std::string,std::string> last,graphStage;float y=28;
     for(const auto &b:buses){const auto id=b.at("id").get<std::string>();if(!visible.contains(id))continue;const auto kind=b.at("kind").get<std::string>();
       add(id,b.at("name"),kind=="master"?"Master output":kind+((b.at("output")=="")?" · disconnected":" input"),28,y,kind,id);std::string previous=id;float x=264;
-      auto addGraph=[&](const std::string &g,const std::string &role){const auto key="graph:"+id+":"+role+":"+g;add(key,graphName(g),role+" · independent copy",x,y,"graph",id,{},g);edge(previous,key,role=="Ordinary"?"":"When active");previous=key;graphStage[id]=key;x+=236;};
+      auto addGraph=[&](const std::string &g,const std::string &role){const auto key="graph:"+id+":"+role+":"+g;add(key,graphName(g),role+" · independent copy",x,y,"graph",id,{},g,{},0,role=="Row"?StageRole::Row:role=="Persistent"?StageRole::Persistent:StageRole::Ordinary);edge(previous,key,role=="Ordinary"?"":"When active");previous=key;graphStage[id]=key;x+=236;};
       for(const auto &role:{std::string("row"),std::string("start")}){std::set<std::string> seen;for(const auto &c:data.at("commands"))if(c.at("target")==id&&c.at("kind")==role&&seen.insert(c.at("graph")).second)addGraph(c.at("graph"),role=="row"?"Row":"Persistent");}
       for(const auto &a:data.at("assignments"))if(a.at("target")==id)addGraph(a.at("graph"),"Ordinary");
       for(const auto &p:inserts(b)){const auto pid=p.get<std::string>(),key="plugin:"+pid;const auto found=plugin.find(pid);const auto name=found==plugin.end()?"Unavailable effect":found->second->at("name").get<std::string>();
@@ -74,14 +82,14 @@ struct SongRoutingCanvas {
       const auto id=i.at("id").get<std::string>(),key="instrument:"+id;const Json *assignment=nullptr;for(const auto &a:data.at("instrumentAssignments"))if(a.at("target")==id)assignment=&a;
       const auto number=i.at("index").get<unsigned>();add(key,"I"+std::to_string(number)+" · "+i.at("name").get<std::string>(),"Sample voices · note's channel",28,y,"sample",{},{},{},id,number);
       if(assignment){const auto g=assignment->at("graph").get<std::string>();const bool expanded=selected==key;
-        if(!expanded){const auto copy="instrument-graph:"+id+":all";add(copy,graphName(g),"Independent copies · select instrument",264,y,"graph",{},{},g,id,number);edge(key,copy,"Per channel");for(const auto &b:buses)if(b.at("kind")=="track")edge(copy,b.at("id"),"Before channel");}
-        else for(const auto &b:buses)if(b.at("kind")=="track"&&visible.contains(b.at("id"))){const auto bus=b.at("id").get<std::string>(),copy="instrument-graph:"+id+":"+bus;add(copy,graphName(g),"I"+std::to_string(number)+" → "+b.at("name").get<std::string>(),264,y,"graph",{},{},g,id,number);edge(key,copy,"Independent copy");edge(copy,bus,"Before channel");y+=100;}
+        if(!expanded){const auto copy="instrument-graph:"+id+":all";add(copy,graphName(g),"Independent copies · select instrument",264,y,"graph",{},{},g,id,number,StageRole::Instrument);edge(key,copy,"Per channel");for(const auto &b:buses)if(b.at("kind")=="track")edge(copy,b.at("id"),"Before channel");}
+        else for(const auto &b:buses)if(b.at("kind")=="track"&&visible.contains(b.at("id"))){const auto bus=b.at("id").get<std::string>(),copy="instrument-graph:"+id+":"+bus;add(copy,graphName(g),"I"+std::to_string(number)+" → "+b.at("name").get<std::string>(),264,y,"graph",{},{},g,id,number,StageRole::Instrument);edge(key,copy,"Independent copy");edge(copy,bus,"Before channel");y+=100;}
       }y+=118;
     }geometry();
   }
   void fit(){if(nodes.empty())return;float l=FLT_MAX,t=FLT_MAX,r=-FLT_MAX,b=-FLT_MAX;for(const auto &n:nodes){l=std::min(l,n.x);t=std::min(t,n.y);r=std::max(r,n.x+184);b=std::max(b,n.y+68);}zoom=std::clamp(std::min((viewport.w-32)/(r-l),(viewport.h-32)/(b-t)),.15f,1.5f);panX=(viewport.w-(r-l)*zoom)/2-l*zoom;panY=(viewport.h-(b-t)*zoom)/2-t*zoom;geometry();}
   int nodeAt(float x,float y)const{for(size_t i=nodes.size();i>0;--i)if(nodes[i-1].rect.contains(x,y))return int(i-1);return -1;}
   int edgeAt(float x,float y)const{float best=7;int found=-1;for(size_t i=0;i<edges.size();++i)if(edges[i].bounds.contains(x,y))for(size_t j=1;j<edges[i].points.size();++j){auto d=GraphCanvas::distance({x,y},edges[i].points[j-1],edges[i].points[j]);if(d<best){best=d;found=int(i);}}return found;}
-  Json snapshot()const{Json ns=Json::array(),es=Json::array();for(const auto &n:nodes)ns.push_back({{"id",n.id},{"bus",n.bus},{"plugin",n.plugin},{"graph",n.graph},{"instrument",n.instrument},{"x",n.x},{"y",n.y},{"rect",{n.rect.x,n.rect.y,n.rect.w,n.rect.h}}});for(const auto &e:edges)es.push_back({{"source",e.source},{"target",e.target},{"action",e.action},{"enabled",e.enabled},{"midpoint",{e.points[16].x,e.points[16].y}},{"targetHandle",{e.points[28].x,e.points[28].y}}});return {{"nodes",ns},{"edges",es},{"viewport",{viewport.x,viewport.y,viewport.w,viewport.h}},{"zoom",zoom}};}
+  Json snapshot()const{Json ns=Json::array(),es=Json::array();for(const auto &n:nodes)ns.push_back({{"id",n.id},{"stageRole",roleName(n.role)},{"canEditInserts",n.canEditInserts()},{"canAssignGraph",n.canAssignGraph()},{"bus",n.bus},{"plugin",n.plugin},{"graph",n.graph},{"instrument",n.instrument},{"x",n.x},{"y",n.y},{"rect",{n.rect.x,n.rect.y,n.rect.w,n.rect.h}}});for(const auto &e:edges)es.push_back({{"source",e.source},{"target",e.target},{"action",e.action},{"enabled",e.enabled},{"midpoint",{e.points[16].x,e.points[16].y}},{"targetHandle",{e.points[28].x,e.points[28].y}}});return {{"nodes",ns},{"edges",es},{"viewport",{viewport.x,viewport.y,viewport.w,viewport.h}},{"zoom",zoom}};}
 };
 }

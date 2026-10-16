@@ -71,7 +71,10 @@ class PluginPresetTests(unittest.TestCase):
         self.assertEqual(saved['presetRevision'], 'preset:' + hashlib.sha256(path.read_bytes()).hexdigest())
         self.assertEqual({k:v for k,v in saved.items() if k not in ('written', 'path')}, self.inspect(path))
         tree = plistlib.loads(path.read_bytes())
-        self.assertEqual(set(tree), {'format','version','name','plugin','state'})
+        self.assertEqual(set(tree), {'format','version','name','plugin','state','audioLayout'})
+        self.assertIsInstance(tree['audioLayout'], str)
+        self.assertEqual(tree['audioLayout'], self.client.call('plugin.state.get', dict(plugin=self.rack()[0]['instanceID']))['data']['audioLayout'])
+        self.assertEqual(tree['audioLayout'], saved['audioLayout'])
         self.assertEqual(tree['format'], 'Resonance plugin preset')
         self.assertEqual(tree['state'], base64.b64decode(self.state()))
         self.assertEqual(tree['name'], 'Sound 🎵')
@@ -98,6 +101,11 @@ class PluginPresetTests(unittest.TestCase):
                 self.assertEqual(info['name'], tree['name'])
                 self.assertEqual(info['stateBytes'], len(tree['state']))
                 self.assertEqual(info['presetRevision'], 'preset:' + hashlib.sha256(legacy.read_bytes()).hexdigest())
+        # Old presets omitted the physical-layout fingerprint. Reading them
+        # keeps the legacy empty-layout contract rather than inventing one.
+        legacy_tree = dict(tree); del legacy_tree['audioLayout']
+        legacy.write_bytes(plistlib.dumps(legacy_tree, fmt=plistlib.FMT_BINARY))
+        self.assertEqual(self.inspect(legacy)['audioLayout'], '')
         self.assertFalse(list(self.folder.glob('*.tmp')))
         self.assertFalse(list(self.folder.glob('*.staged.*')))
 

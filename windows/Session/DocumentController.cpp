@@ -113,8 +113,8 @@ std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,uns
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
-  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),thread_([this]{loop();}) {
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath,DocumentReplacementAdmission *replacementAdmission)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),replacementAdmission_(replacementAdmission),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -147,8 +147,9 @@ void DocumentController::service() {
   {std::lock_guard lock(mutex_);tasks.swap(main_);}for(auto &task:tasks) task();
 }
 std::shared_ptr<const DocumentView> DocumentController::view() {std::lock_guard lock(mutex_);return view_;}
-std::string DocumentController::revision() const {
-  return identity_+":"+std::to_string(generation_)+":"+std::to_string(document_->revision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex())+":"+std::to_string(project_.pluginRevision);
+std::string DocumentController::revision() const {return revision(document_->revision);}
+std::string DocumentController::revision(uint64_t documentRevision) const {
+  return identity_+":"+std::to_string(generation_)+":"+std::to_string(documentRevision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex())+":"+std::to_string(project_.pluginRevision);
 }
 void DocumentController::open(const std::filesystem::path &path) {
   if(sampleRecording_&&sampleRecording_->hasTake())throw Api::ApiError(-32602,"Add or discard the retained microphone take before replacing this song");
@@ -202,11 +203,29 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
     SampleRecordingOperations::Hooks capture;
     capture.devices=[] {return captureDevices();};capture.capture=[] {return makeWasapiCapture();};
     capture.uniqueID=[] {GUID id{};if(FAILED(CoCreateGuid(&id)))throw std::runtime_error("Cannot allocate microphone take identity");wchar_t text[40]{};StringFromGUID2(id,text,40);std::string value;for(auto p=text;*p;++p)value.push_back(char(*p));return value;};
-    capture.append=[this](auto pcm,auto rate,auto channels,const auto &name,bool instrument,bool dry){return assets_->appendCapturedAudio(pcm,rate,channels,name,instrument,dry);};
+    capture.append=[this](auto pcm,auto rate,auto channels,const auto &name,bool instrument,bool dry,const auto &take){
+      return assets_->appendCapturedAudio(pcm,rate,channels,name,instrument,dry,[this,&take](const Json &imported){
+        auto result=imported;result["take"]=take;return prepareAssetCompletion("sample.recording.commit",result);
+      });
+    };
     initialRecording=std::make_unique<SampleRecordingOperations>(std::move(capture));
   }
-  if(view_) retired_.push_back(view_);
-  try {if(beforeCommit)beforeCommit();if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
+  const auto departing=view_;
+  if(departing) retired_.push_back(departing);
+  bool admitted=false;
+  try {
+    if(beforeCommit)beforeCommit();
+    if(document_)onMain([&] {
+      if(replacementAdmission_) {
+        replacementAdmission_->admit(departing->session.documentId,departing->session.revision);
+        admitted=true;
+      }
+      // Admission and Stop are one UI service callback. The lease remains
+      // active while the worker adopts the already-prepared document below.
+      try{stop_();}
+      catch(...){if(admitted){replacementAdmission_->finish(false);admitted=false;}throw;}
+    });
+  } catch(...) {if(departing)retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
@@ -215,6 +234,7 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
   if(sampleRecording_)sampleRecording_->documentReplaced();
   else sampleRecording_=std::move(initialRecording);
   install(std::move(next));
+  if(admitted)onMain([this]{replacementAdmission_->finish(true);});
 }
 const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const {
   const auto key=std::tuple(pattern,row,target,column);
@@ -372,12 +392,34 @@ void DocumentController::publish() {
   if(view_) retired_.push_back(view_);
   install(std::move(next));
 }
-void DocumentController::publishCommitted() {
+std::unique_ptr<AssetOperations::ImportCommit> DocumentController::prepareAssetCompletion(const std::string &method,const Json &result) {
+  struct Completion final:AssetOperations::ImportCommit {
+    std::shared_ptr<const Api::CompletedCall> value;
+    std::shared_ptr<const Api::CompletedCall> &destination;
+    std::shared_ptr<NativeCallReceipt> ticket;
+    Completion(std::shared_ptr<const Api::CompletedCall> call,std::shared_ptr<const Api::CompletedCall> &target,std::shared_ptr<NativeCallReceipt> receipt)
+      :value(std::move(call)),destination(target),ticket(std::move(receipt)){}
+    void committed()noexcept override {destination=value;if(ticket)ticket->publish(value);}
+  };
+  // PreparedAssetImport commits exactly one Document transaction, changing no
+  // plugin revision, sequence or document identity. Capture that next revision
+  // before Stop; failed preflight/Stop/transaction never publishes this receipt.
+  auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{
+    method,identity_+":"+std::to_string(generation_),revision(document_->revision+1),result});
+  return std::make_unique<Completion>(std::move(completed),completedCall_,nativeCallReceipt_);
+}
+void DocumentController::publishCommitted(const std::string &method,const Json &result) {
   publicationPending_=true;
   try {publish();} catch(...) {
     // Shared by ordinary edits and recording commits: a repaired publication
     // must report success after the retained take has already been consumed.
-    try {publish();} catch(...) {throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.");}
+    try {publish();} catch(...) {
+      const auto document=identity_+":"+std::to_string(generation_),current=revision();
+      if(!completedCall_)completedCall_=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,document,current,result});
+      throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,document,current},
+        completedCall_);
+    }
   }
 }
 void DocumentController::preflightGrowth(const std::string &method,const Json &params) {
@@ -515,7 +557,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     const auto before=revision();
     if(method=="sample.recording.commit")preflightGrowth(method,params);
     auto result=sampleRecording_->invoke(method,params,identity_+":"+std::to_string(generation_),before);
-    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted();}return result;
+    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted(method,result);}return result;
   }
   // Browser preferences are independent of the song. Do not flush vendor
   // editors, require a document revision, or allocate musical history here.
@@ -595,7 +637,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
         const auto checked=Tracker::importRecordedAudio(*document_,rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,true);
         result["frames"]=checked.frames;result["selectedFrames"]=rendered.selectedFrames;result["preRollFrames"]=rendered.preRollFrames;
         result["tailFrames"]=rendered.tailFrames;result["latencyFrames"]=rendered.latencyFrames;result["automationStartFrame"]=rendered.automationStartFrame;result["clippedValues"]=checked.clippedValues;
-        assets_->appendCapturedAudio(rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,false);
+        assets_->appendCapturedAudio(rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,false,
+          [this,&result](const Json &){return prepareAssetCompletion("sample.renderSelection",result);});
       }
     } catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   } else if(method=="document.save" || method=="document.open") {
@@ -682,6 +725,10 @@ Json DocumentController::operation(const std::string &method,Json params) {
     hooks.validateCandidate=[this](const auto &next){validateNativeCandidate(next);};
     hooks.parameterAutomationConflicts=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==parameter)return true;return false;};
     hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
+    hooks.prepareCompletion=[this,&method](const Json &value,bool musicalChange){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(document_->revision+(musicalChange?1:0)),value});
+      return [this,completed=std::move(completed),ticket=nativeCallReceipt_]()noexcept{completedCall_=completed;if(ticket)ticket->publish(completed);};
+    };
     EnvelopeOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks),cataloguePath_);result=operations.invoke(method,params);
   } else if(patternMethod) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
@@ -706,7 +753,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
           if(assigned) throw Api::ApiError(-32602,"Instrument slot belongs to a preserved plugin assignment");
         }
       }
-      result=assets_->invoke(method,params);
+      result=assets_->invoke(method,params,[this,&method](const Json &imported){return prepareAssetCompletion(method,imported);});
     } else if(std::find(timeline.begin(),timeline.end(),method)!=timeline.end()) {
       TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);
     } else {
@@ -720,23 +767,65 @@ Json DocumentController::operation(const std::string &method,Json params) {
     }
   }
   if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount() || beforeRecovered!=project_.recoveredUnsaved)) {
-    publishCommitted();
+    publishCommitted(method,result);
   }
   return result;
 }
+Api::CompletedCall DocumentController::invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt) {
+  completedCall_.reset();nativeCallReceipt_=receipt;
+  struct Reset {DocumentController &owner;~Reset(){owner.completedCall_.reset();owner.nativeCallReceipt_.reset();}} reset{*this};
+  const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
+  bool returned=false;
+  try {
+    auto result=operation(method,std::move(params));returned=true;
+    if(completedCall_)return *completedCall_;
+    // Capture on the serial worker, before any later queued operation can edit
+    // the view. Reading view() on the native owner after await is too late.
+    if(receipt){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(),std::move(result)});
+      receipt->publish(completed);
+      return *completed;
+    }
+    return {method,identity_+":"+std::to_string(generation_),revision(),std::move(result)};
+  } catch(...) {
+    const auto failure=std::current_exception();
+    // Only our own publication boundary can supply a failed invocation's
+    // result. An ApiError from a nested callback is never receipt provenance.
+    if(receipt&&completedCall_)receipt->publish(completedCall_);
+    if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
+      publicationPending_=true;scanPatterns_=true;scanWaves_=true;
+      try {publish();} catch(...) {}
+      // Only our own publication boundary can supply this invocation's result.
+      // Never adopt a receipt thrown by a nested host callback, even when its
+      // method and document happen to match.
+      throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()},completedCall_);
+    }
+    if(returned)throw Api::ApiError(-32003,"Operation returned but completion identity could not be retained; read state before retrying.",Tracker::WriteOutcome{});
+    // These operations publish only one prepared document import. The real
+    // recorder's Keep consumes its take only after that import succeeds; an
+    // unchanged revision on failure proves no Keep/import was committed.
+    // This does not classify recording start/stop/discard, files or vendor calls.
+    if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
+        ||method=="sample.import"||method=="instrument.import"||method=="instrument.create") {
+      const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
+      try {std::rethrow_exception(failure);}
+      catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}
+      catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),rejected);}
+      catch(...){throw Api::ApiError(-32003,"Import failed before document commit",rejected);}
+    }
+    std::rethrow_exception(failure);
+  }
+}
 std::future<Json> DocumentController::invoke(std::string method,Json params) {
   auto task=std::make_shared<std::packaged_task<Json()>>([this,method=std::move(method),params=std::move(params)]() mutable {
-    const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
-    try {return operation(method,std::move(params));} catch(...) {
-      if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
-        // Includes an exception in an edit/playback callback after the shared
-        // model committed. Preserve/recover the actual new revision, not the old cache.
-        publicationPending_=true;scanPatterns_=true;scanWaves_=true;
-        try {publish();} catch(...) {} // A later snapshot read retries on this worker.
-        throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.");
-      }
-      throw;
-    }
+    return invokeOperation(method,std::move(params)).result;
+  });
+  auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
+}
+std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt) {
+  auto task=std::make_shared<std::packaged_task<Api::CompletedCall()>>([this,method=std::move(method),params=std::move(params),receipt=std::move(receipt)]() mutable {
+    return invokeOperation(method,std::move(params),receipt);
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

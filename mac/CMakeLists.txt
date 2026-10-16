@@ -442,6 +442,10 @@ else()
 endif()
 add_test(NAME routing-prototype COMMAND routing-prototype-tests)
 add_executable(mixer-graph-tests Tests/MixerGraphTests.cpp)
+add_executable(order-edit-admission-tests ../editor/Tests/OrderEditAdmissionTests.cpp)
+target_link_libraries(order-edit-admission-tests PRIVATE TrackerEditor)
+add_test(NAME order-edit-admission COMMAND order-edit-admission-tests)
+set_tests_properties(order-edit-admission PROPERTIES TIMEOUT 30)
 add_executable(mixer-runtime-tests Tests/MixerRuntimeTests.cpp)
 target_link_libraries(mixer-runtime-tests PRIVATE TrackerEditor)
 if(CMAKE_CXX_FLAGS MATCHES "sanitize")
@@ -875,6 +879,13 @@ add_executable(windows-scratch-editor-state-tests
 target_include_directories(windows-scratch-editor-state-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
 target_link_libraries(windows-scratch-editor-state-tests PRIVATE TrackerEditor)
 add_test(NAME windows-scratch-editor-state COMMAND windows-scratch-editor-state-tests)
+
+# Shared departure values plus the Windows owner-registry protocol. This target
+# has no Win32/AppKit or audio dependency; actual native admission is separate.
+add_executable(document-departure-tests "${ROOT}/editor/Tests/DocumentDepartureTests.cpp")
+target_include_directories(document-departure-tests PRIVATE "${ROOT}")
+add_test(NAME document-departure COMMAND document-departure-tests)
+set_tests_properties(document-departure PROPERTIES LABELS "portable;functional;drafts;no-hardware" TIMEOUT 30)
 
 add_executable(audio-port-trim-tests "${ROOT}/editor/Tests/AudioPortTrimTests.cpp")
 target_link_libraries(audio-port-trim-tests PRIVATE TrackerMac)

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows optional classified write error data",
+  "description": "Schema for error.data when writeOutcome is present. Existing error codes remain unchanged. Absence of this data is not proof that no side effect occurred. Unknown and committed failures require domain-specific reconciliation before any new write; replay retention is bounded and not durable.",
+  "type": "object",
+  "properties": {
+    "writeOutcome": { "enum": ["notCommitted", "noChange", "committed", "unknown"] },
+    "documentId": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "minLength": 1 }
+  },
+  "required": ["writeOutcome"],
+  "additionalProperties": false
+}

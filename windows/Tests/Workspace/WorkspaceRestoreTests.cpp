@@ -4,6 +4,7 @@
 #include "../../App/Main.cpp"
 #undef wWinMain
 #include "../PrivateGuiProcessTest.hpp"
+#include <fstream>
 #include <iostream>
 
 namespace {
@@ -69,9 +70,52 @@ struct RestoreApplication final:Application {
     std::optional<Json> sampleGuardState;
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
+    std::function<void()> completionFault;
+    std::function<void(const std::string &)> sampleMutationCompletion;
+    std::function<void(const std::string &,Json &)> sampleReadResult;
+    std::function<void()> sampleLibraryCompletionFault;
+    unsigned sampleLibraryCompletions=0;
+    void finishSampleLibraryOperation(const std::string &,const Json &)override {
+        ++sampleLibraryCompletions;if(auto fault=std::exchange(sampleLibraryCompletionFault,{}))fault();
+    }
+    std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
+    std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments)override {
+        if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
+        return sampleImportChooser(instruments);
+    }
+    std::function<std::optional<std::filesystem::path>(bool)> pluginPresetChooser;
+    std::function<void()> pluginPresetCompletionFault;
+    unsigned pluginPresetWrites=0;
+    std::optional<std::filesystem::path> choosePluginPresetFile(bool save)override {
+        if(!pluginPresetChooser)throw std::runtime_error("Fixture requires an owned preset chooser");
+        return pluginPresetChooser(save);
+    }
+    int nativeCommandChoice=IDNO;std::function<void()> duringCommandAcknowledgement;
+    bool failSaveBeforeCleanup=false;unsigned saveCleanupFailures=0;
+    int chooseNativeCommandAcknowledgement(const Json &)override{if(auto action=std::exchange(duringCommandAcknowledgement,{}))action();return nativeCommandChoice;}
+    int departureChoice=IDCANCEL;
+    bool failDepartureStop=false,failDepartureRefresh=false;
+    std::function<void()> beforeDepartureAdmission,duringDepartureAdmission;
+    int chooseNativeDraftDeparture(const Tracker::DocumentDepartureSnapshot &,Tracker::DocumentDeparture::Status)override{return departureChoice;}
+    void admit(const std::string &document,const std::string &revision)override {
+        if(auto action=std::exchange(beforeDepartureAdmission,{}))action();
+        Application::admit(document,revision);
+        try{if(auto action=std::exchange(duringDepartureAdmission,{}))action();}catch(...){Application::finish(false);throw;}
+    }
+    void stop()override {if(failDepartureStop&&departureInput)throw std::runtime_error("Owned departure Stop refusal");Application::stop();}
+    void refreshAdoptedDocument()override {if(failDepartureRefresh)throw std::runtime_error("Owned post-adoption refresh failure");Application::refreshAdoptedDocument();}
 
     explicit RestoreApplication(const std::filesystem::path &folder)
         :Application({},true,folder/L"envelope-catalogue.json",folder/L"plugin-library.json"){}
+    void finishDocumentOperation(const std::string &method,const Json &result)override {
+        if(method=="document.save"&&failSaveBeforeCleanup){refreshDocument();++saveCleanupFailures;throw std::runtime_error("Owned failure before recovery cleanup scheduling");}
+        Application::finishDocumentOperation(method,result);
+        if(method=="plugin.preset.save"||method=="plugin.preset.load") {
+            ++pluginPresetWrites;if(auto fault=std::exchange(pluginPresetCompletionFault,{}))fault();
+        }
+        if(sampleMutationCompletion)sampleMutationCompletion(method);
+        if(auto fault=std::exchange(completionFault,{}))fault();
+    }
     Json documentOperation(const std::string &method,const Json &params)override {
         if(method=="sample.recording.get"&&sampleGuardState) {
             // Only the device-backed sample read is substituted. The aggregate
@@ -81,7 +125,7 @@ struct RestoreApplication final:Application {
             if(sampleGuardFails)throw ScreamSeq::Api::ApiError(-32003,"Owned sample-state read failure");
             return result;
         }
-        ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);return result;
+        ordinaryReads.push_back(method);auto result=Application::documentOperation(method,params);if(pumpOrdinaryReads)pumpInputAfterRead(method);if(sampleReadResult)sampleReadResult(method,result);return result;
     }
     Json workspacePreparationRead(const std::string &method,const Json &params)override {
         preparationReads.push_back(method);preparationRequests.emplace_back(method,params);if(beforeRead)beforeRead(method);
@@ -944,6 +988,22 @@ void provenanceNavigationUsesCapturedTargets() {
 }
 }
 
+static void modulationCatalogueReadRetainsNewerDraft() {
+    withRestoreFixture([](RestoreApplication &app) {
+        addRestoreGain(app);app.command(graphCommand);app.command(graphNew);app.command(graphAddEffect);
+        const auto plugin=app.graphNode;const auto before=songState(app),definition=app.graphDraft;
+        const auto baseline=app.graphInitialModulation(plugin,1);
+        restoreCheck(baseline.base==.8&&!baseline.quantized,"Graph catalogue did not retain the normalized manual Gain baseline");
+        app.targetRead="graph.plugin.get";app.pumpOrdinaryReads=true;
+        app.postedInput=[&]{SetWindowTextW(app.controls.at(graphMinimum),L"-.125");};
+        const auto error=restoreRejected([&]{app.graphInitialModulation(plugin,1);});
+        restoreCheck(app.dispatchedInput==1&&error.find("draft changed")!=std::string::npos,"Catalogue completion accepted an older draft generation");
+        restoreCheck(app.graphFieldDirty&&restoreText(app.controls.at(graphMinimum))==L"-.125"&&app.graphDraft==definition,
+            "Catalogue completion overwrote newer raw text or the captured graph");
+        restoreCheck(songState(app)==before,"Catalogue read changed song/history");
+    });
+}
+
 static void retainedTakesProtectLeavingDocument() {
     using Json=RestoreJson;
     withRestoreFixture([](RestoreApplication &app) {
@@ -981,6 +1041,63 @@ static void retainedTakesProtectLeavingDocument() {
     });
 }
 
+#include "DocumentDraftCensusTests.inc"
+#include "DocumentDepartureApplicationTests.inc"
+#include "PluginLibraryApplicationTests.inc"
+#include "SampleBrowserApplicationTests.inc"
+#include "SampleLibraryApplicationTests.inc"
+#include "NativeReceiptApplicationTests.inc"
+#include "PluginPresetApplicationTests.inc"
+#include "InstrumentCreationApplicationTests.inc"
+#include "SampleMutationApplicationTests.inc"
+#include "SampleReadbackApplicationTests.inc"
+#include "BankClosureApplicationTests.inc"
+#include "NativeCommandApplicationTests.inc"
+#include "UnknownAssetApplicationTests.inc"
+#include "ParityFixtureApplicationTests.inc"
+
+void nativeCompletionRetainsOutcome() {
+    using Json=RestoreJson;
+    withRestoreFixture([](RestoreApplication &app) {
+        const auto prior=app.view->session.revision;
+        const auto before=app.view->cell(0,0,0);
+        const auto note=before.note==61?62:61;
+        app.completionFault=[]{throw std::runtime_error("Injected native completion failure");};
+        bool failed=false;
+        try {app.documentOperation("pattern.apply",{{"expectedRevision",prior},{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",note}}})}});}
+        catch(const ScreamSeq::Api::ApiError &error) {
+            failed=error.code==-32003&&error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown;
+            restoreCheck(error.outcome->revision.empty(),"Native completion must not advertise pre-write revision");
+            restoreCheck(error.completed&&error.completed->method=="pattern.apply"&&error.completed->document==app.view->session.documentId&&error.completed->revision==app.view->session.revision,
+                "Native completion failed to retain its exact worker result identity");
+        }
+        restoreCheck(failed&&app.view->session.revision!=prior&&app.view->cell(0,0,0).note==note,"Native completion misreported or reverted an accepted worker edit");
+        const auto committed=app.view->session.revision;
+        const auto saved=app.snapshot();
+        restoreCheck(saved.revision==committed&&app.view->session.revision==committed,"Readback changed committed document");
+        app.documentOperation("history.undo",{{"expectedRevision",committed},{"domain","document"}});
+        restoreCheck(app.view->cell(0,0,0)==before,"Native completion inserted another history edit or lost original cell");
+        // A nested callback's refusal cannot prove the returned outer operation
+        // was rejected, nor can it supply the outer operation's revision.
+        const Tracker::WriteOutcome typed{Tracker::CommitOutcome::NotCommitted,"other-document","other-revision"};
+        const auto falseReceipt=std::make_shared<const ScreamSeq::Api::CompletedCall>(ScreamSeq::Api::CompletedCall{
+            "synchronizeView",app.view->session.documentId,app.view->session.revision,{{"nestedWrongResult",true}}});
+        app.completionFault=[&]{throw ScreamSeq::Api::ApiError(-32003,"Typed completion",typed,falseReceipt);};
+        failed=false;
+        try {app.documentOperation("synchronizeView",Json::object());}
+        catch(const ScreamSeq::Api::ApiError &error) {
+            failed=error.outcome&&error.outcome->state==Tracker::CommitOutcome::Unknown&&error.outcome->document.empty()&&error.outcome->revision.empty();
+            restoreCheck(error.completed&&error.completed!=falseReceipt&&error.completed->method=="synchronizeView"&&!error.completed->result.contains("nestedWrongResult"),
+                "Matching nested callback receipt replaced the original result");
+        }
+        restoreCheck(failed,"Nested completion refusal falsified the outer operation's outcome");
+        bool rejected=false;
+        try {app.documentOperation("pattern.apply",{{"expectedRevision","stale"},{"cells",Json::array()}});}
+        catch(const ScreamSeq::Api::ApiError &error) {rejected=error.code==-32001&&!error.outcome;}
+        restoreCheck(rejected,"Precommit stale refusal acquired a false completion outcome");
+    });
+}
+
 int wmain(int argc,wchar_t **argv) {
     try {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -988,7 +1105,47 @@ int wmain(int argc,wchar_t **argv) {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
             struct Com {~Com(){CoUninitialize();}} com;
             INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_LISTVIEW_CLASSES};restoreCheck(InitCommonControlsEx(&controls)!=FALSE,"Initialize restore native lists");
+            std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
+            wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
+            if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"parity-fixture") {
+                    applicationParityFixtureRecovery();std::cout<<"PASS original F04 and three Parity WAVs: retained results, no replay, exact PCM/identity history and save/reopen\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"asset-outcomes") {
+                    applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
+                    applicationNativeCommandRecovery();std::cout<<"PASS Main command recovery: sample, MIDI, saved file and recovery cleanup without replay\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
+                    applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"sample-reads") {
+                    applicationSampleReadbackRecovery();std::cout<<"PASS sample readback: staged target, raw drafts, waveform and navigation\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
+                    applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: receipts, staged refresh, domain readback and no replay\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"receipts") {
+                    nativeCompletionRetainsOutcome();applicationLostRenderReceipt();directRenderCompletionCensus();applicationLibraryCompletionRetention();applicationSampleBrowserCompletionRetention();applicationDirectSampleImportRetention();applicationSampleLibraryRecovery();applicationPluginPresetRecovery();applicationInstrumentCreationRecovery();
+                    std::cout<<"PASS Native receipts: worker identity, lost callback, retained render and one Undo\n";return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"departure") {
+                    applicationDepartureRefusalAndAdoption();applicationDepartureRefreshFailure();applicationDepartureSessionCancel();applicationDepartureRecoveryBrowser();
+                    std::cout<<"PASS Application departure: native/API consent, stale input, Stop rollback, retirement, refresh retry and canceled shutdown\n";return;
+                }
+                restoreCheck(length<std::size(group)&&std::wstring_view(group)==L"drafts","Unknown workspace test group");
+                nativeDraftCensusRetainsRawOwners();std::cout<<"PASS draft census: real native raw fields, hidden/reparented owners and nested formula lifetimes\n";
+                mainAndTimingDraftCensus();std::cout<<"PASS draft census: Main nudge review and captured timing sequence\n";
+                importAndRecorderDraftCensus();std::cout<<"PASS draft census: recorder setup and actual Application hidden path repair ownership\n";
+                mainOwnersRetireAfterAdmission();std::cout<<"PASS Main retirement: seven owners, rollback, raw text, generations and fresh initialization\n";
+                return;
+            }
+            // Recovery/receipt scenarios have dedicated CTest groups above.
+            // Keep this default process limited to the original workspace cases;
+            // each private child retains the same bounded lifetime.
             retainedTakesProtectLeavingDocument();std::cout<<"PASS take protection: MIDI, microphone, both, read failure and reentrant input\n";
+            modulationCatalogueReadRetainsNewerDraft();std::cout<<"PASS modulation catalogue: manual baseline and pumped raw-draft retention\n";
             firstRestoreMatchesOrdinaryOpen();std::cout<<"PASS first restore: independent Notes inspector/native target and FX binding equivalence\n";
             requiredReadFailuresAreAtomic();std::cout<<"PASS required reads: errors and malformed Notes/Graph/Mixer are atomic\n";
             secondHiddenEditorFailureIsAtomic();std::cout<<"PASS all-before-any: second hidden editor failure and normal adopted callbacks\n";

@@ -223,6 +223,9 @@ public:
 	int addPattern(int rows, bool duplicate, int source);
 	void setOrder(int index, int pattern);
 	void editOrder(int index, int pattern, const std::string &operation);
+    // Validates before a native host stops transport. False is an exact no-op;
+    // moving identical pattern occurrences still changes their stable order IDs.
+    bool orderEditChanges(int index, int pattern, const std::string &operation) const;
 	void removeOrder(int index);
 	void processSample(int sample, const std::string &operation, uint32_t first, uint32_t last);
 	SampleProcessResult processSample(int sample, const SampleProcessOptions &options, bool dryRun = false);

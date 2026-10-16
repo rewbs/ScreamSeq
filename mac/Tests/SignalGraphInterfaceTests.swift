@@ -1303,12 +1303,14 @@ extension InterfaceTests {
       ["id":17,"name":"Mode","min":0.0,"max":3.0,"value":1.0,"writable":true,"canSlide":false,"step":1.0],
       ["id":9,"name":"Meter","min":0.0,"max":1.0,"value":0.0,"writable":false,"canSlide":true]]
     let song:[String:Any]=["songSources":[["id":"n20","kind":"lfo","name":"LFO","x":80.0,"y":400.0]],"songModulation":[],"library":[],"plugins":[["id":"rack-a","name":"Gain","isInstrument":false]],"mixer":["buses":[["id":"n1","kind":"track","name":"Track 1","output":"n2","inserts":["rack-a"]],["id":"n2","kind":"master","name":"Master","inserts":[]]]]]
-    var writes=[(String,[String:Any])]()
+    var writes=[(String,[String:Any])](),trimReads=[[String:Any]]()
     editor.onRequest={method,p,reply in
       if method=="plugin.parameters.get"{reply(["result":["revision":"drop:1","data":parameters]])}
+      else if method=="graph.trim.get"{trimReads.append(p);reply(["result":["revision":"drop:1","data":["ports":[],"sources":[]]]])}
       else{writes.append((method,p));reply(["error":["message":"captured"]])}
     }
     editor.update(song);editor.selectedID="plugin:rack-a";editor.canvas.selected=editor.selectedID;editor.inspect()
+    try require(writes.isEmpty,"Inspecting the parameter-drop target only reads its parameter and trim catalogs")
     let continuous=editor.rackControls.parameterDropTarget(row:0)!,stepped=editor.rackControls.parameterDropTarget(row:1)!,readonly=editor.rackControls.parameterDropTarget(row:2)!
     let surface=GraphRackControls(frame:NSRect(x:0,y:0,width:320,height:420))
     surface.onRequest={_,_,reply in reply(["result":["revision":"surface:1","data":parameters]])};surface.context(["id":"visible-processor"])
@@ -1320,7 +1322,10 @@ extension InterfaceTests {
     surface.isHidden=true;try require(surface.parameterDropTarget(atWindowPoint:rowPoint)==nil,"Hidden parameter surfaces cannot receive a drop")
     try require(editor.beginParameterDrop(source:"source:n20"),"A source drag captures the currently visible rack parameter surface")
     editor.completeParameterDrop(continuous)
-    try require(writes.count==1 && writes[0].0=="graph.song.modulation.set" && writes[0].1["source"] as? String=="n20" && writes[0].1["plugin"] as? String=="rack-a" && writes[0].1["parameter"] as? UInt32==777 && writes[0].1["maximum"] as? Int==0,"A host control drop creates one zero-depth connection using stable source, processor and parameter identities")
+    try require(trimReads.count==1 && trimReads[0]["node"] as? String=="plugin:rack-a" && trimReads[0]["graph"] is NSNull,"Inspecting the host drop target reads exactly its song trim context: \(trimReads)")
+    try require(writes.count==1,"A host control drop submits exactly one mutation, including after rejection")
+    try require(writes[0].0=="graph.song.modulation.set" && writes[0].1["source"] as? String=="n20" && writes[0].1["plugin"] as? String=="rack-a" && writes[0].1["parameter"] as? UInt32==777,"A host control drop uses stable source, processor and parameter identities")
+    try require(writes[0].1["minimum"] as? Int==0 && writes[0].1["maximum"] as? Int==0 && writes[0].1["quantized"] as? Bool==false,"A continuous host control drop starts at zero depth without discrete quantization")
     writes=[];try require(editor.beginParameterDrop(source:"source:n20"),"Source drag can repeat after a failed transaction")
     editor.completeParameterDrop(readonly);try require(writes.isEmpty && editor.status.stringValue.contains("read-only"),"Dropping onto a read-only parameter is explained without writing")
     _=editor.beginParameterDrop(source:"source:n20");editor.completeParameterDrop(stepped)
@@ -1329,11 +1334,13 @@ extension InterfaceTests {
     writes=[];_=editor.beginParameterDrop(source:"source:n20");editor.rackControls.context(["id":"other"]);editor.completeParameterDrop(continuous)
     try require(writes.isEmpty && editor.status.stringValue.contains("processor changed"),"A parameter surface retargeted during a drag cannot receive the old connection")
     let recipe=SignalGraphEditor(frame:.zero);let definition:[String:Any]=["id":"n100","number":1,"nodes":[["id":"n1","kind":"input"],["id":"n2","kind":"plugin","name":"Gain"],["id":"n3","kind":"output"],["id":"n4","kind":"lfo"]],"audio":[["source":"n1","target":"n2"],["source":"n2","target":"n3"]],"modulation":[]]
-    recipe.onRequest={method,p,reply in if method=="graph.plugin.get"{reply(["result":["revision":"recipe:1","data":["parameters":parameters,"buses":[]]]])}else{writes.append((method,p));reply(["error":["message":"captured"]])}}
+    trimReads=[]
+    recipe.onRequest={method,p,reply in if method=="graph.plugin.get"{reply(["result":["revision":"recipe:1","data":["parameters":parameters,"buses":[]]]])}else if method=="graph.trim.get"{trimReads.append(p);reply(["result":["revision":"recipe:1","data":["ports":[],"sources":[]]]])}else{writes.append((method,p));reply(["error":["message":"captured"]])}}
     recipe.graphID="n100";recipe.update(["library":[definition]]);recipe.selectedID="n2";recipe.canvas.selected="n2";recipe.inspect()
     let recipeTarget=recipe.pluginControls.parametersView.parameterDropTarget(row:0)!
     try require(recipe.beginParameterDrop(source:"n4"),"Reusable modulation source captures the recipe's stable parameter surface")
     recipe.completeParameterDrop(recipeTarget)
+    try require(trimReads.count==1 && trimReads[0]["node"] as? String=="n2" && trimReads[0]["graph"] as? String=="n100","Inspecting the recipe drop target reads exactly its captured trim context: \(trimReads)")
     let connections=(writes.last?.1["definition"] as? [String:Any])?["modulation"] as? [[String:Any]] ?? []
     try require(writes.last?.0=="graph.update" && connections.count==1 && connections[0]["source"] as? String=="n4" && connections[0]["target"] as? String=="n2" && connections[0]["maximum"] as? Double==0 && connections[0]["base"] as? Double==0.4,"Recipe drops preserve the manual baseline and use one zero-depth definition edit")
     writes=[];_=recipe.beginParameterDrop(source:"n4");recipe.completeParameterDrop(recipe.pluginControls.parametersView.parameterDropTarget(row:1))
@@ -1402,8 +1409,12 @@ extension InterfaceTests {
     }
     editor.load();editor.rewire(index,source:"n4",target:"plugin:compressor",out:0,input:1,modulation:false)
     pendingRead?(["result":["revision":"routing:2","data":connected]])
-    RunLoop.current.run(until:Date().addingTimeInterval(0.12))
-    try require(writes.count==1 && writes[0]["expectedRevision"] as? String=="routing:1" && (writes[0]["sources"] as? [[String:Any]])?.first?["source"] as? String=="n4" && (writes[0]["sources"] as? [[String:Any]])?.first?["gainDB"] as? Double == -3,"A handle release during refresh retains its revision, chosen source and existing sidechain gain")
+    pumpMainRunLoop(0.12)
+    try require(writes.count==1,"A handle release during refresh submits exactly once: \(writes); status: \(editor.status.stringValue), loading: \(editor.loading)")
+    try require(writes[0]["expectedRevision"] as? String=="routing:1","A queued handle release keeps its captured revision: \(writes[0])")
+    let capturedSources=writes[0]["sources"] as? [[String:Any]]
+    try require(capturedSources?.first?["source"] as? String=="n4","A queued handle release keeps its chosen source: \(writes[0])")
+    try require(capturedSources?.first?["gainDB"] as? Double == -3,"A queued handle release keeps the existing sidechain gain: \(writes[0])")
     try require(editor.status.stringValue=="Captured revision is stale","A queued rewire conflict stays visible instead of silently rebasing the gesture")
 
     editor.update(connected);editor.canvas.selectedEdge=editor.songConnections.firstIndex{$0["kind"] as? String=="plugin-input"}!

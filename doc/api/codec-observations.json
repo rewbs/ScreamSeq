@@ -1,0 +1,564 @@
+{
+  "format": "screamseq-codec-observations-v1",
+  "policy": "Exact observed classification ratchet. Successful recovery may be lossy; matching this baseline is not cross-platform equality or a release waiver.",
+  "phase": "P6a",
+  "sourceCommit": "5358a8ebcaafae88c071cd7ed8fd27c227c747db",
+  "originalFixtureSHA256": "ec36560ceecc0baaf4e127217d1637cd5e387fbd9d4c42163e99b467e84fe813",
+  "windows": [
+    {
+      "id": "unknown-root",
+      "question": "Root extension preservation versus lossy warning",
+      "inputSHA256": "2531185b8d10d8450a94e3f79a53a418c348a727664d0f007381dff5d5445fba",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "f8ef15b8972c468ca12d19ba44f6d40e989efcc98f0c43e41ad05b1c4dc97f83",
+      "differenceCount": 0
+    },
+    {
+      "id": "unknown-native",
+      "question": "Native extension preservation and source protection",
+      "inputSHA256": "ed942aa38c0aa98f47cecb56d984b599bddf292a785dba6afa979859c55bcf22",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Unrecognized native metadata properties were retained without interpretation"
+      ],
+      "savedTypedSHA256": "9242931779a5c0bc8796852928dd19ddb4c78e665f5ae9aebd5daeda0909e94a",
+      "differenceCount": 0
+    },
+    {
+      "id": "unknown-track",
+      "question": "Stable entity extension preservation",
+      "inputSHA256": "696bf70c0910442a15b1a2e9f1dadbe97f58b4c207c8176537ecbae0e629ad8b",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Unrecognized native metadata properties were retained without interpretation"
+      ],
+      "savedTypedSHA256": "a71c0d293ac8933114a694ce76c19b6db2d84b065727efa4d7d6371a63ece0d6",
+      "differenceCount": 0
+    },
+    {
+      "id": "unknown-node",
+      "question": "Identity-array extension preservation at a graph processor",
+      "inputSHA256": "017a4a364a5c630befb6c1f7aaa7d3daa1cb504c66d1392090344cfefb6cd365",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Unrecognized native metadata properties were retained without interpretation"
+      ],
+      "savedTypedSHA256": "d553bf5187cb7dcc915ef544ee8c6f5cddee5e8bd00e35711566017f44a7365c",
+      "differenceCount": 0
+    },
+    {
+      "id": "reordered-tracks",
+      "question": "Stable indexed identities versus array ordering",
+      "inputSHA256": "834f4c97a480ce63ec45146b736828a2556352141a342be8f39eae5fcfcb3d62",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 30
+    },
+    {
+      "id": "duplicate-track-id",
+      "question": "Invalid identity recovery and explicit loss/source protection",
+      "inputSHA256": "3b23ea6c0e13f521269ff9a12433db11957dba6cff2ac73807e5219dcea41bdb",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Invalid or duplicate native identity",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "2e64fb2d9af9ae6c6fc66d20c518a6aa74281ad57c38d78b179f692f1311977b",
+      "differenceCount": 68
+    },
+    {
+      "id": "deleted-track-record",
+      "question": "Incomplete identity layer recovery",
+      "inputSHA256": "5b8896cc003f5edca1077e9ba1517f99a7957665fa61aa7c6bb875a72d50a243",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Native metadata does not match the song structure",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "8a623f623ade2769e61fec132e53f626dd64646bca8e75c35a5fa149af4271d7",
+      "differenceCount": 66
+    },
+    {
+      "id": "future-container",
+      "question": "Future outer version best-effort recovery classification",
+      "inputSHA256": "63f5647331b630584ef9118611ff914ce756266f06d23fffa331e77be08daa63",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Unsupported project container version; recovered understood fields"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "future-native",
+      "question": "Future metadata version recovery classification",
+      "inputSHA256": "397506946573ad9d7807537228346867a173124ccdf61acc4cff6251e64a988d",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Unsupported native metadata version; recovered understood fields"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "precise-zero-effect-parameter",
+      "question": "F25: optional parameter preservation when effect is zero; API reachability is checked separately",
+      "inputSHA256": "1516c4ea5de5cdd2f269775aed50081ec4d59bdbe6a30c0c271967797101d24d",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped incompatible metadata entry /preciseNotes/0"
+      ],
+      "savedTypedSHA256": "e3931e9c56cf230e7cb6003db324a9f52630b159d9c445409c6d361cb63652c1",
+      "differenceCount": 26
+    },
+    {
+      "id": "missing-non-nudge-duration",
+      "question": "F25: absent duration default versus record recovery",
+      "inputSHA256": "a4e6cd14d67ab83a83304eb017ff945ef534874712f43fc0327dee789fd86427",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped incompatible metadata entry /performance/commands/0"
+      ],
+      "savedTypedSHA256": "844682beb34c8b59eb9d611aba6bee74cc7a6f5e6ecdcc9299f990859565bb7a",
+      "differenceCount": 63
+    },
+    {
+      "id": "missing-scratch-library",
+      "question": "Missing optional library with retained SK references; do not assume lossless default",
+      "inputSHA256": "bb43d14678253b68ac6507117bfd16b7efeb6620584cbde093ad704ced8d18c8",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped incompatible metadata entry /performance/commands/3",
+        "Skipped incompatible metadata entry /performance/commands/7"
+      ],
+      "savedTypedSHA256": "d1c7769b4733587ee4a27cdffd7ab0fda23b009a3a63275a3aa288b558af3c40",
+      "differenceCount": 36
+    },
+    {
+      "id": "integer-real-next-id",
+      "question": "Integral real versus integer metadata validation",
+      "inputSHA256": "8f2330d96f7bac7dc2835528e7013ba947e3cd07df6cef12262155ac72621624",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "1000f91158ca87853cb9c83636a1217b56bba1d81915dd2c0600206ca5701fea",
+      "differenceCount": 68
+    },
+    {
+      "id": "boolean-next-id",
+      "question": "Boolean must not silently become a native allocator ID",
+      "inputSHA256": "75e06256a0796612334638200c201352064c3b2bd2ad785425bbf1139b92afef",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "e532ecf2fda376e8c7ec41541b62aa2f2634790b7209ea8e51b8913d3af2bab8",
+      "differenceCount": 68
+    },
+    {
+      "id": "fractional-next-id",
+      "question": "Fractional identity recovery",
+      "inputSHA256": "6698804f17b1bc7e14d9d9fde2a5ba3e156e6a2ceafe3099980bdd38ad28cc20",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "f47d20fbab8b13c6637731e51f92fbea43fa55f86e0ff29e52fb8537d39d6a14",
+      "differenceCount": 68
+    },
+    {
+      "id": "unsafe-next-id",
+      "question": "Unsafe integer identity must not silently round",
+      "inputSHA256": "bf41d96060d137a654cad9c6a7b66eee0f2d63cc18cf69e6d91fcf17bff4b6ec",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities do not match the embedded song; native sections kept inactive: Metadata integer out of range",
+        "Skipped native section automation because its identities could not be recovered",
+        "Skipped native section mixer because its identities could not be recovered",
+        "Skipped native section noteTracks because its identities could not be recovered",
+        "Skipped native section columnMutes because its identities could not be recovered",
+        "Skipped native section performance because its identities could not be recovered",
+        "Skipped native section preciseNotes because its identities could not be recovered",
+        "Skipped native section signalGraph because its identities could not be recovered",
+        "Skipped native section envelopeBank because its identities could not be recovered",
+        "Skipped native section scratchGestures because its identities could not be recovered"
+      ],
+      "savedTypedSHA256": "a846673799a442af0ad475cb10f98f310e758415e20ea7bc6a779867e62141f1",
+      "differenceCount": 68
+    },
+    {
+      "id": "supplementary-unicode",
+      "question": "Exact supplementary-plane and decomposed Unicode preservation",
+      "inputSHA256": "deb82258bae6d5d448f578697c6697fad7d66bdec9ef716b39a41a1acd18543c",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "7bae99e30fa18c199583b58e46947cc30e839e5fe125e1507946040a922d3dc9",
+      "differenceCount": 0
+    },
+    {
+      "id": "corrupt-required-module",
+      "question": "Required core failure must preserve the previously loaded document",
+      "inputSHA256": "e00aaf3a7884274e55de2c2df820d52e36321e7573ad9b7202fb3d1335971e64",
+      "accepted": false,
+      "rejectionCode": -32003
+    },
+    {
+      "id": "missing-au",
+      "question": "Unavailable provider must retain stable identity, routes and exact opaque state; audio is not started",
+      "inputSHA256": "368bb0285a07bda182bdf63d31a42d04848d0f3f07495b361fdb6d2cac8f9e6b",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "c20959a9b0983ad6d867148571c699e4213bd0255264f2f015dd98b73fc48381",
+      "differenceCount": 0
+    },
+    {
+      "id": "missing-vst3",
+      "question": "Unavailable provider must retain stable identity, routes and exact opaque state; audio is not started",
+      "inputSHA256": "3e0b2421fb2e6ed12f5cdd82cbf72df2f9992b991b7e0509216a1629ce0f1d4e",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "340f8395420c824cf1c343b2f3d0fcb37bd622be30db4692d068275974b83159",
+      "differenceCount": 0
+    },
+    {
+      "id": "invalid-ascii-string",
+      "question": "Invalid property-list string encoding must not corrupt the current document",
+      "inputSHA256": "f72075c1210fa5b576f4f3493061acbcd5823a1b2a3207299587f79c0e93f612",
+      "accepted": false,
+      "rejectionCode": -32003
+    }
+  ],
+  "macos": [
+    {
+      "id": "unknown-root",
+      "question": "Root extension preservation versus lossy warning",
+      "inputSHA256": "2531185b8d10d8450a94e3f79a53a418c348a727664d0f007381dff5d5445fba",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Ignored unsupported project field: parityUnknown"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "unknown-native",
+      "question": "Native extension preservation and source protection",
+      "inputSHA256": "ed942aa38c0aa98f47cecb56d984b599bddf292a785dba6afa979859c55bcf22",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Ignored unsupported metadata field: parityUnknown"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "unknown-track",
+      "question": "Stable entity extension preservation",
+      "inputSHA256": "696bf70c0910442a15b1a2e9f1dadbe97f58b4c207c8176537ecbae0e629ad8b",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Ignored unsupported metadata field: parityUnknown"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "unknown-node",
+      "question": "Identity-array extension preservation at a graph processor",
+      "inputSHA256": "017a4a364a5c630befb6c1f7aaa7d3daa1cb504c66d1392090344cfefb6cd365",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Ignored unsupported metadata field: parityUnknown"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "reordered-tracks",
+      "question": "Stable indexed identities versus array ordering",
+      "inputSHA256": "834f4c97a480ce63ec45146b736828a2556352141a342be8f39eae5fcfcb3d62",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 30
+    },
+    {
+      "id": "duplicate-track-id",
+      "question": "Invalid identity recovery and explicit loss/source protection",
+      "inputSHA256": "3b23ea6c0e13f521269ff9a12433db11957dba6cff2ac73807e5219dcea41bdb",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities could not be recovered (Invalid or duplicate native song identity); recovered the embedded song without its optional native metadata."
+      ],
+      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
+      "differenceCount": 82
+    },
+    {
+      "id": "deleted-track-record",
+      "question": "Incomplete identity layer recovery",
+      "inputSHA256": "5b8896cc003f5edca1077e9ba1517f99a7957665fa61aa7c6bb875a72d50a243",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities could not be recovered (Native metadata does not match the song structure); recovered the embedded song without its optional native metadata."
+      ],
+      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
+      "differenceCount": 80
+    },
+    {
+      "id": "future-container",
+      "question": "Future outer version best-effort recovery classification",
+      "inputSHA256": "63f5647331b630584ef9118611ff914ce756266f06d23fffa331e77be08daa63",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Read known fields from an incompatible project container version (current: 6)."
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "future-native",
+      "question": "Future metadata version recovery classification",
+      "inputSHA256": "397506946573ad9d7807537228346867a173124ccdf61acc4cff6251e64a988d",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Read known fields from incompatible native metadata version 18 (current: 17)."
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "precise-zero-effect-parameter",
+      "question": "F25: optional parameter preservation when effect is zero; API reachability is checked separately",
+      "inputSHA256": "1516c4ea5de5cdd2f269775aed50081ec4d59bdbe6a30c0c271967797101d24d",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped preciseNotes[0]: Invalid or duplicate precise note event"
+      ],
+      "savedTypedSHA256": "f211839d6d5715bea733ca2fdaeec0654d788d9411d3826277adca8f24fc0d19",
+      "differenceCount": 25
+    },
+    {
+      "id": "missing-non-nudge-duration",
+      "question": "F25: absent duration default versus record recovery",
+      "inputSHA256": "a4e6cd14d67ab83a83304eb017ff945ef534874712f43fc0327dee789fd86427",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped performance.commands[0]: Invalid or duplicate FX-column command"
+      ],
+      "savedTypedSHA256": "a430c21439cf6131d7130bcbe954c535929efeafbe4a538fc588d3369fd9d67a",
+      "differenceCount": 62
+    },
+    {
+      "id": "missing-scratch-library",
+      "question": "Missing optional library with retained SK references; do not assume lossless default",
+      "inputSHA256": "bb43d14678253b68ac6507117bfd16b7efeb6620584cbde093ad704ced8d18c8",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Skipped performance.commands[3]: Scratch command references a missing gesture; remove or change its uses first",
+        "Skipped performance.commands[7]: Scratch command references a missing gesture; remove or change its uses first"
+      ],
+      "savedTypedSHA256": "1fea536d2f4801d30c57407f3a3dfb82b1824375854b34069d6df828ac7acc4e",
+      "differenceCount": 35
+    },
+    {
+      "id": "integer-real-next-id",
+      "question": "Integral real versus integer metadata validation",
+      "inputSHA256": "8f2330d96f7bac7dc2835528e7013ba947e3cd07df6cef12262155ac72621624",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
+    },
+    {
+      "id": "boolean-next-id",
+      "question": "Boolean must not silently become a native allocator ID",
+      "inputSHA256": "75e06256a0796612334638200c201352064c3b2bd2ad785425bbf1139b92afef",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities could not be recovered (Expected a number, not a boolean); recovered the embedded song without its optional native metadata."
+      ],
+      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
+      "differenceCount": 82
+    },
+    {
+      "id": "fractional-next-id",
+      "question": "Fractional identity recovery",
+      "inputSHA256": "6698804f17b1bc7e14d9d9fde2a5ba3e156e6a2ceafe3099980bdd38ad28cc20",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities could not be recovered (Expected an integer); recovered the embedded song without its optional native metadata."
+      ],
+      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
+      "differenceCount": 82
+    },
+    {
+      "id": "unsafe-next-id",
+      "question": "Unsafe integer identity must not silently round",
+      "inputSHA256": "bf41d96060d137a654cad9c6a7b66eee0f2d63cc18cf69e6d91fcf17bff4b6ec",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Native identities could not be recovered (Number outside its allowed range); recovered the embedded song without its optional native metadata."
+      ],
+      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
+      "differenceCount": 82
+    },
+    {
+      "id": "supplementary-unicode",
+      "question": "Exact supplementary-plane and decomposed Unicode preservation",
+      "inputSHA256": "deb82258bae6d5d448f578697c6697fad7d66bdec9ef716b39a41a1acd18543c",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "7bae99e30fa18c199583b58e46947cc30e839e5fe125e1507946040a922d3dc9",
+      "differenceCount": 0
+    },
+    {
+      "id": "corrupt-required-module",
+      "question": "Required core failure must preserve the previously loaded document",
+      "inputSHA256": "e00aaf3a7884274e55de2c2df820d52e36321e7573ad9b7202fb3d1335971e64",
+      "accepted": false,
+      "rejectionCode": -32003
+    },
+    {
+      "id": "missing-au",
+      "question": "Unavailable provider must retain stable identity, routes and exact opaque state; audio is not started",
+      "inputSHA256": "368bb0285a07bda182bdf63d31a42d04848d0f3f07495b361fdb6d2cac8f9e6b",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "c20959a9b0983ad6d867148571c699e4213bd0255264f2f015dd98b73fc48381",
+      "differenceCount": 0
+    },
+    {
+      "id": "missing-vst3",
+      "question": "Unavailable provider must retain stable identity, routes and exact opaque state; audio is not started",
+      "inputSHA256": "3e0b2421fb2e6ed12f5cdd82cbf72df2f9992b991b7e0509216a1629ce0f1d4e",
+      "accepted": true,
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "340f8395420c824cf1c343b2f3d0fcb37bd622be30db4692d068275974b83159",
+      "differenceCount": 0
+    },
+    {
+      "id": "invalid-ascii-string",
+      "question": "Invalid property-list string encoding must not corrupt the current document",
+      "inputSHA256": "f72075c1210fa5b576f4f3493061acbcd5823a1b2a3207299587f79c0e93f612",
+      "accepted": true,
+      "requiresSaveAs": true,
+      "loadWarnings": [
+        "Ignored unsupported project field: parityInvalidEncoding"
+      ],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": null
+    }
+  ],
+  "sourceFindings": [
+    {
+      "id": "F25-precise-zero-effect",
+      "finding": "Current shared validation requires parameter zero when effect is CMD_NONE. NativeSong::validate calls NativeNoteEffectSupported; this input is invalid in the current model, and Windows recovers by dropping the incompatible event with a warning/source protection. A different encoder condition alone is not a reachable valid-edit loss defect.",
+      "sources": [
+        "editor/NativeSong.cpp",
+        "soundlib/NativeNoteEffects.h"
+      ]
+    },
+    {
+      "id": "F25-missing-duration",
+      "finding": "Windows recovers the incomplete non-nudge command by dropping the entry, with warning/source protection. Mac defaulting behavior remains a current socket/load observation question.",
+      "sources": [
+        "windows/Project/NativeMetadataAutomation.inc",
+        "mac/Bridge/PatternPerformanceMetadata.inc"
+      ]
+    }
+  ],
+  "evidence": "bin/parity-evidence/p0c-windows-codec-01/codec/report.json",
+  "evidenceSHA256": "4e05ce6d708f330eeb95eb1acf137727763534b57c2c3243e728de7337038f88",
+  "macosEvidence": {
+    "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
+    "executableSHA256": "a7cac5d20c52cb3a9e3a4ae1c0c54068f13be2c92f0cd98711b1d3943db4a9f9",
+    "run": "https://github.com/rewbs/ScreamSeq/actions/runs/37995159221",
+    "reportSHA256": "72fb4bfc9e693393473d5c68fd92426f60881ac544e8f06a7962e8e612b646ce",
+    "loadPath": "recovery.restore of exact staged bytes; same-session rejection checks and effective-source overwrite protection",
+    "preservation": "Unknown root/native/track/node extension fields are warned, protected and dropped by canonical Mac save; Windows preserves them. This is a P6 convergence gap, not a loss waiver."
+  }
+}

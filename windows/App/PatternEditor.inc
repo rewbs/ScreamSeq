@@ -87,11 +87,11 @@
         effectDraftRevision=std::move(initial.revision);effectDraftDocument=std::move(initial.document);effectChoices=std::move(initial.choices);effectBindingChoices=std::move(initial.bindings);
         visibleEffectChoices=std::move(initial.visible);effectSelected=initial.selected;effectEditorStatus=std::move(initial.status);
         const bool previous=settingEffectFields;settingEffectFields=true;struct Guard{bool &setting;bool previous;~Guard(){setting=previous;}}guard{settingEffectFields,previous};
-        SendMessageW(controls.at(effectKind),CB_RESETCONTENT,0,0);for(const auto &label:initial.choiceLabels)SendMessageW(controls.at(effectKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-        SendMessageW(controls.at(effectKind),CB_SETCURSEL,effectSelected,0);
-        SendMessageW(controls.at(effectBinding),CB_RESETCONTENT,0,0);for(const auto &label:initial.bindingLabels)SendMessageW(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-        SendMessageW(controls.at(effectBinding),CB_SETCURSEL,initial.selectedBinding,0);
-        SetWindowTextW(controls.at(effectSearch),L"");
+        ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_RESETCONTENT,0,0);for(const auto &label:initial.choiceLabels)ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_SETCURSEL,effectSelected,0);
+        ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_RESETCONTENT,0,0);for(const auto &label:initial.bindingLabels)ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_SETCURSEL,initial.selectedBinding,0);
+        ScreamSeq::NativeInputGate::text(controls.at(effectSearch),L"");
         effectDraftRowsPerBeat=initial.rowsPerBeat;effectRows=initial.rows;
         effectDraftCommand=std::move(initial.command);effectFieldsDraft=std::move(initial.descriptors);
         fillEffectFields();effectDraftDirty=false;effectDraftExists=true;++effectDraftGeneration;
@@ -123,32 +123,32 @@
         for(int id:{effectKind,effectBinding,effectUnits})combo(id);
         for(int id:{effectValue,effectOffset,effectDuration,effectRange,effectSearch})edit(id);
         for(int i=0;i<10;++i){edit(effectFieldBase+i);combo(effectChoiceBase+i);}
-        for(const auto *unit:{L"Beats",L"Rows"})SendMessageW(controls.at(effectUnits),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(unit));
-        SendMessageW(controls.at(effectUnits),CB_SETCURSEL,0,0);
+        for(const auto *unit:{L"Beats",L"Rows"})ScreamSeq::NativeInputGate::present(controls.at(effectUnits),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(unit));
+        ScreamSeq::NativeInputGate::present(controls.at(effectUnits),CB_SETCURSEL,0,0);
         for(auto [id,h]:controls)if((id==effectsCommand||isEffectControl(id))&&!h)throw std::runtime_error("Cannot create pattern FX controls");
     }
     void filterEffects() {
         if(settingEffectFields)return;
         auto query=effectField(effectSearch);std::transform(query.begin(),query.end(),query.begin(),towlower);
-        visibleEffectChoices.clear();SendMessageW(controls.at(effectKind),CB_RESETCONTENT,0,0);int selected=-1;
+        visibleEffectChoices.clear();ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_RESETCONTENT,0,0);int selected=-1;
         for(size_t i=0;i<effectChoices.size();++i) {
             auto label=wide(effectChoices[i].at("displayCode").get<std::string>()+"  "+effectChoices[i].at("name").get<std::string>());
             auto match=label+L" "+wide(effectChoices[i].value("description",std::string())+" "+effectChoices[i].value("equivalents",std::string()));std::transform(match.begin(),match.end(),match.begin(),towlower);
             if(!query.empty()&&match.find(query)==std::wstring::npos)continue;
             if(int(i)==effectSelected)selected=int(visibleEffectChoices.size());
-            visibleEffectChoices.push_back(i);SendMessageW(controls.at(effectKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+            visibleEffectChoices.push_back(i);ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
         }
-        SendMessageW(controls.at(effectKind),CB_SETCURSEL,selected,0);
+        ScreamSeq::NativeInputGate::present(controls.at(effectKind),CB_SETCURSEL,selected,0);
     }
     void fillEffectFields() {
         const bool previous=settingEffectFields;settingEffectFields=true;
         for(size_t i=0;i<effectFieldsDraft.size();++i){const auto &f=effectFieldsDraft[i];const int id=effectFieldControl(i);if(id==effectBinding)continue;
             const auto value=ScreamSeq::PatternFields::get(effectDraftCommand,f);
             if(f.at("type")=="choice"||f.at("type")=="boolean"){
-                const Json options=f.at("type")=="boolean"?Json::array({false,true}):f.at("choices");int selected=0;SendMessageW(controls.at(id),CB_RESETCONTENT,0,0);
-                for(size_t j=0;j<options.size();++j){const auto label=options[j].is_boolean()?(options[j].get<bool>()?L"On":L"Off"):wide(options[j].get<std::string>());SendMessageW(controls.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(options[j]==value)selected=int(j);}
-                SendMessageW(controls.at(id),CB_SETCURSEL,selected,0);
-            }else {const auto text=wide(ScreamSeq::PatternFields::text(effectDraftCommand,f,effectDraftRowsPerBeat,effectRows));effectRenderedText[id]=text;SetWindowTextW(controls.at(id),text.c_str());}
+                const Json options=f.at("type")=="boolean"?Json::array({false,true}):f.at("choices");int selected=0;ScreamSeq::NativeInputGate::present(controls.at(id),CB_RESETCONTENT,0,0);
+                for(size_t j=0;j<options.size();++j){const auto label=options[j].is_boolean()?(options[j].get<bool>()?L"On":L"Off"):wide(options[j].get<std::string>());ScreamSeq::NativeInputGate::present(controls.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(options[j]==value)selected=int(j);}
+                ScreamSeq::NativeInputGate::present(controls.at(id),CB_SETCURSEL,selected,0);
+            }else {const auto text=wide(ScreamSeq::PatternFields::text(effectDraftCommand,f,effectDraftRowsPerBeat,effectRows));effectRenderedText[id]=text;ScreamSeq::NativeInputGate::text(controls.at(id),text.c_str());}
         }
         settingEffectFields=previous;
     }
@@ -172,7 +172,7 @@
     void focusEffectField() {
         int target=effectFieldsDraft.empty()?effectKind:effectFieldControl(0);
         const auto fields=currentEffectFields();if(effectFieldIndex<fields.size())for(size_t i=0;i<effectFieldsDraft.size();++i)if(effectFieldsDraft[i].at("storage")==fields[effectFieldIndex].at("storage"))target=effectFieldControl(i);
-        SetFocus(controls.at(target));SendMessageW(controls.at(target),EM_SETSEL,0,-1);
+        SetFocus(controls.at(target));ScreamSeq::NativeInputGate::present(controls.at(target),EM_SETSEL,0,-1);
     }
     void openEffectEditor(const std::string &code="",bool reload=false) {
         if(code=="SK"&&view->nativePattern->scratchGestures.empty()){openScratchGestures();return;}
@@ -185,15 +185,15 @@
         effectChoices=view->commands.at("effect");for(const auto &entry:view->commands.at("native"))effectChoices.push_back(entry);
         const auto current=view->effect(patternIndex,row,channel,effectDraftColumn);const auto currentCode=current?effectText(current).first:L"..";
         effectSelected=0;for(size_t i=0;i<effectChoices.size();++i)if(wide(effectChoices[i].at("displayCode").get<std::string>())==(code.empty()?currentCode:wide(code))){effectSelected=int(i);break;}
-        settingEffectFields=true;SetWindowTextW(controls.at(effectSearch),L"");settingEffectFields=false;filterEffects();
+        settingEffectFields=true;ScreamSeq::NativeInputGate::text(controls.at(effectSearch),L"");settingEffectFields=false;filterEffects();
         const bool same=current&&(code.empty()||wide(code)==currentCode);
-        effectBindingChoices=Json::array();SendMessageW(controls.at(effectBinding),CB_RESETCONTENT,0,0);int selectedBinding=-1;
-        for(const auto &[id,binding]:view->nativePattern->performance.bindings){if(same&&current->binding==id)selectedBinding=int(effectBindingChoices.size());effectBindingChoices.push_back({{"id",id}});const auto label=std::to_wstring(id)+L"  "+wide(binding.name.empty()?binding.plugin:binding.name);SendMessageW(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        effectBindingChoices=Json::array();ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_RESETCONTENT,0,0);int selectedBinding=-1;
+        for(const auto &[id,binding]:view->nativePattern->performance.bindings){if(same&&current->binding==id)selectedBinding=int(effectBindingChoices.size());effectBindingChoices.push_back({{"id",id}});const auto label=std::to_wstring(id)+L"  "+wide(binding.name.empty()?binding.plugin:binding.name);ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         for(const auto &parameter:pluginParameters)if(parameter.at("id")==selectedParameter&&parameter.value("writable",false)&&!selectedPlugin.empty()){
             unsigned free=1;while(free<=255&&view->nativePattern->performance.bindings.contains(uint16_t(free)))++free;
-            if(free<=255){effectBindingChoices.push_back({{"id",free},{"plugin",selectedPlugin},{"parameter",selectedParameter},{"name",parameter.at("name")}});const auto label=L"New: "+wide(parameter.at("name").get<std::string>());SendMessageW(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(selectedBinding<0)selectedBinding=int(effectBindingChoices.size())-1;}break;
+            if(free<=255){effectBindingChoices.push_back({{"id",free},{"plugin",selectedPlugin},{"parameter",selectedParameter},{"name",parameter.at("name")}});const auto label=L"New: "+wide(parameter.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(selectedBinding<0)selectedBinding=int(effectBindingChoices.size())-1;}break;
         }
-        if(selectedBinding<0&&!effectBindingChoices.empty())selectedBinding=0;SendMessageW(controls.at(effectBinding),CB_SETCURSEL,selectedBinding,0);
+        if(selectedBinding<0&&!effectBindingChoices.empty())selectedBinding=0;ScreamSeq::NativeInputGate::present(controls.at(effectBinding),CB_SETCURSEL,selectedBinding,0);
         selectEffectFields(same?ScreamSeq::PatternFields::command(*current):ScreamSeq::PatternFields::defaults(effectChoices.at(effectSelected)));
         effectDraftDirty=false;effectEditorStatus=L"Draft / Apply edits the captured cell / Escape returns to the grid";focusEffectField();
     }
@@ -203,13 +203,13 @@
         if(!c||c->kind==Tracker::PatternCommandKind::TrackerEffect||currentEffectFields().empty()){openEffectEditor();return;}
         openEffectEditor("",true);effectInline=true;effectEditorOpen=false;effectInlineControl=0;revealWorkspacePattern();workspaceState.focus="pattern";
         const auto fields=currentEffectFields();if(!fields.empty())for(size_t i=0;i<effectFieldsDraft.size();++i)if(effectFieldsDraft[i].at("storage")==fields[std::min(effectFieldIndex,fields.size()-1)].at("storage")){effectInlineControl=effectFieldControl(i);effectInlineField=std::min(effectFieldIndex,fields.size()-1);}
-        layoutControls();if(effectInlineControl){SetFocus(controls.at(effectInlineControl));SendMessageW(controls.at(effectInlineControl),EM_SETSEL,0,-1);}
+        layoutControls();if(effectInlineControl){SetFocus(controls.at(effectInlineControl));ScreamSeq::NativeInputGate::present(controls.at(effectInlineControl),EM_SETSEL,0,-1);}
     }
     void effectFieldChanged(){if(!settingEffectFields&&effectDraftExists){effectDraftDirty=true;++effectDraftGeneration;}}
     bool effectCommand(int id) {
         if(id!=effectsCommand&&!isEffectControl(id))return false;
         if(id==effectsCommand||id==effectReload){openEffectEditor("",id==effectReload);return true;}
-        if(id==effectUnits){try{auto command=effectDraftExists?readEffectFields():effectDraftCommand;const bool next=SendMessageW(controls.at(effectUnits),CB_GETCURSEL,0,0)==1;effectDraftCommand=std::move(command);effectRows=next;fillEffectFields();}catch(const std::exception&e){SendMessageW(controls.at(effectUnits),CB_SETCURSEL,effectRows?1:0,0);effectEditorStatus=wide(e.what());}return true;}
+        if(id==effectUnits){try{auto command=effectDraftExists?readEffectFields():effectDraftCommand;const bool next=SendMessageW(controls.at(effectUnits),CB_GETCURSEL,0,0)==1;effectDraftCommand=std::move(command);effectRows=next;fillEffectFields();}catch(const std::exception&e){ScreamSeq::NativeInputGate::present(controls.at(effectUnits),CB_SETCURSEL,effectRows?1:0,0);effectEditorStatus=wide(e.what());}return true;}
         for(size_t i=0;i<effectFieldsDraft.size();++i)if(effectFieldsDraft[i].at("key")=="rateMode"&&id==effectFieldControl(i)){
             try{effectDraftCommand=readEffectFields();fillEffectFields();effectFieldChanged();}catch(const std::exception&e){effectEditorStatus=wide(e.what());}return true;
         }

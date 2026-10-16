@@ -16,9 +16,7 @@ struct Owner {
 std::wstring text(HWND control){std::wstring result(size_t(GetWindowTextLengthW(control))+1,0);GetWindowTextW(control,result.data(),int(result.size()));result.resize(wcslen(result.c_str()));return result;}
 std::pair<DWORD,DWORD> selection(HWND control){DWORD first=0,last=0;SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));return {first,last};}
 void sizeClient(HWND window,int width,int height){
-  const auto dpi=GetDpiForWindow(window);RECT frame{0,0,MulDiv(width,dpi,96),MulDiv(height,dpi,96)};
-  require(AdjustWindowRectExForDpi(&frame,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi),"Calculate instrument client frame");
-  require(SetWindowPos(window,nullptr,0,0,frame.right-frame.left,frame.bottom-frame.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Size wide instrument fixture");
+  ScreamSeq::Tests::sizeOwnedGuiClient(window,width,height);
 }
 struct Form {
   ScreamSeq::InstrumentEnvelopeWindow::Context current{"owned-song","r1",1,1,
@@ -94,13 +92,15 @@ void allPagesAndActions(Owner &owner){
 }
 
 void rawDraftFocusAndPlacement(Owner &owner){
-  Form form(owner.window);form.open(owner.window);const auto tick=form.control(4413),value=form.control(4414),native=form.tool.window();
+  Form form(owner.window);form.tool.openAt();sizeClient(form.tool.window(),440,500);form.tool.dock(owner.window);form.tool.dockBounds(0,0,440,300);SetActiveWindow(owner.window);
+  const auto tick=form.control(4413),value=form.control(4414),native=form.tool.window();
   form.field(4413,L"unfinished tick");form.field(4414,L"37.");SetFocus(tick);SendMessageW(tick,EM_SETSEL,2,7);
   const auto captured=form.tool.snapshot();const auto reads=form.reads;
   form.tool.dockBounds(0,0,460,310);require(GetFocus()==tick&&selection(tick)==std::pair<DWORD,DWORD>{2,7},"Short resize lost visible raw field focus/caret");
   form.press(4605);require(IsWindowVisible(GetFocus())&&GetFocus()!=tick,"Options left focus on a hidden field");form.press(4605);
   for(int page=1;page<5;++page){form.page(page);geometry(form);}form.page(0);
   SetFocus(tick);form.tool.floatWindow();require(!form.tool.snapshot().at("shortDock").get<bool>()&&GetFocus()==tick,"Floating lost visible field focus or kept short body");
+  require(IsWindowVisible(tick)&&selection(tick)==std::pair<DWORD,DWORD>{2,7}&&text(tick)==L"unfinished tick","Compact floating view hid or replaced the raw point field/caret");
   MINMAXINFO minimum{};SendMessageW(native,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&minimum));const auto dpi=GetDpiForWindow(native);RECT bounds{0,0,MulDiv(440,dpi,96),MulDiv(500,dpi,96)};
   require(AdjustWindowRectExForDpi(&bounds,DWORD(GetWindowLongPtrW(native,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(native,GWL_EXSTYLE)),dpi),"Calculate unchanged floating minimum");
   require(minimum.ptMinTrackSize.x==bounds.right-bounds.left&&minimum.ptMinTrackSize.y==bounds.bottom-bounds.top,"Short mode changed the floating minimum");

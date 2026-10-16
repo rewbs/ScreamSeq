@@ -16,7 +16,7 @@ private:
     heading=4300,targetLabel,rowLabel,valueLabel,formulaLabel,rangeLabel,toolLabel0,toolLabel1,toolLabel2,toolLabel3,statusLabel,pageHelp};
   static constexpr std::array<const char *,9> curves={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse","scripted"};
   static constexpr std::array<const char *,9> operations={"flip-time","flip-values","shift","scale","ramp","sine","humanize","paste","insert"};
-  Request request_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
+  Request request_;NativeWriteCompletion::Write bankWrite_;std::function<Cursor()> context_;std::function<void(const std::string &,uint32_t)> inspect_;
   std::function<void(const std::string &,uint32_t)> absolute_;
   Cursor captured_;std::string patternID_,pluginID_,laneID_;std::optional<uint32_t> parameter_;
   Json lanes_=Json::array(),plugins_=Json::array(),catalog_=Json::array(),points_=Json::array(),values_=Json::array(),clip_;
@@ -42,7 +42,7 @@ private:
     compactPage_=std::clamp(page,0,3);layout();if(focus)focusPage();requestPaint();
   }
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void choose(int id,int index){SendMessageW(controls_.at(id),CB_SETCURSEL,index,0);}
+  void choose(int id,int index){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,index,0);}
   void require(bool value,const char *message)const{if(!value)throw std::runtime_error(message);}
   bool draft()const{return dirty_||pointFields_;}
   bool current()const{const auto now=context_();return captured_.document==now.document&&captured_.revision==now.revision;}
@@ -66,15 +66,15 @@ private:
   }
   void filter(){
     auto term=field(search);std::transform(term.begin(),term.end(),term.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});filtered_.clear();int selected=-1;
-    SendMessageW(controls_.at(parameters),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(parameters),LB_RESETCONTENT,0,0);
+    SendMessageW(controls_.at(parameters),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_RESETCONTENT,0,0);
     for(size_t i=0;i<catalog_.size();++i){auto name=wide(catalog_[i].at("name").get<std::string>()),folded=name;std::transform(folded.begin(),folded.end(),folded.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});if(!term.empty()&&folded.find(term)==std::wstring::npos)continue;
-      if(parameter_&&catalog_[i].at("id")==*parameter_)selected=int(filtered_.size());filtered_.push_back(i);SendMessageW(controls_.at(parameters),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
-    SendMessageW(controls_.at(parameters),LB_SETCURSEL,selected,0);SendMessageW(controls_.at(parameters),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(parameters),nullptr,FALSE);
+      if(parameter_&&catalog_[i].at("id")==*parameter_)selected=int(filtered_.size());filtered_.push_back(i);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}
+    ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_SETCURSEL,selected,0);SendMessageW(controls_.at(parameters),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(parameters),nullptr,FALSE);
   }
   void choices(){
-    setting_=true;SendMessageW(controls_.at(pattern),CB_RESETCONTENT,0,0);int i=0;
-    for(const auto &p:captured_.patterns){auto name=L"Pattern "+std::to_wstring(p.at("index").get<unsigned>())+L" · "+wide(p.at("name").get<std::string>());SendMessageW(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==patternID_)choose(pattern,i);++i;}
-    SendMessageW(controls_.at(plugin),CB_RESETCONTENT,0,0);i=0;for(const auto &p:plugins_){auto name=wide(p.at("name").get<std::string>());SendMessageW(controls_.at(plugin),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("instanceID")==pluginID_)choose(plugin,i);++i;}
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_RESETCONTENT,0,0);int i=0;
+    for(const auto &p:captured_.patterns){auto name=L"Pattern "+std::to_wstring(p.at("index").get<unsigned>())+L" · "+wide(p.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==patternID_)choose(pattern,i);++i;}
+    ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_RESETCONTENT,0,0);i=0;for(const auto &p:plugins_){auto name=wide(p.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("instanceID")==pluginID_)choose(plugin,i);++i;}
     setting_=false;filter();
   }
   void load(bool follow,std::string wantedPlugin={},std::optional<uint32_t> wantedParameter={},std::optional<unsigned> wantedPattern={},bool allowMissingPlugin=false,bool strictTarget=false){
@@ -164,11 +164,13 @@ private:
     const auto doc=captured_.document,plugin=pluginID_,pattern=patternID_;const auto parameter=parameter_;auto token=std::make_shared<uint64_t>(generation_);
     auto source=[this,doc,plugin,pattern,parameter,token]{return context_().document==doc&&captured_.document==doc&&pluginID_==plugin&&patternID_==pattern&&parameter_==parameter&&generation_==*token&&!pointFields_;};
     auto context=[this]{const auto c=context_();return std::pair(c.document,c.revision);};
-    auto request=[this,source,token](const std::string &method,const Json &p){const bool owned=source(),wasPending=pending_;if(owned)pending_=true;Json result;try{result=request_(method,p);}catch(...){pending_=wasPending;throw;}pending_=wasPending;
-      if(p.contains("expectedRevision")&&owned&&source()){captured_.revision=context_().revision;if(method=="envelope.bank.apply"||((method=="envelope.bank.unlink"||method=="envelope.bank.save")&&!draft())){const auto before=generation_;load(false);if(!draft()&&generation_==before+1)*token=generation_;}}return result;};
+    auto dispatch=[this,source,token](const std::string &method,const Json &p,const std::shared_ptr<NativeCallReceipt> &receipt){const bool owned=source(),wasPending=pending_;if(owned)pending_=true;Api::CompletedCall completed;Json result;try{if(receipt){completed=bankWrite_(method,p,receipt);if(!receipt->read())receipt->publish(std::make_shared<const Api::CompletedCall>(completed));result=completed.result;}else result=request_(method,p);}catch(...){pending_=wasPending;throw;}pending_=wasPending;
+      if(p.contains("expectedRevision")&&owned&&source()){captured_.revision=context_().revision;if(method=="envelope.bank.apply"||((method=="envelope.bank.unlink"||method=="envelope.bank.save")&&!draft())){const auto before=generation_;load(false);if(!draft()&&generation_==before+1)*token=generation_;}}if(receipt)return completed;return Api::CompletedCall{method,captured_.document,context_().revision,std::move(result)};};
+    auto request=[dispatch](const auto &method,const auto &params){return dispatch(method,params,{}).result;};
+    auto write=[dispatch](const auto &method,const auto &params,const auto &receipt){return dispatch(method,params,receipt);};
     Json target={{"kind","parameter"},{"pattern",captured_.pattern},{"plugin",pluginID_},{"parameter",*parameter_}},shape;
     if(!points_.empty())shape={{"span",rows_*256},{"rowsPerBeat",rowsPerBeat_},{"points",points_}};
-    bank_=std::make_unique<EnvelopeBankWindow>(window_,target,shape,captured_.document,captured_.revision,parameterName()+L" · Pattern "+std::to_wstring(captured_.pattern),std::move(request),std::move(context),std::move(source));bank_->show();
+    bank_=std::make_unique<EnvelopeBankWindow>(window_,target,shape,captured_.document,captured_.revision,parameterName()+L" · Pattern "+std::to_wstring(captured_.pattern),std::move(request),std::move(context),std::move(source),std::move(write));bank_->show();
   }
   void touch(){require(!draft(),"Apply or Reload the current curve draft first");const auto data=request_("automation.target.get",Json::object());const auto &target=data.at("target");require(!target.is_null()&&target.value("available",false),"Touch a parameter in the rack or a plugin editor first");load(true,target.at("plugin"),target.at("parameter").get<uint32_t>());}
   void action(int id,unsigned notification)override{
@@ -284,7 +286,9 @@ private:
       }else if(compactPage_==1){
         float x=left;const float kindWidth=inner-278;
         for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{kind,kindWidth},{snap,82.f},{enabled,74.f},{fit,40.f},{zoomOut,26.f},{zoomIn,26.f}}){put(id,x,52,width,id==kind?230.f:id==snap?220.f:26.f);x+=width+gap;}
-        canvas_.viewport={left,100,inner,std::max(1.f,h-198)};
+        // Owner-drawn combos can have a 28-DIP collapsed body with classic
+        // Windows borders. Leave room above the 22-DIP ruler on that theme too.
+        canvas_.viewport={left,104,inner,std::max(1.f,h-200)};
         pointFields(h-92);
       }else if(compactPage_==2){
         put(kind,left,52,inner-174,230);put(snap,w-176,52,82,220);put(enabled,w-88,52,80,26);
@@ -380,20 +384,26 @@ private:
     wchar_t label[160]{};swprintf_s(label,shortDock_?L"Rows %.2f–%.2f · %.1f–%.1f%%":L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,0x93aabd);
   }
 public:
+  void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
+    bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};
     minimumClientWidth_=440;minimumClientHeight_=500;create(L"ScreamSeq.ParameterAutomation",L"Pattern parameter automation",1240,850);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageTarget,L"Target"},{pageCurve,L"Curve"},{pageFormula,L"Formula"},{pageTools,L"Tools"}})button(id,name);
     for(int id:{pattern,plugin,kind,snap,tool})combo(id);for(int id:{search,pointRow,pointValue,formula,rangeStart,rangeEnd,toolValue0,toolValue1,toolValue2,toolValue3})edit(id,L"",id==formula?2048:id==search?128:32);
     add(parameters,L"LISTBOX",L"Automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
     button(absolute,L"Song automation…");
-    for(auto name:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})SendMessageW(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(kind,1);
-    for(auto name:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(snap,0);
-    for(auto name:{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"})SendMessageW(controls_.at(tool),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(tool,0);
+    for(auto name:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(kind,1);
+    for(auto name:{L"1 row",L"½ row",L"¼ row",L"1/256 row"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(snap,0);
+    for(auto name:{L"Flip time",L"Flip values",L"Shift",L"Scale",L"Ramp",L"Sine",L"Humanize",L"Paste",L"Insert paste"})ScreamSeq::NativeInputGate::present(controls_.at(tool),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));choose(tool,0);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{setPoint,L"Set point"},{deletePoint,L"Delete point"},{rampUp,L"Ramp up"},{rampDown,L"Ramp down"},{enabled,L"Enabled"},{apply,L"Apply curve"},{verify,L"Verify"},{remove,L"Remove lane"},{reload,L"Reload"},{fromCursor,L"From cursor"},{bank,L"Envelope bank…"},{expand,L"Expand…"},{reference,L"Reference"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{copyRange,L"Copy range"},{previewTool,L"Preview tool"},{close,L"Close"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Pattern parameter automation"},{targetLabel,L"Choose a plugin parameter"},{rowLabel,L"Row / 1⁄256"},{valueLabel,L"Value / %"},{formulaLabel,L"Formula"},{rangeLabel,L"Range / rows"},{statusLabel,L""}})label(id,name);
     for(int id=toolLabel0;id<=toolLabel3;++id)label(id,L"");label(pageHelp,L"");setting_=true;set(rangeStart,L"0");set(rangeEnd,L"64");setting_=false;finish();
   }
   bool retainedDraft()const{return pending_||dragging_||draft()||toolFieldsDirty_||(bank_&&bank_->retainedDraft())||(workbench_&&workbench_->retainedDraft());}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(captured_.document,captured_.revision,Json::array({patternID_,pluginID_,parameter_?Json(*parameter_):Json()}).dump(),
+      generation_,draft()||toolFieldsDirty_||dragging_,pending_);
+  }
   bool followCursor(){
     if(retainedDraft())return false;const auto now=context_();
     if(now.document==captured_.document&&now.pattern==captured_.pattern&&now.revision==captured_.revision)return true;

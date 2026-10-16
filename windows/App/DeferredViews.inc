@@ -36,6 +36,7 @@
         PostMessageW(window,deferredViewsMessage,0,0);frameRequested=true;return true;
     }
     void drainViews() {
+        if(departureInput)return;
         if(busy||drainingViews||refreshingPlugins||refreshingMixer||refreshingGraph||mixerPending||graphPending||graphCurvePending()||preciseNotePending())return;
         drainingViews=true;
         struct Guard{bool &flag;~Guard(){flag=false;}}guard{drainingViews};

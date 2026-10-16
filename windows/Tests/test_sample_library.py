@@ -184,6 +184,18 @@ class SampleLibraryTests(unittest.TestCase):
         self.press(5418);self.desktop.send(self.desktop.hwnd(self.pid),0x111,511);self.assertEqual(self.idle_browser()['gainDB'],'-18')
         self.assertEqual(before,self.client.call('document.get'))
 
+    def test_configured_family_survives_close_and_reopen_before_any_field_edit(self):
+        self.open_browser();self.field(5401,'piano');self.select_files([0]);self.press(5415)
+        original=self.browser()['multisample'];self.assertTrue(original['draft'])
+        before=self.client.call('document.get');self.press(5608,True)
+        self.client.call('document.patch',dict(title='Changed with configured family hidden',expectedRevision=before['revision']))
+        self.press(5415);retained=self.browser()['multisample']
+        for field in ('group','name','octaveShift','documentId','revision'):
+            self.assertEqual(retained[field],original[field],field)
+        self.assertTrue(retained['stale']);self.assertTrue(retained['draft'])
+        self.press(5610,True);self.assertFalse(self.browser()['multisample']['draft'])
+        self.press(5415);self.assertFalse(self.browser()['multisample']['stale'])
+
     def test_native_multisample_roots_stale_guard_retained_draft_and_rebase(self):
         self.open_browser();self.field(5401,'piano');self.select_files([0]);self.press(5415);state=self.browser()['multisample'];self.assertTrue(state['visible']);self.assertEqual(state['octaveShift'],'1')
         self.field(5601,'Glass keys',True);self.field(5602,'0',True);self.press(5603,True);state=self.browser()['multisample'];self.assertEqual([z['rootNote'] for z in state['zones']],[37,41,44])
