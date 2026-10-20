@@ -28,8 +28,8 @@ def inventory(configured, platform_name):
         labels = next((entry["value"] for entry in test.get("properties", []) if entry["name"] == "LABELS"), [])
         if platform_name == "windows":
             selected = []
-            if set(labels) & {"portable", "worker"}:
-                selected.append("portable-worker")
+            if set(labels) & {"portable", "worker", "api"}:
+                selected.append("portable-worker-api")
             if set(labels) & {"native-ui", "preferences", "recovery"}:
                 selected.append("native-ui-preferences-recovery")
         else:
@@ -41,7 +41,7 @@ def inventory(configured, platform_name):
     if not registered:
         raise EvidenceError("Configured test inventory is empty")
     if platform_name == "windows":
-        for expression in ("-L '^(portable|worker)$'", "-L '^(native-ui|preferences|recovery)$'"):
+        for expression in ("-L '^(portable|worker|api)$'", "-L '^(native-ui|preferences|recovery)$'"):
             if expression not in text:
                 raise EvidenceError("CI selection changed; update the inventory's explicit selection rules")
     elif 'ctest --test-dir "$SCREAMSEQ_BUILD_DIR" --output-on-failure' not in text:

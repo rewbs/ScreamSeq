@@ -52,7 +52,7 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         run: |
-          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(portable|worker)$' *>&1 | Tee-Object screamseq-windows-model.log
+          ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(portable|worker|api)$' *>&1 | Tee-Object screamseq-windows-model.log
           if ($LASTEXITCODE -ne 0) { throw 'Portable or worker checks failed.' }
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
