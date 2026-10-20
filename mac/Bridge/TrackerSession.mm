@@ -13,6 +13,8 @@
 #include "SignalTelemetry.hpp"
 #include "editor/PatternTools.hpp"
 #include "editor/ProjectLoadRecovery.hpp"
+#include "editor/project/ProjectMetadata.hpp"
+#include "NativePropertyTree.hpp"
 #include <sys/stat.h>
 #include "editor/ParameterProvenance.hpp"
 #include "editor/ParameterBaseline.hpp"
@@ -190,7 +192,7 @@ NSDictionary *decodeProject(NSData *data, ProjectLoadRecovery *recovery = nullpt
     throw std::runtime_error("Invalid embedded module size");
   if(recovery) {
     if(![root[@"version"] isEqual:@(nativeProjectVersion)])recovery->warn("Read known fields from an incompatible project container version (current: " + std::to_string(nativeProjectVersion) + ").",false,true);
-    for(NSString *key in root)if(![key hasPrefix:@"screamseqLoadRecovery"] && ![@[@"version",@"module",@"native",@"sequence",@"plugins",@"automation",@"recoveryTake"] containsObject:key])recovery->warn("Ignored unsupported project field: "+std::string(key.UTF8String),true);
+    for(NSString *key in root)if(![key hasPrefix:@"screamseqLoadRecovery"] && ![@[@"version",@"module",@"native",@"sequence",@"plugins",@"automation",@"recoveryTake"] containsObject:key])recovery->warn("Retained unsupported project field without interpretation: "+std::string(key.UTF8String),false,true);
   } else Automation::integer(root[@"version"], nativeProjectVersion, nativeProjectVersion);
   NSData *module = root[@"module"];
   const bool snapshot = isSongSnapshot({static_cast<const std::byte *>(module.bytes), module.length});
@@ -353,6 +355,7 @@ std::vector<std::byte> byteVector(NSData *data) {
   auto begin = static_cast<const std::byte *>(data.bytes);
   return {begin, begin + data.length};
 }
+#include "ProjectMetadata.inc"
 NSString *songString(const CSoundFile &song, const std::string &value) {
   auto utf8 = ::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8, song.GetCharsetInternal(), value);
   return [[NSString alloc] initWithBytes:utf8.data() length:utf8.size() encoding:NSUTF8StringEncoding] ?: @"";
@@ -407,7 +410,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::string _pluginWarning; // Non-blocking; reported with the document issues.
   ProjectLoadRecovery _loadRecovery;
   NSString *_loadSourcePath;
-  NSDictionary *_loadRecoveryArchives; // Inactive opaque source fragments from portable recovery.
+  ScreamSeq::Project::ProjectMetadata _projectMetadata;
   PluginPathHints _pluginPathHints;
   std::unique_ptr<NativePlugin> _graphEditorPlugin;
   GraphPluginRecipe _graphEditorRecipe;
@@ -504,7 +507,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   _pluginPathHints.clear();
   _document = demo ? Document::demo() : std::make_unique<Document>();
   _automationDocumentID = NSUUID.UUID.UUIDString;
-  _loadRecovery={};_loadSourcePath=nil;_loadRecoveryArchives=nil;
+  _loadRecovery={};_loadSourcePath=nil;_projectMetadata={};
   _graphEditorPlugin.reset();_graphEditorID=nil;
   _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
 }
@@ -520,17 +523,18 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     PluginPathHints hints;
     std::string missing;
     ProjectLoadRecovery recovery;
-    NSMutableDictionary *recoveryArchives=[NSMutableDictionary dictionary];
+    ScreamSeq::Project::ProjectMetadata projectMetadata;
     if ([@[@"screamseq", @"resonance"] containsObject:path.pathExtension.lowercaseString]) {
       auto attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
       if ([attributes fileSize] > 600 * 1024 * 1024)
         throw std::runtime_error("Project exceeds 600 MB");
-      NSDictionary *root = decodeProject([NSData dataWithContentsOfFile:path], &recovery);
+      NSData *sourceData=[NSData dataWithContentsOfFile:path];
+      NSDictionary *root = decodeProject(sourceData, &recovery);
+      auto properties=captureProjectProperties(sourceData,root,recovery);
       auto snapshot=byteVector(root[@"module"]);
       recoverLegacySongSnapshot(snapshot,recovery);
       if(!isSongSnapshot(snapshot))recovery.warn("Opening the legacy embedded tracker module; native sample/timing extensions may be unavailable.",false,true);
       next = std::make_unique<Document>(snapshot);
-      for(NSString *key in root)if([key hasPrefix:@"screamseqLoadRecovery"])recoveryArchives[key]=root[key];
       if (root[@"sequence"]) try {
         const auto sequence = unsignedInteger(root[@"sequence"], UINT8_MAX, "Invalid sequence selection");
         if (sequence >= next->song().Order.GetNumSequences())
@@ -595,6 +599,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
           recoveredTake->inputError=reason.UTF8String;
         }
       }catch(const std::exception &e){recoveredTake.reset();recovery.warn("Skipped incompatible recording take: "+std::string(e.what()),true);}
+      auto known=ScreamSeq::NativePropertyTree::fromFoundation(encodeProjectMetadata(*next,plugins,automation,hints));
+      if(projectMetadata.capture(std::move(properties),std::move(known),recovery.lossy,removeMigratedNudgeDurations))
+        recovery.warn("Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model.",true,true);
     } else
       next = Document::open(path.UTF8String);
     validatePluginCapacity(plugins, next->native().mixer.buses.size());
@@ -620,7 +627,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _knownHistorySequence = _parameterGestureSequence = 0; _parameterGesture = NO;
     _graphEditorPlugin.reset();_graphEditorID=nil;
     _document = std::move(next);
-    _loadRecovery=std::move(recovery);_loadSourcePath=[path copy];_loadRecoveryArchives=[recoveryArchives copy];
+    _loadRecovery=std::move(recovery);_loadSourcePath=[path copy];_projectMetadata=std::move(projectMetadata);
     _automationDocumentID = NSUUID.UUID.UUIDString;
     _recording = std::move(recoveredTake);
     _recordingID = _recording ? NSUUID.UUID.UUIDString : nil;
@@ -842,51 +849,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   // playback use the cached baseline plus all parameter edits made by our controls.
   if (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState())))
     _plugins = _audio->pluginStates();
-  auto plugins = [NSMutableArray array];
-  const int projectVersion = nativeProjectVersion;
-  for (auto &plugin : _plugins) {
-    NSMutableDictionary *item = [descriptorDictionary(plugin.descriptor) mutableCopy];
-    if (const auto hint = _pluginPathHints.rack.find(plugin.instanceID); hint != _pluginPathHints.rack.end() &&
-        hint->second.applies(plugin.descriptor.format, plugin.descriptor.path, plugin.descriptor.classID))
-      item[@"path"] = pathString(hint->second.path) ?: @""; // Projects keep the location they stored.
-    item[@"bypass"] = @(plugin.bypass);
-    item[@"instrument"] = @(plugin.instrument);
-    item[@"instrumentAssignments"] = encodePluginAssignments(plugin);
-    item[@"instanceID"] = @(plugin.instanceID.c_str());
-    item[@"state"] = [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()];
-    item[@"audioLayout"] = @(plugin.audioLayout.c_str());
-    NSMutableArray *inputs = [NSMutableArray array], *outputs = [NSMutableArray array];
-    for (auto bus : plugin.auxiliaryInputs) [inputs addObject:@(bus)];
-    for (auto bus : plugin.auxiliaryOutputs) [outputs addObject:@(bus)];
-    item[@"auxiliaryInputs"] = inputs; item[@"auxiliaryOutputs"] = outputs;
-    [plugins addObject:item];
-  }
-  auto automation = [NSMutableArray array];
-  for (auto &point : _automation)
-    [automation addObject:@[ @(point.slot), @(point.id), @(point.value), @(point.frame) ]];
-  NSDictionary *nativeMetadata = nil;
-  if (_pluginPathHints.graph.empty())
-    nativeMetadata = encodeNativeSong(_document->native());
-  else {
-    auto native = _document->native();
-    for (auto &definition : native.signal.library)
-      for (auto &node : definition.nodes) {
-        const auto hint = _pluginPathHints.graph.find({definition.id, node.id});
-        if (hint != _pluginPathHints.graph.end() && node.kind == SignalNodeKind::Plugin &&
-            hint->second.applies(node.plugin.format, node.plugin.path, node.plugin.classID))
-          node.plugin.path = hint->second.path;
-      }
-    nativeMetadata = encodeNativeSong(native);
-  }
-  NSMutableDictionary *root = [@{
-    @"version" : @(projectVersion),
-    @"native" : nativeMetadata,
-    @"sequence" : @(_document->song().Order.GetCurrentSequenceIndex()),
-    @"module" : [NSData dataWithBytes:bytes.data() length:bytes.size()],
-    @"plugins" : plugins,
-    @"automation" : automation
-  } mutableCopy];
-  if(_loadRecoveryArchives)[root addEntriesFromDictionary:_loadRecoveryArchives];
+  NSMutableDictionary *root=encodeProjectMetadata(*_document,_plugins,_automation,_pluginPathHints);
+  root[@"module"]=[NSData dataWithBytes:bytes.data() length:bytes.size()];
   if (recovery && _recording) {
     // Close held notes in a copy. The live take and audio clock keep running.
     auto take = *_recording;
@@ -900,15 +864,21 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     if(!take.inputError.empty())retainedTake[@"inputError"]=@(take.inputError.c_str());
     root[@"recoveryTake"]=retainedTake;
   }
-  NSError *error = nil;
-  NSData *data = [NSPropertyListSerialization dataWithPropertyList:root
-                                                            format:NSPropertyListBinaryFormat_v1_0
-                                                           options:0
-                                                             error:&error];
-  if (!data)
-    throw std::runtime_error(error.localizedDescription.UTF8String);
-  if (data.length > 600 * 1024 * 1024)
-    throw std::runtime_error("Project exceeds the 600 MB save/reopen limit");
+  auto current=ScreamSeq::NativePropertyTree::fromFoundation(root);
+  NSData *data=ScreamSeq::NativePropertyTree::encode(_projectMetadata.merge(std::move(current)));
+  // Validate the actual merged musical fields before atomic file publication.
+  // Unknown extensions are retained data, never relaxed API/mutation fields.
+  NSDictionary *saved=decodeProject(data);
+  const auto states=decodePlugins(saved);
+  (void)decodeAutomation(saved);
+  {
+    Automation::ImportFieldScope fields([](NSString *){});
+    auto native=decodeNativeSong(saved[@"native"]);native.validate(_document->song());
+    validatePluginCapacity(states,native.mixer.buses.size());
+    for(const auto &route:native.signal.stageConnections)for(const auto &endpoint:{route.source,route.target})
+      if(!endpoint.plugin.empty() && std::none_of(states.begin(),states.end(),[&](const auto &plugin){return plugin.instanceID==endpoint.plugin;}))
+        throw std::runtime_error("Graph stage cable refers to a missing rack plugin");
+  }
   return data;
 }
 - (BOOL)saveRecoveryPath:(NSString *)path error:(NSError **)error {
@@ -2447,6 +2417,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       states = decodePlugins(root);
       automation = decodeAutomation(root);
       {
+        Automation::ImportFieldScope fields([](NSString *){});
         native = decodeNativeSong(root[@"native"]);
         for(const auto &r:native->signal.stageConnections)for(const auto &e:{r.source,r.target})if(!e.plugin.empty()&&std::none_of(states.begin(),states.end(),[&](const auto &p){return p.instanceID==e.plugin;}))throw std::invalid_argument("Graph stage cable refers to a missing rack plugin");
         Document validation(byteVector(module));

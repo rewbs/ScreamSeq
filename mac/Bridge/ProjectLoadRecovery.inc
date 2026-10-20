@@ -12,7 +12,7 @@ NativeSong recoverNativeSong(id raw, const Document &document, ProjectLoadRecove
   std::set<std::string> unknown;
   ImportFieldScope fields([&](NSString *key) {
     const std::string name=key.UTF8String;
-    if(unknown.insert(name).second)report.warn("Ignored unsupported metadata field: "+name,true);
+    if(unknown.insert(name).second)report.warn("Retained unsupported metadata field without interpretation: "+name,false,true);
   });
   if(![source[@"version"] isEqual:@17])report.warn("Read known fields from incompatible native metadata version "+std::string([[source[@"version"] description] UTF8String]?:"missing")+" (current: 17).",false,true);
   source[@"version"]=@17;

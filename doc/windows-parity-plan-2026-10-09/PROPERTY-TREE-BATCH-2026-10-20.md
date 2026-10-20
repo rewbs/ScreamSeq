@@ -2,7 +2,10 @@
 
 ## Status and observed ownership gap
 
-**Source prepared, unbuilt. This does not yet fix Mac session save/load.**
+**Foundation checkpoint `5f278e7c5`, unbuilt at this checkpoint.**
+The subsequent [Mac session ownership source batch](MAC-PRESERVATION-BATCH-2026-10-20.md)
+implements the integration described below; it also remains unqualified.
+The following observations describe the pre-integration session.
 Mac's current `TrackerSession.mm` constructs a fresh root in
 `projectDataForRecovery:`. `decodeProject` and `ProjectLoadRecovery.inc` report
 unknown root/native fields as ignored/lossy; `_loadRecoveryArchives` retains

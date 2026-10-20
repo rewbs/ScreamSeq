@@ -58,6 +58,7 @@ bash mac/build-reference.sh
 "$tracker_build/binary-plist-tests"
 "$tracker_build/project-preservation-tests"
 "$tracker_build/native-property-tree-tests"
+"$tracker_build/project-recovery-tests"
 "$tracker_build/plugin-inventory-tests"
 "$tracker_build/plugin-lifecycle-tests"
 "$tracker_build/plugin-shutdown-tests" "$tracker_build/test-plugins/ResonanceFixture.vst3"

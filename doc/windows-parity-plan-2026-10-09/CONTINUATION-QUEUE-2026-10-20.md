@@ -53,7 +53,7 @@ the newer source or a visual review.
 | 1 / M | Frozen ARM64 batch has bounded passing evidence and one failed native metadata test. Shared preview paths also change Mac bridge/audio adapters. | Rebuild and rerun the corrected metadata test at the next permitted opportunity; preserve full-model and unit assertions. Obtain Mac/x64 execution; reuse unchanged passing evidence and retain both apps on the same integration line. |
 | 2 / S–M | At the frozen candidate, Mac `TrackerSessionAPI.inc` excludes rack `dryRun`; Windows accepts it. The later [Mac correction](RACK-DRY-RUN-2026-10-20.md) is source only, with a shared contract passed on the existing Windows app. The API corpus still retains `API-PLUGIN-DRY-RUN`. | Qualify Mac dry runs using existing shared parameter preparation and accepted manual values. Preserve active preview ownership, queues, Redo, revision, opaque bytes and transport. Check changed and no-op batches, full-batch rejection, unavailable/read-only targets, stale guards and subsequent real edits. Do not count a method-name match as parity. |
 | 3 / M | [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md) and [terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) are prepared but unbuilt. The retained Windows app reproduces both differences. | Qualify numeric bounds/adapters, terminal-error retention, busy retries, uncertain side effects, exact cache accounting and both shared app contracts in the next batch. API vectors retain the old baseline until both hosts execute. Generic host failures now require reconciliation without advertising the pre-write revision; prove that behavior with the native real-pipe cases. |
-| 4 / L | Unknown root/native/entity extensions are retained by Windows and dropped by canonical Mac save with warnings/source protection. The [shared typed foundation](PROPERTY-TREE-BATCH-2026-10-20.md) is now prepared but unbuilt; Mac session integration remains open. | Connect staged Mac load/save/recovery ownership to the shared codec/merge and native data bridge. Preserve XML imports, accepted recovery trees, budgets and opaque plugin state; then execute reciprocal edited-file checks. Do not copy Mac's loss into Windows to make the baseline equal. |
+| 4 / L | The executed corpus still records Mac's unknown-extension loss. The [shared typed foundation](PROPERTY-TREE-BATCH-2026-10-20.md) and subsequent [Mac session ownership](MAC-PRESERVATION-BATCH-2026-10-20.md) are prepared but unbuilt. | Qualify staged Mac load/save/recovery ownership, XML admission, inactive archives, owned plugin/take state and actual merged-tree validation. Execute reciprocal edited-file checks before updating observations. Large-file peak memory and unsupported-encoding archive limits remain explicit risks. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
 | 6 / M | Native control/event checks do not establish visual ergonomics, DPI, UIA or physical input quality. Computer use remains stopped after the user's Escape. | Retain A16/P8 as open. Resume foreground inspection only with renewed authorization. Check 100/150/200% DPI, compact/normal layouts, focus visibility, hidden tab stops, high contrast and Narrator on the usable candidate. Avoid further speculative UI redesign based on screenshots alone. |
 | 7 / L, equipment-dependent | Real vendor/device lifecycle and physical audio/MIDI remain separately unqualified. Optional unavailable provider tests are skips, not passes. | Use explicit fixture providers/devices; preserve musician sessions and audio defaults. Qualify architecture mismatch, editor lifecycle, latency changes, reconnect, capture/overflow and physical measurements with their existing strict limits. Keep silent private-desktop observations separate from audible evidence. |
@@ -76,26 +76,29 @@ Confirmed source boundaries:
   about uninterpreted extensions; `NativeProject.cpp::nativeProjectTree`
   merges against the captured pre-edit baseline and validates the actual saved
   tree before staging atomic replacement.
-- Mac `TrackerSession.mm::decodeProject` warns about unknown root fields,
-  `ProjectLoadRecovery.inc` reports unknown native fields as lossy, and
-  `projectDataForRecovery:` constructs a new root with encoded native metadata.
-  Merely changing a warning would not preserve the dropped contents.
+- The executed Mac corpus predates preservation ownership. New source stages
+  `ProjectMetadata` beside the document and shares `ProjectMetadata.inc` between
+  Open and Save. It merges current known fields with retained typed extensions,
+  validates the merged musical tree, and archives damaged original sections
+  inactive. Unknown-field warning changes now accompany this source behavior,
+  but remain unqualified.
 
 The typed codec and preservation policy have moved into `editor/project/`;
-the [foundation batch](PROPERTY-TREE-BATCH-2026-10-20.md) records the remaining
-native integration. Retain atomic file publication and session lifetime in each
+the [foundation batch](PROPERTY-TREE-BATCH-2026-10-20.md) and
+[native ownership batch](MAC-PRESERVATION-BATCH-2026-10-20.md) record the changes
+and remaining gates. Retain atomic file publication and session lifetime in each
 platform adapter. Mac must retain its
 original property tree and a canonical baseline for the loaded document; reset
-or replace them only with successful document replacement/save. Failed loads,
+or replace them only with successful document replacement; saving does not
+replace the immutable import baseline. Failed loads,
 failed saves, Undo/Redo, recovery snapshots and edited identities need explicit
 ownership tests. Keep Foundation types out of the shared model and avoid textual
 JSON conversion of opaque values.
 
-Before moving the Windows helper, inventory its typed leaf representations and
-Foundation equivalents: binary bytes, signed/integral/real values, signed zero,
-Unicode, dates and unsupported plist objects. Either a typed shared value adapter
-or a narrow tree-policy interface is reasonable; neither may silently coerce
-unknown values. Preserve unknown fields without interpreting them as routing or
+The shared codec now supplies typed binary bytes, signed/integral/real values,
+signed zero, Unicode, dates, UIDs, wide integers and float32 NaNs. Original binary
+metadata stays outside Foundation canonicalization. Validate those representations
+through the actual session, not only the adapter. Preserve unknown fields without interpreting them as routing or
 DSP instructions, retain appropriate warnings/source protection, and refuse
 unsafe identity merges instead of guessing by array position.
 

@@ -42,8 +42,10 @@ unclassified host failures. Its pre-fix request-ID reuse difference is reproduce
 the correction and cross-platform contract remain unbuilt/unqualified.
 
 [Shared typed project preservation](PROPERTY-TREE-BATCH-2026-10-20.md) moves the
-codec/merge into `editor/` and prepares a native Mac data bridge. Mac session
-load/save integration is still required; unknown-metadata loss is not yet fixed.
+codec/merge into `editor/` and prepares a native Mac data bridge. The subsequent
+[Mac session ownership batch](MAC-PRESERVATION-BATCH-2026-10-20.md) connects
+staged Open, Save and recovery to that shared layer. It is source only;
+unknown-metadata parity is not qualified or merged to main.
 
 **Planning only.** Reviewed against latest remote main **`16cab100b898f66726cfab6c2386887a9bcf5fd4`**, the supplied Mac baseline **`ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`**, and checkout **`03321c22a525f9fb0e11bda257bde404bdf47213`** with five pre-existing uncommitted retirement source/test changes. Latest source/evidence corrections are in the [final planning review](final-planning-review.md), backed by its [inspection snapshot](final-planning-snapshot.json). The remote main and all reference/peer input hashes were rechecked. No product code was modified, application launched, build/test started, or implementation undertaken for this review. Existing changes were left untouched; local `main` is stale and was not used as the latest source.
 

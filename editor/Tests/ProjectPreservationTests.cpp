@@ -1,4 +1,5 @@
 #include "editor/project/ProjectPreservation.hpp"
+#include "editor/project/ProjectMetadata.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
@@ -59,6 +60,59 @@ int main() {
 		check(ScreamSeq::Project::mergePreserved(opaqueRack,rack,Json::array({rack[1]}),"/plugins")==Json::array({rack[1]}),
 			"Removed plugin identity was resurrected");
 		std::cout<<"PASS plugin instance identities, opaque keys, state edits and removal\n";
+		const Json knownProject={{"version",6},{"sequence",0},{"module",Json::binary({1,2,3})},
+			{"plugins",rack},{"automation",Json::array()},{"native",{{"version",17},{"tracks",indexed},
+			{"scratchGestures",Json::array({{{"id",1},{"name","One"}},{{"id",2},{"name","Two"}}})}}}};
+		auto imported=knownProject;imported["futureRoot"]=Json::binary({0,255,17});
+		imported["native"]["tracks"][0][1]["extension"]="only-n1";
+		imported["plugins"][0]["extension"]="only-plugin-a";
+		imported["native"]["scratchGestures"][0]["extension"]="only-phrase-1";
+		std::swap(imported["native"]["scratchGestures"][0],imported["native"]["scratchGestures"][1]);
+		imported["recoveryTake"]={{"events",Json::array()}};
+		ScreamSeq::Project::ProjectMetadata metadata;
+		check(!metadata.capture(imported,knownProject,false),"Valid extensions must not require inactive recovery");
+		auto edited=knownProject;edited["module"]=Json::binary({5,6,7});
+		edited["native"]["tracks"]=reordered;
+		edited["plugins"]=changedRack;
+		auto saved=metadata.merge(edited);
+		check(saved["module"]==edited["module"] && !saved.contains("recoveryTake"),"Owned snapshot/take content must not be resurrected");
+		check(saved["plugins"][1]["state"]==changedRack[1]["state"] && saved["plugins"][1]["extension"]=="only-plugin-a" &&
+			!saved["plugins"][0].contains("extension"),"Current plugin state and opaque extension must follow the same stable plugin");
+		check(saved["native"]["tracks"][1][1]["extension"]=="only-n1" &&
+			!saved["native"]["tracks"][0][1].contains("extension"),"Project metadata retargeted track extension");
+		check(saved["native"]["scratchGestures"][0]["extension"]=="only-phrase-1","Native keyed promotion must use the metadata-relative path");
+		check(saved["futureRoot"]==imported["futureRoot"],"Project root extension lost during edit");
+		auto undone=metadata.merge(knownProject);
+		check(undone["native"]["tracks"][0][1]["extension"]=="only-n1" &&
+			undone["plugins"][0]["state"]==rack[0]["state"],"Repeated save/Undo must use the immutable imported baseline");
+		auto removed=knownProject;removed["plugins"]=Json::array({rack[1]});
+		check(metadata.merge(removed)["plugins"].size()==1,"Captured metadata resurrected a removed plugin");
+		check(metadata.merge(knownProject)["plugins"][0]["extension"]=="only-plugin-a","Undo removal lost original plugin extension");
+		bool badCapture=false;try{metadata.capture(Json::array(),knownProject,false);}catch(const std::runtime_error &){badCapture=true;}
+		check(badCapture && ScreamSeq::Project::sameStoredValue(metadata.merge(edited),saved),"Failed staged capture changed retained metadata");
+		std::cout<<"PASS staged project capture, owned payloads, identity edits and immutable Undo baseline\n";
+		auto damaged=imported;damaged["native"]["tracks"].push_back({99,{{"id","invalid"},{"opaque",42}}});
+		damaged["screamseqLoadRecovery"]={{"previous","archive"}};
+		ScreamSeq::Project::ProjectMetadata recovered;
+		check(recovered.capture(damaged,knownProject,true),"Recovery must retain original inactive metadata");
+		auto recoveryCopy=recovered.merge(knownProject);
+		const auto &archive=recoveryCopy["screamseqLoadRecovery1"]["sourceSections"];
+		check(archive["native"]==damaged["native"] && archive["plugins"]==damaged["plugins"] &&
+			archive["recoveryTake"]==damaged["recoveryTake"],"Recovery archive lost rejected metadata/state/take");
+		check(!archive.contains("module") && !archive.contains("screamseqLoadRecovery") &&
+			recoveryCopy["screamseqLoadRecovery"]==damaged["screamseqLoadRecovery"],"Recovery duplicated module/older archive or discarded earlier evidence");
+		check(recoveryCopy["native"]==knownProject["native"] && !recoveryCopy.contains("recoveryTake"),
+			"Recovery reactivated invalid metadata or a discarded take");
+		ScreamSeq::Project::ProjectMetadata ambiguous;
+		check(ambiguous.capture(damaged,knownProject,false),"Unmatched unknown-bearing arrays must archive instead of guessing identities");
+		check(ambiguous.merge(knownProject)["native"]==knownProject["native"],"Ambiguous promotion published an unmatched entry");
+		damaged["native"]["consumedLegacyField"]=42;
+		ScreamSeq::Project::ProjectMetadata migrationFailure;
+		check(migrationFailure.capture(damaged,knownProject,false,[](Json &active){active["native"].erase("consumedLegacyField");}),
+			"Unmatched migrated metadata must still archive");
+		check(migrationFailure.merge(knownProject)["screamseqLoadRecovery1"]["sourceSections"]["native"]["consumedLegacyField"]==42,
+			"Failed promotion archived a modified migration candidate instead of the original");
+		std::cout<<"PASS recovery archives, collision avoidance and ambiguous-promotion refusal\n";
 		return 0;
 	} catch(const std::exception &e) {std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}
 }
