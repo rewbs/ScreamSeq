@@ -25,7 +25,7 @@ double number(const Json &v,double lo,double hi) {
   require(std::isfinite(n)&&n>=lo&&n<=hi,"Number outside allowed range"); return n;
 }
 uint64_t integer(const Json &v,uint64_t lo,uint64_t hi) {
-  const auto n=number(v,double(lo),double(hi)); require(std::floor(n)==n,"Expected an integer"); return uint64_t(n);
+  const auto n=Api::boundedInteger(v,lo,hi);require(n.has_value(),"Expected an integer within its allowed range");return *n;
 }
 std::string text(const Json &v,size_t max) {
   return Project::validatedNativeText(v,max);

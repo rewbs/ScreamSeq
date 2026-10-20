@@ -298,6 +298,16 @@ Every mutation requires the opaque `expectedRevision` returned by a previous rea
 
 Recent small mutation replies are deduplicated by request ID and exact content. Reusing an ID with different content is rejected. The cache retains at most 64 replies with an 8 MiB conservative memory budget; large replies are not cached. Always retain the original revision when retrying: even after cache eviction it prevents reapplying a successful mutation. On connection loss or timeout the outcome can be unknown; reread the document rather than automatically retrying with a fresh revision. The supplied client retries busy responses only.
 
+Integer parameters accept JSON numbers with an integral value: `1`, `1.0` and
+`1e0` select the same coordinate or numeric parameter ID. Booleans, strings,
+null, fractional values and values outside the field's range are rejected before
+conversion. Exact integer storage is preserved without converting through
+floating point; real values must be finite and safely convertible. Stable
+document/entity/plugin identities remain strings. This value equivalence does
+not relax request replay: retries must retain the original ID and content,
+including numeric representation. Native file and preference decoders keep
+their separate compatibility rules.
+
 ## Data conventions
 
 `document.save {path, overwrite?, dryRun?, expectedRevision}` saves the open song as a native `.resonance` project. The absolute path must end in `.resonance`, its parent must exist, and replacing an existing file requires `overwrite:true`. `dryRun:true` validates serialization and the destination without writing. Success returns `{path, format, written, projectVersion}`, with the actual version (4 or 5), including for previews. An actual save updates the application's save destination and clears its unsaved indicator; preview does neither. The song revision and history remain unchanged, and saving does not stop playback. This command performs an atomic file replacement, not an undoable song edit. As with other commands, keep the same request ID/content when retrying an uncertain response; a file can have been written even if the reply was lost.

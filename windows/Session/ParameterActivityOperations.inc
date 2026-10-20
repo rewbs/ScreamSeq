@@ -5,10 +5,9 @@ Json DocumentController::parameterActivityOperation(const std::string &method,co
   const auto require=[](bool ok,const char *why){if(!ok)throw Api::ApiError(-32602,why);};
   require(p.is_object(),"Expected parameter activity object");
   const auto integer=[&](const Json &v,uint64_t low,uint64_t high){
-    require(v.is_number(),"Expected a parameter activity number, not a boolean");
-    const auto n=v.get<double>();
-    require(std::isfinite(n)&&n>=double(low)&&n<=double(high)&&std::floor(n)==n,"Parameter activity integer outside range");
-    return uint64_t(n);
+    const auto n=Api::boundedInteger(v,low,high);
+    require(n.has_value(),"Expected a parameter activity integer within its allowed range");
+    return *n;
   };
   const auto field=[&](const char *key)->const Json &{require(p.contains(key),"Missing parameter activity field");return p.at(key);};
   const auto id=[](uint64_t value){return "n"+std::to_string(value);};

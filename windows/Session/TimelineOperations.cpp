@@ -21,10 +21,7 @@ void need(bool ok,const char *why){if(!ok)throw Api::ApiError(-32602,why);}
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected object");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto key){return i.key()==key;}),"Unknown parameter");}
 const Json &field(const Json &p,const char *key){need(p.contains(key),"Required parameter missing");return p.at(key);}
 uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){
-  need(v.is_number(),"Expected integer, not boolean");
-  if(v.is_number_unsigned()){auto n=v.get<uint64_t>();need(n>=lo&&n<=hi,"Integer out of range");return n;}
-  if(v.is_number_integer()){auto n=v.get<int64_t>();need(n>=0&&uint64_t(n)>=lo&&uint64_t(n)<=hi,"Integer out of range");return uint64_t(n);}
-  auto n=v.get<double>();need(std::isfinite(n)&&n>=double(lo)&&n<=double(hi)&&n<=9007199254740991.0&&std::floor(n)==n,"Integer out of range");return uint64_t(n);
+  const auto n=Api::boundedInteger(v,lo,hi);need(n.has_value(),"Expected an integer within its allowed range");return *n;
 }
 double number(const Json &v,double lo,double hi){need(v.is_number(),"Expected number");auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Number out of range");return n;}
 std::string text(const Json &v,size_t maximum){

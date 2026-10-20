@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include "../../editor/WriteOutcome.hpp"
 #include "ProtocolLimits.hpp"
+#include "IntegerValidation.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -150,10 +151,9 @@ class SessionAdapter {
   }
   static unsigned integer(const Json &p, const char *key, unsigned fallback, unsigned low, unsigned high, bool required=false) {
     if(!p.contains(key)) { require(!required,"Missing integer parameter"); return fallback; }
-    const auto &v=p[key];
-    require(v.is_number_integer() && !v.is_boolean(),"Expected an integer (not a boolean)");
-    require(v>=low && v<=high,"Integer parameter is outside its range");
-    return v.get<unsigned>();
+    const auto value=boundedInteger(p.at(key),low,high);
+    require(value.has_value(),"Expected an integer within its range (not a boolean)");
+    return unsigned(*value);
   }
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
@@ -380,9 +380,7 @@ public:
           require(p.contains("instrument")||p.contains("octave"),"Supply instrument or octave");
           const auto inputInteger=[&](const char *key,unsigned low,unsigned high) {
             if(!p.contains(key))return;
-            const auto &raw=p.at(key);require(raw.is_number(),"Input selection must be an integer number");
-            const auto value=raw.get<double>();
-            require(std::isfinite(value)&&std::floor(value)==value&&value>=low&&value<=high,"Input selection is outside its integer range");
+            require(boundedInteger(p.at(key),low,high).has_value(),"Input selection is outside its integer range");
           };
           inputInteger("instrument",1,255);inputInteger("octave",0,8);
         }

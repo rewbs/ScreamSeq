@@ -26,8 +26,7 @@ void keys(const Json &p,std::initializer_list<const char *> allowed) {
 const Json &field(const Json &p,const char *k) { require(p.is_object()&&p.contains(k),"Missing required field"); return p.at(k); }
 const Json &array(const Json &v,size_t maximum) { require(v.is_array()&&v.size()<=maximum,"Invalid array or capacity"); return v; }
 uint64_t integer(const Json &v,uint64_t lo,uint64_t hi) {
-  require(v.is_number(),"Expected a number, not a boolean"); const auto n=v.get<double>();
-  require(std::isfinite(n)&&n>=double(lo)&&n<=double(hi)&&std::floor(n)==n,"Integer outside allowed range"); return uint64_t(n);
+  const auto n=Api::boundedInteger(v,lo,hi);require(n.has_value(),"Expected an integer within its allowed range");return *n;
 }
 double number(const Json &v,double lo,double hi) {
   require(v.is_number(),"Expected a number, not a boolean"); const auto n=v.get<double>();

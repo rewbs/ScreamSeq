@@ -25,10 +25,8 @@ const Json &field(const Json &p, const char *key) {
   return p.at(key);
 }
 uint64_t integer(const Json &v, uint64_t low, uint64_t high) {
-  require(v.is_number() && !v.is_boolean(),"Expected a number, not a boolean");
-  const auto n=v.get<double>();
-  require(std::isfinite(n) && n>=double(low) && n<=double(high) && std::floor(n)==n,"Integer outside its allowed range");
-  return uint64_t(n);
+  const auto n=Api::boundedInteger(v,low,high);
+  require(n.has_value(),"Expected an integer within its allowed range");return *n;
 }
 bool boolean(const Json &v) {
   require(v.is_boolean(),"Expected a boolean"); return v.get<bool>();

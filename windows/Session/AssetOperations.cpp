@@ -23,7 +23,7 @@ double number(const Json &v,double lo,double hi) {
   const auto n=v.get<double>();require(std::isfinite(n)&&n>=lo&&n<=hi,"Number outside allowed range");return n;
 }
 uint64_t integer(const Json &v,uint64_t lo,uint64_t hi) {
-  auto n=number(v,double(lo),double(hi));require(std::floor(n)==n,"Expected an integer");return uint64_t(n);
+  const auto n=Api::boundedInteger(v,lo,hi);require(n.has_value(),"Expected an integer within its allowed range");return *n;
 }
 bool boolean(const Json &v) { require(v.is_boolean(),"Expected a boolean");return v.get<bool>(); }
 bool dryRun(const Json &p) { return p.contains("dryRun")?boolean(p.at("dryRun")):false; }

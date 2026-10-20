@@ -20,7 +20,7 @@ void need(bool value,const char *why){if(!value)throw Api::ApiError(-32602,why);
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected an object");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto k){return i.key()==k;}),"Unknown pattern field");}
 const Json &field(const Json &p,const char *key){need(p.contains(key),"Missing required pattern field");return p.at(key);}
 double number(const Json &v,double lo,double hi){need(v.is_number()&&!v.is_boolean(),"Expected a number");const auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Number outside its allowed range");return n;}
-uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){const auto n=number(v,double(lo),double(hi));need(std::floor(n)==n,"Expected an integer");return uint64_t(n);}
+uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){const auto n=Api::boundedInteger(v,lo,hi);need(n.has_value(),"Expected an integer within its allowed range");return *n;}
 bool flag(const Json &p,const char *key){if(!p.contains(key))return false;need(p.at(key).is_boolean(),"Expected a boolean");return p.at(key).get<bool>();}
 const Json &array(const Json &v,size_t limit){need(v.is_array()&&v.size()<=limit,"Pattern collection exceeds its limit");return v;}
 std::string text(const Json &v,size_t limit){need(v.is_string(),"Expected a string");const auto &s=v.get_ref<const std::string &>();need(s.size()<=limit*4&&s.find('\0')==std::string::npos,"Text exceeds its limit or contains NUL");if(!s.empty()){const auto n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(n>0&&size_t(n)<=limit,"Invalid UTF-8 or oversized text");}return s;}

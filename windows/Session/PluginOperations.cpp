@@ -24,7 +24,7 @@ using namespace Tracker;
 void need(bool ok,const char *why){if(!ok)throw Api::ApiError(-32602,why);}
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected an object");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto k){return i.key()==k;}),"Unknown plugin field");}
 const Json &field(const Json &p,const char *key){need(p.contains(key),"Missing plugin field");return p.at(key);}
-uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){need(v.is_number_integer() && !v.is_boolean() && v>=lo && v<=hi,"Plugin integer outside range");return v.get<uint64_t>();}
+uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){const auto n=Api::boundedInteger(v,lo,hi);need(n.has_value(),"Expected a plugin integer within its allowed range");return *n;}
 double number(const Json &v,double lo,double hi){need(v.is_number()&&!v.is_boolean(),"Expected plugin number");auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Plugin value outside range");return n;}
 bool flag(const Json &p,const char *key,bool fallback=false){if(!p.contains(key))return fallback;need(p.at(key).is_boolean(),"Expected plugin boolean");return p.at(key).get<bool>();}
 std::string text(const Json &v,size_t max=8192){need(v.is_string(),"Expected plugin text");const auto &s=v.get_ref<const std::string &>();need(s.size()<=max*4&&s.find('\0')==std::string::npos,"Invalid plugin text");if(!s.empty()){auto n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(n>0&&size_t(n)<=max,"Invalid plugin UTF-8");}return s;}

@@ -1,6 +1,7 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <limits>
 #include "SessionAdapter.hpp"
 #include <windows.h>
 #include <aclapi.h>
@@ -83,6 +84,15 @@ void sessionTests() {
   check(doc["result"]["data"]["title"]=="fixture" && doc["result"]["documentId"]=="test", "document snapshot envelope");
   auto pattern=api.handle(request("pattern.get",{{"pattern",0},{"startRow",1},{"rowCount",1}}));
   check(pattern["result"]["data"]["cells"].size()==2 && pattern["result"]["data"]["cells"][1]["note"]==49,"pattern rectangle matches snapshot cells");
+  for(const char *literal:{"0","0.0","0e0","-0.0"}) {
+    auto params=json{{"pattern",json::parse(literal)},{"startRow",1.0},{"rowCount",1.0}};
+    check(api.handle(request("pattern.get",params))==pattern,"Integral JSON representations changed pattern selection");
+  }
+  for(const auto &value:{json(true),json(false),json(.5),json(-1),json("0"),json(nullptr),
+      json(UINT64_MAX),json(0x1p64),json(std::numeric_limits<double>::infinity())})
+    check(!boundedInteger(value,0,UINT32_MAX),"Invalid JSON integer passed range validation");
+  check(boundedInteger(json(UINT64_MAX),UINT64_MAX,UINT64_MAX)==UINT64_MAX,"JSON exact uint64 rounded");
+  check(!boundedInteger(json(0x1p53),9007199254740993ULL,UINT64_MAX),"JSON real rounded its lower bound");
   for(auto p:{json{{"pattern",true}},json{{"pattern",0},{"startRow",4}},json{{"pattern",0},{"rowCount",-1}},json{{"pattern",0},{"unknown",1}},json{{"pattern",0},{"channelCount",3}}})
     check(api.handle(request("pattern.get",p))["error"]["code"]==-32602,"pattern params reject without coercion");
   check(api.handle(request("context.get"))["result"]["contextChanged"]==false,"read-only context");

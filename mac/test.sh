@@ -53,6 +53,8 @@ bash mac/build-reference.sh
 "$tracker_build/musical-automation-tests" "$tracker_build/test-plugins/ResonanceFixture.vst3"
 "$tracker_build/session-tests"
 "$tracker_build/automation-tests"
+"$tracker_build/integer-validation-tests"
+"$tracker_build/foundation-integer-validation-tests"
 "$tracker_build/plugin-inventory-tests"
 "$tracker_build/plugin-lifecycle-tests"
 "$tracker_build/plugin-shutdown-tests" "$tracker_build/test-plugins/ResonanceFixture.vst3"

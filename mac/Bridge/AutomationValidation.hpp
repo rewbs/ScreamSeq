@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <tuple>
 #include <functional>
+#include "../../editor/IntegerValidation.hpp"
 
 namespace Automation {
 struct Error : std::runtime_error {
@@ -37,9 +38,19 @@ inline double number(id value, double minimum, double maximum) {
   return n;
 }
 inline uint64_t integer(id value, uint64_t minimum, uint64_t maximum) {
-  double n = number(value, double(minimum), double(maximum));
-  require(std::floor(n) == n, "Expected an integer");
-  return uint64_t(n);
+  require([value isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID(),
+          "Expected an integer, not a boolean");
+  std::optional<uint64_t> result;
+  switch(*[value objCType]) {
+  case 'C': case 'S': case 'I': case 'L': case 'Q':
+    result=Tracker::boundedUnsignedInteger(uint64_t([value unsignedLongLongValue]),minimum,maximum);break;
+  case 'c': case 's': case 'i': case 'l': case 'q':
+    result=Tracker::boundedUnsignedInteger(int64_t([value longLongValue]),minimum,maximum);break;
+  default:
+    result=Tracker::boundedUnsignedInteger([value doubleValue],minimum,maximum);break;
+  }
+  require(result.has_value(),"Expected an integer within its allowed range");
+  return *result;
 }
 inline bool boolean(id value) {
   require(value && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID(), "Expected a boolean");

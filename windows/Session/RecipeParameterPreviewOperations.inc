@@ -33,8 +33,9 @@ Json DocumentController::recipeParameterPreviewOperation(const std::string &meth
     const auto text=[&](const char *key,size_t maximum){if(!p.contains(key)||!p.at(key).is_string())throw std::invalid_argument("Preview identity must be a string");auto s=p.at(key).get<std::string>();if(s.empty()||s.size()>maximum||s.find('\0')!=std::string::npos)throw std::invalid_argument("Invalid preview identity");return s;};
     const auto nativeID=[&](const char *field){const auto s=text(field,32);if(s.size()<2||s[0]!='n'||s[1]=='0')throw std::invalid_argument("Invalid graph identity");uint64_t result=0;for(size_t i=1;i<s.size();++i){if(s[i]<'0'||s[i]>'9'||result>(Tracker::NativeSong::maximumID-1-uint64_t(s[i]-'0'))/10)throw std::invalid_argument("Invalid graph identity");result=result*10+uint64_t(s[i]-'0');}return result;};
     const auto graph=nativeID("graph"),node=nativeID("node");
-    if(!p.contains("parameter")||!p.at("parameter").is_number_integer()||p.at("parameter").get<double>()<0||p.at("parameter").get<double>()>UINT32_MAX)throw std::invalid_argument("Invalid parameter identity");
-    const Owner::Key key{text("gesture",80),"recipe:n"+std::to_string(graph)+":n"+std::to_string(node),p.at("parameter").get<uint32_t>()};Owner::validateKey(key);
+    const auto parameter=p.contains("parameter")?Api::boundedInteger(p.at("parameter"),0,UINT32_MAX):std::nullopt;
+    if(!parameter)throw std::invalid_argument("Invalid parameter identity");
+    const Owner::Key key{text("gesture",80),"recipe:n"+std::to_string(graph)+":n"+std::to_string(node),uint32_t(*parameter)};Owner::validateKey(key);
     if(text("expectedRevision",200)!=revision())throw Api::ApiError(-32001,"Song changed; recipe preview was not updated");
     if(cancel){if(recipePreview_.active()&&recipePreview_.active()->key!=key)throw std::invalid_argument("Cancellation belongs to another recipe preview");cancelRecipeParameterPreview();return {{"active",false}};}
     if(!document_->editable())throw std::invalid_argument("This document is read-only");

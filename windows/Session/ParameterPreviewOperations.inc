@@ -42,8 +42,9 @@ Json DocumentController::parameterPreviewOperation(const std::string &method,con
     else keys(p,{"expectedRevision","plugin","parameter","gesture","value"});
     const auto string=[&](const char *key,size_t maximum){if(!p.contains(key)||!p.at(key).is_string())throw std::invalid_argument("Preview identity must be a string");auto v=p.at(key).get<std::string>();if(v.empty()||v.size()>maximum)throw std::invalid_argument("Invalid preview identity");return v;};
     const auto expected=string("expectedRevision",200);
-    if(!p.contains("parameter")||!p.at("parameter").is_number_integer()||p.at("parameter").get<double>()<0||p.at("parameter").get<double>()>UINT32_MAX)throw std::invalid_argument("Invalid parameter identity");
-    const Owner::Key key{string("gesture",80),string("plugin",128),p.at("parameter").get<uint32_t>()};
+    const auto parameter=p.contains("parameter")?Api::boundedInteger(p.at("parameter"),0,UINT32_MAX):std::nullopt;
+    if(!parameter)throw std::invalid_argument("Invalid parameter identity");
+    const Owner::Key key{string("gesture",80),string("plugin",128),uint32_t(*parameter)};
     Owner::validateKey(key);
     if(expected!=revision())throw Api::ApiError(-32001,"Song changed; parameter preview was not updated");
     if(cancel){if(parameterPreview_.active()&&parameterPreview_.active()->key!=key)throw std::invalid_argument("Cancellation belongs to another preview");cancelRackParameterPreview();return {{"active",false}};}

@@ -11,6 +11,7 @@ from parameter_preview_contract import parameter_preview_contract
 from recipe_parameter_contract import recipe_parameter_contract
 from recipe_preview_contract import recipe_preview_contract
 from rack_dry_run_contract import rack_dry_run_contract
+from integer_api_contract import integer_api_contract
 
 
 class PluginEditParityTests(unittest.TestCase):
@@ -20,6 +21,15 @@ class PluginEditParityTests(unittest.TestCase):
     write = support.GraphMixerAppTests.write
     rejected = support.GraphMixerAppTests.rejected
     add_gain = support.GraphMixerAppTests.add_gain
+
+    def test_integer_api_contract_and_reopen(self):
+        def expect_error(code, action):
+            with self.assertRaises(ApiError) as error:
+                action()
+            self.assertEqual(error.exception.code, code)
+        path, plugin, accepted = integer_api_contract(self.client, self.folder, expect_error)
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('plugin.state.get', plugin=plugin), accepted)
 
     def test_rack_dry_run_contract(self):
         def expect_error(code, action):

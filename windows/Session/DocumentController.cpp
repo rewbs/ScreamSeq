@@ -645,7 +645,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   Json result;
   if(method=="sample.renderSelection") {
     keys(params,{"pattern","firstRow","lastRow","firstChannel","lastChannel","name","createInstrument","tailSeconds","dryRun"});
-    auto index=[&](const char *key){if(!params.contains(key)||!params.at(key).is_number_integer()||params.at(key).get<double>()<0||params.at(key).get<double>()>65535)throw Api::ApiError(-32602,"Selection coordinates must be integers from 0 to 65535");return params.at(key).get<uint16_t>();};
+    auto index=[&](const char *key){const auto value=params.contains(key)?Api::boundedInteger(params.at(key),0,65535):std::nullopt;if(!value)throw Api::ApiError(-32602,"Selection coordinates must be integers from 0 to 65535");return uint16_t(*value);};
     const Tracker::SamplingSelection selection{index("pattern"),index("firstRow"),index("lastRow"),index("firstChannel"),index("lastChannel")};
     const auto nameValue=params.value("name",Json("Rendered selection"));
     if(!nameValue.is_string())throw Api::ApiError(-32602,"Expected a sample name");
