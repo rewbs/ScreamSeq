@@ -296,6 +296,22 @@ All six edits Undo and Redo chronologically against complete saved trees.
 Interleaved no-ops retain Redo, a stale request rejects without mutation, and a
 real edit forks history. The final copy reopens exactly and is retained as
 `composing-history/reopened.screamseq` for later reciprocal exchange.
+
+`--envelope-bank` adds the stopped F04 linked-master journey. It copies n40 to
+instrument n21 independently, links instrument n22, edits the master and verifies
+both linked uses while retaining the independent copy. After unlinking n22, a
+second master edit changes only n20. Dry runs, a no-op unlink, invalid shape and
+used-master removal retain exact state and Redo. Five chronological Undo/Redo
+steps and reopen compare complete typed saved trees. All instrument fields and
+sample PCM are checked during materialization; the embedded module may change
+only for actual envelope edits. It retains 25 saved checkpoints and
+`envelope-bank/reopened.screamseq` for reciprocal exchange.
+
+Both native workflows request this check. It does not qualify catalogue
+publication/import, sample-family import, foreground bank controls, live audio,
+or the full A08 acceptance recipe. Exact saved-state checks do not independently
+decode every embedded module field; shared snapshot validators remain part of
+the broader gate.
 The fixture's volume envelope remains linked to n40; editing its template is
 the separate A08 bank journey, not bypassed here.
 

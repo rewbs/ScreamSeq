@@ -167,7 +167,7 @@ jobs:
           $executable = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $binaryHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
           $builtCommit = (git rev-parse HEAD).Trim()
-          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history *>&1 | Tee-Object screamseq-conformance-native.log
+          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history --envelope-bank *>&1 | Tee-Object screamseq-conformance-native.log
           if ($LASTEXITCODE -ne 0) { throw 'Native conformance baseline did not match; inspect retained reports.' }
       - name: Configured test scheduling inventory
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

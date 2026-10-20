@@ -193,6 +193,8 @@ def main(argv=None):
                         help="Check opaque metadata through paired edits, rack identities and Undo/Redo")
     parser.add_argument("--composing-history", action="store_true",
                         help="Check F04 edits across six domains through chronological Undo/Redo and reopen")
+    parser.add_argument("--envelope-bank", action="store_true",
+                        help="Check F04 linked-master propagation, independent copies, unlink and history")
     parser.add_argument("--editing-contracts", action="store_true",
                         help="Run six shared editing contracts in fresh native app processes")
     args = parser.parse_args(argv)
@@ -298,6 +300,12 @@ def main(argv=None):
                 report["composingHistory"] = dict(passed=history_report["passed"],
                     report="composing-history/report.json",
                     sha256=sha256(read_bytes(output / "composing-history/report.json")))
+            if args.envelope_bank:
+                from envelope_bank import run
+                bank_report = run(client, output / "envelope-bank")
+                report["envelopeBank"] = dict(passed=bank_report["passed"],
+                    report="envelope-bank/report.json",
+                    sha256=sha256(read_bytes(output / "envelope-bank/report.json")))
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
         report["passed"] = (len(report["fixtures"]) == len(sources) and all(row["passed"] for row in report["fixtures"])
@@ -308,6 +316,7 @@ def main(argv=None):
                             and report.get("durationDefaults", {}).get("passed", True)
                             and report.get("editedMetadata", {}).get("passed", True)
                             and report.get("composingHistory", {}).get("passed", True)
+                            and report.get("envelopeBank", {}).get("passed", True)
                             and report.get("editingContracts", {}).get("passed", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:

@@ -30,6 +30,17 @@ The [export follow-up audit](EXPORT-FOLLOWUP-2026-10-20.md) also confirms the
 missing Windows module-export endpoint/command and records concrete shared/native
 boundaries for A15, to follow the current integration repair.
 
+During the cooldown the retained Windows candidate also passed the new shared
+`--envelope-bank` journey at **07:16:44–07:16:59 UTC**: 25 exact saved checkpoints
+cover two linked uses, an independent copy, unlink, master edits, dry/no-op and
+invalid requests, chronological Undo/Redo and reopen. All instrument fields and
+sample PCM were checked. Evidence is under
+`bin/commit-outcome-20261020/envelope-bank-journey/`; the final exchange input is
+`envelope-bank/reopened.screamseq`. Original inputs, outputs and executable
+remained unchanged and owned processes exited. This is a bounded A08 bank check,
+not family/catalogue/UI/audio completion. The next native workflow batch
+schedules it on both platforms; no new product build ran.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:

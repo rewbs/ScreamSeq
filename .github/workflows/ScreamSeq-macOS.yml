@@ -147,7 +147,7 @@ jobs:
             --executable "$executable" --binary-sha256 "$binary_hash" \
             --binary-source-commit "$(git rev-parse HEAD)" \
             --build-receipt "$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/Resources/BuildInfo.json" \
-            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --editing-contracts --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history \
+            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --editing-contracts --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history --envelope-bank \
             2>&1 | tee screamseq-macos-conformance-native.log
       - name: Configured test scheduling inventory
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
