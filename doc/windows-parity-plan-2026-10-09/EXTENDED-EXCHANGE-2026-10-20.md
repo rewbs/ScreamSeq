@@ -58,6 +58,22 @@ These are tooling/admission checks. No application was launched, no original
 artifact changed, and no native product was built. They do not establish a new
 reciprocal pass. The current candidate must still execute the exchange.
 
+### Current Mac artifact admission
+
+The completed Apple Silicon artifact at source
+`e4f36a1f1c84dbaa0995dd7ad74843e0f870d149` now supplies all three successful
+edited journeys. Its composing report is 21,341,767 bytes and its bank report
+17,538,532 bytes. Their complete request/reply audits exceed the original
+16-MiB small-receipt parser limit.
+
+Only hash-verified journey reports now use an explicit **32-MiB** read bound;
+other receipts retain 16 MiB. The checker still requires the full original
+source, final-save byte/typed fingerprints, comparison and preservation evidence.
+No assertions or reports are dropped. All eight tooling tests passed again
+in 20.511 seconds, and all three real current Mac journey inputs passed
+admission. The verified receipt is retained at
+`bin/gesture-batch-20261020/mac-arm-conformance-verification.json`.
+
 ## Run with retained applications
 
 Both native workflow dispatch forms now accept `extended_exchange: true`;

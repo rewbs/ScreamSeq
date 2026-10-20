@@ -20,8 +20,8 @@ from native_roundtrip import ROOT, main as native_main, write_json
 from project_tree import CORPUS, EvidenceError, digest, read_bytes, read_project, sha256
 
 
-def read_json(path):
-    return json.loads(read_bytes(path, 16 * 1024 * 1024).decode("utf-8-sig"))
+def read_json(path, limit=16 * 1024 * 1024):
+    return json.loads(read_bytes(path, limit).decode("utf-8-sig"))
 
 
 def one(root, pattern):
@@ -172,7 +172,10 @@ def edited_journey_input(parent_path, key, directory, format_name, rows_key, exp
         raise EvidenceError(f"Missing successful native editing journey: {directory}")
     report_path = parent_path.parent / relative
     check_hash(report_path, entry["sha256"])
-    report = read_json(report_path)
+    # The native Mac audit includes full document replies: the verified F04
+    # composing report is 21.3 MB. Keep small receipts at their original bound
+    # and admit only these explicit, already hash-checked journey reports here.
+    report = read_json(report_path, 32 * 1024 * 1024)
     if (report.get("format") != format_name or report.get("passed") is not True
             or report.get("inputsAndOutputsUnchanged") is not True
             or report.get("sourceSHA256") != sha256(read_bytes(CORPUS / "fixtures/04-complete-reference.screamseq"))):
