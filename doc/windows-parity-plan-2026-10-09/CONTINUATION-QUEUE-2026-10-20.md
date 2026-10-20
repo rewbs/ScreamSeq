@@ -21,6 +21,15 @@ than **08:01:13 UTC**. Earlier pending-build statements below are historical;
 the next action is to inspect those live CI runs and their retained results,
 then review actual cross-platform observations and exchange saved files.
 
+**Subsequent result:** Mac Apple Silicon failed compilation at 07:08:49 UTC on
+a malformed rack-preview array initializer. The correction is prepared locally;
+the same report retains its exact log and pending native gate. Intel and x64
+were still running at diagnosis. Collect their results and batch corrections
+before the next hourly build; do not interpret the Windows passes as Mac proof.
+The [export follow-up audit](EXPORT-FOLLOWUP-2026-10-20.md) also confirms the
+missing Windows module-export endpoint/command and records concrete shared/native
+boundaries for A15, to follow the current integration repair.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:

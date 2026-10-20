@@ -74,6 +74,29 @@ The new edited exchange inputs are retained at
 directory. They have passed Windows checks only. Reciprocal F01–F05 and actual
 edited-file legs remain required.
 
+### Subsequent Mac failure
+
+Apple Silicon job `118498660903` completed with a build failure at
+**07:08:49 UTC**, before native/socket/interface qualification. The actual CI
+checkout was PR merge `b30e060c630d445b653b32018b8d787c8bdf0468`, merging the
+frozen head into the stated main.
+
+`ParameterPreviewAPI.inc:50` is missing the closing brace of its nested
+`std::array<std::pair<...>,1>` initializer. The compiler also reports selectors
+whose definitions occur after that parse failure and a missing `@end`. A
+local correction makes the pair construction explicit; whether it resolves
+all downstream diagnostics requires the next native compile. No immediate
+rebuild was started. The Intel and Windows x64 jobs were still live when the
+Apple Silicon failure was diagnosed.
+
+The full job log is retained as
+`bin/commit-outcome-20261020/macos-15-job-118498660903.log`,
+SHA-256 `9550c4a5d97eef760b6f2f59eb57b52c17784fe88b94cc0f41ac6da46b3024cb`.
+No Mac app archive was produced by this failed build. Keep the PR draft.
+The next Mac build must also respect its hourly gate (no earlier than
+**08:08:50 UTC** for this architecture); collect the other jobs' results before
+freezing the correction batch.
+
 Foreground UI inspection remains stopped following the earlier human Escape.
 Renewed permission was requested and has not been received at this checkpoint.
 Private-desktop control checks are not live visual, physical keyboard, DPI,

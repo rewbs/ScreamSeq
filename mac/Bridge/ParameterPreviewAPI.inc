@@ -47,7 +47,9 @@
   require(found!=_plugins.end(),"Plugin instance no longer exists");const auto slot=uint32_t(found-_plugins.begin());
   const auto revision=std::string(self.automationRevision.UTF8String);
   const auto catalog=_audio->pluginParameters(slot);
-  const std::array<std::pair<uint32_t,double>,1> requested{{{key.parameter,number(p[@"value"],-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max()))}};
+  const std::array<std::pair<uint32_t,double>,1> requested{
+    std::pair<uint32_t,double>{key.parameter,
+      number(p[@"value"],-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max()))}};
   std::vector<std::pair<uint32_t,float>> edits;
   try{edits=prepareParameterEdits(catalog,requested);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
   const auto value=edits.at(0).second;
