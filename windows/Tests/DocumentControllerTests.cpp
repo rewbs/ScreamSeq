@@ -7,6 +7,7 @@
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
+#include "soundlib/mod_specifications.h"
 #include <iostream>
 
 using namespace ScreamSeq;
@@ -719,8 +720,10 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "TrackControllerTests.inc"
 #include "TimelineControllerTests.inc"
 #include "PatternTransformControllerTests.inc"
+#include "ModuleExportControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--module-export") {moduleExportControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-transform") {patternTransformControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--timeline") {timelineControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--tracks") {trackControllerTests(std::filesystem::u8path(argv[2]));return 0;}

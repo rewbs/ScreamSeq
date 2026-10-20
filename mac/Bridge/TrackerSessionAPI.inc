@@ -69,7 +69,7 @@
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
     if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
-    if(mutation&&!_parameterPreviewCommitting&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))) [self cancelParameterPreview];
+    if(mutation&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))) [self cancelParameterPreview];
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
     id result = @{};
@@ -292,10 +292,15 @@
       BOOL directory = NO;
       require([NSFileManager.defaultManager fileExistsAtPath:path.stringByDeletingLastPathComponent isDirectory:&directory] && directory,
               "Save directory does not exist");
+      require(![NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&directory] || !directory,
+              "Save destination must be a file");
+      if(!native) {
+        try{[self validateModuleExport];}
+        catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      }
       if (dry) {
         if (native) (void)[self projectData];
         else {
-          require(_plugins.empty() && !_document->native().hasAnnotations(), "Use a .screamseq project to retain native metadata, effects and automation");
           _document->validateModuleSampleExport();
         }
       } else if (overwrite) {

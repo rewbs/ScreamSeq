@@ -8,6 +8,7 @@
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
+#include "ModuleExportDialog.hpp"
 #include "WorkspaceState.hpp"
 #include "WorkspaceRegions.hpp"
 #include "WorkspaceLayouts.hpp"
@@ -103,6 +104,7 @@ constexpr int keyboardSettingsCommand=628;
 constexpr int exitCommand=629;
 constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
 constexpr int contextPanelCommand=635,contextActionFirst=636,contextActionLast=641;
+constexpr int exportModuleCommand=642;
 static_assert(contextActionLast<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,

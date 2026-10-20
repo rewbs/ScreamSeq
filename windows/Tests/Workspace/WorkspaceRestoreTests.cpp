@@ -87,6 +87,11 @@ struct RestoreApplication final:Application {
         ++sampleLibraryCompletions;if(auto fault=std::exchange(sampleLibraryCompletionFault,{}))fault();
     }
     std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
+    std::function<std::filesystem::path(const std::wstring &)> moduleExportChooser;
+    std::filesystem::path chooseModuleExportFile(const std::wstring &format)override {
+        if(!moduleExportChooser)throw std::runtime_error("Fixture requires an owned module export chooser");
+        return moduleExportChooser(format);
+    }
     std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments)override {
         if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
         return sampleImportChooser(instruments);
@@ -1075,6 +1080,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
 #include "ContextPanelApplicationTests.inc"
+#include "ModuleExportApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
 #include "EffectPickerApplicationTests.inc"
 #include "DocumentLoadReportApplicationTests.inc"
@@ -1192,6 +1198,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
+                    timedRestoreCase("module export command and captured picker",applicationModuleExport);
                     timedRestoreCase("automatic field edits",applicationAutomaticEdits);
                     timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);

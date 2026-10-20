@@ -9747,7 +9747,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Export the current module format after checking sample preservation and rejecting native metadata, plugins or automation that cannot be represented. Does not change the native save destination or dirty flag.",
+      "description": "Export the current MOD/XM/S3M/IT/MPTM format after validating structure, samples and timing. Rejects native annotations, hosted plugins, recorded automation, uncommitted takes and retained unknown project data or recovery archives. Dry run writes nothing; actual export leaves native save destination, source protection, dirty state and history unchanged. Both native platforms implement this method.",
       "type": "object",
       "properties": {
         "jsonrpc": {

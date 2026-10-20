@@ -290,6 +290,42 @@ static void opaqueMetadata(NSData *baselineBytes,NSString *directory) {
   check([[NSData dataWithContentsOfFile:pluginPath] isEqual:pluginBytes],"Missing plugin edit/save changed original source");
 }
 
+static void moduleExportRecovery(NSString *directory) {
+  // Container-version recovery alone has no native musical loss to block
+  // export, but the original source must stay protected afterwards.
+  Document fresh(MOD_TYPE_IT,4);Document imported(fresh.serialize());
+  const auto module=imported.moduleExportData();
+  NSString *input=[directory stringByAppendingPathComponent:@"export-baseline.it"];
+  check([[NSData dataWithBytes:module.data() length:module.size()] writeToFile:input atomically:YES],
+    "Write export recovery baseline");
+  TrackerSession *session=[TrackerSession new];open(session,input);
+  NSMutableDictionary *root=decode(session.serializedData);root[@"version"]=@999;
+  NSString *source=[directory stringByAppendingPathComponent:@"export-protected.screamseq"];
+  NSData *original=writeProject(root,source);open(session,source);warnings(session,source);
+  NSString *output=[directory stringByAppendingPathComponent:@"export-recovered.it"];
+  NSString *revision=session.automationRevision;NSDictionary *before=[session snapshot:0];
+  check([call(session,@"document.exportModule",@{@"path":output},true)[@"written"] boolValue],
+    "Recovered module-compatible project can export a separate file");
+  check([session.automationRevision isEqual:revision]&&[[session snapshot:0] isEqual:before],
+    "Export cleared recovery source protection or changed the song");
+  NSError *error=nil;
+  check(![session savePath:source error:&error]&&[[NSData dataWithContentsOfFile:source] isEqual:original],
+    "Export unlocked the original recovered source");
+  root[@"futureExtension"]=[NSData dataWithBytes:"\0\xff" length:2];
+  NSString *opaque=[directory stringByAppendingPathComponent:@"export-opaque.screamseq"];
+  NSData *opaqueOriginal=writeProject(root,opaque);open(session,opaque);
+  NSData *exportOriginal=[NSData dataWithContentsOfFile:output];
+  for(NSNumber *dry in @[@YES,@NO]) {
+    error=nil;revision=session.automationRevision;
+    check(![session automationMethod:@"document.exportModule" params:@{@"expectedRevision":revision,
+      @"path":output,@"overwrite":@YES,@"dryRun":dry} error:&error],
+      "Opaque retained project fields must block module export");
+    check([session.automationRevision isEqual:revision]&&
+      [[NSData dataWithContentsOfFile:output] isEqual:exportOriginal]&&
+      [[NSData dataWithContentsOfFile:opaque] isEqual:opaqueOriginal],
+      "Rejected opaque export changed a destination, original source or revision");
+  }
+}
 int main(int argc, char **argv) { @autoreleasepool { try {
   if(argc == 3 && std::string(argv[1]) == "--probe") {
     NSString *path = @(argv[2]);
@@ -315,6 +351,7 @@ int main(int argc, char **argv) { @autoreleasepool { try {
   partialRecovery(bytes, directory);
   malformedPluginContainers(bytes, directory);
   opaqueMetadata(bytes,directory);
+  moduleExportRecovery(directory);
   [NSFileManager.defaultManager removeItemAtPath:directory error:nil];
   std::cout << "PASS project recovery: legacy NF/NR signatures, warnings, guarded Save As, typed extensions/XML, inactive recovery archives, Undo/Redo, failed Save/Open, strict API and byte-identical originals\n";
   return 0;

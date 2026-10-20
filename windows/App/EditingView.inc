@@ -279,6 +279,24 @@
         bool selected=save ? GetSaveFileNameW(&choice)!=FALSE : GetOpenFileNameW(&choice)!=FALSE;
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
+    virtual std::filesystem::path chooseModuleExportFile(const std::wstring &format) {
+        ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format);
+    }
+    void exportModuleFile() {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
+        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        const auto document=documentId,revision=view->session.revision;
+        auto format=wide(view->session.document.at("format").get<std::string>());
+        std::transform(format.begin(),format.end(),format.begin(),towlower);
+        if(format!=L"mod"&&format!=L"xm"&&format!=L"s3m"&&format!=L"it"&&format!=L"mptm")
+            throw std::runtime_error("This source format does not support module export / use Save As for a native project");
+        const auto path=chooseModuleExportFile(format);
+        if(path.empty())return;
+        if(documentId!=document||view->session.revision!=revision)
+            throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Export; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        retainedNativeCommand("export","document.exportModule",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
+            {{"path",utf8Path(path)}},[&](const Json &){status=L"Module exported / native project save state retained";});
+    }
     bool saveFile(bool saveAs=false) {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");

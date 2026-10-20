@@ -46,6 +46,9 @@ nlohmann::json nativeProjectTree(Tracker::Document &document,const ProjectState 
 std::vector<std::byte> serializeNativeProject(Tracker::Document &document,const ProjectState &state);
 // Also used by API dry runs: overwrite:true never bypasses source protection.
 void validateProjectSaveDestination(const ProjectState &state,const std::filesystem::path &path);
+// Read-only loss admission. The caller must also prepare validated module bytes
+// and protect the destination before publication; no saved identity is updated.
+void validateModuleExport(const Tracker::Document &document,const ProjectState &state);
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite);
 bool requiresHostedPlayback(const Tracker::Document &document,const ProjectState &state);
 }

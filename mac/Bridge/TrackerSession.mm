@@ -14,6 +14,7 @@
 #include "editor/PatternTools.hpp"
 #include "editor/ProjectLoadRecovery.hpp"
 #include "editor/project/ProjectMetadata.hpp"
+#include "editor/project/ModuleExport.hpp"
 #include "NativePropertyTree.hpp"
 #include <sys/stat.h>
 #include "editor/ParameterProvenance.hpp"
@@ -902,6 +903,14 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   const bool sameInode=::stat(_loadSourcePath.fileSystemRepresentation,&original)==0 && ::stat(path.fileSystemRepresentation,&destination)==0 && original.st_dev==destination.st_dev && original.st_ino==destination.st_ino;
   if(sameInode || [canonical(path) isEqual:canonical(_loadSourcePath)])throw std::runtime_error("This project was recovered with compatibility warnings. Save a new .screamseq copy to preserve the original file.");
 }
+- (void)validateModuleExport {
+  const auto known=ScreamSeq::NativePropertyTree::fromFoundation(
+    encodeProjectMetadata(*_document,_plugins,_automation,_pluginPathHints));
+  const auto retained=_projectMetadata.merge(known);
+  ScreamSeq::Project::validateModuleExportFeatures({_document->native().hasAnnotations(),
+    !_plugins.empty(),!_automation.empty(),bool(_recording)||bool(_sampleRecorder),
+    ScreamSeq::Project::hasUnknownProperties(retained,known)});
+}
 - (BOOL)savePath:(NSString *)path error:(NSError **)error {
   try {
     [self validateRecoveredSavePath:path];
@@ -911,13 +920,13 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       NSError *writeError = nil;
       if (![data writeToFile:path options:NSDataWritingAtomic error:&writeError])
         throw std::runtime_error(writeError.localizedDescription.UTF8String);
+      _loadRecovery.protectSource=false;
     } else {
-      if (!_plugins.empty() || _document->native().hasAnnotations())
-        throw std::runtime_error(
-            "Use Save As and the .screamseq project format to retain native metadata, effects and automation.");
+      [self validateModuleExport];
+      if(![path.pathExtension.lowercaseString isEqual:@(_document->song().GetModSpecifications().fileExtension)])
+        throw std::invalid_argument("Export extension must match the current module format.");
       _document->save(path.UTF8String, true);
     }
-    _loadRecovery.protectSource=false;
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);

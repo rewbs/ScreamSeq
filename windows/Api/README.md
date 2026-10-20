@@ -1,5 +1,16 @@
 # Windows local API subset
 
+`document.exportModule {expectedRevision, path, overwrite?, dryRun?}` exports the
+current MOD/XM/S3M/IT/MPTM format to an absolute path with its matching extension.
+It validates the actual module bytes before atomic publication; `overwrite`
+defaults to false and remains exclusive if another writer creates the target
+after admission. Dry runs create no file. Export preserves native project
+identity, dirty state, recovery protection, playback and Undo/Redo. Native
+annotations, plugins, automation, uncommitted takes and retained unknown fields
+or recovery archives require a native `.screamseq` save instead. Exact terminal
+request replay returns the retained response without repeating file publication.
+The corresponding native command is **File → Export module…**.
+
 `track.get {}` returns the shared note-track projection: stable column identities,
 effective per-column mute, visual group membership, note-column indexes, group
 bus names/colors/outputs, available destinations and the module's column limit.

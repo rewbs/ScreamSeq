@@ -620,14 +620,14 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
-  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || replacing;
+  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.exportModule" || replacing;
   if(write) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
     // A document mutation/save uses the accepted baseline. Never serialize or
     // carry a temporary audible value into another edit or plugin topology.
-    if(!flag(params,"dryRun"))cancelParameterPreview();
+    if(method!="document.exportModule"&&!flag(params,"dryRun"))cancelParameterPreview();
   }
   const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();const bool beforeRecovered=project_.recoveredUnsaved;
   changedPatterns_.clear();
@@ -692,6 +692,34 @@ Json DocumentController::operation(const std::string &method,Json params) {
     bool discard=flag(params,"discard");
     if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
     open(path);return {{"path",utf8(path)},{"loadWarnings",project_.loadWarnings},{"requiresSaveAs",project_.requiresSaveAs},{"loadSourcePath",utf8(project_.loadSourcePath)}};
+  } else if(method=="document.exportModule") {
+    std::filesystem::path path;bool overwrite=false,dry=false;std::vector<std::byte> bytes;
+    try {
+      // Everything in this block is read-only. In particular an incompatible
+      // export must not flush a vendor editor, cancel a gesture or stop audio.
+      keys(params,{"path","overwrite","dryRun"});
+      if(recording_||(sampleRecording_&&sampleRecording_->hasTake()))
+        throw Api::ApiError(-32602,"Finish or discard the recording take before exporting a module");
+      if(!params.contains("path"))throw Api::ApiError(-32602,"path is required");
+      path=pathValue(params.at("path"));overwrite=flag(params,"overwrite");dry=flag(params,"dryRun");
+      const std::string format=document_->song().GetModSpecifications().fileExtension;
+      if(extension(path)!=std::filesystem::path("."+format).wstring())
+        throw Api::ApiError(-32602,"Export extension must match the current module format: ."+format);
+      if(!overwrite&&std::filesystem::exists(path))throw Api::ApiError(-32602,"File exists; use overwrite:true");
+      if(!std::filesystem::is_directory(path.parent_path())||std::filesystem::is_directory(path))
+        throw Api::ApiError(-32602,"Export destination must be a file in an existing directory");
+      Project::validateProjectSaveDestination(project_,path);
+      try{Project::validateModuleExport(*document_,project_);}
+      catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+      bytes=document_->moduleExportData();
+      // Allocate the reply before any external side effect. Export never
+      // establishes a native save baseline or consumes musical Undo/Redo.
+      result={{"path",utf8(path)},{"format",format},{"written",!dry},{"projectVersion",nullptr}};
+    } catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+      catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+    // File publication is deliberately outside the noncommit admission block.
+    // An unchanged song revision cannot classify a failed file-write receipt.
+    if(!dry)Project::writeProjectFile(path,bytes,overwrite);
   } else if(method=="document.save") {
     std::filesystem::path path;std::wstring ext;bool overwrite=false,dry=false;
     try {

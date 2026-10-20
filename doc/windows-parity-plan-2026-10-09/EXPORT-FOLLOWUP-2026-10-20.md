@@ -141,3 +141,58 @@ Continue this branch while current CI results are collected, then reconcile
 with the corrected integration branch before its own frozen, bounded build
 batch. Preserve the one-main integration policy; this is a temporary feature
 branch, not a platform fork.
+
+### Endpoint and native-command source batch (20 October, unbuilt)
+
+The follow-up now wires `document.exportModule` through Windows
+`SessionAdapter.hpp` and `DocumentController.cpp`, retaining ordinary revision
+guards and terminal request caching. Read-only admission produces an explicit
+noncommit receipt; file publication remains outside that block and outside the
+unchanged-revision rejection allowlist. The exact `moduleExportData()` bytes go
+to `ProjectIO.hpp`'s exclusive/replace publisher. The operation does not flush
+plugins, cancel parameter previews, stop playback or establish a native save
+baseline.
+
+`editor/project/ModuleExport.hpp` supplies one loss policy for native annotations,
+hosted plugins, absolute automation, uncommitted takes and opaque extensions or
+recovery archives. Windows checks the current metadata merge; Mac checks its
+metadata owner's merge against the current known encoder. Unknown data is
+rejected, never stripped to make export pass. Module byte structure/sample/timing
+validation remains in the existing shared Document preparation.
+
+Windows File / Export module uses `ModuleExportDialog.hpp` and the native
+`IFileSaveDialog` with an explicit Export button. `EditingView.inc` captures the
+document/revision across the picker. `NativeCommandRecovery.inc` recognizes
+export destinations, records their hash and decoded summary during Review,
+checks the file again before acknowledging uncertain work, and never repeats
+publication automatically. Native shortcut dispatch preserves retained-editor
+focus. The API guide, describe response and shared schema document the contract.
+
+Mac's native menu now uses the guarded export API with the pre-picker revision.
+The application adapter does not collect/commit plugin gestures for this method.
+`savePath` clears recovery source protection only after a native project save,
+and checks the module extension on direct module saves too. API preflight
+rejects incompatible session layers before reserving a staging file.
+
+Prepared (not executed) regressions:
+
+- `document-controller-module-export` in the normal Windows worker schedule:
+  five normalized imported source formats, dry run/no file, reopen, dirty/native
+  state and Redo retention, wrong/relative/missing/existing destinations, strict
+  flags, stale requests, explicit replacement, opaque native/root data,
+  inactive archives, and recovered-source protection after successful export.
+- `applicationModuleExport` in `workspace-command-result-tests`: native menu
+  availability/dispatch, cancelled and stale picker results, successful export
+  without native save/history changes, and destination readback. The fixture
+  replaces only the OS picker; it is not a rendered-dialog test.
+- Existing Mac `sample-project-tests` now checks five-format export with pending
+  Redo. `project-recovery-tests` adds compatible recovered export followed by
+  protected original-save refusal and opaque export refusal in dry/real modes.
+- The previous standalone Snapshot target still needs explicit scheduling.
+
+No build or test execution has qualified these additions. Before integration:
+add actual pipe/socket request-replay and post-publication native-completion
+fault coverage; inspect failed/uncertain publication outcomes and source aliases;
+run the bounded native/worker/Mac batches on a frozen candidate. Review the real
+Windows dialog and Mac sheet when foreground inspection is authorized. Full-song
+audio export and manual automation capture remain separate open requirements.

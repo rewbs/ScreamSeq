@@ -45,7 +45,10 @@ extension AppController {
       return
     }
     var error: NSError?
-    let edits = session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
+    // Export rejects hosted/native layers. Its admission and dry run must not
+    // commit pending vendor gestures while explaining that refusal.
+    let edits = method == "document.exportModule" ? 0 :
+      session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 {
       dirty = true
       window.isDocumentEdited = true

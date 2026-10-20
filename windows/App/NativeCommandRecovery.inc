@@ -16,14 +16,20 @@
     Json retainedNativeCommand(const std::string &domain,const std::string &method,Json params,Json target={}){
         return retainedNativeCommand(domain,method,std::move(params),std::move(target),[](const Json &){});
     }
-    static Json inspectSavedCommandFile(const std::filesystem::path &path){
+    static Json inspectSavedCommandFile(const std::filesystem::path &path,bool module=false){
         Json result={{"path",utf8Path(path)},{"exists",std::filesystem::exists(path)}};if(!result.at("exists").get<bool>())return result;
-        auto bytes=ScreamSeq::Project::readProjectBytes(path);auto candidate=ScreamSeq::Project::openNativeProjectBytes(bytes);
+        auto bytes=ScreamSeq::Project::readProjectBytes(path);
         ::mpt::crypto::hash::SHA256 hash;hash.process(::mpt::const_byte_span(bytes.data(),bytes.size()));const auto digest=hash.result();
         std::string sha;sha.reserve(64);constexpr char hex[]="0123456789abcdef";
         for(const auto b:digest){const auto value=std::to_integer<unsigned>(b);sha+=hex[value>>4];sha+=hex[value&15];}
-        result["sha256"]=std::move(sha);result["bytes"]=bytes.size();result["validated"]=true;
-        result["samples"]=candidate.document->song().GetNumSamples();result["instruments"]=candidate.document->song().GetNumInstruments();return result;
+        result["sha256"]=std::move(sha);result["bytes"]=bytes.size();
+        std::unique_ptr<Tracker::Document> candidate;
+        if(module) {
+            try {candidate=std::make_unique<Tracker::Document>(bytes);}
+            catch(const std::exception &error){result["validated"]=false;result["error"]=error.what();return result;}
+        } else candidate=ScreamSeq::Project::openNativeProjectBytes(bytes).document;
+        result["validated"]=true;
+        result["samples"]=candidate->song().GetNumSamples();result["instruments"]=candidate->song().GetNumInstruments();return result;
     }
     Json readNativeCommandState(){
         const auto captured=std::pair(documentId,view->session.revision);const auto generation=nativeCommandGeneration;
@@ -51,6 +57,9 @@
             auto layout=documentOperation("track.get",Json::object());
             if(!layout.at("columns").is_array()||!layout.at("noteTracks").is_array())throw std::runtime_error("Track readback is unavailable / result retained");
             observed["layout"]=std::move(layout);
+        }else if(domain=="export"){
+            const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
+            observed["file"]=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path,true);}));
         }else if(domain=="save"){
             const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
             observed["file"]=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path);}));observed["recoveryStatus"]=recoveryStatus();observed["recoveryCopies"]=recoveryCopies();
@@ -73,12 +82,19 @@
             status=domain=="save"?L"Earlier Save completed / current file was not overwritten and recovery cleanup was not repeated":domain=="midi"?L"Earlier recording operation completed / current take retained / no operation repeated":domain=="mixer"?L"Earlier mixer operation completed / current draft retained / no write repeated":L"Earlier sample operation completed / current selection and raw fields retained / no write repeated";
             if(domain=="track")status=L"Earlier track operation completed / current selection retained / no write repeated";
             if(domain=="graph")status=L"Earlier graph operation completed / current draft retained / no write repeated";
+            if(domain=="export")status=L"Earlier module export completed / no file write repeated";
             if(domain=="midi")updateRecordingWindow();nativeCommandCompletion.finish();frameRequested=true;return;
         }
         nativeCommandReport=readNativeCommandState();const auto observation=nativeCommandReport;
         if(chooseNativeCommandAcknowledgement(observation)!=IDYES){status=L"Unverified command result retained / no operation repeated";return;}
         const auto check=[&]{if(documentId!=observation.at("documentId").get<std::string>()||view->session.revision!=observation.at("observedRevision").get<std::string>()||nativeCommandGeneration!=observation.at("generation").get<uint64_t>())throw std::runtime_error("Song changed after Review / review again before acknowledging");};
         check();const auto domain=nativeCommandTarget.at("domain").get<std::string>();
+        if(domain=="export"){
+            const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
+            const auto file=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path,true);}));
+            if(file!=observation.at("observed").at("file"))throw std::runtime_error("Export destination changed after Review / result retained");
+            check();
+        }
         if(domain=="save"){
             const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
             const auto file=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path);}));if(file!=observation.at("observed").at("file"))throw std::runtime_error("Saved file changed after Review / result retained");
