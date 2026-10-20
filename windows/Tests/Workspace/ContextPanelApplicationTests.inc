@@ -48,7 +48,18 @@ void applicationContextPanel() {
     app.toggleContextPanel();
     restoreCheck(GetFocus()==app.window&&app.selectedSample()==sample&&!IsWindowVisible(app.controls.at(sampleCommandBase)),
         "Hiding a focused sample list lost its selection or left invisible keyboard focus");
-    app.toggleContextPanel();app.command(graphCommand);SetFocus(app.window);app.refreshContextPanel();
+    app.toggleContextPanel();
+    const auto sampleField=app.controls.at(sampleStartField);
+    SetFocus(sampleField);rawDraftText(sampleField,L"-");SendMessageW(sampleField,EM_SETSEL,0,1);
+    for(unsigned toggle=0;toggle<2;++toggle){
+        app.runWorkspaceShortcut(contextPanelCommand);
+        wchar_t raw[8]{};GetWindowTextW(sampleField,raw,8);DWORD begin=0,end=0;
+        SendMessageW(sampleField,EM_GETSEL,reinterpret_cast<WPARAM>(&begin),reinterpret_cast<LPARAM>(&end));
+        restoreCheck(GetFocus()==sampleField&&std::wstring_view(raw)==L"-"&&begin==0&&end==1&&app.sampleDraft&&app.selectedSample()==sample,
+            "Context shortcut lost the sample field's focus, partial text, selection or target");
+    }
+    app.key(VK_ESCAPE,false); // Explicitly cancel this disposable partial field.
+    app.command(graphCommand);SetFocus(app.window);app.refreshContextPanel();
     restoreCheck(app.contextPanelEditor=="graph"&&app.contextActions[0].command==graphLoadPlugin&&
         !IsWindowVisible(app.controls.at(patternChooser))&&!IsWindowVisible(app.controls.at(sampleCommandBase)),
         "Graph context did not expose graph actions");
