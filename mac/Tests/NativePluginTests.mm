@@ -351,6 +351,12 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
           instrumentSlider.doubleValue = .61;
           [instrumentSlider sendAction:instrumentSlider.action to:instrumentSlider.target];
           check([reopened collectPluginEdits:YES error:&error] == 1, "record custom-interface parameter gesture");
+          check([reopened clearAutomation:&error]&&reopened.playing,
+                "Clearing a freshly captured vendor gesture must preserve playback");
+          check(std::abs([[reopened pluginParameters:0][0][@"manualValue"] doubleValue]-.27)<1e-5,
+                "Clear must restore the independent manual value, not the vendor's last captured value");
+          check([reopened historyUndo:NO error:&error]&&reopened.playing,
+                "Cleared vendor gesture must return in one live Undo");
           [reopened stop];
           check([reopened savePath:path error:&error], "save custom-interface automation");
           NSDictionary *project = [NSPropertyListSerialization propertyListWithData:[NSData dataWithContentsOfFile:path]

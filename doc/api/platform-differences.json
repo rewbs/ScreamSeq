@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "ab3d6701fee0096d00656d27411aa59f162c979ddfbb4cae42614a4c9c30a787",
+    "sha256": "33a8f57fe4031cd875d675976fbe6787730b2714706e6816069db2589c098654",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -17,6 +17,7 @@
       "automation.pattern.remove",
       "automation.pattern.set",
       "automation.pattern.transform",
+      "automation.recorded.clear",
       "automation.recorded.edit",
       "automation.recorded.get",
       "automation.replaceLane",
@@ -336,6 +337,7 @@
         "automation.pattern.remove",
         "automation.pattern.set",
         "automation.pattern.transform",
+        "automation.recorded.clear",
         "automation.recorded.edit",
         "automation.replaceLane",
         "context.set",
@@ -589,6 +591,14 @@
         ],
         "removed": [],
         "evidence": "No native run for these source changes yet; see RECIPE-PREVIEW-BATCH-2026-10-20.md."
+      },
+      "pendingRecordedClear20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "writesAdded": [
+          "automation.recorded.clear"
+        ],
+        "removed": [],
+        "evidence": "New explicit endpoint; native/shared contract and Windows control tests prepared, not executed. See RECORDED-CLEAR-BATCH-2026-10-20.md."
       }
     },
     "macos": {
@@ -676,6 +686,7 @@
         "automation.pattern.remove",
         "automation.pattern.set",
         "automation.pattern.transform",
+        "automation.recorded.clear",
         "automation.recorded.edit",
         "automation.replaceLane",
         "context.set",
@@ -869,6 +880,14 @@
         ],
         "removed": [],
         "evidence": "No native run for these source changes yet; see RECIPE-PREVIEW-BATCH-2026-10-20.md."
+      },
+      "pendingRecordedClear20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "writesAdded": [
+          "automation.recorded.clear"
+        ],
+        "removed": [],
+        "evidence": "New explicit endpoint; native/shared contract and Windows control tests prepared, not executed. See RECORDED-CLEAR-BATCH-2026-10-20.md."
       }
     }
   },

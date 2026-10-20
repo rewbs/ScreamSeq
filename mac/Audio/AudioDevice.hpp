@@ -65,7 +65,7 @@ public:
     std::unique_ptr<RecordedAutomationPlan> hosted;
     std::vector<ParameterChange> points;
   };
-  std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &);
+  std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &,std::span<const ParameterChange> manualBaselines={});
   bool publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan>);
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }

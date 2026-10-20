@@ -568,6 +568,11 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     (void)flag(params,"demo");(void)flag(params,"discard");
   }
+  if(method=="automation.recorded.clear") {
+    keys(params,{"expectedRevision","dryRun"});(void)flag(params,"dryRun");
+    if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())throw Api::ApiError(-32602,"expectedRevision is required");
+    if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed; recorded automation was retained");
+  }
   if(publicationPending_) publish();
   if(method.starts_with("plugin.parameters.preview."))return parameterPreviewOperation(method,params);
   if(method.starts_with("graph.plugin.preview."))return recipeParameterPreviewOperation(method,params);
@@ -606,7 +611,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
+  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit" || method=="automation.recorded.clear") {
     flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
@@ -627,7 +632,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
     params.erase("expectedRevision");
     // A document mutation/save uses the accepted baseline. Never serialize or
     // carry a temporary audible value into another edit or plugin topology.
-    if(method!="document.exportModule"&&!flag(params,"dryRun"))cancelParameterPreview();
+    if(method!="document.exportModule"&&!flag(params,"dryRun")&&
+       !(method=="automation.recorded.clear"&&project_.preserved.at("automation").empty()))cancelParameterPreview();
   }
   const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();const bool beforeRecovered=project_.recoveredUnsaved;
   changedPatterns_.clear();

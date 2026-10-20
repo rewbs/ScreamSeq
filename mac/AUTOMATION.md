@@ -1887,6 +1887,7 @@ Those point edits stop playback and use the unified chronological Undo history.
 | `parameter.activity.get` | Optional `after` sequence (0…9007199254740991) and `limit` (1…8192, default 2048). Nondestructive retained history, token, cursor/oldest/latest, dropped count and current target. Restart cursor at zero when the token changes. Capture is restored on playback restart where the same stable target exists; a new engine starts a new token. |
 | `automation.recorded.get` | Stable `plugin`, `parameter`, optional `offset` (0…100000), `limit` (1…4096, default 512). Returns selected lane points, total and 48000 Hz timestamp rate. |
 | `automation.recorded.edit` | `plugin`, `parameter`, `frame`, `expectedRevision`; either `value` (native units, upsert) with optional `newFrame`, or `remove:true`. Optional `dryRun`. Preserves every other parameter and timestamp. Moves reject occupied destination timestamps. Validates before mutation; no-op creates no Undo. |
+| `automation.recorded.clear` | `expectedRevision`, optional boolean `dryRun`. Clears every recorded parameter lane in one Undo, preserving plugin identities, opaque manual state, pattern curves and unrelated music. Returns `removed`, `wouldChange`, `dryRun`; an empty collection is a no-op. Live publication restores accepted manual values and refuses a full/stale queue without discarding the recording or stopping transport. |
 
 Recorded-point edits and Undo/Redo prepare a bounded immutable timeline off the
 audio callback, then adopt it at one render boundary. Catch-up uses device-rate

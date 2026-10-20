@@ -70,6 +70,11 @@
         }
         result=@{@"sources":sources,@"omitted":@(omitted),@"rule":target.graph?@"Each graph copy has independent state. Modulation adds contributions to a base, then clamps to 0…1. Inactive copies still process silence; wet and activity affect audibility, not the parameter value.":@"Enabled envelopes, parameter pattern commands and recorded automation are mutually exclusive base controls. Song modulation adds its contributions to that base, then clamps to 0…1 and rounds discrete targets. Manual edits may be overwritten by base automation. Plugin-internal modulation is not exposed."};
       } else throw Error(-32601,"Unknown parameter activity method");
+    } else if([method isEqual:@"automation.recorded.clear"]) {
+      allowed(@[@"dryRun"]);const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      const auto removed=_automation.size();
+      if(removed&&!dry&&![self clearAutomation:&problem])throw std::runtime_error(problem.localizedDescription.UTF8String);
+      result=@{@"removed":@(removed),@"wouldChange":@(removed!=0),@"dryRun":@(dry)};
     } else if([method isEqual:@"automation.recorded.get"] || [method isEqual:@"automation.recorded.edit"]) {
       const auto slot=instanceSlot();auto id=uint32_t(integer(p[@"parameter"],0,UINT32_MAX));
       if([method isEqual:@"automation.recorded.get"]) {

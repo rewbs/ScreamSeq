@@ -51,7 +51,10 @@ void liveRecordedAutomationTests(const std::filesystem::path &directory) {
   auto before=c.view();edit(0,-18,true);need(c.view()==before&&active&&stops==stopped,"Recorded dry run mutated or stopped playback");
   edit(0,-18);edit(48000,0);edit(24000,-9);before=c.view();const auto filled=lane();bool rejected=false;
   try{edit(96000,-24);}catch(const Api::ApiError &e){rejected=e.code==-32002;}
-  need(rejected&&c.view()==before&&lane()==filled&&active&&stops==stopped,"Full recorded queue changed model/history/transport");render();
+  need(rejected&&c.view()==before&&lane()==filled&&active&&stops==stopped,"Full recorded queue changed model/history/transport");
+  need(invoke(c,"automation.recorded.clear",{{"dryRun",true}}).at("removed")==3&&c.view()==before,"Clear dry run changed a full live queue");
+  rejected=false;try{invoke(c,"automation.recorded.clear");}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  need(rejected&&c.view()==before&&lane()==filled&&active&&stops==stopped,"Refused clear lost recorded music, history or playback");render();
   invoke(c,"history.undo");need(lane().at("total")==2&&active&&stops==stopped,"Recorded Undo stopped or retained rejected history");render();
   invoke(c,"history.redo");need(lane()==filled&&active&&stops==stopped,"Recorded Redo failed");render();
   before=c.view();rejected=false;
@@ -62,8 +65,16 @@ void liveRecordedAutomationTests(const std::filesystem::path &directory) {
   invoke(c,"automation.recorded.edit",{{"plugin",plugin},{"parameter",1},{"frame",32000},{"remove",true}});render();
   need(call(c,"plugin.state.get",{{"plugin",plugin}})==rack,"Recorded editing baked effective values into the saved plugin state");
   const auto saved=lane();const auto path=directory/"live-recorded-publication.screamseq";
+  need(invoke(c,"automation.recorded.clear").at("removed")==2&&lane().at("total")==0&&active&&stops==stopped,"Clear did not remove every recorded point live");render();
+  need(call(c,"plugin.state.get",{{"plugin",plugin}})==rack,"Clear captured the automated effective value into the saved rack");
+  before=c.view();need(!invoke(c,"automation.recorded.clear").at("wouldChange").get<bool>()&&c.view()==before,"Empty clear created history");
+  const auto clearedPath=directory/"live-recorded-cleared.screamseq";
+  invoke(c,"document.save",{{"path",clearedPath.generic_string()},{"overwrite",true}});
+  invoke(c,"history.undo");render();need(lane()==saved&&active&&stops==stopped,"Clear was not one reversible live edit");
+  invoke(c,"history.redo");render();need(lane().at("total")==0&&active&&stops==stopped,"Clear Redo failed");invoke(c,"history.undo");render();
   invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});need(active&&stops==stopped,"Recorded save stopped playback");
   active=false;invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});need(lane()==saved,"Recorded points did not survive native save/reopen");
+  invoke(c,"document.open",{{"path",clearedPath.generic_string()},{"discard",true}});need(lane().at("total")==0&&call(c,"plugin.state.get",{{"plugin",plugin}})==rack,"Cleared timeline or manual state changed on reopen");
   std::cout<<"PASS Windows recorded point preview/add/move/remove, live queue refusal, Undo/Redo, opaque baseline and persistence\n";
 }
 void liveBusMetadataTests() {

@@ -14,6 +14,8 @@ from rack_dry_run_contract import rack_dry_run_contract
 from integer_api_contract import integer_api_contract
 from request_replay_contract import request_replay_contract
 from module_export_contract import module_export_contract
+from recorded_clear_contract import recorded_clear_contract
+from Conformance.project_tree import typed
 
 
 class PluginEditParityTests(unittest.TestCase):
@@ -23,6 +25,16 @@ class PluginEditParityTests(unittest.TestCase):
     write = support.GraphMixerAppTests.write
     rejected = support.GraphMixerAppTests.rejected
     add_gain = support.GraphMixerAppTests.add_gain
+
+    def test_recorded_clear_contract_and_reopen(self):
+        def expect_error(code, action):
+            with self.assertRaises(ApiError) as error:
+                action()
+            self.assertEqual(error.exception.code, code)
+        path, expected = recorded_clear_contract(self.client, self.folder, expect_error)
+        self.write('document.open', path=str(path), discard=True)
+        _, reopened = self.saved('recorded-clear-reopened')
+        self.assertEqual(typed(reopened), typed(expected))
 
     def test_module_export_contract_and_reopen(self):
         path, title = module_export_contract(self.client, self.folder, ApiError)

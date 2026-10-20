@@ -26,10 +26,22 @@ bool NativePlugin::adoptRecordedAutomation(const RecordedAutomationTimeline &tim
   }
   return true;
 }
-std::unique_ptr<RecordedAutomationPlan> PluginChain::prepareRecordedAutomation(const std::vector<ParameterChange> &points) {
+std::unique_ptr<RecordedAutomationPlan> PluginChain::prepareRecordedAutomation(const std::vector<ParameterChange> &points,std::span<const ParameterChange> manualBaselines) {
   if(points.size()>100000)throw std::invalid_argument("Automation exceeds 100000 points");
+  if(manualBaselines.size()>rack_.size()*1024)throw std::invalid_argument("Recorded manual baselines exceed the parameter budget");
   if(!recordedPlans_.available())throw std::runtime_error("Recorded automation publication is busy; retry the edit");
   auto plan=std::make_unique<RecordedAutomationPlan>();plan->sourceRevision=recordedRevision_;plan->active=!points.empty();
+  plan->preparedParameterFence=write_.load(std::memory_order_relaxed);
+  std::set<std::pair<uint32_t,uint32_t>> baselineTargets;
+  for(const auto &point:manualBaselines) {
+    if(point.slot>=rack_.size()||point.frame||!std::isfinite(point.value)||!baselineTargets.emplace(point.slot,point.id).second)
+      throw std::invalid_argument("Invalid or duplicate recorded manual baseline");
+    const auto &catalog=rack_[point.slot]->parameters;
+    const auto parameter=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==point.id;});
+    if(parameter==catalog.end()||!parameter->writable||point.value<parameter->min||point.value>parameter->max)
+      throw std::invalid_argument("Recorded manual baseline is unavailable or outside its range");
+  }
+  plan->manualBaselines.assign(manualBaselines.begin(),manualBaselines.end());
   std::vector<std::vector<ParameterChange>> bySlot(rack_.size());
   std::set<std::tuple<uint32_t,uint32_t,uint64_t>> unique;
   for(auto point:points) {
@@ -43,7 +55,8 @@ std::unique_ptr<RecordedAutomationPlan> PluginChain::prepareRecordedAutomation(c
   }
   for(auto &lane:bySlot)std::stable_sort(lane.begin(),lane.end(),[](const auto &a,const auto &b){return a.frame<b.frame;});
   for(const auto &entry:rack_)plan->rack.push_back(entry->plugin.get());
-  size_t bytes=sizeof(*plan);recordedPlans_.forEachRetained([&](const auto &old){for(const auto &lane:old.lanes)bytes+=lane.timeline.storageBytes();});
+  size_t bytes=sizeof(*plan)+plan->manualBaselines.capacity()*sizeof(ParameterChange);
+  recordedPlans_.forEachRetained([&](const auto &old){bytes+=old.manualBaselines.capacity()*sizeof(ParameterChange);for(const auto &lane:old.lanes)bytes+=lane.timeline.storageBytes();});
   for(const auto &entry:retainedRack_) {
     const auto old=lastRecordedPlan_?std::find_if(lastRecordedPlan_->lanes.begin(),lastRecordedPlan_->lanes.end(),[&](const auto &p){return p.plugin==entry->plugin;}):std::vector<RecordedAutomationPlan::Lane>::const_iterator{};
     const bool hadPlan=lastRecordedPlan_&&old!=lastRecordedPlan_->lanes.end();
@@ -53,11 +66,15 @@ std::unique_ptr<RecordedAutomationPlan> PluginChain::prepareRecordedAutomation(c
     lane.timeline.points=current==rack_.end()?previous:bySlot[size_t(current-rack_.begin())];
     std::set<uint32_t> targets;for(const auto &p:previous)targets.insert(p.id);for(const auto &p:lane.timeline.points)targets.insert(p.id);
     if(hadPlan)for(const auto &p:old->timeline.parameters)targets.insert(p.id);
+    if(current!=rack_.end())for(const auto &p:manualBaselines)if(p.slot==size_t(current-rack_.begin()))targets.insert(p.id);
     if(targets.size()>1024)throw std::invalid_argument("Recorded automation exceeds 1024 parameters per processor");
     for(auto id:targets) {
       const auto parameter=std::find_if(entry->parameters.begin(),entry->parameters.end(),[&](const auto &p){return p.id==id;});
       if(parameter==entry->parameters.end()||!parameter->writable)throw std::invalid_argument("Recorded automation parameter is unavailable");
-      RecordedAutomationTimeline::Parameter p;p.id=id;p.baseline=parameter->value;p.minimum=p.maximum=p.baseline;
+      RecordedAutomationTimeline::Parameter p;p.id=id;p.baseline=parameter->value;
+      if(current!=rack_.end())for(const auto &baseline:manualBaselines)
+        if(baseline.slot==size_t(current-rack_.begin())&&baseline.id==id){p.baseline=baseline.value;break;}
+      p.minimum=p.maximum=p.baseline;
       for(const auto &point:lane.timeline.points)if(point.id==id){p.points.push_back(point);p.minimum=std::min(p.minimum,point.value);p.maximum=std::max(p.maximum,point.value);}
       lane.timeline.parameters.push_back(std::move(p));
     }
@@ -70,8 +87,17 @@ std::unique_ptr<RecordedAutomationPlan> PluginChain::prepareRecordedAutomation(c
 bool PluginChain::publishRecordedAutomation(std::unique_ptr<RecordedAutomationPlan> plan) {
   if(!plan||plan->sourceRevision!=recordedRevision_||plan->rack.size()!=rack_.size())return false;
   for(size_t i=0;i<rack_.size();++i)if(plan->rack[i]!=rack_[i]->plugin.get())return false;
+  // An explicit baseline must never overwrite a newer accepted manual edit.
+  if(!plan->manualBaselines.empty()&&plan->preparedParameterFence!=write_.load(std::memory_order_relaxed))return false;
   plan->parameterFence=write_.load(std::memory_order_relaxed);
   const auto *published=plan.get();if(!recordedPlans_.publish(std::move(plan)))return false;
+  for(const auto &baseline:published->manualBaselines) {
+    auto &entry=*rack_[baseline.slot];
+    for(size_t i=0;i<entry.parameters.size();++i)if(entry.parameters[i].id==baseline.id){
+      entry.parameters[i].value=baseline.value;entry.previewed[i]=false;break;
+    }
+    for(auto &parameter:activity_->processors[entry.activity-1].parameters)if(parameter.id==baseline.id){parameter.value=baseline.value;break;}
+  }
   lastRecordedPlan_=published;++recordedRevision_;recordedActive_.store(published->active,std::memory_order_release);return true;
 }
 } // namespace Tracker

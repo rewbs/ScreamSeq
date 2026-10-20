@@ -52,6 +52,21 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.field(4608,1.5);self.press(4610);self.assertTrue(self.state()['fieldDraft']);self.assertIn('whole frames',self.state()['status']);self.key(0x1B);self.field(4609,25);self.press(4610);self.assertTrue(self.state()['fieldDraft']);self.key(0x1B)
         path=self.folder/'native-absolute.screamseq';saved=self.saved();self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4625);self.select(4603,1);self.assertEqual(self.saved(),saved);self.press(4613);self.assertTrue(self.state()['dirty']);self.press(4614);self.assertEqual(self.saved(),[])
 
+    def test_clear_all_recordings_preserves_stale_and_field_drafts_and_one_undo(self):
+        first=self.add_gain();second=self.add_gain()
+        for plugin in (first,second):
+            self.write('automation.recorded.edit',plugin=plugin,parameter=1,frame=0,value=-12)
+        points=self.read('automation.get');states=[self.read('plugin.state.get',plugin=p) for p in (first,second)]
+        self.start();self.field(4609,-6);self.press(4633)
+        self.assertTrue(self.state()['fieldDraft']);self.assertEqual(self.read('automation.get'),points)
+        self.press(4615);self.write('document.patch',title='Retained clear target');before=self.doc();self.press(4633)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.read('automation.get'),points);self.assertTrue(self.state()['stale'])
+        self.press(4615);self.press(4633)
+        self.assertEqual(self.read('automation.get')['total'],0)
+        self.assertEqual([self.read('plugin.state.get',plugin=p) for p in (first,second)],states)
+        self.press(4631);self.assertEqual(self.read('automation.get'),points)
+        self.press(4632);self.assertEqual(self.read('automation.get')['total'],0)
+
     def test_stale_fields_target_removal_close_and_replacement_preserve_drafts(self):
         first=self.setup_curve();self.press(4614);self.add_gain();self.press(4615);self.field(4609,-6);self.select(4601,1);self.assertEqual(self.state()['plugin'],first);self.assertTrue(self.state()['fieldDraft']);self.press(4624);self.start();self.assertTrue(self.state()['fieldDraft']);self.press(4610);draft=self.state()['points']
         self.write('document.patch',title='Outside edit');before=self.doc();self.press(4614);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['points'],draft);self.press(4615);self.write('plugin.remove',slot=0);self.press(4615);self.assertEqual(self.state()['plugin'],first);self.assertIn('removed',self.state()['status']);self.press(4625);self.assertNotEqual(self.state()['plugin'],first)

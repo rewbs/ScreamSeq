@@ -93,10 +93,41 @@ static void capturePreparation() {
     check(rejected,"Invalid captured value/time was accepted");
   }
 }
+static void captureBaselineRestoration() {
+  for(unsigned rate:{44100u,48000u,96000u}) {
+    // A newly captured gesture need not have entered a scheduled timeline yet.
+    // Its live catalogue/value must not become the accepted manual baseline.
+    PluginChain chain({gain()},rate,true);
+    auto manual=[&]{for(const auto &p:chain.parameters(0))if(p.id==1)return p.manualValue.value_or(p.value);throw std::runtime_error("Missing manual gain");};
+    check(chain.parameter(0,1,-18),"Capture fixture live value rejected");
+    const std::array<ParameterChange,1> baseline{{{0,1,-3,0}}};
+    check(chain.publishRecordedAutomation(chain.prepareRecordedAutomation({},baseline)),"Explicit manual restoration rejected");
+    check(manual()==-3&&!chain.hasAutomatedState(),"Clear retained a capture value in the manual catalogue");
+    settled(chain,-3);
+    auto stale=chain.prepareRecordedAutomation({},std::array<ParameterChange,1>{{{0,1,-6,0}}});
+    check(chain.parameter(0,1,-9),"Intervening manual fixture rejected");
+    check(!chain.publishRecordedAutomation(std::move(stale))&&manual()==-9,"Stale restoration overwrote a newer manual edit");
+    settled(chain,-9);
+    for(const auto &invalid:std::vector<std::vector<ParameterChange>>{
+        {{1,1,0,0}},{{0,999,0,0}},{{0,1,25,0}},{{0,1,-3,1}},
+        {{0,1,std::numeric_limits<float>::quiet_NaN(),0}},{{0,1,-3,0},{0,1,-6,0}}}) {
+      bool rejected=false;try{(void)chain.prepareRecordedAutomation({},invalid);}catch(const std::invalid_argument &){rejected=true;}
+      check(rejected&&manual()==-9,"Invalid restoration partially changed the manual catalogue");
+    }
+    for(float value:{-12.f,-15.f,-18.f})
+      check(chain.publishRecordedAutomation(chain.prepareRecordedAutomation({},std::array<ParameterChange,1>{{{0,1,value,0}}})),"Available restoration publication rejected");
+    bool rejected=false;try{(void)chain.prepareRecordedAutomation({},baseline);}catch(const std::runtime_error &){rejected=true;}
+    check(rejected&&manual()==-18,"Full restoration queue changed the accepted baseline");settled(chain,-18);
+    check(chain.publishRecordedAutomation(chain.prepareRecordedAutomation({},baseline)),"Restoration after drain rejected");
+    check(chain.parameter(0,1,-6),"Manual suffix rejected");
+    settled(chain,-6);check(manual()==-6,"Clear overrode a later accepted manual gesture");
+  }
+}
 int main() {
   try {
     recordingFrameClock();
     capturePreparation();
+    captureBaselineRestoration();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};
       PluginChain initial({gain()},rate,true,points),published({gain()},rate,true);

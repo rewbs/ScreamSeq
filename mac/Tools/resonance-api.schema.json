@@ -19116,6 +19116,47 @@
       "additionalProperties": false
     },
     {
+      "description": "Clear all recorded parameter lanes in one reversible edit without capturing automated values into saved manual state. Live publication preserves playback; dryRun and empty no-op preserve history.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recorded.clear"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "type": "object",
       "properties": {
         "jsonrpc": {

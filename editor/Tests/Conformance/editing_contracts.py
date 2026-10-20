@@ -14,7 +14,7 @@ from native_roundtrip import ROOT, owned_client, write_json
 from project_tree import EvidenceError, differences, read_bytes, read_project, sha256
 
 CONTRACTS = ("parameter_preview", "recipe_parameter", "recipe_preview",
-             "rack_dry_run", "integer_api", "request_replay", "module_export")
+             "rack_dry_run", "integer_api", "request_replay", "module_export", "recorded_clear")
 
 
 def run(executable, output):

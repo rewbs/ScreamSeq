@@ -2309,12 +2309,35 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)clearAutomation:(NSError **)error {
   try {
-    if (!_pluginError.empty())
-      throw std::runtime_error(_pluginError);
-    auto states = _audio->pluginStates();
+    if(_automation.empty())return YES; // Preserve Redo and pending manual edits.
     [self commitManualParameters];
-    [self applyPluginGraph:states automation:{}];
-    _manualParameters.clear();
+    // The playing vendor may contain a recorded or modulated effective value.
+    // Clear only the timeline, retaining the independent accepted manual state.
+    // This also uses the recorded-only live publication and unified Undo path.
+    if(!_audio->active()){[self applyPluginGraph:_plugins automation:{}];return YES;}
+    if(!_parameterPreviewCommitting)[self cancelParameterPreview];
+    // Native/vendor capture can have changed the live control catalogue without
+    // changing the independent saved manual state. Restore those targets in the
+    // same bounded publication, including a just-captured unscheduled gesture.
+    std::vector<ParameterChange> baselines;
+    for(size_t slot=0;slot<_plugins.size();++slot) {
+      std::set<uint32_t> targets;for(const auto &point:_automation)if(point.slot==slot)targets.insert(point.id);
+      if(targets.empty())continue;
+      NativePlugin baseline(_plugins[slot],_audio->sampleRate());
+      const auto catalog=baseline.parameters();
+      for(auto id:targets) {
+        const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==id;});
+        if(found==catalog.end())throw std::runtime_error("Recorded manual parameter is unavailable; recording retained");
+        baselines.push_back({uint32_t(slot),id,found->value,0});
+      }
+    }
+    auto prepared=_audio->prepareRecordedAutomation({},baselines);
+    [self synchronizeHistory];
+    EffectSnapshot before{_plugins,_automation,_manualParameters};_effectUndo.reserve(_effectUndo.size()+1);
+    if(!_audio->publishRecordedAutomation(std::move(prepared)))throw std::runtime_error("Recorded automation publication is busy; recording and playback retained");
+    _automation.clear();++_pluginRevision;
+    before.sequence=_document->externalHistoryEdit();_knownHistorySequence=before.sequence;_parameterGestureSequence=0;
+    _effectUndo.push_back(std::move(before));_effectRedo.clear();trimEffectHistory(_effectUndo);
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);

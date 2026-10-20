@@ -123,6 +123,7 @@ jobs:
               test_workspace_shortcuts.WorkspaceShortcutTests `
               test_menu_pattern_keys.MenuPatternTests `
               test_plugin_edit_parity.PluginEditParityTests `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_clear_all_recordings_preserves_stale_and_field_drafts_and_one_undo `
               test_graph_mixer_app.GraphMixerAppTests.test_linked_envelope_admission_retains_bank_and_history `
               test_graph_editor.GraphEditorTests `
               test_context_menus.WorkspaceContextMenuTests.test_graph_node_wire_menu_selection_draft_and_history `

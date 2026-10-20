@@ -8,6 +8,11 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Next source batch:** [clear recorded automation](RECORDED-CLEAR-BATCH-2026-10-20.md)
+adds the Windows action and both API endpoints, fixes Mac's live-state capture/
+Stop path, and shares guarded manual-baseline restoration. All native tests are
+prepared but unbuilt. This is not completion of Windows gesture recording.
+
 **Current candidate `28d757f65` built on Windows ARM64:** the
 [clock/recovery qualification](CLOCK-RECOVERY-QUALIFICATION-2026-10-20.md)
 records 19/20 targeted registrations, all 21 actual codec safety cases and four

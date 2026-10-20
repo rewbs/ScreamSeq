@@ -74,6 +74,18 @@ static void sessionAPI() {
   call(@"history.undo",@{@"domain":@"plugins"},true);check([lane() count]==0,"Recorded Undo failed");call(@"history.redo",@{@"domain":@"plugins"},true);check([lane() count]==1,"Recorded Redo failed");
   auto invalid=[edit mutableCopy];invalid[@"value"]=@999;invalid[@"expectedRevision"]=session.automationRevision;check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error]&&[lane() count]==1,"Invalid value partially replaced recording");
   invalid=[edit mutableCopy];invalid[@"expectedRevision"]=@"stale";check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error],"Stale recorded write accepted");
+  check([session pluginParameter:0 identifier:1 value:-3 record:NO error:&error],"Manual baseline fixture failed");
+  NSDictionary *savedState=call(@"plugin.state.get",@{@"plugin":plugin})[@"data"];
+  revision=session.automationRevision;
+  auto clearPreview=call(@"automation.recorded.clear",@{@"dryRun":@YES},true);
+  check([clearPreview[@"data"][@"removed"] unsignedIntegerValue]==1&&[revision isEqual:session.automationRevision]&&[lane() count]==1,"Clear dry run changed recording/history");
+  auto cleared=call(@"automation.recorded.clear",@{},true);
+  check([cleared[@"data"][@"removed"] unsignedIntegerValue]==1&&[lane() count]==0&&[savedState isEqual:call(@"plugin.state.get",@{@"plugin":plugin})[@"data"]],"Clear changed the independent saved manual state");
+  revision=session.automationRevision;
+  check([session clearAutomation:&error]&&[revision isEqual:session.automationRevision],"Empty native clear created history");
+  call(@"history.undo",@{},true);check([lane() count]==1,"Clear was not one Undo");
+  call(@"history.redo",@{},true);check([lane() count]==0,"Clear Redo failed");
+  call(@"history.undo",@{},true);check([lane() count]==1,"Clear recording fixture was not restored");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([session savePath:path error:&error]&&[session openPath:path error:&error]&&[lane() count]==1,"Recorded edit failed project roundtrip");[[NSFileManager defaultManager]removeItemAtPath:path error:nil];
 }
 static void sessionPreview() {
