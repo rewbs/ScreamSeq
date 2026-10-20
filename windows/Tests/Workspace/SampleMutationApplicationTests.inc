@@ -1,4 +1,82 @@
 // Real native owners and worker calls, on the existing private fixture desktop.
+void applicationSampleDrawingGestures(){
+  const auto press=[](HWND window,int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
+  for(const bool loseRefresh:{false,true}){
+    RestoreFixture fixture;auto &app=*fixture.app;app.openSampleDetail();
+    auto *tool=app.sampleDetailWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+    rawDraftText(GetDlgItem(window,4819),L"0");rawDraftText(GetDlgItem(window,4820),L"32");press(window,4821);press(window,4814);
+    restoreCheck(tool->snapshot().at("precise")==true,"Drawing fixture did not load individual frames");
+    const auto original=app.documentOperation("sample.pcm.get",{{"sample",1}});
+    const auto other=app.documentOperation("sample.pcm.get",{{"sample",2}});
+    const auto initial=songState(app),target=tool->musicalTarget();
+    const auto canvas=tool->snapshot().at("canvas");const float scale=GetDpiForWindow(window)/96.f;
+    const auto mouse=[&](UINT message,float x,float y){
+      const int px=int((canvas[0].get<float>()+x*canvas[2].get<float>())*scale);
+      const int py=int((canvas[1].get<float>()+y*canvas[3].get<float>())*scale);
+      SendMessageW(window,message,message==WM_LBUTTONUP?0:MK_LBUTTON,MAKELPARAM(px,py));
+    };
+    const auto begin=[&]{mouse(WM_LBUTTONDOWN,.125f,.25f);mouse(WM_MOUSEMOVE,.375f,.75f);
+      restoreCheck(tool->snapshot().at("dragging")==true&&tool->snapshot().at("points").size()>=8,
+        "Native waveform gesture did not retain its stroke");};
+    unsigned writes=0;bool injected=false;
+    app.sampleMutationCompletion=[&](const auto &method){
+      if(method=="sample.draw")++writes;
+      if(loseRefresh&&method=="sample.waveform.get"&&!injected){
+        injected=true;rawDraftText(GetDlgItem(window,5007),L"-.");SetFocus(app.window);
+        throw std::runtime_error("Owned waveform read failure after released stroke");
+      }
+    };
+    begin();restoreCheck(songState(app)==initial,"Drawing movement committed before release");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
+    restoreCheck(tool->snapshot().at("points").empty()&&!tool->snapshot().at("dragging").get<bool>()&&writes==0&&songState(app)==initial,
+      "Escape saved a drawing or retained its capture");
+    begin();ReleaseCapture();
+    restoreCheck(tool->snapshot().at("points").empty()&&writes==0&&songState(app)==initial,
+      "Capture loss saved a drawing");
+    // Input pumped during a captured gesture must win over its next move/up.
+    begin();rawDraftText(GetDlgItem(window,4823),L"-.");mouse(WM_LBUTTONUP,.375f,.75f);
+    restoreCheck(tool->snapshot().at("points").empty()&&restoreText(GetDlgItem(window,4823))==L"-."&&
+      writes==0&&songState(app)==initial,"Released stroke erased or committed newer numeric input");
+    press(window,4826);
+    // A deliberate numeric batch is independent of a new pointer stroke.
+    rawDraftText(GetDlgItem(window,4822),L"0");rawDraftText(GetDlgItem(window,4823),L"0.5");press(window,4824);
+    const auto staged=tool->snapshot().at("points");mouse(WM_LBUTTONDOWN,.125f,.25f);
+    restoreCheck(!tool->snapshot().at("dragging").get<bool>()&&tool->snapshot().at("points")==staged&&writes==0,
+      "New pointer gesture absorbed a staged numeric batch");
+    press(window,4826);
+    begin();const auto stroke=tool->snapshot().at("points");mouse(WM_LBUTTONUP,.375f,.75f);
+    app.sampleMutationCompletion={};
+    const auto changed=app.documentOperation("sample.pcm.get",{{"sample",1}});
+    restoreCheck(writes==1&&changed!=original&&app.documentOperation("sample.pcm.get",{{"sample",2}})==other,
+      "Released stroke did not write exactly once to its captured sample");
+    restoreCheck(tool->musicalTarget().at("id")==target.at("id")&&tool->snapshot().at("viewStart")==0&&
+      tool->snapshot().at("viewEnd")==32,"Released stroke changed sample identity or viewport");
+    if(loseRefresh){
+      const auto held=tool->snapshot();
+      restoreCheck(injected&&held.at("mutationCompletion").at("returned")==true&&held.at("points")==stroke&&
+        restoreText(GetDlgItem(window,5007))==L"-."&&GetFocus()==app.window,
+        "Failed drawing refresh erased stroke, raw fields, result or newer focus");
+      const auto committed=songState(app);press(window,4803);mouse(WM_LBUTTONUP,.375f,.75f);
+      restoreCheck(songState(app)==committed&&tool->snapshot().at("mutationCompletion").is_null()&&
+        tool->snapshot().at("points")==stroke&&restoreText(GetDlgItem(window,5007))==L"-."&&writes==1,
+        "Drawing Review repeated the write or erased retained work");
+      app.edit("history.undo",{{"domain","all"}});
+      restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==original,
+        "Uncertain released stroke did not undo in one step");
+    }else{
+      restoreCheck(tool->snapshot().at("points").empty()&&tool->snapshot().at("mutationCompletion").is_null(),
+        "Successful release retained an Apply requirement");
+      press(window,4804);restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==original,
+        "Released stroke required more than one Undo");
+      press(window,4805);restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==changed,
+        "Released stroke failed Redo");
+      const auto accepted=songState(app);begin();mouse(WM_LBUTTONUP,.375f,.75f);
+      restoreCheck(songState(app)==accepted&&tool->snapshot().at("points").empty(),
+        "Repeated identical stroke created a history entry");
+    }
+    std::cout<<"PASS released sample stroke, cancellation, staged-input isolation and "<<(loseRefresh?"retained refresh failure":"one-step history/no-op")<<"\n";
+  }
+}
 void applicationSampleMutationRecovery(){
   using Json=RestoreJson;
   const auto press=[](HWND window,int id){SendMessageW(window,WM_COMMAND,id,reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};

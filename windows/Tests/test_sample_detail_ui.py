@@ -78,8 +78,22 @@ class SampleDetailUITests(unittest.TestCase):
     def test_mouse_drawing_cancellation_and_stale_gesture_preserve_audio(self):
         self.view(0,32);self.press(4814);x,y,w,h=self.state()['canvas'];before=self.doc()
         self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75);self.key(0x1B);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
-        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75);self.mouse(0x202,x+w*.375,y+h*.75);self.assertGreaterEqual(len(self.state()['points']),8);self.press(4825);self.assertNotEqual(self.pcm(),self.raw)
-        self.press(4804);self.assertEqual(self.pcm(),self.raw);self.mouse(0x201,x+w*.125,y+h*.25);self.write('document.patch',title='Concurrent edit');before=self.doc();self.mouse(0x200,x+w*.375,y+h*.75);self.idle();self.assertFalse(self.state()['dragging']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
+        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75)
+        self.assertGreaterEqual(len(self.state()['points']),8);self.assertEqual(self.doc(),before)
+        self.mouse(0x202,x+w*.375,y+h*.75);self.idle()
+        actual=self.pcm();self.assertNotEqual(actual,self.raw);self.assertEqual(self.state()['points'],[])
+        self.assertEqual((self.state()['viewStart'],self.state()['viewEnd']),(0,32))
+        self.press(4804);self.assertEqual(self.pcm(),self.raw)
+        self.press(4805);self.assertEqual(self.pcm(),actual)
+        before=self.doc()
+        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75)
+        self.mouse(0x202,x+w*.375,y+h*.75);self.idle();self.assertEqual(self.doc(),before)
+        identity=self.state()['id'];path=self.folder/'released-stroke.screamseq'
+        self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.start();self.assertEqual(self.state()['id'],identity);self.assertEqual(self.pcm(),actual)
+        self.view(0,32);x,y,w,h=self.state()['canvas']
+        if not self.state()['drawing']:self.press(4814)
+        self.mouse(0x201,x+w*.125,y+h*.25);self.write('document.patch',title='Concurrent edit');before=self.doc();self.mouse(0x200,x+w*.375,y+h*.75);self.idle();self.assertFalse(self.state()['dragging']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
 
     def test_loop_crossfade_preview_modes_curves_history_and_native_storage(self):
         self.page('loops')
