@@ -193,6 +193,8 @@ def main(argv=None):
                         help="Check opaque metadata through paired edits, rack identities and Undo/Redo")
     parser.add_argument("--composing-history", action="store_true",
                         help="Check F04 edits across six domains through chronological Undo/Redo and reopen")
+    parser.add_argument("--editing-contracts", action="store_true",
+                        help="Run six shared editing contracts in fresh native app processes")
     args = parser.parse_args(argv)
     report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[], parityComplete=False,
                   qualificationScope="Five no-edit fixture legs; optional API evidence baseline is not a parity pass")
@@ -238,6 +240,12 @@ def main(argv=None):
                 (Path(__file__), Path(__file__).with_name("project_tree.py"),
                  ROOT / "windows/Tests/private_desktop.py", ROOT / "windows/Api/client.py",
                  ROOT / "mac/Tools/resonance_api.py", Path(__file__).with_name("fixture_loader.py"))})
+        if args.editing_contracts:
+            from editing_contracts import run
+            contract_report = run(executable, output / "editing-contracts")
+            report["editingContracts"] = dict(passed=contract_report["passed"],
+                report="editing-contracts/report.json",
+                sha256=sha256(read_bytes(output / "editing-contracts/report.json")))
         with owned_client(executable, output, report["process"]) as client:
             for source in sources:
                 row = dict(fixture=source.name, passed=False)
@@ -299,7 +307,8 @@ def main(argv=None):
                             and report.get("codec", {}).get("baselineMatched", True)
                             and report.get("durationDefaults", {}).get("passed", True)
                             and report.get("editedMetadata", {}).get("passed", True)
-                            and report.get("composingHistory", {}).get("passed", True))
+                            and report.get("composingHistory", {}).get("passed", True)
+                            and report.get("editingContracts", {}).get("passed", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

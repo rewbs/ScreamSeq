@@ -39,7 +39,7 @@ two provider skips and successful fixture/API/codec/duration checks against
 their pinned baselines. The native metadata test failed on an NF/NR field
 assumption; its test-only correction now passes on the later candidate below.
 
-The qualification worktree is now frozen at
+The retained shared-contract executable was built at
 `b3fe23e45a14763c1f34fe602f8340a49385e93a`. Its
 [shared contract qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
 records a 05:53–05:57 UTC ARM64 build, 21/22 native registrations and all ten
@@ -74,6 +74,14 @@ Temporary integration branch `codex/plugin-edit-parity` was pushed through
 `b0d34b57af665f0d7e694e97929e034b64b635c1` without starting CI: no PR existed
 and both native workflows' push triggers are restricted to main. Later prepared
 source still needs the same-candidate local and cross-platform gate before main.
+
+The next product candidate is `73d5d277c3f9cdfbed628b75fee8c022b16bbd6c`,
+pushed and fast-forwarded into the qualification checkout. A subsequent
+tooling-only change adds an explicit Mac CI socket stage for the six existing
+shared editing contracts; its Windows runner path passes on retained B3.
+The next frozen build will include that stage. Prepared scripts under
+`bin/commit-outcome-20261020/` retain the hourly gate and preserve earlier outputs;
+they have been parsed but not executed.
 
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context

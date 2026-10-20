@@ -157,6 +157,25 @@ The stopped journey is bounded A01 evidence, not the full A01/A08/A18 gate,
 foreground inspection, live audio or reciprocal editing. Its concrete final
 file is `composing-history-final/composing-history/reopened.screamseq`.
 
+### Shared socket runner coverage
+
+Review found that Mac CI's existing CTest and corpus stages did not execute the
+new shared editing contracts in `mac/Tests/test_automation.py`. They now have a
+bounded `native_roundtrip.py --editing-contracts` stage explicitly requested by
+Mac CI, before the baseline corpus. Six fresh owned instances exercise rack
+preview, recipe parameters, recipe preview, rack dry runs, integer validation
+and terminal request replay, each followed by exact final save/reopen. Every
+case retains its PID/command, RPC journal and contract-source hash. An uncaught
+failure closes that instance; subsequent cases are independent.
+
+The runner's Windows path passed all six cases plus its explicit F04 leg on B3
+at **06:52:30–06:52:52 UTC**, without a build. Evidence:
+`bin/shared-contracts-20261020/editing-contract-runner/`. Original corpus,
+explicit input and executable remained unchanged; all QA processes exited.
+Mac runner execution is **pending**, and direct bridge passes alone do not
+establish this socket gate. Windows CI already runs its existing private-PID
+wrappers, so it does not add the new runner redundantly.
+
 ## Prepared corrections after B3
 
 Alongside the fresh-ID test correction, `DocumentController.cpp` now prepares:

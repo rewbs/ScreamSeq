@@ -303,3 +303,19 @@ The check is scheduled on both native workflows. It does not establish physical
 input, live admission, foreground interaction, linked-bank editing, reciprocal
 editing or all of A01/A18. Windows' linked-envelope rejection outcome has its own
 native controller and private-PID regression.
+
+### Shared editing contracts on the native socket
+
+`--editing-contracts` runs the existing parameter-preview, recipe-parameter,
+recipe-preview, rack-dry-run, integer-API and request-replay contracts. Each case
+gets a new owned application process, exact endpoint, output directory and RPC
+journal. An uncaught failure closes that instance; later cases start independent
+processes rather than retrying or replacing its uncertain document.
+Existing contract assertions are unchanged. Each accepted final state additionally
+saves/reopens with the exact typed comparator.
+
+Mac CI requests this stage before the baseline corpus so an earlier codec failure
+cannot suppress these independent socket checks. Windows CI retains its existing
+actual-PID cases; the runner is also usable there. Build/executable identities are
+bound by the parent CLI and each contract source hash is retained. Success on one
+host does not qualify the other host, UI interaction or audible playback.
