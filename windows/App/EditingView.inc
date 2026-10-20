@@ -42,10 +42,17 @@
             edit("pattern.effect.set",{{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",(column-3)/2},{"command",nullptr}});
             return;
         }
+        if(!selecting && (column==1 || column==2)) {
+            Json cell={{"pattern",patternIndex},{"row",row},{"channel",channel}};
+            if(column==1)cell["instrument"]=0;
+            else {cell["volumeCommand"]=0;cell["volume"]=0;}
+            edit("pattern.apply",{{"cells",Json::array({cell})}});return;
+        }
         const auto s=selection();
         edit("pattern.transform",{{"operation","clear"},{"pattern",patternIndex},{"startRow",s.at("startRow")},
             {"rowCount",s.at("endRow").get<unsigned>()-s.at("startRow").get<unsigned>()+1},
-            {"startChannel",s.at("startChannel")},{"channelCount",s.at("endChannel").get<unsigned>()-s.at("startChannel").get<unsigned>()+1}});
+            {"startChannel",s.at("startChannel")},{"channelCount",s.at("endChannel").get<unsigned>()-s.at("startChannel").get<unsigned>()+1},
+            {"fields",column>=3?Json::array({"effect"}):Json::array({"note","instrument","volume","effect"})}});
     }
     void transformPatternSelection(int id) {
         const auto s=selection();const bool rows=id==patternInsertRows||id==patternDeleteRows;
@@ -234,6 +241,12 @@
         auto revision=view->session.revision;auto path=chooseFile(false);if(path.empty()) return;
         documentOperation("document.open",{{"expectedRevision",revision},{"path",utf8Path(path)},{"discard",true}});
         status=L"Opened "+path.filename().wstring();
+    }
+    void newFile() {
+        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectUnsaved())return;
+        documentOperation("document.new",{{"expectedRevision",view->session.revision},{"discard",true}});
+        status=L"New song";
     }
     void refreshChoosers() {
         if(!controls.contains(patternChooser)) return;

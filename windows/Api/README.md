@@ -1,5 +1,12 @@
 # Windows local API subset
 
+`document.new` requires `expectedRevision`, accepts optional boolean `discard`
+and `dryRun`, and creates an empty 8-channel, 64-row native song. Unsaved work
+requires `discard:true`; unfinished recording takes must be resolved first.
+Like Open, it replaces the document identity, path and Undo history; subsequent
+edits use the ordinary shared Undo and persistence paths. A dry run validates
+without replacing the song. See [document-new.schema.json](document-new.schema.json).
+
 Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
 `.parameters`, `.sources` and `.get` read actual host values and controlling sources.
 `parameter.activity.watch` is a transient replay-cached write without a song revision

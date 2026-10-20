@@ -13,13 +13,13 @@ struct Window {
 };
 class Tool final:public ScreamSeq::NativeToolWindow {
 public:
-  unsigned localKeys=0,deactivations=0,layouts=0;
+  unsigned localKeys=0,deactivations=0,layouts=0,comboActions=0;
   explicit Tool(HWND owner):NativeToolWindow(owner){minimumWidth_=300;minimumHeight_=220;create(L"ScreamSeq.DockTest.Tool",L"Retained editor",640,420);edit(1,L"Captured draft",128);button(2,L"Apply");combo(3);SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"First"));SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Second"));SendMessageW(controls_.at(3),CB_SETCURSEL,1,0);finish();ScreamSeq::Tests::ownGuiWindow(window());}
   HWND control(int id)const{return controls_.at(id);}
   void minimumClient(int width,int height){minimumClientWidth_=width;minimumClientHeight_=height;}
   void layout()override{++layouts;const auto [w,h]=size();place(1,8,8,std::max(1.f,w-16),24);place(2,8,40,90,24);place(3,106,40,150,160);}
   void paint(ScreamSeq::RenderSurface &surface)override{surface.fill(0,0,surface.width(),surface.height(),0x18222d);}
-  void action(int,unsigned)override{}
+  void action(int id,unsigned)override{if(id==3){++comboActions;SendMessageW(control(3),CB_SHOWDROPDOWN,FALSE,0);}}
   bool key(WPARAM key,bool,bool)override{if(key==VK_F6){++localKeys;return true;}return false;}
   void deactivate()override{++deactivations;}
 };
@@ -69,6 +69,16 @@ void retainedDock(HWND main,HWND host){
   SetWindowPos(window,nullptr,80,90,640,420,SWP_NOZORDER|SWP_NOACTIVATE);
   RECT floating{};GetWindowRect(window,&floating);
   tool.show();SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
+  RECT comboRect{};GetClientRect(combo,&comboRect);
+  const auto click=MAKELPARAM(comboRect.right-8,comboRect.bottom/2);
+  SendMessageW(combo,WM_LBUTTONDOWN,MK_LBUTTON,click);SendMessageW(combo,WM_LBUTTONUP,0,click);
+  require(SendMessageW(combo,CB_GETDROPPEDSTATE,0,0),"Mouse click must leave the dropdown open");
+  require(tool.comboActions==0,"Opening/focusing a dropdown must not invoke an editing action");
+  SendMessageW(combo,WM_KEYDOWN,VK_ESCAPE,0);
+  require(!SendMessageW(combo,CB_GETDROPPEDSTATE,0,0)&&tool.comboActions==0,"Cancelling a dropdown must not edit");
+  SendMessageW(window,WM_COMMAND,MAKEWPARAM(3,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
+  require(tool.comboActions==1,"Selected dropdown item must dispatch exactly once");
+  SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
   unsigned changed=0,globals=0,releases=0;
   tool.placementChanged([&]{++changed;});
   tool.workspaceKeys([&](WPARAM key,bool){++globals;return key==VK_F8;});

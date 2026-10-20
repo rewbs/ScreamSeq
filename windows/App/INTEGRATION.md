@@ -1,5 +1,29 @@
 # Windows document-worker application integration
 
+The native menu bar exposes File, Edit, View, Pattern, Playback and Help. File /
+New Song (Ctrl+N) uses the same unsaved-work protection as Open and creates an
+empty song through `document.new`. Menu shortcut labels follow saved custom
+bindings. Help / Keyboard Shortcuts opens the searchable, configurable palette.
+
+Pattern keyboard defaults follow the Mac grid's editing behavior, with Ctrl
+replacing Command: Ctrl+A selects the pattern, Shift+arrows extends a selection,
+and Tab/Shift+Tab changes channels while retaining the current field. Windows
+also exposes Ctrl+L for the channel, Ctrl+R for the row and Ctrl+Shift+A for the
+pattern. Backspace, Delete and dot clear data: instrument and volume fields
+clear independently, either FX field clears its FX column, and the note field
+clears the cell (or the precise notes at that row). Deleting a selection from an
+FX field clears only effects. Dot still starts decimal entry in a nudge value.
+Alt+Up/Down selects the previous/next input instrument; Alt+Left/Right and keypad
+divide/multiply change octave; Enter on an instrument field adopts that cell's
+instrument. Panel Return is now Ctrl+Alt+Backspace. Native text fields and open
+selectors retain their local keys. These are Windows bindings; macOS continues
+to use its existing native Command/Option mappings.
+
+Native tool selectors dispatch only `CBN_SELCHANGE` to editing actions. Opening,
+focusing or dismissing a dropdown cannot rebuild its contents or apply a draft.
+Regression coverage is in `test_menu_pattern_keys.py` and
+`Workspace/NativeToolWindowTests.cpp`.
+
 `RecordingIntegration.inc` connects native WinMM input and the retained
 `MidiRecordingWindow.hpp` to document-owned `recording.*` transactions. Callbacks
 queue bounded driver timestamps; a correlated WASAPI presentation clock maps

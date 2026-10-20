@@ -79,6 +79,10 @@ constexpr int dockAutomationCommand=530,dockInstrumentCommand=531,editorTrackerT
     editorPinCommand=537,editorCursorCommand=538,editorReturnCommand=539;
 constexpr int layoutsCommand=513, saveLayoutCommand=514, restoreLayoutCommand=515,
     dockNotes=520,dockSamples=521,dockEffects=522,dockPlugins=523,dockMixer=524,dockGraph=525,dockToggle=526;
+constexpr int newSongCommand=700,exitCommand=701,aboutCommand=702,keyboardHelpCommand=703,
+    selectChannelCommand=704,selectPatternCommand=705,selectRowCommand=706,
+    previousInstrumentCommand=707,nextInstrumentCommand=708,octaveDownCommand=709,octaveUpCommand=710,useInstrumentCommand=711;
+static_assert(newSongCommand>regionControlEnd,"Menu commands must not overlap workspace region controls");
 constexpr int playCommand=101, stopCommand=102, followCommand=103, composeCommand=104,
 	patternCommand=105, soundCommand=106, notesCommand=107, samplesCommand=108,
 	pinCommand=109, cursorCommand=110, returnCommand=111, paletteCommand=112,
@@ -611,6 +615,7 @@ public:
     #include "WorkspaceDocking.inc"
     #include "WorkspaceCommands.inc"
     #include "WorkspaceShortcutDispatch.inc"
+    #include "MainMenu.inc"
     #include "WorkspaceContextMenus.inc"
     #include "DeferredViews.inc"
 	#include "WorkspaceView.inc"
@@ -902,6 +907,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
             SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
         case WM_COMMAND:
+            if(!lp){app->menuCommand(LOWORD(wp));return 0;}
             if(LOWORD(wp)==9800||LOWORD(wp)==9801){if(HIWORD(wp)==EN_CHANGE)app->patternNudgeFieldChanged();return 0;}
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
             if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;

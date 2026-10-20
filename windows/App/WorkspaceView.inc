@@ -185,10 +185,17 @@
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();
+        installMainMenu();
 		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();layoutControls();
 	}
 	void command(int id) {
 		try {
+            if(id==newSongCommand){newFile();return;}
+            if(id==exitCommand){PostMessageW(window,WM_CLOSE,0,0);return;}
+            if(id==aboutCommand){modalMessage(L"ScreamSeq\nNative tracker and music workstation\n\nBuilt on the OpenMPT playback engine.\nOpenMPT copyright and attribution are retained in the bundled notices.",L"About ScreamSeq",MB_OK|MB_ICONINFORMATION);return;}
+            if(id==keyboardHelpCommand){palette->show();return;}
+            if(id>=selectChannelCommand&&id<=selectRowCommand){selectPatternRegion(id);return;}
+            if(id>=previousInstrumentCommand&&id<=useInstrumentCommand){patternInputCommand(id);return;}
             if(focusedEditingCommand(id))return;
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
@@ -343,6 +350,15 @@
         }
 		if(ctrl || alt) return false;
 		if(workspaceState.focus!="pattern"||!trackerWorkspaceVisible()) return false;
+        if(shift&&key==VK_OEM_2&&column>=3){openEffectEditor();return true;}
+		if(key==VK_BACK || key==VK_DELETE){clearPatternSelection();return true;}
+        if(key==VK_OEM_PERIOD || key==VK_DECIMAL){
+            const auto effect=column>=3?view->effect(patternIndex,row,channel,(column-3)/2):std::nullopt;
+            if(column>=4&&column%2==0&&effect&&(effect->kind==Tracker::PatternCommandKind::NudgeForward||effect->kind==Tracker::PatternCommandKind::NudgeReverse))return enterEffect(key);
+            clearPatternSelection();return true;
+        }
+        if(key==VK_DIVIDE||key==VK_MULTIPLY){patternInputCommand(key==VK_DIVIDE?octaveDownCommand:octaveUpCommand);return true;}
+        if(key==VK_RETURN&&column==1){patternInputCommand(useInstrumentCommand);return true;}
 		if(key==VK_RETURN) { if(beginPatternNudgeEdit())return true;command(column>=3?effectsCommand:notesCommand);return true; }
         if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
@@ -353,7 +369,7 @@
 		else if(key==VK_NEXT) r=std::min(row+visibleRows(),rows-1);
 		else if(key==VK_HOME) r=0;
 		else if(key==VK_END) r=rows-1;
-		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
+		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=std::min(col,2u+2u*view->effectColumns.at(c)); }
 		else if(key==VK_LEFT) { if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
 		else if(key==VK_RIGHT) { if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
 		else return enterCell(key,repeat);

@@ -7,6 +7,10 @@
     static std::string shortcutCommandID(int id){return "windows.command."+std::to_string(id);}
     static std::vector<std::string> defaultShortcutKeys(int id) {
         switch(id) {
+        case newSongCommand:return {"ctrl+n"};case keyboardHelpCommand:return {"f1"};
+        case selectChannelCommand:return {"ctrl+l"};case selectPatternCommand:return {"ctrl+shift+a"};case selectRowCommand:return {"ctrl+r"};
+        case previousInstrumentCommand:return {"alt+up"};case nextInstrumentCommand:return {"alt+down"};
+        case octaveDownCommand:return {"alt+left"};case octaveUpCommand:return {"alt+right"};
         case paletteCommand:return {"ctrl+k"};case layoutsCommand:return {"ctrl+alt+w"};
         case liveKeysCommand:return {"ctrl+alt+l"};case dockToggle:return {"ctrl+j"};
         case openCommand:return {"ctrl+o"};case saveCommand:return {"ctrl+s"};case saveAsCommand:return {"ctrl+shift+s"};
@@ -14,7 +18,7 @@
         case copyFocusedCommand:return {"ctrl+c"};case pasteFocusedCommand:return {"ctrl+v"};case cutFocusedCommand:return {"ctrl+x"};
         case deleteFocusedCommand:return {"delete"};case selectAllFocusedCommand:return {"ctrl+a"};case patternPasteMix:return {"ctrl+shift+v"};
         case sampleImportCommand:return {"ctrl+i"};case composeCommand:return {"ctrl+1"};case patternCommand:return {"ctrl+2"};case soundCommand:return {"ctrl+3"};
-        case pinCommand:return {"ctrl+p"};case cursorCommand:return {"ctrl+home"};case returnCommand:return {"alt+left"};
+        case pinCommand:return {"ctrl+p"};case cursorCommand:return {"ctrl+home"};case returnCommand:return {"ctrl+alt+backspace"};
         case nextPanelCommand:return {"f6"};case followCommand:return {"f"};case togglePlaybackCommand:return {"space"};case stopCommand:return {"escape"};
         case widerCommand:return {"ctrl+alt+left"};case narrowerCommand:return {"ctrl+alt+right"};
         case tallerCommand:return {"ctrl+alt+up"};case shorterCommand:return {"ctrl+alt+down"};
@@ -24,12 +28,18 @@
     void configureWorkspaceCommands() {
         workspaceCommands=defaultWorkspaceCommands();
         workspaceCommands.insert(workspaceCommands.begin(),{
+            {newSongCommand,L"File / New song",L""},{exitCommand,L"File / Exit",L""},
+            {aboutCommand,L"Help / About ScreamSeq",L""},{keyboardHelpCommand,L"Help / Keyboard shortcuts",L""},
+            {selectChannelCommand,L"Pattern / Select channel",L""},{selectPatternCommand,L"Pattern / Select pattern",L""},{selectRowCommand,L"Pattern / Select row",L""},
+            {previousInstrumentCommand,L"Pattern / Previous instrument",L""},{nextInstrumentCommand,L"Pattern / Next instrument",L""},
+            {octaveDownCommand,L"Pattern / Octave down",L"Keypad /"},{octaveUpCommand,L"Pattern / Octave up",L"Keypad *"},
+            {useInstrumentCommand,L"Pattern / Use instrument from cursor",L"Enter in instrument field"},
             {paletteCommand,L"Workspace / Search commands and shortcuts",L""},
             {copyFocusedCommand,L"Edit / Copy focused selection",L""},
             {pasteFocusedCommand,L"Edit / Paste into focused selection",L""},
             {cutFocusedCommand,L"Edit / Cut focused selection",L""},
             {deleteFocusedCommand,L"Edit / Delete focused selection",L""},
-            {selectAllFocusedCommand,L"Edit / Select all sample frames",L""},
+            {selectAllFocusedCommand,L"Edit / Select all",L""},
             {togglePlaybackCommand,L"Playback / Play or stop",L""},
             {redoAlternateCommand,L"Edit / Redo (alternate shortcut)",L""},
             {reloadShortcutsCommand,L"Workspace / Reload saved shortcuts",L""}});
@@ -43,6 +53,7 @@
             entry.shortcut.clear();
             if(entry.id==playCommand)entry.label=L"Playback / Play";
             if(entry.id==focusPatternCommand||entry.id==graphLanesFocus)entry.contextHint.clear();
+            if(entry.id==clearCommand)entry.contextHint=L"Backspace / . in pattern";
             definitions.push_back({shortcutCommandID(entry.id),std::move(keys)});
         }
         workspaceShortcuts=std::make_unique<ScreamSeq::WorkspaceShortcuts>(std::move(definitions));
@@ -76,6 +87,7 @@
         shortcutTimer();
         if(palette)palette->refreshShortcuts();
         refreshShortcutControlLabels();
+        refreshMenuLabels();
     }
     void refreshShortcutControlLabels() {
         if(!workspaceShortcuts||controls.empty())return;
@@ -183,6 +195,7 @@
         if(ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the tracker or sample selection first");
         if(workspaceMainCanvasFocused("samples"))command(id==copyFocusedCommand?sampleCopyCommand:id==pasteFocusedCommand?samplePasteCommand:id==cutFocusedCommand?sampleCutCommand:id==deleteFocusedCommand?sampleClearCommand:sampleAllCommand);
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==cutFocusedCommand)cutCells();
+        else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&id==selectAllFocusedCommand)selectPatternRegion(selectPatternCommand);
         else if(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()&&(id==copyFocusedCommand||id==pasteFocusedCommand||id==deleteFocusedCommand))command(id==copyFocusedCommand?copyCommand:id==pasteFocusedCommand?pasteCommand:clearCommand);
         else throw std::runtime_error("Focus a matching pattern or sample selection first");
         return true;

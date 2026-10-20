@@ -79,7 +79,7 @@
 			{composeCommand,L"Workspace / Compose",L"Ctrl+1"},{patternCommand,L"Workspace / Pattern focus",L"Ctrl+2"},
 			{soundCommand,L"Workspace / Sound design",L"Ctrl+3"},{notesCommand,L"Pattern / Precise note row editor",L"Enter on a note cell"},
 			{samplesCommand,L"Inspect / Sample & loops",L""},{pinCommand,L"Panel / Toggle pin",L"Ctrl+P"},
-			{cursorCommand,L"Panel / Follow editing cursor",L"Ctrl+Home"},{returnCommand,L"Panel / Return to opening position",L"Alt+Left"},
+			{cursorCommand,L"Panel / Follow editing cursor",L"Ctrl+Home"},{returnCommand,L"Panel / Return to opening position",L"Ctrl+Alt+Backspace"},
 			{focusPatternCommand,L"Focus / Pattern",L"Esc (also stops)"},{nextPanelCommand,L"Focus / Next panel",L"F6"},
 			{followCommand,L"Playback / Toggle follow",L"F"},{playCommand,L"Playback / Play demo",L"Space"},{stopCommand,L"Playback / Stop",L"Esc"},
 			{widerCommand,L"Layout / Widen inspector",L"Ctrl+Alt+Left"},{narrowerCommand,L"Layout / Narrow inspector",L"Ctrl+Alt+Right"},

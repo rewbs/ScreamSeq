@@ -300,7 +300,15 @@ protected:
       case WM_ERASEBKGND:return 1;
       case WM_PAINT:{PAINTSTRUCT p{};BeginPaint(h,&p);EndPaint(h,&p);self->render();return 0;}
       case WM_TIMER:if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
-      case WM_COMMAND:if(self->ready_){const auto notification=HIWORD(w);if(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL)return 0;self->action(LOWORD(w),notification);self->layout();self->requestPaint();}return 0;
+      case WM_COMMAND:if(self->ready_){
+        const auto notification=HIWORD(w);
+        // Focus/open/close notifications are not edits. Rebuilding a selector
+        // in response to CBN_DROPDOWN closes its native popup immediately.
+        wchar_t type[32]{};if(l)GetClassNameW(reinterpret_cast<HWND>(l),type,32);
+        if(!_wcsicmp(type,L"ComboBox")&&notification!=CBN_SELCHANGE)return 0;
+        if(!_wcsicmp(type,L"Edit")&&(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL))return 0;
+        self->action(LOWORD(w),notification);self->layout();self->requestPaint();
+      }return 0;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
       case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));

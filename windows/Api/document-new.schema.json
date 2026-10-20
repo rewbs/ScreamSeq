@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Windows document.new parameters",
+  "description": "Replace the song with an empty native project. Like Open, this resets document identity and history. Unsaved work requires discard:true. dryRun validates without replacing the song.",
+  "type": "object",
+  "required": ["expectedRevision"],
+  "additionalProperties": false,
+  "properties": {
+    "expectedRevision": {"type": "string"},
+    "discard": {"type": "boolean", "default": false},
+    "dryRun": {"type": "boolean", "default": false}
+  }
+}

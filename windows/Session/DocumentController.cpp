@@ -432,7 +432,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
   }
-  if(recording_&&(method=="document.save"||method=="document.open"))
+  if(recording_&&(method=="document.save"||method=="document.open"||method=="document.new"))
     throw Api::ApiError(-32602,"Finish or discard the recording take before saving or opening another song");
   // Browser preferences are independent of the song. Do not flush vendor
   // editors, require a document revision, or allocate musical history here.
@@ -452,7 +452,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || method=="document.open" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
+  if(method=="document.save" || method=="document.open" || method=="document.new" || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
     flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
@@ -465,7 +465,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
-  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="document.save" || method=="document.open";
+  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="document.save" || method=="document.open" || method=="document.new";
   if(write) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
@@ -483,9 +483,19 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(sample>=1 && sample<=65535 && std::floor(sample)==sample) changedSamples_.insert(unsigned(sample));
   }
   scanPatterns_=method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="arrangement.copyBlock";
-  if(write && method!="document.open") preflightGrowth(method,params);
+  if(write && method!="document.open" && method!="document.new") preflightGrowth(method,params);
   Json result;
-  if(method=="document.save" || method=="document.open") {
+  if(method=="document.new") {
+    keys(params,{"discard","dryRun"});
+    const bool discard=flag(params,"discard"),dry=flag(params,"dryRun");
+    if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard)
+      throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before creating a song");
+    Project::OpenedProject candidate;
+    candidate.document=std::make_unique<Tracker::Document>();
+    candidate.state=Project::newProjectState(*candidate.document);
+    if(!dry)installCandidate(std::move(candidate));
+    return {{"created",!dry}};
+  } else if(method=="document.save" || method=="document.open") {
     if(method=="document.save") keys(params,{"path","overwrite","dryRun"});else keys(params,{"path","discard"});
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
     if(method=="document.open") {
