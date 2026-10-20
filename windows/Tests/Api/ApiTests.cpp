@@ -70,7 +70,9 @@ void transientInputTests() {
   check(api.handle(request("workspace.input",params,"stale"))["error"]["code"]==-32001,"Input requires fresh context");
   for(auto invalid:{Json{{"instrument",true}},Json{{"instrument",0}},Json{{"octave",9}},Json{{"octave",1.5}},Json::object()}) {
     invalid["expectedRevision"]=host.state.revision;invalid["expectedContext"]=host.state.context.at("contextRevision");
-    check(api.handle(request("workspace.input",invalid,"invalid"))["error"]["code"]==-32602,"Invalid input must reject before host");
+    // Each independent validation case needs a fresh ID: a terminal error
+    // retains its ID, so a different invalid payload would test ID conflict.
+    check(api.handle(request("workspace.input",invalid))["error"]["code"]==-32602,"Invalid input must reject before host");
   }
   check(host.inputs==1&&host.plays==0&&host.stops==0,"Input rejection changed transport or context");
   const auto watch=request("parameter.activity.watch",{{"target","copy"},{"parameter",1}},"watch");const auto watched=api.handle(watch);

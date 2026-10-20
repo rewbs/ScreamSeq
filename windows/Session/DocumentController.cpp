@@ -686,23 +686,31 @@ Json DocumentController::operation(const std::string &method,Json params) {
     // fallible staging, take protection and native draft lease as Open.
     Json response={{"demo",demo},{"path",""},{"loadWarnings",Json::array()},{"requiresSaveAs",false},{"loadSourcePath",""}};
     installCandidate(std::move(candidate));return response;
-  } else if(method=="document.save" || method=="document.open") {
-    if(method=="document.save") keys(params,{"path","overwrite","dryRun"});else keys(params,{"path","discard"});
+  } else if(method=="document.open") {
+    keys(params,{"path","discard"});
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
-    if(method=="document.open") {
-      bool discard=flag(params,"discard");
-      if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
-      open(path);return {{"path",utf8(path)},{"loadWarnings",project_.loadWarnings},{"requiresSaveAs",project_.requiresSaveAs},{"loadSourcePath",utf8(project_.loadSourcePath)}};
-    } else {
-      auto ext=extension(path);if(ext!=L".screamseq" && ext!=L".resonance") throw Api::ApiError(-32602,"Use .screamseq or .resonance for a native project");
-      bool overwrite=flag(params,"overwrite"),dry=flag(params,"dryRun");
+    bool discard=flag(params,"discard");
+    if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
+    open(path);return {{"path",utf8(path)},{"loadWarnings",project_.loadWarnings},{"requiresSaveAs",project_.requiresSaveAs},{"loadSourcePath",utf8(project_.loadSourcePath)}};
+  } else if(method=="document.save") {
+    std::filesystem::path path;std::wstring ext;bool overwrite=false,dry=false;
+    try {
+      // Only read-only admission is covered by this rejection receipt. Neither
+      // serialization nor staging/atomic replacement has begun. A prior editor
+      // flush that changed music is still classified by invokeOperation.
+      keys(params,{"path","overwrite","dryRun"});
+      if(!params.contains("path"))throw Api::ApiError(-32602,"path is required");
+      path=pathValue(params["path"]);ext=extension(path);
+      if(ext!=L".screamseq" && ext!=L".resonance")throw Api::ApiError(-32602,"Use .screamseq or .resonance for a native project");
+      overwrite=flag(params,"overwrite");dry=flag(params,"dryRun");
       if(!overwrite && std::filesystem::exists(path)) throw Api::ApiError(-32602,"File exists; use overwrite:true");
       if(!std::filesystem::is_directory(path.parent_path()) || std::filesystem::is_directory(path)) throw Api::ApiError(-32602,"Save destination must be a file in an existing directory");
       Project::validateProjectSaveDestination(project_,path);
-      if(dry) (void)Project::serializeNativeProject(*document_,project_);else Project::saveNativeProject(*document_,project_,path,overwrite);
-      result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
-      if(auto warning=plugins_->takeEditorWarning();!warning.empty())result["pluginEditorWarning"]=std::move(warning);
-    }
+    } catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+      catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+    if(dry) (void)Project::serializeNativeProject(*document_,project_);else Project::saveNativeProject(*document_,project_,path,overwrite);
+    result={{"path",utf8(path)},{"format",ext==L".screamseq" ? "screamseq" : "resonance"},{"written",!dry},{"projectVersion",6}};
+    if(auto warning=plugins_->takeEditorWarning();!warning.empty())result["pluginEditorWarning"]=std::move(warning);
   } else if(method=="history.undo"||method=="history.redo") {
     keys(params,{"domain"});const auto domain=params.value("domain",Json("all"));
     if(domain!="all"&&domain!="document"&&domain!="plugins")throw Api::ApiError(-32602,"History domain must be all, document or plugins; all use chronological history");
@@ -871,10 +879,12 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // graph.update likewise prepares a copied definition and publishes it through
     // Document::annotate. Failed validation/preparation leaves the recipe and
     // history untouched; a later completion failure is handled above.
-    // This does not classify recording start/stop/discard, files or vendor calls.
+    // Open, like New, only reads/stages a candidate before installCandidate's
+    // no-throw ownership swap. Generation/path changes are handled above.
+    // This does not classify recording start/stop/discard, file writes or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="graph.update"
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="document.open"||method=="graph.update"
         ||method=="plugin.parameters.preview.commit"||method=="graph.plugin.preview.commit") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}

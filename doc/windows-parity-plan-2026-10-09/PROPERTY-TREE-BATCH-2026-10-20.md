@@ -1,5 +1,9 @@
 # Shared typed project preservation foundation
 
+**Later execution:** [B3 qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+passes the shared binary codec and preservation/metadata-owner tests on Windows
+ARM64. Mac's bridge/session tests and reciprocal edited-file gates remain open.
+
 ## Status and observed ownership gap
 
 **Foundation checkpoint `5f278e7c5`, unbuilt at this checkpoint.**

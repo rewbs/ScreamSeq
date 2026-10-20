@@ -1,5 +1,11 @@
 # Terminal mutation replay
 
+**Later execution:** [B3 qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+passes the cache suite and actual Windows replay contract. A native test's
+reused IDs and explicit file-rejection outcomes need the recorded follow-up
+corrections; remaining real-pipe and Mac checks are open. The original
+reproduction and preparation evidence below is retained.
+
 ## Observed difference and chosen contract
 
 Mac `mac/App/AutomationServer.swift::route` retains bounded mutation replies

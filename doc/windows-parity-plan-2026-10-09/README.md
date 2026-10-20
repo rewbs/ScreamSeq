@@ -26,6 +26,15 @@ slide vector. All three actual-app derivatives pass two saves/reopens on the
 candidate; the C++ test correction still needs execution. The existing codec
 baseline has not been relaxed.
 
+**Later B3 checkpoint:** [shared contract qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+records a successful `b3fe23e45` ARM64 build, 21/22 native registrations passed,
+all ten actual-app plugin contracts passed, and exact F01–F05 plus separate
+duration checks passed. The metadata test correction now passes. One API test
+needs fresh request IDs; the codec corpus stopped because a proven protected
+Save refusal lacked an explicit outcome. Both follow-up corrections are source
+only. The next build gate is **06:57:04 UTC**; Mac/x64 and final integration
+remain open.
+
 [Mac rack dry runs](RACK-DRY-RUN-2026-10-20.md) are a subsequent source batch,
 outside the frozen `b1581c9c8` build. The shared contract passes on the existing
 Windows app; Mac compilation/execution and API baseline reconciliation remain
@@ -33,13 +42,14 @@ pending.
 
 [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md) prepares
 consistent integral-number semantics and safe exact bounds on both platforms.
-The existing Windows rejection is reproduced; the correction is source only
-and awaits the next batched build.
+The original Windows rejection is reproduced; B3's shared and actual-app integer
+checks now pass. Mac execution and baseline reconciliation remain open.
 
 [Terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) prepares Windows
 retention of terminal mutation errors and conservative classification of
-unclassified host failures. Its pre-fix request-ID reuse difference is reproduced;
-the correction and cross-platform contract remain unbuilt/unqualified.
+unclassified host failures. B3's cache and actual-app replay checks pass. Its
+test-ID correction, previously unreached real-pipe groups, file-outcome follow-up
+and Mac contract remain unqualified.
 
 [Shared typed project preservation](PROPERTY-TREE-BATCH-2026-10-20.md) moves the
 codec/merge into `editor/` and prepares a native Mac data bridge. The subsequent

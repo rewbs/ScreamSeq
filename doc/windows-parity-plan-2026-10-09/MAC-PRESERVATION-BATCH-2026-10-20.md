@@ -1,10 +1,12 @@
 # Mac session ownership of preserved project metadata
 
-**Source prepared; no build or runtime qualification for this batch yet.**
+**Mac source prepared; Mac compilation/execution remain open.**
+The later [B3 qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+passes the shared codec/preservation/metadata-owner tests on Windows ARM64.
+Those checks do not qualify this native Mac session integration.
 This follows the [typed foundation](PROPERTY-TREE-BATCH-2026-10-20.md) at
-`5f278e7c5`. The latest executed ARM64 application remains `b1581c9c8`.
-The first allowed next build is 05:53:34 UTC on 20 October. No codec observation
-baseline is changed by this source work.
+`5f278e7c5`. B3 executed after the 05:53:34 UTC hourly gate. No codec observation
+baseline is changed by this source work; the next build gate is 06:57:04 UTC.
 
 ## Implemented source behavior
 
@@ -103,8 +105,9 @@ and plugin extensions.
 
 ## Remaining risks and gates
 
-- Native compilation and all newly added assertions are unexecuted. Source
-  inspection and `git diff --check` are not substitutes.
+- Mac compilation and native Mac assertions are unexecuted. Source inspection
+  and `git diff --check` are not substitutes; Windows helper passes have a
+  narrower scope.
 - Large-file peak memory and save latency need bounded measurement: Foundation
   and portable parsing coexist during staged import/serialization, although
   module/plugin payloads are excluded from the retained baseline.

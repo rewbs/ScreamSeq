@@ -1,5 +1,10 @@
 # Shared API integer validation
 
+**Later execution:** [B3 qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+passes the shared boundary test and complete Windows application contract,
+including history and save/reopen. Mac execution remains open. The evidence
+below preserves the original reproduction and preparation chronology.
+
 ## Evidence and scope
 
 The retained Windows ARM64 app at `b1581c9c8` rejects `pattern.get` with

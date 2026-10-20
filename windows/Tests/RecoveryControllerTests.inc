@@ -60,11 +60,49 @@ void recoveryControllerTests(const std::filesystem::path &directory) {
   recovered=recoveryWait(c,c.recover(first->bytes,savedRevision));
   need(recovered->dirty && recovered->path.empty(),"clean guarded restore did not become unsaved");
   const auto unsaved=c.view();bool failedSave=false;
-  try{invoke(c,"document.save",{{"path",output.generic_string()}});}catch(const std::exception &){failedSave=true;}
+  try{invoke(c,"document.save",{{"path",output.generic_string()}});}
+  catch(const Api::ApiError &e){failedSave=e.code==-32602 && e.outcome && e.outcome->state==Tracker::CommitOutcome::NotCommitted;}
   need(failedSave && c.view()==unsaved && c.view()->dirty,"failed save cleared recovered unsaved flag");
   bool blockedOpen=false;
-  try{invoke(c,"document.open",{{"path",output.generic_string()}});}catch(const Api::ApiError &){blockedOpen=true;}
+  try{invoke(c,"document.open",{{"path",output.generic_string()}});}
+  catch(const Api::ApiError &e){blockedOpen=e.code==-32602 && e.outcome && e.outcome->state==Tracker::CommitOutcome::NotCommitted;}
   need(blockedOpen && c.view()==unsaved,"normal open discarded recovered unsaved state");
+
+  {
+    unsigned fileStops=0;DocumentController files({},"file-admission",[&]{++fileStops;},[](const auto &){});
+    auto tree=Project::decodePlist(*first->bytes);
+    tree["native"]["unrecognizedFileBoundary"]=Json::binary({0,255,17});
+    const auto protectedBytes=Project::encodePlist(tree);
+    const auto protectedPath=directory/"file-admission-protected.screamseq";
+    Project::writeProjectFile(protectedPath,protectedBytes,false);
+    invoke(files,"document.open",{{"path",protectedPath.generic_string()},{"discard",true}});
+    need(files.view()->session.document.at("requiresSaveAs")==true,"File boundary fixture must protect its source");
+    const auto rejectBeforeCommit=[&](const char *method,Json params,int code) {
+      const auto before=files.view();const auto stopped=fileStops;const auto receipt=std::make_shared<NativeCallReceipt>();
+      params["expectedRevision"]=before->session.revision;bool rejected=false;
+      try{(void)recoveryWait(files,files.invokeCompleted(method,std::move(params),receipt));}
+      catch(const Api::ApiError &e) {
+        rejected=e.code==code && e.outcome && e.outcome->state==Tracker::CommitOutcome::NotCommitted;
+        need(!e.completed,"Rejected file admission must not fabricate a returned operation");
+      }
+      need(rejected && !receipt->read(),"Proven pre-commit file rejection lost its explicit outcome");
+      need(files.view()==before && fileStops==stopped,"Rejected file admission changed song, protection, view or playback");
+      need(Project::readProjectBytes(protectedPath)==protectedBytes,"Rejected file admission changed protected source bytes");
+    };
+    rejectBeforeCommit("document.save",{{"path",protectedPath.generic_string()},{"overwrite",true}},-32003);
+    rejectBeforeCommit("document.save",{{"path",protectedPath.generic_string()}},-32602);
+    rejectBeforeCommit("document.save",{{"path",(directory/"missing-parent"/"copy.screamseq").generic_string()}},-32602);
+    rejectBeforeCommit("document.save",{{"path",(directory/"wrong-extension.wav").generic_string()}},-32602);
+    tree["module"]=Json::binary({1,2,3});
+    const auto broken=directory/"file-admission-broken.screamseq";
+    const auto brokenBytes=Project::encodePlist(tree);Project::writeProjectFile(broken,brokenBytes,false);
+    rejectBeforeCommit("document.open",{{"path",broken.generic_string()},{"discard",true}},-32003);
+    need(Project::readProjectBytes(broken)==brokenBytes,"Failed Open changed malformed source bytes");
+    const auto copy=directory/"file-admission-copy.screamseq";
+    invoke(files,"document.save",{{"path",copy.generic_string()}});
+    need(Project::readProjectBytes(protectedPath)==protectedBytes &&
+      files.view()->session.document.at("requiresSaveAs")==false,"Valid copy after rejection lost source protection semantics");
+  }
 
   {
     unsigned automationStops=0;DocumentController automated({},"recovery-automation",[&]{++automationStops;},[](const auto &){});

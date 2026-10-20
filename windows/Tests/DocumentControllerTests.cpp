@@ -32,7 +32,8 @@ void publicationTests(const std::filesystem::path &directory) {
   old=controller.view();auto beforeStops=stops;
   fail=true;
   bool rejected=false;
-  try {invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});} catch(const std::runtime_error &) {rejected=true;}
+  try {invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});}
+  catch(const Api::ApiError &e){rejected=e.outcome && e.outcome->state==Tracker::CommitOutcome::NotCommitted;}
   need(rejected && controller.view()==old,"open fault must retain the entire old immutable view");
   need(stops==beforeStops && old->dirty && old->path==path,"open fault must not stop or replace the dirty source");
   need(controller.invoke("sample.get",{{"sample",1}}).get()==oldSample,"open fault must retain the worker song");

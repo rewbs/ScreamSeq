@@ -27,8 +27,8 @@ The returned job summaries are retained in
 [Windows](https://github.com/rewbs/ScreamSeq/actions/runs/39349699781) and
 [Mac](https://github.com/rewbs/ScreamSeq/actions/runs/39349699645).
 
-The Windows candidate is frozen at
-`b1581c9c8bc7d776d637d8c6ac094e8c3db7780a` in the qualification worktree.
+The earlier Windows candidate is
+`b1581c9c8bc7d776d637d8c6ac094e8c3db7780a`.
 It combines recipe preview ownership, sample release/loop gestures, the corrected
 sidebar fixture and zero-duration file defaults. Seven native build targets,
 the selected native/application checks, and exact fixture/API/codec/duration
@@ -37,8 +37,17 @@ checks are retained under `bin/recipe-sample-20261020/`.
 04:50–04:53 UTC build, 16/17 native groups passed, 21 application cases passed,
 two provider skips and successful fixture/API/codec/duration checks against
 their pinned baselines. The native metadata test failed on an NF/NR field
-assumption; a test-only correction is prepared but unbuilt. The next build gate
-is **20 October 05:53:34 UTC**.
+assumption; its test-only correction now passes on the later candidate below.
+
+The qualification worktree is now frozen at
+`b3fe23e45a14763c1f34fe602f8340a49385e93a`. Its
+[shared contract qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+records a 05:53–05:57 UTC ARM64 build, 21/22 native registrations and all ten
+actual-app contracts passed. F01–F05 and separate duration checks passed.
+The API corpus has three intentional unmatched observations; the codec corpus
+stopped on an unclassified protected-source Save refusal. Fresh-ID test and
+explicit file-boundary corrections are prepared after B3 but unbuilt.
+The next build gate is **20 October 06:57:04 UTC**.
 
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context
@@ -50,10 +59,10 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Frozen ARM64 batch has bounded passing evidence and one failed native metadata test. Shared preview paths also change Mac bridge/audio adapters. | Rebuild and rerun the corrected metadata test at the next permitted opportunity; preserve full-model and unit assertions. Obtain Mac/x64 execution; reuse unchanged passing evidence and retain both apps on the same integration line. |
+| 1 / M | B3 built; corrected metadata passes. Its API executable stops on reused fixture IDs, and codec qualification stops at an unclassified protected-source refusal. Follow-up source corrections are prepared. | At the next permitted build, qualify explicit pre-commit file outcomes, fresh-ID API cases and previously unreached real-pipe tests. Rerun the actual codec corpus without weakening uncertainty/source checks. Obtain Mac/x64 execution and reuse unchanged evidence. |
 | 2 / S–M | At the frozen candidate, Mac `TrackerSessionAPI.inc` excludes rack `dryRun`; Windows accepts it. The later [Mac correction](RACK-DRY-RUN-2026-10-20.md) is source only, with a shared contract passed on the existing Windows app. The API corpus still retains `API-PLUGIN-DRY-RUN`. | Qualify Mac dry runs using existing shared parameter preparation and accepted manual values. Preserve active preview ownership, queues, Redo, revision, opaque bytes and transport. Check changed and no-op batches, full-batch rejection, unavailable/read-only targets, stale guards and subsequent real edits. Do not count a method-name match as parity. |
-| 3 / M | [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md) and [terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) are prepared but unbuilt. The retained Windows app reproduces both differences. | Qualify numeric bounds/adapters, terminal-error retention, busy retries, uncertain side effects, exact cache accounting and both shared app contracts in the next batch. API vectors retain the old baseline until both hosts execute. Generic host failures now require reconciliation without advertising the pre-write revision; prove that behavior with the native real-pipe cases. |
-| 4 / L | The executed corpus still records Mac's unknown-extension loss. The [shared typed foundation](PROPERTY-TREE-BATCH-2026-10-20.md) and subsequent [Mac session ownership](MAC-PRESERVATION-BATCH-2026-10-20.md) are prepared but unbuilt. | Qualify staged Mac load/save/recovery ownership, XML admission, inactive archives, owned plugin/take state and actual merged-tree validation. Execute reciprocal edited-file checks before updating observations. Large-file peak memory and unsupported-encoding archive limits remain explicit risks. |
+| 3 / M | [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md), cache accounting and [terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) now pass B3's shared/actual-app checks. Mac and remaining real-pipe paths are open. | Preserve the old observation baseline until both hosts execute and changes are reviewed. Qualify remaining completion failures without advertising a pre-write revision or converting uncertain side effects into proven rejection. |
+| 4 / L | The executed corpus still records Mac's unknown-extension loss. B3's shared codec/preservation/owner tests pass on Windows; [Mac session ownership](MAC-PRESERVATION-BATCH-2026-10-20.md) remains uncompiled/unexecuted on Mac. | Qualify staged Mac load/save/recovery ownership, XML admission, inactive archives, owned plugin/take state and actual merged-tree validation. Execute reciprocal edited-file checks before updating observations. Large-file peak memory and unsupported-encoding archive limits remain explicit risks. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
 | 6 / M | Native control/event checks do not establish visual ergonomics, DPI, UIA or physical input quality. Computer use remains stopped after the user's Escape. | Retain A16/P8 as open. Resume foreground inspection only with renewed authorization. Check 100/150/200% DPI, compact/normal layouts, focus visibility, hidden tab stops, high contrast and Narrator on the usable candidate. Avoid further speculative UI redesign based on screenshots alone. |
 | 7 / L, equipment-dependent | Real vendor/device lifecycle and physical audio/MIDI remain separately unqualified. Optional unavailable provider tests are skips, not passes. | Use explicit fixture providers/devices; preserve musician sessions and audio defaults. Qualify architecture mismatch, editor lifecycle, latency changes, reconnect, capture/overflow and physical measurements with their existing strict limits. Keep silent private-desktop observations separate from audible evidence. |
