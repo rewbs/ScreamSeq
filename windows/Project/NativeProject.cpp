@@ -1,5 +1,6 @@
 #include "NativeProject.hpp"
 #include "editor/project/ModuleExport.hpp"
+#include "editor/IntegerValidation.hpp"
 #include "NativeMetadata.hpp"
 #include "BinaryPlist.hpp"
 #include "ProjectIO.hpp"

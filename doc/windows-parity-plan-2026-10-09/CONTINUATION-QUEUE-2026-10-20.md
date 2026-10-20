@@ -8,6 +8,14 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Codec review completed:** [13 Mac expectation changes](CODEC-OBSERVATION-REVIEW-2026-10-20.md)
+are proven extension/archive preservation improvements on both architectures.
+Inputs, admission, protection, Windows expectations and historical reports stay
+unchanged. Additional retained Windows probes confirmed loss of plugin records
+and recorded points for integral-real project fields; the
+[file-integer repair](FILE-INTEGER-RECOVERY-2026-10-20.md) now covers those known
+fields too, with strict regression checks prepared but unbuilt.
+
 **New source, unbuilt:** [original-time plugin notifications](PLUGIN-EDIT-TIMESTAMPS-2026-10-20.md)
 now preserve VST3 callback/AU listener timestamps through the shared host
 interface and expose backend loss counters. Native/worker checks are prepared.

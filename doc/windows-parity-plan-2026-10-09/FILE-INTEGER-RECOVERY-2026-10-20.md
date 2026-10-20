@@ -39,3 +39,43 @@ tree to Mac. Recheck F04 opaque edited metadata and source protection because
 the file-recovery path changed. Retained 54fa binaries cannot qualify this fix.
 Do not update the Windows codec observation baseline until that execution proves
 the intended difference and retains all malformed-input checks.
+
+## Additional project-record defect confirmed without rebuilding
+
+Four new probes used the unchanged retained CI x64 executable on a never-switched
+private desktop (owned PID 30432, subsequently closed). Source, executable and
+BuildInfo hashes were rechecked. `project-integer-probes/report.json` under
+`bin/export-capture-20261020/` has SHA-256
+`ef77367626729cbe23fd8bbb26bde3a8fcaba864956d692c38fcb1c3eb8dd242`.
+`probe-project-integers.py` retains the exact inputs, requests and saved outputs.
+This runtime evidence belongs to frozen merge `d79321c7c`, not the new source.
+
+| F04 derivative | Frozen Windows result |
+| --- | --- |
+| First plugin `type: 0.0` | Dropped that plugin: 15 rack records became 14. |
+| First plugin `instrument: 0.0` | Dropped that plugin: 15 became 14. |
+| Selected sequence stored as integral real | Defaulted the selection and required a protected copy. |
+| Recorded frame stored as `0.0` | Dropped the sole recorded point. |
+
+Mac source uses bounded numeric conversion for plugin descriptors, assignments,
+buses and absolute points; new paired native execution is still required for
+these exact derivatives.
+
+The Windows file-open adapter now canonicalizes only understood project integer
+fields before the existing strict validators: sequence, plugin descriptor IDs,
+assignment/bus fields, recorded slot/ID/frame, and recovery-take counters/events.
+Integral current container/metadata versions avoid an unnecessary compatibility
+warning. Invalid/nonfinite/fractional/negative/out-of-range fields still follow
+the existing per-record recovery, archive and source-protection paths. This
+uses `editor/IntegerValidation.hpp`; there is no global permissive decoder, opaque
+state conversion or API relaxation.
+
+`Snapshot/ProjectIntegerRecoveryChecks.inc` adds a normal-build check using F04,
+an unavailable synth with opaque state and aliases, recorded automation and a
+recovery take. It requires exact canonical encoded-tree equality, complete native
+and core preservation, unknown real values remaining real, save/reopen, strict
+captured-byte rejection per field, strict writer rejection, and protected
+malformed-value recovery retaining unrelated plugins. Tests remain **unbuilt**.
+Include `snapshot-tests` and the actual four probes in the next coordinated
+batch, together with the native metadata checks. Do not rerun unchanged broad
+suites just to qualify this file-only repair.

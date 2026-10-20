@@ -13,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 using namespace Tracker;
 #define CHECK(x) do { if(!(x)) throw std::runtime_error(std::string(__func__)+": "+#x); } while(false)
@@ -423,6 +424,7 @@ void patternNameSave(MODTYPE type, bool preserveSamples) {
   auto doc=patternNameDocument(type);
   checkRejectedSave(*doc,preserveSamples);
 }
+#include "ProjectIntegerRecoveryChecks.inc"
 int main(int argc,char **argv) {
   if(!std::getenv("TMPDIR")||!*std::getenv("TMPDIR")) {
     std::cerr<<"TMPDIR must name an owned scratch directory\n";return 1;
@@ -431,7 +433,8 @@ int main(int argc,char **argv) {
   std::vector<std::pair<std::string,std::function<void()>>> tests{
       {"titleSnapshot",titleSnapshot},{"sparseSnapshot",sparseSnapshot},{"structureConservation",structureConservation},
       {"moduleExportLoss",moduleExportLoss},{"titlesAndLegacy",titlesAndLegacy},{"malformedArchives",malformedArchives},
-      {"parityReferenceFixture",parityReferenceFixture},{"exactPatternGroove",exactPatternGroove}};
+      {"parityReferenceFixture",parityReferenceFixture},{"exactPatternGroove",exactPatternGroove},
+      {"projectIntegerRecovery",projectIntegerRecovery}};
   for(const auto &[type,name]:std::vector<std::pair<MODTYPE,std::string>>{
       {MOD_TYPE_MOD,"MOD"},{MOD_TYPE_XM,"XM"},{MOD_TYPE_S3M,"S3M"},{MOD_TYPE_IT,"IT"},{MOD_TYPE_MPT,"MPTM"}}) {
     tests.emplace_back("idleCellSnapshot/"+name,[type]{idleCellSnapshot(type);});

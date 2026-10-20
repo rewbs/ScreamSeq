@@ -6,7 +6,7 @@ Tracker::NativeSong recoverNativeMetadata(Json &metadata,const Tracker::Document
   auto decode=[&](const Json &tree){auto model=decodeNativeMetadata(tree);model.validate(snapshot.song());return model;};
   if(!metadata.is_object()){report.warn("Native metadata is unavailable; loaded the embedded song snapshot",true);metadata=base;return snapshotNative;}
   Json source=metadata;
-  if(!source.contains("version")||!source.at("version").is_number_integer()||source.at("version")!=17)
+  if(!source.contains("version")||source.at("version")!=17)
     report.warn("Unsupported native metadata version; recovered understood fields",false,true);
   source["version"]=17;
   // Optional unreleased metadata17 extension; older songs have no bank.
