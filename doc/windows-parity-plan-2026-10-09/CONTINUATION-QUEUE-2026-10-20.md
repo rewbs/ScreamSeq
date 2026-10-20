@@ -49,6 +49,14 @@ stopped on an unclassified protected-source Save refusal. Fresh-ID test and
 explicit file-boundary corrections are prepared after B3 but unbuilt.
 The next build gate is **20 October 06:57:04 UTC**.
 
+During the cooldown, the retained B3 app passed the new shared
+`--edited-metadata` check: 18 paired clean/opaque stages covering edits,
+stable plugin movement/deletion, Undo/Redo and reopen. Its final opaque output
+is retained under
+`bin/shared-contracts-20261020/edited-metadata-final-2/edited-metadata/opaque-reopened.screamseq`
+for exchange. Both native workflows request the check. No new build ran; Mac
+execution and the reciprocal return journey remain pending.
+
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context
 case passed, and five subsequent keyboard/browser cases passed. See

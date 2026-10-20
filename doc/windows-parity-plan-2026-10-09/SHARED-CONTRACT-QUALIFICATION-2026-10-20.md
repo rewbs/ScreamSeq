@@ -92,6 +92,36 @@ values matched exactly. That run completed at **06:04:02.490 UTC**.
 Both conformance runs report unchanged executable, inputs and original corpus.
 No QA application process remained after completion.
 
+### Edited opaque metadata on the retained B3 executable
+
+A later tooling-only check completed **06:14:37–06:14:49 UTC**, with no build.
+Evidence is under
+`bin/shared-contracts-20261020/edited-metadata-final-2/`. The runner's F04
+no-edit leg and **18 paired clean/opaque saved stages passed**: baseline,
+title, graph-node label, plugin move, plugin removal, Undo, Redo, Undo restoration
+and reopen on each input. Root/native/track/node/plugin extensions retained
+data, large integers, date, UID, Unicode, numeric type and negative zero.
+Stable plugin identity followed movement, disappeared on deletion and returned
+exactly with Undo. Title/label/move checks also constrain unrelated project data;
+Undo/Redo require the complete corresponding prior tree. All input, output,
+executable and original-corpus hashes remained unchanged.
+
+The new shared `edited_metadata.py` compares exact expected output without
+stripping unfamiliar fields. Its first diagnostic run exposed Python plist
+float interning in the **probe generator**, not a product loss: negative zero
+had replaced unrelated positive-zero values before loading. The corrected
+generator verifies its complete intended typed input before native admission.
+A subsequent tooling-only failure involved editing the strict reader's
+duplicate-key-guarded dictionary; oracle copies now use mutable dictionaries
+without changing typed values. Both failed reports remain retained alongside
+the final passing run. The three existing roundtrip safety tests also passed.
+
+Both platform workflows now request `--edited-metadata`; Mac execution remains
+pending. The retained `edited-metadata/opaque-reopened.screamseq` is a concrete
+edited input for the next reciprocal exchange. This Windows private-desktop
+check does not complete reciprocal editing, Mac Open/UI behavior, or the earlier
+codec failure. It does not qualify the unbuilt file-outcome correction.
+
 ## Prepared corrections after B3
 
 Alongside the fresh-ID test correction, `DocumentController.cpp` now prepares:

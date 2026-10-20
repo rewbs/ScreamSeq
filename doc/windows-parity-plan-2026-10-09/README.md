@@ -35,6 +35,12 @@ Save refusal lacked an explicit outcome. Both follow-up corrections are source
 only. The next build gate is **06:57:04 UTC**; Mac/x64 and final integration
 remain open.
 
+The same retained B3 executable subsequently passed **18 paired edited-metadata
+stages**, covering opaque extensions through title/graph edits, plugin movement
+and deletion, Undo/Redo and reopen. The shared check is scheduled on both native
+workflows and retains an edited exchange input; Mac and reciprocal execution are
+still pending. This required no new build.
+
 [Mac rack dry runs](RACK-DRY-RUN-2026-10-20.md) are a subsequent source batch,
 outside the frozen `b1581c9c8` build. The shared contract passes on the existing
 Windows app; Mac compilation/execution and API baseline reconciliation remain

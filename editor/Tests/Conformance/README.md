@@ -259,3 +259,25 @@ remains a separate UI gate; these recovery observations cannot qualify it.
 
 These Mac harness changes require execution against the retained Mac apps before
 they are qualified. Local Python tests establish tooling behavior only.
+
+### Edited opaque metadata
+
+`native_roundtrip.py --edited-metadata` adds paired original/opaque F04 legs.
+Each performs title and graph-node label edits, stable-identity plugin movement
+and deletion, Undo/Redo and reopen. Exact typed comparisons inject the expected
+extensions into the clean edited tree; they never strip unknown output fields.
+Root/native/track/node/plugin sentinels include data, large integers, UID, date,
+Unicode and negative zero. The generator verifies its exact input before loading:
+ordinary `plistlib` float interning otherwise aliases positive and negative zero.
+
+Every save is a new file; source and prior output hashes are retained. Intended
+edits, exact Undo/Redo restoration and unrelated-field preservation are asserted.
+The final `edited-metadata/opaque-reopened.screamseq` is an explicit edited
+exchange input for a later `--input-file` leg on the other platform. That later
+leg alone is not proof of edits on both platforms; the reciprocal edited gate
+still needs both native implementations and the return journey.
+
+Both build workflows request this bounded check after the existing corpus.
+Earlier failures stop execution; an absent edited report is not a pass. Mac
+setup uses the private `recovery.restore` path documented above, so this contract
+does not qualify Mac's Open dialog or foreground interaction.
