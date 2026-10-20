@@ -10,7 +10,7 @@ int main(){@autoreleasepool{try{
   auto original=before;
   original["opaqueData"]=Project::Value::binary({0,255,42});
   original["opaqueDate"]=Project::Value::binary({0x3f,0xf0,0,0,0,0,0,0},uint64_t(Project::OpaqueType::Date));
-  original["opaqueUID"]=Project::Value::binary({0,0,7},uint64_t(Project::OpaqueType::UID));
+  original["opaqueUID"]=Project::Value::binary({0,1,0,0,0,0,0,1},uint64_t(Project::OpaqueType::UID));
   std::vector<uint8_t> wide(16,0xff);wide.back()=0;
   original["opaqueWideInteger"]=Project::Value::binary(wide,uint64_t(Project::OpaqueType::WideInteger));
   original["opaqueNaN"]=Project::Value::binary({0x7f,0xc0,0,7},uint64_t(Project::OpaqueType::Real32NaN));
@@ -20,6 +20,12 @@ int main(){@autoreleasepool{try{
   NSData *captured=NativePropertyTree::encode(original);
   auto loaded=NativePropertyTree::decode(captured);
   check(Project::sameStoredValue(loaded,original),"Native data bridge changed typed opaque values");
+  NSDictionary *projection=NativePropertyTree::modelProjection(loaded);
+  check(projection[@"opaqueUID"]==NSNull.null&&projection[@"opaqueWideInteger"]==NSNull.null&&
+    projection[@"opaqueNaN"]==NSNull.null&&[projection[@"knownBytes"] isKindOfClass:NSData.class]&&
+    [projection[@"knownNumber"] doubleValue]==1.0&&[projection[@"tracks"] count]==2,
+    "Model projection narrowed opaque values or lost supported musical properties");
+  check(Project::sameStoredValue(loaded,original),"Model projection mutated retained original properties");
   const auto after=NativePropertyTree::fromFoundation(@{@"version":@17,
     @"tracks":@[@[@0,@{@"id":@"n2",@"name":@"Second"}],@[@1,@{@"id":@"n1",@"name":@"Edited"}]],
     @"knownNumber":@2.0,@"knownBytes":[NSData dataWithBytes:"def" length:3]});

@@ -187,6 +187,8 @@ NSDictionary *decodeProject(NSData *data, ProjectLoadRecovery *recovery = nullpt
                                                       options:NSPropertyListImmutable
                                                        format:nil
                                                         error:&error];
+  if(!root&&data.length>=6&&std::memcmp(data.bytes,"bplist",6)==0)
+    root=ScreamSeq::NativePropertyTree::modelProjection(ScreamSeq::NativePropertyTree::decode(data));
   if (![root isKindOfClass:NSDictionary.class] ||
       ![root[@"module"] isKindOfClass:NSData.class] || (!recovery && ![root[@"plugins"] isKindOfClass:NSArray.class]))
     throw std::runtime_error("Invalid or unsupported ScreamSeq project.");

@@ -208,7 +208,8 @@ static void opaqueMetadata(NSData *baselineBytes,NSString *directory) {
   Project::Value sentinel={{"integer",int64_t(9007199254740993LL)},{"real",1.0},{"negativeZero",-0.0},
     {"data",Project::Value::binary({0,255,1})},{"text","music \xF0\x9F\x8E\xB5"}};
   sentinel["date"]=Project::Value::binary({0x3f,0xf0,0,0,0,0,0,0},uint64_t(Project::OpaqueType::Date));
-  sentinel["uid"]=Project::Value::binary({0,0,7},uint64_t(Project::OpaqueType::UID));
+  sentinel["uid"]=Project::Value::binary({0,1,0,0,0,0,0,1},uint64_t(Project::OpaqueType::UID));
+  sentinel["wideInteger"]=Project::Value::binary(std::vector<uint8_t>(16,0xff),uint64_t(Project::OpaqueType::WideInteger));
   sentinel["nan32"]=Project::Value::binary({0x7f,0xc0,0,7},uint64_t(Project::OpaqueType::Real32NaN));
   original["futureRoot"]=sentinel;original["native"]["futureNative"]=sentinel;
   original["native"]["tracks"][0][1]["futureTrack"]=sentinel;
