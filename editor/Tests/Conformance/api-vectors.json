@@ -115,7 +115,7 @@
         "channelCount": 1
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "difference": "API-INTEGER-TYPES",
@@ -258,7 +258,7 @@
         "slot": 0.0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "difference": "API-INTEGER-TYPES",
@@ -307,7 +307,7 @@
       },
       "expected": {
         "windows": "success",
-        "macos": -32602
+        "macos": "success"
       },
       "guard": "fresh",
       "difference": "API-PLUGIN-DRY-RUN",
@@ -328,7 +328,7 @@
       },
       "expected": {
         "windows": "success",
-        "macos": -32602
+        "macos": "success"
       },
       "guard": "fresh",
       "difference": "API-PLUGIN-DRY-RUN",
@@ -401,7 +401,7 @@
     }
   ],
   "rejectedRequestIDReuse": {
-    "windows": "success",
+    "windows": -32600,
     "macos": -32600
   }
 }

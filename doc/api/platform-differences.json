@@ -872,12 +872,21 @@
       }
     }
   },
+  "pairedContractReview20261020": {
+    "sourceCommit": "d79321c7ccf59e7fdf0a4b2918d6906b41097ef4",
+    "platforms": ["Windows x64 binary on Windows ARM64", "macOS Apple Silicon", "macOS Intel"],
+    "caseCount": 28,
+    "outcomesIdentical": true,
+    "preservationFailures": 0,
+    "evidence": "doc/windows-parity-plan-2026-10-09/PAIRED-API-REVIEW-2026-10-20.md",
+    "scope": "Reviewed existing immutable native reports; no new execution or final parity claim. Five historical expectations now match the intentionally implemented contract. Boolean, fractional, unsafe-number, stale, replay and preservation assertions remain strict."
+  },
   "contracts": [
     {
       "id": "API-INTEGER-TYPES",
       "phase": "P6a",
-      "status": "unresolved",
-      "finding": "Windows pattern.get and plugin slot validation reject integer-valued reals; the Mac validator accepts finite integral numbers. This is method-specific; Windows DocumentOperations already accepts integral reals.",
+      "status": "paired-native-vectors-qualified",
+      "finding": "Same-source Windows x64, Mac Apple Silicon and Mac Intel reports agree on finite integer-valued reals for pattern.get and plugin slot reads, while rejecting boolean, fractional and unsafe inputs. The 28-case reports have identical outcomes and exact preservation; see PAIRED-API-REVIEW-2026-10-20.md. This bounded evidence does not close all endpoint or final integration gates.",
       "sources": [
         "windows/Api/SessionAdapter.hpp",
         "windows/Session/PluginOperations.cpp",
@@ -908,8 +917,8 @@
     {
       "id": "API-PLUGIN-DRY-RUN",
       "phase": "P4b",
-      "status": "implemented-pending-qualification",
-      "finding": "Windows B3 actual-app checks pass dry-run parameter, bypass and rack-move preservation, including active preview ownership, exact saved state and Redo. Mac source now accepts all three flags using validation without publication; native and shared socket assertions await Mac compilation/execution. See RACK-DRY-RUN-2026-10-20.md. Old observation baselines remain unchanged.",
+      "status": "paired-native-vectors-qualified",
+      "finding": "Same-source Windows x64 and both Mac architectures accept bypass/parameter dry runs without changing document or saved state. Mac rack_dry_run actual-socket contract also passed; prior Windows targeted owner/Redo checks remain separately scoped. Reviewed historical expectations now require the implemented success behavior; see PAIRED-API-REVIEW-2026-10-20.md. Final integration remains open.",
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
@@ -928,8 +937,8 @@
     {
       "id": "API-REPLAY-ERROR",
       "phase": "P6a",
-      "status": "unresolved",
-      "finding": "Mac retains eligible non-busy errors; Windows retains successful writes and classified committed/unknown outcomes. Probe invalid-ID reuse separately from exact successful replay. Neither cache is durable.",
+      "status": "paired-native-vectors-qualified",
+      "finding": "Both native adapters retain terminal errors and reject reuse of their request ID with different content as -32600. Same-source Windows x64 and both Mac reports agree and preserve the document; exact successful replay, one-step history and save/reopen also passed. See PAIRED-API-REVIEW-2026-10-20.md. Caches remain bounded and session-local; this does not imply durable deduplication.",
       "sources": [
         "windows/Api/SessionAdapter.hpp",
         "mac/App/AutomationServer.swift"
