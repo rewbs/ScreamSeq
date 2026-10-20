@@ -76,7 +76,7 @@ class PatternToolsAppTests(unittest.TestCase):
         applied = self.press(8018)
         self.assertTrue(applied['completed'])
         self.assertIsNone(applied['completion'])
-        self.assertEqual(self.read('context.get'), context)
+        self.assertEqual(self.read('context.get'), dict(context, dirty=True))
         after = self.cells()
         self.assertEqual(next(c for c in after if c['row'] == 0 and c['channel'] == 0)['volume'], 4)
         self.assertEqual(next(c for c in after if c['row'] == 63 and c['channel'] == 0)['volume'], 64)

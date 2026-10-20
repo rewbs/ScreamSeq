@@ -142,6 +142,32 @@ void applicationMixingGraphUsability(){
   fixture.close();
 }
 
+void applicationRecipeAutomaticEdits(){
+  RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,852);addRestoreGain(app);
+  app.graphControlCommand(graphCommand);app.graphControlCommand(graphNew);app.graphControlCommand(graphAddEffect);
+  const auto read=[&]{return app.documentOperation("graph.get",RestoreJson::object()).at("library");};
+  const auto original=read();const auto node=app.graphNode;
+  rawDraftText(app.controls.at(graphPropertyValue),L"Saved node name");app.graphFieldChanged();app.graphControlCommand(graphSetProperty);
+  const auto renamed=read();restoreCheck(renamed!=original&&!app.graphDirty&&!app.graphFieldDirty,"Completed graph property still requires Apply");
+  app.layoutControls();restoreCheck(!IsWindowEnabled(app.controls.at(graphApply)),"Clean graph advertises a required Save edit action");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(read()==original,"Graph property needed more than one Undo");
+  app.edit("history.redo",RestoreJson::object());app.refreshGraph();
+  const auto item=std::find_if(app.graphCanvas.nodes.begin(),app.graphCanvas.nodes.end(),[&](const auto &v){return v.id==node;});
+  restoreCheck(item!=app.graphCanvas.nodes.end(),"Recipe canvas fixture node absent");
+  const auto x=item->rect.x+20,y=item->rect.y+10;app.graphMouseDown(x,y);app.graphMouseMove(x+40,y+20);app.graphMouseMove(x+60,y+30);
+  restoreCheck(read()==renamed&&app.graphDirty,"Node movement committed before release");app.graphMouseUp(x+60,y+30);
+  const auto moved=read();restoreCheck(moved!=renamed&&!app.graphDirty,"Node release did not save its position");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(read()==renamed,"One node drag created multiple Undo entries");app.refreshGraph();
+  rawDraftText(app.controls.at(graphPropertyValue),L"Before lost completion");app.graphFieldChanged();unsigned writes=0;
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="graph.update"){++writes;rawDraftText(app.controls.at(graphPropertyValue),L"Later raw name");app.graphFieldChanged();throw std::runtime_error("Owned graph completion failure");}};
+  restoreRejected([&]{app.graphControlCommand(graphSetProperty);});
+  restoreCheck(writes==1&&app.nativeCommandCompletion.returned()&&app.graphDirty&&app.graphFieldDirty,"Graph failure lost its receipt or newer draft");
+  const auto committed=read();restoreRejected([&]{app.graphControlCommand(graphApply);});app.graphControlCommand(graphReload);
+  restoreCheck(writes==1&&!app.nativeCommandCompletion.retained()&&read()==committed&&app.graphFieldDirty&&restoreText(app.controls.at(graphPropertyValue))==L"Later raw name","Review repeated a graph edit or discarded newer text");
+  app.sampleMutationCompletion={};app.graphControlCommand(graphReload);app.edit("history.undo",RestoreJson::object());
+  restoreCheck(read()==renamed,"Graph result recovery added an extra history entry");
+}
+
 void applicationRecipeParameterInspector(){
   RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
   const auto plugin=addRestoreGain(app);

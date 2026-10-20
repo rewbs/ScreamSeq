@@ -138,7 +138,7 @@
             items.push_back({graphDeleteNode,L"Delete node",targetReady&&clean&&node&&node->value("kind",std::string{})!="input"&&node->value("kind",std::string{})!="output"});
             items.push_back({0,L""});
         } else if(surfaceName=="graph-wire") {
-            items.push_back({graphDeleteWire,L"Delete wire in draft",targetReady&&current&&!graphFieldDirty&&graphWireIndex>=0});
+            items.push_back({graphDeleteWire,L"Delete wire\tBackspace",targetReady&&current&&!graphFieldDirty&&graphWireIndex>=0});
             items.push_back({0,L""});
         }
         items.push_back({graphWorkflowCommand,L"Groups, visual layout and signal tools…",idle});
@@ -147,8 +147,8 @@
         items.push_back({graphAddEffect,L"Add selected rack effect",clean&&!graphID.empty()&&SendMessageW(controls.at(graphRack),CB_GETCURSEL,0,0)>=0});
         items.push_back({graphFit,L"Fit graph\tHome",idle&&!graphID.empty()});
         items.push_back({0,L""});
-        items.push_back({graphApply,L"Apply graph draft\tCtrl+Enter",current&&graphDirty&&!graphFieldDirty});
-        items.push_back({graphReload,L"Reload graph / discard draft",idle&&(graphDirty||graphFieldDirty||!current)});
+        items.push_back({graphApply,L"Save retained graph edit\tCtrl+Enter",current&&graphDirty&&!graphFieldDirty&&!nativeCommandCompletion.retained()});
+        items.push_back({graphReload,nativeCommandCompletion.retained()?L"Review graph result":L"Reload graph / discard draft",idle&&(graphDirty||graphFieldDirty||!current||nativeCommandCompletion.retained())});
         items.push_back({0,L""});
         items.push_back({undoCommand,L"Undo document edit\tCtrl+Z",idle&&view->session.document.value("canUndo",false)});
         items.push_back({redoCommand,L"Redo document edit\tCtrl+Y",idle&&view->session.document.value("canRedo",false)});

@@ -90,6 +90,11 @@ class PluginEditParityTests(unittest.TestCase):
     def test_recipe_gesture_one_undo_noop_rejections_and_save(self):
         plugin, graph, node = self.recipe()
         rack = self.read('plugin.state.get', plugin=plugin)
+        recipe_catalog = self.read('graph.plugin.get', graph=graph, node=node)['parameters']
+        rack_catalog = self.read('plugin.parameters.get', plugin=plugin)
+        for recipe, instance in zip(recipe_catalog, rack_catalog, strict=True):
+            for key in ('id', 'unit', 'unitLabel', 'choices', 'step', 'writable'):
+                self.assertEqual(recipe[key], instance[key])
         before = self.read('graph.get')['library']
         def change(value, **extra):
             return self.write('graph.plugin.set', graph=graph, node=node,

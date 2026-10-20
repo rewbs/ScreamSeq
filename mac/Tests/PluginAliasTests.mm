@@ -81,6 +81,15 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
     NSString *identity=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
     auto call=[&](NSString *method,NSDictionary *values,bool mutation=false){auto p=[values mutableCopy];if(mutation)p[@"expectedRevision"]=session.automationRevision;
       auto result=[session automationMethod:method params:p error:&error];if(!result)throw std::runtime_error(error.localizedDescription.UTF8String);return result;};
+    // addInstrument converts the demo's samples into mapped instruments. This
+    // fixture measures plugin-only channel weights; sample+plugin summation is
+    // exercised separately by LayeredInstrumentChecks on AU and VST3.
+    NSMutableArray *emptyMapping=[NSMutableArray arrayWithCapacity:128];
+    for(int key=0;key<128;++key)[emptyMapping addObject:@0];
+    for(int instrument=1;instrument<=3;++instrument){
+      call(@"instrument.patch",@{@"instrument":@(instrument),@"values":@{@"mapping":emptyMapping}},true);
+      check([call(@"instrument.get",@{@"instrument":@(instrument)})[@"data"][@"mapping"] isEqual:emptyMapping],"Alias audio fixture has no sample layer");
+    }
     NSArray *assignments=@[@{@"instrument":@1,@"channel":@2},@{@"instrument":@2,@"channel":@7},@{@"instrument":@3,@"channel":@16}];
     NSString *revision=session.automationRevision;
     auto preview=call(@"plugin.instruments.set",@{@"plugin":identity,@"assignments":assignments,@"dryRun":@YES},true);
@@ -125,6 +134,7 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
     check([audio isEqual:[NSData dataWithContentsOfFile:reopened]],"Native alias reopen preserves complete WAV bytes");
     for(int row=0;row<4;++row){const size_t frame=size_t((row*.12+.01)*48000),offset=44+frame*2*sizeof(float);float sample=0;
       check(audio.length>=offset+sizeof(float),"Export contains independent alias note-offs");std::memcpy(&sample,static_cast<const char *>(audio.bytes)+offset,sizeof(float));
+      if(std::abs(sample-std::array{25.,23.,16.,0.}[row]*.2*.3/16)>=1e-6)std::cerr<<descriptor.format<<" exported row "<<row<<" actual "<<sample<<" expected "<<std::array{25.,23.,16.,0.}[row]*.2*.3/16<<'\n';
       check(std::abs(sample-std::array{25.,23.,16.,0.}[row]*.2*.3/16)<1e-6,"Actual WAV preserves each channel and saved plugin parameter");}
     [NSFileManager.defaultManager removeItemAtPath:wav error:nil];[NSFileManager.defaultManager removeItemAtPath:reopened error:nil];
     auto broken=[root mutableCopy];broken[@"version"]=@4;[[NSPropertyListSerialization dataWithPropertyList:broken format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil] writeToFile:file atomically:YES];

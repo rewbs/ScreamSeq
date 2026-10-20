@@ -290,6 +290,7 @@
         "pattern.get",
         "pattern.notes.get",
         "pattern.performance.get",
+        "pattern.timeline.get",
         "plugin.buses.get",
         "plugin.discover",
         "plugin.instruments.get",
@@ -314,6 +315,7 @@
         "sample.snap.get",
         "sample.waveform.get",
         "scratch.gestures.get",
+        "track.get",
         "transport.get",
         "workspace.commands.get",
         "workspace.get"
@@ -327,6 +329,7 @@
         "automation.recorded.edit",
         "automation.replaceLane",
         "context.set",
+        "document.new",
         "document.open",
         "document.patch",
         "document.save",
@@ -473,99 +476,34 @@
         "scratch.gestures.set",
         "sequence.select",
         "song.annotate",
+        "track.column.set",
+        "track.create",
+        "track.group",
+        "track.ungroup",
+        "transport.loop",
         "transport.note",
         "transport.panic",
         "transport.play",
         "transport.stop",
         "workspace.input",
+        "workspace.keyboard.set",
         "workspace.layout",
         "workspace.panel",
+        "workspace.ruler",
         "workspace.shortcut.set"
       ],
       "missingSharedMethods": [
-        {
-          "method": "document.exportModule",
-          "phase": "P7",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "graph.controller",
-          "phase": "P5",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "pattern.timeline.get",
-          "phase": "P3",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "plugin.locations.get",
-          "phase": "P4b",
-          "classification": "native-equivalent-workflow-to-verify",
-          "status": "unresolved"
-        },
-        {
-          "method": "plugin.locations.trust",
-          "phase": "P4b",
-          "classification": "native-equivalent-workflow-to-verify",
-          "status": "unresolved"
-        },
-        {
-          "method": "plugin.meters",
-          "phase": "P4b",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "track.column.set",
-          "phase": "P2",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "track.create",
-          "phase": "P2",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "track.get",
-          "phase": "P2",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "track.group",
-          "phase": "P2",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "track.ungroup",
-          "phase": "P2",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "transport.loop",
-          "phase": "P3",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        },
-        {
-          "method": "workspace.ruler",
-          "phase": "P3",
-          "classification": "advertisement-gap-runtime-dispatch-unverified",
-          "status": "unresolved"
-        }
+        "document.exportModule",
+        "graph.controller",
+        "plugin.locations.get",
+        "plugin.locations.trust",
+        "plugin.meters"
       ],
       "additionalMethods": [
         "audio.devices.get",
         "audio.settings.get",
         "audio.settings.set",
+        "document.new",
         "document.open",
         "graph.plugin.path.get",
         "graph.plugin.path.scan",
@@ -577,8 +515,37 @@
         "plugin.editor.open",
         "plugin.path.get",
         "plugin.path.scan",
-        "plugin.path.set"
-      ]
+        "plugin.path.set",
+        "workspace.keyboard.set"
+      ],
+      "inventoryReview20261019": {
+        "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
+        "binarySourceCommit": "e8e97cdb0",
+        "binarySHA256": "f585a5d565f8c80114739621425711708ee96e4c0da4b755444d8a1089ef3d95",
+        "delta": {
+          "reads": {
+            "added": [
+              "pattern.timeline.get",
+              "track.get"
+            ],
+            "removed": []
+          },
+          "writes": {
+            "added": [
+              "document.new",
+              "track.column.set",
+              "track.create",
+              "track.group",
+              "track.ungroup",
+              "transport.loop",
+              "workspace.keyboard.set",
+              "workspace.ruler"
+            ],
+            "removed": []
+          }
+        },
+        "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-EDIT-BATCH-2026-10-19.md"
+      }
     },
     "macos": {
       "sourceCommit": "d703d86640c770e2a5735ea9a27dc57a011bf0e3",
@@ -842,8 +809,8 @@
     {
       "id": "API-ORDER-MOVE",
       "phase": "P3a",
-      "status": "unresolved",
-      "finding": "Windows order.edit on the safety branch omits move/destination; the existing follow-on integration commit 446bc84e3 implements them with regressions. The earlier Mac no-op history/revision failure is historical: current TrackerSession.mm uses shared orderEditChanges before stopping/editing. Final current-candidate native execution and the Windows integration decision remain open; see contract-triage-2026-10-16.md.",
+      "status": "integrated-pending-final-gate",
+      "finding": "Integrated on main at 07424c0c6. Current Windows source supports absolute destination and the main ARM64 binary preserves complete document/revision on destination=source; Mac main ARM64 CI likewise passes the no-op vector. Existing nonadjacent occurrence/Undo/persistence tests remain required; final reciprocal qualification remains open.",
       "sources": [
         "windows/Session/DocumentOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
@@ -852,8 +819,8 @@
     {
       "id": "API-PLUGIN-POSITION",
       "phase": "P4b",
-      "status": "unresolved",
-      "finding": "Windows plugin.move accepts direction and dryRun; Mac also supports absolute position.",
+      "status": "implemented-pending-qualification",
+      "finding": "Windows plugin.move accepts direction and dryRun; Mac also supports absolute position. Source prepared on codex/plugin-edit-parity at dc18fa8d3; changed vector expectations are not native passes. See PLUGIN-EDIT-BATCH-2026-10-19.md.",
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
@@ -872,8 +839,8 @@
     {
       "id": "API-GRAPH-GESTURE",
       "phase": "P5",
-      "status": "unresolved",
-      "finding": "Mac graph.plugin.set accepts a gesture token for coalesced parameter Undo. Windows rejects gesture. Field acceptance is not proof of history coalescing.",
+      "status": "implemented-pending-qualification",
+      "finding": "Mac graph.plugin.set accepts a gesture token for coalesced parameter Undo. Windows rejects gesture. Field acceptance is not proof of history coalescing. Source prepared on codex/plugin-edit-parity at dc18fa8d3; changed vector expectations are not native passes. See PLUGIN-EDIT-BATCH-2026-10-19.md.",
       "sources": [
         "windows/Session/GraphPluginOperations.inc",
         "mac/Bridge/GraphPluginAPI.inc"

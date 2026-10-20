@@ -135,15 +135,17 @@ void applicationNativeCommandRecovery(){
   });
   // Unknown outcomes use actual side effects but deliberately drop every route
   // by which the fixture could return a receipt. This is not the ordinary API.
-  for(const std::string domain:{"sample","midi","save","mixer","track"}){
+  for(const std::string domain:{"sample","midi","save","mixer","track","graph"}){
     RestoreFixture fixture;auto &app=*fixture.app;const auto path=saveDepartureFixture(fixture);const auto doc=app.documentId;
     if(domain=="mixer")app.documentOperation("mixer.enable",{{"expectedRevision",app.view->session.revision}});
-    const std::string method=domain=="sample"?"sample.clipboard.copy":domain=="midi"?"recording.start":domain=="mixer"?"mixer.bus.set":domain=="track"?"track.column.set":"document.save";
+    if(domain=="graph")app.edit("graph.create",RestoreJson::object());
+    const std::string method=domain=="sample"?"sample.clipboard.copy":domain=="midi"?"recording.start":domain=="mixer"?"mixer.bus.set":domain=="track"?"track.column.set":domain=="graph"?"graph.update":"document.save";
     RestoreJson params={{"expectedRevision",app.view->session.revision}},target=RestoreJson::object();
     if(domain=="sample"){params["sample"]=1;params["start"]=0;params["end"]=16;const auto &samples=app.view->session.document.at("samples");const auto found=std::find_if(samples.begin(),samples.end(),[](const auto &sample){return sample.at("index")==1;});restoreCheck(found!=samples.end(),"Clipboard fixture sample unavailable");target["id"]=found->at("id");}
     else if(domain=="midi"){params["channels"]=RestoreJson::array({0});params["instrument"]=1;}
     else if(domain=="mixer"){params["bus"]=app.documentOperation("mixer.get",RestoreJson::object()).at("buses")[0].at("id");params["gainDB"]=-12;}
     else if(domain=="track"){params["column"]=app.noteColumn(0).at("id");params["mute"]=true;}
+    else if(domain=="graph"){params["definition"]=app.documentOperation("graph.get",RestoreJson::object()).at("library")[0];params["definition"]["name"]="Saved graph name";}
     else{params["path"]=utf8Path(path);params["overwrite"]=true;}
     app.nativeCommandTarget={{"domain",domain},{"method",method},{"documentId",doc},{"revision",app.view->session.revision},{"params",params},{"target",target}};
     unsigned writes=0;restoreRejected([&]{app.nativeCommandCompletion.submit([&](const auto &name,const auto &values,const auto &)->ScreamSeq::Api::CompletedCall{++writes;(void)app.documentOperation(name,values);throw std::runtime_error("Owned unknown command result");},method,params,doc,++app.nativeCommandGeneration,app.nativeCommandTarget);});
@@ -163,10 +165,14 @@ void applicationNativeCommandRecovery(){
     }else if(domain=="track"){
       app.duringCommandAcknowledgement=[&]{auto changed=params;changed["expectedRevision"]=app.view->session.revision;changed["mute"]=false;app.documentOperation("track.column.set",changed);};
       restoreRejected([&]{app.reviewNativeCommand();});restoreCheck(app.nativeCommandCompletion.retained(),"Changed column mute bypassed acknowledgement revision guard");
+    }else if(domain=="graph"){
+      app.duringCommandAcknowledgement=[&]{auto changed=params;changed["expectedRevision"]=app.view->session.revision;changed["definition"]["name"]="Changed during review";app.documentOperation("graph.update",changed);};
+      restoreRejected([&]{app.reviewNativeCommand();});restoreCheck(app.nativeCommandCompletion.retained(),"Changed graph bypassed acknowledgement revision guard");
     }
     app.reviewNativeCommand();restoreCheck(writes==1&&!app.nativeCommandCompletion.retained()&&app.nativeCommandReport.at("outcome")=="unverified","Unknown command recovery replayed or fabricated success");
     if(domain=="save")restoreCheck(!std::filesystem::exists(path),"Save acknowledgement rewrote the absent file");
     if(domain=="midi")restoreCheck(app.hasRecordingTake(),"MIDI acknowledgement consumed the newer take");
     if(domain=="track")restoreCheck(app.nativeCommandReport.at("observed").at("layout")==app.documentOperation("track.get",RestoreJson::object()),"Track Review did not retain the observed current layout");
+    if(domain=="graph")restoreCheck(app.nativeCommandReport.at("observed").at("graph")==app.documentOperation("graph.get",{{"includeState",false}}),"Graph Review did not retain the observed current graph");
   }
 }

@@ -123,8 +123,7 @@ class GraphMixerAppTests(unittest.TestCase):
         self.assertEqual(self.desktop.focus(self.desktop.hwnd(self.pid)), self.control(401))
         self.command(402)  # Enable.
         track = self.read('workspace.get')['mixerEditor']['bus']
-        self.field(413, '-9')
-        self.command(407)  # Mute draft.
+        self.field(413, '-.')  # Invalid raw text must remain captured despite autosave.
         self.assertTrue(self.read('workspace.get')['mixerEditor']['draft'])
         # Selecting another bus cannot redirect a partially edited value.
         self.desktop.send(self.control(401), 0x186, 1)
@@ -205,6 +204,9 @@ class GraphMixerAppTests(unittest.TestCase):
         for identifier in range(401, 424):
             with self.subTest(control=identifier):
                 control = self.control(identifier)
+                if identifier == 406:
+                    self.assertFalse(user.IsWindowVisible(control), 'Clean auto-saving mixer must not show a retry CTA')
+                    continue
                 self.assertTrue(user.IsWindowVisible(control))
                 rect = wintypes.RECT()
                 self.assertTrue(user.GetWindowRect(control, ctypes.byref(rect)))

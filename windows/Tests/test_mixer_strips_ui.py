@@ -155,6 +155,7 @@ class MixerStripsUITests(unittest.TestCase):
         self.write('mixer.bus.set', bus=bus, gainDB=-3)
         self.write('document.open', path=str(path), discard=True)
         self.main_command(418)
+        self.refresh()  # Publish bindings through the normal visible mixer timer.
         self.assertEqual(self.read('mixer.get'), saved)
         self.assertEqual(self.strip(bus)['bus'], bus)
 
@@ -204,6 +205,7 @@ class MixerStripsUITests(unittest.TestCase):
         self.assertFalse(self.settle()['mixerStrips']['gesture'])
         self.write('document.open', path=str(path), discard=True)
         self.main_command(418)
+        self.refresh()
         self.assertFalse(self.settle()['mixerStrips']['gesture'])
         self.assertEqual(self.strip(bus)['bus'], bus)
 

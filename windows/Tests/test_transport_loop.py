@@ -158,7 +158,9 @@ class TransportLoopTests(unittest.TestCase):
         self.assertEqual(live_after['recordingClock']['generation'], live_before['recordingClock']['generation'])
         self.assertGreaterEqual(live_after['frames'], live_before['frames'])
         self.assertEqual(self.doc(), document_before)
-        self.assertEqual(self.read('context.get'), context_before)
+        after_query = self.read('context.get')
+        self.assertEqual(after_query, dict(context_before, playback=after_query['playback']))
+        self.assertTrue(after_query['playback']['playing'])
         window = self.desktop.hwnd(self.pid)
         self.desktop.send(window, 0x111, 105)  # Pattern focus layout.
         order = private_desktop.user.GetDlgItem(window, 131)
@@ -186,7 +188,15 @@ class TransportLoopTests(unittest.TestCase):
             self.assertTrue(current['audioActive'])
             self.assertFalse(current['fault'])
             self.assertEqual(self.doc(), document)
-            self.assertEqual(self.read('context.get'), context)
+            after_context = self.read('context.get')
+            # Playback telemetry must advance independently of the detached
+            # editing cursor; compare every editing/context field exactly.
+            playback = after_context['playback']
+            self.assertEqual(after_context, dict(context, playback=playback))
+            self.assertTrue(playback['playing'])
+            self.assertEqual(playback['pattern'], 0)
+            self.assertGreaterEqual(playback['row'], expected.get('startRow', 0))
+            self.assertLess(playback['row'], expected.get('endRow', rows))
             self.assertEqual(self.read('workspace.get')['viewport'], viewport)
 
         play(587, dict(order=1, cursorRow=16, loop=True))

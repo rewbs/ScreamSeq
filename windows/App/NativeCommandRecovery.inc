@@ -43,6 +43,10 @@
             auto mixer=documentOperation("mixer.get",Json::object());
             if(!mixer.at("buses").is_array())throw std::runtime_error("Mixer readback is unavailable / result retained");
             observed["mixer"]=std::move(mixer);
+        }else if(domain=="graph"){
+            auto graph=documentOperation("graph.get",{{"includeState",false}});
+            if(!graph.at("library").is_array())throw std::runtime_error("Graph readback is unavailable / result retained");
+            observed["graph"]=std::move(graph);
         }else if(domain=="track"){
             auto layout=documentOperation("track.get",Json::object());
             if(!layout.at("columns").is_array()||!layout.at("noteTracks").is_array())throw std::runtime_error("Track readback is unavailable / result retained");
@@ -68,6 +72,7 @@
             const auto domain=nativeCommandTarget.at("domain").get<std::string>();
             status=domain=="save"?L"Earlier Save completed / current file was not overwritten and recovery cleanup was not repeated":domain=="midi"?L"Earlier recording operation completed / current take retained / no operation repeated":domain=="mixer"?L"Earlier mixer operation completed / current draft retained / no write repeated":L"Earlier sample operation completed / current selection and raw fields retained / no write repeated";
             if(domain=="track")status=L"Earlier track operation completed / current selection retained / no write repeated";
+            if(domain=="graph")status=L"Earlier graph operation completed / current draft retained / no write repeated";
             if(domain=="midi")updateRecordingWindow();nativeCommandCompletion.finish();frameRequested=true;return;
         }
         nativeCommandReport=readNativeCommandState();const auto observation=nativeCommandReport;

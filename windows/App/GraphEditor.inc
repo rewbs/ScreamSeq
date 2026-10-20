@@ -19,7 +19,7 @@
     void rebuildGraphCanvas(){graphCanvas.viewport=graphCanvasRect();graphCanvas.rebuild(graphDraft,graphExposedNode,graphExposedParameter);frameRequested=true;}
     void installGraphControls(){
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{graphCommand,L"Graph"},{graphNew,L"New"},{graphClone,L"Clone graph"},{graphRemove,L"Delete graph"},
-            {graphAddSource,L"+ Source"},{graphAddEffect,L"+ Effect"},{graphFit,L"Fit"},{graphApply,L"Apply"},{graphReload,L"Reload"},{graphSetProperty,L"Set property"},
+            {graphAddSource,L"+ Source"},{graphAddEffect,L"+ Effect"},{graphFit,L"Fit"},{graphApply,L"Save edit"},{graphReload,L"Reload"},{graphSetProperty,L"Set property"},
             {graphConnect,L"Add / update wire"},{graphDeleteWire,L"Delete wire"},{graphDeleteNode,L"Delete node"},{graphLoadPlugin,L"All parameters…"},{graphSetParameter,L"Set parameter"},{graphReconnect,L"Reconnect plugin…"},
             {graphOpenPlugin,L"Interface"},{graphSavePlugin,L"Save draft"},{graphClosePlugin,L"Close"},{graphAssign,L"Assign graph"},{graphUnassign,L"Clear assignment"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
@@ -212,11 +212,25 @@
             showControl(graphConnect,x,r.y+210,152,25,show);showControl(graphDeleteWire,x+160,r.y+210,88,25,show);}
         if(graphPageIndex==3){showControl(graphLoadPlugin,x,r.y+70,248,25,show);showControl(graphParameter,x,r.y+106,248,230,show);showControl(graphParameterValue,x,r.y+143,248,25,show);showControl(graphSetParameter,x,r.y+176,248,25,show);showControl(graphOpenPlugin,x,r.y+211,80,25,show);showControl(graphSavePlugin,x+84,r.y+211,80,25,show);showControl(graphClosePlugin,x+168,r.y+211,80,25,show);showControl(graphReconnect,x,r.y+246,248,25,show);}
         if(graphPageIndex==4){showControl(graphBus,x,r.y+38,248,230,show);showControl(graphAmount,x,r.y+92,120,25,show);showControl(graphWet,x+128,r.y+92,120,25,show);showControl(graphAssign,x,r.y+131,120,25,show);showControl(graphUnassign,x+128,r.y+131,120,25,show);}
-        EnableWindow(controls.at(graphApply),chosen&&!graphPending);EnableWindow(controls.at(graphAddEffect),chosen&&SendMessageW(controls.at(graphRack),CB_GETCOUNT,0,0)>0);
+        EnableWindow(controls.at(graphApply),chosen&&graphDirty&&!graphFieldDirty&&!graphPending&&!nativeCommandCompletion.retained()&&graphDocument==documentId&&graphRevision==view->session.revision);EnableWindow(controls.at(graphAddEffect),chosen&&SendMessageW(controls.at(graphRack),CB_GETCOUNT,0,0)>0);
+        ScreamSeq::NativeControls::text(controls.at(graphReload),nativeCommandCompletion.retained()?L"Review result":L"Reload");
         for(int id:{graphAddSource,graphClone,graphRemove,graphDeleteNode,graphLoadPlugin,graphConnect,graphAssign,graphUnassign})EnableWindow(controls.at(id),chosen&&!graphPending);
         auto selectedNode=graphSelectedNode();const bool vst3=selectedNode&&selectedNode->at("kind")=="plugin"&&selectedNode->at("plugin").at("format")=="VST3";EnableWindow(controls.at(graphOpenPlugin),vst3);EnableWindow(controls.at(graphReconnect),vst3&&!graphPending);EnableWindow(controls.at(graphSavePlugin),!graphEditorToken.empty()&&graphID==graphEditorTokenGraph&&graphNode==graphEditorTokenNode);EnableWindow(controls.at(graphClosePlugin),!graphEditorToken.empty());for(int id=graphLibrary;id<=graphReconnect;++id)if(!placed.contains(id))ScreamSeq::NativeControls::show(controls.at(id),false);rebuildGraphCanvas();if(show)SetTimer(window,4,100,nullptr);
     }
-    void graphRequireCurrent(bool clean=true){if(graphDocument!=documentId||graphRevision!=view->session.revision)throw std::runtime_error("Song changed; graph draft retained. Reload before applying");if(clean&&(graphDirty||graphFieldDirty))throw std::runtime_error("Apply or reload the graph draft before this action");}
+    void graphRequireCurrent(bool clean=true){if(graphDocument!=documentId||graphRevision!=view->session.revision)throw std::runtime_error("Song changed; graph draft retained. Reload before applying");if(clean&&(graphDirty||graphFieldDirty))throw std::runtime_error("Save or reload the unsaved graph edit before this action");}
+    void graphSaveCompletedEdit(){
+        graphRequireCurrent(false);
+        if(graphFieldDirty)throw std::runtime_error("Finish the graph field before saving the edit");
+        if(!graphDirty)return;
+        const auto generation=graphGeneration;graphPending=true;
+        try{
+            retainedNativeCommand("graph","graph.update",{{"expectedRevision",graphRevision},{"definition",graphDraft}},{{"graph",graphID}},[&](const Json &){
+                graphPending=false;
+                if(generation==graphGeneration){graphDirty=false;refreshGraph();}
+                graphStatus=L"Graph edit saved / document Undo available";
+            });
+        }catch(...){graphPending=false;graphStatus=nativeCommandCompletion.retained()?L"Graph result retained / Review before another edit":L"Edit rejected / graph draft retained";throw;}
+    }
     ScreamSeq::GraphCableEdits::ModulationDefault graphInitialModulation(const std::string &target,uint32_t parameter){
         graphRequireCurrent(false);const auto generation=graphGeneration;const auto capturedGraph=graphID;
         const auto catalog=documentOperation("graph.plugin.get",{{"graph",capturedGraph},{"node",target}});
@@ -236,6 +250,10 @@
             throw ScreamSeq::Api::ApiError(-32002,"Graph editor is busy");
         }
         setWorkspaceCanvasFocus("graph");
+        if(nativeCommandCompletion.retained()&&id!=graphCommand){
+            if(id==graphReload){reviewNativeCommand();layoutControls();return true;}
+            throw std::runtime_error("Review the earlier command result before changing the graph");
+        }
         if(id==graphReconnect){graphRequireCurrent();openPluginPath({{"graph",graphID},{"node",graphNode}});return true;}
         if(id==graphCommand){const bool firstOpen=graphDocument!=documentId;graphEditorOpen=true;mixerEditorOpen=false;workspaceState.layout="Compose";setWorkspaceCanvasFocus(workspaceMainCanvasIdentity());refreshGraph();layoutControls();if(firstOpen)graphCanvas.fit(graphDraft);rebuildGraphCanvas();SetFocus(window);return true;}
         if(id==graphReload){graphDirty=graphFieldDirty=false;++graphGeneration;refreshGraph(true);return true;}
@@ -245,8 +263,8 @@
         if(id==graphBus){if(graphFieldDirty){ScreamSeq::NativeInputGate::present(controls.at(graphBus),CB_SETCURSEL,graphBusIndex,0);throw std::runtime_error("Assign or reload the field draft before changing buses");}graphBusIndex=int(SendMessageW(controls.at(graphBus),CB_GETCURSEL,0,0));loadGraphFields();return true;}
         if(id==graphSource||id==graphDestination){graphFieldChanged();return true;}
         if(id==graphLibrary){if(graphDirty||graphFieldDirty)for(size_t i=0;i<graphData.at("library").size();++i)if(graphData.at("library")[i].at("id")==graphID)ScreamSeq::NativeInputGate::present(controls.at(id),CB_SETCURSEL,i,0);graphRequireCurrent();const auto i=SendMessageW(controls.at(id),CB_GETCURSEL,0,0);if(i>=0){graphID=graphData.at("library").at(size_t(i)).at("id").get<std::string>();graphNode.clear();refreshGraph();graphCanvas.fit(graphDraft);rebuildGraphCanvas();}return true;}
-        if(id==graphApply){graphRequireCurrent(false);if(graphFieldDirty)throw std::runtime_error("Use Set property or Add / update wire before applying the graph");const auto generation=graphGeneration;graphPending=true;try{documentOperation("graph.update",{{"expectedRevision",graphRevision},{"definition",graphDraft}});graphPending=false;if(generation==graphGeneration){graphDirty=false;refreshGraph();}graphStatus=L"Graph applied / document Undo available";}catch(...){graphPending=false;throw;}return true;}
-        if(id==graphSetProperty){graphRequireCurrent(false);auto node=graphSelectedNode();const char *properties[]={"name","name","number","rate","phase","attack","release","controller"};auto &target=graphPropertyIndex==1||graphPropertyIndex==2?graphDraft:node?*node:graphDraft;target[properties[graphPropertyIndex]]=graphPropertyIndex<2?Json(utf8Path(effectField(graphPropertyValue))):graphPropertyIndex==2||graphPropertyIndex==7?Json(graphInteger(graphPropertyValue)):Json(graphNumber(graphPropertyValue));graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;}
+        if(id==graphApply){graphSaveCompletedEdit();return true;}
+        if(id==graphSetProperty){graphRequireCurrent(false);auto node=graphSelectedNode();const char *properties[]={"name","name","number","rate","phase","attack","release","controller"};auto &target=graphPropertyIndex==1||graphPropertyIndex==2?graphDraft:node?*node:graphDraft;target[properties[graphPropertyIndex]]=graphPropertyIndex<2?Json(utf8Path(effectField(graphPropertyValue))):graphPropertyIndex==2||graphPropertyIndex==7?Json(graphInteger(graphPropertyValue)):Json(graphNumber(graphPropertyValue));graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();graphSaveCompletedEdit();return true;}
         if(id==graphConnect||id==graphDeleteWire){
             graphRequireCurrent(false);const bool modulation=graphPageIndex==2;const auto selected=graphWireIndex;
             auto edges=graphDraft.at(modulation?"modulation":"audio");
@@ -271,7 +289,7 @@
                 }else{e["output"]=graphInteger(graphOutputPort,63);e["input"]=graphInteger(graphInputPort,63);e["gain"]=graphNumber(graphGain);}
                 if(selected>=0)edges.at(size_t(selected))=std::move(e);else edges.push_back(std::move(e));
             }
-            graphDraft[modulation?"modulation":"audio"]=std::move(edges);graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;
+            graphDraft[modulation?"modulation":"audio"]=std::move(edges);graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();graphSaveCompletedEdit();return true;
         }
         if(id==graphLoadPlugin){graphLoadPluginControls();auto node=graphSelectedNode();if(node)openGraphRecipeParameters(graphID,graphNode,node->at("name").get<std::string>());return true;}
         if(id==graphSetParameter){graphRequireCurrent(false);if(graphDirty)throw std::runtime_error("Apply the graph before editing its plugin");const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i<0||graphPluginTarget!=graphNode||!graphPluginData.contains("parameters"))throw std::runtime_error("Load plugin controls first");const auto value=graphNumber(graphParameterValue);const auto parameter=graphPluginData.at("parameters").at(size_t(i)).at("id");const auto generation=graphGeneration;graphPending=true;try{documentOperation("graph.plugin.set",{{"expectedRevision",graphRevision},{"graph",graphID},{"node",graphNode},{"parameters",Json::array({{{"id",parameter},{"value",value}}})}});graphPending=false;if(generation==graphGeneration){graphFieldDirty=false;refreshGraph();graphLoadPluginControls();}}catch(...){graphPending=false;throw;}return true;}
@@ -286,7 +304,8 @@
     }
     bool graphMouseDown(float x,float y){
         if(!graphEditorVisible()||!graphCanvas.viewport.contains(x,y))return false;
-        if(busy||graphPending)return true;if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before selecting on the canvas");
+        if(busy||graphPending||nativeCommandPending)return true;if(nativeCommandCompletion.retained())throw std::runtime_error("Review the earlier command result before changing the graph");if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before selecting on the canvas");
+        graphRequireCurrent();
         workspaceState.focus="graph";SetFocus(window);graphPointer={x,y};graphDragStart={x,y};graphDragDirty=graphDirty;
         const auto socket=graphCanvas.socketAt(x,y),node=graphCanvas.nodeAt(x,y),wire=graphCanvas.wireAt(x,y);
         graphDragReplace.reset();
@@ -324,7 +343,12 @@
                 ScreamSeq::NativeInputGate::present(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);loadGraphFields();
             }catch(const std::exception &e){graphStatus=wide(e.what());status=graphStatus;}
         }graphDragReplace.reset();}
-        if(graphDragging()){dragging=0;rebuildGraphCanvas();layoutControls();}
+        if(graphDragging()){
+            const bool save=(dragging==6||dragging==7)&&graphDirty;
+            dragging=0;ReleaseCapture();
+            if(save)try{graphSaveCompletedEdit();}catch(const std::exception &e){graphStatus=wide(e.what());status=graphStatus;}
+            rebuildGraphCanvas();layoutControls();
+        }
     }
     void graphCancelDrag(){if(!graphDragging())return;if(dragging==6){if(auto n=graphSelectedNode();n&&n->at("id")==graphDragNode){(*n)["x"]=graphDragCoordinates[0];(*n)["y"]=graphDragCoordinates[1];graphDirty=graphDragDirty;++graphGeneration;}}if(dragging==8){graphCanvas.panX=graphDragOrigin.x;graphCanvas.panY=graphDragOrigin.y;}graphDragReplace.reset();dragging=0;ReleaseCapture();rebuildGraphCanvas();}
     void graphZoom(float factor){const auto &r=graphCanvas.viewport;const auto anchor=graphCanvas.world(r.x+r.w/2,r.y+r.h/2);graphCanvas.zoom=std::clamp(graphCanvas.zoom*factor,.25f,2.5f);graphCanvas.panX=r.w/2-anchor.x*graphCanvas.zoom;graphCanvas.panY=r.h/2-anchor.y*graphCanvas.zoom;rebuildGraphCanvas();}
@@ -338,8 +362,8 @@
         if(key==VK_HOME){command(graphFit);return true;}if(key==VK_OEM_PLUS||key==VK_ADD){graphZoom(1.2f);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){graphZoom(1/1.2f);return true;}
         if(key==VK_ESCAPE){graphFieldDirty=false;loadGraphFields();return true;}
         if(key==VK_TAB){if(graphFieldDirty)throw std::runtime_error("Set or reload the field draft before changing selection");if(ctrl){if(!graphCanvas.wires.empty()){int i=0;for(size_t n=0;n<graphCanvas.wires.size();++n)if(graphCanvas.wires[n].index==size_t(graphWireIndex)&&graphCanvas.wires[n].modulation==graphWireModulation)i=int(n)+1;const auto &w=graphCanvas.wires[size_t(i)%graphCanvas.wires.size()];graphWireIndex=int(w.index);graphWireModulation=w.modulation;graphPageIndex=w.modulation?2:1;ScreamSeq::NativeInputGate::present(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);}}else if(!graphCanvas.nodes.empty()){int i=0;for(size_t n=0;n<graphCanvas.nodes.size();++n)if(graphCanvas.nodes[n].id==graphNode)i=int(n);i=(i+(shift?-1:1)+int(graphCanvas.nodes.size()))%int(graphCanvas.nodes.size());graphNode=graphCanvas.nodes[size_t(i)].id;graphWireIndex=-1;}loadGraphFields();layoutControls();return true;}
-        if(key==VK_DELETE){command(graphWireIndex>=0?graphDeleteWire:graphDeleteNode);return true;}
-        if(key==VK_LEFT||key==VK_RIGHT||key==VK_UP||key==VK_DOWN){if(auto n=graphSelectedNode()){graphRequireCurrent(false);const double step=shift?1:8;const char *axis=key==VK_LEFT||key==VK_RIGHT?"x":"y";(*n)[axis]=std::clamp(n->at(axis).get<double>()+((key==VK_LEFT||key==VK_UP)?-step:step),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();}return true;}
+        if(key==VK_DELETE||key==VK_BACK){command(graphWireIndex>=0?graphDeleteWire:graphDeleteNode);return true;}
+        if(key==VK_LEFT||key==VK_RIGHT||key==VK_UP||key==VK_DOWN){if(auto n=graphSelectedNode()){if(nativeCommandCompletion.retained())throw std::runtime_error("Review the earlier command result before changing the graph");graphRequireCurrent();const double step=shift?1:8;const char *axis=key==VK_LEFT||key==VK_RIGHT?"x":"y";(*n)[axis]=std::clamp(n->at(axis).get<double>()+((key==VK_LEFT||key==VK_UP)?-step:step),-100000.0,100000.0);graphDirty=true;++graphGeneration;rebuildGraphCanvas();graphSaveCompletedEdit();}return true;}
         return false;
     }
     void drawGraphEditor(){
@@ -358,6 +382,6 @@
         if(graphPageIndex==1||graphPageIndex==2){s.uiText(L"Source",x,r.y+63,120,0x8390a2);s.uiText(L"Destination",x+128,r.y+63,120,0x8390a2);s.uiText(graphPageIndex==1?L"Output port":L"Stable parameter ID →",x,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Input port":L"Parameter",x+128,r.y+107,120,0x8390a2);s.uiText(graphPageIndex==1?L"Gain multiplier":L"Minimum",x,r.y+152,120,0x8390a2);if(graphPageIndex==2){s.uiText(L"Maximum",x+84,r.y+152,76,0x8390a2);s.uiText(L"Base / auto",x+168,r.y+152,80,0x8390a2);}}
         if(graphPageIndex==4){s.uiText(L"Amount / 0…1",x,r.y+73,120,0x8390a2);s.uiText(L"Wet / 0…1",x+128,r.y+73,120,0x8390a2);}
         const bool stale=graphDocument!=documentId||graphRevision!=view->session.revision;
-        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Graph draft / Apply commits one document Undo":L"Drag either socket to add · selected wire handles rewire · Ctrl+Tab selects wires",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="graph"?0x6edac5:0x303b49);
+        s.uiText(stale&&(graphDirty||graphFieldDirty)?L"Song changed / captured graph retained — Reload before applying":graphFieldDirty?L"Field draft / Set property or update wire":graphDirty?L"Unsaved graph edit / Save edit retries; Reload discards":L"Drag either socket to add · selected wire handles rewire · Ctrl+Tab selects wires",r.x+8,r.y+r.h-23,r.w-16,stale?0xe7bb79:0x8390a2);s.unclip();s.outline(r.x,r.y,r.w,r.h,workspacePresentationFocus()=="graph"?0x6edac5:0x303b49);
     }
     Json graphEditorSnapshot()const{Json nodes=Json::array(),sockets=Json::array(),wires=Json::array();for(const auto &n:graphCanvas.nodes)nodes.push_back({{"id",n.id},{"x",n.rect.x},{"y",n.rect.y},{"width",n.rect.w},{"height",n.rect.h}});for(const auto &s:graphCanvas.sockets)sockets.push_back({{"node",s.node},{"output",s.output},{"modulation",s.modulation},{"port",s.port},{"x",s.at.x},{"y",s.at.y}});for(const auto &w:graphCanvas.wires)wires.push_back({{"modulation",w.modulation},{"index",w.index},{"x",w.points[16].x},{"y",w.points[16].y},{"sourceHandle",{{"x",w.points[4].x},{"y",w.points[4].y}}},{"targetHandle",{{"x",w.points[28].x},{"y",w.points[28].y}}}});return {{"visible",graphEditorVisible()},{"graph",graphID},{"node",graphNode},{"wire",graphWireIndex},{"modulation",graphWireModulation},{"dirty",graphDirty},{"fieldDraft",graphFieldDirty},{"pending",graphPending},{"stale",graphDocument!=documentId||graphRevision!=view->session.revision},{"expectedRevision",graphRevision},{"zoom",graphCanvas.zoom},{"nodes",nodes},{"sockets",sockets},{"wires",wires}};}

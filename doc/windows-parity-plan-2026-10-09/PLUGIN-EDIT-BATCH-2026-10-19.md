@@ -26,6 +26,7 @@ before that gate. A failed compile does not authorize an immediate extra build.
 | P4b / rack ergonomics | Up/Down require repeated actions for distant moves. | Native **Move to…** button and command palette entry list final positions. Captured document, revision, selected plugin and draft generation are rechecked after the native popup loop. Compact racks retain Move to while hiding the two redundant adjacent-move buttons. |
 | P5 / API-GRAPH-GESTURE | Mac accepts a graph-parameter gesture token; Windows rejects it. | Windows now supplies the existing guarded `Document::annotate` merge sequence for one captured graph/node/parameter/token. Failed publication cannot advance ownership. Both adapters also require the previous document revision, preventing a reused token from merging back across Undo/Redo. |
 | P5 / recipe parameters | The song-routing rack inspector has pages of ten controls, while a reusable graph node exposes only the older single-value form. | **All parameters…** opens the same retained `PluginParametersWindow`, with an explicit graph/node target and the existing graph API. Target selection, drafts, automatic typed saves, result review and document retirement reuse the existing owner. Rack state and recipe state remain independent. |
+| P5 / completed recipe edits | A live, silent QA review of the main binary confirmed an enabled Apply on a clean graph. Source confirms that node moves, cable edits and Set property only stage changes. | Completed drags, keyboard position steps, Set property and wire actions now save through a guarded retained result owner. Backspace also removes the selected cable. Save edit is a disabled fallback while clean; Review result handles a lost completion without repeating the write. Invalid/stale definitions remain captured. Typing alone and vendor editor drafts retain their explicit completion boundary. |
 
 The schema, API guides and source architecture map are updated with these
 contracts. The two corresponding API vectors now require success on Windows,
@@ -33,6 +34,11 @@ with unchanged-document assertions for their no-op/dry-run inputs. Earlier
 failure receipts remain historical evidence; modifying expectations is not a
 runtime pass. No codec, plugin-state representation, audio callback, attribution,
 device default or third-party framework changes are involved.
+
+Recipe parameter metadata now retains the same numeric `unit` discriminator on
+both adapters, so the common Windows field presenter can choose an actual native
+checkbox for a Boolean parameter. The API regression compares recipe/rack IDs,
+units, labels, choices, steps and writability explicitly.
 
 Graph gesture writes are durable edits sharing history, **not** the separate
 transient-preview protocol. The paged sliders still commit on release. Audible
@@ -88,6 +94,13 @@ Required checks for that candidate:
    plugin move/remove/reopen cases supplement this focused selection.
 6. Configured CTest scheduling audit: the new portable target and four Python
    cases must be included in the existing CI batches without duplicate runs.
+7. `test_graph_editor.GraphEditorTests`, the two graph-specific context-menu
+   cases, and `GraphCurveHostTests.test_routing_and_curve_keep_independent_raw_drafts_and_targets`:
+   completed gestures save once, Escape cancels, a stale in-flight drag preserves
+   the document, invalid cycles remain drafts, cable attributes/neighbors persist,
+   Backspace cuts only its selected cable, and retained curve drafts stay independent.
+   Native command-result tests additionally inject known and unknown graph
+   completion failures and a revision change during acknowledgement.
 
 Broaden only for a failure implicating another owner or a further product change.
 No full native/application suite is required merely because the build directory
@@ -103,8 +116,77 @@ integration remain on their respective platforms.
 ## Current integration risk
 
 The main push's existing CI runs are Windows `39349699781` and Mac `39349699645`.
-At the last inspection the Mac ARM job had compiled successfully but its native
-model/host step failed; the remaining job steps were still running, and GitHub
-had not yet published its downloadable job log. Inspect that failure before
-requesting another cross-platform run. No rerun or extra build was dispatched.
-This is a baseline-main failure, not evidence about the unbuilt feature branch.
+These are baseline-main results, not evidence about the unbuilt feature branch.
+No rerun or extra build was dispatched.
+
+- Mac ARM64 compiled; 127/128 model/host tests and all 35 interface groups passed.
+  `plugin-aliases` failed its plugin-only exported PCM assertion. Source inspection
+  shows that its demo-derived instruments still map samples, now intentionally
+  audible alongside plugins. The fixture now explicitly clears and verifies the
+  three sample keymaps before alias measurements. Exact PCM assertions remain;
+  separate shared AU/VST3 layered-stem checks remain intact. This correction
+  still requires a Mac run. Intel was still compiling at the last inspection.
+- Windows x64 compiled and passed the registered native/model/editor batches.
+  The integration Python batch reported 16 failures and three errors (including
+  secondary teardown failures after audio startup refusal). Six non-audio cases
+  had stale fixture assumptions: expecting a clean saved song after a mutation,
+  expecting a visible Apply in an auto-saving mixer, using valid text to test
+  draft blocking, failing to allow overwrite of the test's own earlier save,
+  and reading newly reopened mixer strip bindings before the normal timer update.
+  All six corrected cases pass against the unchanged main ARM64 executable
+  (8.954 seconds; `bin/plugin-edit-parity-20261019/baseline-fixture-corrections.log`).
+  They retain exact state/history/identity assertions and still need x64 confirmation.
+- Windows pipe conformance stopped on an outdated advertised-method inventory.
+  An actual main-binary probe found two added reads (`pattern.timeline.get`,
+  `track.get`) and eight added writes (`document.new`, four track edits,
+  `transport.loop`, `workspace.keyboard.set`, `workspace.ruler`), with no removals.
+  The reviewed inventory is updated explicitly. The same probe confirms that
+  `order.edit` with destination equal to source preserves the full document and
+  revision; the obsolete rejection vector is replaced by success plus unchanged
+  document assertions. Mac ARM64 CI passed that no-op vector already.
+- The remaining Windows live-audio failures could not start a WASAPI endpoint
+  on the hosted runner, despite the existing audio-service startup/probe step.
+  Required tests are not disabled and no synthetic clock is substituted for
+  device evidence. Preserve that failure until an endpoint-equipped run qualifies
+  the transport/recording/audition cases. This remains an integration limitation.
+
+The foreground review used only the task-owned main executable with
+`--inspection --automation --seconds 900`, PID 30320, at 1285×761. It confirmed
+actual presentation and clean-graph Apply discoverability, not sound, frame
+pacing or the unbuilt changes. Its disposable modified demo was discarded and
+the owned process closed; no musician session was present or modified.
+
+Follow-up: the exact x64 binary from run `39349699781` was downloaded with its
+artifact, archive, executable and build-receipt hashes verified. Its hosted
+audio report explicitly contains an empty device list. On this endpoint-equipped
+ARM64 host, that x64 binary passes all 16 targeted cases under x64 emulation,
+without a rebuild. This includes the six corrected non-audio fixtures and ten
+live-audio cases. Two further fixture corrections were necessary: use invalid
+`3e` rather than auto-saving valid `3.` when testing retained raw text, and compare
+the detached editing context exactly while separately asserting that the live
+playhead remains in its requested pattern/range. Assertions for transport,
+document/history, focus, Undo and persistence remain. See
+[the exact evidence record](MAIN-CI-FOLLOWUP-2026-10-19.json). Hosted CI is still
+red; these baseline passes do not qualify the new graph/plugin implementation.
+
+## Next dependency after this batch
+
+The next parameter usability step is transient audible slider preview, followed
+by one durable commit or cancellation. Discovery confirms that
+`editor/hosted/PluginChain.cpp` already owns `previewParameters`,
+`hasParameterPreview` and `cancelParameterPreviews`, declared in `HostedAudio.hpp`;
+`editor/Tests/ParameterPreviewTests.cpp` checks baseline preservation, cancellation
+against a newer accepted value and queue saturation. Neither native frontend
+currently calls those preview methods. Windows vendor-editor polling in
+`PluginOperations.cpp` is a different path: it delivers live edits and later
+captures opaque state, and must not be mistaken for cancellable UI preview.
+
+The next batch should expose an owner with stable document/plugin/parameter
+identities and revision/generation guards through the controller/API, then wire
+`PluginParametersWindow` tracking/release/Escape to it. Recipe instances need
+their corresponding graph-control publication owner, not a positional rack
+shortcut. Queue refusal must retain ownership for safe cancellation; save,
+document replacement, Undo and external edits need explicit interaction tests.
+Reuse the existing shared primitive and tests rather than introduce a second
+audio-state representation. Do not advertise the durable graph `gesture` token
+as this preview protocol.

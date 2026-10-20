@@ -225,12 +225,14 @@
         "destination": 0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-ORDER-MOVE",
-      "phase": "P3a"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     },
     {
       "id": "plugin-move-position",

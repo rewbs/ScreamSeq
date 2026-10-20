@@ -324,7 +324,7 @@ class SongToolsUITests(unittest.TestCase):
         self.assertEqual(self.doc()['revision'], revision)
         self.write('history.redo', domain='all')
         self.assertEqual(self.doc()['data']['orderMetadata'], expected_metadata)
-        self.write('document.save', path=str(path))
+        self.write('document.save', path=str(path), overwrite=True)
         self.write('document.open', path=str(path), discard=True)
         self.assertEqual(self.doc()['data']['orderMetadata'], expected_metadata)
 

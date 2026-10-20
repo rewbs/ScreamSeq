@@ -123,6 +123,9 @@ jobs:
               test_workspace_shortcuts.WorkspaceShortcutTests `
               test_menu_pattern_keys.MenuPatternTests `
               test_plugin_edit_parity.PluginEditParityTests `
+              test_graph_editor.GraphEditorTests `
+              test_context_menus.WorkspaceContextMenuTests.test_graph_node_wire_menu_selection_draft_and_history `
+              test_context_menus.WorkspaceContextMenuTests.test_graph_raw_draft_prevents_retarget_and_modal_generation_change `
               test_mixer_strips_ui.MixerStripsUITests `
               test_note_tracks.NoteTrackAppTests `
               test_pattern_tools.PatternToolsAppTests `

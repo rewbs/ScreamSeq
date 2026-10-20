@@ -1,0 +1,120 @@
+{
+  "format": "screamseq-main-followup-v1",
+  "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
+  "scope": "Baseline main only. Current feature branch product changes are uncompiled and cannot inherit these passes.",
+  "runID": 39349699781,
+  "artifactID": 12234570804,
+  "artifactSHA256": "59720b26cf461d4586644dd4b927ab2acb9eea428c2ebf2866bad25870bba1e7",
+  "identity": {
+    "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
+    "qualification": "Built candidate; test results are separate and may fail.",
+    "executableSHA256": "1bb5a96709af8c6e0ef16321663a8eb70864ee35f6d8364e3a8781c7ad9380cb",
+    "archiveSHA256": "ecaf70039e476bd40b0ff15312dca73f16421837609220bfddab1d9426499ca1",
+    "buildReceiptSHA256": "a2b4dfa1b77c50a01e2cd6e29cdb9fe2608169a028ef881ea4827d246bb34a2e"
+  },
+  "machine": "0x8664",
+  "host": "Windows-11-10.0.28000-SP0",
+  "hostMachine": "ARM64",
+  "rebuild": false,
+  "testsPassed": 16,
+  "testsSkipped": 0,
+  "durationSeconds": 36.961,
+  "log": "bin\\plugin-edit-parity-20261019\\main-x64-corrections.log",
+  "logSHA256": "b91e79cae20cbbae3e17c3371b0e0470fd9f1233d9ac2ddc1a4c02841dce9ce6",
+  "fixtures": {
+    "test_mixer_strips_ui.py": "5905e21f42c84175ef7a3d3ade6bfb8147925570d02cefd36486fb0828b78c09",
+    "test_song_tools_ui.py": "f6fc153fd1cdaec4cc68ef6624dcf2fda0a7d98574feb4e970a9c9bf7f5be0c3",
+    "test_pattern_tools.py": "f1ac887e44f9dc6cf2840dd843f5146621f4cdfab5140d615dc22d07811fe5ed",
+    "test_graph_mixer_app.py": "5dda0e9e1148b2803d801d707fea5aaf86f84246f8f6a39aa5a19597b6b3237b",
+    "test_workspace_shortcuts.py": "f2a761529f551796eea697c8b707b043e65da4d66ba6f7beba658c2667a13511",
+    "test_transport_loop.py": "683a404e15b7e01caa30d0bcb038b1b2ee97d812a04f88d9db5caf76fba835cc",
+    "test_recording.py": "bdea8c972a46ad4e365e4f2a4739d7e16932a4ff6ba8641f8371d6ef19f7f02d",
+    "test_audition.py": "19e589642a91a8c23e113e08d58566b43533454a2a726072a844c9dbdbdf8203"
+  },
+  "hostReports": [
+    {
+      "file": "test_keyup_during_document_wait_never_starts_a_late_voice-host.json",
+      "sha256": "ce56713a33561e63f6fdce85256144dce6d3faa912f76d41b7b100b1c0fa4f61",
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 5,
+        "renderedFrames": 2880,
+        "maxCallbackMicros": 2138.7,
+        "maxServiceMicros": 2182.3,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      }
+    },
+    {
+      "file": "test_native_sample_and_instrument_typing_capture_text_and_close-host.json",
+      "sha256": "13b0f59c35ac226e81ea431577890e933de305badcae86a9768e574eafb49e4e",
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 109,
+        "renderedFrames": 52800,
+        "maxCallbackMicros": 3370,
+        "maxServiceMicros": 3398.8,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      }
+    },
+    {
+      "file": "test_sample_dock_typing_live_mode_and_text_focus-host.json",
+      "sha256": "5b2e1daf6bd85dba3e4863b0d07c95767e3ec2042abe633ae026a5cb4feb75a0",
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 60,
+        "renderedFrames": 28800,
+        "maxCallbackMicros": 4548,
+        "maxServiceMicros": 4579.6,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      }
+    }
+  ],
+  "ciAudioDevices": [],
+  "limitations": [
+    "Hosted CI has no WASAPI render endpoints; required live checks still fail there.",
+    "x64 executable ran under Windows ARM64 emulation on an endpoint-equipped host.",
+    "Not a pass for unbuilt plugin/graph changes, reciprocal fixtures, physical audio or presentation timing."
+  ]
+}
