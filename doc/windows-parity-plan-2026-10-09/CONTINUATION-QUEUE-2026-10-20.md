@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**New capture source, unbuilt:** [shared gesture owner](RECORDED-GESTURE-OWNER-2026-10-20.md)
+retains original timestamps, pending clock coverage, epoch/revision/target guards,
+loss accounting and atomic point candidates. Its regression checks join the
+existing shared recorded-automation target. Native adapters, multi-target vendor
+coordination, API/recovery and Record controls remain incomplete.
+
+**All current CI jobs are terminal.** Intel matched Apple Silicon's 134 native/
+35 interface passes and the same exact `/plugins/0/state` Undo failure.
+Its retained `undo-plugin.screamseq` is byte-identical to the ARM artifact.
+See the appended Intel checkpoint in [device follow-up](DEVICE-FOLLOWUP-2026-10-20.md).
+Do not poll/restart those completed jobs. Next build remains **11:48 UTC**.
+
+**Retained device follow-up:** [all ten endpoint-dependent x64 cases passed](DEVICE-FOLLOWUP-2026-10-20.md)
+on the unchanged CI binary under Windows ARM64 emulation, using silent output
+and never-switched private desktops. No skips, errors or build; 23.328 seconds.
+This is additional bounded evidence, not a retroactive CI pass. Intel's build
+finished at **10:47:45 UTC** and its test job remains active. Next coordinated
+build **not before 11:48 UTC**; poll job `118569881392` without restarting it.
+
 **Latest CI review and prepared repair:** [clock/recovery CI review](CLOCK-CI-REVIEW-2026-10-20.md).
 Windows x64 passed its build, 156/157 portable/worker registrations, all 48 native
 editor groups and complete composing/envelope-bank journeys. Its remaining

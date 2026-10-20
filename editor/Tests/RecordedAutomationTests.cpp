@@ -1,5 +1,7 @@
 #include "editor/hosted/HostedAudio.hpp"
 #include "editor/hosted/RecordedCapture.hpp"
+#include "editor/hosted/RecordedGestureCapture.hpp"
+#include "editor/TrackerDocument.hpp"
 #include "editor/RecordingFrameClock.hpp"
 #include <algorithm>
 #include <array>
@@ -40,6 +42,7 @@ static void settled(PluginChain &chain,float decibels) {
   const auto pcm=render(chain,4096,128);const double expected=.25*std::pow(10.,decibels/20.);
   check(std::abs(pcm.back()-expected)<1e-6,"Published timeline has the wrong current value");
 }
+#include "RecordedGestureCaptureTests.inc"
 static void capturePreparation() {
   for(const uint32_t rate:{44100u,48000u,96000u}) {
     for(const uint64_t frame:std::array<uint64_t,7>{0,1,127,511,uint64_t(rate)-1,uint64_t(rate),uint64_t(rate)*604800})
@@ -127,6 +130,7 @@ int main() {
   try {
     recordingFrameClock();
     capturePreparation();
+    recordedGestureCapture();
     captureBaselineRestoration();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};

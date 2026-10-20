@@ -111,6 +111,11 @@ public:
   void invalidate() noexcept {invalidated_=true;generation_.store(0,std::memory_order_release);}
   uint64_t generation() const noexcept {return generation_.load(std::memory_order_acquire);}
   bool stopped() const noexcept {return stopped_.load(std::memory_order_acquire);}
+  std::optional<uint64_t> stoppedEndTime(uint64_t expectedGeneration) const noexcept {
+    if(!expectedGeneration||!stopped()||generation()!=expectedGeneration)return {};
+    const auto end=end_.load(std::memory_order_acquire);
+    return generation()==expectedGeneration?std::optional<uint64_t>(end):std::nullopt;
+  }
   std::optional<uint64_t> locate(uint64_t time,uint64_t expectedGeneration) const noexcept {
     if(!expectedGeneration||generation()!=expectedGeneration)return {};
     const auto first=first_.load(std::memory_order_acquire),end=end_.load(std::memory_order_acquire);

@@ -1,5 +1,15 @@
 # Manual automation recording: remaining A13/P4b work
 
+**Current-source/evidence update (20 October):** the frame-clock and original-time
+notification infrastructure is in built candidate `28d757f65`. Windows x64
+`plugin-edit-notification` and `recorded-automation-tests` passed; Mac Apple
+Silicon `native-plugins`, `recorded-automation` and `plugin-robustness` passed.
+These are bounded infrastructure checks. Windows gesture capture and the Mac
+poll-time consumer replacement remain unimplemented. The newer
+[`automation.recorded.clear` batch](RECORDED-CLEAR-BATCH-2026-10-20.md) is
+implemented in source but unbuilt. The historical source-only checkpoints
+below describe their original date/state.
+
 Latest source-only slice:
 [original-time vendor notifications and loss counters](PLUGIN-EDIT-TIMESTAMPS-2026-10-20.md).
 Consumers are not switched to capture from those timestamps yet; the new checks
@@ -33,9 +43,10 @@ The missing path is **capturing manual gestures while playing**:
   state after the gesture settles. It passes the existing recorded-automation
   collection unchanged to `commit`. Coalescing is appropriate for current
   controls but cannot reconstruct a recorded gesture.
-- `WindowsVST3.cpp::Impl::Edit` currently carries only parameter ID and value;
-  the audio/UI queues each have 8,192 entries. `popEdit` returns no event time.
-  Recording at a later worker poll would include worker scheduling delay.
+- At the original audit, `WindowsVST3.cpp::Impl::Edit` carried only ID/value.
+  The current timestamped `popEdit(PluginEdit&)` preserves callback time and
+  exposes loss counts, but `flushEditors` still uses the legacy ID/value reader.
+  Recording at its later worker poll would still include scheduling delay.
 - The inspected Windows rack parameter controls, plugin owner, preview adapter
   and public method inventory contain no gesture-record arm/capture path.
   The existing MIDI note take and microphone recorder are separate owners.
@@ -52,10 +63,45 @@ clear-all command. `main.swift` passes the record flag to native parameter edits
 - keeps `_manualParameters` separate during recording;
 - groups a native gesture or debounced vendor gesture in chronological history.
 
-`clearAutomation` is an existing native Mac method. The shared public API
-inventory does not expose gesture arm/clear semantics, so API parity needs work
-on both platforms. The current Mac telemetry sampling is not evidence of
+`clearAutomation` is an existing native Mac method. The new source exposes
+`automation.recorded.clear` on both APIs; gesture arm/capture semantics still
+need work on both platforms. The current Mac telemetry sampling is not evidence of
 timestamp-accurate vendor callback capture; measure it before promising that.
+
+## Current adapter boundaries rechecked
+
+The follow-up source audit at `fc5d586ad` confirms four integration obligations
+before adding a Windows Record toggle:
+
+1. `windows/Session/PluginOperations.cpp::flushEditors` consumes each vendor
+   event once, coalesces per target for live delivery, and later serializes the
+   editor's opaque state into the manual baseline. Recording must intercept
+   original events before coalescing and must not run the ordinary opaque
+   capture for a recorded gesture. Its pending live-publication retry behavior
+   must remain intact.
+2. `PluginOperations::overlayRecoveryState` currently reads retained editor
+   state without consuming its events. A recorded gesture needs a separate
+   recoverable take representation; simply adding an armed flag to
+   `flushEditors` would still let recovery serialize movement as manual state.
+3. `windows/App/PluginParametersWindow.hpp::previewSlider` and
+   `Session/ParameterPreviewOperations.inc` retain a single transient value.
+   Release calls the ordinary manual edit. Recording needs the original native
+   control timestamps and accepted sequence, with cancellation/release and
+   queued-completion ownership retained. The worker's request time is not a
+   substitute for the original UI event time.
+4. Mac `collectPluginEdits` drains up to 128 legacy ID/value events per slot;
+   `acceptPluginParameter` uses current telemetry only while playing. A delayed
+   Stop drain therefore needs the retained original playback timeline and
+   explicit capture ownership, rather than relying on the current playing flag.
+
+Both native adapters already expose the absolute mapping:
+Windows `Audio/PresentationClock.hpp::RecordingTimeline::absoluteFrames`
+and Mac `AudioDevice::recordingFrameTimeline()`. Bind it to the original
+document, playback and provider incarnation; do not infer the provider's
+incarnation from a stable project ID or subtract loss counters across a vendor
+replacement. Keep the existing independent MIDI-note take separate. Its
+[ten-case device follow-up](DEVICE-FOLLOWUP-2026-10-20.md) does not qualify
+plugin gesture recording.
 
 ## Proposed shared/native boundary
 
