@@ -101,7 +101,8 @@ constexpr int documentLoadReportCommand=626;
 constexpr int songPropertiesCommand=627;
 constexpr int keyboardSettingsCommand=628;
 constexpr int exitCommand=629;
-constexpr int aboutCommand=702,keyboardHelpCommand=703,selectChannelCommand=704,selectPatternCommand=705,selectRowCommand=706;
+constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
+static_assert(selectRowCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
