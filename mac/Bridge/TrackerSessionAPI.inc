@@ -1223,7 +1223,7 @@
       result = PluginPreset::write(path, descriptorDictionary(plugin.descriptor),
         [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()], name, overwrite, dry, @(plugin.audioLayout.c_str()));
     } else if ([method isEqual:@"plugin.state.get"]) {
-      allowed(@[ @"slot" ]);
+      allowed(@[ @"slot", @"plugin" ]);
       auto slot = pluginSlot();
       [self commitManualParameters];
       // This is the saved baseline, not a capture of automation's transient value.

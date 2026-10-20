@@ -2607,10 +2607,20 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 63
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             }
           },
-          "required": [
-            "slot"
+          "oneOf": [
+            {
+              "required": ["slot"]
+            },
+            {
+              "required": ["plugin"]
+            }
           ],
           "additionalProperties": false
         }
