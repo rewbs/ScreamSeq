@@ -1,5 +1,37 @@
 # Recorded take and graph-retention batch
 
+## CI checkpoint at 14:03 UTC
+
+The following results qualify `7fb99d0b2` / its identical merge tree only,
+not the subsequent unbuilt native vendor-ownership source.
+
+- Windows run **39430710486**, job **118654733984**, is terminal **failure**.
+  Build passed (finished 13:45:28); all **157 worker/model** and **48 native**
+  registrations passed. The application selection ran 86 tests: **74 passed,
+  10 failed, 2 skipped**. The 13 failure reports include three additional
+  teardown failures for already-exited audition processes. The ten affected
+  cases fail at audio startup/playback-clock acquisition, matching the earlier
+  endpoint-dependent failure set; there is no new graph fixture failure.
+  This is not a green application gate. Actual audio availability and the
+  current binary still require separate evidence before closing those cases.
+- Mac Apple Silicon run **39430710525**, job **118654733396**, is terminal
+  **success** (13:54:38). All **134 native tests** and **35/35 interface groups**
+  passed, including the protected-source history correction and real native
+  plugin capture. Actual socket editing contracts and all five original native
+  fixture save/reopen cases passed. This is not a foreground visual review.
+- Mac Intel job **118654733679** remains live in its original build. Do not
+  restart it or dispatch another native build.
+
+Complete terminal job logs are retained locally as
+`bin/recorded-take-20261020/ci-118654733984.log` and
+`ci-118654733396.log`. The prior reciprocal exchange remains attached to its
+own candidate lineage.
+
+The earlier gate below is superseded: use **14:54:39 UTC at the earliest**
+(7:54:39 a.m. Pacific), and extend it to one hour after the later Intel
+compilation/harness completion. The conservative ARM bound includes its Swift
+interface-harness compilation, not just the application build.
+
 ## Frozen candidate and scope
 
 Candidate `7fb99d0b2b50f3827e16bcf59e295d4a9b4f85b5` is pushed to

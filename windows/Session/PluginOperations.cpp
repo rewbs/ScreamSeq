@@ -78,9 +78,18 @@ std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::stri
 PluginEditSource PluginOperations::parameterEditSource(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).editSource();
 }
+#include "RecordedPluginEditors.inc"
 bool PluginOperations::commitRecordedGestures(std::span<RecordedGestureCapture *const> owners,
     const std::string &revision,uint64_t playbackEpoch,bool acknowledgeLoss) {
   need(!owners.empty()&&owners.size()<=RecordedGestureCapture::batchTargetCapacity,"Recorded gesture needs 1 to 128 targets");
+  if(recordedEditors_) {
+    const auto current=recordedEditors_->context();
+    need(current.first==revision&&current.second==playbackEpoch,
+      "Recorded publication belongs to an earlier native session context");
+    const auto expected=recordedEditors_->take->preparedOwners(revision,playbackEpoch,acknowledgeLoss);
+    need(expected.size()==owners.size()&&std::equal(expected.begin(),expected.end(),owners.begin()),
+      "Publish the complete owned take, not a retained subset of its parameters");
+  }
   const auto rack=projectPluginStates(project_);
   const auto before=projectAbsoluteAutomation(project_);
   struct Provider {PluginEditSource source;std::vector<PluginParameter> parameters;};
@@ -119,6 +128,11 @@ bool PluginOperations::commitRecordedGestures(std::span<RecordedGestureCapture *
     }
     // commit stages the complete history and prepared audio publication before
     // adoption. Queue refusal throws before any saved state or owner retirement.
+    struct PublicationGuard {
+      bool &active;bool previous;
+      explicit PublicationGuard(bool &value):active(value),previous(value){active=true;}
+      ~PublicationGuard(){active=previous;}
+    } guard(recordedPublicationActive_);
     commit(project_.preserved.at("plugins"),std::move(next),true);
     return true;
   });
@@ -184,6 +198,7 @@ void PluginOperations::trimHistory() {
   std::erase_if(historyGroups_,[&](const auto &group){return group.second<=historyFloor_;});
 }
 void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool parameterOnly,std::span<const ParameterChange> changes,const NativeSong *native) {
+  requireManualEditors();
   auto candidate=project_;candidate.preserved["plugins"]=plugins;candidate.preserved["automation"]=automation;
   auto sourceNative=native?*native:document_.native();reconcilePluginNoteSources(sourceNative,projectPluginStates(project_),projectPluginStates(candidate));native=&sourceNative;
   const bool nativeChange=*native!=document_.native();
@@ -248,6 +263,7 @@ void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
 void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &documentHistory,
     const std::function<void(const NativeSong &)> &validateNative,
     const std::function<void(bool,const std::function<void()> &)> &liveDocumentHistory) {
+  requireManualEditors();
   synchronizeHistory();const auto first=historyHead(redo);if(!first)return;
   auto range=std::pair{first,first};for(const auto &group:historyGroups_)if(first>=group.first&&first<=group.second){range=group;break;}
   const bool grouped=range.first!=range.second;
@@ -288,7 +304,9 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
 bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
   bool changed=false;
   for(auto &record:copy.preserved.at("plugins")) {
-    const auto found=editors_.find(record.at("instanceID").get<std::string>());
+    const auto identity=record.at("instanceID").get<std::string>();
+    if(ownsRecordedEditor(identity))continue;
+    const auto found=editors_.find(identity);
     if(found==editors_.end() || !found->second)continue;
     // These retained instances never receive song automation. Do not consume
     // popEdit() or touch gesture bookkeeping while taking a recovery copy.
@@ -300,6 +318,9 @@ bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
 }
 void PluginOperations::dropEditor(const std::string &instance,const std::string &reason) noexcept {
   try {
+    if(ownsRecordedEditor(instance)){
+      editorWarning_="Recorded plugin failed / take and saved baseline protection retained / "+reason;return;
+    }
     const std::string key=instance; // The caller's reference may point into the erased entry.
     auto found=editors_.find(key);
     if(found!=editors_.end()){try{found->second->closeEditor();}catch(...){}editors_.erase(found);}
@@ -314,13 +335,14 @@ bool PluginOperations::flushEditors(bool force) {
   if(graphEditorWindowOpen_&&graphEditor_)try{graphOpen=graphEditor_->editorOpen();}catch(const WindowsVST3::UiOwnerBusy &){graphOpen=true;}catch(const std::exception &){graphOpen=false;}
   const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphOpen;
   if(graphClosed)graphEditorWindowOpen_=false;
+  (void)pollRecordedEditors();
   if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();
   std::vector<ParameterChange> liveChanges;
   std::vector<std::pair<std::string,std::string>> unusable;
   std::set<std::string> postponed;
-  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
+  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key)||ownsRecordedEditor(key))continue;
     std::map<uint32_t,float> edits;
     uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;pendingLiveParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
     if(const auto pending=pendingLiveParameters_.find(key);pending!=pendingLiveParameters_.end())
@@ -339,6 +361,10 @@ bool PluginOperations::flushEditors(bool force) {
     unusable.clear();
     if(openEditors_.empty()){pendingParameters_.clear();pendingLiveParameters_.clear();return true;}
   }
+  // Defer ordinary opaque history capture while a take owns the full captured
+  // revision. Unowned live gestures remain pending and recoverable; owned
+  // providers can never leak recorded values through forced Save/close flushes.
+  if(recordedEditors_)return graphClosed;
   const auto forget=[&]{std::erase_if(pendingParameters_,[&](const auto &entry){return !postponed.contains(entry.first);});};
   // Fast gesture delivery does not serialize vendor state or copy the rack.
   // Capture after the gesture settles, or immediately for save/close/read.
@@ -378,6 +404,7 @@ bool PluginOperations::flushEditors(bool force) {
 #include "PluginPathOperations.inc"
 #include "AbsoluteAutomation.inc"
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
+  requireManualOperation(method);
   if(method=="automation.get"||method=="automation.replaceLane"||method=="automation.recorded.get"||method=="automation.recorded.edit"||method=="automation.recorded.clear")return invokeAutomation(method,p);
   if(method.starts_with("plugin.path."))return invokePath(method,p);
   if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
@@ -504,7 +531,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="plugin.state.get"){keys(p,{"slot","plugin"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"audioLayout",state.audioLayout},{"kind","saved-baseline"}};}
   if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});const auto catalog=audioBuses(index,true);return {{"plugin",state.instanceID},{"buses",buses(catalog)},{"audioLayout",pluginAudioLayoutSignature(catalog)}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
-    keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
+    keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {if(!ownsRecordedEditor(state.instanceID))flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
   }
   if(method=="plugin.instruments.get"||method=="plugin.instruments.set"||method=="plugin.assign") {
     const bool get=method=="plugin.instruments.get",assign=method=="plugin.assign";

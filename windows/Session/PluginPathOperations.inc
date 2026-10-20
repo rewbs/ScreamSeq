@@ -1,6 +1,7 @@
 // Explicit Windows location repair, preserving the complete saved recipe except
 // its path. No automatic class substitution or AU-to-VST3 conversion is allowed.
 Json PluginOperations::invokePath(const std::string &method,const Json &p) {
+  requireManualOperation(method);
   const bool reconnect=method=="plugin.path.set"||method=="graph.plugin.path.set";
   bool committing=false;
   try {

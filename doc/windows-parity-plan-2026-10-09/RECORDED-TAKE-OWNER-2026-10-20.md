@@ -1,10 +1,14 @@
 # Shared recorded take ownership
 
-**Windows ARM64 qualified on `7fb99d0b2`; Mac/x64 CI still running.** See the
+**Shared/native take checks passed on Windows ARM64, x64 and Mac ARM on
+`7fb99d0b2`; Intel CI is still running.** Windows' broader application gate
+still has ten audio-startup failures. See the
 [batch results](TAKE-BATCH-QUALIFICATION-2026-10-20.md) for exact source,
 binary and test scope. This is a control-owner layer over
 `RecordedGestureCapture`, not a user-facing Record feature.
 No API, project format, native UI or audio callback behavior changes yet.
+The subsequent [native vendor ownership source](RECORDED-VENDOR-OWNERSHIP-2026-10-20.md)
+is unbuilt and not covered by those results.
 
 ### Review corrections and native-input checks
 
@@ -35,8 +39,9 @@ checks remain.
 through this same shared owner after release. It checks exact original-time
 publication and leaves the existing audible callback assertion intact.
 
-The Windows native notification, shared and worker checks **passed on ARM64**.
-Mac `native-plugins` and x64 execution remain in the running CI batch. These
+The Windows native notification, shared and worker checks **passed on ARM64
+and x64**, and Mac ARM's `native-plugins` and full native suite passed. Intel
+execution remains in the running CI batch. These
 checks use controlled presentation coverage; they do not prove device latency,
 session arming, manual-state exclusion, recovery or the final native Record
 workflow. They remain in existing registrations, not separate build targets.

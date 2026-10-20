@@ -212,8 +212,10 @@ void liveEditorAdmissionTests(const std::filesystem::path &scanner,const std::fi
   std::cout<<"PASS retained vendor notifications, retry coalescing, idle delivery and one-step history\n";
 }
 
+#include "RecordedEditorOwnershipTests.inc"
 void recoveryManualEditorTests(const std::filesystem::path &scanner,const std::filesystem::path &cache,const std::filesystem::path &directory) {
   liveEditorAdmissionTests(scanner,cache);
+  recordedEditorOwnershipTests(scanner,cache,directory);
   const char *stage="initial plugin setup";
   try {
   Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());

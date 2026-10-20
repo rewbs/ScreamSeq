@@ -17,12 +17,22 @@ capture, native recorded publication and graph-selector repair on ARM64.
 The complete native recording workflow still needs session arming/intake,
 manual-state protection, recovery and UI/API integration.
 
-Windows CI run **39430710486**, job **118654733984**, and Mac run
-**39430710525**, jobs **118654733396/118654733679**, are still building.
-Reuse these live handles; do not dispatch a new build. Local completion was
-13:31:37.992 UTC. Next build is no earlier than **14:31:38 UTC**, extended by
-later CI build completion. Local source and CI merge source have identical
+Windows CI run **39430710486**, job **118654733984**, is terminal failure:
+157 worker/48 native passes, with ten endpoint-dependent application failures.
+Mac run **39430710525** ARM job **118654733396** passed all 134 native and
+35 interface groups; Intel job **118654733679** is still building.
+See the terminal log review in the take batch qualification. Reuse the live
+Intel handle; do not dispatch a new build. Next build is no earlier than
+**14:54:39 UTC**, extended to one hour after later Intel compilation/harness
+completion. Local source and CI merge source have identical
 Git trees. Shared main remains `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
+
+**Next source batch, unbuilt:** [native recorded vendor ownership](RECORDED-VENDOR-OWNERSHIP-2026-10-20.md)
+protects manual state/recovery, retains raw intake and previews across refusal,
+and restores open or explicitly closed providers before releasing ownership.
+The real-vendor worker fixture and private-desktop CI scheduling are prepared.
+There are no production arming callers yet. Session barriers, recovery,
+Mac intake and both-host API/UI remain required before exposing Record.
 
 **Previous executed boundary (historical):** candidate `db42b1421` passed its one Windows ARM64
 build, all 24 selected CTest registrations (21 executable checks plus three

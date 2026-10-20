@@ -16,6 +16,7 @@ namespace Tracker {
 // target gesture until the native adapter atomically publishes points/history.
 // Native input, provider incarnation, recovery serialization and UI stay native.
 class RecordedGestureCapture {
+  friend class RecordedGestureTake;
 public:
   static constexpr size_t eventCapacity=8192;
   static constexpr size_t batchTargetCapacity=128;

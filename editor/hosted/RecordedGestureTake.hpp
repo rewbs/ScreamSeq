@@ -122,6 +122,16 @@ public:
   uint64_t rejectedEvents()const noexcept{return rejected_;}
   std::optional<uint64_t> endTime()const noexcept{return end_;}
   const RecordedGestureCapture &target(size_t index)const{return *targets_.at(index);}
+  bool matchesBaseline(std::span<const PluginState> rack,std::span<const ParameterChange> points)const {
+    return rack.size()==rack_.size()&&std::equal(rack.begin(),rack.end(),rack_.begin(),
+      [](const auto &a,const auto &b){return a.instanceID==b.instanceID;})&&
+      RecordedGestureCapture::sameBaseline(*before_,points);
+  }
+  std::vector<Provider> providers()const {
+    std::vector<Provider> result;result.reserve(sources_.size());
+    for(const auto &s:sources_)result.push_back(s.initial);
+    return result;
+  }
   bool owns(const std::string &plugin)const noexcept {
     return std::any_of(sources_.begin(),sources_.end(),[&](const auto &s){return s.initial.plugin==plugin;});
   }
