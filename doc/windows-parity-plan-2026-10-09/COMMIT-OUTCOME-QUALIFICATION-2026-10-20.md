@@ -97,6 +97,15 @@ The next Mac build must also respect its hourly gate (no earlier than
 **08:08:50 UTC** for this architecture); collect the other jobs' results before
 freezing the correction batch.
 
+Intel job `118498661208` subsequently failed at **07:21:08 UTC** with the same
+five diagnostics, including the malformed initializer. It also produced no app
+archive or runtime qualification. Its full retained log is
+`bin/commit-outcome-20261020/macos-intel-job-118498661208.log`,
+SHA-256 `a6ae09d5c08e41b9bbf45cbc9c82eb104c212088b76bc97c2bae4bbe498b4c3b`.
+The coordinated next Mac build gate is therefore **08:21:09 UTC**. Windows x64
+job `118498660665` was still building at this later checkpoint. The local fix
+is committed as `19ee413b9` but has not been pushed to restart CI.
+
 Foreground UI inspection remains stopped following the earlier human Escape.
 Renewed permission was requested and has not been received at this checkpoint.
 Private-desktop control checks are not live visual, physical keyboard, DPI,

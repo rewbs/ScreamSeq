@@ -41,6 +41,21 @@ remained unchanged and owned processes exited. This is a bounded A08 bank check,
 not family/catalogue/UI/audio completion. The next native workflow batch
 schedules it on both platforms; no new product build ran.
 
+The [manual automation audit](MANUAL-AUTOMATION-FOLLOWUP-2026-10-20.md)
+confirms a remaining A13/P4b implementation gap: Windows supports live editing
+of recorded points, but its native/vendor parameter gestures do not capture
+them. The audit maps existing Mac behavior, Windows queues, shared/native
+ownership, timing and history gates. Do not count existing recorded-point
+editing or note capture as completion, and do not add only a cosmetic Record
+toggle. This larger batch follows current integration repairs.
+
+Intel CI subsequently failed at 07:21:08 UTC on the same Mac initializer and
+downstream parse diagnostics. Both Mac failures are retained in the
+commit-outcome report; neither reached runtime qualification. Windows x64
+remained live. Keep the prepared correction and tooling changes local until
+the coordinated Mac gate, **08:21:09 UTC**, and incorporate any further confirmed
+x64 failures into that batch.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:
