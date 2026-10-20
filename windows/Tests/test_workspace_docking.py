@@ -28,6 +28,47 @@ class WorkspaceDockingTests(unittest.TestCase):
     navigate = test_workspace.WorkspaceTests.navigate
     resize_client = test_workspace.WorkspaceTests.resize_client
 
+    def test_context_panel_width_and_compact_native_selection(self):
+        self.resize_client(1600, 900)
+        state = self.panel('preciseNotes', placement='secondary', focus=True)
+        window = self.native_window('ScreamSeq.PreciseNotes')
+        song, context = self.doc(), self.read('context.get')
+        self.assertEqual(state['editorDock']['mode'], 'regions')
+        self.assertEqual(state['geometry']['pattern']['x'], 170)
+        self.assertTrue(state['contextPanel']['visible'])
+        def retained(snapshot):
+            keys = ('document', 'revision', 'patternID', 'trackID', 'pattern',
+                    'row', 'channel', 'generation', 'selected', 'raw',
+                    'draftCount', 'selectedEvent', 'tools')
+            return {key: snapshot['inspection']['preciseNotes'][key] for key in keys}
+        target = retained(state)
+        hidden = self.command(635)
+        self.assertFalse(hidden['contextPanel']['visible'])
+        self.assertEqual(hidden['geometry']['pattern']['x'], 6)
+        self.assertEqual(hidden['geometry']['pattern']['width'],
+                         state['geometry']['pattern']['width'] + 164)
+        self.assertEqual(retained(hidden), target)
+        self.command(635)
+        self.panel('preciseNotes', focus=True)
+        self.resize_client(1000, 720)
+        compact = self.ready()
+        self.assertEqual(compact['editorDock']['mode'], 'tabs')
+        self.assertFalse(compact['editorDock']['trackerVisible'])
+        self.assertEqual(compact['editorDock']['compactSelection'], 'preciseNotes')
+        before = compact['editorDock']['hosts']['secondary']['body']
+        self.assertEqual(before['x'], 170)
+        hidden = self.command(635)
+        after = hidden['editorDock']['hosts']['secondary']['body']
+        self.assertEqual(hidden['editorDock']['mode'], 'tabs')
+        self.assertEqual(hidden['editorDock']['compactSelection'], 'preciseNotes')
+        self.assertEqual(after['x'], 6)
+        self.assertEqual(after['width'], before['width'] + 164)
+        self.assertEqual(self.native_window('ScreamSeq.PreciseNotes'), window)
+        self.assertEqual(retained(hidden), target)
+        self.assertEqual(self.desktop.focus(window), window)
+        self.assertEqual(self.doc(), song)
+        self.assertEqual(self.read('context.get'), context)
+
     def state(self):
         return self.read('workspace.get')
 

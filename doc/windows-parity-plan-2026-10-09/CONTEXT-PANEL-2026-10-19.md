@@ -81,6 +81,18 @@ the region mode, and adds compact native-tab width/focus checks. This correction
 has **not been rebuilt or executed**; the original failure is retained. Later
 retained-draft assertions in that group did not execute.
 
+An additional actual-app PID-pipe/native-message check passed against the same
+unchanged executable: `WorkspaceDockingTests.test_context_panel_width_and_compact_native_selection`
+(2.779 s). It establishes a 1600×900-DIP region layout and a 1000×720-DIP compact
+layout, verifies 164-DIP reclaimed width in both, and preserves the native notes
+HWND, target, raw fields, selected event, tools, focus, context and document.
+Log: `bin/context-panel-20261019/application-context.log`. An initial harness
+attempt incorrectly requested an omitted full `draft` array; its KeyError is
+retained in `application-context-initial-shape.log`. The corrected case uses the
+published `draftCount`, `selectedEvent`, raw fields and unchanged document.
+This pass is independent evidence of application behavior, not a retroactive
+pass for the failed C++ group or a foreground visual review.
+
 Build only ScreamSeq and workspace-restore-tests for this Windows presentation
 batch. Run the new private-desktop `workspace-context-panel-tests`, existing
 workspace restore/region, menu and shortcut tests where their binaries match,
