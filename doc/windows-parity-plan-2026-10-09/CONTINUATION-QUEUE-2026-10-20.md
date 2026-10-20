@@ -8,7 +8,23 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**Latest executed boundary:** candidate `db42b1421` passed its one Windows ARM64
+**Latest executed boundary:** candidate `7fb99d0b2` passed one Windows ARM64
+five-target build, all six selected CTest registrations (five checks plus
+scratch setup), and the affected actual-app graph parameter/bus-assignment
+case. See [take batch qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md).
+This qualifies the shared take/loss/timestamp fixes, real native VST3 callback
+capture, native recorded publication and graph-selector repair on ARM64.
+The complete native recording workflow still needs session arming/intake,
+manual-state protection, recovery and UI/API integration.
+
+Windows CI run **39430710486**, job **118654733984**, and Mac run
+**39430710525**, jobs **118654733396/118654733679**, are still building.
+Reuse these live handles; do not dispatch a new build. Local completion was
+13:31:37.992 UTC. Next build is no earlier than **14:31:38 UTC**, extended by
+later CI build completion. Local source and CI merge source have identical
+Git trees. Shared main remains `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
+
+**Previous executed boundary (historical):** candidate `db42b1421` passed its one Windows ARM64
 build, all 24 selected CTest registrations (21 executable checks plus three
 scratch setups), and two actual-app clear checks. See the
 [qualification record](GESTURE-BATCH-QUALIFICATION-2026-10-20.md) for exact

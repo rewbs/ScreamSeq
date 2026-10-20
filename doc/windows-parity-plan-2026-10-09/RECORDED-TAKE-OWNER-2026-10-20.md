@@ -1,12 +1,14 @@
 # Shared recorded take ownership
 
-**Prepared source, unbuilt and unexecuted.** This is the next control-owner
-layer over `RecordedGestureCapture`, not a user-facing Record feature.
+**Windows ARM64 qualified on `7fb99d0b2`; Mac/x64 CI still running.** See the
+[batch results](TAKE-BATCH-QUALIFICATION-2026-10-20.md) for exact source,
+binary and test scope. This is a control-owner layer over
+`RecordedGestureCapture`, not a user-facing Record feature.
 No API, project format, native UI or audio callback behavior changes yet.
 
 ### Review corrections and native-input checks
 
-The next batch also fixes two source-level defects found before exposing this
+The batch also fixes two source-level defects found before exposing this
 owner through either session:
 
 - A capacity/storage/allocation refusal is reviewable, but a later document,
@@ -33,11 +35,11 @@ checks remain.
 through this same shared owner after release. It checks exact original-time
 publication and leaves the existing audible callback assertion intact.
 
-These checks are **prepared, not executed**. They use controlled presentation
-coverage; they will not prove device latency, session arming, manual-state
-exclusion, recovery or the final native Record workflow. Run them in the
-existing `plugin-edit-notification` and `native-plugins` registrations with
-the shared/worker checks below, not as a separate build.
+The Windows native notification, shared and worker checks **passed on ARM64**.
+Mac `native-plugins` and x64 execution remain in the running CI batch. These
+checks use controlled presentation coverage; they do not prove device latency,
+session arming, manual-state exclusion, recovery or the final native Record
+workflow. They remain in existing registrations, not separate build targets.
 
 ## Why another ownership boundary is needed
 
@@ -105,10 +107,10 @@ queue, no-partial-publication, exact saved/manual state, one Undo/Redo,
 save/reopen, no-op Redo preservation and PCM checks remain. Controlled
 notifications are not evidence of native slider/vendor intake.
 
-Run these shared and worker groups once in the next coordinated build with
-the pending graph-selector and Mac history-fixture repairs. Both Mac builds
-must compile and execute the shared tests. The prior candidate's successful
-reciprocal exchange does not qualify this new header.
+The shared and worker groups passed in the coordinated ARM64 build together
+with the graph-selector repair. Both running Mac jobs must compile and execute
+the shared tests and protected-source history fixture correction. The prior
+candidate's successful reciprocal exchange does not qualify this new header.
 
 ## Remaining native work
 

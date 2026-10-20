@@ -1,10 +1,13 @@
 # ScreamSeq Windows parity implementation plan
 
-**Latest executed checkpoint (20 October, `db42b1421`):**
-[gesture/clear/history qualification](GESTURE-BATCH-QUALIFICATION-2026-10-20.md)
-records the successful Windows ARM64 batch, all 24 selected CTest registrations
-and two actual-app clear checks. Windows x64 and both Mac architectures are in
-the current PR qualification batch. Gesture arming/intake/recovery and final
+**Latest executed checkpoint (20 October, `7fb99d0b2`):**
+[recorded take/graph qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md)
+records the successful Windows ARM64 batch, all six selected CTest registrations
+and the affected actual-app graph parameter/assignment case. Windows x64 and
+both Mac architectures are building in the current PR qualification batch.
+The preceding candidate completed the full twenty-return reciprocal fixture
+gate; its exact evidence remains in the [CI review](GESTURE-CI-REVIEW-2026-10-20.md).
+Gesture arming/intake/recovery and final
 shared-main integration remain open. The checkpoints below retain their
 historical scope; consult the [current queue](CONTINUATION-QUEUE-2026-10-20.md)
 before acting on an old failure or source-only label.
