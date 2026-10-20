@@ -10,6 +10,13 @@ void applicationContextPanel() {
     restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(contextPanelCommand),FALSE)==app.controls.at(patternChooser)&&
         GetNextDlgTabItem(app.window,app.controls.at(soundChooser),FALSE)==app.controls.at(contextActionFirst),
         "Context controls do not follow their visible reading order with Tab");
+    const auto step=app.controls.at(stepChooser);RECT stepRect{},octaveRect{};
+    GetWindowRect(step,&stepRect);GetWindowRect(app.controls.at(octaveChooser),&octaveRect);
+    const auto dc=GetDC(step);const auto font=reinterpret_cast<HFONT>(SendMessageW(step,WM_GETFONT,0,0));
+    const auto previousFont=SelectObject(dc,font);SIZE stepText{};
+    GetTextExtentPoint32W(dc,L"Step 16",7,&stepText);SelectObject(dc,previousFont);ReleaseDC(step,dc);
+    restoreCheck(stepRect.top>=octaveRect.bottom&&stepRect.right-stepRect.left>=stepText.cx+MulDiv(40,GetDpiForWindow(step),96),
+        "Context note-entry selectors clip the current step value or overlap");
     restoreCheck(!IsWindowVisible(app.controls.at(openCommand))&&!IsWindowVisible(app.controls.at(undoCommand))&&
         app.menuCommandState(openCommand).enabled,"Removed sidebar duplicates must remain available in menus");
     app.runWorkspaceShortcut(contextPanelCommand);

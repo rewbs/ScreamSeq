@@ -8,6 +8,13 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Foreground UI follow-up:** renewed permission enabled inspection of the
+retained `7fb99d0b2` QA app. Context switching and Ctrl+B width reclamation
+worked; stale sibling-button pixels on layout changes and a clipped step
+value did not. [Visual review and pending corrections](CONTEXT-PANEL-VISUAL-2026-10-20.md)
+add Windows control/context tests and require another visible check on the
+next built candidate. No new build was run; the QA process is closed.
+
 **Latest executed boundary:** candidate `7fb99d0b2` passed one Windows ARM64
 five-target build, all six selected CTest registrations (five checks plus
 scratch setup), and the affected actual-app graph parameter/bus-assignment

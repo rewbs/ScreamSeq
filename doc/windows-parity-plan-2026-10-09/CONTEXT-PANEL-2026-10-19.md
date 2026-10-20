@@ -1,5 +1,12 @@
 # Contextual left panel
 
+**Foreground follow-up:** with renewed user permission, the retained
+`7fb99d0b2` app was inspected through Computer Use. Context changes and width
+reclamation worked, but step-value clipping and stale control pixels after
+layout changes were observed. [The visual review](CONTEXT-PANEL-VISUAL-2026-10-20.md)
+records the source corrections and required recheck. They are unbuilt.
+Earlier "Computer Use remains stopped" statements below are historical.
+
 **Latest qualification:** the corrected native context group and actual-app
 width/focus case both passed on `b1581c9c8`. See the
 [20 October candidate results](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md).

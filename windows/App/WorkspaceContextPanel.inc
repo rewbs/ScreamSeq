@@ -101,10 +101,12 @@
         ScreamSeq::NativeControls::text(controls.at(contextPanelCommand),visible?L"Hide context panel":L"Show context panel");
         ScreamSeq::NativeControls::active(controls.at(contextPanelCommand),visible);
         place(patternChooser,132,250,pattern);place(orderChooser,162,250,pattern);
-        place(octaveChooser,216,230,pattern,10,70);place(stepChooser,216,230,pattern,84,72);
-        place(soundChooser,246,230,pattern);
+        // Both labels include their meaning and value. Two narrow selectors
+        // clipped "Step 1" to "Step...", hiding the value even at 100% DPI.
+        place(octaveChooser,216,230,pattern);place(stepChooser,246,230,pattern);
+        place(soundChooser,276,230,pattern);
         place(sampleCommandBase,132,std::max(64.f,std::min(180.f,height-360)),sample);
-        const float actionTop=pattern?294:sample?std::max(64.f,std::min(180.f,height-360))+144:140;
+        const float actionTop=pattern?324:sample?std::max(64.f,std::min(180.f,height-360))+144:140;
         for(size_t i=0;i<contextActions.size();++i) {
             const auto &action=contextActions[i];const int id=contextActionFirst+int(i);
             const float y=actionTop+float(i)*30;
