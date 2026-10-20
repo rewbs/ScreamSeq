@@ -1,4 +1,5 @@
 #include "editor/hosted/HostedAudio.hpp"
+#include "editor/hosted/RecordedCapture.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -35,8 +36,62 @@ static void settled(PluginChain &chain,float decibels) {
   const auto pcm=render(chain,4096,128);const double expected=.25*std::pow(10.,decibels/20.);
   check(std::abs(pcm.back()-expected)<1e-6,"Published timeline has the wrong current value");
 }
+static void capturePreparation() {
+  for(const uint32_t rate:{44100u,48000u,96000u}) {
+    for(const uint64_t frame:std::array<uint64_t,7>{0,1,127,511,uint64_t(rate)-1,uint64_t(rate),uint64_t(rate)*604800})
+      check(canonicalRecordedFrame(frame,rate)==frame*48000/rate,"Capture clock conversion lost an exact frame");
+  }
+  check(canonicalRecordedFrame(48000,48000.5)==47999,"Fractional device rate was narrowed");
+  for(const double rate:{0.,-1.,std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity()}) {
+    bool rejected=false;try{(void)canonicalRecordedFrame(48000,rate);}catch(const std::invalid_argument &){rejected=true;}
+    check(rejected,"Invalid floating device rate was accepted");
+  }
+  for(const auto &[frame,rate]:std::array<std::pair<uint64_t,uint32_t>,3>{{
+      {0,0},{UINT64_MAX,48000},{uint64_t(48000)*604800+1,48000}}}) {
+    bool rejected=false;try{(void)canonicalRecordedFrame(frame,rate);}catch(const std::invalid_argument &){rejected=true;}
+    check(rejected,"Invalid capture time was accepted");
+  }
+  const std::vector<ParameterChange> original={{0,1,-6,100},{1,1,-9,100},{0,2,.5f,100},{0,1,-12,200}};
+  auto points=original;
+  auto apply=[&](ParameterChange point) {
+    const auto prepared=prepareRecordedCapture(points,point);
+    if(prepared.changed) {
+      if(prepared.index==points.size()){points.reserve(points.size()+1);points.push_back(point);}
+      else points[prepared.index]=point;
+    }
+    return prepared.changed;
+  };
+  check(!apply({0,1,-6,100})&&points.size()==4,"Identical captured point was not a no-op");
+  check(apply({0,1,-3,100})&&points.size()==4&&points[0].value==-3,"Same-frame capture appended a duplicate");
+  for(size_t i=1;i<original.size();++i)
+    check(points[i].slot==original[i].slot&&points[i].id==original[i].id&&points[i].frame==original[i].frame&&
+      points[i].value==original[i].value,"Capture changed another parameter, plugin or time");
+  check(apply({0,1,-18,300})&&points.size()==5,"New captured time was not appended");
+  std::vector<ParameterChange> captured={{0,1,-6,0}};
+  const ParameterChange last{0,1,-12,0};
+  const auto destination=prepareRecordedCapture(captured,last);captured[destination.index]=last;
+  PluginChain audible({gain()},48000,true);
+  check(audible.publishRecordedAutomation(audible.prepareRecordedAutomation(captured)),
+    "Same-frame captured gesture cannot enter the shared playback timeline");
+  settled(audible,-12);
+  auto invalid=points;invalid.push_back(points[0]);
+  bool rejected=false;try{(void)prepareRecordedCapture(invalid,points[0]);}catch(const std::invalid_argument &){rejected=true;}
+  check(rejected,"Ambiguous existing points were silently rewritten");
+  std::vector<ParameterChange> full;full.reserve(maximumRecordedPoints);
+  for(size_t i=0;i<maximumRecordedPoints;++i)full.push_back({0,1,-6,uint64_t(i)});
+  const auto replace=prepareRecordedCapture(full,{0,1,-12,0});
+  check(replace.changed&&replace.index==0&&full[0].value==-6,"Full capture could not prepare replacement without mutation");
+  rejected=false;try{(void)prepareRecordedCapture(full,{0,1,-3,maximumRecordedPoints});}catch(const std::invalid_argument &){rejected=true;}
+  check(rejected&&full.size()==maximumRecordedPoints,"Full capture admitted an append");
+  for(const auto point:std::array<ParameterChange,2>{{
+      {0,1,std::numeric_limits<float>::quiet_NaN(),0},{0,1,0,maximumRecordedFrame+1}}}) {
+    rejected=false;try{(void)prepareRecordedCapture(points,point);}catch(const std::invalid_argument &){rejected=true;}
+    check(rejected,"Invalid captured value/time was accepted");
+  }
+}
 int main() {
   try {
+    capturePreparation();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};
       PluginChain initial({gain()},rate,true,points),published({gain()},rate,true);

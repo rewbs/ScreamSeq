@@ -25,6 +25,7 @@
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/RecordedCapture.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/PluginNoteSources.hpp"
@@ -2248,8 +2249,19 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       throw std::runtime_error("Disable pattern automation for this parameter before recording absolute automation.");
     if (recording && _document->native().performance.controls(_plugins[slot].instanceID,uint32_t(identifier)))
       throw std::runtime_error("Remove pattern commands for this parameter before recording absolute automation.");
-    if (recording && _automation.size() >= 100000)
-      throw std::runtime_error("Automation reached 100,000 points.");
+    ParameterChange captured{};
+    RecordedCaptureDestination capture;
+    if(recording) {
+      captured={uint32_t(slot),uint32_t(identifier),float(value),
+        canonicalRecordedFrame(_audio->telemetry().frames,_audio->sampleRate())};
+      capture=prepareRecordedCapture(_automation,captured);
+      if(!capture.changed) {
+        if(!alreadyApplied&&!_audio->pluginParameter(uint32_t(slot),uint32_t(identifier),float(value)))
+          throw std::runtime_error("The plugin parameter queue is full or unavailable.");
+        [self rememberParameterTouch:size_t(slot) identifier:uint32_t(identifier) source:alreadyApplied ? @"plugin-editor" : @"native-control"];
+        return YES;
+      }
+    }
     [self synchronizeHistory];
     const auto now = std::chrono::steady_clock::now();
     const bool continued = _parameterGestureSequence == _document->historySequence() && _parameterGestureSequence &&
@@ -2261,14 +2273,15 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       if(!recording)before->parameterValues.push_back({uint32_t(slot),uint32_t(identifier),[self manualValueForHistory:uint32_t(slot) identifier:uint32_t(identifier) alreadyApplied:alreadyApplied],0});
       _effectUndo.reserve(_effectUndo.size() + 1);
     }
-    if (recording) _automation.reserve(_automation.size() + 1);
+    if (recording) {
+      if(capture.index==_automation.size())_automation.reserve(_automation.size()+1);
+    }
     else _manualParameters.reserve(_manualParameters.size() + 1);
     if (!alreadyApplied && !_audio->pluginParameter(uint32_t(slot), uint32_t(identifier), float(value)))
       throw std::runtime_error("The plugin parameter queue is full or unavailable.");
     if (recording) {
-      auto frames = _audio->telemetry().frames;
-      _automation.push_back({uint32_t(slot), uint32_t(identifier), float(value),
-                             uint64_t(double(frames) * 48000 / _audio->sampleRate())});
+      if(capture.index==_automation.size())_automation.push_back(captured);
+      else _automation[capture.index]=captured;
     }
     if (!recording) {
       auto found = std::find_if(_manualParameters.begin(), _manualParameters.end(),

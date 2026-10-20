@@ -130,3 +130,73 @@ contracts, not invitations to silently alter those contracts.
 
 Relative effort: **L**, with shared preparation/timing, host ingestion and native
 controls kept as reviewable slices that converge on main.
+
+## Capture admission slice (20 October, source only)
+
+Further source inspection found a concrete shared-boundary mismatch.
+`TrackerSession::collectPluginEdits` may drain 128 notifications in one poll;
+`acceptPluginParameter` previously appended every one using the current
+telemetry frame. Multiple edits of one parameter in one frame could therefore
+produce duplicate `(slot,id,frame)` points. Meanwhile
+`editor/hosted/RecordedAutomation.cpp::prepareRecordedAutomation` explicitly
+rejects those duplicates. Mac's existing control-period timestamping also does
+not establish original vendor-event timing.
+
+`editor/hosted/RecordedCapture.hpp` now prepares a destination without mutating
+the song: last accepted value at the same target/frame replaces that point;
+an identical value is a no-op; a new frame appends subject to the existing
+100,000-point limit. Replacement is allowed at capacity. Ambiguous already-saved
+duplicates at the edited time reject with a lane-edit instruction; unrelated
+records/order remain untouched. The owner resolves stable identity and catalogue/
+conflict guards before preparation, reserves append storage before host
+publication, and adopts on the same serialized owner. There is no callback
+allocation or new history/format owner.
+
+The helper also converts integer device frames to canonical 48 kHz by quotient/
+remainder arithmetic, avoiding floating rounding and overflow at ordinary
+integer rates. Fractional Core Audio rates remain supported with checked
+conversion. Invalid rates, non-finite values and times outside the existing
+one-week bound reject before narrowing.
+
+The Mac capture adapter uses this preparation before its existing queue/history
+admission, retains the independent manual baseline, and replaces/appends only
+after the live parameter queue accepts. Identical captured values add no musical
+history. This fixes same-frame capture admission; **it still samples telemetry
+at collection time and does not close the timestamping gap**. Windows manual
+capture is still absent; its future adapter should consume this same helper.
+
+Prepared checks in the existing shared `RecordedAutomationTests.cpp` cover
+44.1/48/96-kHz and fractional rates, invalid/overflow input, exact capacity,
+same-frame replacement/no-op, preservation of other targets/times and rejection
+of ambiguous old duplicates. A coalesced gesture also enters the real shared
+timeline and is rendered under the existing callback audit. Both native CMake
+projects already schedule this target. These checks and the Mac adapter have
+not yet been compiled or executed; Mac gesture history/opaque-state and provider
+recording gates remain necessary.
+
+### More precise clock integration boundary
+
+- `editor/TrackerDocument.cpp::nativePrepareMix` already publishes host-time
+  coverage for MIDI positions through `RecordingClock`. It has both
+  `renderOffset_` and the renderer's cumulative `frames_`; these provide the
+  source for an absolute-frame mapping alongside the musical-position mapping.
+  Do not infer cumulative frames from row position, especially across loops.
+- Windows `Session/HostedProject.cpp::render` supplies the WASAPI presentation
+  origin and device generation, bounds valid coverage only after successful
+  processing, quarantines failed/discontinuous clocks and publishes Stop's final
+  bound through `Audio/PresentationClock.hpp::RecordingTimeline`.
+- Mac `Audio/AudioDevice.mm::callback` supplies `mHostTime` to the same renderer,
+  but has no equivalent retained absolute-frame/generation capture view. Add
+  explicit lifecycle bounds before relying on this path for delayed events.
+- Windows VST3 `performEdit` runs on its required STA owner, publishing separate
+  8,192-entry UI/audio queues. Its UI record must acquire the original native
+  host timestamp at acceptance. Preserve the audio queue's current delivery and
+  queue-full failure; do not substitute a worker timestamp in `flushEditors`.
+- Windows `flushEditors` currently folds consumed records into maps and captures
+  opaque state after 400 ms. Capture must retain timestamped events before that
+  fold, keep failed-publication work pending and distinguish unrelated opaque
+  preset changes from parameter-only gestures. Existing live manual delivery
+  must continue while capture is armed.
+
+These findings refine the next implementation slice; they do not authorize
+calling clock accuracy, Windows capture or A13 complete.
