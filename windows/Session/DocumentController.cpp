@@ -557,6 +557,7 @@ std::function<void()> DocumentController::prepareNativePublication(const Tracker
 }
 
 #include "ParameterPreviewOperations.inc"
+#include "RecipeParameterPreviewOperations.inc"
 Json DocumentController::operation(const std::string &method,Json params) {
   const bool replacing=method=="document.open"||method=="document.new";
   if(method=="document.new") {
@@ -569,6 +570,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   }
   if(publicationPending_) publish();
   if(method.starts_with("plugin.parameters.preview."))return parameterPreviewOperation(method,params);
+  if(method.starts_with("graph.plugin.preview."))return recipeParameterPreviewOperation(method,params);
   if(method.starts_with("parameter.activity."))return parameterActivityOperation(method,params);
   if(method.starts_with("recording.")) {
     try{return recordingOperation(method,params);}
@@ -596,7 +598,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     const auto count=plugins_->openEditorCount();bool changed=false;
     try{changed=plugins_->flushEditors(force);}
     catch(const std::exception &e){plugins_->editorWarning(std::string("Plugin editor state was not captured / ")+e.what());changed=true;}
-    if(changed&&parameterPreview_.active())cancelParameterPreview();
+    if(changed&&(parameterPreview_.active()||recipePreview_.active()))cancelParameterPreview();
     if(changed || count!=plugins_->openEditorCount())publish();
   };
   if(method=="flushPluginEditors") {
@@ -873,7 +875,7 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
         ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="graph.update"
-        ||method=="plugin.parameters.preview.commit") {
+        ||method=="plugin.parameters.preview.commit"||method=="graph.plugin.preview.commit") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

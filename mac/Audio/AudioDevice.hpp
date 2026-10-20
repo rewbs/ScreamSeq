@@ -121,6 +121,16 @@ public:
   MixerTransition::Reading mixerRoutingReading() const noexcept {return plugins_?plugins_->mixerRoutingReading():MixerTransition::Reading{};}
   std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &native);
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &native) {return active()&&plugins_?plugins_->prepareGraphControls(native):nullptr;}
+  std::unique_ptr<GraphControlPlan> prepareGraphParameterPreview(const NativeSong &native,
+      uint64_t graph,uint64_t node,uint32_t parameter,double value,std::span<const PluginParameter> catalog) {
+    return active()&&plugins_?plugins_->prepareGraphParameterPreview(native,graph,node,parameter,value,catalog):nullptr;
+  }
+  bool restoreGraphParameterPreview(const NativeSong &native) {
+    if(!plugins_)return true;
+    if(!active())plugins_->applyPending(); // Only a quiescent callback may be drained here.
+    auto plan=plugins_->prepareGraphControls(native);
+    return plan&&plugins_->publishGraphControls(std::move(plan));
+  }
   bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {return plugins_&&plugins_->publishGraphControls(std::move(plan));}
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &plan) noexcept {return plugins_ && plugins_->publishMixerRouting(plan);}
   std::vector<MixerMeter> mixerMeters() const { return active() && plugins_ ? plugins_->mixerMeters() : std::vector<MixerMeter>{}; }

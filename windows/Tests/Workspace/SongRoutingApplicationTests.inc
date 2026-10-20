@@ -186,6 +186,36 @@ void applicationRecipeParameterInspector(){
   restoreCheck(editor->visible()&&app.graphEditorVisible()&&snapshot.at("graph")==graph&&snapshot.at("node")==node&&snapshot.at("plugin")=="","Recipe parameter action lost its captured target or hid the graph");
   const auto before=app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}}),rack=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
   const auto &rows=snapshot.at("rows");const auto row=std::find_if(rows.begin(),rows.end(),[](const auto &r){return r.at("id")==1;});restoreCheck(row!=rows.end(),"Recipe gain parameter is missing");
+  const auto track=GetDlgItem(pane,row->at("sliderControl").get<int>());
+  const auto readRecipe=[&]{return app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}});};
+  const auto readOwner=[&]{return app.documentOperation("graph.plugin.preview.get",RestoreJson::object());};
+  const auto reloadRecipe=[&]{SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));};
+  const auto revision=app.view->session.revision;
+  SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  const auto owner=readOwner();
+  restoreCheck(owner.at("active")==true&&owner.at("graph")==graph&&owner.at("node")==node&&
+    readRecipe()==before&&app.view->session.revision==revision,"Recipe slider lost ownership or committed while tracking");
+  SendMessageW(pane,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));const auto slid=readRecipe();
+  restoreCheck(slid!=before&&!readOwner().at("active").get<bool>()&&!editor->snapshot().at("dirty").get<bool>(),
+    "Recipe slider release did not save its final value");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(readRecipe()==before,"Recipe slider needed more than one Undo");reloadRecipe();
+  SendMessageW(track,TBM_SETPOS,TRUE,9000);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(pane,WM_KEYDOWN,VK_ESCAPE,1);
+  restoreCheck(readRecipe()==before&&!readOwner().at("active").get<bool>()&&!editor->snapshot().at("dirty").get<bool>(),
+    "Escape committed or retained a recipe preview");
+  bool pumped=false;
+  app.sampleReadResult=[&](const std::string &method,RestoreJson &){
+    if(method=="graph.plugin.preview.set"&&!pumped){
+      pumped=true;SendMessageW(track,TBM_SETPOS,TRUE,7000);
+      SendMessageW(pane,WM_HSCROLL,TB_THUMBPOSITION,LPARAM(track));
+      SendMessageW(pane,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+      SendMessageW(pane,WM_TIMER,8,0);
+      restoreCheck(readRecipe()==before,"Recipe release committed reentrantly during its preview request");
+    }
+  };
+  SendMessageW(track,TBM_SETPOS,TRUE,8000);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  app.sampleReadResult={};SendMessageW(pane,WM_TIMER,8,0);
+  restoreCheck(pumped&&readRecipe()!=before&&!readOwner().at("active").get<bool>(),"Deferred recipe release was lost");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(readRecipe()==before,"Deferred recipe release split its history");reloadRecipe();
   const auto value=GetDlgItem(pane,row->at("valueControl").get<int>());SetWindowTextW(value,L"-9");
   // Complete the same guarded submission used by the idle autosave timer.
   SendMessageW(pane,WM_COMMAND,3964,LPARAM(GetDlgItem(pane,3964)));

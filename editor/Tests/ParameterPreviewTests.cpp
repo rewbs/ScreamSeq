@@ -1,5 +1,8 @@
 #include "editor/hosted/HostedAudio.hpp"
 #include "editor/ParameterPreviewOwner.hpp"
+#include "editor/TrackerDocument.hpp"
+#include "editor/hosted/RecipeParameterEdits.hpp"
+#include "soundlib/ModInstrument.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -111,10 +114,69 @@ static void ownership(){
   check(owner.cancel(key,[](const auto &){return true;})&&!owner.active(),"Accepted cancel retained ownership");
   check(owner.cancel(key,[](const auto &){throw std::runtime_error("should not publish");return false;}),"Repeated cancel was not harmless");
 }
+static void recipeBlock(PluginChain &chain,Renderer &renderer,float *pcm,unsigned count){
+  bool okay=false;
+  const auto render=[&]{chain.beginRenderBlock();chain.syncTransport(renderer);renderer.render(pcm,count);okay=chain.process(pcm,count)&&!renderer.faulted();};
+#ifdef _WIN32
+  {ScreamSeq::AudioAudit::Scope audit;render();}
+  check(!ScreamSeq::AudioAudit::allocations.load()&&!ScreamSeq::AudioAudit::deallocations.load(),"Recipe preview callback allocated or freed C++ storage");
+#elif !defined(TRACKER_SANITIZER)
+  uint64_t a=0,f=0,l=0;tracker_audit_begin();render();tracker_audit_end(&a,&f,&l);
+  check(!a&&!f&&!l,"Recipe preview callback allocated, freed or locked");
+#else
+  render();
+#endif
+  check(okay,"Recipe preview render failed");
+}
+static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
+  auto doc=Document::demo();
+  doc->transaction([&](OpenMPT::CSoundFile &song){
+    song.Order().SetDefaultSpeed(6);song.Order().SetDefaultTempoInt(125);
+    if(sampleCopies){song.m_nInstruments=1;song.Instruments[1]=new OpenMPT::ModInstrument(1);}
+    for(auto &p:song.Patterns)if(p.IsValid())for(OpenMPT::ROWINDEX row=0;row<p.GetNumRows();++row)for(OpenMPT::CHANNELINDEX ch=0;ch<song.GetNumChannels();++ch)*p.GetpModCommand(row,ch)={};
+    auto &note=*song.Patterns[0].GetpModCommand(0,0);note.note=61;note.instr=1;
+  });
+  doc->annotate([](NativeSong &n){n.ensureMixer();});
+  auto accepted=doc->native();const auto untouched=accepted;
+  SignalDefinition definition;definition.id=accepted.makeEntity().id;definition.number=1;definition.name="Transient recipe";
+  const auto input=accepted.makeEntity().id,node=accepted.makeEntity().id,output=accepted.makeEntity().id;
+  definition.nodes={{input,SignalNodeKind::Input,"Input"},{node,SignalNodeKind::Plugin,"Gain"},{output,SignalNodeKind::Output,"Output"}};
+  NativePlugin probe(gain("recipe-catalogue"),rate,true);const auto catalog=probe.parameters();const auto state=probe.state();
+  definition.nodes[1].plugin.classID=state.descriptor.classID;definition.nodes[1].plugin.state=state.state;
+  definition.audio={{input,node},{node,output}};accepted.signal.library={definition};
+  accepted.signal.assignments={{accepted.masterID,definition.id,1,1}};
+  accepted.signal.lanes[accepted.masterID]=2;
+  accepted.signal.commands={{accepted.patterns.at(0).id,accepted.masterID,definition.id,0,0,SignalCommandKind::Start},{accepted.patterns.at(0).id,accepted.masterID,definition.id,0,1,SignalCommandKind::Row}};
+  if(sampleCopies)accepted.signal.instrumentAssignments={{accepted.instruments.at(1).id,definition.id,1,1}};
+  accepted.validate(doc->song());const auto initial=accepted;
+  Renderer reference(doc->serialize(),rate),renderer(doc->serialize(),rate);
+  PluginChain dry({},rate,true),live({},rate,true);dry.attachInstruments(reference,&untouched);live.attachInstruments(renderer,&accepted);
+  const auto manual=[&](float expected){size_t copies=0;for(const auto &p:live.parameterActivity().processors)if(p.graph==definition.id&&p.node==node){++copies;const auto parameter=std::find_if(p.parameters.begin(),p.parameters.end(),[](const auto &v){return v.id==1;});check(parameter!=p.parameters.end()&&parameter->value==expected,"Recipe preview overwrote a copy's accepted manual catalogue");}
+    check(copies==size_t(3+(sampleCopies?doc->song().GetNumChannels()+1:0)),"Recipe preview fixture did not prepare every ordinary/row/persistent/instrument copy");};
+  manual(0);std::array<float,1024>a{},b{};double db=0,energy=0;unsigned changedAt=0;
+  const auto preview=[&](double value){auto plan=live.prepareGraphParameterPreview(accepted,definition.id,node,1,value,catalog);check(plan&&plan->transientParameters&&live.publishGraphControls(std::move(plan)),"Recipe preview failed to publish");};
+  for(unsigned at=0;at<4800;){
+    if(at==1000){preview(-6);manual(0);check(accepted==initial,"Recipe preview changed the accepted song");db=-6;changedAt=at;}
+    if(at==2000){auto restore=live.prepareGraphControls(accepted);check(restore&&live.publishGraphControls(std::move(restore)),"Recipe cancellation failed");manual(0);db=0;changedAt=at;}
+    if(at==3000){const std::array<std::pair<uint32_t,double>,1> edits{{{1,-3}}};editSignalParameters(accepted.signal.library[0],node,catalog,edits,[](uint32_t,float){return true;});auto commit=live.prepareGraphControls(accepted);check(commit&&live.publishGraphControls(std::move(commit)),"Accepted recipe parameter failed");manual(-3);db=-3;changedAt=at;}
+    if(at==4000){preview(-6);preview(-12);preview(-18);manual(-3);bool refused=false;try{preview(-24);}catch(const std::runtime_error &){refused=true;}check(refused,"Full recipe control queue accepted a fourth preview");refused=false;try{live.prepareGraphControls(accepted);}catch(const std::runtime_error &){refused=true;}check(refused,"Full recipe control queue accepted restoration");db=-18;changedAt=at;}
+    auto count=std::min(block,4800-at);for(auto boundary:{1000u,2000u,3000u,4000u})if(boundary>at)count=std::min(count,boundary-at);
+    recipeBlock(dry,reference,a.data(),count);recipeBlock(live,renderer,b.data(),count);
+    const auto factor=std::pow(10.,db*double(sampleCopies?4:3)/20.);
+    for(unsigned i=0;i<count*2;++i){energy+=double(a[i])*a[i];if(at+i/2>=changedAt+512)check(std::abs(b[i]-a[i]*factor)<4e-6,"Recipe preview/cancel did not reach every audible copy");}
+    check(renderer.telemetry().frames==reference.telemetry().frames,"Recipe preview changed the playback clock");at+=count;
+  }
+  check(energy>.01,"Recipe preview PCM fixture is silent");
+  auto restore=live.prepareGraphControls(accepted);check(restore&&live.publishGraphControls(std::move(restore)),"Recipe cancellation did not recover after queue consumption");manual(-3);
+  auto stale=accepted;stale.signal.library[0].audio[0].gain=.5;
+  bool refused=false;try{live.prepareGraphParameterPreview(stale,definition.id,node,1,-6,catalog);}catch(const std::invalid_argument &){refused=true;}check(refused,"Recipe preview silently republished stale routing");
+  check(accepted.signal.library[0].nodes[1].plugin.state==initial.signal.library[0].nodes[1].plugin.state&&doc->native()==untouched,"Recipe preview altered opaque state or the owning document");
+}
 int main(){try{
   ownership();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   refusal();
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})for(bool samples:{false,true})recipePreview(rate,block,samples);
   std::cout<<"PASS transient parameter PCM, manual/opaque state isolation, reopen, current-baseline cancel, atomic refusal and callback audit\n";
   return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

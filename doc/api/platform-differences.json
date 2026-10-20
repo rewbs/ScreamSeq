@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "ab879fa08639d0027cbbc0ed505dfdb6ea95b6a77127b36220381e3d0b40ba23",
+    "sha256": "aca6aaea23fb938744cb8163166c916408405772ccf7397a79d6470e74668d53",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -74,6 +74,10 @@
       "graph.plugin.get",
       "graph.plugin.preset.load",
       "graph.plugin.preset.save",
+      "graph.plugin.preview.cancel",
+      "graph.plugin.preview.commit",
+      "graph.plugin.preview.get",
+      "graph.plugin.preview.set",
       "graph.plugin.set",
       "graph.presentation.set",
       "graph.provenance.get",
@@ -273,6 +277,7 @@
         "graph.note.activity",
         "graph.plugin.get",
         "graph.plugin.path.get",
+        "graph.plugin.preview.get",
         "graph.provenance.get",
         "graph.scope.get",
         "graph.selection.copy",
@@ -377,6 +382,9 @@
         "graph.plugin.path.set",
         "graph.plugin.preset.load",
         "graph.plugin.preset.save",
+        "graph.plugin.preview.cancel",
+        "graph.plugin.preview.commit",
+        "graph.plugin.preview.set",
         "graph.plugin.set",
         "graph.presentation.set",
         "graph.remove",
@@ -567,6 +575,19 @@
         "removed": [],
         "evidence": "doc/windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md",
         "note": "Expected inventory only. Earlier executable receipts do not qualify these additions; native runtime capture remains required."
+      },
+      "pendingRecipePreview20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "graph.plugin.preview.get"
+        ],
+        "writesAdded": [
+          "graph.plugin.preview.cancel",
+          "graph.plugin.preview.commit",
+          "graph.plugin.preview.set"
+        ],
+        "removed": [],
+        "evidence": "No native run for these source changes yet; see RECIPE-PREVIEW-BATCH-2026-10-20.md."
       }
     },
     "macos": {
@@ -597,6 +618,7 @@
         "graph.listen.get",
         "graph.note.activity",
         "graph.plugin.get",
+        "graph.plugin.preview.get",
         "graph.provenance.get",
         "graph.scope.get",
         "graph.selection.copy",
@@ -697,6 +719,9 @@
         "graph.plugin.editor.open",
         "graph.plugin.preset.load",
         "graph.plugin.preset.save",
+        "graph.plugin.preview.cancel",
+        "graph.plugin.preview.commit",
+        "graph.plugin.preview.set",
         "graph.plugin.set",
         "graph.presentation.set",
         "graph.remove",
@@ -830,6 +855,19 @@
         "removed": [],
         "evidence": "doc/windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md",
         "note": "Expected inventory only. Earlier executable receipts do not qualify these additions; native runtime capture remains required."
+      },
+      "pendingRecipePreview20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "graph.plugin.preview.get"
+        ],
+        "writesAdded": [
+          "graph.plugin.preview.cancel",
+          "graph.plugin.preview.commit",
+          "graph.plugin.preview.set"
+        ],
+        "removed": [],
+        "evidence": "No native run for these source changes yet; see RECIPE-PREVIEW-BATCH-2026-10-20.md."
       }
     }
   },
@@ -916,6 +954,18 @@
         "windows/Session/ParameterPreviewOperations.inc",
         "mac/Bridge/ParameterPreviewAPI.inc",
         "editor/Tests/parameter_preview_contract.py"
+      ]
+    },
+    {
+      "id": "API-RECIPE-PREVIEW",
+      "phase": "P5",
+      "status": "implemented-pending-qualification",
+      "finding": "Recipe gestures use the shared graph-control plan for all prepared copies. Rack/recipe ownership is mutually exclusive; final commit uses ordinary graph.plugin.set. New shared manual-parameter helper preserves exact modulation bases on representational no-ops. Native tests and real application pipe/socket execution remain required.",
+      "sources": [
+        "editor/hosted/RecipeParameterEdits.hpp",
+        "editor/hosted/PluginChain.cpp",
+        "windows/Session/RecipeParameterPreviewOperations.inc",
+        "mac/Bridge/RecipeParameterPreviewAPI.inc"
       ]
     }
   ]

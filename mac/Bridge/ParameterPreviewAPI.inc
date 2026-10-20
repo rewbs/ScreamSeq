@@ -1,7 +1,13 @@
 // Shared transient ownership with native Core Audio publication. Saved plugin
 // states/manual deltas and unified history remain in their existing owners.
 - (void)reconcileParameterPreview {
-  if(_parameterPreviewCommitting||!_parameterPreview.active())return;
+  if(_parameterPreviewCommitting)return;
+  [self reconcileRecipeParameterPreview];
+  [self reconcileRackParameterPreview];
+}
+- (void)reconcileRackParameterPreview {
+  if(_parameterPreviewCommitting)return;
+  if(!_parameterPreview.active())return;
   const auto &entry=*_parameterPreview.active();
   if(entry.revision!=self.automationRevision.UTF8String||entry.hostEpoch!=_audio->pluginEpoch()||(entry.audible&&!_audio->active()))[self cancelParameterPreview];
 }
@@ -11,6 +17,10 @@
   try{[self reconcileParameterPreview];}catch(const std::exception &e){_pluginWarning=e.what();}
 }
 - (void)cancelParameterPreview {
+  [self cancelRackParameterPreview];
+  [self cancelRecipeParameterPreview];
+}
+- (void)cancelRackParameterPreview {
   if(!_parameterPreview.active())return;
   const auto key=_parameterPreview.active()->key;
   if(!_parameterPreview.cancel(key,[&](const auto &entry){
@@ -25,13 +35,14 @@
     if(!_parameterPreview.active())return @{@"active":@NO};
     const auto &e=*_parameterPreview.active();return @{@"active":@YES,@"gesture":@(e.key.token.c_str()),@"plugin":@(e.key.plugin.c_str()),@"parameter":@(e.key.parameter),@"revision":@(e.revision.c_str()),@"value":@(e.value),@"audible":@(e.audible)};
   };
-  if([method isEqual:@"plugin.parameters.preview.get"]){keys(p,@[]);[self reconcileParameterPreview];return describe();}
+  if([method isEqual:@"plugin.parameters.preview.get"]){keys(p,@[]);[self reconcileRackParameterPreview];return describe();}
   const bool update=[method isEqual:@"plugin.parameters.preview.set"],commit=[method isEqual:@"plugin.parameters.preview.commit"],cancel=[method isEqual:@"plugin.parameters.preview.cancel"];
   require(update||commit||cancel,"Unknown parameter preview method");
   keys(p,cancel?@[@"expectedRevision",@"plugin",@"parameter",@"gesture"]:@[@"expectedRevision",@"plugin",@"parameter",@"gesture",@"value"]);
   const ParameterPreviewOwner::Key key{string(p[@"gesture"],80).UTF8String,string(p[@"plugin"],128).UTF8String,uint32_t(integer(p[@"parameter"],0,UINT32_MAX))};
   try{ParameterPreviewOwner::validateKey(key);}catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
-  if(cancel){require(!_parameterPreview.active()||_parameterPreview.active()->key==key,"Cancellation belongs to another preview");[self cancelParameterPreview];return @{@"active":@NO};}
+  if(cancel){require(!_parameterPreview.active()||_parameterPreview.active()->key==key,"Cancellation belongs to another preview");[self cancelRackParameterPreview];return @{@"active":@NO};}
+  require(!_recipePreview.active(),"A recipe parameter preview is retained; cancel it first");
   const auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==key.plugin;});
   require(found!=_plugins.end(),"Plugin instance no longer exists");const auto slot=uint32_t(found-_plugins.begin());
   const auto revision=std::string(self.automationRevision.UTF8String);

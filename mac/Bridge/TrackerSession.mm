@@ -22,6 +22,7 @@
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/RecipeParameterEdits.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/PluginNoteSources.hpp"
 #include "editor/AutomationTools.hpp"
@@ -386,6 +387,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::unique_ptr<Document> _document;
   std::unique_ptr<AudioDevice> _audio;
   ParameterPreviewOwner _parameterPreview;
+  ParameterPreviewOwner _recipePreview;
+  uint64_t _recipePreviewGraph,_recipePreviewNode;
+  std::vector<PluginParameter> _recipePreviewCatalog;
   BOOL _parameterPreviewCommitting;
   std::unique_ptr<MidiInput> _midi;
   std::unique_ptr<PluginInventory> _pluginInventory;
@@ -2483,5 +2487,6 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   } catch(const std::exception &e){failure(error,e);return nil;}
 }
 #include "ParameterPreviewAPI.inc"
+#include "RecipeParameterPreviewAPI.inc"
 #include "TrackerSessionAPI.inc"
 @end

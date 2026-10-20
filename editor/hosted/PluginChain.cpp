@@ -4,6 +4,7 @@
 #include "GraphPluginEndpoint.hpp"
 #include "mac/Audio/NativeSignalGraph.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "RecipeParameterEdits.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -276,6 +277,32 @@ bool PluginChain::process(float *buffer, uint32_t frames) noexcept {
   return true;
 }
 std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const NativeSong &next) {return prepareGraphControls(next,false);}
+std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphParameterPreview(const NativeSong &accepted,
+    uint64_t graph,uint64_t node,uint32_t parameter,double value,std::span<const PluginParameter> catalog) {
+  // Only this parameter may differ from the currently published graph. A
+  // stale accepted song must not audition old topology, presets or routing.
+  auto withoutTarget=[&](SignalGraph signal){
+    for(auto &d:signal.library)if(d.id==graph){
+      for(auto &n:d.nodes)if(n.id==node)n.plugin.parameters.erase(parameter);
+      for(auto &edge:d.modulation)if(edge.target==node&&edge.parameter==parameter)edge.base=0;
+    }
+    return signal;
+  };
+  const auto &current=lastGraphControls_?lastGraphControls_->signal:preparedSignal_;
+  if(withoutTarget(current)!=withoutTarget(accepted.signal))
+    throw std::invalid_argument("Graph changed; refresh the accepted recipe before previewing");
+  auto next=accepted;
+  const auto definition=std::find_if(next.signal.library.begin(),next.signal.library.end(),[&](const auto &d){return d.id==graph;});
+  if(definition==next.signal.library.end())throw std::invalid_argument("Subgraph no longer exists");
+  const std::array<std::pair<uint32_t,double>,1> values{{{parameter,value}}};
+  editSignalParameters(*definition,node,catalog,values,[](uint32_t,float){return true;});
+  auto plan=prepareGraphControls(next);
+  if(!plan)return {};
+  if(!plan->observations.empty()||!plan->latencies.empty())
+    throw std::runtime_error("Recipe processors or latency changed; refresh before previewing");
+  plan->transientParameters=true;
+  return plan;
+}
 std::unique_ptr<GraphControlPlan> PluginChain::prepareGraphControls(const NativeSong &next,bool copyHandoff,std::shared_ptr<const HostedSampleBindings> samples) {
   if(!copyHandoff&&mixerTransition_&&!mixerTransition_->ready())throw std::runtime_error("A routing transition is still preparing; retry the graph edit");
   if(!copyHandoff&&latencyChangePending())return nullptr;
@@ -438,7 +465,7 @@ void PluginChain::commitGraphControls(GraphControlPlan &plan) noexcept {
   for(const auto &copy:plan.rememberedCopies)*copy.target=copy.state;
   lastGraphControls_=&plan;++graphControlRevision_;
   liveGraphTail_.store(plan.renderedTail,std::memory_order_relaxed);liveTailRevision_.fetch_add(1,std::memory_order_relaxed);
-  for(const auto &r:plan.readings)r.plugin->observedBaseline(r.parameter,r.value);
+  if(!plan.transientParameters)for(const auto &r:plan.readings)r.plugin->observedBaseline(r.parameter,r.value);
 }
 bool PluginChain::publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {
   if(!plan || !acceptsGraphControls(*plan))return false;

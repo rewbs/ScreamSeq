@@ -328,6 +328,29 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 
 `pattern.get` returns at most 4,096 cells per request and supports row/channel pagination. `pattern.apply` accepts up to 4,096 distinct cell patches, validates the entire batch before changing anything, and supports `dryRun`. A parameter batch or lane replacement likewise forms one plugin-history step. There are no cross-domain transactions or general dry runs yet.
 
+### Transient recipe parameter gestures
+
+`graph.plugin.preview.get/set/commit/cancel` uses the rack gesture contract below,
+with canonical stable `graph` and `node` identities replacing `plugin`.
+`set` and `commit` require `expectedRevision`, `parameter`, `gesture` and `value`;
+`cancel` omits `value`, and `get` accepts only `{}`. Values use native catalog
+units. Recipe and rack gestures are mutually exclusive within a session.
+Cancelling an inactive family never cancels the other family's retained gesture.
+
+During playback, a recipe preview publishes one prepared graph-control plan to
+every existing copy of the recipe, including ordinary, Row, persistent and
+sample-instrument copies. Tracking does not edit the recipe, opaque state,
+manual parameter catalog or document history. An inactive host returns
+`audible:false` without starting audio. Release commits through `graph.plugin.set`
+as one Undo step; an unchanged final value restores the accepted graph without
+history. Cancellation queue refusal retains ownership for retry after the
+renderer consumes pending plans.
+
+A representational no-op preserves the exact saved parameter map and normalized
+modulation bases, including disabled contributions. Ordinary changed manual edits
+update all contributions to that parameter together. These operations introduce
+no native-project format or identity migration.
+
 ### Transient rack parameter gestures
 
 `plugin.parameters.preview.set` takes `expectedRevision`, stable `plugin`, integer

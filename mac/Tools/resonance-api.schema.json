@@ -22595,6 +22595,230 @@
       ],
       "additionalProperties": false,
       "description": "Atomically edit one audio port trim in dB, inverse compensation link or replacement modulation source list. Link edits preserve the sum of both manual gains. One Undo, revision checked; dryRun validates without changing audio or history."
+    },
+    {
+      "description": "Read the retained transient recipe parameter preview. Does not change document history. Retired ownership is reconciled against the current document and audio host. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Audition one recipe parameter in native catalog units without changing saved state or history. Requires stable graph and node identities and a gesture token. Returns audible:false without starting audio when the host is inactive. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "value",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Commit the final value of the matching retained preview through the normal parameter edit path, with one Undo step. Stale or different ownership rejects. A no-op restores the accepted baseline without adding history. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "value",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Cancel the matching preview and restore the current accepted baseline without history. Idempotent after retirement. Queue refusal preserves ownership for explicit retry. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.cancel"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ],
   "$defs": {

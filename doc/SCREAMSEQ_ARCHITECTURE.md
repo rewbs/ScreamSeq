@@ -82,6 +82,18 @@ copies use a different publication path. See the [preview qualification
 checkpoint](windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md)
 for execution status and pending gates.
 
+Recipe manual editing is centralized in `editor/hosted/RecipeParameterEdits.hpp`:
+complete candidate validation and provider acceptance precede no-throw adoption;
+representational no-ops preserve exact saved overrides and modulation bases.
+Recipe preview adapters use the same transient owner, mutually exclusive with a
+rack gesture, and `PluginChain::prepareGraphParameterPreview` publishes prepared
+controls to every existing recipe copy. Transient plans preserve accepted monitor
+baselines. Commit stays in ordinary graph history; cancellation restores the
+accepted definition and retains ownership on queue refusal. No format migration
+or callback-side allocation is introduced. This newer source batch has separate
+[recipe qualification gates](windows-parity-plan-2026-10-09/RECIPE-PREVIEW-BATCH-2026-10-20.md);
+the prior rack results do not qualify it.
+
 ## Editing and API invariants
 
 - Native IDs are stable across insert/reorder; indices are transient views. Whole-collection API writes need read/merge/write.

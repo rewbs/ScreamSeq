@@ -32,6 +32,14 @@ class PluginParametersWindow final : public NativeToolWindow {
   void status(const std::wstring &text){status_=text;set(statusLabel,text);}
   void error(const std::exception &e)override{status(wide(e.what())+(completion_.retained()?L" / Review result before another edit":L""));layout();}
   void requireReady()const{if(pending_||completion_.retained()||needsReload_)throw std::runtime_error("Review or reload the previous parameter result before editing");}
+  std::string previewMethod(const char *operation)const{return std::string(graph_.empty()?"plugin.parameters.preview.":"graph.plugin.preview.")+operation;}
+  Json previewIdentity(const std::string &revision)const{
+    auto p=target();p["expectedRevision"]=revision;p["parameter"]=previewParameter_;p["gesture"]=previewToken_;return p;
+  }
+  bool ownsPreview(const Json &owner)const{
+    if(!owner.at("active").get<bool>()||owner.at("gesture")!=previewToken_||owner.at("parameter")!=previewParameter_)return false;
+    return graph_.empty()?owner.at("plugin")==plugin_:owner.at("graph")==graph_&&owner.at("node")==node_;
+  }
   void cancelPreview(){
     if(previewToken_.empty())return;
     if(pending_)throw std::runtime_error("Wait for the current preview request before cancelling");
@@ -39,17 +47,15 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(current.first!=document_)throw std::runtime_error("Original preview song is unavailable; review before closing");
     pending_=true;
     try{
-      const auto owner=request_("plugin.parameters.preview.get",Json::object());
+      const auto owner=request_(previewMethod("get"),Json::object());
       if(context_()!=current)throw std::runtime_error("Song changed while checking preview ownership / retry Reload");
-      if(owner.at("active").get<bool>()&&owner.at("gesture")==previewToken_&&owner.at("plugin")==plugin_&&owner.at("parameter")==previewParameter_)
-        request_("plugin.parameters.preview.cancel",{{"expectedRevision",current.second},{"plugin",plugin_},{"parameter",previewParameter_},{"gesture",previewToken_}});
+      if(ownsPreview(owner))request_(previewMethod("cancel"),previewIdentity(current.second));
     }
     catch(...){pending_=false;throw;}
     pending_=false;
     previewToken_.clear();
   }
   void previewSlider(int row,double value){
-    if(!graph_.empty())return; // Recipe controls need their own copy publication.
     if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed; slider draft retained. Reload before editing");
     if(previewToken_.empty()){
       previewToken_="slider:"+std::to_string(reinterpret_cast<uintptr_t>(window_))+":"+std::to_string(generation_);
@@ -57,14 +63,15 @@ class PluginParametersWindow final : public NativeToolWindow {
     }
     pending_=true;
     try{
-      const auto result=request_("plugin.parameters.preview.set",{{"expectedRevision",revision_},{"plugin",plugin_},{"parameter",previewParameter_},{"gesture",previewToken_},{"value",value}});
+      auto p=previewIdentity(revision_);p["value"]=value;
+      const auto result=request_(previewMethod("set"),p);
       pending_=false;status(result.at("audible").get<bool>()?L"Auditioning value / release saves once / Escape restores":L"Release saves this value / Escape restores");
     }catch(...){
       // A rejected/uncertain preview must not turn release into an ordinary
       // durable write. Keep input gated while reconciling its transient owner.
       pending_=true;needsReload_=true;const auto failure=std::current_exception();
-      try{const auto observed=request_("plugin.parameters.preview.get",Json::object());
-        if(!observed.at("active").get<bool>()||observed.at("gesture")!=previewToken_||observed.at("plugin")!=plugin_||observed.at("parameter")!=previewParameter_)previewToken_.clear();
+      try{const auto observed=request_(previewMethod("get"),Json::object());
+        if(!ownsPreview(observed))previewToken_.clear();
       }catch(...){} // Unknown preview ownership remains explicit until Reload.
       pending_=false;
       std::rethrow_exception(failure);
@@ -151,7 +158,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(preview){submitted_["gesture"]=previewToken_;submitted_["parameter"]=previewParameter_;submitted_["value"]=values[0].at("value");}
     else submitted_[graph_.empty()?"values":"parameters"]=std::move(values);
     const auto generation=generation_;pending_=true;layout();
-    try{completion_.submit(write_,preview?"plugin.parameters.preview.commit":writeMethod(),submitted_,document_,generation,raw);pending_=false;finishResult();}
+    try{completion_.submit(write_,preview?previewMethod("commit"):writeMethod(),submitted_,document_,generation,raw);pending_=false;finishResult();}
     catch(...){pending_=false;layout();throw;}layout();
   }
   void review(){
@@ -205,7 +212,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(code==TB_LINEUP||code==TB_LINEDOWN){const auto step=f.step>0?f.step:(f.maximum-f.minimum)/100;candidate=std::clamp(f.value+(code==TB_LINEUP?-step:step),f.minimum,f.maximum);}
     if(f.step>0)candidate=std::clamp(f.minimum+std::round((candidate-f.minimum)/f.step)*f.step,f.minimum,f.maximum);
     sliderRow_=row;setting_=true;set(control(row,value),Json(candidate));setting_=false;r.dirty=true;++generation_;
-    if(code==TB_THUMBTRACK||code==TB_THUMBPOSITION){if(graph_.empty())previewSlider(row,candidate);else status(L"Release the slider to save this recipe value / Escape cancels");}
+    if(code==TB_THUMBTRACK||code==TB_THUMBPOSITION){previewSlider(row,candidate);}
     else{sliderRow_=-1;commit();}return true;
   }
   void controlCaptureChanged(HWND child)override{if(sliderRow_>=0&&child==controls_.at(control(sliderRow_,slider)))SetTimer(window_,8,1,nullptr);}

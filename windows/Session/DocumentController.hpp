@@ -119,8 +119,16 @@ class DocumentController {
   uint64_t playbackDocumentGeneration_=0;
   Tracker::ParameterPreviewOwner parameterPreview_;
   HostedProjectPlayback *parameterPreviewHost_=nullptr;
+  Tracker::ParameterPreviewOwner recipePreview_;
+  HostedProjectPlayback *recipePreviewHost_=nullptr;
+  uint64_t recipePreviewGraph_=0,recipePreviewNode_=0;
+  std::vector<Tracker::PluginParameter> recipePreviewCatalog_;
   Json parameterPreviewOperation(const std::string &,const Json &);
+  Json recipeParameterPreviewOperation(const std::string &,const Json &);
   void cancelParameterPreview();
+  void cancelRackParameterPreview();
+  void cancelRecipeParameterPreview();
+  void retireRecipeParameterPreview();
   Project::ProjectState project_;
   std::unique_ptr<RecordingTake> recording_;
   std::string identity_;

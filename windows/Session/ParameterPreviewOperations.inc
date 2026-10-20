@@ -1,6 +1,7 @@
 // Serial worker adapter for the shared transient owner. No opaque plugin state
 // is captured while tracking; only Commit uses the ordinary durable operation.
-void DocumentController::cancelParameterPreview() {
+void DocumentController::cancelParameterPreview() {cancelRackParameterPreview();cancelRecipeParameterPreview();}
+void DocumentController::cancelRackParameterPreview() {
   if(!parameterPreview_.active())return;
   const auto key=parameterPreview_.active()->key;
   const auto accepted=parameterPreview_.cancel(key,[&](const auto &entry){
@@ -45,7 +46,8 @@ Json DocumentController::parameterPreviewOperation(const std::string &method,con
     const Owner::Key key{string("gesture",80),string("plugin",128),p.at("parameter").get<uint32_t>()};
     Owner::validateKey(key);
     if(expected!=revision())throw Api::ApiError(-32001,"Song changed; parameter preview was not updated");
-    if(cancel){if(parameterPreview_.active()&&parameterPreview_.active()->key!=key)throw std::invalid_argument("Cancellation belongs to another preview");cancelParameterPreview();return {{"active",false}};}
+    if(cancel){if(parameterPreview_.active()&&parameterPreview_.active()->key!=key)throw std::invalid_argument("Cancellation belongs to another preview");cancelRackParameterPreview();return {{"active",false}};}
+    if(recipePreview_.active())throw std::invalid_argument("A recipe parameter preview is retained; cancel it first");
     if(!document_->editable())throw std::invalid_argument("This document is read-only");
     const auto &rack=project_.preserved.at("plugins");const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &r){return r.at("instanceID")==key.plugin;});
     if(found==rack.end())throw std::invalid_argument("Plugin instance no longer exists");

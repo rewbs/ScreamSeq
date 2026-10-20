@@ -114,4 +114,45 @@ static void sessionPreview() {
   check([[session snapshot:0][@"nativePlugins"][0][@"instanceID"] isEqual:plugin],"Native preview roundtrip changed stable plugin identity");
   [[NSFileManager defaultManager]removeItemAtPath:path error:nil];[session shutdown];
 }
-int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, preview/native history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}
+static void sessionRecipePreview() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{
+    auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:p error:&error];
+    if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return reply[@"data"];
+  };
+  call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  NSString *graph=call(@"graph.create",@{@"name":@"Native recipe preview"},true)[@"graph"];
+  NSString *node=call(@"graph.node.add",@{@"graph":graph,@"kind":@"plugin",@"slot":@0,@"insertEdge":@0},true)[@"node"];
+  auto gesture=[&](NSString *method,double value){return call(method,@{@"graph":graph,@"node":node,@"parameter":@1,@"gesture":@"native-recipe-preview",@"value":@(value)},true);};
+  auto active=[&]{return [call(@"graph.plugin.preview.get",@{})[@"active"] boolValue];};
+  auto state=[&]{return call(@"graph.get",@{});};
+  auto manual=[&]()->double{for(NSDictionary *p in call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"parameters"])
+    if([p[@"id"] unsignedIntValue]==1)return [p[@"manualValue"] doubleValue];throw std::runtime_error("Missing native recipe gain");};
+  auto tree=[&](NSData *data)->NSDictionary *{check(data!=nil,"Recipe recovery serialization failed");
+    auto root=[NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:&error];
+    check([root isKindOfClass:NSDictionary.class],"Invalid recipe recovery property tree");return root;};
+  NSDictionary *original=state();
+  gesture(@"graph.plugin.preview.set",-18);gesture(@"graph.plugin.preview.commit",-9);
+  check(!active()&&manual()==-9,"Native recipe release lost its final value");
+  NSDictionary *accepted=state();
+  check([session historyUndo:NO error:&error]&&[state() isEqual:original],"Native recipe Undo lost its original state");
+  check([session historyUndo:YES error:&error]&&[state() isEqual:accepted],"Native recipe Redo lost its accepted state");
+  NSString *revision=session.automationRevision;gesture(@"graph.plugin.preview.set",-21);gesture(@"graph.plugin.preview.commit",-9);
+  check([revision isEqual:session.automationRevision]&&!active(),"Native recipe no-op release changed history");
+  gesture(@"graph.plugin.preview.set",-18);
+  check([session addPattern:64 duplicate:NO source:0 error:&error]>=0,"Native recipe interleaving edit failed");
+  (void)[session snapshot:0];check(!active()&&manual()==-9,"Native document refresh retained a stale recipe preview");
+  NSDictionary *baseline=tree([session recoveryData:&error]);revision=session.automationRevision;
+  gesture(@"graph.plugin.preview.set",-24);
+  NSDictionary *recovery=tree([session recoveryData:&error]);
+  check(active()&&[revision isEqual:session.automationRevision]&&
+    [baseline[@"native"] isEqual:recovery[@"native"]]&&[baseline[@"plugins"] isEqual:recovery[@"plugins"]],
+    "Recovery committed/cancelled a recipe preview or serialized its temporary value");
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([session savePath:path error:&error]&&!active()&&manual()==-9,"Native save did not restore the accepted recipe");
+  check([session openPath:path error:&error]&&!active()&&manual()==-9,"Native recipe save/reopen lost its stable target");
+  [[NSFileManager defaultManager]removeItemAtPath:path error:nil];[session shutdown];
+}
+int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();sessionRecipePreview();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, rack/recipe preview history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

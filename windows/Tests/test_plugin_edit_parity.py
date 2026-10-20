@@ -8,6 +8,8 @@ import test_graph_mixer_app as support
 from client import ApiError
 sys.path.insert(0, str(support.ROOT / 'editor/Tests'))
 from parameter_preview_contract import parameter_preview_contract
+from recipe_parameter_contract import recipe_parameter_contract
+from recipe_preview_contract import recipe_preview_contract
 
 
 class PluginEditParityTests(unittest.TestCase):
@@ -17,6 +19,26 @@ class PluginEditParityTests(unittest.TestCase):
     write = support.GraphMixerAppTests.write
     rejected = support.GraphMixerAppTests.rejected
     add_gain = support.GraphMixerAppTests.add_gain
+
+    def test_transient_recipe_preview_contract_and_reopen(self):
+        def expect_error(code, action):
+            with self.assertRaises(ApiError) as error:
+                action()
+            self.assertEqual(error.exception.code, code)
+        path, graph, accepted = recipe_preview_contract(self.client, self.folder, expect_error)
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('graph.get'), accepted)
+        self.assertFalse(self.read('graph.plugin.preview.get')['active'])
+
+    def test_recipe_manual_noop_preserves_exact_bases_and_redo(self):
+        def expect_error(code, action):
+            with self.assertRaises(ApiError) as error:
+                action()
+            self.assertEqual(error.exception.code, code)
+        path, graph, expected = recipe_parameter_contract(self.client, self.folder, expect_error)
+        self.write('document.open', path=str(path), discard=True)
+        actual = next(g for g in self.read('graph.get')['library'] if g['id'] == graph)
+        self.assertEqual(actual, expected)
 
     def ids(self):
         return [p['instanceID'] for p in self.doc()['data']['nativePlugins']]

@@ -1545,6 +1545,15 @@ or Undo/Redo starts a new entry. Dry runs, no-ops and refused publication do not
 advance gesture ownership. Each accepted value is durable and revision-guarded;
 this API is not a transient preview or cancellation protocol.
 
+For transient recipe sliders use `graph.plugin.preview.get/set/commit/cancel`
+as documented in [Transient recipe parameter gestures](../../mac/AUTOMATION.md#transient-recipe-parameter-gestures).
+Both platform adapters expose the same fields and mutually exclusive rack/recipe
+gesture ownership. The retained Windows parameter inspector uses this protocol
+while tracking, the ordinary graph edit at release, and cancellation on Escape,
+Reload or Close. Its ten-parameter pages, captured identity and completion review
+continue to belong to that retained inspector. A failed/unknown preview never
+falls back to an unguarded durable write.
+
 Reusable graph nodes expose **All parameters…** from their Plugin controls page.
 The retained editor shares the rack's pages of up to ten values, sliders, choices,
 typed-value autosave and failure review. It captures the graph/node identity;

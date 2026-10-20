@@ -88,6 +88,9 @@ using PluginParameterQueue = std::array<TimedPluginParameter,65536>;
 struct GraphParameterUpdate { NativePlugin *plugin=nullptr;SignalRuntime *runtime=nullptr;uint64_t node=0;uint32_t parameter=0;double value=0;double *appliedBaseline=nullptr;double initialBaseline=0;GraphPluginEndpoint *endpoint=nullptr;bool resetModulation=false; };
 struct GraphControlPlan {
   uint64_t sourceRevision=0;
+  // A numeric recipe audition changes audible controls but keeps the accepted
+  // manual catalogue intact. Session owners still guard/cancel the gesture.
+  bool transientParameters=false;
   // A fixed-boundary group toggle changes only its wrapper's fade target.
   // Keeping the wrapper alive also makes skipped queue generations safe.
   std::shared_ptr<SongGroupRuntime> songGroups;
@@ -605,6 +608,8 @@ public:
 
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &) noexcept;
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &);
+  std::unique_ptr<GraphControlPlan> prepareGraphParameterPreview(const NativeSong &accepted,
+      uint64_t graph,uint64_t node,uint32_t parameter,double value,std::span<const PluginParameter> catalog);
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &,bool copyHandoff,std::shared_ptr<const HostedSampleBindings> samples={});
   bool acceptsGraphControls(const GraphControlPlan &) const noexcept;
   void commitGraphControls(GraphControlPlan &) noexcept;

@@ -440,6 +440,7 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 #include "MixerIntegrationTests.inc"
 #include "LiveGraphPublicationTests.inc"
 #include "LiveParameterPreviewTests.inc"
+#include "LiveRecipePreviewTests.inc"
 void graphRecipeRenderTests(const std::filesystem::path &directory) {
   {
     bool running=false,audition=false;unsigned stops=0;PlaybackHooks hooks;
@@ -732,6 +733,7 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--publication") {publicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--assets") {assetTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-parameters") {const auto directory=std::filesystem::u8path(argv[2]);liveParameterTests(directory);liveParameterPreviewTests(directory);return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recipe-preview") {liveRecipePreviewTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--trigger-instruments") {triggerInstrumentTests(std::filesystem::u8path(argv[2]));return 0;}
     throw std::runtime_error("Use --fixtures or --publication <existing directory>");
   } catch(const std::exception &e) {std::cerr<<e.what()<<'\n';return 1;}
