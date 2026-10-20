@@ -58,6 +58,13 @@ the recipe/controller/shared targets.
   interpolation/save/reopen and pointer cancellation/release/history/no-op/
   save/reopen/stale document. The latter now explicitly requires release to
   change audio without clicking Apply.
+- Run `test_dense_gesture_bounds_and_atomic_point_limit`. Its old expectation
+  that release leaves 512 staged points has been replaced with the new contract:
+  movement is temporary, release saves the stroke, one Undo restores the sample,
+  and Redo restores the same PCM. A separate numeric batch still accepts exactly
+  4096 points, rejects the next point without changing PCM or history, saves the
+  exact expected values and leaves the remaining sample untouched. This updated
+  test is source only until the pending candidate is exercised.
 - Run existing sample readback and automatic-edit groups to protect retained
   fields, loops/settings and focus. Broaden only on a failure or relevant change.
 - Reuse shared PCM/codec evidence only where inputs are unchanged. Recipe work

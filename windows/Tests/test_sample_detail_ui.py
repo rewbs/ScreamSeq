@@ -197,14 +197,31 @@ class SampleDetailUITests(unittest.TestCase):
 
     def test_dense_gesture_bounds_and_atomic_point_limit(self):
         self.install(1,[0]*6000);self.press(4803);self.view(0,512);self.assertTrue(self.state()['precise']);self.assertEqual(self.state()['waveBins'],512);self.assertEqual(len(self.state()['peaks']),1024)
-        self.press(4814);x,y,w,h=self.state()['canvas'];self.mouse(0x201,x,y+h*.25);self.mouse(0x200,x+w,y+h*.75);self.mouse(0x202,x+w,y+h*.75);self.assertEqual(len(self.state()['points']),512)
+        self.press(4814);x,y,w,h=self.state()['canvas'];before=self.doc()
+        self.mouse(0x201,x,y+h*.25);self.mouse(0x200,x+w,y+h*.75)
+        self.assertEqual(len(self.state()['points']),512);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.pcm(),(0,)*6000)
+        self.mouse(0x202,x+w,y+h*.75);self.idle()
+        drawn=self.pcm();self.assertNotEqual(drawn[:512],(0,)*512)
+        self.assertEqual(drawn[512:],(0,)*5488);self.assertEqual(self.state()['points'],[])
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
+        self.press(4805);self.assertEqual(self.pcm(),drawn)
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
         # Windows constrains the tool to this desktop's maximum track width.
-        # Fill the remaining exact points through the real numeric controls,
+        # Build a separate explicit batch through the real numeric controls,
         # without assuming a 4096-logical-pixel display or relaxing the cap.
+        self.field(4823,.25);before=self.doc()
         window=self.window();frame_control=self.control(4822);stage_control=self.control(4824)
-        for frame in range(512,4096):
+        for frame in range(4096):
             text=ctypes.create_unicode_buffer(str(frame));self.desktop.send(frame_control,0xC,0,ctypes.addressof(text));self.desktop.send(window,0x111,4824,stage_control)
-        self.idle();points=self.state()['points'];self.assertEqual(len(points),4096);self.stage(5000,.5);self.assertEqual(self.state()['points'],points);self.assertIn('4096',self.state()['status']);self.press(4825);self.assertNotEqual(self.pcm()[:4096],(0,)*4096);self.assertEqual(self.pcm()[4096:],(0,)*1904);self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
+        self.idle();points=self.state()['points'];self.assertEqual(len(points),4096)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.pcm(),(0,)*6000)
+        self.stage(5000,.5);self.assertEqual(self.state()['points'],points)
+        self.assertIn('4096',self.state()['status']);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.pcm(),(0,)*6000)
+        self.press(4825);self.assertEqual(self.pcm()[:4096],(8192,)*4096)
+        self.assertEqual(self.pcm()[4096:],(0,)*1904)
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit short silent WASAPI qualification')
     def test_live_waveform_preview_noop_rejection_and_edit_stop(self):
