@@ -1,13 +1,27 @@
 # Rack parameter preview batch — qualification checkpoint
 
-Status: **Windows ARM64 candidate built; targeted qualification partly passed;
-retained-window group timed out; Mac/x64 and visual gates remain open**.
+Status: **Windows ARM64 candidate built; targeted rack qualification passed,
+including the subsequently split retained-window groups; Mac/x64 and visual
+gates remain open**.
 This follows the built `1d6c2a21106411c3885169cfd5689dd369e1ceab`
 plugin-edit candidate and the uncompiled recovery correction `69110f4ed`.
 Those executables do not contain this preview implementation.
 
 The new candidate is `ef24c31a145a8840d8ffcece1011f9ed8ce45c9b`.
 The test-group split described below is subsequent source, not part of that binary.
+
+## Subsequent bounded UI qualification
+
+The context-panel candidate `e79133155` includes the group split and the same rack
+preview implementation. On 20 October UTC, command results passed in 74.07 s,
+parameter preview in 4.81 s and recipe edits in 4.09 s, each within its unchanged
+private-child bound. The assertions were not weakened. Registration/scheduling
+audit passed. This resolves the earlier aggregate timeout for these groups.
+The new context-panel group separately failed a geometry assertion; its failure
+does not invalidate the completed rack cases or count as a sidebar pass.
+See [context checkpoint](CONTEXT-PANEL-2026-10-19.md) for exact build fingerprint,
+all results and the unbuilt fixture correction. No recipe transient-preview
+implementation from commit `62bcbba1f` is present in this executable.
 
 ## Windows execution evidence — 20 October UTC
 

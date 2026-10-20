@@ -48,15 +48,31 @@ void applicationContextPanel() {
     SetFocus(app.controls.at(contextActionFirst+1));app.refreshContextPanel();
     restoreCheck(app.contextPanelEditor=="graph","Moving into contextual actions changed their target editor");
 
+    // A private desktop may cap the fixture's initial physical size. Establish
+    // an exact DIP client before asserting independent region geometry.
+    resizeRestoreClient(app,1440,900);
     app.command(dockPreciseNotesCommand);
     restoreCheck(app.hasWorkspaceDock(),"Region-layout context test did not create a real native dock");
     const auto notes=notesState(app);
-    restoreCheck(app.workspaceRegionGeometry().pattern.x==170,"Visible context origin differs in region layout");
+    restoreCheck(app.workspaceRegionGeometry().mode==ScreamSeq::WorkspaceRegions::Mode::regions&&
+        app.workspaceRegionGeometry().pattern.x==170,"Visible context origin differs in region layout");
     app.toggleContextPanel();
     restoreCheck(app.workspaceRegionGeometry().pattern.x==6&&notesState(app)==notes,
         "Hiding context in region layout lost width or retargeted native notes");
     app.toggleContextPanel();
     restoreCheck(notesState(app)==notes,"Restoring context changed retained native note controls");
+    SetFocus(app.preciseNoteWindow->window());resizeRestoreClient(app,1000,720);
+    const auto compact=app.workspaceRegionGeometry();
+    restoreCheck(compact.mode==ScreamSeq::WorkspaceRegions::Mode::tabs&&compact.tabs.x==170&&
+        compact.hosts[2].visible&&compact.hosts[2].selected=="preciseNotes"&&!compact.pattern.h,
+        "Compact context fixture did not retain the focused native notes tab");
+    app.toggleContextPanel();
+    const auto compactHidden=app.workspaceRegionGeometry();
+    restoreCheck(compactHidden.mode==ScreamSeq::WorkspaceRegions::Mode::tabs&&compactHidden.tabs.x==6&&
+        compactHidden.tabs.w==compact.tabs.w+164&&compactHidden.hosts[2].visible&&
+        compactHidden.hosts[2].selected=="preciseNotes"&&notesState(app)==notes,
+        "Hidden context did not reclaim compact tab width or preserve native notes");
+    app.toggleContextPanel();resizeRestoreClient(app,1440,900);
 
     // A hidden or pinned native editor keeps its own fields, target and focus.
     app.command(patternCommand);app.openPatternTools();

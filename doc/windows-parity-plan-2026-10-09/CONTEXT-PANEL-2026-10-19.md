@@ -56,10 +56,30 @@ Menu, command and shortcut integration remain in their existing modules.
 
 ## Bounded qualification
 
-This checkpoint records source work, **not a successful build or visual review**.
-The preceding build completed at 02:47:43 UTC on 20 October. The next build must
-start no earlier than **03:48 UTC**. This change will share that build with the
-already committed split of the oversized parameter/recipe UI test group.
+**20 October UTC: Windows ARM64 build passed; seven of eight targeted test
+groups passed. The context-panel group failed and remains unqualified.**
+Source `e79133155d62c5eff0ceaf15beba6f987b96256f` built from 03:48:08 through
+03:49:50 UTC, after the previous hourly gate, with two workers. App and workspace
+test targets share the `ContextPanel-Release` output directory. App SHA-256 is
+`4c01af17b6e9f0fc4112e9f61442b90868b988fb6baf17d1dc8a336609367dc0`.
+Build receipts, exact manifests, native XML/log and schedule audit are retained in
+`bin/context-panel-20261019/`. No next build before **04:50 UTC**.
+
+Restore (48.79 s), advanced restore (33.94 s), command results (74.07 s), parameter
+preview (4.81 s), recipe edits (4.09 s), menu bar (0.88 s) and pattern display
+(3.55 s) passed. Total test time was 171.12 s. Registration audit found 198
+registered tests, none unscheduled or repeated.
+
+The context test failed at `Visible context origin differs in region layout`
+after its visibility, Tab order, saved/legacy/malformed layout, capture refusal,
+sample focus and graph context assertions completed. Source inspection identified
+an invalid fixture assumption: its initial physical window may be monitor-capped,
+and docking/focusing native notes can select compact tabs, where the hidden
+tracker rectangle is intentionally empty. The source correction uses the existing
+exact-DIP resize helper before asserting wide region geometry, explicitly checks
+the region mode, and adds compact native-tab width/focus checks. This correction
+has **not been rebuilt or executed**; the original failure is retained. Later
+retained-draft assertions in that group did not execute.
 
 Build only ScreamSeq and workspace-restore-tests for this Windows presentation
 batch. Run the new private-desktop `workspace-context-panel-tests`, existing
@@ -73,7 +93,7 @@ Add reciprocal context checks at resized/DPI layouts before claiming ergonomics.
 Broaden if focus or layout tests expose a shared dispatch regression. No shared
 musical, project or Mac sources change in this batch, so the earlier exact-source
 audio/codec evidence remains applicable to those unchanged components. This
-does not qualify the separate, uncommitted recipe-preview work.
+does not qualify the separate recipe-preview commit `62bcbba1f`.
 
 Computer use remains stopped after the user's Escape. Private-desktop handler
 checks cannot establish real visual quality, readability, pointer ergonomics or
