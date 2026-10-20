@@ -1,0 +1,1015 @@
+{
+  "date": "2026-10-19",
+  "productBuildCommit": "e8e97cdb0e76a82de43c3b2839906c44d55670ff",
+  "validationSourceCommit": "08e14a6069b0353b6a6bdde9837e203a2ead776d",
+  "appSHA256": "f585a5d565f8c80114739621425711708ee96e4c0da4b755444d8a1089ef3d95",
+  "scope": "Combined evidence: one full 192-registration run, scoped corrections and reruns; three bounded groups replace one 90-second workspace group, leaving 194 current registrations. Not a fresh full-suite run after every correction. Mac and physical devices not executed.",
+  "registeredCount": 194,
+  "outcomes": {
+    "ApiTests": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.827019"
+    },
+    "SessionCacheTests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.59318"
+    },
+    "arrangement-matrix-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.15481"
+    },
+    "arrangement-tools": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.389718"
+    },
+    "arrangement-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.57554"
+    },
+    "audio-port-trim": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0680528"
+    },
+    "automation-tools": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.143638"
+    },
+    "command-palette-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.26822"
+    },
+    "curve-formulas": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.105966"
+    },
+    "document-controller-annotations": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.916577"
+    },
+    "document-controller-arrangement": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.603546"
+    },
+    "document-controller-assets": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.185466"
+    },
+    "document-controller-cache": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.145272"
+    },
+    "document-controller-departure": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.47678"
+    },
+    "document-controller-fixtures": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.0633044"
+    },
+    "document-controller-graph-pattern-view": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.13749"
+    },
+    "document-controller-graph-recipes": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "1.60417"
+    },
+    "document-controller-large-fixture": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.203962"
+    },
+    "document-controller-live-graph-publication": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.910022"
+    },
+    "document-controller-live-native": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "2.03439"
+    },
+    "document-controller-live-parameters": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.381984"
+    },
+    "document-controller-live-rack-publication": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "1.26736"
+    },
+    "document-controller-live-recorded-publication": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.465743"
+    },
+    "document-controller-matrix": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.711129"
+    },
+    "document-controller-mixer-integration": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "1.8334"
+    },
+    "document-controller-parameter-activity": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.584341"
+    },
+    "document-controller-pattern-clipboard": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.403277"
+    },
+    "document-controller-pattern-performance": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "1.19337"
+    },
+    "document-controller-pattern-transform": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.138471"
+    },
+    "document-controller-publication": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.788069"
+    },
+    "document-controller-recording": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.526007"
+    },
+    "document-controller-recovery": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.385421"
+    },
+    "document-controller-sampling": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.223605"
+    },
+    "document-controller-scratch": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.11088"
+    },
+    "document-controller-timeline": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.195722"
+    },
+    "document-controller-tracks": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.602965"
+    },
+    "document-controller-trigger-instruments": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.435289"
+    },
+    "document-controller-unified-plugin-history": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "1.26866"
+    },
+    "document-departure": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.125692"
+    },
+    "document-history-allocation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.910235"
+    },
+    "effect-auxiliary": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.096194"
+    },
+    "envelope-bankHistory": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0701569"
+    },
+    "envelope-bankPersistence": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0789223"
+    },
+    "envelope-capacityBeforePlayback": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0787866"
+    },
+    "envelope-catalogueCopies": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0817416"
+    },
+    "envelope-catalogueValidation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.202837"
+    },
+    "envelope-catalogueWriters": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.360154"
+    },
+    "envelope-instrumentBaking": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0538558"
+    },
+    "envelope-instrumentMetadataBudget": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.128654"
+    },
+    "envelope-jsonDefault": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0680118"
+    },
+    "envelope-jsonGuards": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0885885"
+    },
+    "envelope-jsonImport": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0602028"
+    },
+    "envelope-jsonLimits": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.616274"
+    },
+    "envelope-jsonOutputBudget": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.34177"
+    },
+    "envelope-jsonPublish": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0686354"
+    },
+    "envelope-jsonRead": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0869934"
+    },
+    "envelope-jsonResponseBudget": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.286577"
+    },
+    "envelope-jsonStrict": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.215145"
+    },
+    "envelope-linkedUses": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.055489"
+    },
+    "envelope-parameterHooks": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0456396"
+    },
+    "envelope-plistWriters": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.396799"
+    },
+    "envelope-refitAndIndependentCopies": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0481111"
+    },
+    "envelope-songGraphTargets": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.040032"
+    },
+    "envelope-strictShapesAndTargets": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0965617"
+    },
+    "filters": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.262066"
+    },
+    "graph-curve-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.56039"
+    },
+    "graph-document-assignmentsRoutesLayoutCommands": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.066867"
+    },
+    "graph-document-audioFanConnections": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0513697"
+    },
+    "graph-document-automationAndBanks": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0700358"
+    },
+    "graph-document-automationOrderAndRedo": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0478501"
+    },
+    "graph-document-cableInsertionAndDetachment": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0592904"
+    },
+    "graph-document-callbackOrderingAndUnrelatedData": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0400336"
+    },
+    "graph-document-createReadHistory": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0394608"
+    },
+    "graph-document-dryRunsAndRedo": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0450198"
+    },
+    "graph-document-graphEditingOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0554193"
+    },
+    "graph-document-graphPresentation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0477039"
+    },
+    "graph-document-graphProvenance": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0452838"
+    },
+    "graph-document-groupBypassOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.061851"
+    },
+    "graph-document-groupDryMapDetachment": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0455018"
+    },
+    "graph-document-hostHooks": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "0.132921"
+    },
+    "graph-document-nodesAndCloning": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0664262"
+    },
+    "graph-document-noteRoutingOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0511593"
+    },
+    "graph-document-portTrimOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.105981"
+    },
+    "graph-document-processingGroups": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.052724"
+    },
+    "graph-document-songAutomationAndBanks": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0500489"
+    },
+    "graph-document-songCableCuts": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0643474"
+    },
+    "graph-document-songModulationSources": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0422303"
+    },
+    "graph-document-songProcessingGroups": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.045288"
+    },
+    "graph-document-songSourceGroupOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0427453"
+    },
+    "graph-document-stableImplicitMaster": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0524023"
+    },
+    "graph-document-stageConnectionOperations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0527584"
+    },
+    "graph-document-strictValidation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.273787"
+    },
+    "graph-signal-observation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.12602"
+    },
+    "graph-workflow-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.52355"
+    },
+    "hosted-project-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.40814"
+    },
+    "instrument-envelopes": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.186551"
+    },
+    "instrument-short-dock-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "5.3799"
+    },
+    "live-parameter-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.318397"
+    },
+    "midi-recording-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.24831"
+    },
+    "mixer-control-edit": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0475637"
+    },
+    "mixer-document-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.111581"
+    },
+    "mixer-graph": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.109322"
+    },
+    "mixer-plugin-routing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.113408"
+    },
+    "mixer-runtime": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.31137"
+    },
+    "mixer-strips-window-tests": {
+      "passed": true,
+      "receipt": "final-native.xml",
+      "seconds": "20.8423"
+    },
+    "native-audio-bus": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "14.1979"
+    },
+    "native-control-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "5.72075"
+    },
+    "native-delay": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.399189"
+    },
+    "native-metadata-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.70236"
+    },
+    "native-pattern-commands": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0688495"
+    },
+    "native-pattern-runtime": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.59898"
+    },
+    "native-reverse-loops": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "6.13545"
+    },
+    "native-timing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.63764"
+    },
+    "native-tool-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "8.46961"
+    },
+    "note-routing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.114791"
+    },
+    "note-track-edit": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.208328"
+    },
+    "order-edit-admission": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.141145"
+    },
+    "oversampling": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.193749"
+    },
+    "parameter-activity-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.461076"
+    },
+    "parameter-automation-dock-tests": {
+      "passed": true,
+      "receipt": "final-native.xml",
+      "seconds": "2.68728"
+    },
+    "parameter-edit": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0929703"
+    },
+    "parameter-preview": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.15383"
+    },
+    "parameter-provenance": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0541"
+    },
+    "pattern-commands": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.120117"
+    },
+    "pattern-display": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.119497"
+    },
+    "pattern-fields": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.111614"
+    },
+    "pattern-timeline": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.15631"
+    },
+    "pattern-tools": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.38429"
+    },
+    "playback-display": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0864912"
+    },
+    "playback-regions": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.454161"
+    },
+    "plugin-audio-layout": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0408344"
+    },
+    "plugin-note-sources": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.121681"
+    },
+    "precise-note-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "13.7272"
+    },
+    "project-preservation-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.085618"
+    },
+    "recorded-automation-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0839497"
+    },
+    "recording-device-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.134591"
+    },
+    "recovery-store-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.510485"
+    },
+    "recovery-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.593618"
+    },
+    "routing-prototype": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.355626"
+    },
+    "sample-archive": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.286611"
+    },
+    "sample-clipboard": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.262425"
+    },
+    "sample-copy": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.467378"
+    },
+    "sample-crossfade": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.420368"
+    },
+    "sample-drawing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.170221"
+    },
+    "sample-preview-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.631624"
+    },
+    "sample-processing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.407531"
+    },
+    "sample-recording": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.109964"
+    },
+    "sample-snap": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.177303"
+    },
+    "sample-workflow-draft-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.106455"
+    },
+    "sampling": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.116202"
+    },
+    "scratch-editor-state": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.109224"
+    },
+    "scratch-gesture-api-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.96481"
+    },
+    "scratch-runtime": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.98322"
+    },
+    "sidechains": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.151287"
+    },
+    "signal-graph": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.138076"
+    },
+    "signal-group-bypass": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.111184"
+    },
+    "signal-group-runtime": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.118829"
+    },
+    "song-group-runtime": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.123329"
+    },
+    "song-modulation": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.0828415"
+    },
+    "song-timing": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.847553"
+    },
+    "song-timing-window-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.11637"
+    },
+    "track-operations": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.164148"
+    },
+    "tracker-core": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.51698"
+    },
+    "unified-effects": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.42014"
+    },
+    "windows-save-scratch": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.104898"
+    },
+    "windows-save-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.111289"
+    },
+    "workspace-asset-outcome-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "6.50718"
+    },
+    "workspace-bank-result-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "27.3358"
+    },
+    "workspace-command-result-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "78.6083"
+    },
+    "workspace-departure-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "29.6079"
+    },
+    "workspace-draft-census-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "8.41473"
+    },
+    "workspace-effect-picker-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.18984"
+    },
+    "workspace-keyboard-settings-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.909502"
+    },
+    "workspace-layout-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.590594"
+    },
+    "workspace-menu-bar-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.867448"
+    },
+    "workspace-mixer-hosted-tests": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "4.87438"
+    },
+    "workspace-note-track-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "9.02624"
+    },
+    "workspace-parity-fixture-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "2.66648"
+    },
+    "workspace-pattern-accessibility-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.00975"
+    },
+    "workspace-pattern-display-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "3.77628"
+    },
+    "workspace-pattern-selection-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "4.00269"
+    },
+    "workspace-pattern-tools-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "9.8342"
+    },
+    "workspace-plugin-search-tests": {
+      "passed": true,
+      "receipt": "targeted-recheck.xml",
+      "seconds": "4.89764"
+    },
+    "workspace-receipt-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "45.1401"
+    },
+    "workspace-regions-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.142008"
+    },
+    "workspace-restore-advanced-tests": {
+      "passed": true,
+      "receipt": "final-native.xml",
+      "seconds": "35.1225"
+    },
+    "workspace-restore-tests": {
+      "passed": true,
+      "receipt": "final-native.xml",
+      "seconds": "48.4708"
+    },
+    "workspace-sample-browser-input-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.820214"
+    },
+    "workspace-sample-readback-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "80.2195"
+    },
+    "workspace-sample-result-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "11.6554"
+    },
+    "workspace-shortcut-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "0.92306"
+    },
+    "workspace-song-properties-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "3.95327"
+    },
+    "workspace-source-navigation-tests": {
+      "passed": true,
+      "receipt": "final-native.xml",
+      "seconds": "4.56961"
+    },
+    "workspace-transport-control-tests": {
+      "passed": true,
+      "receipt": "ctest.xml",
+      "seconds": "1.30766"
+    }
+  },
+  "evidenceDirectory": "bin/main-integration-20261019 (qualification worktree; ignored)",
+  "evidenceSHA256": {
+    "build.json": "ef625f87c4ffef6bb24ee293cf32bbfbbf652d72da26bd0f64512fc7dfd9fdcc",
+    "build.log": "d5abdcb5fad519fc14089aadb7b895021e3c65f1b5825222f66e2ac3adda90ba",
+    "final-targets.json": "902d0332f8eabe94f13f2203be7a10d4320d8b61c42a610d2219f05a3c241caf",
+    "final-targets.log": "7d6a47dd0fca841a5e8d8dbee81b69648362759b8f2ab448cdf15219a454eb2b",
+    "integration-repair-build.json": "a67bd1b3d5bdb8c07c349a633471d9403cd52177804a49e3a7db2b6f6b6d8022",
+    "integration-repair-build.log": "e1f79ba3191b316e5dbddc86ad4d95fae3b27921f6674a0baaf9f0edec83591d",
+    "final-fixture-build.json": "1c6ca7a0062e9e04eeeeffc75bb946b93e2d97b51600410e9d53b5046be7d676",
+    "final-fixture-build.log": "ce78f5d17a5e3679255399c4cf58f85631c0f33e11798a9244d0f9482ba478b0",
+    "ctest.xml": "479ba1877ea5e090242aa6052fa4bc2dc4ee53c394d2bf28c2185859b3b85cce",
+    "ctest.log": "d15849e0854cf4a36b88abff99cf3580c44293769fef628dafdf6c7de9684ebf",
+    "targeted-recheck.xml": "0d15e8f3bd926c00671a5d022e7fe290f9894cada76865d05ffc9c62d327c5b0",
+    "targeted-recheck.log": "7a0e1da80d6fd81f5870a1bc2bb6484d7a7f97f55c1cd4884562b96aa12428d9",
+    "restore-isolated.log": "5d2ac59b26584348f6fcbd441f225e540004a1c6fd303e32bd37190d530ad4ff",
+    "final-native.xml": "87bf07e6df7f7060d8745591e992fc7ed4e4930bfebb3ebbe22c3742487cc25f",
+    "final-native.log": "d4ba76ada39906403d8311dffe56bb224b744f2ed0f8a9088d676d3fe09f2b0c",
+    "app-keyboard-menu.log": "679375bacde01e7b6c3ca14205fe26f06190f3636c3e747f632504f83e8c183b",
+    "app-keyboard-menu-recheck.log": "1d33e069511315ede8a60610e818194f549d3e24e6a4ecb6fafa66344c6c2e55",
+    "app-cold-parameter.log": "966c67fb62e4bd8924567a8907069191960756c2dfcd1aa86bb8a941b65a7d02",
+    "conformance-tools.log": "7378dfb029faf768b090b1546472bd4511f499b0ffb140f95b077179deec2465",
+    "project-framing.log": "7aef42d258bb41c36f25d28f28a159de70e06535b8318c99de62a69f8be95480",
+    "api-client-current-build.log": "d18e44dc81cc2e74afdc966bab7b7b7a77e5ebbc1b6b39620816bdc24effa968",
+    "settled-schedule.json": "6dac3ce6b15badbabd049e781a8c9210c1fd67ed234f2289607809210d993a2b"
+  },
+  "python": {
+    "passed": 57,
+    "skipped": 2,
+    "notes": "22 conformance helpers, 17 project helpers + 1 existing skip, 4 API-client tests, 13 native shortcut/menu tests + 1 live-audio skip, 1 native cold-state API test. Two shortcut cases rerun after fixture-only corrections."
+  },
+  "scheduling": {
+    "registered": 194,
+    "unscheduled": 0,
+    "repeated": 0
+  }
+}
