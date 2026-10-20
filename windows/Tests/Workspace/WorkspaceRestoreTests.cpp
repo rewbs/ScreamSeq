@@ -16,6 +16,13 @@ constexpr UINT_PTR restoreInputDeadline=0xBF21;
 void restoreCheck(bool condition,const char *message) {
     if(!condition)throw std::runtime_error(message);
 }
+template<class Action>void timedRestoreCase(const char *name,Action action) {
+    const auto start=std::chrono::steady_clock::now();
+    std::cout<<"BEGIN "<<name<<'\n';
+    action();
+    const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count();
+    std::cout<<"PASS "<<name<<" ("<<elapsed<<" ms)\n";
+}
 std::wstring restoreText(HWND control) {
     std::wstring text(size_t(GetWindowTextLengthW(control))+1,0);
     GetWindowTextW(control,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));return text;
@@ -1184,7 +1191,23 @@ int wmain(int argc,wchar_t **argv) {
                     applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
-                    applicationAutomaticEdits();applicationGraphParameterInspector();applicationRecipeAutomaticEdits();applicationRecipeParameterInspector();applicationMixingGraphUsability();applicationNativeCommandRecovery();applicationMixerInstrumentRouting();applicationSongRoutingPorts();applicationSongRoutingUnknownResult();applicationSongRoutingCatalogRefusal();std::cout<<"PASS Main command recovery: sample, MIDI, saved file, mixer destination, routing ports and recovery cleanup without replay\n";return;
+                    timedRestoreCase("automatic field edits",applicationAutomaticEdits);
+                    timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
+                    timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
+                    timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);
+                    timedRestoreCase("song routing ports",applicationSongRoutingPorts);
+                    timedRestoreCase("song routing unknown result",applicationSongRoutingUnknownResult);
+                    timedRestoreCase("song routing catalogue refusal",applicationSongRoutingCatalogRefusal);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
+                    timedRestoreCase("retained rack parameters and preview lifecycle",applicationGraphParameterInspector);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"recipe-edits") {
+                    timedRestoreCase("automatic recipe edits",applicationRecipeAutomaticEdits);
+                    timedRestoreCase("retained recipe parameter inspector",applicationRecipeParameterInspector);
+                    return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
                     applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;

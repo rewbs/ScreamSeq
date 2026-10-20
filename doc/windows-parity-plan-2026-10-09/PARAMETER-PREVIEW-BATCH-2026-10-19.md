@@ -1,9 +1,64 @@
-# Rack parameter preview batch — source checkpoint
+# Rack parameter preview batch — qualification checkpoint
 
-Status: **implementation in progress; native compilation and execution pending**.
+Status: **Windows ARM64 candidate built; targeted qualification partly passed;
+retained-window group timed out; Mac/x64 and visual gates remain open**.
 This follows the built `1d6c2a21106411c3885169cfd5689dd369e1ceab`
 plugin-edit candidate and the uncompiled recovery correction `69110f4ed`.
 Those executables do not contain this preview implementation.
+
+The new candidate is `ef24c31a145a8840d8ffcece1011f9ed8ce45c9b`.
+The test-group split described below is subsequent source, not part of that binary.
+
+## Windows execution evidence — 20 October UTC
+
+One combined two-worker build ran from **02:45:10 to 02:47:43 UTC** and passed.
+It built the app, workspace/controller tests, rack-move and parameter-preview
+targets together. The prior candidate remains intact. No further configure/build
+before **03:48 UTC** (19 October, 20:48 Pacific), including after a failure.
+
+- Executable: qualification checkout
+  `bin/windows-parity-p1/ParameterPreview-Release/ScreamSeq.exe`.
+- Source: `ef24c31a145a8840d8ffcece1011f9ed8ce45c9b`.
+- Executable SHA-256:
+  `3049d1c81c777099754ad9f218e59168579432ef1d5e84cf9e47e81b71cf1ca3`.
+- Build receipt SHA-256:
+  `4ed48976f76f2d9fb6535a4813814b161a3ca48d9aeca9e32520723a99253681`.
+- Evidence root: `bin/parameter-preview-parity-20261019/`; build receipt/log,
+  native JUnit/log, application log, schedule inventory and conformance report
+  retain separate outcomes.
+
+**Observed results:** eight of nine native CTests passed, including shared PCM and
+preview ownership, live controller preview, rack/graph publication, recipe edits
+and unified plugin history. `workspace-command-result-tests` exceeded its private
+child's unchanged 90-second limit. It is a failed group, not a native UI pass.
+Its log reached the recipe inspector's 1440×800 setup, which occurs after the new
+rack inspector checks and automatic recipe checks return. This establishes that
+those earlier assertions completed, but does not qualify the unfinished group.
+The previous candidate's group took 86.26 seconds before the new cases were added.
+An aggregate duration overrun is the leading explanation, not yet a verified fix.
+
+The application run executed 16 cases: **14 passed, two skipped** because native
+provider fixtures/installed ARM64 effects were absent. These include the actual
+PID-pipe transient preview contract, exact request replay, history, accepted-state
+save/reopen, and the previously failing invalid-cycle rejection/Reload case.
+
+F01–F05 passed exact typed open/save/reopen comparisons. API and codec vectors
+matched their recorded baselines; codec safety checks passed. Input corpus and
+executable hashes stayed unchanged. Both reports still set `parityComplete=false`:
+known platform differences, edited reciprocal exchange and native provider audio
+are not waived by these passes. Test registration/scheduling audit also passed
+for this built configuration.
+
+**Next source change, not yet built:** split the oversized group into
+`workspace-command-result-tests`, `workspace-parameter-preview-tests` and
+`workspace-recipe-edit-tests`, all using the same executable, private desktop,
+90-second child bound and existing CI native-UI selection. Every former case
+appears exactly once; assertions are unchanged. Per-case BEGIN/PASS elapsed-time
+lines distinguish a slow group from a stuck case. At the next hourly checkpoint,
+reconfigure and rebuild only the changed workspace test target, then run these
+three groups and regenerate registration/scheduling evidence. Reuse the successful
+app/PCM/controller/conformance results while their relevant inputs are unchanged;
+do not rebuild the app for this test-only split.
 
 ## User-visible behavior and boundary
 
@@ -51,7 +106,8 @@ unresolved API/codec differences and assertions remain unchanged.
    inactive and active preview, invalid inputs and competing owners, one-step
    Undo/Redo, no-op release, full queue set/cancel/commit refusal, intervening edit,
    host generation retirement, stopped cancellation, and native save/reopen.
-3. `workspace-command-result-tests`: actual retained inspector handlers establish
+3. `workspace-parameter-preview-tests` (split from `workspace-command-result-tests`
+   after its aggregate timeout): actual retained inspector handlers establish
    preview ownership while tracking, clear it on release/Escape, preserve the
    captured plugin across graph selection, and retain existing keyboard, paging,
    stale draft and completion-loss checks. The prior `69110f4ed` graph-update
@@ -67,6 +123,8 @@ unresolved API/codec differences and assertions remain unchanged.
    read before committing, and a deferred Escape takes precedence over release.
    Native cases pump those three event sequences during the preview request and
    require one commit/Undo or an unchanged revision on cancellation.
+   Recipe inspector and automatic recipe assertions remain in the separate
+   `workspace-recipe-edit-tests`; other command/recovery cases retain their group.
 4. `test_plugin_edit_parity`: new shared `editor/Tests/parameter_preview_contract.py`
    runs over a disposable Windows PID pipe and checks silent ownership, type/key
    validation, history, stale release and exact accepted save trees. Windows adds
@@ -85,11 +143,12 @@ unresolved API/codec differences and assertions remain unchanged.
    match source expectation; preservation assertions are unchanged. Mac and x64
    builds and reciprocal edited fixture saves remain integration gates.
 
-Compile the app, `workspace-restore-tests`, `document-controller-tests`,
+The initial candidate compiled the app, `workspace-restore-tests`, `document-controller-tests`,
 `parameter-preview-tests` and `rack-move-tests` together with two workers, reusing
-the qualification cache and a new runtime output directory. No configure or build
-before **2026-10-20 02:45 UTC**: the preceding build ended at 01:44:52 UTC. A build
-failure does not waive the hourly limit. Start broader suites only for failures,
+the qualification cache and a new runtime output directory. It respected the
+02:45 UTC gate following the preceding build's 01:44:52 UTC finish. The next gate
+is **03:48 UTC**. A build failure does not waive the hourly limit.
+Start broader suites only for failures,
 changed shared behavior, or the final integration gate.
 
 ## Remaining qualification / risks
@@ -101,8 +160,9 @@ changed shared behavior, or the final integration gate.
   the complete bundled schema and rejects unknown keys, boolean parameter IDs and
   empty gestures. Receipt: `bin/parameter-preview-parity-20261019/schema-checks.json`.
   These checks neither execute the new fixtures nor establish native behavior.
-- No native execution or audible result is claimed for this source checkpoint.
-  Strict syntax/schema checks establish only fixture/schema consistency.
+- Native execution is bounded to the exact ARM64 candidate and results above.
+  Shared PCM tests establish rendered audio behavior; no physical speaker or
+  hands-on slider audition result is claimed. The test split remains uncompiled.
 - Review completion failures after durable commit separately from precommit
   refusal. A returned or committed operation must not be automatically replayed.
 - Verify native vendor editor edits, transport restart and unavailable providers

@@ -169,6 +169,8 @@ if(BUILD_TESTING)
     set_tests_properties(workspace-asset-outcome-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=asset-outcomes" TIMEOUT 120)
     add_test(NAME workspace-command-result-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-parameter-preview-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-recipe-edit-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-note-track-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-pattern-tools-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-effect-picker-tests COMMAND workspace-restore-tests)
@@ -207,6 +209,10 @@ if(BUILD_TESTING)
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=note-tracks" TIMEOUT 120)
     set_tests_properties(workspace-command-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=command-results" TIMEOUT 120)
+    set_tests_properties(workspace-parameter-preview-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;plugins"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=parameter-preview" TIMEOUT 120)
+    set_tests_properties(workspace-recipe-edit-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;plugins"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=recipe-edits" TIMEOUT 120)
     add_test(NAME workspace-bank-result-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-bank-result-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;drafts;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=bank-results" TIMEOUT 120)
