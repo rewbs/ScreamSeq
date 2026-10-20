@@ -56,6 +56,23 @@ remained live. Keep the prepared correction and tooling changes local until
 the coordinated Mac gate, **08:21:09 UTC**, and incorporate any further confirmed
 x64 failures into that batch.
 
+At **07:28:50 UTC**, Windows x64 job `118498660665` had completed its build and
+was running portable/worker tests. Its runtime gate is not yet complete. Retain
+the final log's exact build-completion time before scheduling another Windows
+build; **08:28:51 UTC** is a conservative earliest coordinated boundary from
+this observation.
+
+Independent module-export implementation has started in the existing
+`C:/Users/P14/.codex/worktrees/windows-parity-workspace/ScreamSeq` checkout,
+temporary branch `codex/module-export-followup`, commit `b7b87e5ff`.
+Its first source change returns the exact shared validated module bytes and
+reuses that preparation in existing save/validation paths. It is unbuilt.
+The feature branch's export-follow-up document records unfinished endpoint/UI,
+metadata policy, Mac protection and standalone-test gates. Neither the PR head
+nor the qualification checkout includes this feature work. Continue it and
+reconcile back into the corrected integration branch before its own gate;
+do not leave a long-lived platform branch.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:
