@@ -298,6 +298,11 @@ Every mutation requires the opaque `expectedRevision` returned by a previous rea
 
 Recent small mutation replies are deduplicated by request ID and exact content. Reusing an ID with different content is rejected. The cache retains at most 64 replies with an 8 MiB conservative memory budget; large replies are not cached. Always retain the original revision when retrying: even after cache eviction it prevents reapplying a successful mutation. On connection loss or timeout the outcome can be unknown; reread the document rather than automatically retrying with a fresh revision. The supplied client retries busy responses only.
 
+The retained replies include terminal validation and stale-request errors.
+Correcting a rejected submission requires a new request ID; retrying its
+unchanged ID/content returns the original error while retained. Reads remain
+fresh, but must not reuse an ID belonging to a retained mutation reply.
+
 Integer parameters accept JSON numbers with an integral value: `1`, `1.0` and
 `1e0` select the same coordinate or numeric parameter ID. Booleans, strings,
 null, fractional values and values outside the field's range are rejected before

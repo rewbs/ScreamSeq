@@ -875,7 +875,9 @@ revision as current. `committed` means an effect occurred but completion failed;
 
 The current worker classifies known committed publication failures. The adapter
 classifies completion failures after a returned host write, including invalid
-UTF-8 or a result exceeding the wire bound. The native application preserves a
+UTF-8 or a result exceeding the wire bound. An unclassified non-busy exception
+after entering a host write is also `unknown`; the adapter cannot infer rejection
+or advertise its pre-write revision as current. The native application preserves a
 classified worker exception through best-effort view repair. This is not yet
 exhaustive classification of every host side effect. Absence of outcome data,
 an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
@@ -895,16 +897,18 @@ response JSON nodes, string capacities, ID copies, containers and allocator
 overhead cost additional memory. Temporary snapshots, serialization buffers and
 in-flight responses are outside this retention accounting.
 
-Successful write-method results enter the cache, including successful no-ops
-and `dryRun:true` previews. Classified `committed` and `unknown` write errors
-also enter it. Proven `notCommitted`/`noChange`, unclassified validation/host
-errors and all reads remain uncached. A retained request's ID, method and
+Terminal write-method replies enter the cache, including successful no-ops,
+`dryRun:true` previews, validation/stale errors and classified outcomes. A busy
+`-32002` remains retryable unless the write has a `committed` or `unknown`
+outcome; those outcomes must be reconciled even when the code says busy.
+Reads remain fresh and uncached. A retained request's ID, method and
 parameters must match its canonical parsed JSON exactly; key order/whitespace
 are irrelevant, but an integer changed
 to a floating-point parameter is different. An exact retry returns the original
 complete response without invoking the host or rechecking now-stale tokens.
-Reusing that ID for a different write returns `-32600` and preserves the original
-entry. Applying a dry-run proposal requires a new ID and current revision.
+Reusing that ID for different content, including a read or an unknown method,
+returns `-32600` and preserves the original entry. Correcting a rejected
+submission or applying a dry-run proposal requires a new ID and current revision.
 
 Insertions evict the oldest entries until both limits hold; a replay
 does not refresh an entry's age. An entry whose charge alone exceeds 8 MiB is

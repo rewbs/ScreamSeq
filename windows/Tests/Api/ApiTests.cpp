@@ -28,8 +28,9 @@ std::string pipeExchange(const std::wstring &name, const std::string &input) {
 using nlohmann::json;
 using namespace ScreamSeq::Api;
 void check(bool ok, const char *what) { if(!ok) throw std::runtime_error(what); }
-json request(std::string method, json params = json::object(), std::string id = "test") {
-  return {{"jsonrpc","2.0"},{"id",id},{"method",method},{"params",params}};
+json request(std::string method, json params = json::object(), std::optional<std::string> id = {}) {
+  static std::atomic<unsigned> serial{0};if(!id)id="test-"+std::to_string(++serial);
+  return {{"jsonrpc","2.0"},{"id",*id},{"method",method},{"params",params}};
 }
 struct TestHost : SessionHost {
   SessionSnapshot state;
@@ -86,7 +87,7 @@ void sessionTests() {
   check(pattern["result"]["data"]["cells"].size()==2 && pattern["result"]["data"]["cells"][1]["note"]==49,"pattern rectangle matches snapshot cells");
   for(const char *literal:{"0","0.0","0e0","-0.0"}) {
     auto params=json{{"pattern",json::parse(literal)},{"startRow",1.0},{"rowCount",1.0}};
-    check(api.handle(request("pattern.get",params))==pattern,"Integral JSON representations changed pattern selection");
+    check(api.handle(request("pattern.get",params))["result"]==pattern["result"],"Integral JSON representations changed pattern selection");
   }
   for(const auto &value:{json(true),json(false),json(.5),json(-1),json("0"),json(nullptr),
       json(UINT64_MAX),json(0x1p64),json(std::numeric_limits<double>::infinity())})
@@ -136,7 +137,7 @@ void playbackLoopTests() {
   check(api.handle(request("transport.loop",{{"enabled",true},{"expectedRevision",host.state.revision}},"refused-loop"))["error"]["code"]==-32002&&
     host.calls==0&&host.state.transport==initial,"Busy loop mutation was not atomic");
   host.refuse=false;
-  const auto set=request("transport.loop",{{"enabled",true},{"expectedRevision",host.state.revision}},"loop-on");
+  const auto set=request("transport.loop",{{"enabled",true},{"expectedRevision",host.state.revision}},"refused-loop");
   const auto applied=api.handle(set);
   check(applied["result"]["data"]==json{{"loop",true}}&&applied["result"]["changed"]==false&&host.state.transport["loop"]==true,
     "Stopped loop setting changed history or returned the wrong state");
@@ -248,6 +249,7 @@ void completionPipeTests() {
       if(p.value("bump",true))state.revision="committed:"+std::to_string(effects);
       if(stage=="after")throw ApiError(-32003,"Injected boundary failure",
         Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,state.documentId,state.revision});
+      if(stage=="unclassified")throw ApiError(-32003,"Injected unclassified failure after an effect");
       if(stage=="snapshot"||stage=="snapshot-rejected"){failSnapshot=true;typedSnapshot=stage=="snapshot-rejected";}
       if(stage=="serialize")return {{"invalid",std::string("\xFF",1)}};
       if(stage=="oversize")return {{"large",std::string(PipeServer::maxResponseBytes,'x')}};
@@ -274,7 +276,7 @@ void completionPipeTests() {
   check(send(afterRequest)==after,"committed pipe receipt not retained");
   auto changed=afterRequest;changed["params"]["bump"]=false;
   check(send(changed)["error"]["code"]==-32600,"retained error allowed changed request payload");
-  for(const auto *stage:{"snapshot","snapshot-rejected","serialize","oversize"}) {
+  for(const auto *stage:{"snapshot","snapshot-rejected","serialize","oversize","unclassified"}) {
     current=send(request("document.get"))["result"];
     const auto q=request("pattern.apply",{{"expectedRevision",current["revision"]},{"stage",stage},{"bump",false}},stage);
     const auto result=send(q);
@@ -288,7 +290,7 @@ void completionPipeTests() {
   }
   check(send(afterRequest)==after,"later failures lost earlier committed receipt");
   server.stop();
-  check(host.effects==5,"pipe completion scenarios duplicated effects");
+  check(host.effects==6,"pipe completion scenarios duplicated effects");
   std::cout<<"PASS real-pipe typed boundaries, unchanged-revision effects, snapshot/serialization/size failures and exact replay\n";
 }
 void requestBoundaryTests() {

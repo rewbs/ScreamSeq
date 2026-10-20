@@ -22,6 +22,7 @@ from recipe_parameter_contract import recipe_parameter_contract
 from recipe_preview_contract import recipe_preview_contract
 from rack_dry_run_contract import rack_dry_run_contract
 from integer_api_contract import integer_api_contract
+from request_replay_contract import request_replay_contract
 import plistlib
 
 
@@ -2322,6 +2323,7 @@ def main():
                 recipe_preview_contract(client, directory, expect_error)
                 rack_dry_run_contract(client, directory, expect_error)
                 integer_api_contract(client, directory, expect_error)
+                request_replay_contract(client, directory, APIError)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

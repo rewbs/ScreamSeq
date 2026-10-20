@@ -104,8 +104,8 @@ class SessionAdapter {
   std::deque<Cached> cache_;
   std::size_t cacheBytes_ = 0;
   std::set<std::string> activeWrites_;
-  // Successful writes and classified committed/unknown errors, FIFO by
-  // insertion (replays do not refresh age). Unclassified errors remain uncached.
+  // Terminal write replies, FIFO by insertion (replays do not refresh age).
+  // Busy is retryable only when no committed/unknown outcome was supplied.
   // Charge compact UTF-8 JSON request + response bytes, excluding newlines.
   // This bounds retained serialized content, not JSON DOM/allocator heap usage.
   void cacheResponse(const Json &request, const Json &response, std::optional<std::size_t> serializedBytes = {}) noexcept {
@@ -166,7 +166,7 @@ class SessionAdapter {
         {"retainedEntries",cache_.size()},{"retainedSerializedBytes",cacheBytes_},
         {"accounting","compact UTF-8 JSON request plus response; excludes newlines; not heap usage"},
         {"eviction","oldest insertion first; replay does not refresh"},
-        {"scope","successful writes, including no-op and dryRun, and classified committed/unknown errors; exact parsed request replay while retained"},
+        {"scope","terminal write replies, including success, no-op, dryRun and errors; busy is retryable unless committed/unknown; exact parsed request replay while retained"},
         {"oversize","success returned without caching; retention failure does not reject a completed write"},
         {"durable",false}}},
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
@@ -321,10 +321,8 @@ public:
     const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
     const bool liveLoop=method=="transport.loop" && host_ && host_->supportsPlaybackLoop();
     const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || liveLoop || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
-    if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
-      return errorResponse(q["id"],-32601,"Unknown method; call api.describe");
     std::string revision;
-    bool hostReturned=false;
+    bool hostEntered=false,hostReturned=false;
     // Completion can fail after a host accepted a write, including a no-op or
     // an independently revisioned side effect. Never fabricate a rejection or
     // advertise the pre-write song revision as authoritative in that case.
@@ -333,25 +331,31 @@ public:
       // that already returned. Only an exception from the host write itself
       // may supply that write's authoritative outcome and identity.
       if(write&&hostReturned)outcome=Tracker::WriteOutcome{};
+      else if(write&&hostEntered&&!outcome&&code!=-32002)outcome=Tracker::WriteOutcome{};
       auto reply=errorResponse(q["id"],code,message);
       if(outcome)reply["error"]["data"]=outcomeData(*outcome);
       else if(!revision.empty())reply["error"]["data"]={{"revision",revision}};
-      if(write&&outcome&&outcome->needsReconciliation())cacheResponse(q,reply);
+      // Error codes do not establish whether a side effect occurred. Retain
+      // terminal replies conservatively, including validation/stale errors.
+      // An authoritative uncertain/committed outcome outranks a busy code.
+      if(write&&(code!=-32002||(outcome&&outcome->needsReconciliation())))cacheResponse(q,reply);
       return reply;
     };
     try {
-      if(write) for(const auto &cached:cache_) if(cached.id==q["id"].get_ref<const std::string &>()) {
+      for(const auto &cached:cache_) if(cached.id==q["id"].get_ref<const std::string &>()) {
         // Canonical JSON ignores object key order/whitespace but preserves
         // integer vs floating-point parameters (JSON operator== does not).
         if(cached.request!=q.dump()) return errorResponse(q["id"],-32600,"Request id was already used with different content");
         return cached.response;
       }
+      if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
+        throw ApiError(-32601,"Unknown method; call api.describe");
       if(!host_ && method!="api.describe") throw ApiError(-32002,"Session is not attached");
       const auto requestId=q["id"].get<std::string>();
       if(write&&!activeWrites_.insert(requestId).second)throw ApiError(-32002,"Request is still running; retry with the same ID after it completes");
       struct ActiveGuard {std::set<std::string> &ids;const std::string &id;bool active;~ActiveGuard(){if(active)ids.erase(id);}}active{activeWrites_,requestId,write};
       if(independentRead || independentWrite) {
-        auto result=host_->independentOperation(method,p);hostReturned=true;
+        hostEntered=write;auto result=host_->independentOperation(method,p);hostReturned=true;
         Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};
         return write ? completeWrite(q,std::move(response)) : response;
       }
@@ -371,7 +375,7 @@ public:
       else if(method=="context.get") { keys(p,{}); data=before.context; }
       else if(method=="transport.get") { keys(p,{}); data=before.transport; }
       else if(method=="pattern.get") data=getPattern(p);
-      else if(docRead || docWrite) {data=host_->documentOperation(method,p);hostReturned=true;}
+      else if(docRead || docWrite) {hostEntered=write;data=host_->documentOperation(method,p);hostReturned=true;}
       else if(workspace) {
         if(method=="workspace.input") {
           keys(p,{"expectedRevision","expectedContext","instrument","octave"});
@@ -384,20 +388,21 @@ public:
           };
           inputInteger("instrument",1,255);inputInteger("octave",0,8);
         }
-        data=host_->workspace(method,p);hostReturned=true;
+        hostEntered=write;data=host_->workspace(method,p);hostReturned=true;
       }
       else if(method=="context.set") {
-        host_->navigate(prepareNavigation(p,before));hostReturned=true; data=host_->snapshot().context;
+        const auto navigation=prepareNavigation(p,before);hostEntered=true;
+        host_->navigate(navigation);hostReturned=true; data=host_->snapshot().context;
       }
       else if(method=="transport.play") {
         validatePlay(p,before); Json settings=p; settings.erase("expectedRevision");
-        host_->play(settings);hostReturned=true; data={{"playing",true},{"region",settings}};
+        hostEntered=true;host_->play(settings);hostReturned=true; data={{"playing",true},{"region",settings}};
       } else if(liveLoop) {
         keys(p,{"expectedRevision","enabled"});require(p.contains("enabled") && p.at("enabled").is_boolean(),"enabled must be boolean");
         const bool enabled=p.at("enabled").get<bool>();
-        host_->setPlaybackLoop(enabled);hostReturned=true;data={{"loop",enabled}};
+        hostEntered=true;host_->setPlaybackLoop(enabled);hostReturned=true;data={{"loop",enabled}};
       } else {
-        keys(p,{"expectedRevision"}); host_->stop();hostReturned=true; data={{"playing",false}};
+        keys(p,{"expectedRevision"});hostEntered=true;host_->stop();hostReturned=true; data={{"playing",false}};
       }
       const auto after=(write || docRead) ? host_->snapshot() : before;
       Json result={{"revision",after.revision},{"changed",before.revision!=after.revision},
