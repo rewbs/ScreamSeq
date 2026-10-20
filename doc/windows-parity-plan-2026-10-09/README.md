@@ -12,7 +12,8 @@ checking those records and current source.
 records a successful ARM64 build, seven native groups passed and one retained
 layout-test failure with an unbuilt fixture correction. [Recipe parameter
 previews](RECIPE-PREVIEW-BATCH-2026-10-20.md) and [sample strokes on
-release](SAMPLE-STROKE-BATCH-2026-10-20.md) are subsequent source batches awaiting
+release](SAMPLE-STROKE-BATCH-2026-10-20.md), including [direct loop
+handles](SAMPLE-LOOP-HANDLES-2026-10-20.md), are subsequent source batches awaiting
 qualification. They are not yet merged to main; do not count them as completed
 cross-platform parity.
 

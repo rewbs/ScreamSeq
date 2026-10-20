@@ -326,7 +326,9 @@ project persistence, and reject unavailable or non-instrument destinations.
 
 `workspace.get.sampleDetail` exposes the detailed sample editor's captured
 identity/revision, draft points, selection, viewport, channels, bounded waveform
-cache and latest operation report. Its native controls call the existing
+cache and latest operation report. Completed pointer strokes save through
+`sample.draw`; numeric Stage point edits form an explicit batch saved with
+Save staged points. Its native controls call the existing
 `sample.*` methods with the same guarded document history and PCM semantics.
 The dock's Detail button and command palette open this window. See
 `../SAMPLE_DETAIL_PROGRESS.md`.
@@ -334,12 +336,19 @@ The dock's Detail button and command palette open this window. See
 The retained sample pages add `page`, `loops`, `pastePreview` and `autoSnap` to
 that read-only snapshot. `loops` includes independent raw normal/sustain frame
 strings, enabled/direction flags, `dirty` and `stale`; invalid input remains
-observable without becoming song data. Joint Preview/Apply uses
-`sample.loops.set`. Paste Preview retains its exact options, target revision and
+observable without becoming song data. Loop field edits save automatically;
+joint preview and retry use `sample.loops.set`. The waveform's `loopHandles`
+array exposes enabled, visible normal/sustain start/end handles with `index`,
+`name`, `frame`, DIP `x`/`y` and `selected`. `loopDragging` identifies a captured
+gesture. Dragging stages bounds; release saves once. Escape/capture loss cancels.
+With waveform focus, Tab/Shift+Tab selects handles, arrows move one frame and
+Shift+arrows move 64; F6 returns to native fields. The existing guarded loop API
+remains authoritative, preserves PCM and supports Undo/save/reopen.
+Paste Preview retains its exact options, target revision and
 clipboard ID; Apply uses that reviewed clipboard or rejects a mismatch.
 `pastePreview` describes a locally retained preview, not a guarantee that an
 external clipboard or document change has not occurred. Snap selection and
-either loop use `sample.snap.get`; only explicit Apply changes saved loops.
+either loop use `sample.snap.get`; snapped loop bounds save automatically.
 See `../SAMPLE_WORKFLOWS_PROGRESS.md` for scope and qualification.
 
 The actual application now also registers `graph.*`, `mixer.*` and

@@ -47,7 +47,7 @@
       SampleWorkflow::LoopDraft loops;loops.reset({c.document,identity,c.revision,index,frames},info);
       auto wave=readSampleWave(index,region,channel,check);check();regions[identity]=region;
       captured_=std::move(c);id_=std::move(identity);slot_=index;info_=std::move(info);region_=region;regions_=std::move(regions);channel_=channel;loops_=std::move(loops);
-      stroke_.clear();dragBefore_.clear();dragging_=selecting_=fields_=false;edited_.clear();++generation_;report_=Json::object();
+      stroke_.clear();dragBefore_.clear();dragging_=selecting_=loopDragging_=fields_=false;selectedLoopHandle_=-1;edited_.clear();++generation_;report_=Json::object();
       adoptSampleWave(std::move(wave));sampleChoices();syncFields();syncSettings();syncLoops();invalidatePaste();pointFields(region_.start,0);describeTarget();
     });status(L"Captured sample / F6: waveform or text focus / Z–M, Q–U: audition saved sound");
   }
@@ -63,12 +63,12 @@
     });++generation_;report_=Json::object();invalidatePaste();status(L"Loop fields reloaded / other raw fields retained at their captured revision");
   }
   void viewport(unsigned first,unsigned last){
-    requireCurrent();require(stroke_.empty()&&!dragging_,"Apply or discard the drawing before changing its view");require(first<last&&last<=region_.frames,"Visible range must be nonempty and inside the sample");
+    requireCurrent();require(stroke_.empty()&&!dragging_&&!loopDragging_,"Finish the loop gesture or staged drawing before changing its view");require(first<last&&last<=region_.frames,"Visible range must be nonempty and inside the sample");
     const auto token=generation_;auto region=region_;region.start=first;region.end=last;
     busy([&]{auto wave=readSampleWave(slot_,region,channel_,[&]{checkSampleRead(captured_,token);});region_=region;adoptSampleWave(std::move(wave));clearFields({viewStart,viewEnd});++generation_;syncFields();});
   }
   void changeWaveChannel(int channel){
-    try{requireCurrent();require(channel>=0&&channel<=2,"Choose a waveform channel");require(stroke_.empty(),"Apply or discard the drawing before changing channels");require(channel!=2||info_.at("channels")==2,"This sample has no right channel");
+    try{requireCurrent();require(channel>=0&&channel<=2,"Choose a waveform channel");require(stroke_.empty()&&!loopDragging_,"Finish the loop gesture or staged drawing before changing channels");require(channel!=2||info_.at("channels")==2,"This sample has no right channel");
       const auto token=generation_;busy([&]{auto wave=readSampleWave(slot_,region_,channel,[&]{checkSampleRead(captured_,token);});channel_=channel;adoptSampleWave(std::move(wave));++generation_;invalidatePaste();});
     }catch(...){choose(channels,channel_);throw;}
   }

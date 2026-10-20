@@ -105,6 +105,47 @@ class SampleDetailUITests(unittest.TestCase):
         self.region(16,112);self.press(4845);self.press(5017);self.select(4834,1);before=self.doc();self.press(4838);self.assertEqual(self.doc(),before);self.press(4839);self.assertEqual(self.read('sample.get',sample=1)['sustainStart'],24)
         path=self.folder/'sample-crossfade.screamseq';saved=self.pcm();info=self.read('sample.get',sample=1);self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.pcm(),saved);self.assertEqual(self.read('sample.get',sample=1),info);self.press(4802);self.field(4837,1);before=self.doc();self.press(4839);self.assertEqual(self.doc(),before)
 
+    def test_loop_handles_release_keyboard_history_and_reopen(self):
+        self.write('sample.loops.set',sample=1,
+                   normal=dict(start=0,end=128,enabled=True,reverse=True),
+                   sustain=dict(start=32,end=96,enabled=True,pingpong=True))
+        self.press(4803)
+        def handle(index):
+            return next(h for h in self.state()['loopHandles'] if h['index']==index)
+        self.assertEqual(len(self.state()['loopHandles']),4)
+        original=self.read('sample.get',sample=1);before=self.doc()
+        for index in (0,1):
+            h=handle(index)
+            self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x'],h['y']);self.idle()
+            self.assertEqual(self.doc(),before,'Clicking a boundary must not move an inset handle')
+        h=handle(0);delta=self.state()['canvas'][2]*16/128
+        self.mouse(0x201,h['x'],h['y']);self.mouse(0x200,h['x']+delta,h['y'])
+        self.assertTrue(self.state()['loopDragging'])
+        self.assertEqual(self.state()['loops']['normal']['start'],'16')
+        self.assertEqual(self.doc(),before)
+        self.key(0x1B)
+        self.assertEqual(self.state()['loops']['normal']['start'],'0');self.assertEqual(self.doc(),before)
+        self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x']+delta,h['y']);self.idle()
+        accepted=self.read('sample.get',sample=1)
+        self.assertEqual(accepted['loopStart'],16);self.assertTrue(accepted['reverseLoop'])
+        self.assertEqual((accepted['sustainStart'],accepted['sustainEnd']),(32,96))
+        self.assertTrue(accepted['sustainPingpong']);self.assertEqual(self.pcm(),self.raw)
+        self.press(4804);self.assertEqual(self.read('sample.get',sample=1),original)
+        self.press(4805);self.assertEqual(self.read('sample.get',sample=1),accepted)
+        h=handle(0);self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x'],h['y'])
+        self.key(0x09);self.key(0x25)
+        self.assertEqual(self.read('sample.get',sample=1)['loopEnd'],127)
+        self.assertEqual(self.pcm(),self.raw)
+        saved=self.read('sample.get',sample=1)
+        path=self.folder/'loop-handles.screamseq'
+        self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.read('sample.get',sample=1),saved);self.assertEqual(self.pcm(),self.raw)
+        self.start();h=handle(0);self.mouse(0x201,h['x'],h['y'])
+        self.write('document.patch',title='External edit during loop drag');before=self.doc()
+        self.mouse(0x202,h['x']+delta,h['y']);self.idle()
+        self.assertFalse(self.state()['loopDragging']);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.read('sample.get',sample=1),saved)
+
     def test_every_processing_operation_matches_shared_api_and_preserves_other_channel(self):
         self.page('process')
         operations=['reverse','normalize','gain','fade-in','fade-out','invert','remove-dc','smooth','trim','silence','swap-channels','copy-left','copy-right','stereo-average']

@@ -1221,7 +1221,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationSampleReadbackRecovery();std::cout<<"PASS sample readback: staged target, raw drafts, waveform and navigation\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
-                    applicationSampleDrawingGestures();applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: drawing gestures, receipts, staged refresh, domain readback and no replay\n";return;
+                    applicationSampleLoopHandles();applicationSampleDrawingGestures();applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: loop/drawing gestures, receipts, staged refresh, domain readback and no replay\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-browser-input") {
                     applicationSampleBrowserInputDuringDecode();std::cout<<"PASS sample browser: active focus, arrows during decode and stale-preview cancellation\n";return;
