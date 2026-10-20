@@ -62,6 +62,19 @@ also prepares Mac `plugin.move` validation parity. The expanded shared contract
 passes on retained Windows B3; Mac native/socket assertions and schema are
 updated but still need Mac execution. This did not require a product build.
 
+The stopped F04 cross-domain composing journey subsequently passed 21 exact
+saved checkpoints on retained B3 (`composing-history-final/` in its evidence
+directory). The shared `--composing-history` check is scheduled on both hosts.
+It also exposed an unclassified linked-envelope refusal during private-clone
+validation. That pure-preflight outcome correction is prepared with controller
+and private-PID regressions; the old executable demonstrably fails the new
+outcome assertion. Include these checks in the next bounded build batch.
+
+Temporary integration branch `codex/plugin-edit-parity` was pushed through
+`b0d34b57af665f0d7e694e97929e034b64b635c1` without starting CI: no PR existed
+and both native workflows' push triggers are restricted to main. Later prepared
+source still needs the same-candidate local and cross-platform gate before main.
+
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context
 case passed, and five subsequent keyboard/browser cases passed. See

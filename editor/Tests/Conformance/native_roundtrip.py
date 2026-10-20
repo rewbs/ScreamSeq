@@ -191,6 +191,8 @@ def main(argv=None):
                         help="Check omitted zero-duration commands through exact save/reopen comparisons")
     parser.add_argument("--edited-metadata", action="store_true",
                         help="Check opaque metadata through paired edits, rack identities and Undo/Redo")
+    parser.add_argument("--composing-history", action="store_true",
+                        help="Check F04 edits across six domains through chronological Undo/Redo and reopen")
     args = parser.parse_args(argv)
     report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[], parityComplete=False,
                   qualificationScope="Five no-edit fixture legs; optional API evidence baseline is not a parity pass")
@@ -282,6 +284,12 @@ def main(argv=None):
                 report["editedMetadata"] = dict(passed=edited_report["passed"],
                     report="edited-metadata/report.json",
                     sha256=sha256(read_bytes(output / "edited-metadata/report.json")))
+            if args.composing_history:
+                from composing_history import run
+                history_report = run(client, output / "composing-history")
+                report["composingHistory"] = dict(passed=history_report["passed"],
+                    report="composing-history/report.json",
+                    sha256=sha256(read_bytes(output / "composing-history/report.json")))
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
         report["passed"] = (len(report["fixtures"]) == len(sources) and all(row["passed"] for row in report["fixtures"])
@@ -290,7 +298,8 @@ def main(argv=None):
                             and report.get("codec", {}).get("safetyPassed", True)
                             and report.get("codec", {}).get("baselineMatched", True)
                             and report.get("durationDefaults", {}).get("passed", True)
-                            and report.get("editedMetadata", {}).get("passed", True))
+                            and report.get("editedMetadata", {}).get("passed", True)
+                            and report.get("composingHistory", {}).get("passed", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

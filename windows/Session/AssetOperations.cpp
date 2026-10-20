@@ -58,10 +58,22 @@ std::string newClipboardId() {
 // Snapshot/native validation failures are fatal, never relaxed or papered over.
 // Comparing both snapshots also suppresses history for effective no-ops.
 bool preflight(Document &document,const std::function<void(Document &)> &op) {
-  auto candidate=std::make_unique<Document>(document.snapshotData());candidate->restoreNative(document.native());
-  candidate->song().Order.SetSequence(document.song().Order.GetCurrentSequenceIndex());
-  const auto before=candidate->snapshotData();const auto nativeBefore=candidate->native();op(*candidate);
-  return before!=candidate->snapshotData()||nativeBefore!=candidate->native();
+  try {
+    auto candidate=std::make_unique<Document>(document.snapshotData());candidate->restoreNative(document.native());
+    candidate->song().Order.SetSequence(document.song().Order.GetCurrentSequenceIndex());
+    const auto before=candidate->snapshotData();const auto nativeBefore=candidate->native();op(*candidate);
+    return before!=candidate->snapshotData()||nativeBefore!=candidate->native();
+  } catch(const Api::ApiError &e) {
+    throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+  } catch(const std::invalid_argument &e) {
+    throw Api::ApiError(-32602,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+  } catch(const std::out_of_range &e) {
+    throw Api::ApiError(-32602,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+  } catch(const std::exception &e) {
+    // This helper only reads the live document and edits a private clone.
+    // Real publication, playback callbacks and their failures are outside it.
+    throw Api::ApiError(-32003,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+  }
 }
 // Stage with the shared importers, keeping decoded allocations alive until commit.
 // Never reopen a file after stopping: files (including external SFZ samples) can

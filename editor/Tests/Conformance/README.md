@@ -281,3 +281,25 @@ Both build workflows request this bounded check after the existing corpus.
 Earlier failures stop execution; an absent edited report is not a pass. Mac
 setup uses the private `recovery.restore` path documented above, so this contract
 does not qualify Mac's Open dialog or foreground interaction.
+
+### Cross-domain composing history
+
+`--composing-history` runs the stopped A01 transaction journey on F04: precise
+note velocity, sample 5's normal-loop start, instrument n20's independent pan
+envelope, Gainer's manual parameter, a recipe audio-edge gain and Pulse's send.
+Each dry run preserves the complete document snapshot. Each real edit constrains
+unrelated project fields; PCM stays exact through loop/envelope edits.
+The note replacement expects the shared operation's documented storage order
+(unchanged patterns, then replaced events); comparisons never sort output.
+
+All six edits Undo and Redo chronologically against complete saved trees.
+Interleaved no-ops retain Redo, a stale request rejects without mutation, and a
+real edit forks history. The final copy reopens exactly and is retained as
+`composing-history/reopened.screamseq` for later reciprocal exchange.
+The fixture's volume envelope remains linked to n40; editing its template is
+the separate A08 bank journey, not bypassed here.
+
+The check is scheduled on both native workflows. It does not establish physical
+input, live admission, foreground interaction, linked-bank editing, reciprocal
+editing or all of A01/A18. Windows' linked-envelope rejection outcome has its own
+native controller and private-PID regression.

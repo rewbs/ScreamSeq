@@ -171,6 +171,40 @@ void assetTests(const std::filesystem::path &directory) {
   invoke(c,"sample.loops.set",{{"sample",1},{"normal",{{"start",8},{"end",64},{"enabled",true}}}});
   need(c.view()->waves.at(1)==loopWave,"loop-only edit unnecessarily rescanned unchanged PCM");
   need(!c.invoke("sample.clipboard.get",Json::object()).get().at("available").get<bool>(),"new document retained another document's clipboard");
+  const auto instrument=invoke(c,"instrument.create",{{"sample",1}}).at("instrument");
+  invoke(c,"instrument.patch",{{"instrument",instrument},{"values",{{"envelope",0},{"enabled",true},
+    {"points",Json::array({Json::array({0,0}),Json::array({4,64}),Json::array({16,0})})}}}});
+  Json identity;
+  for(const auto &item:c.view()->session.document.at("instruments"))if(item.at("index")==instrument)identity=item.at("id");
+  need(identity.is_string(),"Linked envelope fixture instrument identity missing");
+  const Json target={{"kind","volume"},{"instrument",identity}};
+  const auto bank=invoke(c,"envelope.bank.save",{{"name","Linked admission fixture"},{"target",target}}).at("id");
+  invoke(c,"envelope.bank.apply",{{"template",bank},{"target",target},{"linked",true}});
+  const auto linkedView=c.view();const auto linkedStops=stops;
+  const auto linkedEnvelope=call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}});
+  for(bool dry:{true,false}) {
+    const auto receipt=std::make_shared<NativeCallReceipt>();bool refused=false;
+    try {
+      auto pending=c.invokeCompleted("instrument.envelope.transform",{{"instrument",identity},{"envelope","volume"},
+        {"operation","scale"},{"options",{{"amount",.5}}},{"dryRun",dry},{"expectedRevision",linkedView->session.revision}},receipt);
+      while(pending.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)c.service();
+      c.service();(void)pending.get();
+    } catch(const Api::ApiError &e) {
+      refused=e.code==-32602&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
+    }
+    need(refused&&!receipt->read()&&c.view()==linkedView&&stops==linkedStops,
+      "Linked-envelope candidate rejection must be explicitly pre-commit and preserve view/history/playback");
+    need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}})==linkedEnvelope,
+      "Rejected linked-envelope transform changed its accepted shape");
+  }
+  const auto panBefore=call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}});
+  invoke(c,"instrument.envelope.transform",{{"instrument",identity},{"envelope","pan"},{"operation","ramp"},
+    {"end",9},{"options",{{"from",0},{"to",64}}}});
+  need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}})!=panBefore,
+    "Candidate rejection left independent envelope edits unusable");
+  invoke(c,"history.undo");
+  need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}})==panBefore,
+    "Accepted envelope edit after rejection failed one-step Undo");
   std::cout<<"asset worker cache, guards, clipboard, history and persistence passed\n";
 }
 

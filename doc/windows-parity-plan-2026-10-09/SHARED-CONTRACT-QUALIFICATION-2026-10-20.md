@@ -122,6 +122,41 @@ edited input for the next reciprocal exchange. This Windows private-desktop
 check does not complete reciprocal editing, Mac Open/UI behavior, or the earlier
 codec failure. It does not qualify the unbuilt file-outcome correction.
 
+### Cross-domain stopped composing journey
+
+`composing-history-final/` records **06:39:39–06:39:56 UTC** on the same retained
+B3 executable. F04's no-edit leg and **21 saved checkpoints passed**: six musical
+edits across precise notes, sample loop, independent instrument pan envelope,
+manual plugin parameter, recipe audio-edge gain and mixer send; six chronological
+Undo steps; six Redo steps; a real history fork and final reopen. Every dry run
+and interleaved no-op preserved the current document/history. A stale captured
+note replacement rejected without mutation. Exact saved-tree and PCM checks
+retain unrelated data. Inputs, previous outputs, executable and original corpus
+were unchanged; the QA process exited. Both workflows now request the shared
+`--composing-history` check, with Mac execution still pending.
+
+Diagnostic runs retained under `composing-history-1/` through `-3/` corrected
+the oracle's precise-note replacement order and real-valued send gain type.
+The exact comparator was not normalized or relaxed. F04's linked volume
+envelope also correctly refused a direct transform; this journey uses its
+independent pan envelope, while A08 linked-master editing remains open.
+
+That linked-envelope refusal exposed an additional outcome-classification gap:
+the error occurred while validating a private document clone, yet the API
+reported `writeOutcome: unknown`. The new private-PID regression reproduces
+the failure on B3 in **0.696 seconds**; receipt/log are under
+`bin/asset-admission-20261020/old-binary.*`. This is a reproduced failure,
+not a pass. The prepared `AssetOperations.cpp::preflight` correction annotates
+errors arising inside that read/clone-only helper as `NotCommitted`, preserving
+validation codes. Actual document publication and playback callbacks remain
+outside the catch. Controller and application regressions require exact
+bank/PCM/view/Redo preservation and a successful independent edit afterward.
+**This correction and its new assertions remain unbuilt/unqualified.**
+
+The stopped journey is bounded A01 evidence, not the full A01/A08/A18 gate,
+foreground inspection, live audio or reciprocal editing. Its concrete final
+file is `composing-history-final/composing-history/reopened.screamseq`.
+
 ## Prepared corrections after B3
 
 Alongside the fresh-ID test correction, `DocumentController.cpp` now prepares:
@@ -149,7 +184,8 @@ Existing post-commit/uncertain completion checks remain unchanged.
 Co-batch the corrections at the next permitted build, then run `ApiTests`
 through its previously unreached real-pipe groups, targeted controller recovery
 and publication tests, native command-completion checks and the actual codec
-corpus. Reuse B3's unchanged integer, cache, codec-helper, metadata, fixture and
+corpus. Include controller assets and the private-PID linked-envelope regression
+for the newly reproduced pure-preflight outcome gap. Reuse B3's unchanged integer, cache, codec-helper, metadata, fixture and
 plugin-contract evidence where the relevant inputs remain identical. A changed
 outcome boundary requires actual file/API checks; a source diff is not enough.
 
