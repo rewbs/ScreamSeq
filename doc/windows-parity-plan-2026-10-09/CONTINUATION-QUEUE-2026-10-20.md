@@ -8,6 +8,24 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Newer native CI evidence (09:02:42 UTC):**
+[cross-platform export results and repairs](EXPORT-CROSS-PLATFORM-2026-10-20.md).
+Apple Silicon passed its build, 134 native registrations and 35 interface groups,
+but conformance found a stable-ID state-read gap and Foundation rejection of a
+large opaque UID. Both have local source repairs, unbuilt. Windows x64 passed its
+build, 155/156 portable registrations and all 48 native editor registrations;
+the snapshot fixture failure is already corrected locally, device-dependent
+application failures remain, and the exact one-method export inventory update is
+reviewed. Intel's build/native steps passed and its interface job remains live.
+Conservative next coordinated build bound: **10:03 UTC**, pending exact Intel
+build completion timestamp. Do not push/build during cooldown.
+
+`6fe231884` adds the shared absolute recording-frame clock, native callback
+adapters and controlled tests, all unbuilt. Event ingestion, capture ownership,
+API/UI and full A13 acceptance still remain. Continue from
+[frame-clock ownership and gates](RECORDING-FRAME-CLOCK-2026-10-20.md).
+Keep native CI repair qualification ahead of claiming new capture functionality.
+
 **Newest result:** pushed candidate `54fa2babc` passed its one Windows ARM64
 build at 08:33:39 UTC. Targeted checks passed 11/12 CTest registrations and the
 actual-app export replay/reopen contract. The snapshot target passed 47/48

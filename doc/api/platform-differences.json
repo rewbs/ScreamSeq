@@ -339,6 +339,7 @@
         "automation.recorded.edit",
         "automation.replaceLane",
         "context.set",
+        "document.exportModule",
         "document.new",
         "document.open",
         "document.patch",
