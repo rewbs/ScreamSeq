@@ -78,8 +78,47 @@ class GraphMixerAppTests(unittest.TestCase):
         buffer = ctypes.create_unicode_buffer(str(value))
         self.desktop.send(self.control(identifier), 0xC, 0, ctypes.addressof(buffer))
 
+    def test_plugin_cold_parameter_noop_preserves_bytes_history_and_redo(self):
+        import plistlib
+        source = ROOT / 'editor/Tests/Fixtures/Parity20261009/fixtures/04-complete-reference.screamseq'
+        source_bytes = source.read_bytes()
+        self.write('document.open', path=str(source), discard=True)
+        plugin = self.doc()['data']['nativePlugins'][0]['instanceID']
+        parameter = next(p for p in self.read('plugin.parameters.get', plugin=plugin) if p['writable'])
+        values = [dict(id=parameter['id'], value=parameter['manualValue'])]
+        initial_state = self.read('plugin.state.get', slot=0)
+        self.assertEqual(initial_state['data'], '')
+        before_path = self.folder / 'cold-before.screamseq'
+        self.write('document.save', path=str(before_path))
+        before = self.doc()
+        for dry in (True, False):
+            result = self.write('plugin.parameters.set', plugin=plugin, values=values, dryRun=dry)
+            self.assertFalse(result['wouldChange'])
+            self.assertEqual(self.doc(), before)
+            self.assertEqual(self.read('plugin.state.get', slot=0), initial_state)
+        self.rejected('plugin.parameters.set', plugin=plugin, values=values + [dict(id=4294967295, value=0)])
+        self.rejected('plugin.parameters.set', plugin=plugin, values=values + values)
+        after_path = self.folder / 'cold-after.screamseq'
+        self.write('document.save', path=str(after_path))
+        self.assertEqual(plistlib.loads(after_path.read_bytes()), plistlib.loads(before_path.read_bytes()))
+        changed_value = parameter['min'] if parameter['manualValue'] != parameter['min'] else parameter['max']
+        self.write('plugin.parameters.set', plugin=plugin, values=[dict(id=parameter['id'], value=changed_value)])
+        changed_state = self.read('plugin.state.get', slot=0)
+        self.assertNotEqual(changed_state, initial_state)
+        self.write('history.undo', domain='all')
+        undone = self.doc()
+        self.assertTrue(undone['data']['canRedo'])
+        self.assertEqual(self.read('plugin.state.get', slot=0), initial_state)
+        self.assertFalse(self.write('plugin.parameters.set', plugin=plugin, values=values)['wouldChange'])
+        self.assertEqual(self.doc(), undone)
+        self.write('history.redo', domain='all')
+        self.assertEqual(self.read('plugin.state.get', slot=0), changed_state)
+        self.assertEqual(source.read_bytes(), source_bytes)
+
     def test_native_mixer_draft_stale_selection_undo_and_reload(self):
         self.command(400)
+        self.assertTrue(self.read('workspace.get')['mixerStrips']['visible'])
+        self.command(419)  # Explicit retained Details view.
         self.assertTrue(self.read('workspace.get')['mixerEditor']['visible'])
         self.assertEqual(self.desktop.focus(self.desktop.hwnd(self.pid)), self.control(401))
         self.command(402)  # Enable.
@@ -158,10 +197,12 @@ class GraphMixerAppTests(unittest.TestCase):
         hwnd = self.desktop.hwnd(self.pid)
         self.assertTrue(user.SetWindowPos(hwnd, None, 0, 0, int(900*dpi), int(620*dpi), 0x16))
         self.command(400)
+        self.assertTrue(self.read('workspace.get')['mixerStrips']['visible'])
+        self.command(419)
         self.command(402)
         frame = wintypes.RECT()
         user.GetWindowRect(hwnd, ctypes.byref(frame))
-        for identifier in range(401, 417):
+        for identifier in range(401, 424):
             with self.subTest(control=identifier):
                 control = self.control(identifier)
                 self.assertTrue(user.IsWindowVisible(control))

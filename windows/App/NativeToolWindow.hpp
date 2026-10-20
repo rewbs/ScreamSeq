@@ -2,6 +2,8 @@
 #include "RenderSurface.hpp"
 #include "AutomationCanvas.hpp"
 #include "NativeControls.hpp"
+#include "NativeAccessibility.hpp"
+#include "DocumentDraftRegistry.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -12,6 +14,7 @@
 
 namespace ScreamSeq {
 inline constexpr wchar_t workspaceShortcutProperty[]=L"ScreamSeq.WorkspaceShortcutHandler";
+inline constexpr wchar_t documentDraftRegistryProperty[]=L"ScreamSeq.DocumentDraftRegistry";
 using WorkspaceShortcutHandler=std::function<bool(WPARAM,bool,bool)>;
 // Musical typing follows key positions, not letters, so QWERTZ and AZERTY keep
 // the same two piano rows. Returns the US-layout virtual key of the physical
@@ -27,12 +30,21 @@ inline WPARAM physicalMusicalKey(WPARAM key){
   if(scan>=0x10&&scan<=0x19)return WPARAM(top[scan-0x10]);
   if(scan>=0x1E&&scan<=0x26)return WPARAM(home[scan-0x1E]);
   if(scan>=0x2C&&scan<=0x32)return WPARAM(bottom[scan-0x2C]);
+  switch(scan) {
+    case 0x0C:return '-';case 0x0D:return '=';case 0x1A:return '[';case 0x1B:return ']';
+    case 0x27:return ';';case 0x28:return '\'';case 0x29:return '`';case 0x2B:return '\\';
+    case 0x33:return ',';case 0x34:return '.';case 0x35:return '/';case 0x56:return '<';
+    default:break;
+  }
   return 0;
 }
 // Modeless native editor shell. Repaint is requested by edits and window events;
 // a hidden or unchanged tool has no running presentation timer.
 class NativeToolWindow {
-  inline static constexpr wchar_t toolProperty_[]=L"ScreamSeq.NativeToolWindow";
+  inline static constexpr auto toolProperty_=NativeControls::appearanceOwnerProperty;
+  DocumentDraftRegistry::Registration draftRegistration_;
+  bool retired_=false;
+  std::optional<Tracker::DocumentDraft> parentDraftIdentity_;
   HWND dockParent_{};
   RECT lastFloatingRect_{};
   LONG_PTR floatingStyle_=WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN;
@@ -155,6 +167,12 @@ class NativeToolWindow {
     layoutAll();if(visible())resumeVisiblePresentation();notifyPlacement();
   }
 protected:
+  static Tracker::DocumentDraft describeDraft(std::string document,std::string revision,std::string target,
+      uint64_t generation,bool dirty,bool pending=false,bool uncertain=false) {
+    Tracker::DocumentDraft result;result.document=std::move(document);result.revision=std::move(revision);
+    result.target=std::move(target);result.generation=generation;result.dirty=dirty;result.pending=pending;result.uncertain=uncertain;return result;
+  }
+  const std::optional<Tracker::DocumentDraft> &parentDraftIdentity()const noexcept{return parentDraftIdentity_;}
   HWND owner_{},window_{};
   std::map<int,HWND> controls_;
   std::unique_ptr<RenderSurface> surface_;
@@ -201,12 +219,34 @@ protected:
   void edit(int id,const wchar_t *text,int limit){auto h=add(id,L"EDIT",text,ES_AUTOHSCROLL);SendMessageW(h,EM_SETLIMITTEXT,limit,0);}
   void combo(int id){add(id,L"COMBOBOX",L"",CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS|WS_VSCROLL);}
   void label(int id,const wchar_t *text){add(id,L"STATIC",text,SS_LEFT);}
-  void set(int id,const std::wstring &s){NativeControls::text(controls_.at(id),s);}
+  void accessibleName(int id,const wchar_t *text){check(NativeAccessibility::name(controls_.at(id),text),"Name native editor control");}
+  // Automatic writes must not normalize the active text field underneath a
+  // musician's caret. A later explicit reload may present the canonical value.
+  HWND automaticEditField_{};
+  bool automaticEditFailed_=false;
+  virtual bool displayControl(int)const{return true;}
+  std::function<void()> automaticEdit_;
+  static constexpr UINT_PTR automaticEditTimer=0x5345;
+  void cancelAutomaticEdit(){KillTimer(window_,automaticEditTimer);automaticEdit_={};}
+  void queueAutomaticEdit(std::function<void()> edit,UINT delay=600){
+    automaticEditFailed_=false;automaticEdit_=std::move(edit);SetTimer(window_,automaticEditTimer,delay,nullptr);
+  }
+  void flushAutomaticEdit(){
+    KillTimer(window_,automaticEditTimer);auto edit=std::exchange(automaticEdit_,{});if(!edit)return;
+    const auto focus=GetFocus();wchar_t type[32]{};GetClassNameW(focus,type,32);
+    automaticEditField_=owns(focus)&&!_wcsicmp(type,L"EDIT")?focus:nullptr;
+    struct Reset{HWND &field;~Reset(){field=nullptr;}}reset{automaticEditField_};
+    // Remove the callback before submitting. A rejected/uncertain write is
+    // never retried by a timer; only a new edit or an explicit retry can do so.
+    try{edit();layout();}catch(...){cancelAutomaticEdit();automaticEditFailed_=true;layout();throw;}
+    if(focus&&(!GetFocus()||GetFocus()==window_)&&IsWindow(focus)&&IsWindowVisible(focus)&&IsWindowEnabled(focus)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(focus);
+  }
+  void set(int id,const std::wstring &s){const auto h=controls_.at(id);if(h!=automaticEditField_)NativeControls::text(h,s);}
   void set(int id,const wchar_t *s){set(id,std::wstring(s));}
   void set(int id,const Api::Json &v){set(id,wide(v.is_string()?v.get<std::string>():v.dump()));}
   std::wstring field(int id)const{auto h=controls_.at(id);std::wstring s(size_t(GetWindowTextLengthW(h))+1,0);GetWindowTextW(h,s.data(),int(s.size()));s.resize(wcslen(s.c_str()));return s;}
   double number(int id)const{auto s=field(id);size_t end=0;auto value=std::stod(s,&end);if(end!=s.size()||!std::isfinite(value))throw std::runtime_error("Enter a finite number");return value;}
-  void place(int id,float x,float y,float w,float h,bool show=true){const auto scale=GetDpiForWindow(window_)/96.0f;NativeControls::place(controls_.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),show);}
+  void place(int id,float x,float y,float w,float h,bool show=true){const auto scale=GetDpiForWindow(window_)/96.0f;NativeControls::place(controls_.at(id),int(x*scale),int(y*scale),int(w*scale),int(h*scale),show&&displayControl(id));}
   std::pair<float,float> size()const{RECT r{};GetClientRect(window_,&r);const auto scale=96.0f/GetDpiForWindow(window_);return {r.right*scale,r.bottom*scale};}
   void requestPaint(){if(window_&&IsWindowVisible(window_))InvalidateRect(window_,nullptr,FALSE);}
   void layoutAll(){if(!ready_||relocating_)return;const auto dpi=GetDpiForWindow(window_);if(fontDpi_!=dpi){auto scale=dpi/96.0f;auto font=CreateFontW(-int(13*scale),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");for(auto [id,h]:controls_)SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(font),TRUE);if(font_)DeleteObject(font_);font_=font;fontDpi_=dpi;fontsChanged();}layout();requestPaint();}
@@ -235,10 +275,29 @@ protected:
   // UI-thread presentation work may have been deferred while this retained
   // HWND was hidden. Never reload its target or move focus from this hook.
   virtual void resumeVisiblePresentation()noexcept{}
-  virtual void paint(RenderSurface &)=0;
+  // Plain native forms share the same surface as their HWND fields, including
+  // the user's high-contrast colors. Canvas owners can supply their own paint.
+  virtual void paint(RenderSurface &surface) {
+    const auto [w,h]=size();
+    surface.fill(0,0,w,h,NativeControls::renderColor(
+      NativeControls::colors(NativeControls::Surface::inspector,NativeControls::highContrast()).background));
+  }
+  static void paintCurveHandle(RenderSurface &surface,float x,float y,bool selected,const NativeControls::CurveColors &colors,UINT32 ordinary) {
+    // Selection remains visible by size and outline when colors coincide.
+    const float radius=selected?5.f:4.f;
+    surface.fill(x-radius,y-radius,radius*2,radius*2,selected?colors.selected:ordinary);
+    if(selected)surface.outline(x-radius,y-radius,radius*2,radius*2,colors.curve);
+  }
+  static void paintCurveBorder(RenderSurface &surface,const WorkspaceRect &bounds,bool active,const NativeControls::CurveColors &colors) {
+    surface.outline(bounds.x,bounds.y,bounds.w,bounds.h,active?colors.focus:colors.border);
+    if(active&&bounds.w>4&&bounds.h>4)surface.outline(bounds.x+2,bounds.y+2,bounds.w-4,bounds.h-4,colors.focus);
+  }
   virtual void action(int,unsigned)=0;
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}
+  virtual bool controlScroll(UINT,WPARAM,HWND){return false;}
+  virtual void controlCaptureChanged(HWND){}
+  virtual void reviewDocumentDraft(){show();SetFocus(window_);}
   virtual bool contextMenu(HWND,POINT){return false;}
   bool hasWorkspaceDockAction()const{return bool(workspaceDockAction_);}
   void toggleWorkspaceDock(){if(workspaceDockAction_)workspaceDockAction_();}
@@ -247,11 +306,11 @@ protected:
   virtual bool wheel(UINT,float,float,WPARAM){return false;}
   virtual void timer(UINT_PTR){}
   virtual void error(const std::exception &e){status_=wide(e.what());requestPaint();}
-  virtual void drawControl(const DRAWITEMSTRUCT &d){NativeControls::recordDraw(d.hwndItem);if(d.CtlType==ODT_COMBOBOX){NativeControls::comboItem(d);return;}RECT r=d.rcItem;const bool disabled=(d.itemState&ODS_DISABLED)!=0;SetDCBrushColor(d.hDC,RGB(35,49,63));FillRect(d.hDC,&r,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,disabled?RGB(103,119,133):RGB(218,232,241));SelectObject(d.hDC,font_);std::wstring text;
-    if(d.CtlType==ODT_COMBOBOX){if(d.itemID!=UINT(-1)){auto length=SendMessageW(d.hwndItem,CB_GETLBTEXTLEN,d.itemID,0);if(length>=0){text.resize(size_t(length)+1);SendMessageW(d.hwndItem,CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(text.data()));text.resize(size_t(length));}}}else {text.resize(size_t(GetWindowTextLengthW(d.hwndItem))+1);GetWindowTextW(d.hwndItem,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));}
-    r.left+=7;r.right-=5;DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|(d.CtlType==ODT_BUTTON?DT_CENTER:DT_LEFT));if(d.itemState&ODS_FOCUS){r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}}
+  virtual void drawControl(const DRAWITEMSTRUCT &d){NativeControls::recordDraw(d.hwndItem);if(d.CtlType==ODT_COMBOBOX){NativeControls::comboItem(d);return;}if(d.CtlType==ODT_BUTTON)NativeControls::buttonItem(d,NativeControls::Surface::inspector);}
   static LRESULT CALLBACK childProc(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR context){
     auto &self=*reinterpret_cast<NativeToolWindow *>(context);
+    if(self.retired_&&m!=WM_NCDESTROY&&m!=WM_DESTROY)return 0;
+    if(m==WM_CAPTURECHANGED)try{self.controlCaptureChanged(h);}catch(const std::exception &e){self.error(e);}
     if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self.notifyFocusPresentation();
     if(m==WM_KEYUP||m==WM_SYSKEYUP)try{if((self.musicalRelease_&&self.musicalRelease_(w))||self.keyUp(w))return 0;}catch(const std::exception &e){self.error(e);return 0;}
     if(m==WM_KILLFOCUS&&!self.relocating_&&!self.owns(reinterpret_cast<HWND>(w)))self.releaseMusicalInput();
@@ -283,27 +342,43 @@ protected:
     return DefSubclassProc(h,m,w,l);
   }
   static LRESULT CALLBACK proc(HWND h,UINT m,WPARAM w,LPARAM l){auto self=reinterpret_cast<NativeToolWindow *>(GetWindowLongPtrW(h,GWLP_USERDATA));if(m==WM_NCCREATE){self=static_cast<NativeToolWindow *>(reinterpret_cast<CREATESTRUCTW *>(l)->lpCreateParams);self->window_=h;SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,m,w,l);
+    // Children may be constructed before this owner's finish(). Publish only
+    // the registry context at HWND creation; register this owner's summary
+    // after all its controls exist. Otherwise an early child escapes census.
+    if(m==WM_NCCREATE)if(auto registry=GetPropW(self->owner_,documentDraftRegistryProperty))
+      if(!SetPropW(h,documentDraftRegistryProperty,registry))return FALSE;
     try{
+      if(self->retired_&&m!=WM_NCDESTROY&&m!=WM_DESTROY)return DefWindowProcW(h,m,w,l);
       if(m==WM_SETFOCUS||m==WM_KILLFOCUS)self->notifyFocusPresentation();
       switch(m){
       case WM_CLOSE:self->hide();return 0;
       case WM_CONTEXTMENU:self->workspaceShortcut(VK_ESCAPE,false,true);if(self->contextMenu(reinterpret_cast<HWND>(w),POINT{GET_X_LPARAM(l),GET_Y_LPARAM(l)}))return 0;break;
       case WM_ACTIVATE:if(LOWORD(w)==WA_INACTIVE&&!self->relocating_)self->releaseMusicalInput();break;
       case WM_KILLFOCUS:if(!self->relocating_&&!self->owns(reinterpret_cast<HWND>(w)))self->releaseMusicalInput();break;
-      case WM_NCDESTROY:RemovePropW(h,toolProperty_);self->window_=nullptr;self->ready_=false;self->dockParent_=nullptr;break;
+      case WM_NCDESTROY:self->draftRegistration_.reset();RemovePropW(h,documentDraftRegistryProperty);RemovePropW(h,toolProperty_);self->window_=nullptr;self->ready_=false;self->retired_=true;self->dockParent_=nullptr;break;
       case WM_MOVE:self->rememberFloatingBounds();break;
       case WM_SIZE:self->rememberFloatingBounds();self->layoutAll();return 0;
       case WM_DPICHANGED:{if(!self->docked()){auto r=reinterpret_cast<RECT *>(l);SetWindowPos(h,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);}self->layoutAll();return 0;}
       case WM_DPICHANGED_AFTERPARENT:self->layoutAll();return 0;
+      case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:{
+        const BOOL dark=!NativeControls::highContrast();DwmSetWindowAttribute(h,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+        NativeControls::refreshTheme(h,m,w,l);self->requestPaint();break;}
       case WM_GETMINMAXINFO:{if(self->docked())break;const auto dpi=GetDpiForWindow(h);const auto scale=dpi/96.0f;auto &minimum=reinterpret_cast<MINMAXINFO *>(l)->ptMinTrackSize;minimum={LONG(self->minimumWidth_*scale),LONG(self->minimumHeight_*scale)};
         if(self->minimumClientWidth_>0&&self->minimumClientHeight_>0){RECT r{0,0,LONG(std::ceil(self->minimumClientWidth_*scale)),LONG(std::ceil(self->minimumClientHeight_*scale))};if(AdjustWindowRectExForDpi(&r,DWORD(GetWindowLongPtrW(h,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(h,GWL_EXSTYLE)),dpi))minimum={r.right-r.left,r.bottom-r.top};}return 0;}
       case WM_ERASEBKGND:return 1;
       case WM_PAINT:{PAINTSTRUCT p{};BeginPaint(h,&p);EndPaint(h,&p);self->render();return 0;}
-      case WM_TIMER:if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
-      case WM_COMMAND:if(self->ready_){const auto notification=HIWORD(w);if(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL)return 0;self->action(LOWORD(w),notification);self->layout();self->requestPaint();}return 0;
+      case WM_TIMER:if(w==automaticEditTimer){if(self->visible())self->flushAutomaticEdit();else self->cancelAutomaticEdit();}
+        else if(w==2){KillTimer(h,2);self->requestPaint();}else self->timer(w);return 0;
+      case WM_COMMAND:if(self->ready_){const auto notification=HIWORD(w);
+        // Opening/focusing a selector is not an edit. Handling CBN_DROPDOWN
+        // as an edit can rebuild the selector and close its native popup.
+        wchar_t type[32]{};if(l)GetClassNameW(reinterpret_cast<HWND>(l),type,32);
+        if(!_wcsicmp(type,L"ComboBox")&&notification!=CBN_SELCHANGE)return 0;
+        if(!_wcsicmp(type,L"Edit")&&(notification==EN_UPDATE||notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_HSCROLL||notification==EN_VSCROLL))return 0;self->action(LOWORD(w),notification);self->layout();self->requestPaint();}return 0;
+      case WM_HSCROLL:case WM_VSCROLL:if(self->ready_&&self->controlScroll(m,w,reinterpret_cast<HWND>(l)))return 0;break;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
-      case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:SetTextColor(reinterpret_cast<HDC>(w),RGB(218,232,241));SetBkColor(reinterpret_cast<HDC>(w),RGB(24,34,45));SetDCBrushColor(reinterpret_cast<HDC>(w),RGB(24,34,45));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+      case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:return NativeControls::controlColor(reinterpret_cast<HDC>(w),reinterpret_cast<HWND>(l),NativeControls::Surface::inspector);
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->workspaceShortcut(w,(l&(1LL<<30))!=0,true)||(self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0))||self->workspaceShortcut(w,(l&(1LL<<30))!=0,false))return 0;break;
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}
@@ -316,12 +391,38 @@ protected:
     }catch(...){if(m==WM_CLOSE)return 0;}
     return DefWindowProcW(h,m,w,l);
   }
-  explicit NativeToolWindow(HWND owner):owner_(owner){}
-  void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=TRUE;DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}
-  void finish(){if(!SetPropW(window_,toolProperty_,reinterpret_cast<HANDLE>(this)))throw std::system_error(GetLastError(),std::system_category(),"Identify native tool window");rememberFloatingBounds();ready_=true;layoutAll();}
+  explicit NativeToolWindow(HWND owner):owner_(owner){
+    if(auto *parent=presentationTool(owner))parentDraftIdentity_=parent->documentDraft();
+  }
+  void create(const wchar_t *className,const wchar_t *title,int width=960,int height=680,bool doubleClicks=false){WNDCLASSW wc{};wc.style=doubleClicks?CS_DBLCLKS:0;wc.lpfnWndProc=proc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=className;wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);RegisterClassW(&wc);RECT owner{};GetWindowRect(owner_,&owner);const auto scale=GetDpiForWindow(owner_)/96.0f;window_=CreateWindowExW(WS_EX_TOOLWINDOW,className,title,WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN,owner.left+int(35*scale),owner.top+int(35*scale),int(width*scale),int(height*scale),owner_,nullptr,wc.hInstance,this);if(!window_)throw std::runtime_error("Cannot create editor window");const BOOL dark=!NativeControls::highContrast();DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));surface_=std::make_unique<RenderSurface>(window_);}
+  void finish(){
+    if(!SetPropW(window_,toolProperty_,reinterpret_cast<HANDLE>(this)))throw std::system_error(GetLastError(),std::system_category(),"Identify native tool window");
+    rememberFloatingBounds();ready_=true;layoutAll();
+    if(auto *registry=reinterpret_cast<DocumentDraftRegistry *>(GetPropW(owner_,documentDraftRegistryProperty)))trackDocumentDrafts(*registry);
+  }
 public:
-  virtual ~NativeToolWindow(){ready_=false;if(window_)DestroyWindow(window_);if(font_)DeleteObject(font_);}
+  virtual ~NativeToolWindow(){draftRegistration_.reset();ready_=false;if(window_)DestroyWindow(window_);if(font_)DeleteObject(font_);}
+  // Editing owners opt in with their own raw-field semantics. Read-only
+  // browsers, references, meters and global preferences have no song draft.
+  // Clean identities are also useful to capture a nested editor's context;
+  // the registry filters them from the departure census.
+  virtual std::optional<Tracker::DocumentDraft> documentDraft()const{return {};}
+  void trackDocumentDrafts(DocumentDraftRegistry &registry) {
+    if(draftRegistration_.id())throw std::logic_error("Native draft owner already registered");
+    std::wstring title(size_t(GetWindowTextLengthW(window_))+1,0);GetWindowTextW(window_,title.data(),int(title.size()));title.resize(wcslen(title.c_str()));
+    if(!SetPropW(window_,documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&registry)))throw std::system_error(GetLastError(),std::system_category(),"Register native draft context");
+    try{draftRegistration_=registry.add(utf8(title),[this]{return documentDraft();},[this]{reviewDocumentDraft();},[this]()noexcept{
+      // Worker adoption has succeeded and the host still holds its input
+      // lease. Do not reenter editor actions, placement callbacks or reads.
+      // Destroy HWNDs here; the host releases C++ owners after native refresh.
+      retired_=true;ready_=false;
+      if(window_){EnableWindow(window_,FALSE);ShowWindow(window_,SW_HIDE);return DestroyWindow(window_)!=FALSE||!window_;}
+      return true;
+    });}
+    catch(...){RemovePropW(window_,documentDraftRegistryProperty);throw;}
+  }
   bool visible()const{return window_&&IsWindowVisible(window_);}
+  bool retired()const noexcept{return retired_;}
   HWND window()const{return window_;}
   bool docked()const{return dockParent_!=nullptr;}
   bool owns(HWND target)const{return window_&&target&&(target==window_||IsChild(window_,target));}
@@ -334,8 +435,8 @@ public:
     return false;
   }
   static bool belongsToTool(HWND target){for(auto current=target;current;current=GetParent(current))if(GetPropW(current,toolProperty_))return true;return false;}
-  void dock(HWND parent){if(!parent)throw std::invalid_argument("Choose a dock host window");relocate(parent);}
-  void floatWindow(){relocate(nullptr);}
+  void dock(HWND parent){if(retired_)throw std::logic_error("Document editor was retired");if(!parent)throw std::invalid_argument("Choose a dock host window");relocate(parent);}
+  void floatWindow(){if(retired_)throw std::logic_error("Document editor was retired");relocate(nullptr);}
   void dockBounds(float x,float y,float width,float height){
     if(!docked())throw std::logic_error("Tool is not docked");
     for(const auto value:{x,y,width,height})if(!std::isfinite(value)||std::abs(value)>32768)throw std::invalid_argument("Invalid tool dock bounds");
@@ -353,8 +454,9 @@ public:
   // A focus event requests painting only; callers must not move focus or layout.
   void focusPresentationChanged(std::function<void()> changed){focusPresentationChanged_=std::move(changed);}
   void musicalTyping(std::function<bool(HWND,WPARAM,bool)> key,std::function<bool(WPARAM)> release,std::function<void()> deactivate){musicalKey_=std::move(key);musicalRelease_=std::move(release);musicalDeactivate_=std::move(deactivate);}
-  void show(){const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
+  void show(){if(retired_||!window_)throw std::logic_error("Document editor was retired");const bool changed=!shown();ShowWindow(window_,IsIconic(window_)?SW_RESTORE:SW_SHOW);SetWindowPos(window_,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|(docked()?SWP_NOACTIVATE:0));requestPaint();if(visible())resumeVisiblePresentation();if(changed)notifyPlacement();}
   virtual void hide(){
+    if(automaticEdit_){cancelAutomaticEdit();automaticEditFailed_=true;if(ready_)layout();}
     const bool changed=shown(),focused=owns(GetFocus());releaseMusicalInput();
     if(window_){KillTimer(window_,2);ShowWindow(window_,SW_HIDE);}
     // A source-free child can belong to a retained but hidden native tool.

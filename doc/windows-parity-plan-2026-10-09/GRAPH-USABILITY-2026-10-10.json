@@ -1,0 +1,149 @@
+{
+  "scope": "First prioritized mixing-graph usability batch; broader parity remains paused",
+  "build": {
+    "commit": "eef65e5bb95aea15fd026b9e491408f3b8b46f2e",
+    "startedUTC": "2026-10-10T09:40:07.194632+00:00",
+    "oldAppSHA256": "0a189502cd9c88ab6193840ab2304ac4dc582183feca1061123681cf119da49d",
+    "scope": "Windows mixing graph usability; batched app and native harness build; previous output untouched",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\GraphUsability-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T09:41:42.853097+00:00",
+    "exitCode": 0,
+    "logSHA256": "111ba84f2d0d54304cec36ea2976f8716d940b83a713011b75ab62d0eae61486",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\GraphUsability-Release\\ScreamSeq.exe": "c0149612ccf93e3bc4e9112dd5e91d5486cd71bc878a52c61610154a11c8a69c",
+      "bin\\windows-parity-p1\\GraphUsability-Release\\ScreamSeqVST3Scanner.exe": "202e2524df2cbcf9d61705fd2f7ada97808888e340673458d8ababf15eb7775b",
+      "bin\\windows-parity-p1\\GraphUsability-Release\\workspace-restore-tests.exe": "ead496e388508e843ecbe2e3facd19e21cf58bab9c162aa0616a7b32753e2c10"
+    }
+  },
+  "initialValidation": {
+    "commit": "eef65e5bb95aea15fd026b9e491408f3b8b46f2e",
+    "buildReceiptSHA256": "0eefb12e3564299bfd8db4d8effe70621305972a688357f0f6a33ccc10bb8c13",
+    "appSHA256": "c0149612ccf93e3bc4e9112dd5e91d5486cd71bc878a52c61610154a11c8a69c",
+    "gates": [
+      {
+        "name": "native",
+        "startedUTC": "2026-10-10T09:41:47.425060+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(workspace-command-result-tests|workspace-receipt-tests)$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T09:43:24.528132+00:00",
+        "log": "bin\\parity-evidence\\graph-usability-native-runner.log",
+        "sha256": "8841c4159edb27782ccb362ecd516dd3f366bf7f701423a3073eae72faf683c1"
+      },
+      {
+        "name": "app",
+        "startedUTC": "2026-10-10T09:43:24.541438+00:00",
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\graph-usability-app.log",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_plugin_output_add_and_cut_preserve_other_destinations",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_insert_order_layout_keyboard_mouse_history_and_reopen",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_bus_and_sample_instrument_graph_assignment_expand_and_inspect",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_native_plugin_sidechains_auxiliary_output_and_disconnection",
+          "--test",
+          "test_song_routing.SongRoutingTests.test_minimum_native_control_bounds_focus_and_layout_history",
+          "--test",
+          "test_plugin_library.PluginLibraryTests.test_native_search_favorites_hide_categories_add_and_retained_stale_draft",
+          "--test",
+          "test_plugin_library.PluginLibraryTests.test_native_keyboard_minimum_bounds_and_unavailable_preferences"
+        ],
+        "exitCode": 1,
+        "finishedUTC": "2026-10-10T09:44:19.516093+00:00",
+        "log": "bin\\parity-evidence\\graph-usability-app-runner.log",
+        "sha256": "d9b6665c12eac7c78fde16824188993a0a7f2bd9c3afd2f51f3dbcf37f0f89b7"
+      }
+    ],
+    "applicationLogSHA256": "d40ab1580868b188730a9ba3b75cd9a92e867651b4f54ede73697c299b2b1ac6",
+    "appUnchanged": true
+  },
+  "qualificationCommit": "08a5f60ed0c1e0dff93806a7e546cc8ed5e06cb7",
+  "binaryInputsUnchangedAfterBuild": true,
+  "postBuildChanges": [
+    "windows/Tests/test_song_routing.py"
+  ],
+  "results": {
+    "nativeGroups": {
+      "workspace-receipt-tests": "passed, 39.88 seconds",
+      "workspace-command-result-tests": "passed, 57.13 seconds; includes new applicationMixingGraphUsability"
+    },
+    "actualApplication": "11 distinct cases pass: 8 in initial run, 2 corrected lifecycle fixtures and 1 additional navigation/bounds case in focused run",
+    "focusedSeconds": 18.243,
+    "priorBuildComparison": "Both initial legacy fixture failures reproduced on unchanged InteractionFix-Release (2d8509a19 product inputs). Failed cycle requires Review, then Reload; document replacement retires the routing HWND. Assertions preserved and expanded."
+  },
+  "logs": {
+    "bin/parity-evidence/graph-usability-build.log": {
+      "sha256": "111ba84f2d0d54304cec36ea2976f8716d940b83a713011b75ab62d0eae61486"
+    },
+    "bin/parity-evidence/graph-usability-native-runner.log": {
+      "sha256": "8841c4159edb27782ccb362ecd516dd3f366bf7f701423a3073eae72faf683c1"
+    },
+    "bin/parity-evidence/graph-usability-app.log": {
+      "sha256": "d40ab1580868b188730a9ba3b75cd9a92e867651b4f54ede73697c299b2b1ac6"
+    },
+    "bin/parity-evidence/graph-usability-prior-app.log": {
+      "sha256": "47a902c6122a3f3492e45a43d1f51ba7c952ecf6d00e6758813713419cab4de2"
+    },
+    "bin/parity-evidence/graph-usability-focused-app.log": {
+      "sha256": "bd46a2ca5b7c14e39e639160be8ce08cc60d61fe4ee92553e14292e9695684e5"
+    }
+  },
+  "limits": [
+    "Private desktop native interaction and geometry assertions; no foreground visual/presentation or audible-output measurement",
+    "No Mac build: only Windows native UI and Windows tests changed; no shared editing, DSP, metadata or API changes",
+    "P5 is not complete: unified song/recipe canvas, searchable in-canvas insertion, cable insertion/detach and wider graph workflow convergence remain in the parity plan"
+  ]
+}

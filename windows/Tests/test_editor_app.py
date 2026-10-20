@@ -460,7 +460,7 @@ class EditorAppTests(unittest.TestCase):
         grid, scale = state['geometry']['pattern'], state['dpi'] / 96
         def mouse(msg, x, y, flags=0):
             self.send(process, msg, flags, round(x*scale) | (round(y*scale) << 16))
-        x, y = grid['x']+44, grid['y']+56
+        x, y = grid['x']+44, grid['y'] + grid['headerHeight'] + 6
         mouse(0x201, x, y, 1)
         mouse(0x200, x+169.6, y+18, 1)
         mouse(0x202, x+169.6, y+18)

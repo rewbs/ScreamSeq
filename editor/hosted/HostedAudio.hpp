@@ -379,6 +379,7 @@ class PluginChain {
     std::shared_ptr<NativePlugin::Preset> preset;
     PluginState baseline;
     std::vector<PluginParameter> parameters;
+    std::vector<bool> previewed; // Control owner; same catalog order, allocated during preparation.
     ObservedProcessor ports;
     uint32_t activity=0;
   };
@@ -443,6 +444,7 @@ class PluginChain {
   std::vector<bool> bypass_;
   struct QueuedParameter {ParameterChange change;bool last=false,observed=false;NativePlugin *plugin=nullptr;uint32_t activity=0;};
   std::array<QueuedParameter, 4096> queue_{};
+  bool enqueueParameterBatch(std::span<const ParameterChange>,bool preview) noexcept;
   alignas(64) std::atomic<uint32_t> write_{0};
   alignas(64) std::atomic<uint32_t> read_{0};
   bool parameterBlockOpen_=false; // Audio owner only; excludes mid-block updates.
@@ -568,6 +570,23 @@ public:
   const float *captureMixerBus(size_t bus,const float *,const float *,uint32_t frames,bool finish) noexcept;
   bool mixerControls(const std::vector<MixerControls> &controls) noexcept { return mixerTransition_ && mixerTransition_->controls(controls); }
   std::vector<MixerMeter> mixerMeters() const { return mixerTransition_ ? mixerTransition_->controlPlan().runtime->meters() : std::vector<MixerMeter>{}; }
+  // Control owner only: collection and identity copies never run on audio.
+  // During adoption/failure, report unavailable instead of assigning old PCM
+  // to the newly edited bus list. Recheck the generation after reading levels.
+  MixerMeterReading identifiedMixerMeters() const {
+    MixerMeterReading result;
+    if(!mixerTransition_||!mixerTransition_->ready())return result;
+    const auto before=mixerTransition_->reading();
+    if(before.preparing()||before.rejected())return result;
+    const auto &runtime=*mixerTransition_->controlPlan().runtime;
+    const auto levels=runtime.meters();const auto &buses=runtime.graph().buses;
+    if(levels.size()!=buses.size())return result;
+    result.buses.reserve(buses.size());
+    for(size_t i=0;i<buses.size();++i)result.buses.push_back({buses[i].id,levels[i]});
+    const auto after=mixerTransition_->reading();
+    if(after.requested!=before.requested||after.rendered!=before.rendered||after.failed!=before.failed)return {};
+    result.fresh=true;result.revision=after.rendered;return result;
+  }
   bool mixerRoutingReady() noexcept {return !mixerTransition_ || mixerTransition_->ready();}
   MixerTransition::Reading mixerRoutingReading() const noexcept {return mixerTransition_?mixerTransition_->reading():MixerTransition::Reading{};}
   // First live-routing path: unchanged processors, sources and total latency.
@@ -617,6 +636,13 @@ public:
   // Single control producer. One release publishes the complete batch, or no
   // values on failure. Caller validates IDs/ranges against its baseline catalog.
   bool enqueueParameters(std::span<const ParameterChange>) noexcept;
+  // Transient audition leaves the accepted manual catalog and captured state
+  // unchanged. All calls are on the single control producer, never rendering.
+  bool previewParameters(std::span<const ParameterChange>) noexcept;
+  bool hasParameterPreview(size_t slot,uint32_t id) const noexcept;
+  // Restore CURRENT accepted values for these IDs, not a gesture's old copy.
+  // Allocation/preparation may throw; queue refusal leaves every preview intact.
+  bool cancelParameterPreviews(size_t slot,std::span<const uint32_t> ids);
   bool bypass(size_t slot,bool value) noexcept;
   size_t bypassStorageBytes() const noexcept;
   // Pair with process(): instrument/mixer/effect stages see the same boundary.

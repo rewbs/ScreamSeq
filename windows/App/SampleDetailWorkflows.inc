@@ -14,29 +14,22 @@
     setting_=true;for(int sustain=0;sustain<2;++sustain){const auto &row=sustain?loops_.raw().sustain:loops_.raw().normal;set(sustain?sustainStart:normalStart,row.start);set(sustain?sustainEnd:normalEnd,row.end);set(sustain?sustainEnabled:normalEnabled,row.enabled?L"Enabled":L"Disabled");choose(sustain?sustainDirection:normalDirection,row.reverse?2:row.pingpong?1:0);}setting_=false;
   }
   void resetLoops(){loops_.reset(workflowTarget(),info_);syncLoops();}
-  void loopChanged(){loops_.replaceRaw(loopFields());++generation_;report_=Json::object();invalidatePaste();requestPaint();}
+  void loopChanged(){loops_.replaceRaw(loopFields());++generation_;report_=Json::object();invalidatePaste();queueSampleEdit();requestPaint();}
   void useSelectionForLoop(bool sustain){
     requireCurrent();applyRange();require(region_.first<region_.last,"Select a nonempty range for the loop");
     auto raw=loopFields();auto &row=sustain?raw.sustain:raw.normal;row.start=std::to_wstring(region_.first);row.end=std::to_wstring(region_.last);row.enabled=true;const auto direction=choice(sustain?sustainDirection:normalDirection);row.pingpong=direction==1;row.reverse=direction==2;
-    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();page_=2;status(L"Loop draft uses the selection / Preview or Apply loops saves both rows together");
+    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();page_=2;status(L"Saving loop from selection…");queueSampleEdit();
   }
   void toggleLoop(bool sustain){
     auto raw=loopFields();auto &row=sustain?raw.sustain:raw.normal;row.enabled=!row.enabled;
-    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();status(L"Loop draft / audio and history unchanged until Apply loops");
+    loops_.replaceRaw(std::move(raw));syncLoops();++generation_;report_=Json::object();invalidatePaste();status(L"Saving loop changes…");queueSampleEdit();
   }
   void editLoops(bool dry){
+    cancelAutomaticEdit();
     requireCurrent();loops_.replaceRaw(loopFields());const auto submittedTarget=loops_.target();const auto submittedRaw=loops_.raw();
     auto params=loops_.params(workflowTarget(),dry);mutate("sample.loops.set",std::move(params),dry,false,false,true);
     if(!dry){require(loops_.acceptApplied(submittedTarget,submittedRaw,workflowTarget()),"Loop draft changed during Apply / newer fields retained");syncLoops();}
     const auto changed=report_.value("loopsChanged",false);status(dry?(changed?L"Preview: normal and sustain loops change together / PCM and history unchanged":L"Preview: both loops already match the saved sample"):(changed?L"Both loops applied / one Undo restores them / PCM unchanged":L"Loops unchanged / no history entry created"));
-  }
-  void reloadLoopFields(){
-    const auto before=context_(true);require(before.document==captured_.document,"Document replaced / use From cursor to capture the new sample");
-    require(std::any_of(before.samples.begin(),before.samples.end(),[&](const auto &v){return v.at("index")==slot_&&v.at("id")==id_;}),"Captured sample is unavailable / use From cursor");
-    const auto token=generation_;busy([&]{const auto data=request_("sample.get",{{"sample",slot_}});const auto now=context_(true);require(now.document==before.document&&now.revision==before.revision&&token==generation_,"Song or fields changed while reloading loops / draft retained");
-      captured_=now;info_=data;region_.frames=data.at("frames");clamp();if(!edited_.contains(rangeStart)&&!edited_.contains(rangeEnd)&&!edited_.contains(viewStart)&&!edited_.contains(viewEnd))syncFields();
-      resetLoops();refreshSavedSettings();sampleChoices();describeTarget();readWave();
-    });++generation_;report_=Json::object();invalidatePaste();status(L"Loop fields reloaded / other raw fields retained at their captured revision");
   }
   Json snapParams(unsigned first,unsigned last)const{
     const bool grid=choice(snapMode)==1;Json p={{"sample",slot_},{"positions",Json::array({first,last})},{"mode",grid?"grid":"zero"},{"direction",choice(snapDirection)==1?"before":choice(snapDirection)==2?"after":"nearest"}};
@@ -53,7 +46,7 @@
     if(loopTarget<0){region_.first=start;region_.last=end;syncFields();++selectionVersion_;}
     else{auto &row=loopTarget?raw.sustain:raw.normal;require(!row.enabled||start<end,"Snapping would collapse the enabled loop / widen its boundaries");row.start=std::to_wstring(start);row.end=std::to_wstring(end);loops_.replaceRaw(std::move(raw));syncLoops();}
     ++generation_;invalidatePaste();report_=std::move(result);unsigned matched=0;for(const auto &v:report_.at("positions"))matched+=v.at("matched").get<bool>();
-    status(L"Matched "+std::to_wstring(matched)+L"/2 boundaries · "+std::to_wstring(start)+L" → "+std::to_wstring(end)+(loopTarget<0?L" / selection only":L" / loop draft; Apply loops to save"));
+    status(L"Matched "+std::to_wstring(matched)+L"/2 boundaries · "+std::to_wstring(start)+L" → "+std::to_wstring(end)+(loopTarget<0?L" / selection only":L" / saving loop changes…"));if(loopTarget>=0)queueSampleEdit();
   }
   Json pasteParams(){
     applyRange();static constexpr const char *modes[]={"insert","overwrite","mix","replace"};const auto mode=choice(pasteMode);require(mode>=0&&mode<4,"Choose a paste mode");
@@ -70,7 +63,7 @@
     if(dry){pasteSignature_=signature;pasteTarget_=target;pasteClipboard_=params.at("clipboardId");}
     else{invalidatePaste();const unsigned start=report_.at("start"),frames=report_.at("insertedFrames");region_.first=std::min(start,region_.frames);region_.last=std::min(region_.frames,start+frames);syncFields();++selectionVersion_;}
     std::wstring text=dry?L"Paste preview: ":L"Pasted: ";text+=std::to_wstring(report_.at("insertedFrames").get<unsigned>())+L" inserted · "+std::to_wstring(report_.at("removedFrames").get<unsigned>())+L" removed · "+std::to_wstring(report_.at("resultFrames").get<unsigned>())+L" result frames";
-    if(report_.value("clippedSamples",uint64_t(0)))text+=L" · "+std::to_wstring(report_.at("clippedSamples").get<uint64_t>())+L" clipped values";status(text+(dry?L"\nReview the result, then Apply paste. The reviewed clipboard and song revision are retained.":L"\nOne Undo restores the previous audio and loop positions."));layout();
+    if(report_.value("clippedSamples",uint64_t(0)))text+=L" · "+std::to_wstring(report_.at("clippedSamples").get<uint64_t>())+L" clipped values";status(text+(dry?L"\nReview the result, then choose Paste audio. The reviewed clipboard and song revision are retained.":L"\nOne Undo restores the previous audio and loop positions."));layout();
   }
   void clipboard(int id){
     if(id==paste){pasteAudio(false);return;}auto p=rangeParams();require(region_.first<region_.last,"Select a nonempty range first");
@@ -82,15 +75,17 @@
     return {{"dirty",loops_.dirty()},{"stale",loops_.loaded()&&(!current()||loops_.target()!=workflowTarget())},{"normal",row(loops_.raw().normal)},{"sustain",row(loops_.raw().sustain)}};
   }
   void createWorkflowControls(){
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageDraw,L"Drawing"},{pageProcess,L"Process"},{pageLoops,L"Loops"},{pageClipboard,L"Paste"},{pageSnap,L"Snap"},{normalEnabled,L"Disabled"},{sustainEnabled,L"Disabled"},{snapNormal,L"Snap normal"},{snapSustain,L"Snap sustain"},{previewLoops,L"Preview loops"},{applyLoops,L"Apply loops"},{reloadLoops,L"Reload loops"},{previewPaste,L"Preview paste"},{autoSnap,L"Snap after selecting: Off"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{pageDraw,L"Drawing"},{pageProcess,L"Process"},{pageLoops,L"Loops"},{pageClipboard,L"Paste"},{pageSnap,L"Snap"},{normalEnabled,L"Disabled"},{sustainEnabled,L"Disabled"},{snapNormal,L"Snap normal"},{snapSustain,L"Snap sustain"},{previewLoops,L"Preview loops"},{applyLoops,L"Retry loops"},{reloadLoops,L"Reload loops"},{previewPaste,L"Preview paste"},{autoSnap,L"Snap after selecting: Off"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{normalStart,L"0"},{normalEnd,L"0"},{sustainStart,L"0"},{sustainEnd,L"0"},{pasteSourceGain,L"0"},{pasteDestinationGain,L"0"},{snapOrigin,L"0"}})edit(id,text,24);
-    auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
+    auto options=[&](int id,std::initializer_list<const wchar_t *> values){combo(id);for(auto text:values)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));choose(id,0);};
     options(normalDirection,{L"Forward",L"Ping pong",L"Reverse"});options(sustainDirection,{L"Forward",L"Ping pong",L"Reverse"});options(pasteRate,{L"Resample to target",L"Keep frame count"});
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{normalTitle,L"NORMAL"},{sustainTitle,L"SUSTAIN"},{loopStartLabel,L"Start frame"},{loopEndLabel,L"End (exclusive)"},{loopDirectionLabel,L"Direction"},{loopHelp,L"Apply saves both loops in one Undo step.\nCrossfade uses saved forward loops."},{pasteModeLabel,L"Paste mode"},{pasteRateLabel,L"Rate conversion"},{pasteSourceLabel,L"Clipboard gain (dB)"},{pasteDestinationLabel,L"Existing audio (dB)"},{pasteHelp,L"Insert adds time. Overwrite replaces frames in place. Mix combines audio. Replace substitutes the selection.\nResample preserves pitch; Keep frame count preserves the clipboard's number of frames."},{snapModeLabel,L"Snap mode"},{snapDirectionLabel,L"Direction"},{snapSizeLabel,L"Search radius (frames)"},{snapOriginLabel,L"Grid origin (frame)"},{snapHelp,L"Snap moves selection or loop draft boundaries; audio stays unchanged.\nZero crossings use the selected channels. Grid positions are measured from the origin."},{amountLabel,L"Amount"},{exponentLabel,L"Exponent"},{curveLabel,L"Fade curve"},{processHelp,L"Amount is gain / target dB, or an odd smoothing window (3–255 frames).\nExponent applies to exponential and logarithmic fades. Preview leaves audio and Undo history unchanged."},{crossFramesLabel,L"Frames"},{drawHelp,L"Zoom to individual frames to draw in the waveform, or stage exact frame / amplitude pairs.\nApply drawing saves the full stroke in one Undo step. Escape cancels the current gesture."}})label(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{normalTitle,L"NORMAL"},{sustainTitle,L"SUSTAIN"},{loopStartLabel,L"Start frame"},{loopEndLabel,L"End (exclusive)"},{loopDirectionLabel,L"Direction"},{loopHelp,L"Loop changes save automatically in one Undo step.\nCrossfade uses saved forward loops."},{pasteModeLabel,L"Paste mode"},{pasteRateLabel,L"Rate conversion"},{pasteSourceLabel,L"Clipboard gain (dB)"},{pasteDestinationLabel,L"Existing audio (dB)"},{pasteHelp,L"Insert adds time. Overwrite replaces frames in place. Mix combines audio. Replace substitutes the selection.\nResample preserves pitch; Keep frame count preserves the clipboard's number of frames."},{snapModeLabel,L"Snap mode"},{snapDirectionLabel,L"Direction"},{snapSizeLabel,L"Search radius (frames)"},{snapOriginLabel,L"Grid origin (frame)"},{snapHelp,L"Snap moves selection or loop draft boundaries; audio stays unchanged.\nZero crossings use the selected channels. Grid positions are measured from the origin."},{amountLabel,L"Amount"},{exponentLabel,L"Exponent"},{curveLabel,L"Fade curve"},{processHelp,L"Amount is gain / target dB, or an odd smoothing window (3–255 frames).\nExponent applies to exponential and logarithmic fades. Preview leaves audio and Undo history unchanged."},{crossFramesLabel,L"Frames"},{drawHelp,L"Zoom to individual frames to draw in the waveform, or stage exact frame / amplitude pairs.\nApply drawing saves the full stroke in one Undo step. Escape cancels the current gesture."}})label(id,text);
   }
   void workflowLayout(){
     const auto [w,h]=size();const auto dpi=GetDpiForWindow(window_);
     const auto previousFocus=GetFocus();
+    ShowWindow(controls_.at(applySettings),automaticEditFailed_&&settingsDraft()?SW_SHOWNA:SW_HIDE);
+    ShowWindow(controls_.at(applyLoops),automaticEditFailed_&&loops_.dirty()&&page_==2?SW_SHOWNA:SW_HIDE);
     // Edits must retain their focus, selection and raw strings while a request
     // refreshes its result. Reflow only for actual geometry/page changes.
     const bool geometry=w!=layoutWidth_||h!=layoutHeight_||dpi!=layoutDpi_||page_!=layoutPage_;
@@ -133,9 +128,15 @@
     }
     for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,!pending_||id==close);}
     EnableWindow(controls_.at(paste),!pending_&&pasteReady());
+    if(mutationFrozen()){
+      for(auto [id,control]:controls_){wchar_t type[24]{};GetClassNameW(control,type,24);if(_wcsicmp(type,L"STATIC"))EnableWindow(control,id==close||(id>=pageDraw&&id<=pageSnap));}
+      EnableWindow(controls_.at(reload),!pending_&&!mutationWorking_);
+      EnableWindow(controls_.at(fromCursor),!pending_&&!mutationWorking_&&mutationNeedsAcknowledgement_);
+    }
+    set(reload,mutationCompletion_.retained()?L"Review":L"Reload");set(fromCursor,mutationCompletion_.retained()?L"Accept state":L"From cursor");
     // Disabling native controls clears their focus during worker requests.
     // Restore only that lost focus, never a newer choice or inactive window.
     if(pending_&&previousFocus&&IsChild(window_,previousFocus)&&!GetFocus())pendingFocus_=previousFocus;
-    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
+    if(!pending_&&!mutationFrozen()&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
     layoutPending_=pending_;
   }

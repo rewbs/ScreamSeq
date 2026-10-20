@@ -1,5 +1,17 @@
 void audioFanConnections() {
   using namespace ScreamSeq::GraphCableEdits;
+  Json parameters=Json::array({{{"id",7},{"min",-96},{"max",24},{"manualValue",-12},{"writable",true},{"canSlide",true},{"step",0}}});
+  const auto manual=modulationDefault(parameters,7);CHECK(manual.base==.7&&!manual.quantized);
+  auto zero=connect(Json::array(),{"source",true,true,0},{"target",false,true,7},{},manual);
+  CHECK(zero.edges[0]["minimum"]==0&&zero.edges[0]["maximum"]==0&&zero.edges[0]["base"]==.7);
+  CHECK(connect(zero.edges,{"target",false,true,7},{"source",true,true,0}).edges==zero.edges);
+  parameters[0]["canSlide"]=false;parameters[0]["step"]=1;
+  CHECK(modulationDefault(parameters,7).quantized);
+  parameters[0]["step"]=0;bool missingStep=false;try{modulationDefault(parameters,7);}catch(const std::invalid_argument &){missingStep=true;}CHECK(missingStep);
+  bool missingManual=false;try{connect(Json::array(),{"source",true,true,0},{"target",false,true,7});}catch(const std::invalid_argument &){missingManual=true;}CHECK(missingManual);
+  auto disabled=zero.edges;disabled[0]["enabled"]=false;disabled[0]["base"]=.1;disabled[0]["quantized"]=true;
+  const auto fresh=connect(disabled,{"other",true,true,0},{"target",false,true,7},{},manual);
+  CHECK(fresh.edges[0]==disabled[0]&&fresh.edges[1]["base"]==.7&&fresh.edges[1]["quantized"]==false);
   Fixture f;const auto graph=f.api.invoke("graph.create",Json::object()).at("graph");
   const auto a=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",recipe()}}).at("node").get<std::string>();
   const auto b=f.api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"plugin",recipe()}}).at("node").get<std::string>();
@@ -49,7 +61,7 @@ void audioFanConnections() {
   const auto lfo2=q.api.invoke("graph.node.add",{{"graph",qg},{"kind","lfo"}}).at("node").get<std::string>();
   auto quantized=definition(q);const auto first=quantized["modulation"][0];
   auto fan=connect(quantized["modulation"],{lfo2,true,true,0},{qp,false,true,7});
-  CHECK(fan.edges[0]==first&&fan.edges[1]["base"]==.42&&fan.edges[1]["quantized"]==true);
+  CHECK(fan.edges[0]==first&&fan.edges[1]["base"]==.42&&fan.edges[1]["quantized"]==true&&fan.edges[1]["minimum"]==0&&fan.edges[1]["maximum"]==0);
   quantized["modulation"]=fan.edges;q.api.invoke("graph.update",{{"definition",quantized}});
   CHECK(definition(q)["modulation"].size()==2);q.doc->undo();CHECK(definition(q)["modulation"].size()==1);
   q.doc->redo();const auto lfo3=q.api.invoke("graph.node.add",{{"graph",qg},{"kind","lfo"}}).at("node").get<std::string>();

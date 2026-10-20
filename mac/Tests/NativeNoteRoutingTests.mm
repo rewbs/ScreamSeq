@@ -17,6 +17,7 @@ extern "C" void tracker_audit_begin();
 extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
 #endif
 static void check(bool ok,const char *why){if(!ok)throw std::runtime_error(why);}
+#include "editor/Tests/LayeredInstrumentChecks.hpp"
 static std::unique_ptr<Document> fixture(){auto doc=std::make_unique<Document>();doc->transaction([](CSoundFile &s){
   s.m_nInstruments=2;s.Instruments[1]=new ModInstrument(0);s.Instruments[2]=new ModInstrument(0);
   s.Order().SetDefaultTempoInt(125);s.Order().SetDefaultSpeed(6);
@@ -72,6 +73,11 @@ int main(int argc,char **argv){trustFixtureArguments(argc,argv);@autoreleasepool
   check(argc==2,"Fixture bundle required");void *handle=dlopen((std::string(argv[1])+"/Contents/MacOS/ResonanceFixture").c_str(),RTLD_NOW|RTLD_LOCAL);check(handle,"Load fixture");auto weighted=reinterpret_cast<void(*)(bool)>(dlsym(handle,"ResonanceFixtureChannelWeights"));check(weighted,"Channel-weight fixture hook");weighted(true);setFixtureAUChannelWeights(true);
   const auto vst=NativePlugin::discoverVST3(argv[1]),au=registerFixtureAUs();
   for(const auto &descriptor:{vst[1],au[1]}){
+    for(auto rate:{44100u,48000u,96000u}){
+      for(bool mixer:{false,true})for(bool preview:{false,true})layeredInstrumentChecks(descriptor,rate,mixer,false,preview);
+      layeredInstrumentChecks(descriptor,rate,true,true,false);layeredInstrumentChecks(descriptor,rate,true,true,true);
+      layeredInstrumentChecks(descriptor,rate,true,false,false,true);layeredInstrumentChecks(descriptor,rate,true,false,false,false,true);
+    }
     noteRoutingScopeChecks(descriptor);
     noteActivityHostChecks(descriptor);
     PluginState a{descriptor},b{descriptor};a.instanceID="note-a";b.instanceID="note-b";a.instrument=1;b.instrument=2;

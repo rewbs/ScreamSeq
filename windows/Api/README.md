@@ -1,5 +1,42 @@
 # Windows local API subset
 
+`track.get {}` returns the shared note-track projection: stable column identities,
+effective per-column mute, visual group membership, note-column indexes, group
+bus names/colors/outputs, available destinations and the module's column limit.
+The same projection is cached as `document.get.data.trackLayout`. Existing
+`document.get.data.tracks` retains its original raw-column metadata contract.
+
+`track.group {channels, name?, output?}`, `track.create {columns, name?, output?}`,
+`track.ungroup {track}` and `track.column.set {column, mute}` require
+`expectedRevision` and accept `dryRun`. Their parameter/result definitions are
+shared with [the Mac API guide](../../mac/AUTOMATION.md). Group existing adjacent
+columns or append new ones within the actual module limit; an explicit destination
+is required when selected columns have different main outputs. Grouping retains
+inserts, sends and unrelated routing. Ungroup removes visual membership while
+retaining the group bus and all its processing/routes. Use `mixer.bus.set` for
+group name/color and `song.annotate` for raw-column metadata.
+
+Changed writes create one chronological Undo step and persist in the existing
+native project format. DryRun and successful no-ops preserve revision/history.
+Structural group/create edits use the existing safe transport-stop path. Pure
+column-mute edits and their Undo/Redo prepare a whole-column frame for live
+publication; a saturated queue or changed playback owner rejects before commit
+with `-32002`, preserving the document, transport and history. Reads expose the
+committed model; renderer adoption occurs at its next render boundary. These
+methods do not enable full API parity. This P2 source integration still requires
+the recorded native/pipe/audio and cross-platform qualification gates.
+
+The native grid shows saved column names and colored group spans above its note
+and effect headers. Click a span to select that group's columns at the current
+row; click a column header to select that column. The native **Mute N / Unmute N**
+button changes only the current note column. Mute and Ungroup are also registered
+commands in the palette and pattern context menu, with configurable shortcuts.
+Their uncertain results use the existing retained command Review flow, without
+repeating a write. `workspace.get.data.trackHeaders` reports visible columns and
+group rectangles in DIPs; `geometry.pattern.headerHeight` locates the first row
+without assuming a fixed header size. Native create/group draft forms remain
+pending in this checkpoint; the APIs support those edits now.
+
 Parameter activity uses the shared prepared processor monitor: `parameter.activity.targets`,
 `.parameters`, `.sources` and `.get` read actual host values and controlling sources.
 `parameter.activity.watch` is a transient replay-cached write without a song revision
@@ -23,6 +60,104 @@ not full macOS API parity. The attached host determines document-operation suppo
 query the running instance's `api.describe` for its current method catalog. Do not
 infer support from the standalone protocol fixture or the Mac schema. Navigation
 and inspectors share GUI/API paths (see **Workspace subset** below).
+
+**File / New song** (Ctrl+N) and **File / Open demo song** are available through
+the native command palette. New uses the shared blank-song defaults; Demo uses
+the same shared example song as Mac. Both ask the existing Save/Discard/Cancel
+question for unsaved music, protect recording takes, and review retained editor
+drafts before replacement. Cancel and failed preparation/Stop preserve the old
+document. A successful replacement starts a fresh document identity, empty
+history and no save path, then focuses the pattern. An existing custom Ctrl+N
+binding is preserved and leaves New unbound until explicitly reassigned.
+
+The native application advertises `document.new` as a Windows extension. It
+requires `expectedRevision` and accepts optional booleans `demo` (default false)
+and `discard` (default false). All other fields reject. Its schema is
+[`document-new.schema.json`](document-new.schema.json). It uses the normal write
+replay cache, so retry an uncertain reply with the same request ID and content;
+do not issue a fresh creation speculatively. New is a document replacement, not
+an Undo entry. Musical edits in the new document retain ordinary Undo/Redo and
+native save/reopen. This extension does not claim that Mac exposes this API.
+
+`document.open` and `document.new` require a current `expectedRevision`. Their `discard:true` applies
+to unsaved song changes; it does not authorize discarding retained native editor
+drafts. Those drafts produce `-32002` with `data.writeOutcome:"notCommitted"`
+before replacement. Resolve them in their editor, or use the native Open review
+prompt to review, discard the exact captured drafts, or keep editing. New/Demo and Recovery
+Restore uses the same final admission check. A changed draft invalidates an
+earlier native discard decision; pending or uncertain work must be resolved.
+
+During document adoption and native refresh, mutating API and workspace actions
+are refused with `-32002` / `notCommitted`. If refresh fails after adoption,
+`document.get` reads the adopted song and `context.get` reports
+`nativeRefreshPending:true`; remaining native context is the last displayed
+context and must not be used as a new editing target. Input stays protected.
+Press F5 in the app to retry native cleanup/refresh without reopening the file
+or replaying the write. Stop remains available and preserves that recovery
+message. A successful retry restores normal editing.
+
+**Report…** beside Save As, and **File / Project load and recovery
+report** in the command palette (626), open a modeless native report. The button
+reads **Recovery…** while Save a copy is required, or **Warnings…** for retained
+load diagnostics. The report displays the
+original source, current saved path, all deduplicated load warnings/import issues
+and preview-only status. Its text is read-only, selectable and scrollable;
+refreshing an unchanged report preserves selection and focus. Warnings remain
+reviewable after a successful Save As, while the completed Save-a-copy requirement
+disappears. Merely opening or closing the report never acknowledges a warning or
+changes source-overwrite protection.
+
+The report's **Save a copy…** uses the existing Save As workflow. It posts the
+action to the main window after the report callback returns and rechecks the
+document identity before opening a chooser. Replacing the document retires the
+old report and cancels its queued action. `workspace.get.loadReport` exposes
+`visible`, the report's `context` and its displayed `text`. Context includes
+`documentId`, `sourcePath`, `path`, `warnings`, `issues`, `requiresSaveAs`,
+`editable` and `busy`; these are existing loader facts, not a new recovery policy.
+
+**Settings…** beside the sidebar channel count, and **Song / Title and channel
+count** in the command palette (627), open a retained native form over
+`document.patch`. Title and channel-count changes are submitted together with
+the captured revision. Omitted/unchanged fields are preserved, including tempo,
+speed, meter and groove. The displayed channel range comes from
+`document.get.data.formatLimits.channelsMin/channelsMax`, alongside the existing
+pattern/order limits. Removing trailing channels removes their music; the form
+explains this before Apply, and document history restores a successful edit.
+
+Refresh, close and reopen retain raw field text. **Use current revision** keeps
+that text and explicitly rebases its target; **Reload values** replaces it with
+the current song values. Ctrl+Enter applies, F6 returns to the pattern and Escape
+hides the form. Hidden dirty fields participate in document departure review.
+**Review result** reconciles a retained completion without repeating its write;
+an outcome without a receipt requires readback and explicit acceptance of the
+observed state. `workspace.get.songProperties` exposes the captured context,
+draft, generation, dirty/stale/pending/completed flags and retained result or
+observation. This UI adds no separate editing, history or persistence policy.
+
+The native sample recorder retains an unresolved Record/Stop/Discard operation
+in `workspace.get.data.sampleRecording.lifecycleReview`, including its method,
+captured document/revision, take identity and submitted parameters. While present,
+another lifecycle write, Keep, setup discard and Close are unavailable. The
+native **Review current take** action reads `sample.recording.get` without
+repeating the operation. Failed or malformed readback retains the review state.
+Successful review adopts the observed current take (including a different take
+created through the API, or no take), preserving the sample-name/output draft.
+It does not claim whether the earlier operation succeeded. Subsequent explicit
+actions use the observed take identity. An uncertain Keep still requires its
+separate result review; absence of the old take does not prove sample import.
+
+The native reconnect window similarly retains a failed explicit path scan or
+installed-plugin rescan in `workspace.get.data.pluginPath.scanReview`. Review
+result uses `synchronizeView` and the captured stable target's `plugin.path.get`
+or `graph.plugin.path.get`; it never sends another reconnect or scan. A reconnect
+with no retained result uses the same observation path. Successful readback
+records `report.outcome:"unverified"`, the observed location/candidates and the
+original submission. This is current-state evidence, not proof that the earlier
+request committed or created Undo history. Raw path fields and their baseline
+remain unchanged; `readbackNeedsReload:true` requires explicit Reload before
+another Verify, reconnect or scan. Wrong-document, changed-revision, wrong-target,
+malformed or failed reads retain the unresolved operation and departure guard.
+Known reconnect receipts retain their existing exact-result review behavior.
 
 `document.get` includes stable current-sequence order identities in
 `orderMetadata: [{id: "n…", name, annotation, color}]`, aligned with every untrimmed entry in `orders`,
@@ -237,6 +372,26 @@ transport or changing history; unsupported preparations also preserve playback.
 draft flags, selection and retained hit-test geometry. The contextual workspace
 panel API is unchanged.
 
+The reusable Windows graph editor starts new modulation cables at zero depth.
+Their base comes from an enabled contribution to the same target, or from the
+target catalogue's normalized manual value. New discrete targets retain an
+explicit quantized mode. In the new-wire form, an empty Base field means this
+automatic baseline; entering a number remains an explicit normalized base edit.
+Updating a selected cable preserves its saved quantized/enabled flags and all
+fields not displayed by the form. These remain local drafts until Apply, which
+uses the existing guarded `graph.update` transaction and document history.
+Catalogue reads capture endpoint identities and reject a changed draft/revision
+before adopting new wire defaults.
+
+`workspace.get.songRouting.canvas.nodes` includes `stageRole` (`none`, `row`,
+`persistent`, `ordinary`, `instrument`), `canEditInserts` and `canAssignGraph`.
+Row/Persistent cards inspect their own shared recipe; activation remains in
+pattern commands. They cannot change the bus's Ordinary assignment or regular
+insert chain, including through keyboard or directly dispatched control actions.
+Regular inserts are edited from the bus/effect owner. These presentation roles
+do not rename persisted graph/layout identities or identify an aggregate audio
+stage as an individual prepared processor copy.
+
 The retained Graph Curve editor uses `graph.automation.get/set` and
 `automation.formula.preview`. Graph's Pattern curve action opens that editor
 while routing remains on its previous page. `workspace.get.graphCurve` reports
@@ -381,6 +536,50 @@ unconfirmed play command. Propagate engine failure; do not report success.
 `stop()` should stop playback/capture through Application::stop(). Neither
 operation changes the document or its Undo history. Host callbacks must not
 partially mutate on validation failure.
+
+Hosts advertising `supportsPlaybackLoop()` also expose `transport.loop` with
+`expectedRevision` and a required boolean `enabled`. ScreamSeq's Windows app
+implements it through the shared renderer's atomic loop setter. It updates a
+running song/pattern region without restarting WASAPI, replacing the region,
+moving the edit cursor, changing history, or stopping/discarding a recording take.
+While stopped, it sets the default for the next Play; an explicit `transport.play`
+`loop` field overrides that default. `transport.get.loop` is the current setting;
+`region` retains the parameters of the request that started playback. Busy or
+document-replacement admission refuses before changing the loop setting.
+Hosts without this capability do not advertise it and return unknown-method.
+
+The Windows command palette and pattern context menu expose the loop toggle,
+along with a native `Playback loop: on/off` button below the typing selectors.
+The palette permits assigning a shortcut using the existing command ID scheme.
+Native editor focus and raw drafts survive shortcut activation. This parity
+slice adds no project field or saved preference format. Its new actual-app,
+native-control and shared renderer checks require qualification before a runtime
+parity claim; authored checks alone are not evidence of device behavior.
+
+Native Play starts at row zero of the selected occurrence of the edited pattern,
+falling back to its first occurrence. **Shift+Space** plays from the edit cursor;
+**Ctrl+Space** plays the selected rows, or the whole pattern when unselected;
+**Ctrl+Shift+Space** uses the cursor within that bounded range (its start when
+the cursor is outside). Bounds include the selected last row, represented as an
+exclusive `endRow` in `transport.get.region`. All these commands appear in the
+palette and pattern context menu. They retain the edit cursor, selection, viewport
+and Follow setting; native text/list controls and formula completion keep local
+ownership of these keys.
+
+Repeated orders use stable occurrence identity through preparation. A removed or
+reassigned occurrence refuses before device work, while a moved occurrence is
+resolved at its new index. Bounded Play also accepts a pattern absent from the
+arrangement; unbounded cursor Play reports that condition instead of playing a
+different pattern. Ordinary Play then uses the selected playable occurrence (or
+first playable order). API `transport.play` retains its explicit parameters and
+default order-zero behavior. No project migration accompanies these UI commands.
+
+Existing customized shortcut profiles retain conflicting explicit bindings when
+these defaults are introduced. Only the corresponding new command starts
+unbound; other new defaults remain active. This is reflected as an empty override
+in the palette/API, written only on the next explicit preference save. Clear the
+old binding and Reset the new command to enable its default. Explicit conflicts
+within a profile still reject the complete load.
 
 ## Workspace subset
 
@@ -553,7 +752,8 @@ Enter on an FX cell; it is not another configurable global binding.
 `workspace.shortcut.set` accepts exactly `command` (a catalog ID) and `keys`
 (an array of zero to four strings). An empty array clears a binding. One stroke
 sets a shortcut; two to four form a sequence, for example `["ctrl+alt+g", "r"]`.
-The first custom stroke needs Ctrl or Alt to preserve note entry. Sending the
+The first custom stroke needs Ctrl or Alt to preserve note entry, except that
+the Play/Stop command also accepts a single unmodified Return. Sending the
 exact `defaults` array for that same command restores its trusted default,
 including built-in unmodified bindings such as Space or F6. Canonical
 strings are lowercase, with modifiers in `ctrl+alt+shift+` order, followed by
@@ -576,6 +776,38 @@ describes unchanged song history even when the preference changes.
 The operation leaves playback running (`playbackStopped:false`). Successful writes use
 the adapter's existing request-ID replay. `workspace.get.shortcuts` reports
 only the current sequence `pending` and `hint` presentation state.
+
+**Preferences / Musical keyboard and Play-Stop key** (command 628) opens the
+retained native keyboard form. Use US unshifted physical key labels, including
+letters, numbers and punctuation; `<` denotes the extra ISO key. These describe
+positions, so QWERTZ/AZERTY keep their physical piano geometry. Lower requires 12
+keys (C through B); upper takes 12, or 13 including top C. All keys across both
+rows must be distinct. Defaults preserve Windows' existing
+`ZSXDCVGBHNJM` / `Q2W3ER5T6Y7UI`, including its top C on I. Mapped keys take
+priority in the pattern note column; ordinary fields keep native text editing,
+and modified command chords keep their existing behavior. Held notes release
+their original pitch even if settings change before key-up.
+
+`workspace.get.keyboard` returns `lower`, `upper`, `playStopKeys` and an opaque
+`revision` token describing that configuration. `workspace.keyboard.set` accepts
+exactly `expectedKeyboard` (that token), `lower`, `upper` and `playStopKeys` (zero
+to four command strokes). `[]` disables the global toggle, `['space']` or
+`['return']` select a native single-key binding, and existing modified
+shortcuts/sequences remain supported. The native form can keep a custom palette
+binding while changing note rows. A stale token, invalid mapping or conflicting
+transport shortcut rejects the whole change. Its normal result envelope reports
+unchanged song history/playback; request-ID replay covers successful writes.
+
+Both settings share the existing guarded, atomic shortcut preference write.
+Optional `noteKeys: {lower, upper}` in `workspace-shortcuts-v1.json` is emitted
+only for a nondefault map; old profiles keep the current Windows defaults and
+are not rewritten on load. Older executables reject this added field rather
+than silently erase it. Invalid/unreadable files retain the active configuration
+and block changes until an explicit successful reload; concurrent disk edits
+also require reload. Inspection instances remain memory-only. Reopening the
+form retains unfinished text; **Reload preferences** explicitly replaces it.
+This global preference draft survives song replacement. Pattern row-density
+commands and saved workspace layouts remain independent presentation settings.
 
 Open **Commands** with its default Ctrl+K binding to search, select a command,
 then **Set shortcut**, **Set sequence**, **Clear**, or **Reset default**.
@@ -612,7 +844,7 @@ for current qualification and remaining scope.
 The base adapter catalog includes `api.describe`, `document.get`, `pattern.get`,
 `context.get`, `transport.get`, `transport.play`, `transport.stop`, `context.set`,
 `workspace.get`, `workspace.panel`, `workspace.layout`, `workspace.commands.get`
-and `workspace.shortcut.set`. Attached document hosts
+and `workspace.shortcut.set`, `workspace.keyboard.set`. Attached document hosts
 can enable additional operations; use the live catalog, not a hard-coded superset.
 Unsupported methods return `-32601`. The adapter uses the existing
 string-ID JSON-RPC envelope, revision guard (-32001), parameter errors (-32602),
@@ -621,12 +853,32 @@ response dictionaries. Unknown envelope keys/batches/notifications are -32600.
 Unbound adapters only describe capabilities; song requests return busy rather
 than fabricated state.
 
-### Bounded successful-write replay
+### Classified write outcomes
+
+A failure to deliver or present a result is separate from whether the operation
+took effect. Classified errors retain the existing public error codes and may
+add `error.data.writeOutcome`: `notCommitted`, `noChange`, `committed` or `unknown`.
+See [write-outcome.schema.json](write-outcome.schema.json) for this optional data.
+`documentId` and `revision` are included only when known at that boundary; a
+post-write snapshot or serialization failure never advertises the pre-write
+revision as current. `committed` means an effect occurred but completion failed;
+`unknown` requires reconciliation. Neither permits blind resubmission.
+
+The current worker classifies known committed publication failures. The adapter
+classifies completion failures after a returned host write, including invalid
+UTF-8 or a result exceeding the wire bound. The native application preserves a
+classified worker exception through best-effort view repair. This is not yet
+exhaustive classification of every host side effect. Absence of outcome data,
+an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
+Filesystem, library, take and device effects require their own domain readback.
+Transport loss after sending can also leave the outcome unknown to the client.
+
+### Bounded write replay
 
 `api.describe.result.data.writeReplayCache` reports the policy and aggregate
 occupancy (`retainedEntries`, `retainedSerializedBytes`), never cached IDs,
 parameters, paths or response contents. Per SessionAdapter, retention is limited
-to **64 successful writes and 8 MiB (8,388,608 bytes)**, whichever binds first.
+to **64 write responses and 8 MiB (8,388,608 bytes)**, whichever binds first.
 The byte charge is precisely `request.dump().size() + response.dump().size()`:
 compact, sorted-object-key UTF-8 JSON envelopes, without newline delimiters or
 original request whitespace. It is **not an 8 MiB heap/RSS guarantee**: retained
@@ -634,23 +886,26 @@ response JSON nodes, string capacities, ID copies, containers and allocator
 overhead cost additional memory. Temporary snapshots, serialization buffers and
 in-flight responses are outside this retention accounting.
 
-Only successful write-method results enter the cache, including successful
-no-ops and `dryRun:true` previews. Validation/host errors and all reads remain
-uncached. A retained request's ID, method and parameters must match its canonical
-parsed JSON exactly; key order/whitespace are irrelevant, but an integer changed
+Successful write-method results enter the cache, including successful no-ops
+and `dryRun:true` previews. Classified `committed` and `unknown` write errors
+also enter it. Proven `notCommitted`/`noChange`, unclassified validation/host
+errors and all reads remain uncached. A retained request's ID, method and
+parameters must match its canonical parsed JSON exactly; key order/whitespace
+are irrelevant, but an integer changed
 to a floating-point parameter is different. An exact retry returns the original
 complete response without invoking the host or rechecking now-stale tokens.
 Reusing that ID for a different write returns `-32600` and preserves the original
 entry. Applying a dry-run proposal requires a new ID and current revision.
 
-Successful insertions evict the oldest entries until both limits hold; a replay
+Insertions evict the oldest entries until both limits hold; a replay
 does not refresh an entry's age. An entry whose charge alone exceeds 8 MiB is
-not retained and does not evict older entries. Retention is best effort: size,
-serialization or allocation failure must not convert an already completed write
-into a rejection with the pre-write revision. The original success is returned
-even when it cannot be cached. A host result that cannot serialize still reaches
-the transport's existing bounded `-32003` fallback (currently with null ID), not
-a claim that the write was unchanged; inspect state to determine the outcome.
+not retained and does not evict older entries. Retention is best effort: a size
+limit or allocation failure must not convert an already completed write into a rejection
+with the pre-write revision. A deliverable success is returned even when it
+cannot be cached. Undeliverable write results instead produce a small `-32003`
+error with the original ID and `writeOutcome:"unknown"`, retained under the same
+bounds. The transport still has a generic fallback for failures outside this
+adapter (including malformed read replies); it makes no rejection claim.
 
 This is a **bounded, session-local replay window**, not durable/global
 idempotency. After eviction, skipped retention or adapter destruction, a request
@@ -1114,3 +1369,144 @@ preset, bypass and auxiliary configuration into a fresh plugin identity. The
 result includes `slot`, `plugin`, `detached`, and `dryRun`. It copies no instrument
 assignments, recorded points, or song cables; effect copies start detached. The
 rack and optional canvas position join one unified history operation and persist.
+
+### Pattern time ruler
+
+The native pattern menu and command palette expose **Increase row height** and
+**Decrease row height** (commands 598/599). Heights are 18, 22, 26, 30 and 34 DIPs;
+the endpoints clamp. Bind either through the existing shortcut editor. Pattern
+and graph-lane drawing, hits, inline fields and visible-row calculations share
+the height. `workspace.get.geometry.pattern.rowHeight` exposes its current value.
+Changing height retains the song/history, playback, edit cursor, selection,
+viewport and retained inspector drafts. A captured mouse gesture or document
+operation must finish first. This changes row spacing, not font size.
+
+Custom saved layouts retain a nondefault height in optional local
+`patternRowHeight`; a missing field restores the historical 18-DIP default.
+The height is never written to project files. A malformed height refuses the
+entire restore before preparing or changing editors. Older app versions may
+reject layouts containing the new field; their existing saved layouts still
+load, and the new default layout shape remains unchanged.
+
+`pattern.timeline.get {pattern, order?}` is a document-worker read advertised by
+`api.describe`. It uses the same shared engine walk as Mac, in the current
+sequence. Omit `order` for the first occurrence, or specify the zero-based order
+containing the requested pattern. `positions` contains `row`, zero-based `beat`,
+`patternSeconds` and `songSeconds`. Times describe first visits, account for
+tempo/speed, groove, native timing and flow, and remain null for unreachable rows
+or unarranged patterns. Pattern time starts at the first reached row. Invalid
+patterns, mismatched orders, booleans/fractions and extra parameters reject with
+`-32602`. Reads do not edit music, advance revisions, stop playback or add history.
+The shared schema already defines this Mac-compatible request.
+
+`workspace.ruler {mode}` accepts `rows`, `beats`, `patternTime` or `songTime`.
+Like Mac, it is session view state and accepts no revision tokens; the result is
+`{mode}` with `changed:false`. `workspace.get.positionMode` reports the choice.
+The native pattern header button and command palette cycle the same modes; its
+command is customizable without reserving another default shortcut. Mode changes
+preserve the edit cursor, selection, scroll and focus, and do not modify projects.
+
+`workspace.get.ruler` additionally reports `mode`, selected `order`, `pending`,
+`ready`, `error` and `gutterWidth`. Pattern geometry exposes `gutterWidth` as well
+as `headerHeight` for clients doing hit testing. The native display uses the
+selected order when it contains the edited pattern, otherwise its first
+occurrence. One asynchronous worker read supplies cached labels. Document,
+revision, sequence, pattern, occurrence and mode changes invalidate the result;
+late completions cannot fill a different view. Pending, failed and unreachable
+times display `--:--.---`, not invented zeroes. Failed queries retain a diagnostic
+and do not retry continuously. Switching mode or changing the source allows a
+fresh query. No device/renderer work happens in the ruler or during drawing.
+
+### Retained Pattern tools
+
+The native **Pattern / Tools: preview transforms** command (591) opens a retained
+Win32 workbench over the existing `pattern.transform` API. It exposes all 14
+operations, selection/column/pattern/song/note-track scopes, field masks, numeric
+filters, curves, seeds and explicit permission for destructive row edits. The
+Mac and Windows forms use `editor/PatternToolCatalog.h` for operation names and
+applicable options; musical validation remains in the shared PatternTools engine.
+There is no new transform method or project representation.
+
+Opening captures the document, revision, pattern, column/note track and selection.
+Navigation and reopening retain that target. **Use current selection** explicitly
+captures a new target while retaining raw settings. Preview must succeed for the
+current settings before Apply; changing any setting invalidates it. A revision
+change requires recapture and a new preview. Apply uses the exact preview request
+with `dryRun:false`, preserves the edit cursor, and creates one Undo operation.
+Both module-cell changes and native-only row changes enable Apply. Numeric
+operations retain the shared engine's module-cell behavior; row operations also
+transform precise notes and the selected native FX layer.
+
+`workspace.get.patternTools` reports `visible`, `captured`, `draft`, `preview`,
+`prepared`, `dirty`, `pending`, `completed`, `generation`, `stale`, `applyEnabled`,
+`completion`, `observation` and `status` while the owner exists; an absent owner
+reports only `visible:false`. These diagnostics are session state, not a portable
+project or a replacement mutation API. Raw incomplete fields, previews and
+unresolved results participate in the document-departure guard, including when
+the window is hidden. Successful document replacement retires the owner.
+
+A fallible native completion retains its worker receipt and later raw text.
+**Review result** never repeats a write. Without an exact receipt, Review
+synchronizes the original document and offers an explicitly unverified state
+observation; **Accept observed state** requires its unchanged revision. Inspect
+the affected music using **Pattern / F6** before accepting it. New operations
+still require explicit capture and Preview. Tab/Shift+Tab use native navigation,
+Ctrl+Enter applies a prepared preview, and Escape hides the retained window.
+
+### Move an order occurrence
+
+`order.edit {expectedRevision, order, operation:"move", destination}` moves the
+selected occurrence to the zero-based final index in the current sequence. It
+uses the shared document operation, carries the occurrence's stable identity and
+section metadata, and preserves intermediate occurrences, including repeated
+patterns and End/Skip slots. The move is one Undo step and persists in native
+projects. Native arrangement selection follows its stable occurrence identity.
+Moving to the same index is a no-op: no Stop, new revision or lost Redo.
+
+`destination` is required for move and rejected for other operations. Invalid,
+boolean, fractional and out-of-range destinations are rejected before Stop or
+mutation. Mac now also rejects an unused destination on remove; previously that
+branch bypassed the existing move-only parameter check. The shared schema
+expresses the same conditional requirement. Existing before/after/assign/up/down
+and remove operations retain their meanings.
+
+### Musical input navigation
+
+The native command palette exposes **Lower/Raise input octave**, **Previous/Next
+input instrument or sample**, and **Use instrument at edit cursor** (commands
+592–596). Each can receive a shortcut through the existing customization UI;
+no new global default overrides a text editor or existing shortcut. Enter on a
+pattern instrument cell also uses its instrument. If that cell is empty, the
+first precise note in that row/column with a nonzero instrument supplies it;
+an empty result leaves input unchanged. The pattern context menu exposes the
+same action.
+
+These commands change future note input only. They preserve the edit cursor,
+selection, focus, raw drafts, song revision and history. Already held notes keep
+their original destinations for release. Instrument stepping includes empty
+slots 1–255 and stops at either boundary; octave stepping retains the native
+chooser's existing 0–9 range. Boundary no-ops do not revise the input context.
+Busy/replacing documents refuse changes. The existing `workspace.input` API
+remains the guarded API for instrument and octave setup, with its existing
+Mac-compatible octave range 0–8; this batch does not expand that wire contract.
+
+### Near-cursor effect chooser
+
+**Choose effect near cursor** (597), the pattern context menu, and local F4 in
+the pattern grid open a native searchable list beside the edited cell. Code,
+name, description and source-format equivalents are searchable. Arrow keys
+choose results, Enter or double-click opens their typed values in the existing
+Pattern FX inspector, and Escape returns to the prior focus. Choosing does not
+write music: the inspector retains the chosen command until Apply or explicit
+discard. Its existing `pattern.effect.set`/binding, Undo and persistence paths
+remain authoritative.
+
+The chooser captures document/revision, cursor, stable pattern/column identities,
+FX/nudge draft generation and selected plugin parameter context. A changed
+target cannot silently receive a stale choice; **Use current cursor** explicitly
+captures it and preserves search. An existing dirty FX or nudge editor is raised
+instead of overwritten. Empty searches and dismissal never mutate the song.
+The window is resizable, constrained to its monitor work area, and retired on
+document replacement. Read-only search does not become an unsaved musical draft.
+`workspace.get.effectPicker` exposes `visible`, `captured`, `search`, `matches`,
+`selected` (catalogue index) and `current` while the owner exists.

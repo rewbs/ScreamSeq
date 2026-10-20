@@ -20,6 +20,16 @@ user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
 user.GetClientRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
 user.GetWindowRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
 user.SetWindowPos.argtypes = [w.HWND, w.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, w.UINT]
+user.GetMenu.argtypes = [w.HWND]
+user.GetMenu.restype = w.HMENU
+user.GetSubMenu.argtypes = [w.HMENU, ctypes.c_int]
+user.GetSubMenu.restype = w.HMENU
+user.GetMenuItemCount.argtypes = [w.HMENU]
+user.GetMenuItemID.argtypes = [w.HMENU, ctypes.c_int]
+user.GetMenuItemID.restype = w.UINT
+user.GetMenuStringW.argtypes = [w.HMENU, w.UINT, w.LPWSTR, ctypes.c_int, w.UINT]
+user.GetMenuState.argtypes = [w.HMENU, w.UINT, w.UINT]
+user.GetMenuState.restype = w.UINT
 
 
 class WorkspaceShortcutTests(unittest.TestCase):
@@ -90,7 +100,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         state = self.ready()
         rect, scale = state['geometry']['pattern'], state['dpi'] / 96
         x = round((rect['x'] + 44) * scale)
-        y = round((rect['y'] + 56) * scale)
+        y = round((rect['y'] + rect['headerHeight'] + 6) * scale)
         self.desktop.send(self.native_window(), 0x201, 1, x | (y << 16))
         self.desktop.send(self.native_window(), 0x202, 0, x | (y << 16))
         self.assertEqual(self.desktop.focus(self.native_window()), self.native_window())
@@ -104,12 +114,233 @@ class WorkspaceShortcutTests(unittest.TestCase):
             time.sleep(.02)
         self.fail(f'Shortcut pending state did not become {value}: {state}')
 
+    def test_pattern_backspace_clears_and_undo_restores(self):
+        self.write('pattern.apply', cells=[dict(pattern=0, row=7, channel=0, note=61)])
+        self.focus_pattern()
+        self.navigate(row=7, channel=0, column=0, following=False)
+        self.key(0x08, hwnd=self.native_window())
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 0)
+        self.key(ord('Z'), hwnd=self.native_window(), ctrl=True)
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 61)
+
+    def test_real_menu_loop_allows_new_song(self):
+        # Enter USER32's actual modal menu loop. Sending WM_ENTERMENULOOP alone
+        # does not acquire menu capture and missed the all-disabled regression.
+        self.focus_pattern()
+        owner = self.native_window()
+        before = self.doc()
+        root = user.GetMenu(owner)
+        file_menu = user.GetSubMenu(root, 0)
+        thread = user.GetWindowThreadProcessId(owner, None)
+
+        def gui():
+            info = private_desktop.GUI(cbSize=ctypes.sizeof(private_desktop.GUI))
+            private_desktop.check(user.GetGUIThreadInfo(thread, ctypes.byref(info)))
+            return info
+
+        private_desktop.check(user.PostMessageW(owner, 0x112, 0xF100, ord('f')))
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                info = gui()
+                if info.flags & 4 and info.hwndMenuOwner == owner and info.hwndCapture == owner:
+                    break
+                time.sleep(.01)
+            else:
+                self.fail('USER32 did not enter the real File menu loop with owner capture')
+            # A sent message is serviced after menu initialization; no simulated
+            # WM_INITMENU or direct command dispatch is used here.
+            self.desktop.send(owner, 0, 0)
+            print(f'Real menu: flags={info.flags} capture={info.hwndCapture} owner={info.hwndMenuOwner}')
+            for identifier in (624, 119, 625, 120, 121):
+                state = user.GetMenuState(file_menu, 32000 + identifier, 0)
+                self.assertNotEqual(state, 0xFFFFFFFF)
+                self.assertFalse(state & 3, f'File command {identifier} disabled during real menu tracking')
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x24, 1))  # Home
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x0D, 1))  # Enter
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and gui().flags & 4:
+                time.sleep(.01)
+            self.assertFalse(gui().flags & 4, 'Menu selection did not leave the modal loop')
+            self.ready()
+            after = self.doc()
+            self.assertNotEqual(after['documentId'], before['documentId'])
+            self.assertFalse(after['data']['canUndo'])
+            # The same real tracking loop must retain contextual Edit state.
+            title = after['data']['title']
+            self.write('document.patch', title='Undo through the real Edit menu')
+            self.focus_pattern()
+            private_desktop.check(user.PostMessageW(owner, 0x112, 0xF100, ord('e')))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not gui().flags & 4:
+                time.sleep(.01)
+            self.assertTrue(gui().flags & 4)
+            self.desktop.send(owner, 0, 0)
+            edit_menu = user.GetSubMenu(root, 1)
+            self.assertFalse(user.GetMenuState(edit_menu, 32000 + 122, 0) & 3)
+            self.assertTrue(user.GetMenuState(edit_menu, 32000 + 123, 0) & 3)
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x24, 1))
+            private_desktop.check(user.PostMessageW(owner, 0x100, 0x0D, 1))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and gui().flags & 4:
+                time.sleep(.01)
+            self.assertFalse(gui().flags & 4)
+            self.ready()
+            undone = self.doc()
+            self.assertEqual(undone['documentId'], after['documentId'])
+            self.assertEqual(undone['data']['title'], title)
+            self.assertTrue(undone['data']['canRedo'])
+        finally:
+            self.desktop.send(owner, 0x1F)  # WM_CANCELMODE, owned QA process only.
+
+    def test_native_menu_catalogue_bindings_and_stale_history(self):
+        owner = self.native_window()
+        root = user.GetMenu(owner)
+        self.assertTrue(root)
+        self.assertEqual(user.GetMenuItemCount(root), 6)
+
+        def item(identifier):
+            pending = [root]
+            while pending:
+                menu = pending.pop()
+                for index in range(user.GetMenuItemCount(menu)):
+                    child = user.GetSubMenu(menu, index)
+                    if child:
+                        pending.append(child)
+                    elif user.GetMenuItemID(menu, index) == 32000 + identifier:
+                        value = ctypes.create_unicode_buffer(512)
+                        self.assertGreater(user.GetMenuStringW(menu, index, value, len(value), 0x400), 0)
+                        return value.value, user.GetMenuState(menu, index, 0x400)
+            self.fail(f'Missing native menu command {identifier}')
+
+        def begin():
+            self.desktop.send(owner, 0x211, 0)  # WM_ENTERMENULOOP, menu bar.
+            self.desktop.send(owner, 0x116, root)
+
+        def choose(identifier):
+            self.desktop.send(owner, 0x212, 0)
+            self.desktop.send(owner, 0x111, 32000 + identifier)
+            return self.ready()
+
+        self.focus_pattern()
+        before = self.doc()
+        begin()
+        self.assertIn('Ctrl+N', item(624)[0])
+        self.desktop.send(owner, 0x212, 0)
+        self.bind(120, ['ctrl+alt+s'])
+        begin()
+        self.assertIn('Ctrl+Alt+S', item(120)[0])
+        self.assertNotIn('\tCtrl+S', item(120)[0])
+        self.desktop.send(owner, 0x212, 0)
+        self.assertEqual(self.doc(), before)
+        self.write('document.patch', title='Menu baseline')
+        begin()
+        self.write('document.patch', title='Changed while menu was open')
+        changed = self.doc()
+        state = choose(122)
+        self.assertEqual(self.doc(), changed)
+        self.assertIn('Menu target changed', state['status'])
+        self.focus_pattern()
+        begin()
+        self.assertFalse(item(122)[1] & 3)
+        choose(122)
+        self.assertEqual(self.doc()['data']['title'], 'Menu baseline')
+        # These are actual HWND/menu and named-pipe checks on a private desktop.
+        # Real Alt/F10 presentation and Narrator operation remain a separate gate.
+
+    def test_keyboard_preferences_atomic_guard_replay_and_native_entry(self):
+        before = self.doc()
+        original = self.state()['keyboard']
+        self.assertIn('workspace.keyboard.set', self.read('api.describe')['writes'])
+        params = dict(expectedKeyboard=original['revision'], lower='FSXDCVGBHNJM',
+                      upper='Q2W3ER5T6Y7UI', playStopKeys=['return'])
+        for change in (dict(lower='duplicate'), dict(upper='Q2W3ER5T6Y7UM'),
+                       dict(playStopKeys=['ctrl+k']), dict(extra=True), dict(expectedKeyboard='stale')):
+            with self.subTest(change=change), self.assertRaises(ApiError):
+                self.client.call('workspace.keyboard.set', dict(params, **change))
+            self.assertEqual(self.state()['keyboard'], original)
+            self.assertEqual(self.doc(), before)
+        response = self.client.call('workspace.keyboard.set', params, request_id='keyboard-once')
+        self.assertFalse(response['changed'])
+        self.assertFalse(response['playbackStopped'])
+        self.assertEqual(self.doc(), before)
+        applied = self.state()['keyboard']
+        self.assertEqual(applied['lower'], 'FSXDCVGBHNJM')
+        self.assertEqual(applied['playStopKeys'], ['return'])
+        self.assertEqual(self.client.call('workspace.keyboard.set', params, request_id='keyboard-once'), response)
+        with self.assertRaises(ApiError):
+            self.client.call('workspace.keyboard.set', params)
+        self.command(628)
+        tool = self.native_window('ScreamSeq.KeyboardSettings')
+        text = self.field(tool, 8701, 'unfinished mapping')
+        self.focus_control(text)
+        self.command(628)
+        self.assertEqual(self.desktop.focus(tool), text)
+        self.assertEqual(self.text(text), 'unfinished mapping')
+        self.desktop.send(tool, 0x111, 8704, self.control(tool, 8704))
+        self.ready()
+        self.assertEqual(self.state()['keyboard'], applied)
+        self.assertEqual(self.text(text), 'unfinished mapping')
+        self.desktop.send(tool, 0x111, 8707, self.control(tool, 8707))
+        self.focus_pattern()
+        self.navigate(row=7, channel=0, column=0, following=False)
+        # Use the target thread's layout to identify physical F, independent
+        # of letter legends on AZERTY/QWERTZ keyboards.
+        user.GetKeyboardLayout.argtypes = [w.DWORD]
+        user.GetKeyboardLayout.restype = w.HANDLE
+        user.MapVirtualKeyExW.argtypes = [w.UINT, w.UINT, w.HANDLE]
+        user.MapVirtualKeyExW.restype = w.UINT
+        layout = user.GetKeyboardLayout(user.GetWindowThreadProcessId(self.native_window(), None))
+        key = user.MapVirtualKeyExW(0x21, 3, layout)
+        self.assertTrue(key)
+        octave = self.read('context.get')['octave']
+        self.key(key, hwnd=self.native_window())
+        cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
+        self.assertEqual(cell['note'], 1 + octave * 12)
+        self.assertFalse(self.read('context.get')['following'])
+        self.assertEqual(self.state()['musicalTyping']['held'], [])
+
+    def test_pattern_select_all_keeps_cursor_view_and_native_text_ownership(self):
+        self.focus_pattern()
+        self.navigate(row=8, channel=1, column=0, following=False)
+        before, context = self.doc(), self.read('context.get')
+        viewport = self.state()['viewport']
+        pattern = self.read('pattern.get', pattern=context['pattern'], rowCount=1, channelCount=1)
+        self.key(ord('A'), ctrl=True)
+        selected = self.read('context.get')
+        self.assertEqual(selected['selection'], dict(startRow=0, endRow=pattern['rows'] - 1,
+                                                     startChannel=0, endChannel=before['data']['channels'] - 1))
+        for key in ('pattern', 'row', 'channel', 'column', 'following'):
+            self.assertEqual(selected[key], context[key], key)
+        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.state()['viewport'], viewport)
+        self.key(ord('A'), ctrl=True)
+        self.assertEqual(self.read('context.get')['contextRevision'], selected['contextRevision'])
+        self.key(0x28)  # Down starts ordinary cursor navigation again.
+        moved = self.read('context.get')
+        self.assertEqual(moved['selection'], dict(startRow=9, endRow=9, startChannel=1, endChannel=1))
+        self.command(584)
+        tool = self.native_window('ScreamSeq.CreateNoteTrack')
+        field = self.field(tool, 7901, 'Keep this native draft')
+        self.focus_control(field)
+        self.desktop.send(field, 0xB1, 4, 4)
+        context = self.read('context.get')
+        self.key(ord('A'), hwnd=field, ctrl=True)
+        span = self.desktop.send(field, 0xB0)
+        self.assertEqual((span & 0xFFFF, (span >> 16) & 0xFFFF), (0, len('Keep this native draft')))
+        self.assertEqual(self.read('context.get'), context)
+        self.assertEqual(self.text(field), 'Keep this native draft')
+        self.assertEqual(self.doc(), before)
+
     def test_api_catalogue_validation_conflicts_and_atomic_presentation_only_edits(self):
         catalogue = self.catalogue()
         self.assertGreater(len(catalogue), 80)
         for identifier, keys in ((112, ['ctrl+k']), (513, ['ctrl+alt+w']), (507, ['ctrl+alt+l']),
                                  (526, ['ctrl+j']), (545, ['space']), (102, ['escape']),
-                                 (540, ['ctrl+c']), (541, ['ctrl+v']), (543, ['delete'])):
+                                 (540, ['ctrl+c']), (541, ['ctrl+v']), (543, ['delete']),
+                                 (587, ['shift+space']), (588, ['ctrl+space']), (589, ['ctrl+shift+space'])):
             entry = catalogue[f'windows.command.{identifier}']
             self.assertEqual(entry['keys'], keys)
             self.assertEqual(entry['defaults'], keys)

@@ -11,7 +11,7 @@ import time
 import unittest
 import private_desktop
 import test_graph_mixer_app as support
-from client import Client, TransportError
+from client import Client, ApiError, TransportError
 
 
 class SongRoutingTests(unittest.TestCase):
@@ -37,33 +37,49 @@ class SongRoutingTests(unittest.TestCase):
         self.fail('routing app did not start')
 
     doc=support.GraphMixerAppTests.doc
-    read=support.GraphMixerAppTests.read
-    write=support.GraphMixerAppTests.write
+    def read(self,method,**fields):
+        deadline=time.monotonic()+8
+        while True:
+            try:return support.GraphMixerAppTests.read(self,method,**fields)
+            except ApiError as error:
+                # Reads can overlap the retained graph/parameter refresh. Never
+                # replay writes or uncertain deliveries through this helper.
+                if error.code!=-32002 or not method.endswith('.get') or time.monotonic()>=deadline:raise
+                time.sleep(.02)
+    def write(self,method,**fields):
+        self.idle()
+        result=support.GraphMixerAppTests.write(self,method,**fields)
+        self.idle()
+        return result
     add_gain=support.GraphMixerAppTests.add_gain
     def main_command(self,identifier):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier))
     def local(self):return self.read('workspace.get')['songRouting']
-    def window(self):
+    def window(self,class_name='ScreamSeq.SongRouting'):
         found=[]
         @private_desktop.callback
         def visit(hwnd,_):
             pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));name=ctypes.create_unicode_buffer(100);private_desktop.user.GetClassNameW(hwnd,name,100)
-            if pid.value==self.pid and name.value=='ScreamSeq.SongRouting':found.append(hwnd)
+            if pid.value==self.pid and name.value==class_name:found.append(hwnd)
             return True
         private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1);return found[0]
     def control(self,identifier):
         hwnd=private_desktop.user.GetDlgItem(self.window(),identifier);self.assertTrue(hwnd);return hwnd
     def idle(self):
-        end=time.monotonic()+8;quiet=None
+        end=time.monotonic()+8;quiet=None;revision=self.doc()['revision']
         while time.monotonic()<end:
             ws=self.read('workspace.get')
-            if ws['documentBusy'] or ws['songRouting'].get('pending'):quiet=None
+            routing=ws['songRouting']
+            refresh_due=routing.get('visible') and routing.get('stale') and not any(routing.get(k) for k in ('draft','layoutDraft','completion','readbackNeedsReload'))
+            parameter_due=any(p.get('visible') and not any(p.get(k) for k in ('dirty','completion','needsReload')) and (p.get('pending') or p.get('revision')!=revision) for p in ws.get('graphPluginParameters',[]))
+            if ws['documentBusy'] or routing.get('pending') or refresh_due or parameter_due:quiet=None
             elif quiet is None:quiet=time.monotonic()
             elif time.monotonic()-quiet>=.1:return
             time.sleep(.02)
         self.fail(str(self.local()))
     def press(self,identifier):self.idle();self.desktop.send(self.window(),0x111,identifier,self.control(identifier));self.idle()
     def select(self,identifier,index):
+        self.idle()
         self.desktop.send(self.control(identifier),0x14E,index);self.desktop.send(self.window(),0x111,identifier|(1<<16),self.control(identifier));self.idle()
     def field(self,identifier,value):
         text=ctypes.create_unicode_buffer(str(value));self.desktop.send(self.control(identifier),0xC,0,ctypes.addressof(text))
@@ -89,7 +105,109 @@ class SongRoutingTests(unittest.TestCase):
     def route(self,kind,source,target,gain=None,input=None,output=None):
         self.select(3804,kind);self.choose_node(3805,source);self.choose_node(3806,target)
         for identifier,value in [(3807,gain),(3808,input),(3809,output)]:
-            if value is not None:self.field(identifier,value)
+            if value is None:continue
+            if identifier==3808 and kind in (4,6):
+                self.select(3837,self.local()['inputPorts']['indices'].index(value)+1)
+            elif identifier==3809 and kind in (5,6):
+                self.select(3838,self.local()['outputPorts']['indices'].index(value)+1)
+            else:self.field(identifier,value)
+
+    def test_direct_cable_drag_cut_backspace_and_node_removal(self):
+        first,second,master=self.setup_mixer();plugin=self.add_gain()
+        self.write('mixer.bus.set',bus=first,inserts=[plugin])
+        group=self.write('mixer.bus.add',kind='group',name='Drag destination')['bus']
+        self.start();scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,point,keys=1):
+            x,y=point;self.desktop.send(self.window(),message,keys if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        def socket(node,output):
+            x,y,w,h=self.node(node)['rect'];return (x+w+2 if output else x-2,y+h/2)
+        def drag(a,b):
+            mouse(0x201,a);mouse(0x200,b);mouse(0x202,b);self.idle()
+        def key(k):self.desktop.send(self.window(),0x100,k);self.desktop.send(self.window(),0x101,k);self.idle()
+        # Socket hit regions extend outside the node. A plain socket click is
+        # neither an edit nor a failed self-connection.
+        before=self.doc();p=socket(first,True);mouse(0x201,p);mouse(0x202,p);self.idle();self.assertEqual(self.doc(),before);self.assertFalse(self.local()['draft'])
+        drag(socket(second,True),socket(group,False));self.assertEqual(self.bus(second)['output'],master);self.assertEqual([s['target'] for s in self.bus(second)['sends']],[group])
+        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
+        handle=self.edges()[self.local()['wire']]['targetHandle']
+        drag(handle,socket(first,False));self.assertEqual(self.bus(second)['output'],first)
+        self.choose_wire(lambda a:a.get('kind')=='output' and a.get('source')==second)
+        handle=self.edges()[self.local()['wire']]['targetHandle'];v=self.local()['canvas']['viewport'];empty=(v[0]+v[2]-14,v[1]+v[3]-14)
+        drag(handle,empty);self.assertEqual(self.bus(second)['output'],'')
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(second)['output'],first)
+        # A serial cable cut preserves the processor and chain order. Its
+        # original sockets restore the exact implicit input in one operation.
+        self.choose_wire(lambda a:a.get('kind')=='insert' and a.get('plugin')==plugin)
+        handle=self.edges()[self.local()['wire']]['targetHandle'];mouse(0x201,handle);mouse(0x202,handle);key(8)
+        self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs'],self.local());self.assertEqual(self.bus(first)['inserts'],[plugin])
+        self.assertFalse(any(e['action'].get('kind')=='insert' and e['action'].get('plugin')==plugin for e in self.edges()))
+        drag(socket(first,True),socket('plugin:'+plugin,False));self.assertNotIn(plugin,self.read('mixer.get')['disconnectedMainInputs'])
+        self.write('history.undo',domain='all');self.assertIn(plugin,self.read('mixer.get')['disconnectedMainInputs']);self.write('history.redo',domain='all')
+        # Ctrl-click opens parameters; dragging/clicking a socket never does.
+        r=self.node('plugin:'+plugin)['rect'];mouse(0x201,(r[0]+r[2]/2,r[1]+r[3]/2),9);self.idle()
+        self.assertTrue(next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==plugin)['visible'])
+        self.choose_node(3802,'plugin:'+plugin);self.press(3845);self.assertFalse(any(n['plugin']==plugin for n in self.nodes()))
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(first)['inserts'],[plugin])
+        self.choose_node(3802,group);self.press(3845);self.assertFalse(any(b['id']==group for b in self.buses()))
+        self.write('history.undo',domain='all');self.assertEqual(self.bus(group)['name'],'Drag destination')
+        self.choose_node(3802,master);before=self.doc();self.press(3845);self.assertEqual(self.doc(),before)
+        path=self.folder/'direct-routing.screamseq';saved=self.read('mixer.get');self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        for field in ('buses','disconnectedMainInputs','pluginConnections'):self.assertEqual(self.read('mixer.get')[field],saved[field])
+
+    def test_plugin_socket_drag_uses_declared_main_ports(self):
+        first,second,_=self.setup_mixer();a=self.add_gain();b=self.add_gain()
+        self.write('mixer.bus.set',bus=first,inserts=[a]);self.write('mixer.bus.set',bus=second,inserts=[b]);self.start()
+        scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        ra=self.node('plugin:'+a)['rect'];rb=self.node('plugin:'+b)['rect']
+        mouse(0x201,ra[0]+ra[2]+2,ra[1]+ra[3]/2);mouse(0x200,rb[0]-2,rb[1]+rb[3]/2);mouse(0x202,rb[0]-2,rb[1]+rb[3]/2);self.idle()
+        cables=self.read('mixer.get')['pluginConnections'];self.assertEqual(len(cables),1);self.assertEqual((cables[0]['source'],cables[0]['target'],cables[0]['output'],cables[0]['input']),(a,b,0,0))
+        self.choose_wire(lambda r:r.get('kind')=='plugin-connection');handle=self.edges()[self.local()['wire']]['targetHandle'];mouse(0x201,*handle);mouse(0x202,*handle)
+        self.desktop.send(self.window(),0x100,8);self.idle();self.assertEqual(self.read('mixer.get')['pluginConnections'],[])
+        self.write('history.undo',domain='all');self.assertEqual(self.read('mixer.get')['pluginConnections'],cables)
+
+    def test_graph_click_jitter_and_completed_moves_do_not_lock_selection(self):
+        first,second,_=self.setup_mixer();self.start();scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        self.choose_node(3802,first);before=self.doc();r=self.node(first)['rect'];x,y=r[0]+r[2]/2,r[1]+r[3]/2
+        mouse(0x201,x,y);mouse(0x200,x+1,y+1);mouse(0x202,x+1,y+1);self.idle()
+        self.assertFalse(self.local()['layoutDraft']);self.assertEqual(self.doc(),before)
+        self.choose_node(3802,second);self.assertEqual(self.local()['selected'],second)
+        layouts=[]
+        for node in (first,second):
+            self.choose_node(3802,node);r=self.node(node)['rect'];x,y=r[0]+r[2]/2,r[1]+r[3]/2
+            mouse(0x201,x,y);mouse(0x200,x+24,y+14);mouse(0x202,x+24,y+14);self.idle()
+            self.assertFalse(self.local()['layoutDraft']);layouts.append(self.read('graph.get',includeState=False)['layout'])
+        self.assertNotEqual(layouts[0],layouts[1]);self.write('history.undo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],layouts[0])
+        self.write('history.undo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
+        self.write('history.redo',domain='all');self.write('history.redo',domain='all');self.assertEqual(self.read('graph.get',includeState=False)['layout'],layouts[1])
+
+    def test_graph_wheel_navigation_is_anchored_and_new_actions_fit(self):
+        first,_,_=self.setup_mixer();self.start();before=self.doc();saved=self.read('graph.get',includeState=False)
+        user=private_desktop.user;owner=self.window();scale=self.read('workspace.get')['dpi']/96
+        user.ClientToScreen.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.POINT)]
+        v=self.local()['canvas']['viewport'];point=(v[0]+v[2]/2,v[1]+v[3]/2)
+        screen=wintypes.POINT(round(point[0]*scale),round(point[1]*scale));self.assertTrue(user.ClientToScreen(owner,ctypes.byref(screen)))
+        packed=(screen.x&65535)|((screen.y&65535)<<16)
+        old=self.node(first)['rect'];zoom=self.local()['canvas']['zoom']
+        self.desktop.send(owner,0x20A,(120<<16)|8,packed)  # Ctrl+wheel, cursor-anchored zoom.
+        fresh=self.node(first)['rect'];self.assertGreater(self.local()['canvas']['zoom'],zoom)
+        # Compare a world point in normalized node coordinates (DPI rounding bounded).
+        for axis in (0,1):self.assertAlmostEqual((point[axis]-old[axis])/old[2+axis],(point[axis]-fresh[axis])/fresh[2+axis],delta=.02)
+        self.desktop.send(owner,0x20A,((-120&65535)<<16),packed)
+        panned=self.node(first)['rect'];self.assertAlmostEqual(panned[1]-fresh[1],-48,delta=.1)
+        self.desktop.send(owner,0x20A,(120<<16)|4,packed)  # Shift+wheel pans horizontally.
+        horizontal=self.node(first)['rect'];self.assertAlmostEqual(horizontal[0]-panned[0],48,delta=.1)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.read('graph.get',includeState=False),saved)
+        user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
+        user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
+        self.assertTrue(user.SetWindowPos(owner,None,0,0,round(1040*scale),round(680*scale),0x16))
+        frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));previous=None
+        for identifier in (3822,3839,3840,3841,3815,3820):
+            rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect))
+            self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right)
+            if previous is not None:self.assertGreaterEqual(rect.left,previous)
+            previous=rect.right
 
     def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
         first,second,master=self.setup_mixer();third=self.buses()[2]['id']
@@ -138,9 +256,60 @@ class SongRoutingTests(unittest.TestCase):
         ids={n['id'] for n in self.nodes()};self.assertTrue({first,group,master}<=ids);self.assertNotIn(second,ids)
         self.assertTrue(any(e['action']==dict(kind='output',source=first) for e in self.edges()))
         self.select(3801,0);self.choose_node(3802,'plugin:'+b);self.press(3821)
-        control=private_desktop.user.GetDlgItem(self.desktop.hwnd(self.pid),300)
-        self.assertEqual(self.desktop.send(control,0x188),1)
+        inspector=next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==b)
+        self.assertTrue(inspector['visible']);self.assertEqual(inspector['selected'],0)
+        self.assertEqual(inspector['parameters'],self.read('plugin.parameters.get',plugin=b));self.assertGreater(len(inspector['parameters']),0)
         self.record('song-routing-scene',canvas=self.local()['canvas'],graph=self.read('graph.get',includeState=False))
+
+    def test_command_stages_cannot_change_ordinary_assignment_or_regular_inserts(self):
+        first, _, _ = self.setup_mixer()
+        effect = self.add_gain()
+        self.write('mixer.bus.set', bus=first, inserts=[effect])
+        ordinary = self.write('graph.create', name='Ordinary recipe')['graph']
+        row = self.write('graph.create', name='Row recipe')['graph']
+        persistent = self.write('graph.create', name='Persistent recipe')['graph']
+        self.write('graph.assign', target=first, graph=ordinary, amount=.25, wet=.75)
+        self.write('graph.commands.set', pattern=0, lanes=[dict(target=first, count=2)], commands=[
+            dict(target=first, graph=row, position=0, column=0, kind='row'),
+            dict(target=first, graph=persistent, position=0, column=1, kind='start')])
+        self.start()
+        before = self.doc()
+        original = self.read('graph.get', includeState=False)
+        for role, graph, choice in [('Row', row, 2), ('Persistent', persistent, 3)]:
+            with self.subTest(role=role):
+                key = f'graph:{first}:{role}:{graph}'
+                self.choose_node(3802, key)
+                node = self.node(key)
+                self.assertEqual(node['stageRole'], role.lower())
+                self.assertFalse(node['canAssignGraph'])
+                self.assertFalse(node['canEditInserts'])
+                self.select(3823, 2)
+                self.assertEqual(self.desktop.send(self.control(3830), 0x147), choice)
+                for control in (3830, 3831, 3832, 3833, 3834):
+                    self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(control)))
+                # Posted commands bypass disabled HWNDs, so the handler must
+                # independently refuse them before issuing any document write.
+                for command in (3833, 3834):
+                    self.press(command)
+                    self.assertEqual(self.doc(), before)
+                    self.assertIn('pattern commands', self.local()['status'])
+                self.select(3823, 1)
+                for control in (3824, 3825, 3826, 3827, 3828, 3829):
+                    self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(control)))
+                for command in (3826, 3827, 3828, 3829):
+                    self.press(command)
+                    self.assertEqual(self.doc(), before)
+                self.press(3821)
+                self.assertEqual(self.read('workspace.get')['graphEditor']['graph'], graph)
+                self.assertEqual(self.read('graph.get', includeState=False), original)
+        self.choose_node(3802, f'graph:{first}:Ordinary:{ordinary}')
+        self.select(3823, 2)
+        self.assertTrue(private_desktop.user.IsWindowEnabled(self.control(3834)))
+        self.press(3834)
+        self.assertEqual(self.read('graph.get', includeState=False)['assignments'], [])
+        self.assertEqual(self.bus(first)['inserts'], [effect])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('graph.get', includeState=False), original)
 
     def test_native_send_update_preserves_other_routes_dry_stale_and_retained_draft(self):
         first,second,master=self.setup_mixer();g1=self.write('mixer.bus.add',kind='group',name='A')['bus'];g2=self.write('mixer.bus.add',kind='return',name='B')['bus'];self.start()
@@ -154,6 +323,13 @@ class SongRoutingTests(unittest.TestCase):
         self.assertEqual(self.doc(),before);self.assertTrue(self.local()['draft'])
         self.choose_node(3802,second);self.assertEqual(self.local()['selected'],'')
         self.press(3820);self.start();self.assertTrue(self.local()['draft'])
+        # The failed cycle has no attributed return: inspect once, then reload.
+        # Neither Review nor a refused repeat may mutate the song or history.
+        retained=self.local()['completion'];self.assertIsNotNone(retained)
+        self.press(3813);self.assertEqual(self.local()['completion'],retained);self.assertEqual(self.doc(),before)
+        self.press(3815);self.assertIsNone(self.local()['completion']);self.assertTrue(self.local()['readbackNeedsReload']);self.assertTrue(self.local()['draft']);self.assertEqual(self.doc(),before)
+        self.press(3815);self.assertFalse(self.local()['readbackNeedsReload'])
+        self.choose_wire(lambda a:a.get('kind')=='send' and a.get('source')==first and a['index']==0);self.field(3807,-13)
         self.write('document.patch',title='External edit');before=self.doc();self.press(3813);self.assertEqual(self.doc(),before);self.assertTrue(self.local()['stale']);self.assertIn('Song changed',self.local()['status'])
         self.press(3815);self.choose_wire(lambda a:a.get('kind')=='send' and a.get('source')==first and a['index']==0);self.press(3814);self.assertEqual(self.bus(first)['sends'],[untouched])
 
@@ -164,13 +340,13 @@ class SongRoutingTests(unittest.TestCase):
         self.write('history.undo',domain='document');self.press(3815);self.assertEqual(self.bus(first)['inserts'],[b,a]);self.select(3823,0)
         self.choose_node(3802,first);before=self.doc();x=self.node(first)['x'];self.desktop.send(self.window(),0x100,0x27);self.assertTrue(self.local()['layoutDraft']);self.assertEqual(self.doc(),before);self.assertEqual(self.node(first)['x'],x+4)
         self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(3812)))
-        self.press(3820);self.start();self.assertTrue(self.local()['layoutDraft']);self.press(3835)
+        self.desktop.send(self.window(),0x101,0x27);self.idle();self.assertFalse(self.local()['layoutDraft']);self.press(3820);self.start();self.assertFalse(self.local()['layoutDraft'])
         positions=self.read('graph.get',includeState=False)['layout'];self.assertEqual(next(p for p in positions if p['node']==first)['x'],x+4)
         self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[]);self.write('history.redo',domain='document');self.press(3815)
         self.choose_node(3802,first);rect=self.node(first)['rect'];scale=self.read('workspace.get')['dpi']/96
         def mouse(message,x,y):self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(int(x*scale)&65535)|((int(y*scale)&65535)<<16))
-        mx,my=rect[0]+12,rect[1]+10;mouse(0x201,mx,my);mouse(0x200,mx+20,my+12);mouse(0x202,mx+20,my+12);self.assertTrue(self.local()['layoutDraft']);self.press(3835)
-        path=self.folder/'routing.screamseq';self.write('document.save',path=str(path));layout=self.read('graph.get',includeState=False)['layout'];self.write('graph.layout.set',reset=True);self.write('document.open',path=str(path),discard=True);self.press(3815)
+        mx,my=rect[0]+12,rect[1]+10;mouse(0x201,mx,my);mouse(0x200,mx+20,my+12);mouse(0x202,mx+20,my+12);self.idle();self.assertFalse(self.local()['layoutDraft'])
+        path=self.folder/'routing.screamseq';self.write('document.save',path=str(path));layout=self.read('graph.get',includeState=False)['layout'];self.write('graph.layout.set',reset=True);self.write('document.open',path=str(path),discard=True);self.start();self.press(3815)
         self.assertEqual(self.read('graph.get',includeState=False)['layout'],layout);self.assertEqual(self.bus(first)['inserts'],[b,a])
 
     def test_bus_and_sample_instrument_graph_assignment_expand_and_inspect(self):
@@ -225,7 +401,7 @@ class SongRoutingTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','owned silent WASAPI')
     def test_layout_and_validated_routing_keep_audio_running_through_history(self):
         first,_,_=self.setup_mixer();self.add_gain();path=self.folder/'live.screamseq';self.write('document.save',path=str(path));self.launch(path);self.start();self.choose_node(3802,first)
-        before=self.read('transport.get');self.desktop.send(self.window(),0x100,0x27);self.press(3835);time.sleep(.25);after=self.read('transport.get');self.assertTrue(after['audioActive']);self.assertGreater(after['frames'],before['frames']);self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
+        before=self.read('transport.get');self.desktop.send(self.window(),0x100,0x27);self.desktop.send(self.window(),0x101,0x27);self.idle();time.sleep(.25);after=self.read('transport.get');self.assertTrue(after['audioActive']);self.assertGreater(after['frames'],before['frames']);self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
         def adopted(previous, previous_plan):
             deadline=time.monotonic()+8
             while time.monotonic()<deadline:
@@ -264,7 +440,7 @@ class SongRoutingTests(unittest.TestCase):
                 if not user.IsWindowVisible(control):continue
                 rect=wintypes.RECT();user.GetWindowRect(control,ctypes.byref(rect));self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right);self.assertLessEqual(rect.bottom,frame.bottom)
         self.choose_node(3802,first);self.assertEqual(self.desktop.focus(self.window()),self.window());self.desktop.send(self.window(),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.control(3802));self.desktop.send(self.control(3802),0x100,0x75);self.assertEqual(self.desktop.focus(self.window()),self.window())
-        before=self.doc();self.press(3819);self.assertTrue(self.local()['layoutDraft']);self.assertEqual(self.doc(),before);self.press(3835);self.assertTrue(self.read('graph.get',includeState=False)['layout']);self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
+        before=self.doc();self.press(3819);self.assertFalse(self.local()['layoutDraft']);self.assertNotEqual(self.doc(),before);self.assertTrue(self.read('graph.get',includeState=False)['layout']);self.write('history.undo',domain='document');self.assertEqual(self.read('graph.get',includeState=False)['layout'],[])
 
     def test_unavailable_insert_retains_routing_and_open_does_not_select_another_plugin(self):
         _,_,master=self.setup_mixer();a=self.add_gain();b=self.add_gain();self.write('mixer.bus.set',bus=master,inserts=[b])

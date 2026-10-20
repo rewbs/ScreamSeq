@@ -2,20 +2,24 @@
 
 ## Status and scope
 
-`native_project.py` is a **portable Python 3.10+ / standard-library `plistlib`
-qualification and repacking foundation**, tested here with Python 3.11. It is
-**not integrated C++ application persistence**. No portable C++ plist dependency
-was found in the inspected CMake definitions. This work does not add a parallel
-song model, a module exporter, a plugin host, or any Mac/shared-model changes.
+`native_project.py` is a **Python 3.10+ / standard-library `plistlib` framing and
+repacking tool**. The Windows application uses `BinaryPlist.cpp`, `NativeProject.cpp`,
+`NativeMetadata*` and `ProjectPreservation.hpp` in this directory, not this Python
+helper. Musical and recovery semantics belong to the native applications and shared
+model. Passing the helper is not proof that a song is valid, playable or losslessly
+recovered by either native frontend.
 
 Both `.screamseq` and legacy `.resonance` name the same container format; the
 extension is not a codec switch. New native songs must not be saved as a renamed
 IT/MPTM module. Existing identifiers and `RSONGS*` magic remain unchanged.
 
-The latest inspected envelope report and current decoder require **native
-metadata 14**. The earlier delivery report's metadata 13 statement is historical,
-not the current ceiling. Container version, metadata version, and snapshot magic
-are three independent version domains.
+Current canonical application saves use **container 6 / native metadata 17**.
+The helper accepts framing versions 1–6 / metadata 1–17 and preserves their version
+values when repacking. It deliberately rejects newer versions instead of claiming
+to qualify them. Native applications separately attempt historical/incompatible
+recovery with warnings and source protection; helper rejection must not be used as
+the application's open policy. Container version, metadata version and snapshot
+magic are three independent version domains.
 
 ## Source contract inspected
 
@@ -24,6 +28,8 @@ Repository-relative authorities (source, not inferred file-extension behavior):
 - `mac/Bridge/TrackerSession.mm`: `decodeProject`, `decodePlugins`,
   `decodeAutomation`, `projectDataForRecovery`, `serializedData`.
 - `mac/Bridge/PluginAssignments.inc`: `nativeProjectVersion`.
+- `windows/Project/NativeProject.cpp`, `NativeProjectRecovery.inc` and
+  `NativeMetadataRecovery.inc`: canonical save and native recovery boundaries.
 - `mac/Bridge/NativeSongMetadata.inc`: `encodeNativeSong`, `decodeNativeSong`.
 - `mac/Bridge/SignalGraphMetadata.inc`: graph recipes and their state encoding.
 - `mac/Bridge/EnvelopeBankMetadata.inc`: song-local templates and links.
@@ -40,8 +46,8 @@ root, not a ZIP archive or JSON document. Current editable saves contain:
 
 | Key | Stored value |
 | --- | --- |
-| `version` | Container integer: supported Mac range 1–5 |
-| `module` | NSData / plist data: exact native song snapshot for versions 4–5 |
+| `version` | Container integer: helper framing range 1–6; canonical application version 6 |
+| `module` | NSData / plist data: exact native song snapshot for versions 4–6 |
 | `native` | NativeSong metadata dictionary, required from container version 3 |
 | `sequence` | Current sequence index; optional on old files, range 0–255 |
 | `plugins` | Array of rack device dictionaries |
@@ -50,8 +56,8 @@ root, not a ZIP archive or JSON document. Current editable saves contain:
 
 Versions 1–3 embed a legacy module rather than an exact snapshot. Version 3 adds
 native metadata. Version 4 carries exact snapshots. Version 5 adds plugin
-`instrumentAssignments` arrays of `{instrument, channel}`. Current saves choose
-4 unless a plugin has a non-default MIDI channel or aliases, then choose 5.
+`instrumentAssignments` arrays of `{instrument, channel}`. Those conditional-version
+writer rules are historical; current native writers emit version 6.
 Repacking does **not** promote legacy modules to exact snapshots or change any
 version. Native metadata, if present even on an old outer version, is version
 checked rather than ignored by this tool.
@@ -73,8 +79,9 @@ RSONGS2\0 (8 bytes) | module_size | samples_size | timing_size
                      module bytes | sample archive bytes | timing archive bytes
 ```
 
-Header sizes are 16 and 20 bytes respectively. Every declared section must be
-nonempty (timing exists only in version 2); the size sum must equal the complete
+Header sizes are 16 and 20 bytes respectively. Module and sample sections must be
+nonempty. Version 2 has a timing length field but permits an empty timing archive,
+as current `SampleArchive.cpp::splitSongSnapshot` does. The size sum must equal the complete
 snapshot size, with no trailing bytes. Nested known song snapshots are rejected.
 Unknown snapshot magic/version is rejected for modern containers; reserved
 `RSONGS` payloads cannot masquerade as legacy modules.
@@ -86,10 +93,11 @@ archive restores native timing. These sections **must not be discarded in favor
 of the inner module**. Their internal serialization is not implemented here;
 the entire `module` plist data value is retained byte-for-byte.
 
-### Native metadata through 14
+### Historical metadata milestones and current framing
 
-The current encoder selects the lowest version required by its feature set,
-not unconditionally 14. The decoder accepts 1–14. Principal milestones:
+Older writers selected the lowest metadata version required by their features.
+The table below retains those historical milestones. Current canonical writers emit
+17; the helper accepts metadata 1–17 without decoding or validating the inner model.
 
 | Version | Native metadata addition |
 | --- | --- |
@@ -129,7 +137,8 @@ IDs, class IDs, AU type/subtype/manufacturer identity, path hints, envelope link
 recovery data, and graph state text are carried through without rewriting.
 No plugin is instantiated, resolved, dropped, substituted, or assigned a new ID.
 AU is macOS-only: retaining an AU recipe/state does **not** make it playable on
-Windows. Installed-plugin availability reporting belongs to the future host.
+Windows. Installed-plugin availability and playback preparation belong to the native
+hosts; the helper cannot qualify them.
 
 Unknown-field retention is a tool guarantee for `plistlib`-representable values,
 not a claim that Mac's strict inner metadata decoders accept hypothetical new
@@ -173,8 +182,13 @@ Reduced configurable constants exercise size boundaries without huge fixtures.
 
 **The inner module/sample/timing sections in the generated tests remain
 intentionally opaque qualification payloads, not playable song archives.**
-The supplied Mac-produced UI reference is now separately qualified below. It is
-external to Git; generated cases must never stand in for this opt-in fixture.
+The historical September Mac-produced reference remains a separate opt-in fixture
+below. The five October reference projects are now pinned in
+`editor/Tests/Fixtures/Parity20261009` and checked by `test_current_corpus.py` using
+typed comparison and exact opaque bytes. Neither set is replaced by generated cases.
+For current native app evidence use the
+[conformance corpus](../../editor/Tests/Conformance/README.md), which records actual
+pipe/socket saves, recovery warnings and source protection separately from repacking.
 
 ### Actual Mac reference: bounded container qualification
 

@@ -31,12 +31,18 @@ void run(){
     tool.openAt();auto window=tool.window();toolWindow=window;const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};
     const auto choose=[&](int id,int index){SendMessageW(GetDlgItem(window,id),CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};
     require(tool.snapshot().at("targets").empty(),"Unprepared processors were fabricated");
-    prepared=true;click(11002);require(tool.snapshot().at("target")=="song/rack/a","Refresh did not capture stable processor");
+    const auto refuses=[&](const std::string &plugin,uint32_t parameter){bool refused=false;try{tool.openSourceAt(plugin,parameter);}catch(const std::exception &){refused=true;}require(refused,"Explicit activity navigation accepted an unavailable or retained target");};
+    const auto unprepared=tool.snapshot();refuses("a",1);require(tool.snapshot()==unprepared,"Unprepared activity fabricated or adopted a target");
+    prepared=true;tool.openSourceAt("a",1);require(tool.snapshot().at("target")=="song/rack/a","Explicit navigation did not capture the prepared processor");
+    const auto captured=tool.snapshot();refuses("missing",1);refuses("a",999);
+    require(tool.snapshot()==captured,"Explicit activity fell back to a different processor or first parameter");
     SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Live trace did not consume its cursor");SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Trace duplicated an old point");
     const auto trace=tool.snapshot().at("trace");require(trace.at("nativePoints")==2&&trace.at("normalizedContributions")==1&&trace.at("segments")==1&&trace.at("minimum")==-.5&&trace.at("maximum")==-.25,"Normalized graph contribution contaminated final native-unit trace range or segments");
     SendMessageW(GetDlgItem(window,11007),LB_SETCURSEL,0,0);click(11008);require(navigation.at("kind")=="baseline"&&navigation.at("parameter")==1&&navigation.at("plugin")=="a","Baseline provenance lost watched plugin/parameter");
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
     SetWindowTextW(GetDlgItem(window,11016),L"-0.25");require(tool.snapshot().at("fieldDraft")==true,"Raw value draft not retained");
+    const auto retained=tool.snapshot();refuses("a",2);tool.openSourceAt("a",1);
+    require(tool.snapshot()==retained,"Explicit activity navigation erased a recorded-point draft");
     context.revision="r2";click(11013);require(edits==0&&tool.snapshot().at("fieldDraft")==true,"Stale recorded fields were committed or discarded");
     tool.hide();tool.openAt("different",9);require(tool.snapshot().at("target")=="song/rack/a"&&tool.snapshot().at("fieldDraft")==true,"Reopen retargeted a retained draft");
     click(11002);SetWindowTextW(GetDlgItem(window,11015),L"0.75");SetWindowTextW(GetDlgItem(window,11016),L"-0.25");click(11013);
@@ -45,6 +51,7 @@ void run(){
     const auto currentRevision=context.revision;navigation=nullptr;context.revision="stale-source";click(11009);
     require(navigation.is_null(),"Stale Song automation action followed a captured plugin into a new revision");context.revision=currentRevision;
     token="2:1";SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("token")=="1:1","External watch silently retargeted observer");
+    const auto frozen=tool.snapshot();refuses("a",2);tool.openSourceAt("a",1);require(tool.snapshot()==frozen,"Parameter action erased a frozen activity trace");
     click(11002);require(tool.snapshot().at("token")=="2:1","Explicit refresh did not resume new engine");
     // Every read is staged: failure after the target/catalog reads leaves the
     // previous lane, watch and raw fields intact, including pumped native input.

@@ -1,0 +1,176 @@
+{
+  "scope": "Sample browser interaction and pattern Backspace/paste fixes; broader parity remains paused",
+  "build": {
+    "commit": "86e29e954d83185ca1130ea5c8a983fb31780ae1",
+    "startedUTC": "2026-10-10T09:23:04.592301+00:00",
+    "oldAppSHA256": "ce3219a7f14668cc0b738ce45ba51915f16451c8d09ce42f6fd06f2bce9b2f15",
+    "scope": "Sample browser and pattern input fixes; batched app/native harness/preview build; running app untouched",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\InteractionFix-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests",
+        "sample-preview-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T09:24:45.375919+00:00",
+    "exitCode": 0,
+    "logSHA256": "7d9e7430f9020bba4875a74740b26511bd1b122f8f4091393acccd2d3cf8fdb7",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\InteractionFix-Release\\sample-preview-tests.exe": "3845a7d63110c37843fca774fc200781f1aab0d026de1008f02273a3d2c66ee0",
+      "bin\\windows-parity-p1\\InteractionFix-Release\\ScreamSeq.exe": "0a189502cd9c88ab6193840ab2304ac4dc582183feca1061123681cf119da49d",
+      "bin\\windows-parity-p1\\InteractionFix-Release\\ScreamSeqVST3Scanner.exe": "442849b4aef166f186d95f3f9c02cbed5ec3c190283450f4de152fcf136c00e6",
+      "bin\\windows-parity-p1\\InteractionFix-Release\\workspace-restore-tests.exe": "a69f60cc8ac395757fd308050790cb66019e4428d8a48e25265beee9f7dfce59"
+    }
+  },
+  "validation": {
+    "commit": "86e29e954d83185ca1130ea5c8a983fb31780ae1",
+    "buildReceiptSHA256": "9b13a5b24b0724bab435cb9d0ca1ac150d64906dd513d36845dbd2f286a1fa5b",
+    "appSHA256": "0a189502cd9c88ab6193840ab2304ac4dc582183feca1061123681cf119da49d",
+    "gates": [
+      {
+        "name": "native",
+        "startedUTC": "2026-10-10T09:24:57.404381+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(workspace-sample-browser-input-tests|workspace-pattern-selection-tests|workspace-receipt-tests|workspace-asset-outcome-tests|sample-preview-tests)$"
+        ],
+        "exitCode": 8,
+        "finishedUTC": "2026-10-10T09:25:47.280722+00:00",
+        "log": "bin\\parity-evidence\\interaction-fix-native-runner.log",
+        "sha256": "0d4b1d1aa12d67c46b221996fea512aeaafb6fedd71c087b2c94225d1a1368e5"
+      },
+      {
+        "name": "app",
+        "startedUTC": "2026-10-10T09:25:47.295148+00:00",
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\interaction-fix-app.log",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_browser_search_retains_focus_and_arrows_preview",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_native_browser_search_waveform_preview_and_retained_selection",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_native_browser_multi_selection_import_uses_shared_transaction",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_native_preview_gain_applies_immediately_and_partial_text_preserves_target",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_configured_family_survives_close_and_reopen_before_any_field_edit",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_native_multisample_roots_stale_guard_retained_draft_and_rebase",
+          "--test",
+          "test_sample_library.SampleLibraryTests.test_native_browser_controls_fit_minimum_size_and_folder_removal_preserves_files",
+          "--test",
+          "test_workspace_shortcuts.WorkspaceShortcutTests.test_pattern_backspace_clears_and_undo_restores",
+          "--test",
+          "test_workspace_shortcuts.WorkspaceShortcutTests.test_retained_editor_global_bindings_preserve_focus_and_raw_draft"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T09:25:59.477475+00:00",
+        "log": "bin\\parity-evidence\\interaction-fix-app-runner.log",
+        "sha256": "d12955d9f9e4385a5820b1e554fdd80d1e6fdb775ba00682d40237fabb9d9476"
+      }
+    ],
+    "applicationLogSHA256": "a29662c7532922adf351cc061245cfe2a5777cb099355d499afedc1b772b82f7",
+    "appUnchanged": true
+  },
+  "testRepair": {
+    "commit": "9006ee417569373184ef781ed0f34dce80039f60",
+    "scope": "Pattern snapshot test-only repair; no application rebuild",
+    "appSHA256": "0a189502cd9c88ab6193840ab2304ac4dc582183feca1061123681cf119da49d",
+    "changed": [
+      "windows/Tests/Workspace/PatternSelectionApplicationTests.inc"
+    ],
+    "gates": [
+      {
+        "name": "build",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+          "--build",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "--config",
+          "Release",
+          "--parallel",
+          "2",
+          "--target",
+          "workspace-restore-tests"
+        ],
+        "startedUTC": "2026-10-10T09:27:12.596861+00:00",
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T09:27:58.956865+00:00",
+        "sha256": "354370a16b895d82508c54530102458b9c1e5ca5eadf51321036f93193c94d53"
+      },
+      {
+        "name": "native",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^workspace-pattern-selection-tests$"
+        ],
+        "startedUTC": "2026-10-10T09:27:59.116501+00:00",
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T09:28:02.809261+00:00",
+        "sha256": "f3143223924e2011a61134b591b19f72550b9ffa55cb67872e6dcdb52547e748"
+      }
+    ],
+    "appUnchanged": true,
+    "testSHA256": "1a1adca85303418db2b8f3ff9c2f552329694ca1c70a7f3ad1db4687722361d4"
+  },
+  "beforeFailures": "Qualification desktop: ScreamSeqTest-608cdab1843a4599b8e6c695aac70a46\ntest_browser_search_retains_focus_and_arrows_preview (test_sample_library.SampleLibraryTests.test_browser_search_retains_focus_and_arrows_preview) ... FAIL\ntest_pattern_backspace_clears_and_undo_restores (test_workspace_shortcuts.WorkspaceShortcutTests.test_pattern_backspace_clears_and_undo_restores) ... FAIL\n\n======================================================================\nFAIL: test_browser_search_retains_focus_and_arrows_preview (test_sample_library.SampleLibraryTests.test_browser_search_retains_focus_and_arrows_preview)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\windows-parity-workspace\\ScreamSeq\\windows\\Tests\\test_sample_library.py\", line 167, in test_browser_search_retains_focus_and_arrows_preview\n    self.assertEqual(self.desktop.focus(search), search, 'Search lost focus while filtering')\nAssertionError: None != 208014844 : Search lost focus while filtering\n\n======================================================================\nFAIL: test_pattern_backspace_clears_and_undo_restores (test_workspace_shortcuts.WorkspaceShortcutTests.test_pattern_backspace_clears_and_undo_restores)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"C:\\Users\\P14\\.codex\\worktrees\\windows-parity-workspace\\ScreamSeq\\windows\\Tests\\test_workspace_shortcuts.py\", line 123, in test_pattern_backspace_clears_and_undo_restores\n    self.assertEqual(cell['note'], 0)\nAssertionError: 61 != 0\n\n----------------------------------------------------------------------\nRan 2 tests in 1.616s\n\nFAILED (failures=2)\n",
+  "finalApplicationResults": "Qualification desktop: ScreamSeqTest-1e2bdd7d253341bf8b9b8c6f5609c4e6\ntest_browser_search_retains_focus_and_arrows_preview (test_sample_library.SampleLibraryTests.test_browser_search_retains_focus_and_arrows_preview) ... ok\ntest_native_browser_search_waveform_preview_and_retained_selection (test_sample_library.SampleLibraryTests.test_native_browser_search_waveform_preview_and_retained_selection) ... ok\ntest_native_browser_multi_selection_import_uses_shared_transaction (test_sample_library.SampleLibraryTests.test_native_browser_multi_selection_import_uses_shared_transaction) ... ok\ntest_native_preview_gain_applies_immediately_and_partial_text_preserves_target (test_sample_library.SampleLibraryTests.test_native_preview_gain_applies_immediately_and_partial_text_preserves_target) ... ok\ntest_configured_family_survives_close_and_reopen_before_any_field_edit (test_sample_library.SampleLibraryTests.test_configured_family_survives_close_and_reopen_before_any_field_edit) ... ok\ntest_native_multisample_roots_stale_guard_retained_draft_and_rebase (test_sample_library.SampleLibraryTests.test_native_multisample_roots_stale_guard_retained_draft_and_rebase) ... ok\ntest_native_browser_controls_fit_minimum_size_and_folder_removal_preserves_files (test_sample_library.SampleLibraryTests.test_native_browser_controls_fit_minimum_size_and_folder_removal_preserves_files) ... ok\ntest_pattern_backspace_clears_and_undo_restores (test_workspace_shortcuts.WorkspaceShortcutTests.test_pattern_backspace_clears_and_undo_restores) ... ok\ntest_retained_editor_global_bindings_preserve_focus_and_raw_draft (test_workspace_shortcuts.WorkspaceShortcutTests.test_retained_editor_global_bindings_preserve_focus_and_raw_draft) ... ok\n\n----------------------------------------------------------------------\nRan 9 tests in 11.824s\n\nOK\n",
+  "logs": {
+    "browser-pattern-before.log": "8d861c19f652d819f253bd97bb9c044a8be1487e83d24fe7274c189d875f4ed6",
+    "interaction-fix-build.log": "7d9e7430f9020bba4875a74740b26511bd1b122f8f4091393acccd2d3cf8fdb7",
+    "interaction-fix-native-runner.log": "0d4b1d1aa12d67c46b221996fea512aeaafb6fedd71c087b2c94225d1a1368e5",
+    "interaction-fix-app.log": "a29662c7532922adf351cc061245cfe2a5777cb099355d499afedc1b772b82f7",
+    "interaction-fix-repair-build.log": "354370a16b895d82508c54530102458b9c1e5ca5eadf51321036f93193c94d53",
+    "interaction-fix-repair-native.log": "f3143223924e2011a61134b591b19f72550b9ffa55cb67872e6dcdb52547e748"
+  },
+  "limitations": [
+    "Browser interaction tests use inspection mode: preview requests and decoded waveforms verified without audible output",
+    "Preview voice/decoder PCM tests passed; no new physical listening or sustained visual presentation measurement",
+    "No Mac build; shared DSP, persistence and API mutation semantics unchanged"
+  ]
+}

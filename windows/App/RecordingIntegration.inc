@@ -182,16 +182,17 @@
         }
     }
     void serviceMidi() {
+        if(departureInput)return;
         if(!controller||busy||midiBusy||midiServicing||midiClosing||recoveryRestoring)return;
         midiServicing=true;struct Guard{bool &value;~Guard(){value=false;}}guard{midiServicing};
         try {
             if(midiResetRequested){midiResetRequested=false;discardPendingMidi();}
-            if(recordingStopRequested) {
+            if(recordingStopRequested&&!nativeCommandPending&&!nativeCommandCompletion.retained()) {
                 auto target=std::exchange(recordingStopRequested,std::nullopt);
                 MidiTransaction boundary(*this);
                 if(matchesRecording(*target)){
                     boundary.capture();
-                    if(view->recording.value("capturing",false))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",target->take}});
+                    if(view->recording.value("capturing",false))retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",target->take}},{{"take",target->take}});
                 }
             }else consumeMidi(drainMidiInput());
             refreshMidiInputStatus();
@@ -203,17 +204,19 @@
         updateMidiTimer();
     }
     void startRecordingIfArmed() {
-        if(!midiArmed||!songPlaying()||hasRecordingTake()||busy)return;
+        if(!midiArmed||!songPlaying()||hasRecordingTake()||busy||nativeCommandPending||nativeCommandCompletion.retained())return;
         try {
             if(!typingSound||typingSound>255||(typingSample&&view->instruments))throw std::runtime_error("Select a mapped instrument before recording");
             Json channels=Json::array();for(unsigned n=0;n<std::min(midiChannelsCount,view->channels-channel);++n)channels.push_back(channel+n);
-            documentOperation("recording.start",{{"expectedRevision",view->session.revision},{"channels",channels},{"instrument",typingSound},
-                {"quantization",midiQuantization},{"latencyMS",midiLatencyMS}});
-            recordingError.clear();status=L"Recording precise notes / Stop finishes one Undo step";
-        }catch(const std::exception &e){recordingError=e.what();status=L"Recording not started / "+wide(e.what());}
+            retainedNativeCommand("midi","recording.start",{{"expectedRevision",view->session.revision},{"channels",channels},{"instrument",typingSound},
+                {"quantization",midiQuantization},{"latencyMS",midiLatencyMS}},{{"channels",channels},{"instrument",typingSound}},[&](const Json &){
+                recordingError.clear();status=L"Recording precise notes / Stop finishes one Undo step";updateRecordingWindow();
+            });
+        }catch(const std::exception &e){recordingError=e.what();status=(nativeCommandCompletion.retained()?L"Recording outcome needs Review / ":L"Recording not started / ")+wide(e.what());}
         updateRecordingWindow();
     }
     void finishRecordingTake(const std::string &take,bool reviewed=true) {
+        if(nativeCommandCompletion.retained()){stop();if(reviewed)reviewNativeCommand();else status=L"Review the earlier command result before finishing another take";return;}
         if(recordingFinishing)throw ScreamSeq::Api::ApiError(-32002,"Recording finish is busy");
         if(!hasRecordingTake()||view->recording.at("take")!=take)throw ScreamSeq::Api::ApiError(-32001,"Recording take changed; review it again");
         recordingFinishing=true;struct Guard{bool &value;~Guard(){value=false;}}guard{recordingFinishing};
@@ -221,23 +224,24 @@
         try {
             MidiTransaction boundary(*this);boundary.capture();
             stop();
-            auto stopped=documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",take}});
+            auto stopped=retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",take}},{{"take",take}});
             const auto drops=stopped.value("missingTime",0ull)+stopped.value("exhaustedVoices",0ull)+stopped.value("overflow",0ull);
             if(!reviewed&&(drops||!stopped.value("inputError",std::string()).empty())) {
                 recordingError=stopped.value("inputError",std::string());if(recordingError.empty())recordingError="Some recording input was lost; review the take before Finish";
                 status=L"Input was lost / review the retained take before Finish";
                 openMidiRecording();updateRecordingWindow();return;
             }
-            documentOperation("recording.commit",{{"expectedRevision",view->session.revision},{"take",take},{"replaceRows",true}});
-            recordingError.clear();status=drops?L"Recording saved / some input was lost; Undo restores previous notes":L"Recording saved / Undo restores previous notes";
-        }catch(const std::exception &e){recordingError=e.what();status=L"Take retained / "+wide(e.what());updateRecordingWindow();throw;}
+            retainedNativeCommand("midi","recording.commit",{{"expectedRevision",view->session.revision},{"take",take},{"replaceRows",true}},{{"take",take}},[&](const Json &){
+                recordingError.clear();status=drops?L"Recording saved / some input was lost; Undo restores previous notes":L"Recording saved / Undo restores previous notes";updateRecordingWindow();
+            });
+        }catch(const std::exception &e){recordingError=e.what();status=(nativeCommandCompletion.retained()?L"Recording result retained for Review / ":L"Recording action failed / ")+wide(e.what());updateRecordingWindow();throw;}
         updateRecordingWindow();
     }
     void discardRecordingTake(const std::string &take) {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
         MidiTransaction boundary(*this);
         recordingFinishRequested.reset();releaseMidiNotes();
-        documentOperation("recording.discard",{{"expectedRevision",view->session.revision},{"take",take}});
-        recordingError.clear();status=L"Recording take discarded";updateRecordingWindow();
+        retainedNativeCommand("midi","recording.discard",{{"expectedRevision",view->session.revision},{"take",take}},{{"take",take}},[&](const Json &){recordingError.clear();status=L"Recording take discarded";updateRecordingWindow();});
     }
     void stopAndFinishRecording() {
         if(!hasRecordingTake()){stop();return;}
@@ -375,7 +379,7 @@
     }
     void configureMidi(bool qualification=false){if(qualification)midiTestBuffer=std::make_unique<ScreamSeq::MidiInputBuffer>();updateMidiTimer();}
     void stopRecordingForRecovery() {
-        if(view->recording.value("capturing",false))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",view->recording.at("take")}});
+        if(view->recording.value("capturing",false))retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",view->recording.at("take")}},{{"take",view->recording.at("take")}});
         releaseMidiNotes();recordingStopRequested.reset();recordingFinishRequested.reset();
     }
     void resetMidiDocument(){releaseMidiNotes();discardPendingMidi();recordingFinishRequested.reset();recordingStopRequested.reset();recordingError.clear();updateRecordingWindow();}

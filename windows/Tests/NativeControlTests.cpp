@@ -1,6 +1,9 @@
 #include "../App/NativeControls.hpp"
+#include "../App/NativeAccessibility.hpp"
+#include "AccessibleControl.hpp"
 #include "../App/NativeReportList.hpp"
 #include "PrivateGuiTest.hpp"
+#include <shlwapi.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9,10 +12,76 @@
 
 namespace {
 void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+void nativeAccessibleNames(HWND parent,HWND combo) {
+  const auto previous=GetFocus();
+  auto edit=CreateWindowW(L"EDIT",L"raw -",WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL,10,250,220,28,parent,
+    reinterpret_cast<HMENU>(987),GetModuleHandleW(nullptr),nullptr);
+  require(edit,"Create accessible field fixture");ScreamSeq::Tests::ownGuiWindow(edit);
+  struct Destroy{HWND value;~Destroy(){if(IsWindow(value))DestroyWindow(value);}} destroy{edit};
+  ScreamSeq::NativeControls::install(edit,true);SetFocus(edit);
+  SendMessageW(edit,EM_SETSEL,5,5);SendMessageW(edit,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"?"));
+  SendMessageW(edit,EM_SETSEL,1,4);
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(edit,L"Raw channel count")),"Annotate native edit");
+  require(ScreamSeq::Tests::accessibleName(edit)==L"Raw channel count","Windows provider lost explicit edit name");
+  DWORD first=0,last=0;SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+  wchar_t text[32]{};GetWindowTextW(edit,text,32);
+  require(std::wstring_view(text)==L"raw -?"&&first==1&&last==4&&GetFocus()==edit&&SendMessageW(edit,EM_CANUNDO,0,0),
+    "Accessible naming changed raw text, caret, focus or local Undo");
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(edit,L"Retained draft / channel count")),"Rename native field");
+  require(ScreamSeq::Tests::accessibleName(edit)==L"Retained draft / channel count","Provider retained an old name");
+  SendMessageW(edit,WM_UNDO,0,0);GetWindowTextW(edit,text,32);
+  require(std::wstring_view(text)==L"raw -","Accessible naming altered the local Undo transaction");
+  const auto selected=SendMessageW(combo,CB_GETCURSEL,0,0);
+  require(SUCCEEDED(ScreamSeq::NativeAccessibility::name(combo,L"Pattern selection")),"Annotate native combo");
+  require(ScreamSeq::Tests::accessibleName(combo)==L"Pattern selection"&&SendMessageW(combo,CB_GETCURSEL,0,0)==selected&&GetFocus()==edit,
+    "Combo provider naming changed selection or focus");
+  require(ScreamSeq::NativeAccessibility::name(edit,L"")==E_INVALIDARG,"Empty accessible name accepted");
+  require(DestroyWindow(edit)!=FALSE,"Destroy annotated edit");
+  require(ScreamSeq::NativeAccessibility::name(edit,L"Gone")==E_INVALIDARG,"Destroyed HWND accepted an annotation");
+  SetFocus(previous);
+}
+void manifestedNativePolicy() {
+  // Check before the test's runtime DPI fallback can hide a missing manifest.
+  require(AreDpiAwarenessContextsEqual(GetThreadDpiAwarenessContext(),DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)!=FALSE,
+    "Native UI executable did not start with its manifested PerMonitorV2 policy");
+  ACTCTX_SECTION_KEYED_DATA binding{sizeof(binding)};
+  require(FindActCtxSectionStringW(0,nullptr,ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION,L"comctl32.dll",&binding)!=FALSE,
+    "Native Common Controls dependency is not active");
+  struct Module{HMODULE value;~Module(){if(value)FreeLibrary(value);}} controls{LoadLibraryW(L"comctl32.dll")};
+  require(controls.value!=nullptr,"Load manifested Common Controls");
+  const auto version=reinterpret_cast<HRESULT(CALLBACK *)(DLLVERSIONINFO *)>(GetProcAddress(controls.value,"DllGetVersion"));
+  DLLVERSIONINFO info{sizeof(info)};
+  require(version&&SUCCEEDED(version(&info))&&info.dwMajorVersion>=6,"Native control fixture loaded the classic Common Controls library");
+  std::cout<<"Native manifest active: PerMonitorV2, Common Controls "<<info.dwMajorVersion<<'.'<<info.dwMinorVersion<<'\n';
+}
 struct FixtureResources {
   HWND window{};HFONT font{};
   ~FixtureResources(){if(window)DestroyWindow(window);if(font)DeleteObject(font);}
 };
+void nativeEditSelection(HWND parent) {
+  for(const DWORD style:{DWORD(0),DWORD(ES_MULTILINE),DWORD(ES_READONLY)}) {
+    const auto edit=CreateWindowW(L"EDIT",L"Retained draft",WS_CHILD|WS_VISIBLE|WS_TABSTOP|style,
+      10,10,260,60,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    require(edit!=nullptr,"Create native text-selection fixture");ScreamSeq::Tests::ownGuiWindow(edit);
+    ScreamSeq::NativeControls::install(edit);SetFocus(edit);
+    SendMessageW(edit,EM_SETSEL,2,4);const auto undo=SendMessageW(edit,EM_CANUNDO,0,0);
+    SendMessageW(edit,WM_CHAR,1,0);DWORD first=0,last=0;
+    SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    require(first==0&&last==14,"Ctrl+A did not select the native field's complete text");
+    SendMessageW(edit,EM_SETSEL,2,4);
+    {
+      const std::array roots{edit};ScreamSeq::NativeInputGate gate(roots);
+      SendMessageW(edit,WM_CHAR,1,0);
+      SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+      require(first==2&&last==4,"Native Select All bypassed document-departure input protection");
+    }
+    wchar_t text[64]{};GetWindowTextW(edit,text,64);
+    require(std::wstring_view(text)==L"Retained draft"&&SendMessageW(edit,EM_CANUNDO,0,0)==undo&&GetFocus()==edit,
+      "Native Select All changed text, Undo or focus");
+    DestroyWindow(edit);
+  }
+  SetFocus(parent);
+}
 std::wstring reportCell(size_t row,unsigned column){
   if(column==0)return row==0?L"Alpha / Café / 旋律 / a long native label that must be ellipsized":row==1?L"Beta":L"Row "+std::to_wstring(row);
   if(column==2)return L"64";
@@ -49,6 +118,49 @@ struct Bitmap {
     std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char *>(&file),sizeof(file));out.write(reinterpret_cast<const char *>(&info),sizeof(info));out.write(static_cast<const char *>(pixels),width*height*4);require(bool(out),"Write selector evidence");
   }
 };
+void nativeControlAppearance(HWND parent,HFONT font){
+  using namespace ScreamSeq::NativeControls;
+  FixtureResources button;
+  button.window=CreateWindowW(L"BUTTON",L"Apply",WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,180,36,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+  require(button.window,"Create appearance fixture button");ScreamSeq::Tests::ownGuiWindow(button.window);
+  install(button.window);SendMessageW(button.window,WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);
+  Bitmap bitmap(180,36);DRAWITEMSTRUCT draw{};draw.CtlType=ODT_BUTTON;draw.hwndItem=button.window;draw.hDC=bitmap.dc;draw.rcItem={0,0,180,36};
+  SetTextColor(bitmap.dc,RGB(1,2,3));SetBkColor(bitmap.dc,RGB(4,5,6));SetBkMode(bitmap.dc,OPAQUE);
+  const auto originalFont=GetCurrentObject(bitmap.dc,OBJ_FONT);
+  buttonItem(draw,Surface::inspector,false,false);require(bitmap.at(10,6)==RGB(35,49,63),"Inspector action lost its normal surface");
+  draw.itemState=ODS_SELECTED;buttonItem(draw,Surface::inspector,false,false);require(bitmap.at(10,6)==RGB(66,80,94),"Pressed inspector action has no feedback");
+  draw.itemState=0;state(button.window)->hot=true;buttonItem(draw,Surface::main,false,false);
+  require(bitmap.at(10,6)==RGB(51,65,79),"Hot native action has no feedback");
+  SendMessageW(button.window,WM_MOUSELEAVE,0,0);require(!state(button.window)->hot,"Mouse leave retained a hot button");
+  active(button.window,true);buttonItem(draw,Surface::inspector,false,false);
+  require(bitmap.at(10,6)==RGB(46,67,77),"Native retained page selection is invisible");
+  buttonItem(draw,Surface::main,false,true);require(bitmap.at(10,6)==GetSysColor(COLOR_HIGHLIGHT),"High-contrast active action ignores system selection");
+  draw.itemState=ODS_DISABLED|ODS_SELECTED;buttonItem(draw,Surface::main,true,true);
+  require(bitmap.at(10,6)==GetSysColor(COLOR_BTNFACE),"Disabled high-contrast action still looks active");
+  active(button.window,false);draw.itemState=ODS_FOCUS|ODS_NOFOCUSRECT;buttonItem(draw,Surface::main,false,false);GdiFlush();
+  const auto pixels=[&]{GdiFlush();const auto bytes=static_cast<unsigned char *>(bitmap.pixels);return std::vector<unsigned char>(bytes,bytes+bitmap.width*bitmap.height*4);};
+  const auto hiddenFocus=pixels();draw.itemState=0;buttonItem(draw,Surface::main,false,false);
+  require(pixels()==hiddenFocus,"Suppressed native focus cue is still drawn");
+  draw.itemState=ODS_FOCUS;buttonItem(draw,Surface::main,false,false);
+  require(pixels()!=hiddenFocus,"Keyboard focus cue is absent");
+  require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE&&GetCurrentObject(bitmap.dc,OBJ_FONT)==originalFont,"Native button draw leaked DC state");
+  draw.CtlType=ODT_LISTBOX;draw.itemState=ODS_SELECTED;listItem(draw,L"Selected list item",true);
+  require(bitmap.at(10,3)==GetSysColor(COLOR_HIGHLIGHT),"High-contrast list selection ignores system colors");
+  draw.itemState=0;listItem(draw,L"Unselected list item",true);require(bitmap.at(10,3)==GetSysColor(COLOR_WINDOW),"High-contrast list background ignores system colors");
+  for(const bool selected:{false,true})for(const bool disabled:{false,true}){
+    const auto palette=listColors(selected,disabled,true);
+    const auto expected=GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT);
+    require(palette.text==expected&&palette.detail==expected,"High-contrast secondary list text does not retain the system foreground");
+  }
+  require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE,"Native list draw leaked DC state");
+  const auto brush=controlColor(bitmap.dc,button.window,Surface::main,true);
+  require(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&GetTextColor(bitmap.dc)==GetSysColor(COLOR_WINDOWTEXT)&&GetBkColor(bitmap.dc)==GetSysColor(COLOR_WINDOW),"Native field ignores system text/background roles");
+  EnableWindow(button.window,FALSE);controlColor(bitmap.dc,button.window,Surface::inspector,true);
+  require(GetTextColor(bitmap.dc)==GetSysColor(COLOR_GRAYTEXT),"Disabled native field ignores system disabled text");
+  // This explicitly selects the system-color rendering branch without changing
+  // the musician's OS theme. Foreground high-contrast qualification is separate.
+  std::cout<<"Native appearance: pressed/hot/active/disabled, focus cues, system colors and DC isolation\n";
+}
 void reportDrawing(HWND parent,HFONT font){
   using namespace ScreamSeq::NativeReportList;
   INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};require(InitCommonControlsEx(&common),"Initialize native report");
@@ -138,6 +250,7 @@ void privateGuiFailureChecks(){
 }
 int main(int argc,char **argv){
   try {
+    manifestedNativePolicy();
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ScreamSeq::Tests::runPrivateGui(L"ScreamSeqControlTest",[&]{
     FixtureResources fixture;
@@ -161,7 +274,7 @@ int main(int argc,char **argv){
       if(argc>1){std::filesystem::path out=argv[1];std::filesystem::create_directories(out);image.save(out/(std::string(name)+".bmp"));}
     };
     render("normal",RGB(53,68,82));
-    ShowWindow(parent,SW_SHOWNOACTIVATE);SetFocus(combo);render("focused",RGB(104,193,178));
+    ShowWindow(parent,SW_SHOWNOACTIVATE);nativeEditSelection(parent);nativeAccessibleNames(parent,combo);SetFocus(combo);render("focused",RGB(104,193,178));
     EnableWindow(combo,FALSE);render("disabled",RGB(53,68,82));EnableWindow(combo,TRUE);
     SendMessageW(combo,WM_KEYDOWN,VK_DOWN,0);require(SendMessageW(combo,CB_GETCURSEL,0,0)==2,"Arrow-key selection");
     SendMessageW(combo,WM_KEYDOWN,VK_F4,0);require(SendMessageW(combo,CB_GETDROPPEDSTATE,0,0),"F4 popup");
@@ -170,7 +283,7 @@ int main(int argc,char **argv){
     const auto before=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int i=0;i<200;++i){InvalidateRect(combo,nullptr,FALSE);UpdateWindow(combo);}
     require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==before,"Paint leaks GDI resources");
-    reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();
+    nativeControlAppearance(parent,font);reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();
     const auto reportResources=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for(int cycle=0;cycle<2;++cycle){
       reportDrawing(parent,font);SetFocus(parent);RedrawWindow(parent,nullptr,nullptr,RDW_UPDATENOW|RDW_ALLCHILDREN);GdiFlush();

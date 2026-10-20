@@ -1,0 +1,169 @@
+{
+  "format": "screamseq-fresh-x64-host-followup-v1",
+  "recordedUTC": "2026-10-16T04:19:48.700382+00:00",
+  "testedSource": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+  "toolingCheckout": "e9a473af5ad3806a35d2fd58ebc68db75aa1e909",
+  "runID": 38846111553,
+  "artifact": {
+    "id": 12024521205,
+    "name": "screamseq-windows-logs",
+    "digest": "sha256:a9266ca3e99e5ae446d64523338644b12489518544732e2a6789a44a772538eb",
+    "size_in_bytes": 15650654,
+    "expires_at": "2026-10-30T04:08:37Z"
+  },
+  "retainedApp": {
+    "archiveSHA256": "f73da272beefef3fa2f620ecb863355e0a654a4b3f63230ca1d965a007949ce8",
+    "qualification": "Built candidate; test results are separate and may fail.",
+    "buildReceiptSHA256": "c1d0e1671ba14e038efde4c8ab2cac99be9ccd7f6b572b2a5cd4012018b90745",
+    "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+    "executableSHA256": "5c8f1a5c8f3ebe8be9dbca9b47a2a123fdcd7efcdade9b9cb3237ac5278d830d"
+  },
+  "identityVerification": {
+    "manifestFiles": 1246,
+    "exactBytes": 1205,
+    "matchedAfterLFtoCRLF": 41,
+    "pythonFixturesHashed": 81,
+    "receiptSHA256": "83b29046ebf25483af48719fe1dbe1533fa6243f30a6dfc6dc7059a04708278f"
+  },
+  "execution": {
+    "host": "Windows 11 ARM64, 10.0.28000",
+    "process": "AMD64 PE (0x8664), x64 emulation",
+    "isolation": "Owned never-switched private desktops; disposable files",
+    "rebuild": false,
+    "startedUTC": "2026-10-16T04:17:15.195725+00:00",
+    "finishedUTC": "2026-10-16T04:18:19.666196+00:00",
+    "applicationCases": 30,
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 62.954,
+    "previouslyFailedCIRechecked": {
+      "test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor (test_workspace_shortcuts.WorkspaceShortcutTests.test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor)": "passed",
+      "test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take (test_recording.RecordingTests.test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take)": "passed",
+      "test_queue_loss_retains_stopped_take_until_explicit_review_and_finish (test_recording.RecordingTests.test_queue_loss_retains_stopped_take_until_explicit_review_and_finish)": "passed",
+      "test_stop_drains_multiple_batches_without_later_step_entry (test_recording.RecordingTests.test_stop_drains_multiple_batches_without_later_step_entry)": "passed",
+      "test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review (test_recording.RecordingTests.test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review)": "passed",
+      "test_sample_dock_typing_live_mode_and_text_focus (test_audition.AuditionTests.test_sample_dock_typing_live_mode_and_text_focus)": "passed",
+      "test_native_sample_and_instrument_typing_capture_text_and_close (test_audition.AuditionTests.test_native_sample_and_instrument_typing_capture_text_and_close)": "passed",
+      "test_keyup_during_document_wait_never_starts_a_late_voice (test_audition.AuditionTests.test_keyup_during_document_wait_never_starts_a_late_voice)": "passed"
+    },
+    "allThreeRecoveryCasesPassed": true,
+    "executableUnchanged": true,
+    "fixturesUnchanged": true
+  },
+  "silentWasapiHostReports": [
+    {
+      "file": "audition-evidence\\test_keyup_during_document_wait_never_starts_a_late_voice-host.json",
+      "sha256": "19fbfd920566a352c13a6e3cd4ff0c99c331b40a845ab0632cac7c988bd7aa60",
+      "durationSeconds": 0.4150647,
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 6,
+        "renderedFrames": 3360,
+        "maxCallbackMicros": 1769.6,
+        "maxServiceMicros": 1833.9,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      },
+      "foregroundVisualQualified": false,
+      "sustainedPresentationQualified": false
+    },
+    {
+      "file": "audition-evidence\\test_native_sample_and_instrument_typing_capture_text_and_close-host.json",
+      "sha256": "465588331a8cc006b04e2192dbc168e327b7838848e5093cdc3f94f264caa7f0",
+      "durationSeconds": 1.4712263,
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 99,
+        "renderedFrames": 47520,
+        "maxCallbackMicros": 3699.7,
+        "maxServiceMicros": 3730.7,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      },
+      "foregroundVisualQualified": false,
+      "sustainedPresentationQualified": false
+    },
+    {
+      "file": "audition-evidence\\test_sample_dock_typing_live_mode_and_text_focus-host.json",
+      "sha256": "dcb036a76bfd40a4ba1a15613aa849b2360373b14f33ad63c1777b2fdf3b3b99",
+      "durationSeconds": 0.8885117,
+      "audio": {
+        "sampleRate": 48000,
+        "periodFrames": 480,
+        "silentOutput": true,
+        "preparedPlayback": true,
+        "processorFault": false,
+        "faultDetails": {
+          "chain": false,
+          "plugins": [],
+          "renderer": false
+        },
+        "callbackCount": 57,
+        "renderedFrames": 27360,
+        "maxCallbackMicros": 3351,
+        "maxServiceMicros": 3381.4,
+        "deadlineOverruns": 0,
+        "starvationIndicators": 0,
+        "deviceErrors": 0,
+        "lastError": 0,
+        "mmcssError": 0,
+        "realtimeAuditPassed": false
+      },
+      "foregroundVisualQualified": false,
+      "sustainedPresentationQualified": false
+    }
+  ],
+  "evidenceDirectory": "C:\\Users\\P14\\Documents\\Codex\\2026-10-15\\task\\windows-fresh-x64-20261016",
+  "evidenceHashes": {
+    "application.log": "564515d71679b8d2f4abb9bc233e9ae2e9de8af77aad6f434c8b3aabcae8a3fd",
+    "audio-probe.log": "ed7f19d775d46c475cf072cfa3c5837585d68b87e0fb263b93fd21296f2552d6",
+    "identity-verification.json": "83b29046ebf25483af48719fe1dbe1533fa6243f30a6dfc6dc7059a04708278f",
+    "record_fresh_x64.py": "6a4eb0b050213ed23e597819e05b00dc2eeede6c99291e2b4f0407d63c5cf5e1",
+    "test-receipt.json": "25d33850b3e97aa98360eae796a4d27ad09d65accfeb14c4e781058352463d51",
+    "test_fresh_x64.py": "3340a7dc0cf2d9cf763c3b4bea6c55941fd7b654d78611105ebdfddff8fcc2c1",
+    "verify_fresh_x64.py": "a65956f5feca8194d7e83448817280789cb28032d232c358d83e96feea297790",
+    "verify_fresh_x64_identity.py": "e098a159dc75255198907e3e0898c4cf1cb50d5ba0f930b6d651a7100f805ff1",
+    "audio-environment\\report.json": "48c78af149dfa3fe3a4418f5ead0aabe3ee319b3553c7a06ca8625112a74feef",
+    "audition-evidence\\test_keyup_during_document_wait_never_starts_a_late_voice-host.json": "19fbfd920566a352c13a6e3cd4ff0c99c331b40a845ab0632cac7c988bd7aa60",
+    "audition-evidence\\test_native_sample_and_instrument_typing_capture_text_and_close-host.json": "465588331a8cc006b04e2192dbc168e327b7838848e5093cdc3f94f264caa7f0",
+    "audition-evidence\\test_sample_dock_typing_live_mode_and_text_focus-host.json": "dcb036a76bfd40a4ba1a15613aa849b2360373b14f33ad63c1777b2fdf3b3b99",
+    "audition-evidence\\typing-history.json": "eb254a486f6ac0d43cdc9bdfcf439602e86ab2c465e350d8f19b645c28632d7c",
+    "artifact\\bin\\windows-ci\\audio-environment\\report.json": "2b4b688a71bd7ec2c56e15a013a657bcccd4a1aed02be7111cf31f96e8b3e432"
+  },
+  "limits": [
+    "All eight CI audio-dependent failures pass here on the identical current candidate; the CI run itself remains failed.",
+    "This is x64 emulation on ARM64, not native x64 hardware qualification.",
+    "MIDI input and sample capture fixtures use controlled injection; physical microphone/MIDI capture and audible speaker output were not validated.",
+    "Three WASAPI observations are short and silent. Each reports realtimeAuditPassed=false and sustainedPresentationQualified=false; no sustained realtime or presentation claim.",
+    "Native Computer Use remains unavailable: no native app APIs/node_repl, and no new foreground mouse/keyboard/screenshots.",
+    "Earlier recovery timeout remains unexplained; all three recovery cases pass in current CI and this host follow-up.",
+    "Known API-PLUGIN-NOOP and codec/API baseline differences, current-candidate reciprocal exchange, P1-P8, foreground accessibility/mixed-DPI and physical/vendor gates remain open."
+  ]
+}

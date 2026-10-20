@@ -84,9 +84,9 @@ class GraphCommandsTests(unittest.TestCase):
         events=self.commands();self.assertEqual([c['kind'] for c in events],['row','start','stop','clear','amount','wet']);self.assertEqual(events[-1]['position'],6*65536-1);self.assertEqual(events[3]['graph'],'')
         self.press(4018);ws=self.read('workspace.get');lane=ws['graphLanes'];self.assertEqual(lane['lanes'],[dict(target=first,column=0,name='Track 1')]);self.assertGreater(lane['rect'][2],0)
         texts={c['row']:c['text'] for c in lane['visibleCommands']};self.assertEqual(texts[3],'CLR');self.assertEqual(texts[5],'~W001 99')
-        x,y,_,_=lane['rect'];self.mouse(x+16,y+50+18*2+4);self.assertEqual(self.read('workspace.get')['focus'],'graphLanes')
+        x,y,_,_=lane['rect'];self.mouse(x+16,y+self.read('workspace.get')['trackHeaders']['headerHeight']+18*2+4);self.assertEqual(self.read('workspace.get')['focus'],'graphLanes')
         self.desktop.send(self.desktop.hwnd(self.pid),0x100,0x28);self.desktop.send(self.desktop.hwnd(self.pid),0x100,0x0D);self.idle();self.assertEqual(self.local()['row'],3);self.assertEqual(self.desktop.send(self.control(4003),0x147),3)
-        self.press(4018);self.mouse(x+16,y+50+18*2+4);self.desktop.send(self.desktop.hwnd(self.pid),0x100,0x2E);self.idle();self.assertEqual(len(self.commands()),5)
+        self.press(4018);self.mouse(x+16,y+self.read('workspace.get')['trackHeaders']['headerHeight']+18*2+4);self.desktop.send(self.desktop.hwnd(self.pid),0x100,0x2E);self.idle();self.assertEqual(len(self.commands()),5)
         self.write('history.undo',domain='document');self.assertEqual(self.commands(),events);self.desktop.send(self.desktop.hwnd(self.pid),0x100,0x75);self.assertEqual(self.read('workspace.get')['focus'],'pattern')
 
     def test_group_lanes_scroll_open_graph_and_minimum_geometry(self):

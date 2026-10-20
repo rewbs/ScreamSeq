@@ -109,7 +109,7 @@ public:
     for(int id:{pitch,units,snap,localEffect})combo(id);
     for(int id:{instrument,velocity,offset,parameter,repeatCount,endVelocity})edit(id,L"",32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
-      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Apply"},
+      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Write note"},
       {loadTarget,L"Load selection"},{replaceRow,L"Replace row note: on"},{fillRow,L"Fill to row end"},
       {pageTimeline,L"Timeline"},{pageHit,L"Hit"},{pageTools,L"Tools"},{pageDetails,L"Details"},{reloadCapturedCommand,L"Reload captured"},
       {returnPattern,L"Return to pattern"},{close,L"Close"}})button(id,text);
@@ -118,16 +118,20 @@ public:
       {velocityLabel,L"Velocity"},{offsetLabel,L"Offset"},{unitsLabel,L"Units"},{effectLabel,L"Note-local effect"},
       {parameterLabel,L"Hex"},{repeatLabel,L"Hits (2–64)"},{endLabel,L"End velocity (1–127)"}})label(id,text);
     for(unsigned n=1;n<=122;++n){const auto text=n<=120?L"Note "+std::to_wstring(n):n==121?L"Note off":L"Cut";
-      const auto i=SendMessageW(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
-      SendMessageW(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}
-    for(auto text:{L"Beats",L"Rows"})SendMessageW(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    for(auto text:{L"Free",L"1/16 beat",L"1/32 beat",L"1/64 beat"})SendMessageW(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+      const auto i=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
+      ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}
+    for(auto text:{L"Beats",L"Rows"})ScreamSeq::NativeInputGate::present(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    for(auto text:{L"Free",L"1/16 beat",L"1/32 beat",L"1/64 beat"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     {Setting guard(setting_);selection(pitch,60);selection(units,0);selection(snap,0);
       set(instrument,L"0");set(velocity,L"127");set(offset,L"0");set(parameter,L"00");set(repeatCount,L"4");set(endVelocity,L"127");}
     pointBaseline_=pointRaw();toolsBaseline_=toolsRaw();status_=L"Tools → Load selection captures a row";finish();
   }
   ~PreciseNoteWindow()override{ready_=false;dragging_=false;if(owns(GetCapture()))ReleaseCapture();}
   bool retainedDraft()const{return pending_||dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,revision_,Json::array({target_.patternID,target_.trackID,target_.row}).dump(),generation_,
+      dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_,pending_);
+  }
   bool pending()const noexcept{return pending_;}
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}

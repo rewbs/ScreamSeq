@@ -72,7 +72,7 @@ class SampleDetailUITests(unittest.TestCase):
     def test_drawing_native_units_channels_interpolation_history_and_reopen(self):
         self.select(4813,2);self.stage(4,.5);self.stage(8,-.5);self.assertEqual(self.pcm(),self.raw);self.press(4825);actual=self.pcm();self.assertEqual(actual[::2],self.raw[::2]);self.assertEqual(actual[9:18:2],(16384,8192,0,-8192,-16384));self.assertEqual(self.state()['points'],[])
         before=self.doc();self.stage(4,.5);self.stage(8,-.5);self.press(4825);self.assertEqual(self.doc(),before);self.press(4804);self.assertEqual(self.pcm(),self.raw);self.press(4805);self.assertEqual(self.pcm(),actual)
-        path=self.folder/'sample-drawing.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4802);self.assertEqual(self.pcm(),actual)
+        identity=self.state()['id'];path=self.folder/'sample-drawing.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.start();self.assertEqual(self.state()['id'],identity);self.assertEqual(self.pcm(),actual)
         self.select(4813,1);self.select(4827,1);self.stage(10,.25);self.stage(13,-.25);self.press(4825);self.assertEqual(self.pcm()[20:28:2],(8192,8192,8192,-8192));self.assertEqual(self.pcm()[1::2],actual[1::2]);self.assertFalse(self.state()['fieldDraft'])
 
     def test_mouse_drawing_cancellation_and_stale_gesture_preserve_audio(self):
@@ -120,11 +120,25 @@ class SampleDetailUITests(unittest.TestCase):
     def test_captured_drafts_survive_close_selection_changes_and_document_replacement(self):
         self.stage(10,.25);draft=self.state()['points'];self.press(4806);self.start();self.assertEqual(self.state()['points'],draft);self.select(4801,1);self.assertEqual(self.state()['sample'],1);self.assertIn('captured draft',self.state()['status'])
         self.write('document.patch',title='External change');before=self.doc();self.press(4825);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['points'],draft);self.press(4803);self.assertEqual(self.state()['points'],[]);self.stage(12,.5)
-        path=self.folder/'other.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);before=self.doc();draft=self.state()['points'];self.press(4803);self.assertEqual(self.state()['points'],draft);self.assertIn('Document replaced',self.state()['status']);self.press(4825);self.assertEqual(self.doc(),before);self.press(4802);self.assertFalse(self.state()['stale']);self.assertEqual(self.state()['points'],[])
+        path=self.folder/'other.screamseq';self.write('document.save',path=str(path));before=self.doc();draft=self.state()['points'];identity=self.state()['id'];pcm=self.pcm()
+        with self.assertRaisesRegex(Exception,'[Rr]etained|[Dd]raft|[Nn]ative'):
+            self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.state()['points'],draft);self.assertEqual(self.state()['id'],identity)
+        self.press(4826);self.write('document.open',path=str(path),discard=True);self.assertFalse(self.state()['visible'])
+        self.start();self.assertFalse(self.state()['stale']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.state()['id'],identity);self.assertEqual(self.pcm(),pcm)
 
     def test_history_removal_retains_identity_and_rejects_replacement_slot(self):
         created=self.write('sample.copyToNew',sample=1,start=0,end=8);self.press(4803);catalog=self.doc()['data']['samples'];self.select(4801,next(i for i,s in enumerate(catalog) if s['id']==created['id']));self.assertEqual(self.state()['id'],created['id'])
-        self.press(4804);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['id'],created['id']);self.assertIn('removed by history',self.state()['status']);before=self.doc();self.stage(0,.5);self.assertEqual(self.doc(),before);self.press(4803);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['id'],created['id']);self.press(4802);self.assertFalse(self.state()['stale']);self.assertNotEqual(self.state()['id'],created['id'])
+        self.press(4804);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['id'],created['id']);self.assertIn('removed by history',self.state()['status'])
+        self.assertTrue(self.state()['mutationCompletion']['returned']);before=self.doc();self.stage(0,.5);self.assertEqual(self.doc(),before)
+        replacement=self.write('sample.copyToNew',sample=1,start=16,end=24)
+        self.assertEqual(replacement['sample'],created['sample']);self.assertNotEqual(replacement['id'],created['id'])
+        replacement_pcm=self.pcm(replacement['sample']);before=self.doc();self.press(4803)
+        self.assertIsNone(self.state()['mutationCompletion']);self.assertEqual(self.state()['mutationReport']['outcome'],'verified')
+        self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['id'],created['id'])
+        self.press(4803);self.assertEqual(self.doc(),before);self.assertEqual(self.state()['id'],created['id']);self.assertIn('unavailable',self.state()['status'])
+        self.assertEqual(self.pcm(replacement['sample']),replacement_pcm)
+        self.press(4802);self.assertFalse(self.state()['stale']);self.assertNotEqual(self.state()['id'],created['id']);self.assertNotEqual(self.state()['id'],replacement['id'])
 
     def test_dense_gesture_bounds_and_atomic_point_limit(self):
         self.install(1,[0]*6000);self.press(4803);self.view(0,512);self.assertTrue(self.state()['precise']);self.assertEqual(self.state()['waveBins'],512);self.assertEqual(len(self.state()['peaks']),1024)

@@ -10,6 +10,7 @@ Json arrangementOrderIDs(const Tracker::Document &document,unsigned sequence) {
 void arrangementCatalogTests(const std::filesystem::path &directory) {
   auto document=std::make_unique<Tracker::Document>(OpenMPT::MOD_TYPE_MPT,4);
   document->transaction([](auto &song) {
+    song.m_nDefaultRowsPerBeat=3;song.m_nDefaultRowsPerMeasure=10;
     need(song.Patterns.Insert(1,32),"Arrangement second pattern fixture");
     auto &pattern=song.Patterns[1];
     need(pattern.SetSignature(16,64),"Arrangement pattern timing fixture");
@@ -34,6 +35,9 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   Project::saveNativeProject(*document,project,path,false);
   unsigned stops=0;DocumentController c(path,"arrangement-catalog",[&]{++stops;},[](const auto &){});
   const auto original=c.view();const auto &snapshot=original->session.document;
+  need(original->patternGridMetrics.at(0).rowsPerBeat==3&&original->patternGridMetrics.at(0).rowsPerMeasure==10&&
+    original->patternGridMetrics.at(1).rowsPerBeat==16&&original->patternGridMetrics.at(1).rowsPerMeasure==64,
+    "Published grid metrics ignored song defaults or an imported pattern signature");
   const auto expectedOrders=Json::array({0,0,unsigned(OpenMPT::PATTERNINDEX_INVALID),unsigned(OpenMPT::PATTERNINDEX_SKIP),1,unsigned(OpenMPT::PATTERNINDEX_SKIP)});
   need(snapshot.at("orders")==expectedOrders&&snapshot.at("orderMetadata")==originalMetadata,"Order identity snapshot trimmed End/Skip or lost slot identity");
   need(originalMetadata.size()==snapshot.at("orders").size(),"Order metadata does not parallel untrimmed orders");
@@ -44,7 +48,7 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   need(snapshot.at("sequences")[1].at("name")=="Second / 序列","Sequence UTF-8 name changed");
 
   // Swapping two uses of the same pattern changes only their native identities.
-  invoke(c,"order.edit",{{"order",0},{"operation","down"}});const auto moved=c.view();
+  invoke(c,"order.edit",{{"order",0},{"operation","move"},{"destination",1}});const auto moved=c.view();
   auto movedMetadata=originalMetadata;std::swap(movedMetadata[0],movedMetadata[1]);
   need(moved->session.document.at("orders")==expectedOrders&&moved->session.document.at("orderMetadata")==movedMetadata,"Repeated-pattern move did not carry the selected identity");
   need(moved->catalogRevision==original->catalogRevision+1,"Same-pattern order move left chooser catalog revision unchanged");
@@ -55,7 +59,19 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   invoke(c,"history.undo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==originalMetadata&&c.view()->catalogRevision==moved->catalogRevision+1,"Undo did not restore order identities and invalidate the catalog");
   const auto undone=c.view();const auto beforeNoopStops=stops;
+  for(const auto &params:std::vector<Json>{
+      {{"order",0},{"operation","assign"},{"pattern",UINT16_MAX}},
+      {{"order",0},{"operation","before"},{"pattern",UINT16_MAX}},
+      {{"order",0},{"operation","up"}},
+      {{"order",5},{"operation","down"}}}) {
+    bool rejected=false;
+    try{invoke(c,"order.edit",params);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&c.view()==undone&&stops==beforeNoopStops&&!c.publicationPending()
+      &&c.view()->session.document.at("canRedo")==true,
+      "Order admission refusal escaped the API contract, stopped playback or consumed redo");
+  }
   invoke(c,"order.edit",{{"order",0},{"operation","assign"},{"pattern",0}});
+  invoke(c,"order.edit",{{"order",0},{"operation","move"},{"destination",0}});
   need(c.view()==undone&&stops==beforeNoopStops&&c.view()->session.document.at("canRedo")==true,"Same-pattern assign republished catalog or consumed redo");
   invoke(c,"history.redo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Redo did not restore moved order identities");
@@ -64,6 +80,28 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   need(sentinelMoved->session.document.at("orders")[2]==unsigned(OpenMPT::PATTERNINDEX_SKIP)&&sentinelMoved->session.document.at("orderMetadata")[3]==originalMetadata[2],"Moving End/Skip lost slot identity");
   invoke(c,"history.undo",{{"domain","document"}});
   need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Sentinel move Undo did not retain other occurrences");
+
+  const auto beforeDestinationRefusal=c.view();const auto beforeDestinationStops=stops;
+  for(const auto &bad:std::vector<Json>{{{"operation","move"}},{{"operation","move"},{"destination",true}},
+      {{"operation","move"},{"destination",1.5}},{{"operation","move"},{"destination",-1}},
+      {{"operation","move"},{"destination",6}},{{"operation","remove"},{"destination",1}},
+      {{"operation","assign"},{"pattern",0},{"destination",1}}}) {
+    auto request=bad;request["order"]=0;bool rejected=false;
+    try{invoke(c,"order.edit",request);}catch(const Api::ApiError &e){rejected=e.code==-32602;}
+    need(rejected&&c.view()==beforeDestinationRefusal&&stops==beforeDestinationStops,"Invalid destination changed history, occurrence or transport");
+  }
+  invoke(c,"order.edit",{{"order",2},{"operation","move"},{"destination",5}});
+  const auto farMove=c.view();auto farMetadata=movedMetadata;auto farOrders=expectedOrders;
+  for(unsigned i=2;i<5;++i){std::swap(farMetadata[i],farMetadata[i+1]);std::swap(farOrders[i],farOrders[i+1]);}
+  need(farMove->session.document.at("orders")==farOrders&&farMove->session.document.at("orderMetadata")==farMetadata,
+    "Destination is not the final slot or an arbitrary move lost intermediate occurrence metadata");
+  invoke(c,"history.undo",{{"domain","all"}});need(c.view()->session.document.at("orderMetadata")==movedMetadata,"Arbitrary move was not one Undo");
+  invoke(c,"history.redo",{{"domain","all"}});need(c.view()->session.document.at("orderMetadata")==farMetadata,"Arbitrary move Redo changed identity");
+  const auto movePath=directory/"order-destination.screamseq";invoke(c,"document.save",{{"path",movePath.generic_string()}});
+  invoke(c,"document.open",{{"path",movePath.generic_string()}});
+  need(c.view()->session.document.at("orders")==farOrders&&c.view()->session.document.at("orderMetadata")==farMetadata,"Destination move reopen lost occurrence order");
+  invoke(c,"order.edit",{{"order",5},{"operation","move"},{"destination",2}});
+  need(c.view()->session.document.at("orders")==expectedOrders&&c.view()->session.document.at("orderMetadata")==movedMetadata,"Upward arbitrary move did not preserve intervening slots");
 
   const auto beforeSequence=c.view();const auto beforeSequenceStops=stops;
   invoke(c,"sequence.select",{{"sequence",1}});const auto second=c.view();
@@ -95,12 +133,22 @@ void arrangementCatalogTests(const std::filesystem::path &directory) {
   invoke(c,"document.open",{{"path",saved.generic_string()}});
   need(c.view()->session.document.at("orderMetadata")==created->session.document.at("orderMetadata")&&c.view()->session.document.at("sequences")==snapshot.at("sequences"),"Native save/reopen changed arrangement identities");
   const auto reopened=Project::openNativeProject(saved);
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==3&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==10&&
+    c.view()->patternGridMetrics.at(2).rowsPerBeat==16&&c.view()->patternGridMetrics.at(2).rowsPerMeasure==64,
+    "Reopen lost default or duplicated pattern display metrics");
   for(const auto index:{1,2}) {
     const auto &pattern=reopened.document->song().Patterns[index];
     need(pattern.GetOverrideSignature()&&pattern.GetRowsPerBeat()==16&&pattern.GetRowsPerMeasure()==64&&pattern.GetTempoSwing()==expectedGroove,"Native save/reopen altered exact duplicate timing");
     need(pattern.GetName()=="Imported phrase"&&pattern.GetColor()==0x123456,"Native save/reopen lost duplicate engine name/color");
   }
-  std::cout<<"PASS arrangement identities, repeated-pattern/sentinel reorder, catalog invalidation, history, sequence navigation and reopen\n";
+  invoke(c,"document.timing.set",{{"rowsPerBeat",5},{"rowsPerMeasure",15},{"groove",Json::array()}});
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==5&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==15&&
+    c.view()->patternGridMetrics.at(1).rowsPerBeat==16&&original->patternGridMetrics.at(0).rowsPerBeat==3,
+    "Timing edit changed an override/retained view or failed to publish new default metrics");
+  invoke(c,"history.undo",{{"domain","all"}});
+  need(c.view()->patternGridMetrics.at(0).rowsPerBeat==3&&c.view()->patternGridMetrics.at(0).rowsPerMeasure==10,
+    "Timing Undo did not restore grid metrics");
+  std::cout<<"PASS arrangement identities, repeated-pattern/sentinel reorder, catalog invalidation, timing projection, history, sequence navigation and reopen\n";
 }
 
 void arrangementLimitTests(const std::filesystem::path &directory) {

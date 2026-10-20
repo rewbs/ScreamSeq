@@ -227,7 +227,7 @@ class WorkspaceDockingTests(unittest.TestCase):
         # Main-window mouse input places keyboard focus in the actual tracker.
         state = self.state()
         grid, scale = state['geometry']['pattern'], state['dpi'] / 96
-        point = round((grid['x'] + 44) * scale) | (round((grid['y'] + 56) * scale) << 16)
+        point = round((grid['x'] + 44) * scale) | (round((grid['y'] + grid['headerHeight'] + 6) * scale) << 16)
         self.desktop.send(main, 0x201, 1, point)
         self.desktop.send(main, 0x202, 0, point)
         before = self.desktop.focus(main)
@@ -278,7 +278,7 @@ class WorkspaceDockingTests(unittest.TestCase):
         finally:
             self.desktop.send(toolbar, 0x202, 0, 4 | (4 << 16))
         covered = self.state()['geometry']['pattern']
-        covered_point = round((covered['x'] + 44) * scale) | (round((covered['y'] + 56) * scale) << 16)
+        covered_point = round((covered['x'] + 44) * scale) | (round((covered['y'] + covered['headerHeight'] + 6) * scale) << 16)
         self.desktop.send(main, 0x201, 1, covered_point)
         self.desktop.send(main, 0x202, 0, covered_point)
         self.assertEqual(self.read('context.get'), context)

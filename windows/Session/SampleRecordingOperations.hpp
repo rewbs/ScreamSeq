@@ -13,7 +13,9 @@ public:
     std::function<std::vector<CaptureDevice>()> devices;
     std::function<std::unique_ptr<SampleCapture>()> capture;
     std::function<std::string()> uniqueID;
-    std::function<Json(std::span<const float>,uint32_t,uint32_t,const std::string &,bool,bool)> append;
+    // Append receives the validated take identity so its pre-commit receipt
+    // can describe the full Keep result before the take is consumed.
+    std::function<Json(std::span<const float>,uint32_t,uint32_t,const std::string &,bool,bool,const std::string &)> append;
   };
 private:
   Hooks hooks_;

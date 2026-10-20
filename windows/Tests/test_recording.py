@@ -249,8 +249,8 @@ class RecordingTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent output required')
     def test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take(self):
-        self.live(); self.inject([0x643c90]); self.wait(lambda: self.take()['eventCount'] == 1)
-        before = self.stable(self.take()); revision = self.doc()['revision']
+        self.live(); self.inject([0x643c90])
+        before = self.stable(self.wait_recording(lambda take: take['eventCount'] == 1)); revision = self.doc()['revision']
         copy = self.write('recovery.save')['data']['lastCopy']
         self.assertEqual(before, self.stable(self.take())); self.assertTrue(self.read('transport.get')['playing'])
         self.assertEqual(self.doc()['revision'], revision)

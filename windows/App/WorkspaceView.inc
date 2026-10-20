@@ -7,7 +7,39 @@
 	float dragRight=0, dragLower=0;
 	bool selecting=false;
 	unsigned anchorRow=0,anchorChannel=0;
-    static constexpr float fxWidth=86.4f, fxStart=79.2f, rowHeight=18, gridHeader=50, gutter=38;
+    std::optional<std::pair<unsigned,unsigned>> explicitSelectionEnd;
+    std::pair<unsigned,unsigned> patternSelectionEnd()const{return selecting&&explicitSelectionEnd?*explicitSelectionEnd:std::pair{row,channel};}
+    void setPatternSelection(bool active,unsigned startRow,unsigned startChannel,std::optional<std::pair<unsigned,unsigned>> end={}) {
+        const auto before=selection();const bool wasSelecting=selecting;
+        selecting=active;anchorRow=startRow;anchorChannel=startChannel;explicitSelectionEnd=active?end:std::nullopt;
+        if(wasSelecting!=selecting||before!=selection())++contextRevision;
+        frameRequested=true;
+    }
+    void resetPatternSelection(){setPatternSelection(false,row,channel);}
+    void selectWholePattern() {
+        rejectDepartureInput();setPatternSelection(true,0,0,std::pair{patternRows()-1,view->channels-1});
+    }
+    void selectPatternRegion(int id) {
+        rejectDepartureInput();
+        if(!trackerWorkspaceVisible()||workspaceState.focus!="pattern"||textOwnsKeyboard()||ScreamSeq::NativeToolWindow::belongsToTool(GetFocus()))throw std::runtime_error("Focus the pattern first");
+        const auto firstRow=id==selectRowCommand?row:0,firstChannel=id==selectChannelCommand?channel:0;
+        setPatternSelection(true,firstRow,firstChannel,std::pair{id==selectRowCommand?row:patternRows()-1,id==selectChannelCommand?channel:view->channels-1});
+    }
+    static constexpr float fxWidth=86.4f, fxStart=79.2f, gridHeader=72;
+    float rowHeight=18;
+    static bool validPatternRowHeight(float height) {
+        return height==18||height==22||height==26||height==30||height==34;
+    }
+    void setPatternRowHeight(float height) {
+        rejectDepartureInput();
+        if(!validPatternRowHeight(height))throw ScreamSeq::Api::ApiError(-32602,"Choose a pattern row height of 18, 22, 26, 30 or 34 DIPs");
+        if(busy||recoveryRestoring||preparingWorkspaceLayout||GetCapture())
+            throw ScreamSeq::Api::ApiError(-32002,"Finish the current operation or mouse gesture before resizing pattern rows");
+        if(rowHeight==height)return;
+        rowHeight=height;layoutControls();
+        status=L"Pattern row height / "+std::to_wstring(unsigned(rowHeight))+L" DIPs";
+    }
+    float gutter=38;
     float horizontalScroll=0;
     float channelWidth(unsigned c) const {return effectColumnStart(c,view->effectColumns.at(c))+7.2f;}
     float channelStart(unsigned c) const {float x=0;for(unsigned i=0;i<c;++i)x+=channelWidth(i);return x;}
@@ -77,11 +109,16 @@
         place(mixerCommand,564,52,76,26);
         place(parameterAutomationCommand,644,52,96,26);
         place(liveKeysCommand,744,52,92,26);
-        place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,146,25);
+        place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,72,25);
+        place(documentLoadReportCommand,86,322,70,25);updateDocumentLoadReport();
+        place(songPropertiesCommand,86,95,70,23);
         place(undoCommand,10,354,68,25);place(redoCommand,82,354,74,25);
         place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
         place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
         place(soundChooser,10,484,146,230);
+        place(playbackLoopCommand,10,516,146,25);
+        refreshPlaybackLoopControl();
+        EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
 		auto g=geometry(); bool show=workspaceInspectorVisible();
@@ -93,7 +130,14 @@
         place(dockToggle,g.lowerTabs.x+g.lowerTabs.w-102,g.lowerTabs.y+3,96,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
         const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230,trackerWorkspaceVisible());
+        place(positionRulerCommand,grid.x+1,grid.y+gridHeader-24,gutter-3,23,trackerWorkspaceVisible());
+        ScreamSeq::NativeControls::text(controls.at(positionRulerCommand),positionMode=="rows"?L"Row":positionMode=="beats"?L"Beat":positionMode=="patternTime"?L"Pattern time":L"Song time");
         place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,trackerWorkspaceVisible());
+        place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,trackerWorkspaceVisible());
+        const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
+        ScreamSeq::NativeControls::text(controls.at(noteColumnMuteCommand),(columnMuted?L"Unmute ":L"Mute ")+std::to_wstring(channel+1));
+        ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
+        EnableWindow(controls.at(noteColumnMuteCommand),!busy&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
         place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
 		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
@@ -137,7 +181,7 @@
         refreshShortcutControlLabels();
         ScreamSeq::NativeControls::text(controls.at(liveKeysCommand),liveKeyboard?L"LIVE KEYS ON":L"Live keys");
 		ScreamSeq::NativeControls::text(controls.at(pinCommand),workspaceState.panel(workspaceState.active).pinned ? L"Pinned" : L"Follow target");
-        for(int id:{liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
+        for(int id:{playbackLoopCommand,liveKeysCommand,composeCommand,patternCommand,soundCommand,notesInspectorCommand,samplesCommand,dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph})
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
         layoutPatternNudgeEditor();
@@ -148,15 +192,18 @@
 			if(!h) throw std::runtime_error("Cannot create workspace control");controls.emplace(id,h);
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
-			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},
+			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
+            {positionRulerCommand,L"Row"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {audioSettingsCommand,L"Audio settings…"},{scratchGesturesCommand,L"Scratch phrases…"},
-            {recoveryCommand,L"Recovery copies"},
+            {recoveryCommand,L"Recovery copies"},{documentLoadReportCommand,L"Load report…"},
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
+            {songPropertiesCommand,L"Settings…"},
+            {noteColumnMuteCommand,L"Mute column"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
@@ -170,28 +217,42 @@
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
         }
         for(int id:{patternChooser,orderChooser,octaveChooser,stepChooser,effectColumnChooser,soundChooser}) controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
-        for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";SendMessageW(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-        for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);SendMessageW(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
-        for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);SendMessageW(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=1;i<=8;++i) {auto label=std::to_wstring(i)+L" FX";ScreamSeq::NativeInputGate::present(controls.at(effectColumnChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=0;i<=9;++i) {auto label=L"Oct "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls.at(octaveChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
+        for(unsigned i=0;i<=16;++i) {auto label=L"Step "+std::to_wstring(i);ScreamSeq::NativeInputGate::present(controls.at(stepChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
         controls[sampleCommandBase]=CreateWindowExW(0,L"LISTBOX",L"Samples",WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(sampleCommandBase)),GetModuleHandleW(nullptr),nullptr);
         for(const auto &[i,sample]:view->samples) {
             auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
-            auto index=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
-            SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
+            auto index=ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+            ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETITEMDATA,index,i);
         }
         installPluginControls();
         installEffectControls();
         installMixerControls();
         installGraphControls();
         installWorkspaceRegionControls();
+        registerMainDrafts();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
 		configureWorkspaceCommands();
-		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();layoutControls();
+		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
 	}
 	void command(int id) {
 		try {
+            if(id==exitCommand){PostMessageW(window,WM_CLOSE,0,0);return;}
+            if(id==aboutCommand){modalMessage(L"ScreamSeq\nNative tracker and music workstation\n\nBuilt on the OpenMPT playback engine.\nOpenMPT copyright and attribution are retained in the bundled notices.",L"About ScreamSeq",MB_OK|MB_ICONINFORMATION);return;}
+            if(id==keyboardHelpCommand){palette->show();return;}
+            if(id>=selectChannelCommand&&id<=selectRowCommand){selectPatternRegion(id);return;}
             if(focusedEditingCommand(id))return;
+            if(id==positionRulerCommand){cyclePositionMode();return;}
+            if(id==patternRowsLargerCommand||id==patternRowsSmallerCommand){setPatternRowHeight(std::clamp(rowHeight+(id==patternRowsLargerCommand?4.f:-4.f),18.f,34.f));return;}
+            if(id==patternToolsCommand){openPatternTools();return;}
+            if(typingInputCommand(id))return;
+            if(id==effectPickerCommand){openEffectPicker();return;}
+            if(id==newDocumentCommand||id==openDemoCommand){newFile(id==openDemoCommand);return;}
+            if(id==documentLoadReportCommand){openDocumentLoadReport();return;}
+            if(id==songPropertiesCommand){openSongProperties();return;}
+            if(id==keyboardSettingsCommand){openKeyboardSettings();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
             if(workspaceEditorCommand(id))return;
@@ -201,15 +262,16 @@
             if(id==dockToggle){workspaceState.lowerVisible=!workspaceState.lowerVisible;workspaceState.focus="pattern";SetFocus(window);if(graphEditorVisible())SetTimer(window,4,100,nullptr);if(mixerEditorVisible())SetTimer(window,3,100,nullptr);layoutControls();ensureCursorVisible();return;}
             if(id==focusPatternCommand&&!drainingViews)deferredViews.clear();
             if(deferView(id))return;
+            if(id==sampleImportCommand||id==sampleImportRawCommand||id==sampleImportInstrumentsCommand){sampleCommand(id);layoutControls();return;}
             if(id==notesCommand){openNoteEditor();return;}
             if(id==notesInspectorCommand){workspace("workspace.panel",{{"panel","notes"},{"focus",true}});return;}
             if(id==samplesCommand||id==sampleCommandBase)revealWorkspaceMainEditor("samples");
             else if(id==effectsCommand)revealWorkspaceMainEditor("effects");
             else if(id==pluginsCommand)revealWorkspaceMainEditor("plugins");
-            else if(id==mixerCommand)revealWorkspaceMainEditor("mixer");
+            else if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand)revealWorkspaceMainEditor("mixer");
             else if(id==graphCommand)revealWorkspaceMainEditor("graph");
             else if(id==focusPatternCommand||id==graphLanesFocus||id==patternChooser||id==orderChooser)revealWorkspacePattern();
-            if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==graphCommand||id==mixerCommand)workspaceState.lowerVisible=true;
+            if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==graphCommand||id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand)workspaceState.lowerVisible=true;
             if(id==samplesCommand||id==sampleCommandBase||id==pluginsCommand||id==effectsCommand||id==soundCommand){mixerEditorOpen=false;graphEditorOpen=false;}
             if(graphCurveCommand(id) || graphControlCommand(id) || mixerControlCommand(id) || noteCommand(id) || effectCommand(id) || pluginCommand(id) || sampleCommand(id)) {}
             else if(id==graphWorkflowCommand){openGraphWorkflow();return;}
@@ -232,6 +294,9 @@
             else if(id==previousSectionCommand||id==nextSectionCommand){navigateArrangementSection(id==nextSectionCommand);return;}
             else if(id==editSectionCommand||id==patternDetailsCommand){openArrangement(id==editSectionCommand?"section":"pattern");return;}
             else if(id==songTimingCommand){openSongTiming();return;}
+            else if(id==noteColumnMuteCommand){toggleNoteColumnMute();return;}
+            else if(id==noteTrackUngroupCommand){ungroupCurrentNoteTrack();return;}
+            else if(id==noteTrackCreateCommand||id==noteTrackGroupCommand){openNoteTrackEditor(id==noteTrackCreateCommand);return;}
             else if(id==midiArmCommand){toggleMidiArm();return;}
             else if(id==recordingFinishCommand){if(hasRecordingTake())finishRecordingTake(view->recording.at("take"));else openMidiRecording();return;}
             else if(id==recordingDiscardCommand){if(hasRecordingTake())discardRecordingTake(view->recording.at("take"));return;}
@@ -268,7 +333,10 @@
                 }
             }
 			else if(id==playCommand) play();
+            else if(id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand)
+                playWorkspaceRegion(id!=playSelectionCommand,id!=playCursorCommand);
 			else if(id==stopCommand) stopAndFinishRecording();
+            else if(id==playbackLoopCommand)setPlaybackLoop(!playbackLoop);
 			else if(id==followCommand) { auto n=position();n["following"]=!follow;navigate(n); }
 			else if(id==composeCommand || id==patternCommand || id==soundCommand) workspace("workspace.layout",{{"name",id==composeCommand ? "Compose" : id==patternCommand ? "Pattern focus" : "Sound design"}});
 			else if(id==samplesCommand) {workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples");}
@@ -286,7 +354,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouting) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=effectColumnChooser && id!=patternChooser && id!=orderChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginReconnect) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginActivity) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
@@ -311,6 +379,7 @@
         if(GetFocus()!=window && IsChild(window,GetFocus())) {
             if(key==VK_TAB) {auto next=GetNextDlgTabItem(window,GetFocus(),shift);if(next) SetFocus(next);return true;}
             wchar_t klass[32]{};GetClassNameW(GetFocus(),klass,32);
+            if(key==VK_RETURN&&GetFocus()==controls.at(pluginValueToggle)){SendMessageW(GetFocus(),BM_CLICK,0,0);return true;}
             if(key==VK_RETURN && _wcsicmp(klass,L"Button")==0) {command(GetDlgCtrlID(GetFocus()));return true;}
             // Space presses the focused button; it is not the transport key here.
             if(key==VK_SPACE && !ctrl && !alt && _wcsicmp(klass,L"Button")==0) return false;
@@ -319,6 +388,11 @@
             if(key==VK_RETURN) {command(sampleRangeCommand);return true;}
             if(key==VK_ESCAPE) {sampleDraft=false;refreshSampleFields();setWorkspaceCanvasFocus("samples");SetFocus(window);return true;}
             if(key==VK_TAB) {SetFocus(GetFocus()==controls.at(sampleStartField) ? controls.at(sampleEndField) : controls.at(sampleRangeCommand));return true;}
+        }
+        if(pluginEditorVisible()&&(GetFocus()==controls.at(pluginParameterSearch)||GetFocus()==controls.at(pluginProgramSearch))) {
+            const auto focus=GetFocus();const auto selector=focus==controls.at(pluginProgramSearch)?pluginProgram:pluginParameter;
+            if(key==VK_ESCAPE&&!ctrl&&!alt){ScreamSeq::NativeInputGate::text(focus,L"");return true;}
+            if((key==VK_RETURN||key==VK_DOWN)&&!ctrl&&!alt){SetFocus(controls.at(selector));if(key==VK_DOWN)SendMessageW(controls.at(selector),CB_SHOWDROPDOWN,TRUE,0);return true;}
         }
         if(pluginEditorVisible()&&GetFocus()==controls.at(pluginValue)) {
             if(key==VK_RETURN) {command(pluginApply);return true;}
@@ -352,7 +426,11 @@
         }
 		if(ctrl || alt) return false;
 		if(workspaceState.focus!="pattern"||!trackerWorkspaceVisible()) return false;
-		if(key==VK_RETURN) {if(beginPatternNudgeEdit())return true;if(workspaceState.focus=="pattern"&&column>=4&&column%2==0)openInlineEffect();else command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
+        if(key==VK_DIVIDE||key==VK_MULTIPLY){command(key==VK_DIVIDE?inputOctaveDownCommand:inputOctaveUpCommand);return true;}
+        if(shift&&key==VK_OEM_2&&column>=3){openEffectEditor();return true;}
+        if(key==VK_DECIMAL){command(patternClearField);return true;}
+		if(key==VK_F4&&!shift) {command(effectPickerCommand);return true;}
+		if(key==VK_RETURN) {if(workspaceState.focus=="pattern"&&column==1){command(inputInstrumentAtCursorCommand);return true;}if(beginPatternNudgeEdit())return true;if(workspaceState.focus=="pattern"&&column>=4&&column%2==0)openInlineEffect();else command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
         if(key==VK_INSERT) {command(patternInsertRows);return true;}
 		auto n=position();unsigned r=row,c=channel,col=column;
 		const unsigned rows=patternRows(),channels=view->channels;
@@ -362,14 +440,14 @@
 		else if(key==VK_NEXT) r=std::min(row+visibleRows(),rows-1);
 		else if(key==VK_HOME) r=0;
 		else if(key==VK_END) r=rows-1;
-		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=0; }
-		else if(key==VK_LEFT) {if(moveEffectField(-1))return true; if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
-		else if(key==VK_RIGHT) {if(moveEffectField(1))return true; if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
+		else if(key==VK_TAB) { c=shift ? (channel+channels-1)%channels : (channel+1)%channels;col=std::min(col,2u+2u*view->effectColumns.at(c)); }
+		else if(key==VK_LEFT) {if(moveEffectField(-1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col) --col;else if(c) {--c;col=2+2*view->effectColumns.at(c);} }
+		else if(key==VK_RIGHT) {if(moveEffectField(1)){setPatternSelection(shift,selecting?anchorRow:row,selecting?anchorChannel:channel);return true;} if(col<2+2*view->effectColumns.at(c)) ++col;else if(c+1<channels) {++c;col=0;} }
 		else return enterCell(key,repeat);
 		const unsigned ar=selecting ? anchorRow : row,ac=selecting ? anchorChannel : channel;
 		n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;navigate(n);
         if(key==VK_LEFT&&col>=4&&col%2==0){const auto &fields=currentEffectFields();effectFieldIndex=fields.empty()?0:fields.size()-1;}
-		selecting=shift && key!=VK_TAB;anchorRow=ar;anchorChannel=ac;ensureCursorVisible();return true;
+		setPatternSelection(shift && key!=VK_TAB,ar,ac);ensureCursorVisible();return true;
 	}
 	bool gridClick(float x,float y,bool extend) {
 		if(!trackerWorkspaceVisible())return false;
@@ -384,11 +462,12 @@
         if(field>=fxStart){unsigned fx=0;while(fx+1<view->effectColumns.at(c)&&effectColumnStart(c,fx+1)<=field)++fx;const auto local=field-effectColumnStart(c,fx);col=3+2*fx+(local>=21.6f?1:0);selectedField=effectColumnLayout(c,fx).hit(local);}
 		unsigned ar=extend ? (selecting ? anchorRow : row) : r,ac=extend ? (selecting ? anchorChannel : channel) : c;
 		auto n=position();n["row"]=r;n["channel"]=c;n["column"]=col;n["following"]=false;
-		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();anchorRow=ar;anchorChannel=ac;selecting=extend;SetFocus(window);
+		workspaceState.focus="pattern";navigate(n);effectFieldIndex=selectedField;ensureCursorVisible();setPatternSelection(extend,ar,ac);SetFocus(window);
 		return true;
 	}
 	void mouseDown(float x,float y,WPARAM buttons) {
 		if(workspaceRegionMouseDown(x,y))return;
+		if(noteTrackHeaderClick(x,y))return;
 		auto g=geometry();dragRight=workspaceState.rightWidth;dragLower=workspaceState.lowerHeight;
 		if(graphLaneClick(x,y)||graphMouseDown(x,y)||sampleMouseDown(x,y,(buttons&MK_SHIFT)!=0)) return;
 		if(g.verticalDivider.contains(x,y)) dragging=1;
@@ -424,6 +503,8 @@
         if(effectInline)layoutControls();
     }
 	bool controlActive(int id) const {
+        if(id==playbackLoopCommand)return playbackLoop;
+        if(id==noteColumnMuteCommand)return noteColumn(channel).at("mute").get<bool>();
         if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();
         if(id==editorTrackerTab)return hasWorkspaceDock()&&trackerWorkspaceVisible();
         if(id==editorAutomationTab||id==editorInstrumentTab||id==editorGraphCurveTab||id==editorPreciseNotesTab){auto *tool=workspaceEditorWindow(id==editorAutomationTab?"automation":id==editorInstrumentTab?"instruments":id==editorGraphCurveTab?"graphCurve":"preciseNotes");return hasWorkspaceDock()&&tool&&tool->docked()&&tool->visible();}
@@ -434,23 +515,13 @@
 	void drawButton(const DRAWITEMSTRUCT &d) {
         ScreamSeq::NativeControls::recordDraw(d.hwndItem);
         if(d.CtlType==ODT_COMBOBOX){ScreamSeq::NativeControls::comboItem(d);return;}
-		if(d.CtlType==ODT_LISTBOX || d.CtlType==ODT_COMBOBOX) {
-            const bool list=d.CtlType==ODT_LISTBOX;std::wstring label;
+		if(d.CtlType==ODT_LISTBOX) {
+            std::wstring label;
             if(d.itemID!=UINT(-1)) {
-                auto length=SendMessageW(d.hwndItem,list?LB_GETTEXTLEN:CB_GETLBTEXTLEN,d.itemID,0);
-                if(length>=0 && length<4096) {label.resize(size_t(length)+1);SendMessageW(d.hwndItem,list?LB_GETTEXT:CB_GETLBTEXT,d.itemID,reinterpret_cast<LPARAM>(label.data()));label.resize(size_t(length));}
+                auto length=SendMessageW(d.hwndItem,LB_GETTEXTLEN,d.itemID,0);
+                if(length>=0 && length<4096) {label.resize(size_t(length)+1);SendMessageW(d.hwndItem,LB_GETTEXT,d.itemID,reinterpret_cast<LPARAM>(label.data()));label.resize(size_t(length));}
             }
-            const bool selected=(d.itemState&ODS_SELECTED)!=0;
-            SetDCBrushColor(d.hDC,selected?RGB(43,73,80):RGB(22,31,41));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-            SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,selected?RGB(164,240,221):RGB(199,214,227));
-            auto old=SelectObject(d.hDC,controlFont);auto r=d.rcItem;r.left+=7;r.right-=5;
-            DrawTextW(d.hDC,label.c_str(),int(label.size()),&r,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
-            SelectObject(d.hDC,old);if(d.itemState&ODS_FOCUS) {InflateRect(&r,-1,-1);DrawFocusRect(d.hDC,&r);}return;
+            ScreamSeq::NativeControls::listItem(d,label);return;
         }
-		wchar_t text[128]{};GetWindowTextW(d.hwndItem,text,128);
-		bool active=controlActive(d.CtlID);
-		SetDCBrushColor(d.hDC,(d.itemState&ODS_SELECTED) ? RGB(66,80,94) : active ? RGB(46,67,77) : RGB(42,51,63));FillRect(d.hDC,&d.rcItem,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-		SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,(d.itemState&ODS_DISABLED) ? RGB(111,126,140) : active ? RGB(125,228,206) : RGB(215,225,235));auto old=SelectObject(d.hDC,controlFont);
-		RECT r=d.rcItem;r.left+=6;r.right-=6;DrawTextW(d.hDC,text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);SelectObject(d.hDC,old);
-		if(d.itemState&ODS_FOCUS) {InflateRect(&r,-2,-2);DrawFocusRect(d.hDC,&r);}
+        if(d.CtlType==ODT_BUTTON)ScreamSeq::NativeControls::buttonItem(d,ScreamSeq::NativeControls::Surface::main,controlActive(d.CtlID));
 	}

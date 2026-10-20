@@ -57,7 +57,7 @@ private:
     const auto control=controls_.at(id);DWORD first=0,last=0;
     SendMessageW(control,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
     set(id,value);
-    SendMessageW(control,EM_SETSEL,std::min<size_t>(first,value.size()),std::min<size_t>(last,value.size()));
+    ScreamSeq::NativeInputGate::present(control,EM_SETSEL,std::min<size_t>(first,value.size()),std::min<size_t>(last,value.size()));
   }
   void details(){
     const auto index=indexOf(selected_);
@@ -107,7 +107,7 @@ private:
     if(listWidth_>0)columnWidths_[2]=std::max(140.f,columnWidths_[2]+width-listWidth_);
     else columnWidths_[2]=std::max(140.f,width-columnWidths_[0]-columnWidths_[1]);
     listWidth_=width;columnDpi_=dpi;resizingColumns_=true;
-    for(int i=0;i<3;++i)ListView_SetColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));
+    for(int i=0;i<3;++i)NativeReportList::setColumnWidth(list,i,int(std::lround(columnWidths_[size_t(i)]*dpi/96.f)));
     resizingColumns_=false;
   }
   void layout()override{
@@ -128,7 +128,6 @@ private:
     if(unavailable()&&focus&&IsChild(window_,focus)&&!GetFocus())pendingFocus_=focus;
     if(!unavailable()&&pendingFocus_){const auto old=pendingFocus_;pendingFocus_=nullptr;if(!GetFocus()&&IsWindowVisible(old)&&IsWindowEnabled(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{
     if(!controls_.contains(copies))return;
     const auto dpi=GetDpiForWindow(window_);
@@ -224,9 +223,9 @@ public:
     if(!loaded_&&selected_.empty()&&!entries_.empty())selected_=entries_.front().id;
     else if(indexOf(selected_)<0)selected_.clear();loaded_=loaded_||!entries_.empty();
     setting_=true;SendMessageW(list,WM_SETREDRAW,FALSE,0);
-    ListView_SetItemCountEx(list,int(entries_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);ListView_SetItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
-    const auto selected=indexOf(selected_);if(selected>=0)ListView_SetItemState(list,selected,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
-    const auto top=indexOf(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))ListView_Scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}
+    NativeReportList::setItemCount(list,int(entries_.size()),LVSICF_NOINVALIDATEALL|LVSICF_NOSCROLL);NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    const auto selected=indexOf(selected_);if(selected>=0)NativeReportList::setItemState(list,selected,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    const auto top=indexOf(topID);if(top>=0){RECT row{};if(ListView_GetItemRect(list,top,&row,LVIR_BOUNDS))NativeReportList::scroll(list,0,(top-ListView_GetTopIndex(list))*(row.bottom-row.top));}
     SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);setting_=false;
     if(operation_!=Operation::restore)operation_=Operation::none;
     details();statusText();layout();

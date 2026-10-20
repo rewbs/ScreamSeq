@@ -46,7 +46,7 @@ PluginChain::PluginChain(const std::vector<PluginState> &states, double rate, bo
     ParameterProcessor observed;observed.key="rack/"+state.instanceID;observed.name=state.descriptor.name;observed.plugin=state.instanceID;observed.bypass=state.bypass;observed.parameters=plugin->parameters();
     plugin->observe(activity_.get(),activity_->add(std::move(observed)));plugin->audible(true);
     auto entry=std::make_shared<RackEntry>();entry->plugin=plugin;entry->baseline=state;
-    entry->parameters=baselineParameters;entry->ports=observedPorts;entry->activity=uint32_t(activity_->processors.size());
+    entry->parameters=baselineParameters;entry->previewed.resize(baselineParameters.size());entry->ports=observedPorts;entry->activity=uint32_t(activity_->processors.size());
     rack_.push_back(entry);retainedRack_.push_back(entry);
     plugins_.push_back(std::move(plugin));
     instances_.push_back(state.instanceID);
@@ -118,17 +118,48 @@ bool PluginChain::bypass(size_t slot,bool value) noexcept {
   return true;
 }
 bool PluginChain::enqueueParameters(std::span<const ParameterChange> changes) noexcept {
+  return enqueueParameterBatch(changes,false);
+}
+bool PluginChain::previewParameters(std::span<const ParameterChange> changes) noexcept {
+  return enqueueParameterBatch(changes,true);
+}
+bool PluginChain::enqueueParameterBatch(std::span<const ParameterChange> changes,bool preview) noexcept {
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
   if(changes.size()>queue_.size() || changes.size()>queue_.size()-(w-r) || failed_.load(std::memory_order_relaxed))return false;
   for(const auto &change:changes)if(change.slot>=rack_.size() || !std::isfinite(change.value) || change.frame)return false;
+  if(preview)for(const auto &change:changes) {
+    const auto &catalog=rack_[change.slot]->parameters;
+    const auto parameter=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==change.id;});
+    if(parameter==catalog.end()||!parameter->writable||!std::isfinite(parameter->min)||!std::isfinite(parameter->max)||
+        parameter->min>parameter->max||change.value<parameter->min||change.value>parameter->max)return false;
+  }
   for(size_t i=0;i<changes.size();++i) {
     const auto &change=changes[i];auto &entry=*rack_[change.slot];
     queue_[(w+uint32_t(i))%queue_.size()]={change,i+1==changes.size(),false,entry.plugin.get(),entry.activity};
-    for(auto &p:entry.parameters)if(p.id==change.id)p.value=change.value;
-    for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==change.id)p.value=change.value;
+    for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==change.id) {
+      entry.previewed[n]=preview;
+      if(!preview)entry.parameters[n].value=change.value;
+    }
+    if(!preview)for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==change.id)p.value=change.value;
   }
   write_.store(w+uint32_t(changes.size()),std::memory_order_release);
   return true;
+}
+bool PluginChain::hasParameterPreview(size_t slot,uint32_t id) const noexcept {
+  if(slot>=rack_.size())return false;
+  const auto &entry=*rack_[slot];
+  for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id)return entry.previewed[n];
+  return false;
+}
+bool PluginChain::cancelParameterPreviews(size_t slot,std::span<const uint32_t> ids) {
+  if(slot>=rack_.size()||ids.size()>queue_.size())return false;
+  const auto &entry=*rack_[slot];std::vector<ParameterChange> restore;restore.reserve(ids.size());
+  for(const auto id:ids) {
+    const auto p=std::find_if(entry.parameters.begin(),entry.parameters.end(),[&](const auto &p){return p.id==id;});
+    if(p==entry.parameters.end())return false;
+    if(entry.previewed[size_t(p-entry.parameters.begin())])restore.push_back({uint32_t(slot),id,p->value,0});
+  }
+  return enqueueParameters(restore);
 }
 void PluginChain::beginRenderBlock() noexcept {observation_->listen.begin(position_);activity_->begin(position_);consumeMusicalPlan();applyPending();parameterBlockOpen_=true;}
 bool PluginChain::latencyChangePending() const noexcept {
@@ -489,6 +520,20 @@ std::vector<PluginState> PluginChain::states() {
   std::vector<PluginState> out;
   for(const auto &entry:rack_) {
     auto state=entry->plugin->state();const auto &baseline=entry->baseline;
+    if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool value){return value;})) {
+      // Never reset the audible vendor just to save. Keep its other opaque
+      // settings, replacing only transient parameter values in a private copy.
+      NativePlugin accepted(state,sampleRate_,offline_);
+      for(size_t n=0;n<entry->parameters.size();++n)if(entry->previewed[n]) {
+        const auto &parameter=entry->parameters[n];
+        if(!accepted.parameter(parameter.id,parameter.value)) {
+          (void)accepted.state(); // Drain this private vendor's bounded queue.
+          if(!accepted.parameter(parameter.id,parameter.value))
+            throw std::runtime_error("Cannot capture accepted plugin values while previewing");
+        }
+      }
+      state=accepted.state();
+    }
     state.bypass=entry->plugin->bypassed();state.instrument=baseline.instrument;state.midiChannel=baseline.midiChannel;state.aliases=baseline.aliases;
     state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
     out.push_back(std::move(state));
@@ -593,7 +638,7 @@ bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
   if(w-r==queue_.size()||slot >= rack_.size() || !rack_[slot]->plugin->popEdit(id, value))return false;
   auto &entry=*rack_[slot];
   queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity};write_.store(w+1,std::memory_order_release);
-  for(auto &p:entry.parameters)if(p.id==id)p.value=value;
+  for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id){entry.parameters[n].value=value;entry.previewed[n]=false;}
   for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==id)p.value=value;
   return true;
 }
@@ -780,6 +825,7 @@ std::shared_ptr<PluginChain::RackEntry> PluginChain::prepareRackEntry(const Plug
   auto entry=std::make_shared<RackEntry>();entry->baseline=state;
   entry->plugin=std::make_shared<NativePlugin>(state,sampleRate_,offline_);entry->plugin->prepareMusicalAutomation();
   entry->parameters=entry->plugin->parameters();
+  entry->previewed.resize(entry->parameters.size());
   return entry;
 }
 std::unique_ptr<PluginChain::RackPlan> PluginChain::prepareRack(const std::vector<PluginState> &states,const NativeSong &native,std::span<const std::string> presetIDs) {
@@ -803,7 +849,7 @@ std::unique_ptr<PluginChain::RackPlan> PluginChain::prepareRack(const std::vecto
       capacity(state.auxiliaryInputs,entry->plugin->preparedAuxiliaryInputs());capacity(state.auxiliaryOutputs,entry->plugin->preparedAuxiliaryOutputs());
       if(replacing.erase(state.instanceID)){
         auto preset=entry->plugin->preparePreset(state,offline_,entry->preset);
-        entry=std::make_shared<RackEntry>(*entry);entry->baseline=state;entry->preset=preset;entry->parameters=preset->parameters;*found=entry;
+        entry=std::make_shared<RackEntry>(*entry);entry->baseline=state;entry->preset=preset;entry->parameters=preset->parameters;entry->previewed.assign(entry->parameters.size(),false);*found=entry;
         presets.emplace_back(entry->plugin,std::move(preset));
       }
       if(state.instrument!=entry->baseline.instrument||state.midiChannel!=entry->baseline.midiChannel||state.aliases!=entry->baseline.aliases||state.auxiliaryInputs!=entry->baseline.auxiliaryInputs||state.auxiliaryOutputs!=entry->baseline.auxiliaryOutputs){

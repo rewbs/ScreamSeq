@@ -1,0 +1,434 @@
+{
+  "format": "screamseq-usable-build-checkpoint-v1",
+  "scope": "Windows ARM64 Release bounded usability checkpoint; full parity goal remains paused",
+  "productCommit": "1d74ef4055a35d18808fc7fb8d4267717d948231",
+  "testRepairCommit": "7b09ec575f3a6b58c38f91612493d61d9b714b50",
+  "localEvidenceRoot": "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence",
+  "application": "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\Release\\ScreamSeq.exe",
+  "records": [
+    {
+      "format": "screamseq-integration-checkpoint-v1",
+      "commit": "018ecafd235f680e63d0d485b158c0f17a2b52c5",
+      "buildStartedUTC": "2026-10-10T07:44:07.294197+00:00",
+      "helperSHA256": "4bde16c6ed4ef042a8be9472683605aa202f58fca4b5e365899c34781bd47321",
+      "plannedBuildTargets": [
+        "ScreamSeq",
+        "document-controller-tests",
+        "playback-region-tests",
+        "native-audio-bus-tests",
+        "parameter-edit-tests",
+        "parameter-preview-tests",
+        "workspace-restore-tests",
+        "live-parameter-tests"
+      ],
+      "previousBuildReceiptSHA256": "41319b7aa5c7167cec72da9922525b5baa3bf303ed729ab0524c775954316998",
+      "plannedTestHelperSHA256": "d31265fa8de3b3229536afcb9bdc1a11f2f4b440f0f7911e17f540d550dd8142",
+      "sourceBranch": "codex/windows-parity-integration",
+      "scope": "User-requested usable Windows ARM64 build and narrow launch/edit/save/reopen plus shared parameter/audition checks; broader parity goal stays paused",
+      "buildFinishedUTC": "2026-10-10T07:44:07.659704+00:00",
+      "build": {
+        "exitCode": 1,
+        "commands": [
+          [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "-S",
+            "windows",
+            "-B",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-G",
+            "Visual Studio 17 2022",
+            "-A",
+            "ARM64",
+            "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+            "-DBUILD_TESTING=ON",
+            "-DSCREAMSEQ_BUILD_APP=ON"
+          ],
+          [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "ScreamSeq",
+            "document-controller-tests",
+            "playback-region-tests",
+            "native-audio-bus-tests",
+            "parameter-edit-tests",
+            "parameter-preview-tests",
+            "workspace-restore-tests",
+            "live-parameter-tests"
+          ]
+        ],
+        "log": "bin\\parity-evidence\\usability-build-01.log",
+        "sha256": "09d81bb22efc72ce899c2bd3ff413c6f41a94b67fc803efab7ee24de008646f8"
+      },
+      "cmakeCacheSHA256": "633e7188c232ed0a4b33f68e6749f07982b7ed704583bf742c52571b20f79e19",
+      "sourcesUnchangedAcrossBuild": true,
+      "nextNormalLocalBuildNotBeforeUTC": "2026-10-10T08:44:07.962249+00:00",
+      "localReceipt": "usability-checkpoint-01.json",
+      "receiptSHA256": "a513bbe3d230e9b5ff97324153e727aa88dd4626d75dbecb8f016a0cc85deed4",
+      "sourceHashCount": 1985,
+      "sourceHashMapSHA256": "3a6710481c7b9862bfa175a5d570b01b7ab5c290a99aa65663e1205a36f8fd49",
+      "appSHA256": "c1fd5bf5c6790b66ddb38f70a6227b0a64f51a75a7fb4e70a40653a80b71e70f",
+      "providerModules": {
+        "bin\\windows-parity-p1\\Release\\ScreamSeqVST3Fixture.vst3": "c21bcb8ec1d4f96619d0d5f42dfffdcb3719786dbf8a2493afba2d67e8851697"
+      }
+    },
+    {
+      "format": "screamseq-integration-checkpoint-v1",
+      "commit": "1d74ef4055a35d18808fc7fb8d4267717d948231",
+      "buildStartedUTC": "2026-10-10T07:44:38.949418+00:00",
+      "helperSHA256": "104bce9375092687500f7434dcbec6117eb01935e5fb90b7d3eb68458d5fe1c1",
+      "plannedBuildTargets": [
+        "ScreamSeq",
+        "document-controller-tests",
+        "playback-region-tests",
+        "native-audio-bus-tests",
+        "parameter-edit-tests",
+        "parameter-preview-tests",
+        "workspace-restore-tests",
+        "live-parameter-tests"
+      ],
+      "previousBuildReceiptSHA256": "a513bbe3d230e9b5ff97324153e727aa88dd4626d75dbecb8f016a0cc85deed4",
+      "plannedTestHelperSHA256": "d31265fa8de3b3229536afcb9bdc1a11f2f4b440f0f7911e17f540d550dd8142",
+      "sourceBranch": "codex/windows-parity-integration",
+      "scope": "User-requested usable Windows ARM64 build and narrow launch/edit/save/reopen plus shared parameter/audition checks; broader parity goal stays paused",
+      "buildFinishedUTC": "2026-10-10T07:50:02.161433+00:00",
+      "build": {
+        "exitCode": 0,
+        "commands": [
+          [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "-S",
+            "windows",
+            "-B",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-G",
+            "Visual Studio 17 2022",
+            "-A",
+            "ARM64",
+            "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+            "-DBUILD_TESTING=ON",
+            "-DSCREAMSEQ_BUILD_APP=ON"
+          ],
+          [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "ScreamSeq",
+            "document-controller-tests",
+            "playback-region-tests",
+            "native-audio-bus-tests",
+            "parameter-edit-tests",
+            "parameter-preview-tests",
+            "workspace-restore-tests",
+            "live-parameter-tests"
+          ]
+        ],
+        "log": "bin\\parity-evidence\\usability-build-02.log",
+        "sha256": "6bb44407b18cc2eebd1e3797e6cfb60656e22fcde7460a41fabc4a499629ce83"
+      },
+      "cmakeCacheSHA256": "633e7188c232ed0a4b33f68e6749f07982b7ed704583bf742c52571b20f79e19",
+      "sourcesUnchangedAcrossBuild": true,
+      "nextNormalLocalBuildNotBeforeUTC": "2026-10-10T08:50:02.473849+00:00",
+      "manifestGate": {
+        "startedUTC": "2026-10-10T07:50:13.957998+00:00",
+        "tool": "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\arm64\\mt.exe",
+        "toolSHA256": "e6b485f294d7ae23ad3b00d13bd38b4d3f85d3b4489ff5bd4092672263321f66",
+        "results": [
+          {
+            "target": "ScreamSeq",
+            "command": [
+              "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\arm64\\mt.exe",
+              "-nologo",
+              "-inputresource:C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\Release\\ScreamSeq.exe;#1",
+              "-out:C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\usability-manifests-02\\ScreamSeq.xml"
+            ],
+            "exitCode": 0,
+            "output": "",
+            "sha256": "9137aa023bd724c9eff54dda7a36234bf7f20eea20edb6ee03c7601f20e63110",
+            "commonControls6": true,
+            "perMonitorV2": true,
+            "asInvoker": true
+          },
+          {
+            "target": "workspace-restore-tests",
+            "command": [
+              "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\arm64\\mt.exe",
+              "-nologo",
+              "-inputresource:C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\Release\\workspace-restore-tests.exe;#1",
+              "-out:C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\usability-manifests-02\\workspace-restore-tests.xml"
+            ],
+            "exitCode": 0,
+            "output": "",
+            "sha256": "9137aa023bd724c9eff54dda7a36234bf7f20eea20edb6ee03c7601f20e63110",
+            "commonControls6": true,
+            "perMonitorV2": true,
+            "asInvoker": true
+          }
+        ],
+        "finishedUTC": "2026-10-10T07:50:14.047063+00:00",
+        "passed": true
+      },
+      "nativeGate": {
+        "startedUTC": "2026-10-10T07:50:14.516138+00:00",
+        "finishedUTC": "2026-10-10T07:50:22.855270+00:00",
+        "exitCode": 8,
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(parameter\\-edit|parameter\\-preview|playback\\-regions|native\\-audio\\-bus|live\\-parameter\\-tests|document\\-controller\\-live\\-parameters|workspace\\-plugin\\-search\\-tests)$"
+        ],
+        "log": "bin\\parity-evidence\\usability-native-02.log",
+        "sha256": "dadb96eb0b2b1201fea4525981a7d11da1614a0143472d362766d4cd77576c88"
+      },
+      "applicationGate": {
+        "startedUTC": "2026-10-10T07:50:23.387685+00:00",
+        "finishedUTC": "2026-10-10T07:50:25.771583+00:00",
+        "exitCode": 1,
+        "command": [
+          "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+          "-B",
+          "-X",
+          "utf8",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+          "--log",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\usability-app-02.log",
+          "--test",
+          "test_main_integration.MainIntegrationTests.test_new_and_demo_identity_validation_replay_and_save_reopen",
+          "--test",
+          "test_plugins_app.PluginAppTests.test_native_rack_buttons_and_stale_parameter_draft",
+          "--test",
+          "test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard"
+        ],
+        "log": "bin\\parity-evidence\\usability-app-02.log",
+        "sha256": "788594675a310435c1d376eb16bcc3566e1a62482c3e140f0fe04846544c294c"
+      },
+      "localReceipt": "usability-checkpoint-02.json",
+      "receiptSHA256": "a70b08be05cecd4645627fd40a668bf43e2099d1b3f81a07b992dfc32ee1056a",
+      "sourceHashCount": 1985,
+      "sourceHashMapSHA256": "e2fe192202869b9d14f7d1e90595d04d2611462cef65404449d3c01008f7c34b",
+      "appSHA256": "dcab1851a2d2c90a56ff9871775b3a4606e0f4a14c7f4c5fb2168a9d3380ed55",
+      "providerModules": {
+        "bin\\windows-parity-p1\\Release\\ScreamSeqVST3Fixture.vst3": "c21bcb8ec1d4f96619d0d5f42dfffdcb3719786dbf8a2493afba2d67e8851697"
+      }
+    },
+    {
+      "commit": "6ebb289a05580a18a688ae83676297fbfc39173a",
+      "scope": "Test-only repairs; no application rebuild; preserve checkpoint02 evidence",
+      "changed": [
+        "windows/Tests/DocumentControllerTests.cpp",
+        "windows/Tests/Workspace/PluginSearchApplicationTests.inc",
+        "windows/Tests/test_plugins_app.py"
+      ],
+      "appSHA256": "dcab1851a2d2c90a56ff9871775b3a4606e0f4a14c7f4c5fb2168a9d3380ed55",
+      "previousReceiptSHA256": "a70b08be05cecd4645627fd40a668bf43e2099d1b3f81a07b992dfc32ee1056a",
+      "gates": [
+        {
+          "name": "test-build",
+          "startedUTC": "2026-10-10T07:54:55.596512+00:00",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "document-controller-tests",
+            "workspace-restore-tests"
+          ],
+          "log": "bin\\parity-evidence\\usability-test-build-03.log",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T07:56:02.395538+00:00",
+          "sha256": "cc9134e6e9c497475a26cc3779f517446b4a72600c6c936e3f4871fc86511e54"
+        },
+        {
+          "name": "native",
+          "startedUTC": "2026-10-10T07:56:02.616963+00:00",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+            "--test-dir",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-C",
+            "Release",
+            "--output-on-failure",
+            "--no-tests=error",
+            "-R",
+            "^(workspace-plugin-search-tests|document-controller-live-parameters)$"
+          ],
+          "log": "bin\\parity-evidence\\usability-native-03.log",
+          "exitCode": 8,
+          "finishedUTC": "2026-10-10T07:56:03.586810+00:00",
+          "sha256": "bc3763620fcd1aa0c5d87708413f476b8e9b22a4046b90792bb242f8de40c62e"
+        },
+        {
+          "name": "app-wrapper",
+          "startedUTC": "2026-10-10T07:56:03.598804+00:00",
+          "command": [
+            "C:\\Users\\P14\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+            "-B",
+            "-X",
+            "utf8",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\windows\\Tests\\run_isolated.py",
+            "--log",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\parity-evidence\\usability-app-03.log",
+            "--test",
+            "test_plugins_app.PluginAppTests.test_native_rack_buttons_and_stale_parameter_draft"
+          ],
+          "log": "bin\\parity-evidence\\usability-app-wrapper-03.log",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T07:56:04.808802+00:00",
+          "sha256": "98af16d4b7c6039f8de38a933a050ad2eb5ae81a7d3e43ed2c8229ce8088f933"
+        }
+      ],
+      "testExecutables": {
+        "document-controller-tests.exe": "8cb828a8b4d61ea5255a904af48707e6dc237f69eeef8b650011fac701955b52",
+        "workspace-restore-tests.exe": "9e12f6ab389b92ba0e910b414d43581f50d43aac2380b9d6fb3553755282dbc7"
+      },
+      "applicationLogSHA256": "1cbf3475214bf4f4e0bc92792a46efa5e3bb9514896c9e144146cc288f1e59f6",
+      "appUnchanged": true,
+      "localReceipt": "usability-test-repair-03.json",
+      "receiptSHA256": "11aac5bcd4743cb81c22990d03c05826ad736e10869c97d52bf22c32ee75e0bb"
+    },
+    {
+      "commit": "d90fd8b8edc097bbd35081a80c82302c4a7517f6",
+      "scope": "Private desktop fixture geometry only; no product rebuild",
+      "appSHA256": "dcab1851a2d2c90a56ff9871775b3a4606e0f4a14c7f4c5fb2168a9d3380ed55",
+      "previousReceiptSHA256": "11aac5bcd4743cb81c22990d03c05826ad736e10869c97d52bf22c32ee75e0bb",
+      "gates": [
+        {
+          "name": "test-build",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "workspace-restore-tests"
+          ],
+          "startedUTC": "2026-10-10T07:57:05.919244+00:00",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T07:57:52.782031+00:00",
+          "log": "bin\\parity-evidence\\usability-test-build-04.log",
+          "sha256": "702d8011ad835cbf8ac37cdc1749287ed768a099c20e5a4a7a8d7cc09ccbb054"
+        },
+        {
+          "name": "native",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+            "--test-dir",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-C",
+            "Release",
+            "--output-on-failure",
+            "--no-tests=error",
+            "-R",
+            "^workspace-plugin-search-tests$"
+          ],
+          "startedUTC": "2026-10-10T07:57:52.928015+00:00",
+          "exitCode": 8,
+          "finishedUTC": "2026-10-10T07:57:53.486402+00:00",
+          "log": "bin\\parity-evidence\\usability-native-04.log",
+          "sha256": "4b9866075226ef30a98f2e18b05f63d6976145e744052c811ab7cd0630b471b4"
+        }
+      ],
+      "appUnchanged": true,
+      "workspaceTestSHA256": "988f2338beea2c933418db5cb37c82041c4d5482897b54b324f5dd41f47aba98",
+      "localReceipt": "usability-test-repair-04.json",
+      "receiptSHA256": "5c80599be80409abef9d0200082d5060359690583df9b39408c20aeb56bcb171"
+    },
+    {
+      "commit": "7b09ec575f3a6b58c38f91612493d61d9b714b50",
+      "scope": "Private desktop fixture geometry only; no product rebuild",
+      "appSHA256": "dcab1851a2d2c90a56ff9871775b3a4606e0f4a14c7f4c5fb2168a9d3380ed55",
+      "previousReceiptSHA256": "5c80599be80409abef9d0200082d5060359690583df9b39408c20aeb56bcb171",
+      "gates": [
+        {
+          "name": "test-build",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+            "--build",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "--config",
+            "Release",
+            "--parallel",
+            "2",
+            "--target",
+            "workspace-restore-tests"
+          ],
+          "startedUTC": "2026-10-10T07:58:55.076324+00:00",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T07:59:42.482152+00:00",
+          "log": "bin\\parity-evidence\\usability-test-build-05.log",
+          "sha256": "702d8011ad835cbf8ac37cdc1749287ed768a099c20e5a4a7a8d7cc09ccbb054"
+        },
+        {
+          "name": "native",
+          "command": [
+            "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+            "--test-dir",
+            "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+            "-C",
+            "Release",
+            "--output-on-failure",
+            "--no-tests=error",
+            "-R",
+            "^workspace-plugin-search-tests$"
+          ],
+          "startedUTC": "2026-10-10T07:59:42.611804+00:00",
+          "exitCode": 0,
+          "finishedUTC": "2026-10-10T07:59:46.909221+00:00",
+          "log": "bin\\parity-evidence\\usability-native-05.log",
+          "sha256": "35144c0cb28445bdc794bc46f0371de6527954ae739038fec0ccfb23a2bc0353"
+        }
+      ],
+      "appUnchanged": true,
+      "workspaceTestSHA256": "5610fcd898a81190e7cc4156c1cf99c40976bfc1532b954837cf8f7a71568dd0",
+      "localReceipt": "usability-test-repair-05.json",
+      "receiptSHA256": "6701f4e35d3a9447542bdd2c2f9c4bddd95d87a8692a5ee4040c6bcc6945ff27"
+    }
+  ],
+  "finalResults": {
+    "nativePassed": [
+      "parameter-edit",
+      "parameter-preview",
+      "playback-regions",
+      "native-audio-bus",
+      "live-parameter-tests",
+      "document-controller-scratch",
+      "document-controller-live-parameters",
+      "workspace-plugin-search-tests"
+    ],
+    "applicationPassed": [
+      "test_main_integration.MainIntegrationTests.test_new_and_demo_identity_validation_replay_and_save_reopen",
+      "test_plugins_app.PluginAppTests.test_native_rack_buttons_and_stale_parameter_draft",
+      "test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard"
+    ],
+    "allSelectedChecksPassed": true
+  },
+  "limitations": [
+    "No new Mac or Windows x64 builds",
+    "No full parity suite or reciprocal Mac/Windows fixture gate",
+    "No physical recording, hardware loopback or third-party vendor qualification",
+    "Preview host foundation is not yet exposed by UI/API"
+  ]
+}

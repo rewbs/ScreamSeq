@@ -22,6 +22,7 @@ extension InterfaceTests {
     let readsBefore=methods.count
     editor.addEntry(existing,graph:nil,target:nil,node:nil,position:.zero)
     try require(editor.selectedID=="provenance:envelope:n23" && methods.count==readsBefore,"Unified Add reveals an existing source by stable reference without duplicating its lane or making a song edit")
+    try require(editor.trimControls.isHidden,"A read-only source reference must not retain the previous processor's audio trim controls")
     let edge=editor.canvas.edges.firstIndex{$0.source=="provenance:envelope:n23"}!
     editor.selectConnection(edge)
     try require(!editor.provenanceControls.isHidden && editor.connectionSection.isHidden,"Reference selection explains baseline provenance instead of offering a misleading Connect or depth form")

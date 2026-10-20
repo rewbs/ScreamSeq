@@ -287,6 +287,66 @@ void invalidReloadAndInspection(const std::filesystem::path &base) {
   check(shortcuts.reload() && !shortcuts.overridden("graph") && shortcuts.keys("graph").empty(), "missing-file reload did not restore defaults");
   check(!shortcuts.load("relative-shortcuts.json"), "relative storage path was accepted");
 }
+void introducedTransportDefaults(const std::filesystem::path &base) {
+  auto expanded=definitions();expanded.push_back({"selection",{"ctrl+space"},true});
+  expanded.push_back({"cursor",{"shift+space"},true});expanded.push_back({"selectionCursor",{"ctrl+shift+space"},true});
+  const auto path=base/"introduced.json";
+  for(const auto &existing:std::vector<std::vector<std::string>>{{"ctrl+space"},{"ctrl+space","m"}}) {
+    write(path,Shortcuts::Json{{"version",1},{"overrides",{{"graph",existing}}}}.dump());
+    const auto oldBytes=contents(path);Shortcuts migrated(expanded);
+    check(migrated.load(path)&&migrated.keys("graph")==existing&&migrated.keys("selection").empty()&&migrated.overridden("selection"),
+      "New transport default invalidated a previous exact or prefix binding");
+    check(migrated.keys("cursor")==std::vector<std::string>{"shift+space"}&&migrated.keys("selectionCursor")==std::vector<std::string>{"ctrl+shift+space"},
+      "Migration disabled unrelated new defaults");
+    check(contents(path)==oldBytes,"Loading an older shortcut profile rewrote it");
+    rejected([&]{migrated.reset("selection");});
+    migrated.set("other",{"ctrl+alt+x"});Shortcuts reopened(expanded);
+    check(reopened.load(path)&&reopened.keys("selection").empty()&&reopened.keys("graph")==existing,
+      "Saving another binding lost the migrated override or original shortcut");
+    reopened.reset("graph");reopened.reset("selection");
+    check(reopened.keys("selection")==std::vector<std::string>{"ctrl+space"},"Explicit Reset did not restore an available transport default");
+    const auto valid=contents(path);
+    for(const auto &invalid:std::vector<std::string>{
+        R"({"version":1,"overrides":{"graph":["ctrl+space"],"selection":["ctrl+space"]}})",
+        R"({"version":1,"overrides":{"graph":["ctrl+space"],"mixer":["ctrl+space"]}})"}) {
+      write(path,invalid);check(!reopened.reload()&&reopened.keys("selection")==std::vector<std::string>{"ctrl+space"},
+        "Migration accepted an explicit conflict or discarded active bindings");
+      write(path,valid);check(reopened.reload(),"Reload after explicit conflict did not recover");
+    }
+  }
+}
+void musicalKeyboardPreferences(const std::filesystem::path &base) {
+  auto defs=definitions();for(auto &definition:defs)if(definition.id=="play")definition.allowsReturn=true;
+  const auto path=base/"musical-keyboard.json";Shortcuts a(defs),b(defs);
+  check(a.load(path)&&b.load(path),"Cannot load an absent keyboard profile");
+  const auto original=a.keyboard("play");
+  check(a.noteKeys().offset('Z')==0&&a.noteKeys().offset('Q')==12&&a.noteKeys().offset('I')==24&&a.noteKeys().offset(0)==-1,"Default physical piano map changed");
+  check(ScreamSeq::MusicalKeyMap::validated(";SXDCVGBHNJM","Q2W3ER5T6Y7U<").offset(';')==0&&
+      ScreamSeq::MusicalKeyMap::validated(";SXDCVGBHNJM","Q2W3ER5T6Y7U<").offset('<')==24,"Punctuation/ISO physical positions are unavailable");
+  const auto revision=[&]{return a.keyboard("play").at("revision").get<std::string>();};
+  check(a.setKeyboard("play",revision(),"fsxdcvgbhnjm","q2w3er5t6y7ui",{"return"}),"Valid keyboard change was a no-op");
+  check(a.noteKeys().offset('F')==0&&a.noteKeys().offset('Z')==-1&&press(a,"return").command=="play"&&!press(a,"space").consumed,"Mapped piano or Return transport was not published");
+  const auto saved=a.keyboard("play");const auto bytes=contents(path);
+  check(!a.setKeyboard("play",revision(),"FSXDCVGBHNJM","Q2W3ER5T6Y7UI",{"enter"})&&contents(path)==bytes,"Equivalent keyboard preferences rewrote disk");
+  for(const auto &low:{"ZSXDCVGBHNJZ","ZSXDCVGBHNJ ","ZSXDCVGBHNJ","ZSXDCVGBHNJM1"}) {
+    rejected([&]{a.setKeyboard("play",revision(),low,"Q2W3ER5T6Y7UI",{"space"});});
+    check(a.keyboard("play")==saved&&contents(path)==bytes,"Invalid row partially changed keyboard or transport");
+  }
+  rejected([&]{a.setKeyboard("play",revision(),"ASXDCVGBHNJM","Q2W3ER5T6Y7UI",{"ctrl+o"});});
+  rejected([&]{a.set("follow",{"return"});});
+  check(a.keyboard("play")==saved&&contents(path)==bytes,"Transport conflict damaged the piano map");
+  rejected([&]{a.setKeyboard("play",original.at("revision"),"ASXDCVGBHNJM","Q2W3ER5T6Y7UI",{"space"});},-32001);
+  rejected([&]{b.setKeyboard("play",b.keyboard("play").at("revision"),"ASXDCVGBHNJM","Q2W3ER5T6Y7UI",{"space"});},-32001);
+  check(b.reload()&&b.keyboard("play")==saved,"Keyboard and Return binding did not survive reload");
+  a.set("graph",{"ctrl+alt+g"});check(a.noteKeys().offset('F')==0,"Unrelated shortcut edit reset the note rows");
+  const auto valid=contents(path);
+  write(path,R"({"version":1,"overrides":{},"noteKeys":{"lower":"ZSXDCVGBHNJM","upper":"Q2W3ER5T6Y7UM"}})");
+  check(!a.reload()&&a.noteKeys().offset('F')==0,"Invalid disk map replaced active settings");
+  rejected([&]{a.setKeyboard("play",revision(),"ASXDCVGBHNJM","Q2W3ER5T6Y7UI",{"space"});},-32001);
+  write(path,valid);check(a.reload(),"Repaired keyboard profile did not reload");
+  write(path,R"({"version":1,"overrides":{"graph":["ctrl+alt+g"]}})");
+  check(a.reload()&&a.noteKeys()==ScreamSeq::MusicalKeyMap{}&&a.keys("play")==std::vector<std::string>{"space"},"Legacy shortcut profile did not retain default piano/transport behavior");
+}
 } // namespace
 int main() {
   try {
@@ -297,6 +357,8 @@ int main() {
     sequenceLifecycle();
     persistenceAndConflicts(scratch.path);
     invalidReloadAndInspection(scratch.path);
+    introducedTransportDefaults(scratch.path);
+    musicalKeyboardPreferences(scratch.path);
     std::cout << "Workspace shortcut parser, conflicts, sequences, atomic persistence and reload guards passed\n";
     return 0;
   } catch(const std::exception &error) {

@@ -14,14 +14,14 @@ class WorkspaceLayoutWindow final : public NativeToolWindow {
     state_=request_(Json::object());
     const auto previous=field(name);
     names_=state_.at("savedLayouts").get<std::vector<std::string>>();
-    SendMessageW(controls_.at(saved),CB_RESETCONTENT,0,0);
+    ScreamSeq::NativeInputGate::present(controls_.at(saved),CB_RESETCONTENT,0,0);
     int selected=-1;
     for(size_t i=0;i<names_.size();++i) {
-      auto title=wide(names_[i]);SendMessageW(controls_.at(saved),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title.c_str()));
+      auto title=wide(names_[i]);ScreamSeq::NativeInputGate::present(controls_.at(saved),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title.c_str()));
       if(title==previous)selected=int(i);
     }
     if(selected<0&&!names_.empty())selected=0;
-    SendMessageW(controls_.at(saved),CB_SETCURSEL,selected,0);
+    ScreamSeq::NativeInputGate::present(controls_.at(saved),CB_SETCURSEL,selected,0);
     EnableWindow(controls_.at(restore),selected>=0);EnableWindow(controls_.at(remove),selected>=0);
   }
   std::string selectedName() const {
@@ -74,8 +74,8 @@ public:
     minimumWidth_=580;minimumHeight_=390;create(L"ScreamSeqWorkspaceLayouts",L"Workspace layouts",640,420);
     combo(preset);combo(saved);edit(name,L"Custom",128);
     button(applyPreset,L"Apply preset");button(restore,L"Restore");button(save,L"Save / update");button(remove,L"Delete");button(close,L"Close");button(reload,L"Refresh saved");
-    for(auto text:{L"Compose",L"Pattern focus",L"Sound design",L"Connected editors"})SendMessageW(controls_.at(preset),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    SendMessageW(controls_.at(preset),CB_SETCURSEL,0,0);finish();
+    for(auto text:{L"Compose",L"Pattern focus",L"Sound design",L"Connected editors"})ScreamSeq::NativeInputGate::present(controls_.at(preset),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
+    ScreamSeq::NativeInputGate::present(controls_.at(preset),CB_SETCURSEL,0,0);finish();
   }
   void open(){refresh();show();SetFocus(controls_.at(name));}
 };

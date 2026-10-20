@@ -1,7 +1,7 @@
     std::unique_ptr<ScreamSeq::ScratchGestureWindow> scratchGestureWindow;
     std::optional<ScreamSeq::ScratchPatternTarget> scratchTargetAt(unsigned p,unsigned r,unsigned c,unsigned fx)const{
         if(busy||!view->session.document.value("editable",false)||!view->patterns.contains(p)||r>=view->pattern(p).rows||c>=view->channels||fx>=view->effectColumns.at(c))return {};
-        ScreamSeq::ScratchPatternTarget target;target.document=documentId;target.revision=view->session.revision;target.pattern=p;target.row=r;target.channel=c;target.column=fx;target.rows=view->pattern(p).rows;target.rowsPerBeat=view->patternRowsPerBeat.at(p);
+        ScreamSeq::ScratchPatternTarget target;target.document=documentId;target.revision=view->session.revision;target.pattern=p;target.row=r;target.channel=c;target.column=fx;target.rows=view->pattern(p).rows;target.rowsPerBeat=view->patternGridMetrics.at(p).rowsPerBeat;
         for(const auto &[id,index]:view->nativePattern->patternIndexes)if(index==p){target.patternID=id;break;}
         for(const auto &[id,index]:view->nativePattern->trackChannels)if(index==c){target.trackID=id;break;}
         if(!target.patternID||!target.trackID)return {};
@@ -22,7 +22,7 @@
             [this](const auto &target){return resolveScratchTarget(target);},
             [this](const auto &target,bool preview){const auto resolved=resolveScratchTarget(target);if(!resolved)throw std::runtime_error("The captured pattern cell no longer exists");
                 if(preview)play({{"pattern",resolved->pattern},{"startRow",resolved->row},{"endRow",resolved->rows},{"cursorRow",resolved->row},{"loop",playbackLoop}});
-                else{auto n=position();n["pattern"]=resolved->pattern;n["row"]=resolved->row;n["channel"]=resolved->channel;n["column"]=3+2*resolved->column;n["following"]=false;navigate(n);selecting=false;ensureCursorVisible();SetForegroundWindow(window);SetFocus(window);}});
+                else{auto n=position();n["pattern"]=resolved->pattern;n["row"]=resolved->row;n["channel"]=resolved->channel;n["column"]=3+2*resolved->column;n["following"]=false;navigate(n);resetPatternSelection();ensureCursorVisible();SetForegroundWindow(window);SetFocus(window);}});
         scratchGestureWindow->openAt();
     }
     bool scratchDoubleClick(float x,float y){
@@ -35,8 +35,12 @@
         if(screen.x==-1&&screen.y==-1){if(workspaceState.focus!="pattern")return false;const auto r=patternGridRect();screen={LONG((r.x+gutter+20)*GetDpiForWindow(window)/96),LONG((r.y+gridHeader+20)*GetDpiForWindow(window)/96)};ClientToScreen(window,&screen);}
         else{POINT client=screen;ScreenToClient(window,&client);const float scale=96.f/GetDpiForWindow(window);if(!patternContextClick(client.x*scale,client.y*scale))return false;}
         HMENU menu=CreatePopupMenu();if(!menu)return false;AppendMenuW(menu,MF_STRING,scratchGesturesCommand,L"Scratch phrases…");AppendMenuW(menu,MF_STRING,effectsCommand,L"Edit FX…");
-        AppendMenuW(menu,MF_SEPARATOR,0,nullptr);AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,selecting?L"Render selection to sample":L"Render current row to sample");AppendMenuW(menu,MF_STRING,patternRenderInstrumentCommand,selecting?L"Render selection to instrument":L"Render current row to instrument");
-        AppendMenuW(menu,MF_STRING,patternRenderOptionsCommand,L"Render selection options…");
+        AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
+        if(directSampleRenderCompletion.retained())AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,L"Review selection render result");
+        else{
+            AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,selecting?L"Render selection to sample":L"Render current row to sample");AppendMenuW(menu,MF_STRING,patternRenderInstrumentCommand,selecting?L"Render selection to instrument":L"Render current row to instrument");
+            AppendMenuW(menu,MF_STRING,patternRenderOptionsCommand,L"Render selection options…");
+        }
         const auto target=patternSampleTarget();const auto selected=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_RIGHTBUTTON,screen.x,screen.y,0,window,nullptr);DestroyMenu(menu);
         if(selected==patternRenderSampleCommand||selected==patternRenderInstrumentCommand)renderPatternSample(selected==patternRenderInstrumentCommand,target);else if(selected==patternRenderOptionsCommand)openPatternSampleRender(false,target);else if(selected)command(int(selected));return true;
     }

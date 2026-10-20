@@ -1,0 +1,107 @@
+{
+  "format": "screamseq-windows-resume-20261016",
+  "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+  "host": "Windows 11 ARM64, 10.0.28000",
+  "buildStartedUTC": "2026-10-16T03:47:45.891069+00:00",
+  "buildFinishedUTC": "2026-10-16T03:49:31.257596+00:00",
+  "sourceInputCount": 1914,
+  "sourceManifestReceiptSHA256": "603bb88b4d8edcbffd7807b5954fc1a9b2b80a759ad7f0d605738861f3f3c1ac",
+  "compilerFiles": {
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostarm64\\arm64\\cl.exe": "47b1e067b8f81a52eddd5a623675bd50126567b1dd1118cde4d52b9e550eb149",
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\arm64\\cl.exe": "88b5f3b3ce1b254b084e91bc46a16f97b3f049f2acf23ff4914ff212e317a228",
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx86\\arm64\\cl.exe": "2c4407a2d1a08cbaa29b3b9fc21a3182612bfc81e8e4bfdc30579f90995e10df"
+  },
+  "cacheAfterSHA256": "e87a445e02658febc2f39c7e4cf093ea7bdd41b987f91ea216055015646958fb",
+  "executableSHA256": "984b8fa5bca7acd6ebb798db81c739bcbdaecdef879adecec711fc23d6786cef",
+  "workspaceHarnessSHA256": "bdd7f472aa90815dadc91974f4a983e6f30fe00019d855fbea068a10ef60334c",
+  "buildWarnings": [],
+  "nativeTargeted": {
+    "passed": 21,
+    "total": 21,
+    "seconds": 37.45
+  },
+  "nativeClosureOwners": {
+    "passed": 8,
+    "total": 8,
+    "command": [
+      "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+      "--test-dir",
+      "C:\\Users\\P14\\.codex\\worktrees\\da23\\ScreamSeq\\bin\\windows-parity-p0",
+      "-C",
+      "Release",
+      "--output-on-failure",
+      "--no-tests=error",
+      "-R",
+      "^workspace-(restore|draft-census|receipt|asset-outcome|command-result|bank-result|sample-readback|sample-result)-tests$"
+    ]
+  },
+  "arm64Application": {
+    "passed": 30,
+    "total": 30,
+    "seconds": 57.622,
+    "skipped": 0
+  },
+  "retainedX64": {
+    "sourceCommit": "d39ec5548fc6224f5d395dbf02d6b0eca35b48ac",
+    "executableSHA256": "ba2f5f93337bd05cbd22d17ed2bdeef5c76e905345548dd760ac8198315a8132",
+    "archiveSHA256": "01e0d47e3816eb65078ab3318ee07d58ef8289137a8d751887e303ecbea73259",
+    "execution": "x64 emulation on ARM64 Windows; not native x64 hardware",
+    "applicationPassed": 30,
+    "applicationTotal": 30,
+    "seconds": 64.136,
+    "skipped": 0
+  },
+  "audio": {
+    "endpointEnumerated": "Speakers (Cirrus Logic XU (with APO Extensions))",
+    "silentPlaybackClockCasesPassed": true,
+    "defaultSettingsChanged": false,
+    "physicalInputOrAudibleOutputQualified": false
+  },
+  "musician": {
+    "pid": 5032,
+    "path": "C:/Users/P14/.codex/worktrees/parity-ci-layout/ScreamSeq/bin/windows-parity-p1/DirectEditsFinal-Release/ScreamSeq.exe",
+    "preserved": true
+  },
+  "evidenceDirectory": "C:\\Users\\P14\\Documents\\Codex\\2026-10-15\\task\\windows-gate-20261016",
+  "files": {
+    "arm64-application.log": "c87b2c4c9b88a23fb0bae1ee7b35cf48eba57351afe44438390bfaa8982999f3",
+    "arm64-audio-probe.log": "99d78d4dc9be4fa6534cdb9890711ea5869a64012719bc4443f21345c04bb2e6",
+    "arm64-native.log": "ba7f343c9104d0dda7f1a95507a60b29fecdd0a82085e99458376d1b7b490403",
+    "build.log": "cc37d35ad06026a2c8cd69f343492d73a9dd42f3ba1d3b98a37b0e817338a549",
+    "closure-owners-detailed.log": "780929b1ae3dab101a90159e0f7a0d9661397e2adb1b2e097a3e897cc4df3c83",
+    "closure-owners.json": "7fe11d138cd083e031270c76f5493ab97c4c9edfbf77a1757b69d14404011d84",
+    "closure-owners.log": "0f66eb4c4f7e189c5f1903a680db691f482a9689c98e977026362d09564a20b1",
+    "configure.log": "807afb05e8b1590047851d4f9dd7fc428899034a4109e22a457a346cd4e899a7",
+    "receipt.json": "603bb88b4d8edcbffd7807b5954fc1a9b2b80a759ad7f0d605738861f3f3c1ac",
+    "retained-x64-identity.json": "16f17cd7597a4a716904c6eae359a64c0d553858b6e79f0b94499432211d458f",
+    "run_windows_gate.py": "126cf4800606cbcf3e2b2952fa79efd397354fd7ee005388603e1e3ac2a4bbe2",
+    "tests.json": "b473d21fe1223d4f71d29162b7e187c8984508602c8b53c86e5111dba0621d27",
+    "test_closure_owners.py": "ac289fc355e22c462fc405788f37afeb310ca67d991d298504723435af23a469",
+    "test_windows_gate.py": "3a58148fecc41a78cc390c63e1b8650b61c18f1a57a2bc9d2d21bc44f5a23969",
+    "x64-retained-application.log": "c659651fa0eee0d64dde507a1751a85d6ac62402622e2d8f39bb407d448b71ad",
+    "x64-retained-audio-probe.log": "5bd8ae965193a2656440af05a78193eebc9c1937886155644741f32173a832d5"
+  },
+  "blockers": [
+    {
+      "action": "Native foreground mouse/keyboard and screenshot validation",
+      "target": "Owned ScreamSeq QA app on Windows",
+      "status": "unavailable, not attempted or approved by substitution",
+      "reason": "cua_repl tool declares native computer APIs disabled; inventory returns apps=[] and Chrome only; no node_repl tool is exposed for the installed @oai/sky skill. No native UI screenshot was captured."
+    },
+    {
+      "action": "Current-head x64 CI gate",
+      "target": "https://github.com/rewbs/ScreamSeq/actions/runs/38846111553",
+      "status": "pending at last observation; parent coordinates terminal result"
+    },
+    {
+      "action": "Physical input/output, device loss, latency and vendor qualification",
+      "status": "not performed; separate hardware evidence required"
+    }
+  ],
+  "limits": [
+    "Private-desktop native handlers/controls and actual app pipes are not foreground computer-use or visual evidence.",
+    "The retained x64 recovery pass does not explain the earlier CI timeout or qualify current-head x64.",
+    "Earlier reciprocal exchanges retain their original source identities; no current-head reciprocal claim.",
+    "P0b/P0c and P1-P8 remain open; no merge or test weakening."
+  ]
+}

@@ -53,6 +53,16 @@ extension InterfaceTests {
   }
   static func patternGridChecks() throws {
     try presentationGateChecks()
+    let oddMeter=PatternModel(["displayRowsPerBeat":3,"displayRowsPerMeasure":10])
+    let metrics=ScreamSeqPatternGridMetricsMake(UInt32(oddMeter.rowsPerBeat),UInt32(oddMeter.rowsPerMeasure))
+    try require(ScreamSeqPatternRowAccent(metrics,9)==1 && ScreamSeqPatternRowAccent(metrics,10)==2 && ScreamSeqPatternRowAccent(metrics,12)==1,
+      "Shared display metrics retain a non-four-row beat and non-divisible measure")
+    var graphDisplay=GraphPatternCommand(target:"n1",graph:"n2",kind:"start",position:0,column:0,number:7,amount:0.7)
+    try require(graphDisplay.display=="S007 B2" && graphDisplay.amount==0.7,"F04 Start display truncates without changing its musical value")
+    graphDisplay.kind="amount";graphDisplay.amount=0.35
+    try require(graphDisplay.display=="A007 59" && graphDisplay.amount==0.35,"F04 Amount display agrees with the shared C formatter")
+    graphDisplay.kind="wet";graphDisplay.amount = .infinity
+    try require(graphDisplay.display=="W007 00","Non-finite graph display uses its neutral fallback")
     var recovery=PatternSnapshotRecovery(interval:1.0/60)
     try require(recovery.enqueue(now:10.010,preparedAt:10,external:true,active:true)==nil,
       "A fresh host snapshot does not add another UI tick to normal display cadence")
@@ -305,6 +315,12 @@ extension InterfaceTests {
     tools.amount.stringValue = "5"; tools.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
     replies.removeFirst()(success)
     try require(!tools.applyButton.isEnabled && tools.summary.stringValue == "Preview a change before applying it.", "A stale preview still cannot be applied")
+    tools.preview()
+    replies.removeFirst()(["result":["revision":"native-only", "data":["changedCells":0,"effectsChanged":true,"changes":[[String:Any]]()]]])
+    try require(tools.applyButton.isEnabled && tools.summary.stringValue.contains("Native note or FX"),
+      "A transform affecting only native notes or extra FX remains applicable")
+    tools.apply();replies.removeFirst()(["result":["revision":"native-applied", "data":["changedCells":0,"effectsChanged":true,"changes":[[String:Any]]()]]])
+    try require(!tools.applyButton.isEnabled,"Applying native-only data still consumes its prepared preview")
     try patternCursorEditingChecks()
     print("PASS pattern grid: modifier-safe typing, busy key queue, audition release, repeat handling, clamped navigation, plus-key shortcuts, palette validation, apply reporting, background paste, cursor-only field clear and channel row deletion")
   }

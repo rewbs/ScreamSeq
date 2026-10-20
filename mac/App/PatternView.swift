@@ -529,14 +529,16 @@ final class PatternView: MTKView, MTKViewDelegate {
         text("FX \(effect+1)",fx+7,headerHeight-28,SIMD4(0.59,0.63,0.78,1))
       }
     }
+    let gridMetrics = ScreamSeqPatternGridMetricsMake(UInt32(clamping:model.rowsPerBeat),UInt32(clamping:model.rowsPerMeasure))
     for v in 0..<visibleRows {
       let r = firstRow + v
       if r >= model.rows { break }
       let y = headerHeight + Float(v) * rowHeight
       clipLeft=0
-      if r % model.rowsPerMeasure == 0 {
+      let rowAccent = ScreamSeqPatternRowAccent(gridMetrics,UInt32(clamping:r))
+      if rowAccent == 2 {
         quad(0, y, width, rowHeight, SIMD4(0.095, 0.12, 0.15, 1))
-      } else if r % model.rowsPerBeat == 0 {
+      } else if rowAccent == 1 {
         quad(0, y, width, rowHeight, SIMD4(0.074, 0.091, 0.115, 1))
       }
       if r == playRow && model.pattern == playPattern {

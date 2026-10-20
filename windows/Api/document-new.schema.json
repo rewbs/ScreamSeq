@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows document creation",
+  "description": "Native application extension. Uses the shared blank/demo constructors and the same guarded replacement boundary as document.open. A new document always has a fresh identity and empty history. Song discard cannot authorize losing native drafts or retained takes. Read api.describe for availability.",
+  "type": "object",
+  "properties": {
+    "jsonrpc": { "const": "2.0" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "method": { "const": "document.new" },
+    "params": {
+      "type": "object",
+      "properties": {
+        "expectedRevision": { "type": "string", "minLength": 1 },
+        "demo": { "type": "boolean", "default": false },
+        "discard": { "type": "boolean", "default": false }
+      },
+      "required": ["expectedRevision"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["jsonrpc", "id", "method", "params"],
+  "additionalProperties": false
+}

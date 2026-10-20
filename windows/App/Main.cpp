@@ -4,6 +4,7 @@
 #include "soundlib/mod_specifications.h"
 #include "soundlib/ModInstrument.h"
 #include "../Session/DocumentController.hpp"
+#include "../Session/LiveParameterPublication.hpp"
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
@@ -13,6 +14,8 @@
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
 #include "NativeContextMenu.hpp"
+#include "NativeMenuBar.hpp"
+#include "NativePatternAccessibility.hpp"
 #include "WorkspaceShortcuts.hpp"
 #include "WorkspaceShortcutKey.hpp"
 #include "PatternClipboard.hpp"
@@ -22,9 +25,12 @@
 #include "EnvelopeBankWindow.hpp"
 #include "ScratchGestureWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
+#include "PluginParameterField.hpp"
+#include "PluginParametersWindow.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
+#include "MixerStripsWindow.hpp"
 #include "GraphCommandsWindow.hpp"
 #include "GraphTrimsWindow.hpp"
 #include "ParameterAutomationWindow.hpp"
@@ -43,6 +49,8 @@
 #include "SampleLibraryWindow.hpp"
 #include "AudioSettingsWindow.hpp"
 #include "../Project/RecoveryStore.hpp"
+#include "../Project/ProjectIO.hpp"
+#include "mpt/crypto/hash.hpp"
 #include "RecoveryWriter.hpp"
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
@@ -50,6 +58,12 @@
 #include "ArrangementWindow.hpp"
 #include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
+#include "DocumentLoadReportWindow.hpp"
+#include "SongPropertiesWindow.hpp"
+#include "KeyboardSettingsWindow.hpp"
+#include "NoteTrackWindow.hpp"
+#include "PatternToolsWindow.hpp"
+#include "EffectPickerWindow.hpp"
 #include <windowsx.h>
 #include <commdlg.h>
 #include <dwmapi.h>
@@ -74,6 +88,20 @@ constexpr int connectedWorkspaceCommand=562,openGraphCurveCommand=563,dockGraphC
     graphEditingWorkspaceCommand=565,editorGraphCurveTab=566,dockPreciseNotesCommand=567,
     editorPreciseNotesTab=568,notesInspectorCommand=569,graphWorkflowCommand=574,parameterActivityCommand=575,regionControlBase=600,regionControlStride=8,regionControlEnd=623;
 constexpr UINT deferredViewsMessage=WM_APP+42;
+constexpr UINT loadReportSaveCopyMessage=WM_APP+43;
+constexpr int noteColumnMuteCommand=582,noteTrackUngroupCommand=583,noteTrackCreateCommand=584,noteTrackGroupCommand=585;
+constexpr int playbackLoopCommand=586,playCursorCommand=587,playSelectionCommand=588,playSelectionCursorCommand=589;
+constexpr int positionRulerCommand=590;
+constexpr int patternToolsCommand=591;
+constexpr int inputOctaveDownCommand=592,inputOctaveUpCommand=593,inputInstrumentPreviousCommand=594,inputInstrumentNextCommand=595,inputInstrumentAtCursorCommand=596;
+constexpr int effectPickerCommand=597;
+constexpr int patternRowsLargerCommand=598,patternRowsSmallerCommand=599;
+constexpr int newDocumentCommand=624,openDemoCommand=625;
+constexpr int documentLoadReportCommand=626;
+constexpr int songPropertiesCommand=627;
+constexpr int keyboardSettingsCommand=628;
+constexpr int exitCommand=629;
+constexpr int aboutCommand=702,keyboardHelpCommand=703,selectChannelCommand=704,selectPatternCommand=705,selectRowCommand=706;
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -104,6 +132,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
+    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
     effectFieldBase=700,effectChoiceBase=720,
@@ -112,7 +141,8 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     noteApply=372,noteReload=373,noteReplace=374,noteRepeat=375,noteRepeatCount=376,noteEndVelocity=377,
     mixerCommand=400,mixerList=401,mixerEnable=402,mixerAdd=403,mixerRemove=404,mixerReload=405,
     mixerApply=406,mixerMute=407,mixerSolo=408,mixerOutput=409,mixerName=410,
-    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,mixerRouting=417,
+    mixerPreGain=411,mixerPrePan=412,mixerGain=413,mixerPan=414,mixerWidth=415,mixerTiming=416,mixerRouting=417,mixerStripsCommand=418,mixerDetailsCommand=419,
+    mixerAddReturn=420,mixerColor=421,mixerAddEffect=422,mixerRouteInstrument=423,
     graphCommand=430,graphLibrary=431,graphNew=432,graphClone=433,graphRemove=434,graphKind=435,graphAddSource=436,
     graphRack=437,graphAddEffect=438,graphFit=439,graphApply=440,graphReload=441,graphNodePicker=442,graphPage=443,
     graphProperty=444,graphPropertyValue=445,graphSetProperty=446,graphSource=447,graphDestination=448,graphWire=449,
@@ -201,9 +231,10 @@ void offlineHostedTest(const std::filesystem::path &project,const std::filesyste
        <<",\"documentUnchanged\":"<<unchanged<<",\"rates\":[44100,48000,96000],\"partitions\":[17,128,4096,8193],\"secondsPerRender\":"<<(audition?2:1)<<",\"audition\":"<<audition<<",\"songPositionStationary\":"<<stationary<<",\"renders\":"<<renders.dump()<<"}";
     out.close();if(!out||!finite||maxDelta>=1e-6||!unchanged||!stationary) throw std::runtime_error("Hosted application offline qualification failed");
 }
-class Application : public ScreamSeq::Api::SessionHost {
+class Application : public ScreamSeq::Api::SessionHost, public ScreamSeq::DocumentReplacementAdmission {
 public:
 	HWND window{};
+	ScreamSeq::DocumentDraftRegistry documentDrafts;
 	std::unique_ptr<ScreamSeq::RenderSurface> surface;
 	std::unique_ptr<ScreamSeq::DocumentController> controller;
 	std::shared_ptr<const ScreamSeq::DocumentView> view;
@@ -233,10 +264,10 @@ public:
 	Json playbackRegion = Json::object();
 	ScreamSeq::Api::SessionSnapshot snapshot() override {
         serviceRecovery();
-        if(!busy && controller->publicationPending()) {await(controller->invoke("synchronizeView",Json::object()));refreshDocument();}
+        if(!departureInput&&!busy && controller->publicationPending()) {await(controller->invoke("synchronizeView",Json::object()));refreshDocument();}
 		auto t = renderer ? renderer->telemetry() : Tracker::Telemetry{};
 		auto audio = device.stats();
-		auto result=view->session;
+		auto result=departureAdopted?controller->view()->session:view->session;
 		result.context = {{"documentId",documentId},{"contextRevision",documentId + ":context:" + std::to_string(contextRevision) + ":" + selection().dump()},
 			{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"instrument",inputInstrumentOverride.value_or(typingSound)},{"octave",octave},{"following",follow},{"follow",follow},{"selection",selection()},
 			{"file",view->path.empty() ? Json(nullptr) : Json(utf8Path(view->path))},{"dirty",view->dirty},{"autosave",recoveryStatus()},
@@ -255,16 +286,19 @@ public:
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
                 {"sampleFrame",v.sampleFrame},{"generation",v.generation},{"envelopeTicks",v.envelopeTicks}});
+		if(departureAdopted){result.context["documentId"]=result.documentId;result.context["contextRevision"]=result.documentId+":native-refresh-pending";result.context["nativeRefreshPending"]=true;}
 		return result;
 	}
 	ScreamSeq::Api::PatternSnapshot pattern(unsigned index) override {
-        auto it=view->patterns.find(index);
-        if(it==view->patterns.end()) throw ScreamSeq::Api::ApiError(-32602,"Pattern does not exist");
+        const auto current=departureAdopted?controller->view():view;
+        auto it=current->patterns.find(index);
+        if(it==current->patterns.end()) throw ScreamSeq::Api::ApiError(-32602,"Pattern does not exist");
         return *it->second;
     }
 	Json selection() const {
-		return {{"startRow",selecting ? std::min(row,anchorRow) : row},{"endRow",selecting ? std::max(row,anchorRow) : row},
-			{"startChannel",selecting ? std::min(channel,anchorChannel) : channel},{"endChannel",selecting ? std::max(channel,anchorChannel) : channel}};
+        const auto [endRow,endChannel]=patternSelectionEnd();
+		return {{"startRow",selecting ? std::min(endRow,anchorRow) : row},{"endRow",selecting ? std::max(endRow,anchorRow) : row},
+			{"startChannel",selecting ? std::min(endChannel,anchorChannel) : channel},{"endChannel",selecting ? std::max(endChannel,anchorChannel) : channel}};
 	}
 	Json position() const { return {{"pattern",patternIndex},{"row",row},{"channel",channel},{"column",column},{"following",follow}}; }
     void validatePosition(const Json &value) const {
@@ -305,9 +339,11 @@ public:
         }
 		auto g=geometry();
 		auto rect=[](const ScreamSeq::WorkspaceRect &r)->Json {return {{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}};};
-		return {{"geometry",{{"pattern",rect(g.pattern)},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
+        auto patternRect=rect(g.pattern);patternRect["headerHeight"]=gridHeader;patternRect["gutterWidth"]=gutter;patternRect["rowHeight"]=rowHeight;
+		return {{"geometry",{{"pattern",patternRect},{"inspector",rect(g.inspector)},{"lowerTabs",rect(g.lowerTabs)},
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
-			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},
+			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},{"gridTiming",patternGridTiming()},
+            {"positionMode",positionMode},{"ruler",rulerSnapshot()},
 			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
@@ -315,7 +351,7 @@ public:
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
             {"savedLayouts",savedLayouts.list()},{"layoutStorageStatus",savedLayouts.diagnostic()},
             {"lowerVisible",workspaceState.lowerVisible},{"lowerEditor",lowerEditorName()},
-            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
+            {"octave",octave},{"editStep",editStep},{"documentBusy",busy},{"pendingPatternPaste",pendingPatternPaste.has_value()},{"pendingViewCommands",deferredViews.size()+(drainingViews?1u:0u)},{"status",utf8Path(status)},
             {"sampleEditor",sampleEditorSnapshot()},{"sampleLibrary",sampleLibrarySnapshot()},
             {"audioSettings",audioSettingsSnapshot()},
             {"recovery",recoveryWindow?recoveryWindow->snapshot():Json{{"visible",false}}},
@@ -324,6 +360,14 @@ public:
             {"arrangementWindow",arrangementWindow?arrangementWindow->snapshot():Json{{"visible",false}}},
             {"arrangementMatrixWindow",arrangementMatrixWindow?arrangementMatrixWindow->snapshot():Json{{"visible",false}}},
             {"songTimingWindow",songTimingWindow?songTimingWindow->snapshot():Json{{"visible",false}}},
+            {"patternTools",patternToolsWindow?patternToolsWindow->snapshot():Json{{"visible",false}}},
+            {"effectPicker",effectPickerWindow?effectPickerWindow->snapshot():Json{{"visible",false}}},
+            {"loadReport",documentLoadReportWindow?documentLoadReportWindow->snapshot():Json{{"visible",false}}},
+            {"songProperties",songPropertiesWindow?songPropertiesWindow->snapshot():Json{{"visible",false}}},
+            {"keyboard",keyboardSettings()},{"keyboardSettingsWindow",keyboardSettingsWindow?keyboardSettingsWindow->snapshot():Json{{"visible",false}}},
+            {"trackHeaders",noteTrackHeaderSnapshot()},
+            {"noteTrackEditors",{{"create",createNoteTrackWindow?createNoteTrackWindow->snapshot():Json{{"visible",false}}},
+                {"group",groupNoteTrackWindow?groupNoteTrackWindow->snapshot():Json{{"visible",false}}}}},
             {"graphEditor",graphEditorSnapshot()},
             {"graphCurve",graphCurveSnapshot()},
             {"formulaWorkbench",curveFormulaWorkbenchSnapshot()},
@@ -334,6 +378,8 @@ public:
             {"pluginLibrary",pluginLibraryWindow?pluginLibraryWindow->snapshot():Json{{"visible",false}}},
             {"pluginPath",pluginPathWindow?pluginPathWindow->snapshot():Json{{"visible",false}}},
             {"songRouting",songRoutingWindow?songRoutingWindow->snapshot():Json{{"visible",false}}},
+            {"graphPluginParameters",graphPluginParameterSnapshots()},
+            {"mixerStrips",mixerStrips?mixerStrips->snapshot():Json{{"visible",false}}},
             {"graphCommands",graphCommandsWindow?graphCommandsWindow->snapshot():Json{{"visible",false}}},
             {"graphLanes",graphLanesSnapshot()},
             {"parameterAutomation",parameterAutomationWindow?parameterAutomationWindow->snapshot():Json{{"visible",false}}},
@@ -347,7 +393,10 @@ public:
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
-            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
+            {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
+                {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
+            {"nativeCommandResult",{{"pending",nativeCommandPending},{"completion",nativeCommandCompletion.snapshot()},{"target",nativeCommandTarget},{"report",nativeCommandReport}}},
+            {"patternSampleRenderAction",{{"pending",directSampleRenderPending},{"completion",directSampleRenderCompletion.snapshot()},{"target",directSampleRenderTarget},{"report",directSampleRenderReport}}},
             {"audition",auditionWindow?auditionWindow->snapshot():Json{{"visible",false}}},
             {"mixerEditor",{{"visible",mixerEditorVisible()},{"bus",mixerTarget},{"draft",mixerDirty},{"pending",mixerPending},
                 {"expectedRevision",mixerRevision},{"stale",mixerDocument!=documentId||mixerRevision!=view->session.revision},{"status",utf8Path(mixerStatus)}}},
@@ -359,8 +408,13 @@ public:
             {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
+        if(method!="workspace.get"&&method!="workspace.commands.get")rejectDepartureInput();
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
+        if(method=="workspace.ruler") {
+            require(p.size()==1&&p.contains("mode")&&p.at("mode").is_string(),"workspace.ruler requires only mode");
+            setPositionMode(p.at("mode").get<std::string>());return {{"mode",positionMode}};
+        }
         if(method=="workspace.input") {
             for(auto it=p.begin();it!=p.end();++it)require(it.key()=="expectedRevision"||it.key()=="expectedContext"||it.key()=="instrument"||it.key()=="octave","Unknown input field");
             require(p.contains("instrument")||p.contains("octave"),"Supply instrument and/or octave");
@@ -376,6 +430,7 @@ public:
         }
         if(method=="workspace.commands.get"){require(p.empty(),"workspace.commands.get accepts no parameters");return workspaceCommandSnapshot();}
         if(method=="workspace.shortcut.set")return setWorkspaceShortcut(p);
+        if(method=="workspace.keyboard.set")return setKeyboardSettings(p);
 		if(method=="workspace.panel"&&p.contains("panel")&&p["panel"].is_string()&&isWorkspaceEditor(p["panel"].get<std::string>())){workspaceEditorRequest(p);return workspaceSnapshot();}
 		if(method=="workspace.layout") {
 			require(p.contains("name") && p["name"].is_string(),"Supply a workspace layout name");
@@ -425,6 +480,7 @@ public:
 		return workspaceSnapshot();
 	}
 	void navigate(const Json &value) override {
+        rejectDepartureInput();
         validatePosition(value);
 		const auto p=value.at("pattern").get<unsigned>(), r=value.at("row").get<unsigned>();
 		const auto c=value.at("channel").get<unsigned>(), col=value.at("column").get<unsigned>();
@@ -437,7 +493,7 @@ public:
 		patternIndex=p; row=r; channel=c; column=col; follow=f; ++contextRevision;
 
 		updateInspector();
-		if(moved) selecting=false; ensureCursorVisible(); layoutControls();
+		if(moved) resetPatternSelection(); ensureCursorVisible(); layoutControls();
 	}
     unsigned patternRows() const {return view->pattern(patternIndex).rows;}
 
@@ -461,14 +517,15 @@ public:
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
-        busy=true;updateTitle();updateSongTools();
-        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();app.updateSongTools();}} guard{*this};
+        busy=true;updateTitle();if(!departureInput)updateSongTools();
+        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();if(!app.departureInput)app.updateSongTools();}} guard{*this};
         std::exception_ptr presentationError;
         while(future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready) {
             controller->service();
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {PostQuitMessage(int(message.wParam));break;}
+                if(filterDepartureMessage(message))continue;
                 if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
@@ -483,39 +540,78 @@ public:
         if(presentationError) status=L"Document operation completed; display presentation failed";
         return result;
     }
-    void refreshDocument() {
-        auto next=controller->view();if(next==view) return;
-        auto oldPosition=position();
+    void refreshDocument(bool force=false) {
+        if(departureAdopted&&!departureRefreshing){completeNativeDeparture();return;}
+        auto next=controller->view();if(next==view&&!force) return;
+        auto oldPosition=position(),oldSelection=selection();
         auto previous=view->session.documentId;const auto previousTake=view->recording.value("take",std::string());view=std::move(next);documentId=view->session.documentId;
         if(previousTake!=view->recording.value("take",std::string()))discardPendingMidi();
-        if(!view->patterns.contains(patternIndex)) patternIndex=view->patterns.begin()->first;
+        if(!view->patterns.contains(patternIndex)){patternIndex=view->patterns.begin()->first;resetPatternSelection();}
         row=std::min(row,patternRows()-1);channel=std::min(channel,view->channels-1);
         column=std::min(column,2u+2u*view->effectColumns.at(channel));
         anchorRow=std::min(anchorRow,patternRows()-1);anchorChannel=std::min(anchorChannel,view->channels-1);
-        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();selecting=false;workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
-        else if(oldPosition!=position()) ++contextRevision;
+        if(explicitSelectionEnd){explicitSelectionEnd->first=std::min(explicitSelectionEnd->first,patternRows()-1);explicitSelectionEnd->second=std::min(explicitSelectionEnd->second,view->channels-1);}
+        if(previous!=documentId) {releaseTypedNotes();resetMidiDocument();preparedPlayback=nullptr;renderer=nullptr;inputInstrumentOverride.reset();liveKeyboard=false;row=channel=column=firstRow=0;horizontalScroll=0;effectPrefix.clear();resetPatternSelection();workspaceState=ScreamSeq::WorkspaceState{};++contextRevision;if(recoveryStore)resetRecoverySession();}
+        else if(oldPosition!=position()||oldSelection!=selection()) ++contextRevision;
         resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
         if(sampleRecordingWindow)sampleRecordingWindow->documentChanged();
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
-    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
-    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::TrackOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
+    std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"document.new","transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::TrackOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
+        guardDepartureOperation(method);
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
-        if(busy||recoveryRestoring) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued");
+        if(busy||(recoveryRestoring&&!departureRefreshing)) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
+        return documentOperationWithOutcome(method,params).result;
+    }
+    ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
+        guardDepartureOperation(method);
+        if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        struct ClearConsent {Application &app;bool replacing;~ClearConsent(){if(replacing)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"||method=="document.new"};
+        ScreamSeq::Api::CompletedCall call;call.method=method;
+        bool completed=false;
         try {
-            auto result=await(controller->invoke(method,params));refreshDocument();
-            if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
-            // A dropped vendor editor never blocks the operation; say what happened.
-            if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
-                pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
-            }
-            return result;
+            call=await(controller->invokeCompleted(method,params,receipt));completed=true;
+            finishDocumentOperation(method,call.result);
+            return call;
         }
-        catch(...) {refreshDocument();throw;}
+        catch(...) {
+            // Repair presentation without replacing the worker's outcome with
+            // a second refresh exception. A returned worker operation may have
+            // changed files/takes/catalogues even when the song token is equal.
+            const auto failure=std::current_exception();
+            try {refreshDocument();} catch(...) {}
+            try {std::rethrow_exception(failure);}
+            catch(const ScreamSeq::Api::ApiError &error) {
+                if(!completed)throw;
+                // An outcome from a later callback can describe its own work,
+                // not the worker operation that already returned. Do not
+                // transplant a rejection or another document's identity.
+                throw ScreamSeq::Api::ApiError(error.code,error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+            catch(const std::exception &error) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,std::string("Operation completed but native completion failed; read state before retrying. ")+error.what(),Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+            catch(...) {
+                if(!completed)throw;
+                throw ScreamSeq::Api::ApiError(-32003,"Operation completed but native completion failed; read state before retrying.",Tracker::WriteOutcome{},std::make_shared<const ScreamSeq::Api::CompletedCall>(std::move(call)));
+            }
+        }
+    }
+    // Keep presentation/recovery completion separate from worker success. The
+    // owned native fixture injects faults here after the real worker has run.
+    virtual void finishDocumentOperation(const std::string &method,const Json &result) {
+        refreshDocument();
+        if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
+        // A dropped vendor editor never blocks the operation; say what happened.
+        if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
+            pluginEditorWarning=wide(result.at("pluginEditorWarning").get<std::string>());status=pluginEditorWarning;frameRequested=true;
+        }
     }
     std::wstring pluginEditorWarning;
     // Internal first-open reads must not refresh presentation until the whole
@@ -538,7 +634,7 @@ public:
         ScreamSeq::PlaybackHooks playback;
         playback.feedback=[this]{
             ScreamSeq::PlaybackFeedback result;result.audioActive=device.running();result.playing=result.audioActive&&!auditionOnly;result.sampleRate=lastRate?lastRate:48000;result.generation=stopGeneration;
-            if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().mixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
+            if(result.playing&&preparedPlayback){result.latency=preparedPlayback->chain().latency();result.meters=preparedPlayback->chain().identifiedMixerMeters();result.activity=preparedPlayback->chain().graphActivity();}
             return result;
         };
         playback.pluginBypass=[this](size_t slot,bool value){
@@ -559,15 +655,13 @@ public:
         controller=std::make_unique<ScreamSeq::DocumentController>(input,documentId,[this]{stop();},[this](const auto &edits){
             if(device.running() && renderer && !renderer->enqueue(edits)) {stop();status=L"Edit committed; playback stopped because live queue was full";}
         },std::function<void()>{},64u*1024u*1024u,[this](std::span<const Tracker::ParameterChange> changes){
-            if(device.running() && preparedPlayback && !preparedPlayback->chain().enqueueParameters(changes)) {
-                stop();status=L"Plugin edit committed; playback stopped because live queue was full or unavailable";
-            }
-        },std::move(playback),std::move(catalogue),std::move(library));
+            ScreamSeq::publishLiveParameters(device.running(),preparedPlayback,changes);
+        },std::move(playback),std::move(catalogue),std::move(library),this);
         view=controller->view();documentId=view->session.documentId;patternIndex=view->patterns.begin()->first;resolveArrangementSelection();
         cpuDraw.reserve(120000);submitIntervals.reserve(120000);updateInspector();
         status=input.empty() ? L"Ready / select a pattern cell or a sample" : L"Project opened";
     }
-	~Application() { api.reset();shutdownMidi();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();palette.reset();if(controlFont)DeleteObject(controlFont); }
+	~Application() { api.reset();shutdownMidi();shutdownRecovery();sampleBrowser.reset();++samplePreviewGeneration;samplePreview.stop();sampleDecoder.reset();sampleLibrary.reset();device.close();auditionWindow.reset();controller.reset();cancelNativeDeparture();palette.reset();if(controlFont)DeleteObject(controlFont); }
 	static void renderAudio(void *context, float *samples, uint32_t frames,const ScreamSeq::RenderTime &time) noexcept {
 		auto &self = *static_cast<Application *>(context);
 		self.preparedPlayback->render(samples, frames,time);
@@ -578,15 +672,41 @@ public:
 	}
     #include "Audition.inc"
     #include "MusicalTyping.inc"
+    #include "NativeCommandRecovery.inc"
     #include "RecordingIntegration.inc"
     #include "SongTools.inc"
-	void play() { play(Json::object()); }
-    void play(const Json &settings) override {startPlayback(settings,false);startRecordingIfArmed();}
-    void startPlayback(const Json &settings,bool audition) {
+    #include "NoteTrackPresentation.inc"
+    #include "WorkspaceTransport.inc"
+    #include "PatternToolsIntegration.inc"
+    #include "WorkspaceRuler.inc"
+    #include "EffectPickerIntegration.inc"
+    #include "DocumentLoadReportIntegration.inc"
+    #include "SongPropertiesIntegration.inc"
+	void play() { playWorkspaceRegion(false,false); }
+    bool supportsPlaybackLoop()const override{return true;}
+    void refreshPlaybackLoopControl() {
+        if(auto found=controls.find(playbackLoopCommand);found!=controls.end()) {
+            ScreamSeq::NativeControls::text(found->second,playbackLoop?L"Playback loop: on":L"Playback loop: off");
+            ScreamSeq::NativeControls::active(found->second,playbackLoop);
+        }
+    }
+    void setPlaybackLoop(bool enabled)override {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; loop was not changed",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        // This atomic setter changes the running region without replacing its
+        // renderer, restarting the device, flushing edits or touching a take.
+        if(device.running()&&!auditionOnly&&renderer)renderer->loop(enabled);
+        playbackLoop=enabled;frameRequested=true;refreshPlaybackLoopControl();
+    }
+    void play(const Json &settings) override {rejectDepartureInput();startPlayback(settings,false);startRecordingIfArmed();}
+    void startPlayback(Json settings,bool audition,std::function<Json()> resolveSettings={}) {
         frameRequested=true;
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         // Audition uses the saved baseline and must not commit an editor draft.
         if(!audition)documentOperation("flushPluginEditors",{{"force",true}});
+        // The plugin flush can pump native input. Resolve the originally chosen
+        // stable pattern/order again before opening or stopping any device.
+        if(resolveSettings)settings=resolveSettings();
         if(audition&&!pendingAuditionCount)throw ScreamSeq::Api::ApiError(-32003,"Audition cancelled during preparation");
         if(!audition)pendingAuditionCount=0;
 		if(inspection) throw ScreamSeq::Api::ApiError(-32003,"Inspection mode: hardware output disabled");
@@ -604,16 +724,16 @@ public:
             if(generation!=stopGeneration) throw ScreamSeq::Api::ApiError(-32003,"Playback preparation cancelled by Stop");
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
             auditionOnly=audition;
-			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;}
+			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();}
 			status = (audition?L"Audition / song position stopped / ":L"Playing / monitor -20 dB / ") + std::to_wstring(lastRate) + L" Hz / " + std::to_wstring(lastPeriod) + L" frames";
 		} catch(...) { device.close(); throw; }
 	}
     void stop() override {
         frameRequested=true;
         if(controller&&view&&view->recording.value("capturing",false)&&!recordingFinishing&&!midiClosing&&!recoveryRestoring) {
-            if(!busy&&!midiBusy&&!midiServicing) {
+            if(!busy&&!midiBusy&&!midiServicing&&!nativeCommandPending&&!nativeCommandCompletion.retained()) {
                 const auto target=recordingTarget();
-                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))documentOperation("recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}});}
+                try{MidiTransaction boundary(*this);boundary.capture();if(matchesRecording(target))retainedNativeCommand("midi","recording.stop",{{"expectedRevision",view->session.revision},{"take",target.take}},{{"take",target.take}});}
                 catch(const std::exception &e){recordingError=e.what();recordingStopRequested=target;}
             }else recordingStopRequested=recordingTarget();
         }
@@ -621,13 +741,15 @@ public:
         midiNotes.clear();
         ++stopGeneration;pendingAuditionCount=0;auditionOnly=false;
 		device.stop(); lastAudio = device.stats();
-		status = L"Stopped / Play starts at the song beginning / cursor remains independent";
+		if(!departureAdopted)status = L"Stopped / Play starts at the selected pattern occurrence / cursor remains independent";
 	}
     #include "WorkspaceLayouts.inc"
     #include "WorkspaceDocking.inc"
     #include "WorkspaceCommands.inc"
     #include "WorkspaceShortcutDispatch.inc"
     #include "WorkspaceContextMenus.inc"
+    #include "WorkspaceMenuBar.inc"
+    #include "WorkspaceAccessibility.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -643,9 +765,12 @@ public:
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
     #include "SampleCaptureIntegration.inc"
+    #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> makeInstrumentEnvelopeWindow(std::shared_ptr<bool> preparing={}){
-        return std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();});
+        auto result=std::make_unique<ScreamSeq::InstrumentEnvelopeWindow>(window,[this,preparing](const auto &method,const auto &p){if(method=="document.get")return view->session.document;return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::InstrumentEnvelopeWindow::Context{documentId,view->session.revision,unsigned(view->cell(patternIndex,row,channel).instrument),cursorSample(),view->session.document.at("instruments"),view->session.document.at("samples")};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(false,slot,id,doc,revision);},[this](unsigned slot,const auto &id){typingSample=false;typingDocument=documentId;typingSound=slot;typingSoundId=id;refreshTypingSounds();},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
+        result->pluginNavigation([this](bool browse){if(browse){openPluginLibrary();pluginLibraryWindow->browseInstruments();}else command(pluginsCommand);});
+        return result;
     }
     void connectInstrumentEnvelopeTyping(){
         auto *tool=instrumentEnvelopeWindow.get();
@@ -664,7 +789,7 @@ public:
         if(!document.empty()&&(document!=documentId||revision!=view->session.revision))throw std::runtime_error("Audition source changed / Reload the captured editor");
         const auto &catalog=view->session.document.at(sample?"samples":"instruments");
         if(slot||!identity.empty()){const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot&&(identity.empty()||v.at("id")==identity);});if(found==catalog.end())throw std::runtime_error("Audition target is unavailable");identity=found->at("id");}
-        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return pianoOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};});
+        if(!auditionWindow)auditionWindow=std::make_unique<ScreamSeq::AuditionWindow>(window,[this](const auto &method,const auto &p){return pianoOperation(method,p);},[this]{return ScreamSeq::AuditionWindow::Context{documentId,view->session.revision,selectedSample(),unsigned(view->cell(patternIndex,row,channel).instrument),stopGeneration,view->session.document.at("samples"),view->session.document.at("instruments")};},[this]{return workspaceShortcuts->noteKeys();});
         auditionWindow->openAt(sample,std::move(identity));
     }
     bool releaseAuditionKey(WPARAM key){const bool typed=releaseTypedKey(key);return (auditionWindow&&auditionWindow->releaseKey(key))||typed;}
@@ -682,7 +807,7 @@ public:
     }
     std::unique_ptr<ScreamSeq::SampleDetailWindow> sampleDetailWindow;
     void openSampleDetail(){
-        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();});
+        if(!sampleDetailWindow)sampleDetailWindow=std::make_unique<ScreamSeq::SampleDetailWindow>(window,[this](const auto &method,const auto &p){if(method=="document.get")return view->session.document;return documentOperation(method,p);},[this](bool full){return ScreamSeq::SampleDetailWindow::Context{documentId,view->session.revision,selectedSample(),full?view->session.document.at("samples"):Json::array()};},[this](unsigned slot,const auto &id,const auto &doc,const auto &revision){openAudition(true,slot,id,doc,revision);},[this]{openSampleRecording();},[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});
         connectTyping(*sampleDetailWindow,[this]{return sampleDetailWindow->musicalTarget();});
         sampleDetailWindow->openAt();
     }
@@ -737,12 +862,13 @@ public:
         }
         throw std::runtime_error("This event has no editable source location");
     }
-    void openParameterActivity(std::string plugin={},std::optional<uint32_t> parameter={}) {
+    void openParameterActivity(std::string plugin={},std::optional<uint32_t> parameter={},bool exact=false) {
         if(!parameterActivityWindow)parameterActivityWindow=std::make_unique<ScreamSeq::ParameterActivityWindow>(window,
             [this](const auto &method,const auto &p){return documentOperation(method,p);},
             [this]{return ScreamSeq::ParameterActivityWindow::Context{documentId,view->session.revision,busy||recoveryRestoring};},
             [this](const Json &source){inspectParameterSource(source);});
-        parameterActivityWindow->openAt(std::move(plugin),parameter);
+        if(exact){if(!parameter)throw std::runtime_error("Select a plugin parameter");parameterActivityWindow->openSourceAt(std::move(plugin),*parameter);}
+        else parameterActivityWindow->openAt(std::move(plugin),parameter);
     }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
         if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter,bool pattern){
@@ -753,10 +879,11 @@ public:
     }
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> parameterAutomationWindow;
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> makeParameterAutomationWindow(std::shared_ptr<bool> preparing={}){
-        return std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
+        auto editor=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("The captured plugin is unavailable");
             selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         },[this](const auto &plugin,uint32_t parameter){openAbsoluteAutomation(plugin,parameter);});
+        editor->bankWriter([this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});return editor;
     }
     std::pair<std::string,std::optional<uint32_t>> initialParameterAutomationTarget(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={})const{
         std::string plugin=std::move(requestedPlugin);auto parameter=requestedParameter;
@@ -764,42 +891,53 @@ public:
         else if(!selectedPlugin.empty()){plugin=selectedPlugin;parameter=selectedParameter;}}
         return {std::move(plugin),parameter};
     }
-    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={}){
+    void openParameterAutomation(std::string requestedPlugin={},std::optional<uint32_t> requestedParameter={},bool exact=false){
         if(!parameterAutomationWindow)parameterAutomationWindow=makeParameterAutomationWindow();
         const auto [plugin,parameter]=initialParameterAutomationTarget(std::move(requestedPlugin),requestedParameter);
+        if(exact) {
+            if(plugin.empty()||!parameter)throw std::runtime_error("Select a plugin parameter");
+            const auto state=parameterAutomationWindow->snapshot();
+            const bool same=state.at("document")==documentId&&state.at("plugin")==plugin&&state.at("parameter")==*parameter&&state.at("pattern")==patternIndex;
+            const bool retained=state.value("retainedDraft",false),pinned=!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned;
+            if(!same&&(retained||pinned))throw std::runtime_error("The automation editor retains another target. Apply/Reload its draft or unpin it before opening this parameter.");
+            if(!same||(!retained&&!pinned&&state.value("stale",false)))parameterAutomationWindow->openSourceAt(plugin,*parameter);
+            else parameterAutomationWindow->show();
+            configureWorkspaceEditor("automation");finishWorkspaceEditorOpen("automation");return;
+        }
         configureWorkspaceEditor("automation");
         if(!workspaceEditors[0].origin.empty()&&workspaceEditors[0].pinned){parameterAutomationWindow->show();SetFocus(parameterAutomationWindow->window());}
         else parameterAutomationWindow->openAt(plugin,parameter);
         finishWorkspaceEditorOpen("automation");
     }
 	#include "WorkspaceDraw.inc"
-	// The one close decision for WM_CLOSE and WM_QUERYENDSESSION. It never
-	// throws. A failed save keeps the song open and says why; when unsaved
-	// work cannot even be checked, the user decides whether to close anyway,
-	// so a broken document worker cannot make the window unclosable.
+    #include "DocumentDepartureIntegration.inc"
+	// Close/session-end admission fails closed if saved state or retained raw
+    // work cannot be checked. A canceled OS shutdown rolls the lease back.
 	bool canClose() noexcept {
 		std::wstring reason=L"unexpected error";
 		unsavedChecked=false;
 		try {
+			if(departureInput)return departureClosing;
 			// A prompt or chooser is already showing: do not stack another.
 			if(modalActive()||recoverySaving||recoveryRestoring||recoveryReads) return false;
 			if(busy||libraryWaits) {stop();++samplePreviewGeneration;samplePreview.stop();return false;}
-			if(!protectRecordingTake()||!protectUnsaved())return false;
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){
+                pluginLibraryWindow->show();status=L"Not closed / review the plugin-library result, or apply/discard its category draft";frameRequested=true;return false;
+            }
+			if(!protectSampleLibraryClose()||!protectRecordingTake()||!protectUnsaved()||!reviewNativeDeparture())return false;
             // A save/discard prompt pumps messages; an API client could have
             // begun a take after the first check. Do not lose that take.
-            return protectRecordingTake();
+            if(!protectRecordingTake()){nativeDepartureConsent.reset();return false;}
+            if(pluginLibraryWindow&&pluginLibraryWindow->protectsClose()){nativeDepartureConsent.reset();pluginLibraryWindow->show();return false;}
+            if(!protectSampleLibraryClose()){nativeDepartureConsent.reset();return false;}
+            admit(documentId,view->session.revision);departureClosing=true;return true;
 		} catch(const std::exception &e) {
 			try {reason=wide(e.what());} catch(...) {}
 		} catch(...) {}
 		frameRequested=true;
 		try {
+			cancelNativeDeparture();
 			status=L"Not closed / "+reason;
-			if(hasRecordingTake()||recordingTakeKnown||(sampleRecordingWindow&&sampleRecordingWindow->hasRetainedTake()))return false;
-			// The song is known to be dirty and its save (or prompt) failed:
-			// keep it. Closing again offers Save/Discard/Cancel once more.
-			if(unsavedChecked) return false;
-			const auto text=L"Could not check for unsaved changes: "+reason+L".\nClose anyway? Unsaved changes will be lost.";
-			return modalMessage(text.c_str(),L"ScreamSeq",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)==IDYES;
 		} catch(...) {}
 		return false;
 	}
@@ -853,6 +991,7 @@ public:
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
 		previousSubmit = now;
+		if(patternAccessibility)patternAccessibility->notify();
 	}
 	void report(const std::filesystem::path &path, double seconds) {
 		if(path.empty()) return;
@@ -882,6 +1021,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	if(message == WM_NCCREATE) {
 		app = static_cast<Application *>(reinterpret_cast<CREATESTRUCTW *>(lp)->lpCreateParams);
 		SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app)); app->window = window;
+		if(!SetPropW(window,ScreamSeq::documentDraftRegistryProperty,reinterpret_cast<HANDLE>(&app->documentDrafts)))return FALSE;
 	}
 	if(!app) return DefWindowProcW(window, message, wp, lp);
     if(message==WM_PAINT || message==WM_SIZE || message==WM_DPICHANGED || message==WM_SETFOCUS || message==WM_KILLFOCUS ||
@@ -889,21 +1029,30 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
        message==WM_MOUSEWHEEL || (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) app->frameRequested=true;
 	try {
 		switch(message) {
+		case WM_GETOBJECT: if(static_cast<LONG>(lp)==UiaRootObjectId&&app->patternAccessibility)return app->patternAccessibility->object(wp,lp);break;
 		case ScreamSeq::ApiDispatch::message: if(app->api && !app->refreshingPlugins) app->api->drain(); return 0;
         case deferredViewsMessage: app->drainViews();return 0;
+        case loadReportSaveCopyMessage: app->performLoadReportSave();return 0;
 		case WM_CLOSE:
             app->recoveryClosePosted=false;
             if(app->recoverySaving||app->recoveryRestoring||app->recoveryReads||(app->recoveryCloseRequested&&(app->busy||app->libraryWaits))) {app->recoveryCloseRequested=true;return 0;}
             app->recoveryCloseRequested=false;if(!app->canClose())return 0;break;
 		case WM_QUERYENDSESSION: return app->canClose() ? TRUE : FALSE;
 		case WM_ENDSESSION:
+			if(!wp){if(app->departureClosing)app->cancelNativeDeparture();return 0;}
+			if(!app->departureClosing)return 0;
 			if(wp) {
                 app->releaseTypedNotes();app->stop();++app->samplePreviewGeneration;app->samplePreview.stop();
                 if(!app->busy&&!app->libraryWaits&&!app->recoverySaving&&!app->recoveryRestoring&&!app->recoveryReads&&!app->modalActive()) DestroyWindow(window);
 			}
 			return 0;
 		case WM_DESTROY: PostQuitMessage(0); return 0;
-		case WM_NCDESTROY: SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+		case WM_NCDESTROY: if(app->patternAccessibility)app->patternAccessibility->retire();if(app->menuBar)app->menuBar->ownerDestroyed();RemovePropW(window,ScreamSeq::documentDraftRegistryProperty);SetWindowLongPtrW(window, GWLP_USERDATA, 0); break;
+        case WM_ENTERMENULOOP:if(!wp)app->beginMenuBar();break;
+        case WM_EXITMENULOOP:if(!wp)app->endMenuBar();break;
+        case WM_INITMENU:if(app->menuBar&&reinterpret_cast<HMENU>(wp)==app->menuBar->handle())app->refreshMenuBar();break;
+        case WM_MENUSELECT:if(HIWORD(wp)!=0xFFFF&&!(HIWORD(wp)&MF_POPUP))app->menuBarHint(LOWORD(wp));break;
+        case WM_CANCELMODE:app->menuArmed=false;app->endMenuBar();break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
         case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
@@ -914,18 +1063,21 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 		case WM_SIZE: app->retainWorkspaceFocusForResize(wp);if(app->window)app->ensureCursorVisible();app->layoutControls();return 0;
 		case WM_GETMINMAXINFO: {
 			auto limits=reinterpret_cast<MINMAXINFO *>(lp);float scale=GetDpiForWindow(window)/96.0f;
-			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)};return 0;
+			limits->ptMinTrackSize={LONG(900*scale),LONG(620*scale)+(GetMenu(window)?GetSystemMetricsForDpi(SM_CYMENU,GetDpiForWindow(window)):0)};return 0;
 		}
 		case WM_DRAWITEM: app->drawButton(*reinterpret_cast<DRAWITEMSTRUCT *>(lp));return TRUE;
+        case WM_SETTINGCHANGE:case WM_THEMECHANGED:case WM_SYSCOLORCHANGE:{
+            const BOOL dark=!ScreamSeq::NativeControls::highContrast();DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+            ScreamSeq::NativeControls::refreshTheme(window,message,wp,lp);app->frameRequested=true;break;}
         case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT *>(lp)->itemHeight=unsigned(22*GetDpiForWindow(window)/96);return TRUE;
         case WM_CTLCOLORLISTBOX:case WM_CTLCOLOREDIT:case WM_CTLCOLORSTATIC:
-            SetTextColor(reinterpret_cast<HDC>(wp),RGB(212,224,235));SetBkColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));
-            SetDCBrushColor(reinterpret_cast<HDC>(wp),RGB(22,31,41));return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+            return ScreamSeq::NativeControls::controlColor(reinterpret_cast<HDC>(wp),reinterpret_cast<HWND>(lp),ScreamSeq::NativeControls::Surface::main);
         case WM_COMMAND:
+            if(!lp&&!HIWORD(wp)&&app->dispatchMenuBar(LOWORD(wp)))return 0;
             if(LOWORD(wp)==9800||LOWORD(wp)==9801){if(HIWORD(wp)==EN_CHANGE)app->patternNudgeFieldChanged();return 0;}
             if(LOWORD(wp)==graphPropertyValue||(LOWORD(wp)>=graphOutputPort&&LOWORD(wp)<=graphGain)||LOWORD(wp)==graphParameterValue||LOWORD(wp)==graphAmount||LOWORD(wp)==graphWet){if(HIWORD(wp)==EN_CHANGE)app->graphFieldChanged();return 0;}
             if((LOWORD(wp)==graphLibrary||LOWORD(wp)==graphKind||LOWORD(wp)==graphRack||LOWORD(wp)==graphNodePicker||LOWORD(wp)==graphPage||LOWORD(wp)==graphProperty||LOWORD(wp)==graphSource||LOWORD(wp)==graphDestination||LOWORD(wp)==graphWire||LOWORD(wp)==graphParameter||LOWORD(wp)==graphBus)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
-            if(LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
+            if((LOWORD(wp)>=mixerName&&LOWORD(wp)<=mixerTiming)||LOWORD(wp)==mixerColor){if(HIWORD(wp)==EN_CHANGE)app->mixerFieldChanged();return 0;}
             if(LOWORD(wp)==mixerOutput&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==mixerList&&HIWORD(wp)!=LBN_SELCHANGE)return 0;
             if(LOWORD(wp)==effectSearch){if(HIWORD(wp)==EN_CHANGE)app->filterEffects();return 0;}
@@ -933,6 +1085,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             if((LOWORD(wp)==effectUnits||(LOWORD(wp)>=effectChoiceBase&&LOWORD(wp)<effectChoiceBase+10))&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if((LOWORD(wp)==effectKind||LOWORD(wp)==effectBinding)&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginValue) {if(HIWORD(wp)==EN_CHANGE)app->pluginFieldChanged();return 0;}
+            if(LOWORD(wp)==pluginParameterSearch||LOWORD(wp)==pluginProgramSearch) {if(HIWORD(wp)==EN_CHANGE)app->filterPluginChoices(LOWORD(wp)==pluginProgramSearch);return 0;}
+            if(LOWORD(wp)==pluginValueChoice&&HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if((LOWORD(wp)==pluginLibrary || LOWORD(wp)==pluginParameter || LOWORD(wp)==pluginInstrument || LOWORD(wp)==pluginPage || LOWORD(wp)==pluginProgram || LOWORD(wp)==pluginPort) && HIWORD(wp)!=CBN_SELCHANGE)return 0;
             if(LOWORD(wp)==pluginList && HIWORD(wp)!=LBN_SELCHANGE && HIWORD(wp)!=LBN_DBLCLK)return 0;
             if(LOWORD(wp)==sampleStartField || LOWORD(wp)==sampleEndField) {
@@ -1078,7 +1232,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			work.left + 40, work.top + 40, (work.right - work.left) * 9 / 10, (work.bottom - work.top) * 9 / 10,
 			nullptr, nullptr, instance, &app);
 		if(!window) throw std::runtime_error("Cannot create native window");
-        const BOOL darkFrame=TRUE;DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
+        const BOOL darkFrame=!ScreamSeq::NativeControls::highContrast();DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&darkFrame,sizeof(darkFrame));
 		app.surface = std::make_unique<ScreamSeq::RenderSurface>(window);
 		app.installControls();
         std::optional<std::filesystem::path> recoveryDirectory;
@@ -1109,19 +1263,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, app.rulerFuture.valid()?25:drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }
+                if(app.filterDepartureMessage(message))continue;
 				if((message.message==WM_KEYDOWN || message.message==WM_SYSKEYDOWN) && IsChild(window,message.hwnd) && !ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd) && app.handleKey(message.wParam,(message.lParam&(1LL<<30))!=0)) continue;
 				if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&app.handleKeyUp(message.wParam))continue;
 				TranslateMessage(&message); DispatchMessageW(&message);
 			}
 			if(closed) break;
+            app.drainPatternPaste();
             app.drainViews();
             app.samplePreview.service();
             app.serviceRecovery();
             app.serviceMidi();
+            app.servicePatternRuler();
 			if(result == WAIT_FAILED) throw std::runtime_error("Frame wait failed");
 			if(renderPending && result == WAIT_OBJECT_0 && !IsIconic(window)) {
 				// A frame counts only when it was really presented: draw() returns

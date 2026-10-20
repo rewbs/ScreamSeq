@@ -33,12 +33,13 @@
         if(graphCurveWindow)graphCurveWindow->observeContext();
     }
     std::unique_ptr<ScreamSeq::GraphCurveWindow> makeGraphCurveWindow(std::shared_ptr<bool> preparing={}) {
-        return std::make_unique<ScreamSeq::GraphCurveWindow>(window,
+        auto editor=std::make_unique<ScreamSeq::GraphCurveWindow>(window,
             [this,preparing](const auto &method,const auto &params){
                 return preparing&&*preparing?workspacePreparationRead(method,params):documentOperation(method,params);
             },[this]{return graphCurveContext();},[this]{
                 workspaceEditorRequest({{"panel","graphCurve"},{"return",true}});
             });
+        editor->bankWriter([this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);});return editor;
     }
     void openGraphCurve() {
         noteGraphCurveSelection();

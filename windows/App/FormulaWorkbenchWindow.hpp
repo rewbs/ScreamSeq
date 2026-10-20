@@ -1,6 +1,7 @@
 #pragma once
 #include "NativeToolWindow.hpp"
 #include "FormulaApplyState.hpp"
+#include "NativeRichText.hpp"
 #include <richedit.h>
 #include <cwctype>
 #include <optional>
@@ -23,6 +24,16 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   bool referenceOnly_=false,setting_=false,pending_=false,previewNeeded_=false,completing_=false,statusError_=false;
   AutomationCanvas canvas_;
   HFONT codeFont_{};UINT codeDpi_=0;
+  static LRESULT CALLBACK codeAppearance(HWND control,UINT message,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR context){
+    if(message==WM_NCDESTROY)RemoveWindowSubclass(control,codeAppearance,id);
+    const auto result=DefSubclassProc(control,message,w,l);
+    if(NativeControls::themeMessage(message)) {
+      auto &self=*reinterpret_cast<FormulaWorkbenchWindow *>(context);
+      try{if(!NativeRichText::applyPlainTextColors(control))throw std::runtime_error("Cannot refresh formula text colors");}
+      catch(const std::exception &error){try{self.error(error);}catch(...) {}}
+    }
+    return result;
+  }
 
   std::wstring source()const{
     // Rich Edit positions count one CR per paragraph. GT_DEFAULT keeps those
@@ -55,18 +66,18 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     LONG start=range.cpMin;if(range.cpMin==range.cpMax)while(start>0&&identifier(text[size_t(start-1)]))--start;
     const auto prefix=text.substr(size_t(start),size_t(range.cpMax-start));
     if(!explicitRequest&&(GetFocus()!=controls_.at(code)||prefix.size()<2)){dismissCompletion();return;}
-    matches_.clear();SendMessageW(controls_.at(suggestions),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<reference_.size();++i){auto name=wide(reference_[i].at("name").get<std::string>());if(name.starts_with(prefix)){matches_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>());SendMessageW(controls_.at(suggestions),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}}
+    matches_.clear();ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<reference_.size();++i){auto name=wide(reference_[i].at("name").get<std::string>());if(name.starts_with(prefix)){matches_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}}
     if(matches_.empty()){dismissCompletion();if(explicitRequest)status(L"No matching formula value or function");return;}
     completionText_=text;completionStart_=start;completionEnd_=range.cpMax;completionSelectionStart_=range.cpMin;completionGeneration_=generation_;completing_=true;
-    SendMessageW(controls_.at(suggestions),LB_SETCURSEL,0,0);SetFocus(controls_.at(code));layout();
+    ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_SETCURSEL,0,0);SetFocus(controls_.at(code));layout();
   }
   void insertText(const std::wstring &text){
     const auto range=selection();const auto current=source();
     if(range.cpMin<0||range.cpMax<range.cpMin||size_t(range.cpMax)>current.size()||current.size()-size_t(range.cpMax-range.cpMin)+text.size()>2048)
       throw std::runtime_error("The complete insertion would exceed the 2,048-character formula limit");
     SetFocus(controls_.at(code));SendMessageW(controls_.at(code),EM_STOPGROUPTYPING,0,0);
-    SendMessageW(controls_.at(code),EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(text.c_str()));
+    ScreamSeq::NativeInputGate::present(controls_.at(code),EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(text.c_str()));
     SendMessageW(controls_.at(code),EM_STOPGROUPTYPING,0,0);
   }
   void acceptCompletion(){
@@ -81,9 +92,9 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   }
   void filter(){
     auto query=field(search);std::transform(query.begin(),query.end(),query.begin(),towlower);
-    filtered_.clear();SendMessageW(controls_.at(symbols),LB_RESETCONTENT,0,0);
-    for(size_t i=0;i<reference_.size();++i){auto full=wide(reference_[i].at("name").get<std::string>()+" "+reference_[i].at("description").get<std::string>()+" "+reference_[i].at("category").get<std::string>());std::transform(full.begin(),full.end(),full.begin(),towlower);if(full.find(query)==std::wstring::npos)continue;filtered_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>()+" — "+reference_[i].at("description").get<std::string>());SendMessageW(controls_.at(symbols),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-    if(!filtered_.empty())SendMessageW(controls_.at(symbols),LB_SETCURSEL,0,0);layout();
+    filtered_.clear();ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_RESETCONTENT,0,0);
+    for(size_t i=0;i<reference_.size();++i){auto full=wide(reference_[i].at("name").get<std::string>()+" "+reference_[i].at("description").get<std::string>()+" "+reference_[i].at("category").get<std::string>());std::transform(full.begin(),full.end(),full.begin(),towlower);if(full.find(query)==std::wstring::npos)continue;filtered_.push_back(i);auto text=wide(reference_[i].at("insert").get<std::string>()+" — "+reference_[i].at("description").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
+    if(!filtered_.empty())ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_SETCURSEL,0,0);layout();
   }
   void insertReference(){if(referenceOnly_)return;const auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(index<0||size_t(index)>=filtered_.size())return;dismissCompletion();insertText(wide(reference_[filtered_[size_t(index)]].at("insert").get<std::string>()));}
   void previewNow(){
@@ -127,7 +138,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     if(value==VK_F6){dismissCompletion();SetFocus(referenceOnly_?(id==search?controls_.at(symbols):controls_.at(search)):(id==code?controls_.at(search):controls_.at(code)));return true;}
     if(value==VK_ESCAPE){if(completing_){dismissCompletion();return true;}hide();return true;}
     if(id==code){
-      if(completing_&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(suggestions),LB_GETCURSEL,0,0);index=std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(matches_.size()-1));SendMessageW(controls_.at(suggestions),LB_SETCURSEL,index,0);return true;}
+      if(completing_&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(suggestions),LB_GETCURSEL,0,0);index=std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(matches_.size()-1));ScreamSeq::NativeInputGate::present(controls_.at(suggestions),LB_SETCURSEL,index,0);return true;}
       if(completing_&&(value==VK_RETURN||value==VK_TAB)){acceptCompletion();return true;}
       if(value==VK_LEFT||value==VK_RIGHT||value==VK_HOME||value==VK_END||value==VK_PRIOR||value==VK_NEXT)dismissCompletion();
       if(value==VK_TAB&&!ctrl&&!shift){insertText(L"    ");return true;}
@@ -135,7 +146,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     }
     if(value==VK_RETURN&&(id==search||id==symbols)){insertReference();return !referenceOnly_;}
     if(value==VK_RETURN&&id==suggestions){acceptCompletion();return true;}
-    if(id==search&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(!filtered_.empty())SendMessageW(controls_.at(symbols),LB_SETCURSEL,std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(filtered_.size()-1)),0);return true;}
+    if(id==search&&(value==VK_UP||value==VK_DOWN)){auto index=SendMessageW(controls_.at(symbols),LB_GETCURSEL,0,0);if(!filtered_.empty())ScreamSeq::NativeInputGate::present(controls_.at(symbols),LB_SETCURSEL,std::clamp<LRESULT>(index+(value==VK_UP?-1:1),0,LRESULT(filtered_.size()-1)),0);return true;}
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(id,BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{
@@ -148,8 +159,7 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
     // WM_SETFONT can restore automatic system text color. The plain-text
     // control has one format; set its default after all native font updates.
     // This changes presentation without selecting text or editing its Undo stack.
-    CHARFORMAT2W format{};format.cbSize=sizeof(format);format.dwMask=CFM_COLOR;format.crTextColor=RGB(218,232,241);
-    if(!SendMessageW(controls_.at(code),EM_SETCHARFORMAT,SCF_DEFAULT,reinterpret_cast<LPARAM>(&format)))throw std::runtime_error("Cannot set formula text color");
+    if(!NativeRichText::applyPlainTextColors(controls_.at(code)))throw std::runtime_error("Cannot set formula text colors");
     SendMessageW(controls_.at(symbols),LB_SETITEMHEIGHT,0,LPARAM(56*dpi/96));SendMessageW(controls_.at(suggestions),LB_SETITEMHEIGHT,0,LPARAM(22*dpi/96));
   }
   void layout()override{
@@ -165,11 +175,19 @@ class FormulaWorkbenchWindow final : public NativeToolWindow {
   }
   void drawControl(const DRAWITEMSTRUCT &d)override{
     if(d.CtlID!=symbols||d.CtlType!=ODT_LISTBOX){NativeToolWindow::drawControl(d);return;}
-    RECT rect=d.rcItem;SetDCBrushColor(d.hDC,(d.itemState&ODS_SELECTED)?RGB(35,65,71):RGB(24,34,45));FillRect(d.hDC,&rect,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
-    if(d.itemID>=filtered_.size())return;const auto &symbol=reference_[filtered_[d.itemID]];const int scale=GetDpiForWindow(window_);rect.left+=8*scale/96;rect.right-=8*scale/96;rect.top+=4*scale/96;auto title=wide(symbol.at("insert").get<std::string>()),detail=wide(symbol.at("description").get<std::string>());SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,RGB(218,232,241));SelectObject(d.hDC,font_);auto top=rect;top.bottom=top.top+19*scale/96;DrawTextW(d.hDC,title.c_str(),int(title.size()),&top,DT_SINGLELINE|DT_END_ELLIPSIS);rect.top+=19*scale/96;SetTextColor(d.hDC,RGB(156,177,192));DrawTextW(d.hDC,detail.c_str(),int(detail.size()),&rect,DT_WORDBREAK|DT_END_ELLIPSIS);if(d.itemState&ODS_FOCUS){rect=d.rcItem;InflateRect(&rect,-2,-2);DrawFocusRect(d.hDC,&rect);}
+    NativeControls::recordDraw(d.hwndItem);const NativeControls::SavedDC saved(d.hDC);if(!saved.saved)return;
+    const auto palette=NativeControls::listColors((d.itemState&ODS_SELECTED)!=0,(d.itemState&ODS_DISABLED)!=0);
+    RECT rect=d.rcItem;NativeControls::fill(d.hDC,rect,palette.background);
+    if(d.itemID>=filtered_.size())return;const auto &symbol=reference_[filtered_[d.itemID]];const int scale=GetDpiForWindow(window_);
+    rect.left+=8*scale/96;rect.right-=8*scale/96;rect.top+=4*scale/96;
+    const auto title=wide(symbol.at("insert").get<std::string>()),detail=wide(symbol.at("description").get<std::string>());
+    SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,palette.text);SelectObject(d.hDC,font_);
+    auto top=rect;top.bottom=top.top+19*scale/96;DrawTextW(d.hDC,title.c_str(),int(title.size()),&top,DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    rect.top+=19*scale/96;SetTextColor(d.hDC,palette.detail);DrawTextW(d.hDC,detail.c_str(),int(detail.size()),&rect,DT_WORDBREAK|DT_END_ELLIPSIS|DT_NOPREFIX);
+    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){rect=d.rcItem;InflateRect(&rect,-2,-2);DrawFocusRect(d.hDC,&rect);}
   }
   void paint(RenderSurface &surface)override{
-    const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);if(referenceOnly_)return;const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,0x10171f);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3948);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,0x68d3bc,2);surface.unclip();surface.uiText(L"100%",r.x-38,r.y,36,0x94a4b4);surface.uiText(L"0%",r.x-38,r.y+r.h-16,36,0x94a4b4);
+    NativeToolWindow::paint(surface);const auto colors=NativeControls::curveColors();if(referenceOnly_)return;const auto &r=canvas_.viewport;surface.fill(r.x,r.y,r.w,r.h,colors.background);surface.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);for(size_t i=1;i<canvas_.curve.size();++i)surface.line(canvas_.curve[i-1].x,canvas_.curve[i-1].y,canvas_.curve[i].x,canvas_.curve[i].y,colors.curve,2);surface.unclip();paintCurveBorder(surface,r,false,colors);surface.uiText(L"100%",r.x-38,r.y,36,colors.text);surface.uiText(L"0%",r.x-38,r.y+r.h-16,36,colors.text);
   }
 public:
   FormulaWorkbenchWindow(HWND owner,const std::wstring &title,const std::string &sourceText,Json params,int selected,Request request,std::function<bool()> sourceCurrent={},std::function<bool(const std::string &)> applySource={})
@@ -177,16 +195,19 @@ public:
     static HMODULE richEdit=LoadLibraryExW(L"Msftedit.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);if(!richEdit)throw std::runtime_error("Cannot load the native formula text editor");minimumWidth_=referenceOnly_?440:840;minimumHeight_=referenceOnly_?450:600;
     create(referenceOnly_?L"ScreamSeq.FormulaReference":L"ScreamSeq.FormulaWorkbench",title.c_str(),referenceOnly_?640:960,680);
     add(code,MSFTEDIT_CLASS,L"",ES_MULTILINE|ES_AUTOVSCROLL|ES_WANTRETURN|ES_NOHIDESEL|WS_VSCROLL|WS_BORDER);
-    SendMessageW(controls_.at(code),EM_SETTEXTMODE,TM_PLAINTEXT|TM_MULTILEVELUNDO,0);SendMessageW(controls_.at(code),EM_EXLIMITTEXT,0,2048);SendMessageW(controls_.at(code),EM_SETUNDOLIMIT,128,0);SendMessageW(controls_.at(code),EM_SETEVENTMASK,0,ENM_CHANGE);SendMessageW(controls_.at(code),EM_SETBKGNDCOLOR,0,RGB(16,23,31));
+    SendMessageW(controls_.at(code),EM_SETTEXTMODE,TM_PLAINTEXT|TM_MULTILEVELUNDO,0);SendMessageW(controls_.at(code),EM_EXLIMITTEXT,0,2048);SendMessageW(controls_.at(code),EM_SETUNDOLIMIT,128,0);SendMessageW(controls_.at(code),EM_SETEVENTMASK,0,ENM_CHANGE);
+    if(!SetWindowSubclass(controls_.at(code),codeAppearance,0x53515254,reinterpret_cast<DWORD_PTR>(this)))throw std::runtime_error("Cannot initialize formula text appearance");
     edit(search,L"",256);SendMessageW(controls_.at(search),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Find a value or function"));
     add(symbols,L"LISTBOX",L"",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS|WS_VSCROLL);
     add(suggestions,L"LISTBOX",L"",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_BORDER);
     add(notes,L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{complete,L"Complete · Ctrl+Space"},{insert,L"Insert selected value / function"},{checkPreview,L"Check"},{use,L"Use formula"},{close,L"Close"},{discard,L"Discard"}})button(id,text);
     label(heading,L"Formula · Ctrl+Enter to use · F6 for reference");label(previewLabel,L"Preview / normalized value · captured envelope");label(referenceHeading,L"Values and functions");label(statusLabel,L"");
-    setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();SendMessageW(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
+    setting_=true;set(code,wide(sourceText));setting_=false;applyState_.baseline=source();ScreamSeq::NativeInputGate::present(controls_.at(code),EM_EMPTYUNDOBUFFER,0,0);
     const auto reference=request_("automation.formula.reference",Json::object());reference_=reference.at("symbols");auto noteText=wide(reference.at("notes").get<std::string>());std::wstring lines;for(auto c:noteText){if(c=='\n')lines+='\r';lines+=c;}set(notes,lines);
     if(!referenceOnly_){if(!params_.contains("points")||point_>=params_.at("points").size())throw std::runtime_error("Formula point no longer exists");params_["samples"]=1024;canvas_.start=0;canvas_.end=params_.value("span",params_.at("rows").get<double>()*256);previewNeeded_=true;}
+    accessibleName(code,L"Formula source");accessibleName(search,L"Search formula values and functions");
+    accessibleName(symbols,L"Formula values and functions");accessibleName(suggestions,L"Formula completions");accessibleName(notes,L"Formula reference notes");
     finish();filter();status(L"Checking formula…");
   }
   ~FormulaWorkbenchWindow()override{if(codeFont_)DeleteObject(codeFont_);}
@@ -197,6 +218,13 @@ public:
   }
   void show(){const bool wasVisible=visible();refreshSourceState();NativeToolWindow::show();if(!wasVisible)SetFocus(controls_.at(referenceOnly_?search:code));if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   bool retainedDraft()const{return !referenceOnly_&&(pending_||applyState_.retained(source()));}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(referenceOnly_)return {};
+    const auto &parent=parentDraftIdentity();
+    return describeDraft(parent?parent->document:std::string(),parent?parent->revision:std::string(),
+      Json::array({parent?parent->target:std::string(),point_}).dump(),generation_,
+      applyState_.retained(source()),pending_||applyState_.pending());
+  }
   Json snapshot()const{Json names=Json::array(),matches=Json::array();for(auto i:filtered_)names.push_back(reference_[i].at("name"));for(auto i:matches_)matches.push_back(reference_[i].at("insert"));return {{"visible",visible()},{"referenceOnly",referenceOnly_},{"source",utf8(source())},{"dirty",retainedDraft()},{"pending",pending_||applyState_.pending()},{"checking",previewNeeded_||pending_},{"valid",validGeneration_&&*validGeneration_==generation_},{"sourceCurrent",referenceOnly_||sourceCurrent_()},{"previewSamples",values_.size()},{"values",values_},{"point",point_},{"symbols",names},{"completionVisible",completing_},{"completions",matches},{"status",utf8(displayStatus())}};}
 };
 }

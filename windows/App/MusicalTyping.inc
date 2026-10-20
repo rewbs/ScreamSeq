@@ -15,12 +15,9 @@
     unsigned typingSound=0;
     // The rows are physical key positions (US letters shown). Held notes stay
     // keyed by the message's own virtual key, which key-up repeats unchanged.
-    static int musicalOffset(WPARAM key) {
+    int musicalOffset(WPARAM key)const {
         const auto physical=ScreamSeq::physicalMusicalKey(key);
-        if(!physical||physical>127)return -1;
-        const std::string_view lower="ZSXDCVGBHNJM",upper="Q2W3ER5T6Y7UI";
-        const auto low=lower.find(char(physical)),high=upper.find(char(physical));
-        return low!=lower.npos?int(low):high!=upper.npos?12+int(high):-1;
+        return workspaceShortcuts?workspaceShortcuts->noteKeys().offset(unsigned(physical)):ScreamSeq::MusicalKeyMap{}.offset(unsigned(physical));
     }
     static bool typingButtonControl(HWND focus) {
         wchar_t name[64]{};GetClassNameW(focus,name,64);
@@ -140,13 +137,13 @@
             auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("index")==slot;});
             if(found==catalog.end())found=catalog.begin();if(found!=catalog.end())typingSoundId=found->at("id");
         }
-        typingSound=0;SendMessageW(controls.at(soundChooser),CB_RESETCONTENT,0,0);
+        typingSound=0;ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_RESETCONTENT,0,0);
         for(const auto &v:catalog){const auto slot=v.at("index").get<unsigned>();const auto text=(sample?L"S":L"I")+std::to_wstring(slot)+L" · "+wide(v.at("name").get<std::string>());
-            const auto i=SendMessageW(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));SendMessageW(controls.at(soundChooser),CB_SETITEMDATA,i,slot);
-            if(inputInstrumentOverride?slot==*inputInstrumentOverride:v.at("id")==typingSoundId){typingSound=slot;typingSoundId=v.at("id");SendMessageW(controls.at(soundChooser),CB_SETCURSEL,i,0);}}
+            const auto i=ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETITEMDATA,i,slot);
+            if(inputInstrumentOverride?slot==*inputInstrumentOverride:v.at("id")==typingSoundId){typingSound=slot;typingSoundId=v.at("id");ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETCURSEL,i,0);}}
         if(inputInstrumentOverride&&!typingSound){
             const auto label=(sample?L"S":L"I")+std::to_wstring(*inputInstrumentOverride)+L" / empty slot";
-            const auto i=SendMessageW(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(soundChooser),CB_SETITEMDATA,i,*inputInstrumentOverride);SendMessageW(controls.at(soundChooser),CB_SETCURSEL,i,0);
+            const auto i=ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETITEMDATA,i,*inputInstrumentOverride);ScreamSeq::NativeInputGate::present(controls.at(soundChooser),CB_SETCURSEL,i,0);
         }
     }
     void selectTypingSound() {
@@ -158,4 +155,27 @@
     Json typingSnapshot()const {
         Json held=Json::array();for(const auto &[key,h]:typedNotes)held.push_back({{"key",key},{"note",h.note},{"sample",h.sample},{"slot",h.slot},{"id",h.identity},{"pending",h.pending},{"started",h.started}});
         return {{"sample",typingSample},{"slot",typingSound},{"inputInstrument",inputInstrumentOverride.value_or(typingSound)},{"id",typingSoundId},{"held",held},{"noteMin",view->noteMin},{"noteMax",view->noteMax}};
+    }
+    bool typingInputCommand(int id) {
+        if(id<inputOctaveDownCommand||id>inputInstrumentAtCursorCommand)return false;
+        rejectDepartureInput();
+        if(busy||recoveryRestoring)throw std::runtime_error("Wait for the document before changing musical input");
+        frameRequested=true;
+        if(id==inputOctaveDownCommand||id==inputOctaveUpCommand) {
+            // Keep the native chooser's existing full 0..9 range. This changes
+            // future notes only; held keys retain their original note/target.
+            const auto next=unsigned(std::clamp(int(octave)+(id==inputOctaveUpCommand?1:-1),0,9));
+            if(next!=octave){octave=next;++contextRevision;ScreamSeq::NativeControls::select(controls.at(octaveChooser),octave);frameRequested=true;}
+            status=L"Input octave "+std::to_wstring(octave);return true;
+        }
+        const auto current=inputInstrumentOverride.value_or(typingSound);unsigned next=current;
+        if(id==inputInstrumentAtCursorCommand) {
+            next=view->cell(patternIndex,row,channel).instrument;
+            if(!next)for(const auto &event:view->notesAt(patternIndex,row,channel))if(event.note.instrument){next=event.note.instrument;break;}
+            if(!next){status=L"No instrument in this cell or its precise notes";return true;}
+        } else next=unsigned(std::clamp(int(current)+(id==inputInstrumentNextCommand?1:-1),1,255));
+        if(next!=current)workspace("workspace.input",{{"expectedRevision",view->session.revision},
+            {"expectedContext",documentId+":context:"+std::to_string(contextRevision)+":"+selection().dump()},{"instrument",next}});
+        status=L"Input "+std::wstring(typingSample?L"sample ":L"instrument ")+std::to_wstring(next)+
+            (!typingSound?L" / empty slot":L"");return true;
     }

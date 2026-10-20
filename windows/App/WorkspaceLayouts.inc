@@ -9,14 +9,24 @@
         return "plugins";
     }
     Json layoutConfiguration() const {
-        return {{"layout",workspaceState.layout},{"active",workspaceState.active},
+        Json result={{"layout",workspaceState.layout},{"active",workspaceState.active},
             {"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
             {"lowerVisible",workspaceState.lowerVisible},{"lowerEditor",lowerEditorName()},
             {"hidden",Json::array({workspaceState.panels[0].hidden,workspaceState.panels[1].hidden})},{"editors",workspaceDockConfiguration()}};
+        // Keep the historical default shape; the optional field is local
+        // workspace presentation and never enters project metadata.
+        if(rowHeight!=18)result["patternRowHeight"]=unsigned(rowHeight);
+        return result;
     }
     void restoreLayoutConfiguration(const Json &v) {
         auto need=[](bool ok){if(!ok)throw ScreamSeq::Api::ApiError(-32602,"Invalid saved workspace layout");};
-        need(v.is_object()&&(v.size()==7||(v.size()==8&&v.contains("editors"))));
+        need(v.is_object()&&v.size()==7+size_t(v.contains("editors"))+size_t(v.contains("patternRowHeight")));
+        float nextRowHeight=18;
+        if(v.contains("patternRowHeight")) {
+            const auto &height=v.at("patternRowHeight");
+            need(height.is_number_integer()&&height>=18&&height<=34);
+            nextRowHeight=height.get<float>();need(validPatternRowHeight(nextRowHeight));
+        }
         for(auto key:{"layout","active","lowerEditor"})need(v.contains(key)&&v.at(key).is_string());
         const auto base=v.at("layout").get<std::string>(),active=v.at("active").get<std::string>(),requestedEditor=v.at("lowerEditor").get<std::string>();
         const bool legacyNotes=requestedEditor=="notes";const auto editor=legacyNotes?lowerEditorName():requestedEditor;
@@ -44,7 +54,7 @@
             editorConfiguration=Regions::placed(std::move(config),Regions::Panel::preciseNotes,destination,editor);
             if(destination!=Regions::Placement::floating)editorConfiguration->compactSelection="preciseNotes";
         }
-        if(busy||recoveryRestoring||preparingWorkspaceLayout||graphPending||mixerPending||preciseNotePending()||graphCurvePending())
+        if(busy||recoveryRestoring||preparingWorkspaceLayout||graphPending||mixerPending||preciseNotePending()||graphCurvePending()||GetCapture())
             throw ScreamSeq::Api::ApiError(-32002,"Wait for the current editor operation before restoring a layout");
         EditorPlacementGuard preparing(preparingWorkspaceLayout);
         const auto previousFocus=GetFocus();const auto previousPanel=workspaceState.focus;
@@ -79,6 +89,7 @@
         effectEditorOpen=editor=="effects";if(effectEditorOpen)effectInline=false;
         workspaceState.layout=base;workspaceState.active=active;
         workspaceState.rightWidth=right;workspaceState.lowerHeight=lower;
+        rowHeight=nextRowHeight;
         workspaceState.lowerVisible=v.at("lowerVisible").get<bool>();
         // These remain the two legacy Notes/Samples inspector flags, unrelated
         // to the four independent native editor placements in editors V4.

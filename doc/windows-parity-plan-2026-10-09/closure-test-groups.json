@@ -1,0 +1,78 @@
+{
+  "kind": "source-only scheduling audit; no executable tests run",
+  "before": "ae7e25a9c",
+  "source": "windows/Tests/Workspace/WorkspaceRestoreTests.cpp",
+  "missingScenarios": [],
+  "duplicateScenarioCalls": {},
+  "removedRepeatedCalls": {
+    "applicationSampleReadbackRecovery": 1,
+    "applicationSampleMutationRecovery": 1,
+    "nativeCompletionRetainsOutcome": 1,
+    "directRenderCompletionCensus": 1,
+    "applicationPluginPresetRecovery": 1,
+    "applicationInstrumentCreationRecovery": 1
+  },
+  "groups": {
+    "restore": [
+      "retainedTakesProtectLeavingDocument",
+      "modulationCatalogueReadRetainsNewerDraft",
+      "firstRestoreMatchesOrdinaryOpen",
+      "requiredReadFailuresAreAtomic",
+      "secondHiddenEditorFailureIsAtomic",
+      "pumpedInputWinsOverPreparedLayout",
+      "sevenFieldLegacyRetainsExistingEditors",
+      "compactRestoreAndResizeKeepVisibleFocus",
+      "thirdHiddenCurveFailureIsAtomic",
+      "successfulCurveAdoptionMatchesApi",
+      "busyCurveSourcePickerRetainsPreparedTarget",
+      "pumpedCurvePatternChangeRejectsPreparedTarget",
+      "guideOnlyRestoreRetainsChildThenInitializes",
+      "fourthHiddenNotesFailureIsAtomic",
+      "preciseOwnerControlsAreLazyAndRetained",
+      "fourOwnerLegacyLayoutContracts",
+      "preparationReadScopeAndBusyGuard",
+      "provenanceNavigationUsesCapturedTargets"
+    ],
+    "parity-fixture": [
+      "applicationParityFixtureRecovery"
+    ],
+    "asset-outcomes": [
+      "applicationUnknownAssetRecovery"
+    ],
+    "command-results": [
+      "applicationNativeCommandRecovery"
+    ],
+    "bank-results": [
+      "applicationBankClosure"
+    ],
+    "sample-reads": [
+      "applicationSampleReadbackRecovery"
+    ],
+    "sample-results": [
+      "applicationSampleMutationRecovery"
+    ],
+    "receipts": [
+      "nativeCompletionRetainsOutcome",
+      "applicationLostRenderReceipt",
+      "directRenderCompletionCensus",
+      "applicationLibraryCompletionRetention",
+      "applicationSampleBrowserCompletionRetention",
+      "applicationDirectSampleImportRetention",
+      "applicationSampleLibraryRecovery",
+      "applicationPluginPresetRecovery",
+      "applicationInstrumentCreationRecovery"
+    ],
+    "departure": [
+      "applicationDepartureRefusalAndAdoption",
+      "applicationDepartureRefreshFailure",
+      "applicationDepartureSessionCancel",
+      "applicationDepartureRecoveryBrowser"
+    ],
+    "drafts": [
+      "nativeDraftCensusRetainsRawOwners",
+      "mainAndTimingDraftCensus",
+      "importAndRecorderDraftCensus",
+      "mainOwnersRetireAfterAdmission"
+    ]
+  }
+}

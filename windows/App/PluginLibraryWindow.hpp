@@ -1,34 +1,47 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeWriteCompletion.hpp"
 namespace ScreamSeq {
 class PluginLibraryWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
   enum : int {search=3201,kind,format,category,favorites,hidden,plugins,favorite,hidePlugin,customCategory,saveCategory,insert,reload,rescan,close,
-    heading=3300,searchLabel,kindLabel,formatLabel,categoryLabel,detailLabel,customLabel,statusLabel};
-  Request request_;Context context_;
+    rackDestination,heading=3300,searchLabel,kindLabel,formatLabel,categoryLabel,detailLabel,customLabel,statusLabel,destinationLabel};
+  Request request_;Context context_;NativeWriteCompletion::Write write_;
+  NativeWriteCompletion completion_;std::string operation_,operationDocument_,operationRevision_;
+  Json operationParams_,report_;uint64_t generation_=0;bool readbackNeedsReload_=false;
+  std::string destinationDocument_,destinationBus_,destinationName_;
+  HWND pendingFocus_{};
+  bool unresolved()const noexcept{return completion_.retained();}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(operation_!="plugin.add"||(!pending_&&!unresolved()))return {};
+    return describeDraft(operationDocument_,operationRevision_,operationParams_.dump(),generation_,false,pending_,!pending_&&unresolved());
+  }
+  void requireResolved()const{if(unresolved())throw std::runtime_error("Review the previous library operation before another action");}
+  void requireWritable()const{requireResolved();if(readbackNeedsReload_)throw std::runtime_error("Reload the reviewed library before another write");}
   Json entries_=Json::array(),allEntries_=Json::array(),categories_=Json::array();
   std::string selected_,revision_,filterCategory_,warning_;
   bool favoritesOnly_=false,includeHidden_=false,pending_=false,setting_=false,categoryDraft_=false,refreshQueued_=false,readQueued_=false;
   const Json *selected()const{for(const auto &p:entries_)if(p.at("catalogID")==selected_)return &p;return nullptr;}
   void status(std::wstring message){status_=std::move(message);set(statusLabel,status_);requestPaint();}
-  void error(const std::exception &e)override{status(wide(e.what()));}
+  void error(const std::exception &e)override{status(wide(e.what())+(unresolved()?L" / Review result before another action":L""));}
   int choice(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void strings(int id,const std::vector<std::wstring> &items,int selection=0){SendMessageW(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &item:items)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(item.c_str()));SendMessageW(controls_.at(id),CB_SETCURSEL,selection,0);}
+  void strings(int id,const std::vector<std::wstring> &items,int selection=0){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &item:items)ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(item.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,selection,0);}
   void fields(){setting_=true;const auto *p=selected();if(!categoryDraft_)set(customCategory,p?wide(p->at("customCategory").get<std::string>()):L"");
     set(favorite,p&&p->at("favorite").get<bool>()?L"Unfavorite":L"Favorite");set(hidePlugin,p&&p->at("hidden").get<bool>()?L"Unhide":L"Hide");
     set(detailLabel,p?wide(p->at("name").get<std::string>()+" / "+p->at("format").get<std::string>()+" / "+p->at("category").get<std::string>()):L"Choose a plugin to add or organize");setting_=false;layout();
   }
   void list(){
-    const auto top=SendMessageW(controls_.at(plugins),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,FALSE,0);SendMessageW(controls_.at(plugins),LB_RESETCONTENT,0,0);
-    int selection=-1;for(size_t i=0;i<entries_.size();++i){const auto &p=entries_[i];auto label=wide((p.at("favorite").get<bool>()?"★  ":"   ")+p.at("name").get<std::string>()+"    / "+p.at("format").get<std::string>()+" / "+p.at("category").get<std::string>()+(p.at("hidden").get<bool>()?"  [hidden]":""));SendMessageW(controls_.at(plugins),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("catalogID")==selected_)selection=int(i);}
+    const auto top=SendMessageW(controls_.at(plugins),LB_GETTOPINDEX,0,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_RESETCONTENT,0,0);
+    int selection=-1;for(size_t i=0;i<entries_.size();++i){const auto &p=entries_[i];auto label=wide((p.at("favorite").get<bool>()?"★  ":"   ")+p.at("name").get<std::string>()+"    / "+p.at("format").get<std::string>()+" / "+p.at("category").get<std::string>()+(p.at("hidden").get<bool>()?"  [hidden]":""));ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));if(p.at("catalogID")==selected_)selection=int(i);}
     if(selection<0)selected_.clear(); // Never retarget an edit when its row disappears.
-    SendMessageW(controls_.at(plugins),LB_SETCURSEL,selection,0);if(top!=LB_ERR)SendMessageW(controls_.at(plugins),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(plugins),nullptr,FALSE);fields();
+    ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_SETCURSEL,selection,0);if(top!=LB_ERR)ScreamSeq::NativeInputGate::present(controls_.at(plugins),LB_SETTOPINDEX,top,0);SendMessageW(controls_.at(plugins),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(plugins),nullptr,FALSE);fields();
   }
   void filter(){
     refreshQueued_=false;entries_=Json::array();const auto query=field(search);const auto k=choice(kind),f=choice(format);
     for(const auto &p:allEntries_){
+      if(!destinationBus_.empty()&&p.at("isInstrument").get<bool>())continue;
       if(f>0&&p.at("format")!=(f==1?"Built-in":f==2?"VST3":"AU"))continue;
       if(k>0&&p.at("isInstrument").get<bool>()!=(k==2))continue;
       if(favoritesOnly_&&!p.at("favorite").get<bool>())continue;
@@ -38,32 +51,133 @@ class PluginLibraryWindow final : public NativeToolWindow {
       entries_.push_back(p);
     }list();status(warning_.empty()?std::to_wstring(entries_.size())+L" of "+std::to_wstring(allEntries_.size())+L" plugins / browser preferences are saved separately from songs":wide(warning_));
   }
-  void load(bool scan=false){
-    if(pending_){readQueued_=refreshQueued_=true;return;}KillTimer(window_,1);readQueued_=refreshQueued_=false;pending_=true;layout();
-    try{auto data=request_("plugin.library.get",{{"includeHidden",true},{"rescan",scan}});pending_=false;
-      allEntries_=data.at("plugins");categories_=data.at("categories");revision_=data.at("libraryRevision").get<std::string>();warning_=data.at("warning").get<std::string>();
-      setting_=true;std::vector<std::wstring> names{L"All categories"};int index=0;
-      for(size_t i=0;i<categories_.size();++i){const auto name=categories_[i].get<std::string>();names.push_back(wide(name));if(name==filterCategory_)index=int(i+1);}
-      if(!filterCategory_.empty()&&!index){names.push_back(wide(filterCategory_));index=int(names.size()-1);}strings(category,names,index);setting_=false;filter();
-    }catch(...){pending_=false;layout();throw;}layout();if(readQueued_)queue(true);
+  static void validateLibrary(const Json &data){
+    const auto &plugins=data.at("plugins"),&categories=data.at("categories");
+    if(!plugins.is_array()||!categories.is_array())throw std::runtime_error("Malformed library readback");
+    (void)data.at("libraryRevision").get<std::string>();(void)data.at("warning").get<std::string>();
+    for(const auto &name:categories)(void)name.get<std::string>();
+    for(const auto &p:plugins){
+      for(const auto *key:{"catalogID","name","format","category","customCategory"})(void)p.at(key).get<std::string>();
+      for(const auto *key:{"favorite","hidden","isInstrument"})(void)p.at(key).get<bool>();
+      if(!p.at("descriptor").is_object())throw std::runtime_error("Malformed library descriptor");
+    }
   }
-  void queue(bool read=false){refreshQueued_=true;readQueued_|=read;SetTimer(window_,1,read?100:30,nullptr);}
+  void adopt(const Json &data){
+    validateLibrary(data);
+    allEntries_=data.at("plugins");categories_=data.at("categories");revision_=data.at("libraryRevision").get<std::string>();warning_=data.at("warning").get<std::string>();
+    setting_=true;struct Reset{bool &value;~Reset(){value=false;}}reset{setting_};
+    std::vector<std::wstring> names{L"All categories"};int index=0;
+    for(size_t i=0;i<categories_.size();++i){const auto name=categories_[i].get<std::string>();names.push_back(wide(name));if(name==filterCategory_)index=int(i+1);}
+    if(!filterCategory_.empty()&&!index){names.push_back(wide(filterCategory_));index=int(names.size()-1);}strings(category,names,index);filter();
+  }
+  void finishResult(){
+    const auto returned=completion_.returned();if(!returned)throw std::runtime_error("Library operation has no exact result / use Review");
+    auto report=Json{{"outcome","returned"},{"submission",{{"method",operation_},{"documentId",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"result",returned->result}};
+    if(operation_=="plugin.add"){
+      const auto &slot=returned->result.at("slot");
+      if(!slot.is_number_integer()||slot.get<double>()<0||returned->result.at("dryRun").get<bool>())throw std::runtime_error("Malformed rack insertion result");
+      // This API returns a historical slot, not a stable identity. Never use
+      // it to select/inspect today's rack after later edits or reordering.
+      status(context_()==std::pair(returned->document,returned->revision)?(operationParams_.contains("target")?L"Effect added to the captured bus / one Undo removes it":L"Plugin added to the captured rack / Undo removes it"):
+        L"Original rack insertion completed / song changed since completion; current selection retained");
+    }else{
+      if(operation_=="plugin.library.set"){
+        if(returned->result.at("catalogID")!=operationParams_.at("catalogID"))throw std::runtime_error("Library result belongs to another plugin");
+        (void)returned->result.at("libraryRevision").get<std::string>();
+      }
+      // Read current preferences without another scan/write. Keep raw fields
+      // staged during this read, including edits pumped by native completion.
+      auto data=operation_=="plugin.library.get"?returned->result:request_("plugin.library.get",{{"includeHidden",true},{"rescan",false}});
+      adopt(data);
+      if(operation_=="plugin.library.set"&&operationParams_.contains("category")&&generation_==completion_.generation()&&
+          utf8(field(customCategory))==completion_.fields().at("category").get<std::string>()) {categoryDraft_=false;fields();}
+      status(categoryDraft_?L"Library result reviewed / newer category draft retained":L"Library updated / song and Undo history unchanged");
+    }
+    report_=std::move(report);completion_.finish();operation_.clear();readbackNeedsReload_=false;
+  }
+  void reviewResult(){
+    if(pending_||!unresolved())return;pending_=true;layout();
+    try{
+      request_("synchronizeView",Json::object());
+      if(completion_.returned())finishResult();
+      else {
+        const auto captured=context_();Json observed;
+        if(operation_=="plugin.add"){
+          if(captured.first!=operationDocument_)throw std::runtime_error("Original rack is unavailable / result retained");
+          observed=request_("document.get",Json::object());
+          if(context_()!=captured)throw std::runtime_error("Song changed during rack review / result retained");
+          const auto &rack=observed.at("nativePlugins");if(!rack.is_array())throw std::runtime_error("Malformed rack observation");
+          for(const auto &plugin:rack)(void)plugin.at("instanceID").get<std::string>();
+          if(operationParams_.contains("target")){
+            auto mixer=request_("mixer.get",Json::object());
+            if(context_()!=captured)throw std::runtime_error("Song changed during destination review / result retained");
+            if(!mixer.at("buses").is_array())throw std::runtime_error("Malformed destination observation");
+            observed["mixer"]=std::move(mixer);
+          }
+        }else{
+          observed=request_("plugin.library.get",{{"includeHidden",true},{"rescan",false}});validateLibrary(observed);
+          if(operation_=="plugin.library.set"){
+            if(observed.at("libraryRevision").get<std::string>().empty())throw std::runtime_error("Preferences are unavailable / result retained");
+            const auto &plugins=observed.at("plugins");
+            if(std::none_of(plugins.begin(),plugins.end(),[&](const auto &p){return p.at("catalogID")==operationParams_.at("catalogID");}))
+              throw std::runtime_error("Original library target is unavailable / result retained");
+          }
+        }
+        auto report=Json{{"outcome","unverified"},{"submission",{{"method",operation_},{"documentId",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"observed",std::move(observed)}};
+        // Desired current state is not proof of which request changed it.
+        // Preserve the raw draft and old revision until explicit Reload.
+        report_=std::move(report);readbackNeedsReload_=true;
+        status(L"Current state inspected / earlier outcome unverified / draft retained; Reload before another write");
+        completion_.finish();operation_.clear();
+      }
+    }catch(...){pending_=false;layout();throw;}pending_=false;layout();
+  }
+  void submit(const std::string &method,Json params){
+    if(pending_||refreshQueued_)return;requireWritable();
+    const auto captured=context_();operation_=method;operationParams_=std::move(params);operationDocument_=captured.first;operationRevision_=captured.second;
+    const auto fields=Json{{"category",utf8(field(customCategory))},{"selected",selected_},{"libraryRevision",revision_}};
+    pending_=true;layout();
+    try{completion_.submit(write_,method,operationParams_,captured.first,generation_,fields);finishResult();}
+    catch(...){if(!unresolved())operation_.clear();pending_=false;layout();throw;}pending_=false;layout();
+  }
+  void load(bool scan=false){
+    if(scan){submit("plugin.library.get",{{"includeHidden",true},{"rescan",true}});return;}
+    requireResolved();if(pending_){readQueued_=refreshQueued_=true;return;}KillTimer(window_,1);readQueued_=refreshQueued_=false;pending_=true;layout();
+    try{auto data=request_("plugin.library.get",{{"includeHidden",true},{"rescan",false}});adopt(data);readbackNeedsReload_=false;}
+    catch(...){pending_=false;layout();throw;}pending_=false;layout();if(readQueued_)queue(true);
+  }
+  void queue(bool read=false){if(unresolved()||readbackNeedsReload_)return;refreshQueued_=true;readQueued_|=read;SetTimer(window_,1,read?100:30,nullptr);}
   void change(const Json &patch){
-    if(pending_||refreshQueued_)return;const auto *p=selected();if(!p||revision_.empty())throw std::runtime_error("Reload available preferences before editing them");
-    const auto target=selected_,expected=revision_;Json params=patch;params["catalogID"]=target;params["expectedLibraryRevision"]=expected;pending_=true;layout();
-    try{const auto result=request_("plugin.library.set",params);pending_=false;revision_=result.at("libraryRevision").get<std::string>();categoryDraft_=false;load();}
-    catch(...){pending_=false;layout();throw;}layout();
+    if(pending_||refreshQueued_)return;requireWritable();const auto *p=selected();if(!p||revision_.empty())throw std::runtime_error("Reload available preferences before editing them");
+    Json params=patch;params["catalogID"]=selected_;params["expectedLibraryRevision"]=revision_;submit("plugin.library.set",std::move(params));
   }
   void addPlugin(){
-    if(pending_||refreshQueued_)return;const auto *p=selected();if(!p)return;const auto captured=context_();const auto descriptor=p->at("descriptor");pending_=true;layout();
-    try{if(context_()!=captured)throw std::runtime_error("Document changed; add again");request_("plugin.add",{{"expectedRevision",captured.second},{"descriptor",descriptor}});pending_=false;status(L"Plugin added to the rack / Undo FX removes it");}
-    catch(...){pending_=false;layout();throw;}layout();
+    if(pending_||refreshQueued_)return;requireWritable();const auto *p=selected();if(!p)return;
+    const auto captured=context_();const auto bus=destinationBus_;const auto selected=selected_;
+    Json params={{"expectedRevision",captured.second},{"descriptor",p->at("descriptor")}};
+    if(!bus.empty()){
+      if(captured.first!=destinationDocument_)throw std::runtime_error("Destination belongs to another song / reopen from Mixer or choose Rack destination");
+      if(p->at("isInstrument").get<bool>())throw std::runtime_error("Choose an effect for this bus");
+      // Copy all intent before this read: worker reads can pump native messages.
+      const auto generation=generation_;Json mixer;pending_=true;layout();
+      try{mixer=request_("mixer.get",Json::object());}catch(...){pending_=false;layout();throw;}
+      pending_=false;layout();
+      if(context_()!=captured||generation_!=generation||destinationBus_!=bus||selected_!=selected||pending_||unresolved()||readbackNeedsReload_)
+        throw std::runtime_error("Destination or selection changed while checking the bus / choose Add effect again");
+      const auto &buses=mixer.at("buses");
+      if(std::none_of(buses.begin(),buses.end(),[&](const auto &entry){return entry.at("id")==bus;}))throw std::runtime_error("Destination bus no longer exists / reopen from Mixer or choose Rack destination");
+      params["target"]=bus;
+    }
+    submit("plugin.add",std::move(params));
   }
   void action(int id,unsigned notification)override{
-    if(setting_)return;if(id==close&&notification==BN_CLICKED){hide();return;}if(pending_)return;
-    if(id==customCategory&&notification==EN_CHANGE){if(refreshQueued_)return;categoryDraft_=true;status(L"Category draft / Apply category saves; Escape discards");return;}
+    if(setting_)return;if(id==close&&notification==BN_CLICKED){hide();return;}
+    if(id==customCategory&&notification==EN_CHANGE){++generation_;categoryDraft_=true;if(!pending_&&!unresolved())status(L"Category draft / Apply category saves; Escape discards");return;}
+    if(pending_)return;
+    if(id==reload&&notification==BN_CLICKED&&unresolved()){reviewResult();return;}requireResolved();
     if(id==saveCategory&&notification==BN_CLICKED){change({{"category",utf8(field(customCategory))}});return;}
-    if(id==reload&&notification==BN_CLICKED){categoryDraft_=false;load();return;}
+    if(id==reload&&notification==BN_CLICKED){const auto generation=generation_;load();if(generation==generation_){categoryDraft_=false;fields();}return;}
+    if(id==rackDestination&&notification==BN_CLICKED){setDestination("","","");return;}
     if(categoryDraft_&&id!=insert)throw std::runtime_error("Apply the category or press Escape before changing the selection or filters");
     if(id==search&&notification==EN_CHANGE){queue();return;}
     if(id==kind||id==format||id==category){if(notification!=CBN_SELCHANGE)return;if(id==category){const auto index=choice(category);filterCategory_=index<=0?"":utf8([&]{const auto n=SendMessageW(controls_.at(category),CB_GETLBTEXTLEN,index,0);std::wstring value(size_t(n)+1,0);SendMessageW(controls_.at(category),CB_GETLBTEXT,index,reinterpret_cast<LPARAM>(value.data()));value.resize(size_t(n));return value;}());}queue();return;}
@@ -73,50 +187,84 @@ class PluginLibraryWindow final : public NativeToolWindow {
     else if(id==rescan)load(true);else if(id==insert)addPlugin();
     else if(const auto *p=selected()){if(id==favorite)change({{"favorite",!p->at("favorite").get<bool>()}});else if(id==hidePlugin)change({{"hidden",!p->at("hidden").get<bool>()}});}
   }
-  void timer(UINT_PTR id)override{if(id==1){KillTimer(window_,1);if(categoryDraft_)return;try{if(readQueued_)load();else filter();}catch(const Api::ApiError &e){if(e.code==-32002){queue(true);layout();return;}throw;}}}
+  void timer(UINT_PTR id)override{if(id==1){KillTimer(window_,1);if(categoryDraft_||unresolved()||readbackNeedsReload_)return;try{if(readQueued_)load();else filter();}catch(const Api::ApiError &e){if(e.code==-32002){queue(true);layout();return;}throw;}}}
   bool key(WPARAM value,bool ctrl,bool)override{
-    if(value==VK_ESCAPE){if(categoryDraft_){categoryDraft_=false;fields();status(L"Category draft discarded");}else hide();return true;}
-    if(ctrl&&value=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
+    if(value==VK_ESCAPE){if(pending_||unresolved()){hide();return true;}if(categoryDraft_){categoryDraft_=false;fields();status(L"Category draft discarded");}else hide();return true;}
+    if(ctrl&&value=='F'){SetFocus(controls_.at(search));ScreamSeq::NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(ctrl&&value=='R'){action(reload,BN_CLICKED);return true;}
     if(value==VK_F6){SetFocus(controls_.at(GetFocus()==controls_.at(plugins)?search:plugins));return true;}
+    if(!ctrl&&GetFocus()==controls_.at(search)&&(value==VK_UP||value==VK_DOWN||value==VK_RETURN)){
+      if(pending_||unresolved()||readbackNeedsReload_||categoryDraft_)return true;
+      // Apply an already typed local query before choosing; never insert a
+      // result from the previous query or trigger an extra library scan.
+      if(refreshQueued_){if(readQueued_)return true;KillTimer(window_,1);filter();}
+      if(entries_.empty())return true;
+      const auto current=SendMessageW(controls_.at(plugins),LB_GETCURSEL,0,0);
+      const auto next=current<0?0:std::clamp<int>(int(current)+(value==VK_DOWN?1:value==VK_UP?-1:0),0,int(entries_.size())-1);
+      NativeInputGate::present(controls_.at(plugins),LB_SETCURSEL,next,0);selected_=entries_[size_t(next)].at("catalogID").get<std::string>();fields();
+      if(value==VK_RETURN)addPlugin();return true;
+    }
     if(value==VK_RETURN){const auto focus=GetFocus();if(focus==controls_.at(customCategory)){action(saveCategory,BN_CLICKED);return true;}if(focus==controls_.at(plugins)){addPlugin();return true;}wchar_t type[32]{};GetClassNameW(focus,type,32);if(_wcsicmp(type,L"Button")==0){action(GetDlgCtrlID(focus),BN_CLICKED);return true;}}return false;
   }
   void layout()override{
-    if(!ready_)return;const auto [w,h]=size();place(heading,16,14,w-254,26);place(reload,w-232,14,96,26);place(rescan,w-128,14,112,26);
+    if(!ready_)return;const auto focused=GetFocus();if(pending_&&!pendingFocus_&&focused&&owns(focused)&&focused!=controls_.at(close))pendingFocus_=focused;
+    const auto [w,h]=size();place(heading,16,14,w-254,26);place(reload,w-232,14,96,26);place(rescan,w-128,14,112,26);
     place(searchLabel,16,54,160,20);place(search,16,77,w-32,26);
     const auto third=(w-48)/3;place(kindLabel,16,115,third,20);place(formatLabel,24+third,115,third,20);place(categoryLabel,32+2*third,115,third,20);
     place(kind,16,138,third,200);place(format,24+third,138,third,220);place(category,32+2*third,138,third,280);
     place(favorites,16,176,150,26);place(hidden,174,176,150,26);
-    place(plugins,16,214,w-32,std::max(70.0f,h-434));place(detailLabel,16,h-208,w-32,22);
+    place(rackDestination,w-164,176,148,26);place(destinationLabel,16,210,w-32,22);
+    place(plugins,16,240,w-32,std::max(70.0f,h-460));place(detailLabel,16,h-208,w-32,22);
     place(favorite,16,h-177,110,26);place(hidePlugin,134,h-177,100,26);place(insert,w-222,h-177,126,26);place(close,w-88,h-177,72,26);
     place(customLabel,16,h-138,w-32,20);place(customCategory,16,h-112,w-178,26);place(saveCategory,w-154,h-112,138,26);place(statusLabel,16,h-70,w-32,56);
-    const bool has=selected()!=nullptr,ready=!pending_;for(int id:{search,kind,format,category,favorites,hidden,plugins,rescan})EnableWindow(controls_.at(id),ready&&!categoryDraft_);
-    EnableWindow(controls_.at(reload),ready);EnableWindow(controls_.at(plugins),ready&&!refreshQueued_&&!categoryDraft_);EnableWindow(controls_.at(insert),ready&&!refreshQueued_&&has);
+    const bool has=selected()!=nullptr,ready=!pending_&&!unresolved()&&!readbackNeedsReload_;for(int id:{search,kind,format,category,favorites,hidden,plugins,rescan})EnableWindow(controls_.at(id),ready&&!categoryDraft_);
+    set(reload,unresolved()?L"Review result":L"Reload");EnableWindow(controls_.at(reload),!pending_);EnableWindow(controls_.at(plugins),ready&&!refreshQueued_&&!categoryDraft_);EnableWindow(controls_.at(insert),ready&&!refreshQueued_&&has);
+    EnableWindow(controls_.at(kind),ready&&!categoryDraft_&&destinationBus_.empty());
+    EnableWindow(controls_.at(rackDestination),ready&&!categoryDraft_&&!destinationBus_.empty());
+    set(insert,destinationBus_.empty()?L"Add to rack":L"Add effect");
+    set(destinationLabel,destinationBus_.empty()?L"Destination: plugin rack":wide("Destination: "+destinationName_+" ["+destinationBus_+"] / bus inserts"));
     for(int id:{favorite,hidePlugin,customCategory,saveCategory})EnableWindow(controls_.at(id),ready&&!refreshQueued_&&has&&!revision_.empty()&&(!categoryDraft_||id==customCategory||id==saveCategory));
     set(favorites,favoritesOnly_?L"★ Favorites only":L"Favorites filter: off");set(hidden,includeHidden_?L"Hidden included":L"Hidden excluded");
+    if(!pending_&&pendingFocus_){const auto previous=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowVisible(previous)&&IsWindowEnabled(previous)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(previous);}
   }
-  void paint(RenderSurface &surface)override{const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);}
   void fontsChanged()override{if(controls_.contains(plugins))SendMessageW(controls_.at(plugins),LB_SETITEMHEIGHT,0,LPARAM(29*GetDpiForWindow(window_)/96));}
   void drawControl(const DRAWITEMSTRUCT &d)override{
     if(d.CtlID!=plugins){NativeToolWindow::drawControl(d);return;}
-    const bool chosen=(d.itemState&ODS_SELECTED)!=0;RECT row=d.rcItem;SetDCBrushColor(d.hDC,chosen?RGB(36,77,89):RGB(24,34,45));FillRect(d.hDC,&row,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+    NativeControls::recordDraw(d.hwndItem);const NativeControls::SavedDC saved(d.hDC);if(!saved.saved)return;
+    const auto palette=NativeControls::listColors((d.itemState&ODS_SELECTED)!=0,(d.itemState&ODS_DISABLED)!=0);
+    RECT row=d.rcItem;NativeControls::fill(d.hDC,row,palette.background);
     if(d.itemID>=entries_.size())return;const auto &p=entries_[d.itemID];SetBkMode(d.hDC,TRANSPARENT);SelectObject(d.hDC,font_);
     const auto width=row.right-row.left;const auto inset=LONG(8*GetDpiForWindow(window_)/96);
-    const auto cell=[&](const std::wstring &text,float left,float right,COLORREF color){auto r=row;r.left+=LONG(width*left)+inset;r.right=row.left+LONG(width*right)-inset;SetTextColor(d.hDC,color);DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);};
-    cell((p.at("favorite").get<bool>()?L"★  ":L"")+wide(p.at("name").get<std::string>())+(p.at("hidden").get<bool>()?L" [hidden]":L""),0,.5f,RGB(218,232,241));
-    cell(wide(p.at("format").get<std::string>())+(p.at("isInstrument").get<bool>()?L" / Instrument":L" / Effect"),.5f,.77f,RGB(153,181,196));
-    cell(wide(p.at("category").get<std::string>()),.77f,1,RGB(153,181,196));if(d.itemState&ODS_FOCUS){InflateRect(&row,-2,-2);DrawFocusRect(d.hDC,&row);}
+    const auto cell=[&](const std::wstring &text,float left,float right,COLORREF color){auto r=row;r.left+=LONG(width*left)+inset;r.right=row.left+LONG(width*right)-inset;SetTextColor(d.hDC,color);DrawTextW(d.hDC,text.c_str(),int(text.size()),&r,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);};
+    cell((p.at("favorite").get<bool>()?L"★  ":L"")+wide(p.at("name").get<std::string>())+(p.at("hidden").get<bool>()?L" [hidden]":L""),0,.5f,palette.text);
+    cell(wide(p.at("format").get<std::string>())+(p.at("isInstrument").get<bool>()?L" / Instrument":L" / Effect"),.5f,.77f,palette.detail);
+    cell(wide(p.at("category").get<std::string>()),.77f,1,palette.detail);if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){InflateRect(&row,-2,-2);DrawFocusRect(d.hDC,&row);}
   }
 public:
-  PluginLibraryWindow(HWND owner,Request request,Context context):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)){
+  PluginLibraryWindow(HWND owner,Request request,Context context,NativeWriteCompletion::Write write):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)){
     minimumWidth_=640;minimumHeight_=540;create(L"ScreamSeq.PluginLibrary",L"Plugin library",820,680);
     edit(search,L"",200);combo(kind);combo(format);combo(category);edit(customCategory,L"",80);
     add(plugins,L"LISTBOX",L"Available plugins",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|LBS_HASSTRINGS|LBS_OWNERDRAWFIXED|WS_VSCROLL);
-    for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{favorites,L"Favorites filter: off"},{hidden,L"Hidden excluded"},{favorite,L"Favorite"},{hidePlugin,L"Hide"},{saveCategory,L"Apply category"},{insert,L"Add to rack"},{reload,L"Reload"},{rescan,L"Rescan"},{close,L"Close"}})button(id,label);
+    for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{favorites,L"Favorites filter: off"},{hidden,L"Hidden excluded"},{favorite,L"Favorite"},{hidePlugin,L"Hide"},{saveCategory,L"Apply category"},{insert,L"Add to rack"},{reload,L"Reload"},{rescan,L"Rescan"},{close,L"Close"},{rackDestination,L"Rack destination"}})button(id,label);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Plugin library"},{searchLabel,L"Search plugins"},{kindLabel,L"Kind"},{formatLabel,L"Format"},{categoryLabel,L"Category"},{detailLabel,L""},{customLabel,L"Custom category / empty uses the default"},{statusLabel,L""}})label(id,text);
+    label(destinationLabel,L"Destination: plugin rack");
+    SendMessageW(controls_.at(search),EM_SETCUEBANNER,TRUE,reinterpret_cast<LPARAM>(L"Search plugins · Up/Down chooses · Enter adds"));
     strings(kind,{L"All kinds",L"Effects",L"Instruments"});strings(format,{L"All formats",L"Built-in",L"VST3",L"AU"});strings(category,{L"All categories"});finish();queue(true);
   }
-  void show(){const bool existing=visible();NativeToolWindow::show();if(!existing){SetFocus(controls_.at(search));if(!categoryDraft_)queue(true);}}
-  Json snapshot()const{return {{"visible",visible()},{"pending",pending_},{"refreshQueued",refreshQueued_},{"selected",selected_},{"plugins",entries_},{"categories",categories_},{"libraryRevision",revision_},{"categoryDraft",categoryDraft_},{"search",utf8(field(search))},{"category",filterCategory_},{"favoritesOnly",favoritesOnly_},{"includeHidden",includeHidden_},{"status",utf8(status_)}};}
+  void setDestination(std::string document,std::string bus,std::string name){
+    if(document==destinationDocument_&&bus==destinationBus_)return;
+    requireWritable();if(pending_||categoryDraft_)throw std::runtime_error("Finish the retained library operation or category draft before changing destination");
+    destinationDocument_=std::move(document);destinationBus_=std::move(bus);destinationName_=std::move(name);++generation_;
+    ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,destinationBus_.empty()?0:1,0);
+    // Retain search and selection when still compatible; never select another row.
+    queue(true);layout();
+  }
+  void browseInstruments(){
+    requireWritable();if(pending_||categoryDraft_)throw std::runtime_error("Finish the retained library operation first");
+    setDestination("","","");NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,2,0);queue(true);show();
+  }
+  void show(){const bool existing=visible();NativeToolWindow::show();if(!existing){SetFocus(controls_.at(search));if(!categoryDraft_&&!unresolved()&&!readbackNeedsReload_)queue(true);}}
+  bool protectsClose()const{return pending_||unresolved()||categoryDraft_;}
+  Json snapshot()const{return {{"destination",{{"document",destinationDocument_},{"bus",destinationBus_},{"name",destinationName_}}},{"completion",completion_.snapshot()},{"report",report_},{"readbackNeedsReload",readbackNeedsReload_},{"generation",generation_},{"visible",visible()},{"pending",pending_},{"refreshQueued",refreshQueued_},{"selected",selected_},{"plugins",entries_},{"categories",categories_},{"libraryRevision",revision_},{"categoryDraft",categoryDraft_},{"search",utf8(field(search))},{"category",filterCategory_},{"favoritesOnly",favoritesOnly_},{"includeHidden",includeHidden_},{"status",utf8(status_)}};}
 };
 }

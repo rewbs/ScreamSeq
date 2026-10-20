@@ -101,6 +101,7 @@ int main(){try{
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
   preparedNativeUpdates(state);
+  preparedColumnMutes(state);
   recordingTiming(*doc,state);
   for(unsigned rate:{44100u,48000u,96000u}){
     const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;

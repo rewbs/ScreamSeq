@@ -3,6 +3,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <commctrl.h>
 #include <algorithm>
 #include <atomic>
 #include <exception>
@@ -84,6 +85,38 @@ inline thread_local Windows *currentWindows=nullptr;
 inline HWND ownGuiWindow(HWND window){
   if(!PrivateGuiDetail::currentWindows)throw std::runtime_error("No private GUI fixture is running");
   PrivateGuiDetail::currentWindows->track(window);return window;
+}
+
+// Geometry fixtures sometimes need a real wide HWND on a smaller headless
+// desktop. Windows' default maximum tracking size otherwise clamps SetWindowPos
+// before the editor sees WM_SIZE. Override only the fixture's maximum while
+// resizing; retain its production minimum and verify the actual client result.
+inline void sizeOwnedGuiClient(HWND window,int width,int height){
+  if(!PrivateGuiDetail::currentWindows||GetWindowThreadProcessId(window,nullptr)!=GetCurrentThreadId()||
+      GetPropW(window,PrivateGuiDetail::ownedProperty)!=reinterpret_cast<HANDLE>(PrivateGuiDetail::currentWindows))
+    throw std::runtime_error("Client sizing requires an owned private GUI thread");
+  const auto dpi=GetDpiForWindow(window);
+  RECT frame{0,0,MulDiv(width,dpi,96),MulDiv(height,dpi,96)};
+  const LONG expectedWidth=frame.right,expectedHeight=frame.bottom;
+  if(!AdjustWindowRectExForDpi(&frame,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi))
+    throw std::runtime_error("Cannot calculate private client frame");
+  POINT requested{frame.right-frame.left,frame.bottom-frame.top};
+  const SUBCLASSPROC overrideMaximum=[](HWND h,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data)->LRESULT {
+    const auto result=DefSubclassProc(h,message,w,l);
+    if(message==WM_GETMINMAXINFO){const auto &requested=*reinterpret_cast<const POINT *>(data);auto &limits=*reinterpret_cast<MINMAXINFO *>(l);
+      limits.ptMaxTrackSize.x=std::max(limits.ptMaxTrackSize.x,requested.x);
+      limits.ptMaxTrackSize.y=std::max(limits.ptMaxTrackSize.y,requested.y);}
+    return result;
+  };
+  constexpr UINT_PTR subclass=0x53515A45;
+  if(!SetWindowSubclass(window,overrideMaximum,subclass,reinterpret_cast<DWORD_PTR>(&requested)))
+    throw std::runtime_error("Cannot install private geometry fixture");
+  const auto changed=SetWindowPos(window,nullptr,0,0,requested.x,requested.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+  RemoveWindowSubclass(window,overrideMaximum,subclass);
+  RECT actual{};
+  if(!changed||!GetClientRect(window,&actual)||actual.right!=expectedWidth||actual.bottom!=expectedHeight)
+    throw std::runtime_error("Private client bounds differ: expected "+std::to_string(expectedWidth)+"x"+std::to_string(expectedHeight)+
+      ", got "+std::to_string(actual.right)+"x"+std::to_string(actual.bottom)+", dpi "+std::to_string(dpi));
 }
 
 // The observer never leaves its original desktop. A fresh worker attaches

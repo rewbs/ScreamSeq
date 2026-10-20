@@ -1,5 +1,11 @@
 # Windows live plugin parameters — 2026-09-21
 
+**Historical checkpoint.** The 10 October parity source replaces the app's
+queue-full stop-and-commit fallback with atomic rejection, including live
+parameter Undo/Redo. See [current P4 implementation](../doc/windows-parity-plan-2026-10-09/P4-IMPLEMENTATION.md).
+That source change is awaiting qualification; the results below describe the
+older implementation and do not qualify the new failure behavior.
+
 This continues the native rack checkpoint. Full Mac parity remains in progress;
 the completion gates in `PARITY_PLAN.md` still apply.
 

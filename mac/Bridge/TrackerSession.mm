@@ -20,14 +20,17 @@
 #include "editor/GraphTrims.hpp"
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/ParameterEdits.hpp"
 #include "editor/PluginNoteSources.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
 #include "editor/PatternCommands.hpp"
 #include "editor/TrackLayout.hpp"
+#include "editor/PatternTimeline.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
 #include "editor/NoteRecording.hpp"
+#include "editor/MixerControlEdit.hpp"
 #include <mach/mach_time.h>
 #include "editor/ArrangementTools.hpp"
 #include "soundlib/ModInstrument.h"
@@ -1358,9 +1361,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)redo { [self historyUndo:YES error:nil]; }
 - (NSArray<NSDictionary *> *)mixerMeters {
   NSMutableArray *result = [NSMutableArray array];
-  const auto levels = _audio->mixerMeters(); const auto &buses = _document->native().mixer.buses;
-  for (size_t i = 0; i < levels.size() && i < buses.size(); ++i)
-    [result addObject:@{@"bus": nativeID(buses[i].id), @"left": @(levels[i].left), @"right": @(levels[i].right)}];
+  const auto reading = _audio->identifiedMixerMeters();
+  if(reading.fresh)for(const auto &bus:reading.buses)
+    [result addObject:@{@"bus": nativeID(bus.id), @"left": @(bus.level.left), @"right": @(bus.level.right)}];
   return result;
 }
 - (void)muteChannel:(NSInteger)c muted:(BOOL)m {
@@ -1396,6 +1399,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)editOrder:(NSInteger)order pattern:(NSInteger)pattern operation:(NSString *)operation error:(NSError **)error {
   try {
+    if(order<std::numeric_limits<int>::min()||order>std::numeric_limits<int>::max()||
+       pattern<std::numeric_limits<int>::min()||pattern>std::numeric_limits<int>::max())
+      throw std::invalid_argument("Order editing value is outside its range.");
+    if(!_document->orderEditChanges(int(order),int(pattern),operation.UTF8String))return YES;
     _audio->stop();
     _document->editOrder(int(order), int(pattern), operation.UTF8String);
     return YES;
@@ -1427,6 +1434,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)removeOrder:(NSInteger)order error:(NSError **)error {
   try {
+    if(order<0||order>std::numeric_limits<int>::max())throw std::invalid_argument("Select a valid order.");
+    _document->orderEditChanges(int(order),0,"remove");
     _audio->stop();
     _document->removeOrder(int(order));
     return YES;

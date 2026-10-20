@@ -1,0 +1,279 @@
+{
+  "kind": "source and retained evidence inspection; not build or runtime test",
+  "utc": "2026-10-09T19:20:38.260647+00:00",
+  "head": "eaa3863b8b89e3fb89d9c1e3092b14f20b1940ca",
+  "main_last_observed": "16cab100b898f66726cfab6c2386887a9bcf5fd4",
+  "owners": [
+    {
+      "owner": "AbsoluteAutomationWindow",
+      "path": "windows/App/AbsoluteAutomationWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "ArrangementMatrixWindow",
+      "path": "windows/App/ArrangementMatrixWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "ArrangementWindow",
+      "path": "windows/App/ArrangementWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "AudioSettingsWindow",
+      "path": "windows/App/AudioSettingsWindow.hpp",
+      "draft_summary": false
+    },
+    {
+      "owner": "AuditionWindow",
+      "path": "windows/App/AuditionWindow.hpp",
+      "draft_summary": false
+    },
+    {
+      "owner": "EnvelopeBankWindow",
+      "path": "windows/App/EnvelopeBankWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "FormulaWorkbenchWindow",
+      "path": "windows/App/FormulaWorkbenchWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "GraphCommandsWindow",
+      "path": "windows/App/GraphCommandsWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "GraphCurveWindow",
+      "path": "windows/App/GraphCurveWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "GraphTrimsWindow",
+      "path": "windows/App/GraphTrimsWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "GraphWorkflowWindow",
+      "path": "windows/App/GraphWorkflowWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "InstrumentEnvelopeWindow",
+      "path": "windows/App/InstrumentEnvelopeWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "MidiRecordingWindow",
+      "path": "windows/App/MidiRecordingWindow.hpp",
+      "draft_summary": false
+    },
+    {
+      "owner": "MultisampleImportWindow",
+      "path": "windows/App/MultisampleImportWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "ParameterActivityWindow",
+      "path": "windows/App/ParameterActivityWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "ParameterAutomationWindow",
+      "path": "windows/App/ParameterAutomationWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "PatternSampleRenderWindow",
+      "path": "windows/App/PatternSampleRenderWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "PluginInstrumentsWindow",
+      "path": "windows/App/PluginInstrumentsWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "PluginLibraryWindow",
+      "path": "windows/App/PluginLibraryWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "PluginPathWindow",
+      "path": "windows/App/PluginPathWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "PreciseNoteWindow",
+      "path": "windows/App/PreciseNoteWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "RecoveryWindow",
+      "path": "windows/App/RecoveryWindow.hpp",
+      "draft_summary": false
+    },
+    {
+      "owner": "SampleDetailWindow",
+      "path": "windows/App/SampleDetailWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "SampleLibraryWindow",
+      "path": "windows/App/SampleLibraryWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "SampleRecordingWindow",
+      "path": "windows/App/SampleRecordingWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "ScratchGestureWindow",
+      "path": "windows/App/ScratchGestureWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "SongRoutingWindow",
+      "path": "windows/App/SongRoutingWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "SongTimingWindow",
+      "path": "windows/App/SongTimingWindow.hpp",
+      "draft_summary": true
+    },
+    {
+      "owner": "WorkspaceLayoutWindow",
+      "path": "windows/App/WorkspaceLayoutWindow.hpp",
+      "draft_summary": false
+    }
+  ],
+  "owner_count": 29,
+  "draft_summary_count": 24,
+  "main_owners": [
+    "Pattern FX",
+    "In-grid nudge",
+    "Sample range",
+    "Mixer",
+    "Plugin parameters and programs",
+    "Plugin preset result",
+    "Graph recipe",
+    "Render selection result"
+  ],
+  "main_owner_count": 8,
+  "inspected_source_hashes": {
+    ".github/workflows/ScreamSeq-macOS.yml": "f50a5772de06d67c54622af8b69c939007736f9d1bc8e4faa05976f292769685",
+    ".github/workflows/ScreamSeq-Windows.yml": "52b8b6d042e7183699d3a6f13c2698171388ac73bedb605eabe574d1e2ec0bf3",
+    "windows/App/AbsoluteAutomationWindow.hpp": "c7e8584acc055bd2a47d52bdc5f6a275d8d5a3c8ee3aaf1867ac4877716884b5",
+    "windows/App/ArrangementMatrixWindow.hpp": "395309207133cab66ec1e58d42ddac21242fa9220acb5201fb462fd237120ddc",
+    "windows/App/ArrangementWindow.hpp": "0d421d687085346efc8ec283b795d1f32aae1cad181de66311cd87a5493ea7fd",
+    "windows/App/AudioSettingsWindow.hpp": "ae5b3d473ecc0b02d975873bb7669ede7fe7ff5ad3ad5866fb4646c14aaea546",
+    "windows/App/AuditionWindow.hpp": "58a0fd3ad2b63ce7f14173b241fd2b708b55701ecb13df561a2e3468fb5468cd",
+    "windows/App/DocumentDepartureIntegration.inc": "cd3ef3c700100c02198181eec9506a225a153292e832e0cbd449d09d6fe9a88c",
+    "windows/App/DocumentDraftRegistry.hpp": "12b944cd702723e5285cdca6055cd373fb9837b5c51c5fd3f3a43cda37870b6b",
+    "windows/App/DocumentDrafts.inc": "62aba498701ae9824ceff2d19b983890d7e3ce0e4588cca906b9bff1f554e344",
+    "windows/App/EditingView.inc": "75e0076f741ca86ce9a0a7ac9690ef4445e89639ea5f5f757759f20404037272",
+    "windows/App/EnvelopeBankWindow.hpp": "1b7f394113bb03d6464f1799d6e8b2a9763b87fe6ca223c69fd217bc2bee9263",
+    "windows/App/FormulaWorkbenchWindow.hpp": "b13bc1527d029d464b1426134a9c84aa2d8ee82d5037bec6e53f1dbd964d4e69",
+    "windows/App/GraphCableEdits.hpp": "a0e54896eba49e768556b8e681056f0c99825625fa80916965fee2dfc26977b6",
+    "windows/App/GraphCommandsWindow.hpp": "e31082774fcff91d881511722d4532fd5987a8d650bdb541988f8df55ac410bf",
+    "windows/App/GraphCurveOwnerChildren.inc": "69696400678db5b5b7ab28d1b2d51f3af3deae18f0bf9d8db67c1df91cfeb9e8",
+    "windows/App/GraphCurveWindow.hpp": "f58551f7b725b45b072d7faf071ce54f5a04d97b729ba38736bc24d483e072f9",
+    "windows/App/GraphEditor.inc": "111c811686f136fb36143843155a5bed7146db3738b277a17724a5683186fa83",
+    "windows/App/GraphTrimsWindow.hpp": "c2361a2070a66b0616410bcc36210bc269ef71d3e77a7996e47af2353924bf4e",
+    "windows/App/GraphWorkflowWindow.hpp": "1208a543202a21625edb9d39870f80dd7bc58b6880b89e1b59fcc3616f387df9",
+    "windows/App/InstrumentEnvelopeWindow.hpp": "c8209c74ea3102f3967e46e9fef070777f450e3bc6e7447ac92587f50b0ba73d",
+    "windows/App/Main.cpp": "db0775f9c157ea289641bf5105f9ca5583ed267b849fa207b8a1e01647d4b6e6",
+    "windows/App/MidiRecordingWindow.hpp": "b3f480efd7741d7866d588386a27a529611fd4a7ab968251e839ffebd92f8c51",
+    "windows/App/MultisampleImportWindow.hpp": "f73a0b5349295544ee96f0d4c1ecd150b54a42fdd539185a9e3c727e82d03bec",
+    "windows/App/NativeContextMenu.hpp": "bc5483d583e8567cecc9205705e74ea19dbf16c208104c9b8bcfd06b5d8d0204",
+    "windows/App/NativeControls.hpp": "2f56dc00c1bdc447ee5063eac41db0c26c2c6cd278753379a7be19b13f9b406d",
+    "windows/App/NativeInputGate.hpp": "e4c4d6c14aeb283e095a83b87930243dfa297ef69eb3dc2df29a7b30fa099748",
+    "windows/App/NativeReportList.hpp": "b389dadf0fbec3698105a58136ff85259669e86438e54d3f3e2f8061237691b2",
+    "windows/App/NativeToolWindow.hpp": "027b58504aef0b13c2f8c3792dd2da7f278bff0d702184429733fdce1f7ec795",
+    "windows/App/NativeWriteCompletion.hpp": "5ef46e2d6b351ec9369f10a8510d989415d32ed10c7ebbf6652a1a76e7af0501",
+    "windows/App/ParameterActivityWindow.hpp": "020d011ddb7b507d8b13aa3b93f84d8d4863fc364dab11c3e3d28b6a86556cbd",
+    "windows/App/ParameterAutomationWindow.hpp": "1ad31dc564e789a3b2906a4810b28c2155215864b88ec9bca3cccada29683e0d",
+    "windows/App/PatternSampleRenderWindow.hpp": "050364f05f32356898c5a49c2c1373fd8c9a9b3e69527f0319f3e7e808064bef",
+    "windows/App/PluginInstrumentsWindow.hpp": "c4d3e24afa52666473d274469f177659128d1b743b4b373441d07f523df4d67a",
+    "windows/App/PluginLibraryWindow.hpp": "cc5191481921989555ffff0006ba87269227552facbcc34c0e6078bba8912629",
+    "windows/App/PluginPathWindow.hpp": "f5ccd64c3ce0ce316035d7abe46519816fba5213972aa538d3de2a8eb833a242",
+    "windows/App/PreciseNoteWindow.hpp": "12477c7001f4fd6c3c26fc8c5c64763f53bf0df87334e5f6203ba3cb7a299bef",
+    "windows/App/RecordingIntegration.inc": "f2658c183e57f0f03940a751ecccdbe8a32893f2f7b5ac891b87d3598791e374",
+    "windows/App/RecoveryWindow.hpp": "30e53fe5f008580fb95a59fb0b62e27d2edcc117769c10c77182f96153dafa78",
+    "windows/App/SampleCaptureIntegration.inc": "8e65fdddd4e8d17dddde4d4da6469a4619421f4d2254b0eaf10774fe152dad8a",
+    "windows/App/SampleDetailWindow.hpp": "57c615502def463689f2df43787e6e975973839bd7899dd7a160c99732b75f10",
+    "windows/App/SampleDetailWorkflows.inc": "0a8f956dffa9d94369fd738df2694b5be1471cecadb87c1b10352bc96bddd054",
+    "windows/App/SampleEditor.inc": "7254c74410bee975c8816ae220ada3ab3159e194f8d42597b1b49b49f2d1244e",
+    "windows/App/SampleFileDialog.hpp": "18e3d30c9da7cbc74add3858e8f1d0c8981b1a8183ac7d62cf6dd7bc77821343",
+    "windows/App/SampleLibrary.inc": "2c808c1b8847123cac5a81c4090ba434cb833d1ed95aaa64b70d642da96f5e1c",
+    "windows/App/SampleLibraryWindow.hpp": "1497aaab711334e70ff5a0551e5d41b4b76fd085170a51512b9954be8aa19715",
+    "windows/App/SampleMutation.inc": "2999d1c770740144d0c48d113ac5cc9166f16ba8bd1437165dbc2687ac8aa713",
+    "windows/App/SampleReadback.inc": "f3ed5f685f5fc5942fb6c52b0c7fd3444883dd8b8940a25d1188be7e0c4d39c8",
+    "windows/App/SampleRecordingWindow.hpp": "cd8e5464b5d511294b819eba172253feb6a8e91f150d47993674746a265b9fd1",
+    "windows/App/SampleWorkflowDraft.hpp": "14c8696a82a952cb81ab57d4ea8e6f9ca6c48c2fe33ce893f976b60d329dec0f",
+    "windows/App/ScratchGestureWindow.hpp": "34ef1bedd83b6e7b64d226ab950ec2b47af7c6c0f2ea0b686641c81fbde7c550",
+    "windows/App/SongRoutingWindow.hpp": "c3a99bf4590840f080a6549a7b8e4a7144ccb451c0e2637765e92806660108d3",
+    "windows/App/SongTimingWindow.hpp": "bb35c93adfc48cd677032cd87ac229382f6f4572cd38ebbfae115bf72a41f10c",
+    "windows/App/WorkspaceLayoutWindow.hpp": "ec8013f5096d3c4c32e573b0db8f8e9cb86f23732ef2419c28a8419530e0129b",
+    "windows/build.ps1": "06efcffea3e20761e06c3ef4154683e728121b17e557878df0a7d5a6f506a069",
+    "windows/CMakeLists.txt": "2fff715ef744400b530527872adb25faa23db8e89cce4f5dcba391c6137faae8",
+    "windows/Session/AssetOperations.cpp": "e1864e33a075b0f25a12fced6836b34e48e961c7c11092001200d9ff8bc9d8c7",
+    "windows/Session/AssetOperations.hpp": "3798705f87d5e758ac1bcd34df3e66c4c7faf2551b869bb6c7367a2255e5ff6a",
+    "windows/Session/DocumentController.cpp": "6ce5d0c27bc5f54b8d592f65bc7a7e79c00cd29917bb18f3a5681f1f9f3739df",
+    "windows/Session/DocumentController.hpp": "7a2a938330b65ed8fcaf226a4e69ab2edf6d3401c1a74061a86f1c8ee29122b6",
+    "windows/Session/EnvelopeOperations.cpp": "dfdf004a0b6906d232223864a48c29fd6437a0d654ba2979982a1984f0a74c5d",
+    "windows/Session/EnvelopeOperations.hpp": "b0bd0973aec275a3ad1baaf8a2881ab16771590bb98ee033e714db868c067a1a",
+    "windows/Tests/PrivateGuiProcessTest.hpp": "311421969abb8490573cc81b800ec336884c5cf92a2b5ef5e6a4a78ac3c76188",
+    "windows/Tests/Workspace/CMakeLists.txt": "578394961b921301d6b3cb5df636ff2266b1f1c886ad3e441a4b5df3b7c2b4e5",
+    "windows/Tests/Workspace/DocumentDepartureApplicationTests.inc": "044b044d65cc8934bc4ab38b8f84a92a4f0add909a8cf9b7e67e3a8c05d0ed6d",
+    "windows/Tests/Workspace/DocumentDraftCensusTests.inc": "fcf8e9a776f1cc901539d86d3c724d230ae98f6957c7cc2b52e875ba410b8cdc",
+    "windows/Tests/Workspace/DraftImportRetentionTests.inc": "3f9a6d98b13ea0c91ed359fc5e661d8262111e998c0ed7fcda2c41ddb024b0aa",
+    "windows/Tests/Workspace/DraftRequestRetentionTests.inc": "cee0611ab9f1c2af8f8f23de056573b6412e0a1d17dc642ca6ab805da0a3fced",
+    "windows/Tests/Workspace/InstrumentCreationApplicationTests.inc": "25dce197f2ad5d9aac97f68dcc07ab058496abc5b9dd8a189c27244562dc4c6b",
+    "windows/Tests/Workspace/NativeInputGateTests.inc": "132814f4a419bb058589d9bb7448577b654e9fede817950c0fd561e3b1477028",
+    "windows/Tests/Workspace/NativeReceiptApplicationTests.inc": "6e4bae357c9e43ec12b47f7045ed10e314c9fc59733a6888fdf159d87347eaf1",
+    "windows/Tests/Workspace/NativeToolWindowTests.cpp": "e2c43d7ecebedf43e82fe25037c146113ab6859e701a6a03d751bb40970d59c8",
+    "windows/Tests/Workspace/NativeWriteCompletionTests.inc": "9ee79bb064192b67ac13040e087fef0081b33fa2324bb24fd0f5c920c34c859b",
+    "windows/Tests/Workspace/NestedDraftOwnerTests.inc": "d47b5db849d51b6caf5208c4e601f12cd81dabb0c53c5873bbd04133db388bde",
+    "windows/Tests/Workspace/PluginLibraryApplicationTests.inc": "4b8ffac6267db8b7e080e4cda6e58b80d8c03279b7ee49d9e4822e22feba5ef7",
+    "windows/Tests/Workspace/PluginLibraryCompletionTests.inc": "5b4cdab8ad5d7c316c852675f4f6753ba1aada1a50e53fb7daa4176a7e7cb382",
+    "windows/Tests/Workspace/PluginPathReadbackTests.inc": "e399a3d662794333d2884c03fbe6181aa45dfa01deac12b61ad086ce45d63e65",
+    "windows/Tests/Workspace/PluginPresetApplicationTests.inc": "4e2808877a681f77f310e9bb1f1104c8526d7aabfd7dfd15089b4c34d755d772",
+    "windows/Tests/Workspace/RecordingLifecycleReviewTests.inc": "f8eec1e2cc8ccb6434628ad1e7c9d833ccf018ceecb7ac3cf7f78e14021c70a9",
+    "windows/Tests/Workspace/SampleBrowserApplicationTests.inc": "8119e8320676ff0cfd702c3320df3e706c467ab6c3726e1c18fef67d9b23df8d",
+    "windows/Tests/Workspace/SampleBrowserCompletionTests.inc": "27a94455af9251c2cf7c20973168872f042aa3ce19212e440da6b3c3a0540157",
+    "windows/Tests/Workspace/SampleLibraryApplicationTests.inc": "24cb986b5e3bbc0c2f6d9e7c4d4fe8a55659fc76ae030cc4e35284d2adcc7b62",
+    "windows/Tests/Workspace/SampleLibraryRecoveryTests.inc": "a07aeed3ce0ede26a3e91b2a7c552583725028c6b381ff92dca7424761ed5570",
+    "windows/Tests/Workspace/SampleMutationApplicationTests.inc": "354bc3fb8e1f5b8ca2c7fdf66d40f1b22e2dfd12db9a27dabe5386cb60944f46",
+    "windows/Tests/Workspace/SampleReadbackApplicationTests.inc": "e851f4b29f765a41ed88746b4bf67d41d1d520228ea15ebb70572890c019f851",
+    "windows/Tests/Workspace/WorkspaceLayoutsTests.cpp": "2bb594b2249332544024eac1eaca9b8a535e193ae6d2d547bbad4a943c9ced41",
+    "windows/Tests/Workspace/WorkspaceRestoreTests.cpp": "87ca62d9c8346c782d111e96b037c8fcbccf692afa1d8c6daa4797419aa6b601",
+    "windows/Tests/Workspace/WorkspaceShortcutsTests.cpp": "ef948433ed3fa6c723064f74d2be036fd713c405184089f1863d28e3b578a522"
+  },
+  "latest_receipt": {
+    "path": "bin/parity-evidence/p0b-sample-readback-receipt.json",
+    "sha256": "a5250fbc404593c196c4234c47ac58ce66c47cc860261ec0a450e13f422e92c7",
+    "comparisons": {
+      "source_hashes": {
+        "count": 1861,
+        "missing": [],
+        "different": []
+      },
+      "executables": {
+        "count": 2,
+        "missing": [],
+        "different": []
+      },
+      "logs": {
+        "count": 4,
+        "missing": [],
+        "different": []
+      }
+    }
+  },
+  "qualification_claim": "None added; prior receipts retain their recorded scope.",
+  "checkpoint_phase": "Before the unbuilt C4/C5 candidate edits; source/evidence comparisons describe that inspection instant, not the pending candidate."
+}

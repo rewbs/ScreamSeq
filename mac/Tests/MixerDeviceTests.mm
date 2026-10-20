@@ -129,6 +129,10 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       if (bus->reductionDB[0] > 0 && bus->detectorDB[0] > -100) ++busReads;
       auto meters = device.mixerMeters();
       if (meters.size() != controls.size()) throw std::runtime_error("Live bus meters unavailable");
+      const auto identified = device.identifiedMixerMeters();
+      if(!identified.fresh||identified.buses.size()!=controls.size())throw std::runtime_error("Live bus meter identities unavailable");
+      for(size_t i=0;i<identified.buses.size();++i)
+        for(size_t j=0;j<i;++j)if(identified.buses[i].id==identified.buses[j].id)throw std::runtime_error("Live bus meter identity duplicated");
       if (std::any_of(meters.begin(), meters.end(), [](const auto &meter) { return meter.left > 0 || meter.right > 0; })) ++meterReads;
       std::vector<Edit> edits;
       for (int ch = 0; ch < 127; ++ch) edits.push_back({0, uint16_t((gestures % 255) * 4), uint16_t(ch), {},

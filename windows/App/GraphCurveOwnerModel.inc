@@ -8,9 +8,9 @@
     selection(kind,kind_);pointFields_=false;setting_=false;layout();
   }
   void choices(){
-    setting_=true;SendMessageW(controls_.at(pattern),CB_RESETCONTENT,0,0);
+    setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_RESETCONTENT,0,0);
     for(size_t i=0;i<patterns_.size();++i){const auto &p=patterns_[i];const auto name=L"Pattern "+std::to_wstring(p.at("index").get<unsigned>())+L" · "+wide(p.value("name",std::string()));
-      SendMessageW(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==target_.patternID)selection(pattern,int(i));}
+      ScreamSeq::NativeInputGate::present(controls_.at(pattern),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(p.at("id")==target_.patternID)selection(pattern,int(i));}
     setting_=false;
   }
   void restorePatternChoice(){for(size_t i=0;i<patterns_.size();++i)if(patterns_[i].at("id")==target_.patternID){selection(pattern,int(i));return;}}
@@ -25,6 +25,7 @@
     load(now,resolve(now,*target),true);
   }
   void load(const Context &before,Target target,bool following){
+    cancelAutomaticEdit();
     require(!before.busy,"Wait for the document before loading a curve");
     const auto token=generation_;const auto previousTarget=target_;const auto previousDocument=document_;
     Pending pending(*this);
@@ -51,7 +52,7 @@
     rows_=rows;rowsPerBeat_=beat;enabled_=enabled;points_=std::move(points);title_=std::move(nextTitle);
     initialized_=true;dirty_=pointFields_=false;selected_=-1;++generation_;values_=Json::array();
     canvas_=std::move(nextCanvas);
-    choices();showPoint();schedule();rebuild();status(L"Click or drag points / Apply saves one document Undo step");
+    choices();showPoint();schedule();rebuild();status(L"Point edits save automatically / each completed drag is one Undo step");
   }
   Json pointFromFields()const{
     const double position=number(pointRow)*256,value=number(pointValue)/100;
@@ -80,6 +81,7 @@
     catch(const std::exception &e){if(token==generation_){values_=Json::array();rebuild();error(e);}}
   }
   void commit(){
+    cancelAutomaticEdit();
     requireCurrent();require(!pointFields_,"Use Set point before applying the curve");
     const auto before=context_();const auto target=resolve(before,target_);const auto token=generation_;
     const auto document=document_,revision=revision_;

@@ -1,4 +1,5 @@
 #include "Library.hpp"
+#include "windows/Session/NativeCallReceipt.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include <windows.h>
@@ -110,17 +111,37 @@ struct Library::Impl {
     need(p.contains("expectedLibraryRevision"),"expectedLibraryRevision is required");
     if(text(p.at("expectedLibraryRevision"))!=version)throw Api::ApiError(-32001,"Sample library changed; read sample.library.get again");
   }
-  Json operation(const std::string &method,const Json &p){
+  Json commitScan(const std::string &method,std::optional<std::vector<std::string>> nextRoots,
+      const std::shared_ptr<NativeCallReceipt> &ticket,const std::string &document,bool &committed){
+    // All allocations, result construction and scan-queue storage precede the
+    // preference promotion. Nothing fallible follows the visible commit.
+    auto nextVersion=nextRoots?revision():version;auto state=*published.load(std::memory_order_acquire);
+    state["indexing"]=true;state["error"]=nullptr;state["libraryRevision"]=nextVersion;
+    if(nextRoots){state["roots"]=*nextRoots;state["ready"]=false;state["count"]=0;state["indexedAt"]=nullptr;state["warnings"]=Json::array();}
+    Json response={{"revision","library:"+nextVersion},{"changed",false},{"playbackStopped",false},{"data",state}};
+    auto publication=std::make_shared<const Json>(state);
+    std::shared_ptr<const Api::CompletedCall> result;
+    if(ticket)result=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,document,nextVersion,std::move(state)});
+    Scan scan{0,false,nextRoots?*nextRoots:currentRoots};
+    static_assert(std::is_nothrow_move_assignable_v<decltype(nextScan)>);
+    std::unique_lock lock(scanMutex);
+    if(nextRoots&&directory)writeJson(*directory/L"roots.json",*nextRoots,1024u*1024u);
+    if(nextRoots){currentRoots.swap(*nextRoots);index.reset();version.swap(nextVersion);preferencesWarning.clear();}
+    scan.generation=generation.fetch_add(1)+1;nextScan=std::move(scan);indexing=true;error.clear();
+    published.store(std::move(publication),std::memory_order_release);committed=true;
+    if(ticket)ticket->publish(std::move(result));
+    lock.unlock();scanWake.notify_one();return response;
+  }
+  Json operation(const std::string &method,const Json &p,const std::shared_ptr<NativeCallReceipt> &ticket,const std::string &document,bool &committed){
     if(method=="sample.library.get"){keys(p,{});return reply(*published.load(std::memory_order_acquire));}
     if(method=="sample.library.roots.set"){
       keys(p,{"roots","expectedLibraryRevision"});checkRevision(p,true);need(p.contains("roots"),"roots is required");auto next=roots(strings(p.at("roots")),true);
       // Commit small preferences before changing the visible generation. Sample
       // packs are never edited; removing a root only removes it from this list.
-      if(directory)writeJson(*directory/L"roots.json",next,1024u*1024u);
-      currentRoots=std::move(next);index.reset();version=revision();preferencesWarning.clear();schedule();return reply(*published.load(std::memory_order_acquire));
+      return commitScan(method,std::move(next),ticket,document,committed);
     }
     if(method=="sample.library.rescan"){
-      keys(p,{"expectedLibraryRevision"});checkRevision(p,true);if(indexing)throw Api::ApiError(-32002,"Sample library is already indexing");schedule();return reply(*published.load(std::memory_order_acquire));
+      keys(p,{"expectedLibraryRevision"});checkRevision(p,true);if(indexing)throw Api::ApiError(-32002,"Sample library is already indexing");return commitScan(method,{},ticket,document,committed);
     }
     if(method=="sample.library.search"){
       keys(p,{"query","tags","root","tagQuery","offset","limit","expectedLibraryRevision"});checkRevision(p,false);
@@ -133,16 +154,29 @@ struct Library::Impl {
     }
     throw Api::ApiError(-32601,"Unknown sample library method");
   }
-  std::future<Json> invoke(std::string method,Json params){
+  std::future<Json> invoke(std::string method,Json params,std::shared_ptr<NativeCallReceipt> ticket,std::string document){
     auto promise=std::make_shared<std::promise<Json>>();auto future=promise->get_future();
-    {std::lock_guard lock(ownerMutex);if(closing||jobs.size()>=64){promise->set_exception(std::make_exception_ptr(Api::ApiError(-32002,"Sample library is busy or closing")));return future;}
-      jobs.emplace_back([this,promise,method=std::move(method),params=std::move(params)]{try{promise->set_value(operation(method,params));}catch(const std::invalid_argument &e){promise->set_exception(std::make_exception_ptr(Api::ApiError(-32602,e.what())));}catch(...){promise->set_exception(std::current_exception());}});
+    {std::lock_guard lock(ownerMutex);if(closing||jobs.size()>=64){promise->set_exception(std::make_exception_ptr(Api::ApiError(-32002,"Sample library is busy or closing",ticket?std::optional(Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted}):std::nullopt)));return future;}
+      jobs.emplace_back([this,promise,method=std::move(method),params=std::move(params),ticket=std::move(ticket),document=std::move(document)]{
+        bool committed=false;const bool write=method=="sample.library.roots.set"||method=="sample.library.rescan";
+        const auto failure=[&](int code,const std::exception &e){
+          // Native completion classification is internal; preserve the
+          // established independent API error envelope for pipe callers.
+          const auto outcome=write&&ticket?std::optional(Tracker::WriteOutcome{committed?Tracker::CommitOutcome::Committed:Tracker::CommitOutcome::NotCommitted}):std::nullopt;
+          promise->set_exception(std::make_exception_ptr(Api::ApiError(code,e.what(),outcome,ticket?ticket->read():nullptr)));
+        };
+        try{promise->set_value(operation(method,params,ticket,document,committed));}
+        catch(const Api::ApiError &e){failure(e.code,e);}
+        catch(const std::invalid_argument &e){failure(-32602,e);}
+        catch(const std::exception &e){failure(-32003,e);}
+        catch(...){promise->set_exception(std::current_exception());}
+      });
     }ownerWake.notify_one();return future;
   }
 };
 Library::Library(std::optional<std::filesystem::path> directory,std::vector<std::string> defaults,std::function<void()> hook):impl_(std::make_unique<Impl>(std::move(directory),std::move(defaults),std::move(hook))){}
 Library::~Library()=default;
-std::future<Json> Library::invoke(std::string method,Json params){return impl_->invoke(std::move(method),std::move(params));}
+std::future<Json> Library::invoke(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt,std::string document){return impl_->invoke(std::move(method),std::move(params),std::move(receipt),std::move(document));}
 Json Library::status()const{return *impl_->published.load(std::memory_order_acquire);}
 std::vector<std::string> Library::reads(){return {"sample.library.get","sample.library.search","sample.library.multisample.get"};}
 std::vector<std::string> Library::writes(){return {"sample.library.roots.set","sample.library.rescan"};}

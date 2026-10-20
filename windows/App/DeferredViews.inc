@@ -7,7 +7,7 @@
     static bool viewOpeningCommand(int id) {
         switch(id){
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:
-        case effectsCommand:case mixerCommand:case mixerRouting:case graphCommand:
+        case effectsCommand:case mixerCommand:case mixerStripsCommand:case mixerDetailsCommand:case mixerAddEffect:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:case graphTrimsCommand:
         case parameterAutomationCommand:case absoluteAutomationCommand:
         case openGraphCurveCommand:case dockGraphCurveCommand:case graphEditingWorkspaceCommand:case editorGraphCurveTab:
@@ -24,7 +24,7 @@
         if(id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});
         if(id==patternRenderOptionsCommand)return Json::array({view->session.revision,patternIndex,selection()});
         if(id==graphCommand)return Json::array({graphID,graphNode,graphGeneration});
-        if(id==mixerCommand)return Json::array({mixerTarget});
+        if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand||id==mixerAddEffect)return Json::array({mixerTarget});
         return Json::array({patternIndex,row,channel,column,selectedSample(),typingSoundId,selectedPlugin,selectedParameter});
     }
     bool deferView(int id) {
@@ -36,6 +36,7 @@
         PostMessageW(window,deferredViewsMessage,0,0);frameRequested=true;return true;
     }
     void drainViews() {
+        if(departureInput)return;
         if(busy||drainingViews||refreshingPlugins||refreshingMixer||refreshingGraph||mixerPending||graphPending||graphCurvePending()||preciseNotePending())return;
         drainingViews=true;
         struct Guard{bool &flag;~Guard(){flag=false;}}guard{drainingViews};

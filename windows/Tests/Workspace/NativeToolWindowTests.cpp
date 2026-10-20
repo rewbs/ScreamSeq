@@ -1,5 +1,12 @@
 #include "../../App/NativeToolWindow.hpp"
-#include "../PrivateGuiTest.hpp"
+#include "../../App/GraphTrimsWindow.hpp"
+#include "../../App/PatternSampleRenderWindow.hpp"
+#include "../../App/MultisampleImportWindow.hpp"
+#include "../../App/PluginPathWindow.hpp"
+#include "../../App/PluginLibraryWindow.hpp"
+#include "../../App/SampleRecordingWindow.hpp"
+#include "../../App/SampleLibraryWindow.hpp"
+#include "../PrivateGuiProcessTest.hpp"
 #include <iostream>
 
 namespace {
@@ -13,13 +20,17 @@ struct Window {
 };
 class Tool final:public ScreamSeq::NativeToolWindow {
 public:
-  unsigned localKeys=0,deactivations=0,layouts=0;
+  unsigned localKeys=0,deactivations=0,layouts=0,comboActions=0;
+  bool documentScoped=false,dirty=false;
   explicit Tool(HWND owner):NativeToolWindow(owner){minimumWidth_=300;minimumHeight_=220;create(L"ScreamSeq.DockTest.Tool",L"Retained editor",640,420);edit(1,L"Captured draft",128);button(2,L"Apply");combo(3);SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"First"));SendMessageW(controls_.at(3),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Second"));SendMessageW(controls_.at(3),CB_SETCURSEL,1,0);finish();ScreamSeq::Tests::ownGuiWindow(window());}
   HWND control(int id)const{return controls_.at(id);}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    if(!documentScoped)return {};
+    Tracker::DocumentDraft result;result.document="old-document";result.revision="r1";result.target="captured-point";result.generation=1;result.dirty=dirty;return result;
+  }
   void minimumClient(int width,int height){minimumClientWidth_=width;minimumClientHeight_=height;}
   void layout()override{++layouts;const auto [w,h]=size();place(1,8,8,std::max(1.f,w-16),24);place(2,8,40,90,24);place(3,106,40,150,160);}
-  void paint(ScreamSeq::RenderSurface &surface)override{surface.fill(0,0,surface.width(),surface.height(),0x18222d);}
-  void action(int,unsigned)override{}
+  void action(int id,unsigned)override{if(id==3){++comboActions;SendMessageW(control(3),CB_SHOWDROPDOWN,FALSE,0);}}
   bool key(WPARAM key,bool,bool)override{if(key==VK_F6){++localKeys;return true;}return false;}
   void deactivate()override{++deactivations;}
 };
@@ -43,6 +54,26 @@ void minimumClientBounds(HWND main,HWND host){
   tool.dockBounds(0,0,320,240);GetClientRect(window,&client);const auto parentScale=GetDpiForWindow(host)/96.f;
   require(client.right==LONG(std::round(320*parentScale))&&client.bottom==LONG(std::round(240*parentScale)),"Docked tool cannot use a client area smaller than its floating minimum");
   std::cout<<"Native client minimum: exact 440 x 500 DIPs at "<<dpi<<" DPI; docked bounds unrestricted\n";
+}
+LRESULT CALLBACK appearanceNotifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
+  if(ScreamSeq::NativeControls::themeMessage(m))++*reinterpret_cast<unsigned *>(data);
+  if(m==WM_NCDESTROY)RemoveWindowSubclass(h,appearanceNotifications,id);
+  return DefSubclassProc(h,m,w,l);
+}
+void retainedThemeChange(HWND main){
+  Tool outer(main);outer.show();Tool inner(outer.window());inner.dock(outer.window());inner.dockBounds(0,100,480,240);inner.show();
+  const auto edit=inner.control(1),selector=inner.control(3);SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
+  const auto beforeOuterLayouts=outer.layouts,beforeInnerLayouts=inner.layouts,beforeReleases=inner.deactivations;
+  const auto undo=SendMessageW(edit,EM_CANUNDO,0,0);unsigned notifications=0;
+  require(SetWindowSubclass(selector,appearanceNotifications,42,reinterpret_cast<DWORD_PTR>(&notifications)),"Observe retained child appearance notifications");
+  for(const auto message:{WM_THEMECHANGED,WM_SYSCOLORCHANGE,WM_SETTINGCHANGE})SendMessageW(outer.window(),message,0,0);
+  DWORD first=0,last=0;SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+  require(notifications>=3,"Top-level appearance change did not reach nested native selectors");
+  require(outer.layouts==beforeOuterLayouts&&inner.layouts==beforeInnerLayouts&&inner.deactivations==beforeReleases,
+    "Appearance refresh reloaded layout or released musical input");
+  require(GetFocus()==edit&&text(edit)==L"Captured draft"&&first==2&&last==7&&SendMessageW(edit,EM_CANUNDO,0,0)==undo&&SendMessageW(selector,CB_GETCURSEL,0,0)==1,
+    "Appearance refresh changed retained text, focus, caret, Undo or selection");
+  std::cout<<"Native theme broadcasts preserve nested retained fields and input ownership\n";
 }
 void compactHeaderMeasurement(){
   Window owner(L"STATIC");ScreamSeq::RenderSurface surface(owner.value);
@@ -69,6 +100,16 @@ void retainedDock(HWND main,HWND host){
   SetWindowPos(window,nullptr,80,90,640,420,SWP_NOZORDER|SWP_NOACTIVATE);
   RECT floating{};GetWindowRect(window,&floating);
   tool.show();SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
+  RECT comboRect{};GetClientRect(combo,&comboRect);
+  const auto click=MAKELPARAM(comboRect.right-8,comboRect.bottom/2);
+  SendMessageW(combo,WM_LBUTTONDOWN,MK_LBUTTON,click);SendMessageW(combo,WM_LBUTTONUP,0,click);
+  require(SendMessageW(combo,CB_GETDROPPEDSTATE,0,0),"Mouse click must leave the dropdown open");
+  require(tool.comboActions==0,"Opening/focusing a dropdown must not invoke an editing action");
+  SendMessageW(combo,WM_KEYDOWN,VK_ESCAPE,0);
+  require(!SendMessageW(combo,CB_GETDROPPEDSTATE,0,0)&&tool.comboActions==0,"Cancelling a dropdown must not edit");
+  SendMessageW(window,WM_COMMAND,MAKEWPARAM(3,CBN_SELCHANGE),reinterpret_cast<LPARAM>(combo));
+  require(tool.comboActions==1,"Selected dropdown item must dispatch exactly once");
+  SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
   unsigned changed=0,globals=0,releases=0;
   tool.placementChanged([&]{++changed;});
   tool.workspaceKeys([&](WPARAM key,bool){++globals;return key==VK_F8;});
@@ -124,12 +165,51 @@ void retainedDock(HWND main,HWND host){
   require(reentrant==1&&!tool.visible(),"Placement notification reentered during retained hide");
   tool.placementChanged({});tool.floatWindow();tool.hide();
 }
+#include "DraftRequestRetentionTests.inc"
+#include "DraftImportRetentionTests.inc"
+#include "NativeWriteCompletionTests.inc"
+#include "RecordingLifecycleReviewTests.inc"
+#include "PluginPathReadbackTests.inc"
+#include "PluginLibraryCompletionTests.inc"
+#include "SampleBrowserCompletionTests.inc"
+#include "SampleLibraryRecoveryTests.inc"
+#include "NativeInputGateTests.inc"
+#include "NestedDraftOwnerTests.inc"
+void nativeOwnerRetirement(HWND main) {
+  DraftRegistryHost host(main);
+  Tool parent(main);parent.documentScoped=true;parent.dirty=true;
+  Tool child(parent.window());child.documentScoped=true;child.dirty=true;
+  Tool clean(main);clean.documentScoped=true;
+  Tool global(main);
+  parent.dock(main);parent.dockBounds(0,0,640,420);parent.show();child.show();clean.hide();global.show();
+  const auto parentWindow=parent.window(),childWindow=child.window(),cleanWindow=clean.window(),globalWindow=global.window();
+  unsigned placement=0;parent.placementChanged([&]{++placement;});
+  auto consent=host.registry.authorize(host.registry.capture("old-document","r1"),true);
+  {
+    auto admission=host.registry.admitForReplacement(*consent.token,"old-document","r1");
+    require(admission.replacement&&IsWindow(parentWindow)&&IsWindow(childWindow)&&text(parent.control(1))==L"Captured draft","Admission retired native controls before adoption");
+  }
+  require(IsWindow(parentWindow)&&IsWindow(childWindow)&&parent.dirty&&placement==0,"Canceled replacement lost raw native controls");
+  consent=host.registry.authorize(host.registry.capture("old-document","r1"),true);
+  auto admission=host.registry.admitForReplacement(*consent.token,"old-document","r1");
+  require(admission.replacement&&admission.replacement->retireOwners()&&host.registry.departing(),"Native owner retirement lost its refresh lease");
+  require(!IsWindow(parentWindow)&&!IsWindow(childWindow)&&!IsWindow(cleanWindow),"Docked, nested or hidden clean document HWND survived retirement");
+  require(parent.retired()&&child.retired()&&clean.retired()&&IsWindow(globalWindow)&&!global.retired(),"Retirement affected global tools or left nested owner reusable");
+  require(placement==0&&host.registry.capture("new-document","r2").drafts.empty(),"Retirement reentered workspace placement or retained destroyed registrations");
+  rejected([&]{parent.show();},"Retired editor was reopened");
+  rejected([&]{parent.floatWindow();},"Retired editor was floated");
+  require(!admission.replacement->retireOwners(),"Native cleanup ran twice");
+  admission.replacement.reset();require(!host.registry.departing(),"Native refresh completion leaked its input lease");
 }
-int main(){
+}
+int wmain(int argc,wchar_t **argv){
   try{
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqDockTest",[]{
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqDockTest",argc,argv,[]{
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
-    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);compactHeaderMeasurement();host.close();main.close();}
-    require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");});std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
+    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);retainedThemeChange(main.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
+    require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");
+    {Window main(type.lpszClassName);completionClassification();pluginPathCompletionReview(main.value);pluginPathReadback(main.value);pluginLibraryCompletionReview(main.value);sampleBrowserCompletionReview(main.value);sampleLibraryRecovery(main.value);renderCompletionReview(main.value);importCompletionReview(main.value);recordingCompletionReview(main.value);recordingLifecycleReview(main.value);nativeOwnerRetirement(main.value);nativeInputGate(main.value);earlyNestedDraftOwner(main.value);}
+    std::cout<<"Native result review: reconnect/render/import/Keep retain postcommit failures without repeating writes\n";
+    });std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;
   }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}
 }

@@ -1,0 +1,287 @@
+{
+  "format": "screamseq-parity-ci-checkpoint-v1",
+  "sourceCommit": "d39ec5548fc6224f5d395dbf02d6b0eca35b48ac",
+  "inspectedUTC": "2026-10-09T23:47:44.218709+00:00",
+  "entries": [
+    {
+      "name": "windows-x64-gate-04",
+      "run": 38003410537,
+      "job": 114066588740,
+      "conclusion": "failure",
+      "artifact": 11651021969,
+      "artifactSHA256": "55a30ac74ac910a4c0d4fa31267eca54d0ea816dcb40587007a2d0eec609d78e",
+      "executableSHA256": "ba2f5f93337bd05cbd22d17ed2bdeef5c76e905345548dd760ac8198315a8132",
+      "roundtripReportSHA256": "a8e61fdd2e634ed0279dc3f4058ad629e66f1f9ffa9d87696078987d55148c36",
+      "fixtures": [
+        {
+          "name": "01-midnight-circuit.screamseq",
+          "passed": true
+        },
+        {
+          "name": "02-editors-and-effects.screamseq",
+          "passed": true
+        },
+        {
+          "name": "03-routing-and-modulation.screamseq",
+          "passed": true
+        },
+        {
+          "name": "04-complete-reference.screamseq",
+          "passed": true
+        },
+        {
+          "name": "05-arrangement-copy-after.screamseq",
+          "passed": true
+        }
+      ],
+      "API": {
+        "baselineMatched": true,
+        "parityComplete": false,
+        "preservationFailures": [
+          "plugin-parameter-stable-identity"
+        ],
+        "noOpPersistence": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "unrelatedPersistence": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "editHistoryReplayPersistence": true
+      },
+      "logs": {
+        "screamseq-conformance-native.log": "54ee1eafd2ed75f43ba88b0a674ef34e41ad773076b7063f79d3adfc517ac396",
+        "screamseq-conformance-project-helper.log": "e6e34a4342a782e6f6e3df902149020a581e7f3a228558dd654ae54f3fe16c4d",
+        "screamseq-conformance-tools.log": "470ab006549319835121c5a9b3ce8fe9705b851e7fc40a06a09c8b2f71b26f9d",
+        "screamseq-integration-ui.log": "b408bbade533d9b6fa9adc1d5e073c1bc00e44ae789f13b5b44d77d2f94479a0",
+        "screamseq-retained-editors.log": "4b06a616ff980dc840ae220f5788620b890e2c88069b84a5f0fd402192ba4257",
+        "screamseq-scratch-ui.log": "5b39ab6fd7a50c6b846bc3ff1af1628906ba5115de65ddeba607441e37352f03",
+        "screamseq-windows-model.log": "befe3c7078af712346863a7a45830d41eb5ead6780b87bae7c63b1450e804557",
+        "screamseq-windows.log": "608e3119996fad454ecad3e5df6c8665c8f66e50ec51a7ec1c09ecb933981bb7"
+      },
+      "nativeTests": {
+        "passed": 136,
+        "total": 137
+      },
+      "editorTests": {
+        "passed": 29,
+        "total": 29
+      },
+      "appTests": {
+        "total": 30,
+        "failureRecords": 12,
+        "failedCases": [
+          "test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take (test_recording.RecordingTests.test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take)",
+          "test_keyup_during_document_wait_never_starts_a_late_voice (test_audition.AuditionTests.test_keyup_during_document_wait_never_starts_a_late_voice)",
+          "test_native_browser_save_reload_restore_and_file_save_cleanup (test_recovery.RecoveryTests.test_native_browser_save_reload_restore_and_file_save_cleanup)",
+          "test_native_sample_and_instrument_typing_capture_text_and_close (test_audition.AuditionTests.test_native_sample_and_instrument_typing_capture_text_and_close)",
+          "test_queue_loss_retains_stopped_take_until_explicit_review_and_finish (test_recording.RecordingTests.test_queue_loss_retains_stopped_take_until_explicit_review_and_finish)",
+          "test_sample_dock_typing_live_mode_and_text_focus (test_audition.AuditionTests.test_sample_dock_typing_live_mode_and_text_focus)",
+          "test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor (test_workspace_shortcuts.WorkspaceShortcutTests.test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor)",
+          "test_stop_drains_multiple_batches_without_later_step_entry (test_recording.RecordingTests.test_stop_drains_multiple_batches_without_later_step_entry)",
+          "test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review (test_recording.RecordingTests.test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review)"
+        ]
+      },
+      "audioServices": [
+        {
+          "error": null,
+          "name": "AudioEndpointBuilder",
+          "before": "Stopped",
+          "status": "Running"
+        },
+        {
+          "error": null,
+          "name": "Audiosrv",
+          "before": "Stopped",
+          "status": "Running"
+        }
+      ],
+      "audioProbe": {
+        "format": "screamseq-audio-environment-v1",
+        "executable": "D:\\a\\ScreamSeq\\ScreamSeq\\bin\\windows-ci\\Release\\ScreamSeq.exe",
+        "executableSHA256": "ba2f5f93337bd05cbd22d17ed2bdeef5c76e905345548dd760ac8198315a8132",
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "machine": "AMD64",
+        "process": {
+          "pid": 2928,
+          "command": [
+            "D:\\a\\ScreamSeq\\ScreamSeq\\bin\\windows-ci\\Release\\ScreamSeq.exe",
+            "--inspection",
+            "--automation",
+            "--seconds",
+            "600"
+          ],
+          "isolation": "never-switched private desktop"
+        },
+        "requests": [
+          {
+            "method": "audio.devices.get",
+            "result": {
+              "changed": false,
+              "data": {
+                "devices": []
+              },
+              "playbackStopped": false,
+              "revision": "audio:{96F0E704-5A49-4180-8023-3B9B8301DA89}:0"
+            }
+          },
+          {
+            "method": "audio.settings.get",
+            "result": {
+              "changed": false,
+              "data": {
+                "active": false,
+                "activeEndpoint": "",
+                "actualPeriodFrames": 0,
+                "audioRevision": "audio:{96F0E704-5A49-4180-8023-3B9B8301DA89}:0",
+                "bufferFrames": 0,
+                "checked": null,
+                "endpoint": "",
+                "inspection": true,
+                "periodFrames": 0,
+                "sampleRate": 0,
+                "window": {
+                  "visible": false
+                }
+              },
+              "playbackStopped": false,
+              "revision": "audio:{96F0E704-5A49-4180-8023-3B9B8301DA89}:0"
+            }
+          },
+          {
+            "method": "transport.get",
+            "result": {
+              "changed": false,
+              "data": {
+                "audioActive": false,
+                "audition": false,
+                "auditionDropped": 0,
+                "callbacks": 0,
+                "fault": false,
+                "faultDetails": null,
+                "frames": 0,
+                "left": 0.0,
+                "loop": true,
+                "maxMicros": 0.0,
+                "order": 0,
+                "overruns": 0,
+                "pattern": 0,
+                "playbackEpoch": 0,
+                "playing": false,
+                "presentation": {
+                  "frames": 1,
+                  "idleWaits": 2
+                },
+                "recordingClock": {
+                  "discontinuities": 0,
+                  "generation": 0,
+                  "hostTicksPerSecond": 10000000,
+                  "lastHostTime": "0",
+                  "valid": false
+                },
+                "region": {},
+                "right": 0.0,
+                "row": 0,
+                "voicePositions": [],
+                "voices": 0
+              },
+              "documentId": "{96F0E704-5A49-4180-8023-3B9B8301DA89}:1",
+              "playbackStopped": false,
+              "revision": "{96F0E704-5A49-4180-8023-3B9B8301DA89}:1:0:0:0"
+            }
+          }
+        ],
+        "diagnosticOnly": true,
+        "completed": true,
+        "binaryUnchanged": true
+      }
+    },
+    {
+      "name": "macos-arm64-gate-04",
+      "run": 38003412848,
+      "job": 114066597302,
+      "conclusion": "failure",
+      "artifact": 11651201638,
+      "artifactSHA256": "d2eac1be9544fa3e0efa9826404427f44f129ad1cddc88de5fe7b11f64e5550c",
+      "executableSHA256": "774a6a4170db8f901985cb5aff4b1f9c39dd41603642b20fe965ea7767bef5a8",
+      "roundtripReportSHA256": "9c3adf45731b2fd0d58fef7157322b59231740f8209d599e61f8e11339cf2da4",
+      "fixtures": [
+        {
+          "name": "01-midnight-circuit.screamseq",
+          "passed": true
+        },
+        {
+          "name": "02-editors-and-effects.screamseq",
+          "passed": true
+        },
+        {
+          "name": "03-routing-and-modulation.screamseq",
+          "passed": true
+        },
+        {
+          "name": "04-complete-reference.screamseq",
+          "passed": true
+        },
+        {
+          "name": "05-arrangement-copy-after.screamseq",
+          "passed": true
+        }
+      ],
+      "API": {
+        "baselineMatched": true,
+        "parityComplete": false,
+        "preservationFailures": [],
+        "noOpPersistence": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "unrelatedPersistence": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "editHistoryReplayPersistence": true
+      },
+      "logs": {
+        "screamseq-macos-build.log": "28f1247ae44d586b1e784b4fd1866bf5dc07c675526b10a8cd56bad9f828c867",
+        "screamseq-macos-conformance-native.log": "6f3fcb7207715454c37967b6d7f6d38e91d2362d13fadad5e4f60d3d78c2ddee",
+        "screamseq-macos-conformance-project-helper.log": "34d6ec72865f99b7e7a1a299e95311a5649acc56dfd253f9bbf81578d60f42c0",
+        "screamseq-macos-conformance-tools.log": "8bd8a01d39e47d33fa3dc301396fdc8588b0df259acf6213b23d7be532dfed81",
+        "screamseq-macos-interface.log": "eeeaa2f1ed4b1035924f6dd2ec01db2e78f8722ca3a861a1812fdafb018ed051",
+        "screamseq-macos-sample-library.log": "0013af0175175020a46636488c54990557924f8127904bf2f56528464138801f",
+        "screamseq-macos-tests.log": "e09c9467105e5e3c6cff6480143a2d5f5f00c13d65af0ddee633d5afd9f3bf69"
+      },
+      "nativeTests": {
+        "passed": 122,
+        "total": 122
+      },
+      "interfaceTests": {
+        "passed": 34,
+        "total": 35,
+        "failedGroups": [
+          "signal-graph"
+        ],
+        "failure": "Host control drop exact-one zero-depth connection"
+      }
+    }
+  ],
+  "outstandingIntel": {
+    "run": 38003412848,
+    "job": 114066597619,
+    "lastObservedStatus": "in_progress",
+    "observedUTC": "2026-10-09T23:42:41Z"
+  },
+  "limits": [
+    "Built source only; neither the follow-up exception mapping nor P1 is qualified",
+    "Roundtrips are same-platform; no reciprocal d39 exchange claimed",
+    "Known API preservation differences remain open; matching the baseline is not parity"
+  ]
+}

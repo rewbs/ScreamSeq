@@ -1,6 +1,9 @@
 // Explicit Windows location repair, preserving the complete saved recipe except
 // its path. No automatic class substitution or AU-to-VST3 conversion is allowed.
 Json PluginOperations::invokePath(const std::string &method,const Json &p) {
+  const bool reconnect=method=="plugin.path.set"||method=="graph.plugin.path.set";
+  bool committing=false;
+  try {
   const bool graph=method.starts_with("graph.");const std::string prefix=graph?"graph.plugin.path.":"plugin.path.";
   Tracker::PluginState state;size_t index=0;uint64_t graphID=0,nodeID=0;Json target;
   const auto nativeID=[](const Json &v){const auto s=text(v,32);need(s.size()>1&&s[0]=='n'&&s[1]!='0',"Invalid graph identity");uint64_t id=0;for(size_t i=1;i<s.size();++i){need(s[i]>='0'&&s[i]<='9'&&id<Tracker::NativeSong::maximumID/10,"Invalid graph identity");id=id*10+s[i]-'0';}need(id&&id<Tracker::NativeSong::maximumID,"Invalid graph identity");return id;};
@@ -28,12 +31,25 @@ Json PluginOperations::invokePath(const std::string &method,const Json &p) {
   const auto path=text(field(p,"path"),8192);std::string resolved;
   try{resolved=WindowsVST3::verifyScannedPlugin(path,state.descriptor.classID,state.descriptor.instrument,hash);}catch(const std::exception &e){throw Api::ApiError(-32602,e.what());}
   const bool dry=flag(p,"dryRun"),changed=state.descriptor.path!=resolved;
+  // Allocate the reply before changing the saved path. Native completion can
+  // retain this original result without reconnecting or probing the vendor again.
+  auto result=target;result.update({{"path",resolved},{"moduleSHA256",hash},{"wouldChange",changed},{"dryRun",dry},{"reconnected",changed&&!dry}});
   if(changed&&!dry){
     auto candidate=state;candidate.descriptor.path=resolved;
     NativePlugin probe(candidate,48000); // State/ports must load before history or playback changes.
-    if(graph){auto next=document_.native();findNode(next).plugin.path=resolved;next.validate(document_.song());document_.annotate([&](Tracker::NativeSong &n){n=std::move(next);},stop_);
+    if(graph){auto next=document_.native();findNode(next).plugin.path=resolved;next.validate(document_.song());committing=true;document_.annotate([&](Tracker::NativeSong &n){n=std::move(next);},stop_);
       if(graphEditorGraph_==graphID&&graphEditorNode_==nodeID){graphEditor_.reset();graphEditorID_.clear();graphEditorWindowOpen_=false;}
-    }else{auto rack=project_.preserved.at("plugins");rack[index]["path"]=resolved;commit(std::move(rack),project_.preserved.at("automation"));}
+    }else{auto rack=project_.preserved.at("plugins");rack[index]["path"]=resolved;committing=true;commit(std::move(rack),project_.preserved.at("automation"));}
   }
-  auto result=target;result.update({{"path",resolved},{"moduleSHA256",hash},{"wouldChange",changed},{"dryRun",dry},{"reconnected",changed&&!dry}});return result;
+  return result;
+  }catch(const Api::ApiError &e){
+    // Only this path-set preflight is known not to have touched saved state.
+    // Scans mutate a separate cache; commit/publication failures remain owned
+    // by the controller, even when the song revision appears unchanged.
+    if(reconnect&&!committing)throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    throw;
+  }catch(const std::exception &e){
+    if(reconnect&&!committing)throw Api::ApiError(-32003,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    throw;
+  }
 }

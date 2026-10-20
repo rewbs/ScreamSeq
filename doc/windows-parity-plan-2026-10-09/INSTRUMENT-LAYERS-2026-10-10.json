@@ -1,0 +1,107 @@
+{
+  "scope": "Instrument-panel plugin assignment and shared layered sample/plugin playback; broader parity goal remains paused",
+  "build": {
+    "commit": "87792c952758350ee5cd0685c2ee87eb2b31cfb3",
+    "startedUTC": "2026-10-10T11:33:09.178515+00:00",
+    "oldAppSHA256": "b6601778c729bb4becb84ba2a70e92fc0cb1c6e4fe3ff6d0dd658d976469790b",
+    "scope": "Instrument assignment and layered sample/plugin playback; single batched app, UI and audio harness build; preserved musician process 31748 in GraphDirect-Release",
+    "commands": [
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "-S",
+        "windows",
+        "-B",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "ARM64",
+        "-DCMAKE_GENERATOR_INSTANCE=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+        "-DBUILD_TESTING=ON",
+        "-DSCREAMSEQ_BUILD_APP=ON",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1\\InstrumentLayers-Release"
+      ],
+      [
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+        "--build",
+        "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+        "--config",
+        "Release",
+        "--parallel",
+        "2",
+        "--target",
+        "ScreamSeq",
+        "workspace-restore-tests",
+        "instrument-short-dock-window-tests",
+        "native-audio-bus-tests",
+        "hosted-project-tests"
+      ]
+    ],
+    "finishedUTC": "2026-10-10T11:35:51.699729+00:00",
+    "exitCode": 0,
+    "logSHA256": "5d5c9e5ce0706834259ae70d43ab1f182c2315ff7d07ed7004153f98b1e05927",
+    "oldAppUnchanged": true,
+    "sourcesUnchanged": true,
+    "executables": {
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\hosted-project-tests.exe": "4abe172aed73c2beb7e15fc67a7d84be3bffa2378248c5986a11c2e71502df31",
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\instrument-short-dock-window-tests.exe": "2c74cfb58da35da1cc4c40cca9a78fb5639d0b80e823de1402369ab97f1195b7",
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\native-audio-bus-tests.exe": "31db2f9da742de1f8997d2eaf3ddca38ff88f334c69fb661afd36f01ceab3bb8",
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\ScreamSeq.exe": "e4c88e790fa5779951fda0dda1c4fc91b4765a760b93d3d3f84cb402d4b35750",
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\ScreamSeqVST3Scanner.exe": "bfcd0e6743146ed238cb182bcd6a99a472e3e2b90bf1954a311584755931d642",
+      "bin\\windows-parity-p1\\InstrumentLayers-Release\\workspace-restore-tests.exe": "26b33004a355f937917df9cf1730bc253ac3e411fecd764d9e5e1c4499e557d6"
+    }
+  },
+  "validation": {
+    "commit": "87792c952758350ee5cd0685c2ee87eb2b31cfb3",
+    "buildSHA256": "e9537a7f0cbdf663d3a08b68f40af2267a05c4a1471b617d3d2c7f9c6fe23765",
+    "gates": [
+      {
+        "name": "instrument-ui",
+        "startedUTC": "2026-10-10T11:35:56.397664+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(instrument-short-dock-window-tests|workspace-mixer-hosted-tests|workspace-draft-census-tests)$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T11:36:09.980926+00:00",
+        "log": "bin\\parity-evidence\\instrument-layers-instrument-ui.log",
+        "sha256": "28ec25a4598da158815c28c94736d72119325ddcb36f105f7ebbceacd442abae"
+      },
+      {
+        "name": "audio",
+        "startedUTC": "2026-10-10T11:36:09.992436+00:00",
+        "command": [
+          "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe",
+          "--test-dir",
+          "C:\\Users\\P14\\.codex\\worktrees\\parity-ci-layout\\ScreamSeq\\bin\\windows-parity-p1",
+          "-C",
+          "Release",
+          "--output-on-failure",
+          "--no-tests=error",
+          "-R",
+          "^(native-audio-bus|hosted-project-tests)$"
+        ],
+        "exitCode": 0,
+        "finishedUTC": "2026-10-10T11:36:24.773388+00:00",
+        "log": "bin\\parity-evidence\\instrument-layers-audio.log",
+        "sha256": "0fa8d2c40539ccd6d19aa027609b18b75848b9c11b8722bc90e069e3f2e2dba1"
+      }
+    ]
+  },
+  "sourceManifestSHA256": "e9537a7f0cbdf663d3a08b68f40af2267a05c4a1471b617d3d2c7f9c6fe23765",
+  "audioDetailSHA256": "d0b071cf7dd1b0b7907bce982557c6aaa7165215b8763dd4137f8324302f2179",
+  "limits": [
+    "Windows ARM64 Release only; Mac AU/VST3 checks added but not run on this host",
+    "Owned private-desktop native controls and deterministic offline VST3 PCM; no foreground screenshot or physical device listening claim",
+    "Realtime audit covers host C++ allocations/deallocations; direct malloc/free, locks and vendor internals are outside Windows audit coverage"
+  ],
+  "compatibility": "No codec or upstream mixer changes. Existing instruments with plugin assignment plus nonempty sample map now play both; clear keymap explicitly for plugin-only behavior.",
+  "runningMusicianProcessPreserved": 31748
+}

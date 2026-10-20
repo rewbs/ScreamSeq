@@ -1,7 +1,9 @@
 #include "windows/Session/DocumentController.hpp"
+#include "windows/Session/LiveParameterPublication.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
 #include "windows/App/PatternClipboard.hpp"
+#include "windows/App/DocumentDraftRegistry.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
@@ -17,6 +19,8 @@ Json call(DocumentController &controller,const char *method,Json p) {
 Json invoke(DocumentController &controller,const char *method,Json p=Json::object()) {
   p["expectedRevision"]=controller.view()->session.revision;return call(controller,method,std::move(p));
 }
+#include "PreparedAssetReceiptTests.inc"
+#include "PreparedEnvelopeReceiptTests.inc"
 void publicationTests(const std::filesystem::path &directory) {
   bool fail=false,persistent=false;unsigned stops=0;
   DocumentController controller({},"worker-test",[&]{++stops;},[](const auto &){},[&]{if(fail || persistent) {fail=false;throw std::runtime_error("controlled view publication failure");}});
@@ -40,15 +44,65 @@ void publicationTests(const std::filesystem::path &directory) {
   invoke(controller,"history.undo",{{"domain","document"}});
   need(controller.view()->cell(0,0,0).note==61,"recovered history must remain usable");
   invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});
+  const auto priorRevision=controller.view()->session.revision;
+  std::string committedRevision;
+  const auto failedPublicationTicket=std::make_shared<NativeCallReceipt>();
   persistent=true;
   rejected=false;
-  try {invoke(controller,"pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",63}}})}});}
-  catch(const Api::ApiError &e) {rejected=std::string(e.what()).find("committed")!=std::string::npos;}
+  try {
+    auto pending=controller.invokeCompleted("pattern.apply",{{"cells",Json::array({{{"pattern",0},{"row",0},{"channel",0},{"note",63}}})},
+      {"expectedRevision",controller.view()->session.revision}},failedPublicationTicket);
+    while(pending.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+    (void)pending.get();
+  }
+  catch(const Api::ApiError &e) {
+    rejected=e.code==-32003 && e.outcome && e.outcome->state==Tracker::CommitOutcome::Committed;
+    need(e.outcome && e.outcome->document==controller.view()->session.documentId,"postcommit outcome lost document identity");
+    committedRevision=e.outcome->revision;
+    need(!committedRevision.empty() && committedRevision!=priorRevision,"postcommit outcome advertised pre-write revision");
+    need(e.completed&&e.completed->method=="pattern.apply"&&e.completed->document==e.outcome->document&&e.completed->revision==committedRevision,
+      "publication failure lost the original worker result identity");
+    need(e.completed->result.is_object(),"publication failure lost the original operation result");
+    need(failedPublicationTicket->read()==e.completed,"Failed worker publication did not retain its own exact receipt");
+  }
   need(rejected && controller.publicationPending(),"persistent postcommit failure must explicitly report committed state");
   persistent=false;
   controller.invoke("synchronizeView",Json::object()).get();
   need(!controller.publicationPending() && controller.view()->cell(0,0,0).note==63,"read-side repair left a forever-stale cache");
+  need(controller.view()->session.revision==committedRevision,"read-side repair disagrees with committed outcome");
   invoke(controller,"history.undo",{{"domain","document"}});
+  const auto ticket=std::make_shared<NativeCallReceipt>();
+  auto returned=controller.invokeCompleted("document.patch",{{"title","First queued receipt"},{"expectedRevision",controller.view()->session.revision}},ticket);
+  while(returned.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+  const auto firstRevision=controller.view()->session.revision;
+  invoke(controller,"document.patch",{{"title","Later queued edit"}});
+  const auto receipt=returned.get();
+  need(ticket->read()&&ticket->read()->result==receipt.result&&ticket->read()->revision==firstRevision,
+    "Native request ticket lost the worker result or acquired a later edit's revision");
+  need(receipt.method=="document.patch"&&receipt.document==controller.view()->session.documentId&&receipt.revision==firstRevision&&receipt.revision!=controller.view()->session.revision,
+    "Later worker edit relabelled an unconsumed operation receipt");
+  for(const auto method:{"sample.renderSelection","instrument.importMultisample","sample.importMany","sample.recording.commit"}){
+    bool classified=false;
+    const auto refusedTicket=std::make_shared<NativeCallReceipt>();
+    try{controller.invokeCompleted(method,{{"unknown",true},{"expectedRevision",controller.view()->session.revision}},refusedTicket).get();}
+    catch(const Api::ApiError &e){classified=e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified&&!refusedTicket->read(),"Rejected prepared import lacks a proven noncommit outcome or inherited a prior receipt");
+  }
+  // A path repair which cannot identify its target never reaches a vendor,
+  // history, Stop or publication. Native owners can safely keep the draft
+  // editable after this proven refusal; an unclassified error cannot do so.
+  const auto beforePathRefusal=controller.view();const auto pathRefusalStops=stops;
+  for(const auto method:{"plugin.path.set","graph.plugin.path.set"}){
+    bool classified=false;
+    const Json target=std::string_view(method).starts_with("graph.")
+      ?Json{{"graph","n999999"},{"node","n999998"}}
+      :Json{{"plugin","missing-instance"}};
+    try{invoke(controller,method,target);}
+    catch(const Api::ApiError &e){classified=e.code==-32602&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified,"Missing reconnect target lacks a proven preflight refusal");
+    need(controller.view()==beforePathRefusal&&stops==pathRefusalStops,"Reconnect preflight changed the document, history view or transport");
+  }
+  preparedAssetReceiptTests(directory);preparedEnvelopeReceiptTests(directory);
   std::cout<<"publication tests passed\n";
 }
 
@@ -126,14 +180,29 @@ void liveParameterTests(const std::filesystem::path &directory) {
     [&](std::span<const Tracker::ParameterChange> changes){
       need(std::this_thread::get_id()==mainThread,"Live parameter publication must use the single UI producer");
       if(reject)throw std::runtime_error("controlled prepublication failure");
-      if(active){++batches;if(!playback->chain().enqueueParameters(changes)){++stops;active=false;}}
+      publishLiveParameters(active,playback,changes);
+      if(active)++batches;
     });
   auto library=call(c,"plugin.discover",{{"format","Built-in"}});
   invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
+  // Imported/default plugin states may be empty. Re-serializing the same manual
+  // values must not materialize vendor state or consume an Undo/Redo entry.
+  const auto coldPath=directory/"live-parameters-cold.screamseq";
+  invoke(c,"document.save",{{"path",coldPath.generic_string()}});
+  auto cold=Project::decodePlist(Project::readProjectBytes(coldPath));
+  cold["plugins"][0]["state"]=Json::binary(std::vector<uint8_t>{});
+  Project::writeProjectFile(coldPath,Project::encodePlist(cold),true);
+  invoke(c,"document.open",{{"path",coldPath.generic_string()}});
   auto prepared=c.prepare(48000,Json::object(),true,true);playback=prepared.get();active=true;const auto beforeStops=stops;
   auto gain=[&]{for(auto p:playback->chain().parameters(0))if(p.id==1)return p.value;throw std::runtime_error("Missing playback gain");};
   auto edit=[&](float value,bool dry=false){return invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",value}},{{"id",2},{"value",25}}})},{"dryRun",dry}});};
   auto baseline=call(c,"plugin.state.get",{{"slot",0}});auto view=c.view();
+  need(baseline.at("data")=="","Cold fixture did not retain empty saved plugin state");
+  const auto plugin=c.view()->session.document.at("nativePlugins")[0].at("instanceID");
+  auto noop=[&](bool dry=false){return invoke(c,"plugin.parameters.set",{{"plugin",plugin},{"values",Json::array({{{"id",0},{"value",1}},{{"id",1},{"value",0}}})},{"dryRun",dry}});};
+  for(bool dry:{true,false}){const auto result=noop(dry);need(!result.at("wouldChange").get<bool>()&&c.view()==view&&stops==beforeStops&&batches==0&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Cold parameter no-op changed state, history or publication");}
+  bool invalidNoop=false;try{invoke(c,"plugin.parameters.set",{{"plugin",plugin},{"values",Json::array({{{"id",0},{"value",1}},{{"id",UINT32_MAX},{"value",0}}})}});}catch(const Api::ApiError &){invalidNoop=true;}
+  need(invalidNoop&&c.view()==view&&stops==beforeStops&&batches==0,"No-op prefix skipped validation of a later invalid parameter");
   edit(-12,true);need(c.view()==view&&stops==beforeStops&&batches==0,"Dry run must not stop, publish or dirty");
   bool failed=false;
   try{invoke(c,"plugin.parameters.set",{{"slot",0},{"values",Json::array({{{"id",1},{"value",-12}},{{"id",UINT32_MAX},{"value",0}}})}});}catch(const Api::ApiError &){failed=true;}
@@ -146,15 +215,45 @@ void liveParameterTests(const std::filesystem::path &directory) {
   view=c.view();edit(-12);need(c.view()==view&&batches==1&&stops==beforeStops,"Parameter no-op must not add history or queue traffic");
   const auto path=directory/"live-parameters.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()}});need(active&&stops==beforeStops,"Save of parameter baseline should retain playback");
-  // Saturation falls back to stopping BEFORE committing the complete baseline.
+  // Use the application's exact admission boundary: saturation rejects before
+  // saved state, revision, touch or chronological history can be adopted.
   std::vector<Tracker::ParameterChange> full(4096,{0,1,-12,0});need(playback->chain().enqueueParameters(full),"Fill live queue");
-  edit(-24);need(!active&&stops==beforeStops+1,"Whole-batch queue failure stops instead of partially publishing");
-  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Undo recovers the pre-overflow saved baseline");
-  invoke(c,"history.undo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==baseline,"One live batch is one plugin Undo step");
-  invoke(c,"history.redo",{{"domain","plugins"}});need(call(c,"plugin.state.get",{{"slot",0}})==changed,"Redo restores the whole live batch");
+  view=c.view();const auto touched=call(c,"automation.target.get",Json::object());const auto beforeBatches=batches;
+  const auto refused=[&](auto action){
+    bool classified=false;try{action();}catch(const Api::ApiError &e){
+      classified=e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
+    }
+    need(classified,"Live queue rejection must report a known uncommitted operation");
+  };
+  refused([&]{edit(-24);});
+  need(active&&stops==beforeStops&&batches==beforeBatches&&c.view()==view&&
+    call(c,"plugin.state.get",{{"slot",0}})==changed&&call(c,"automation.target.get",Json::object())==touched,
+    "Full queue changed transport, accepted state, view, history or last-touched target");
+  edit(-24,true);edit(-12);
+  need(c.view()==view&&batches==beforeBatches,"Dry run and no-op must remain harmless with a full queue");
+  refused([&]{invoke(c,"history.undo",{{"domain","plugins"}});});
+  need(c.view()==view&&active&&stops==beforeStops,"Failed live Undo changed history or stopped playback");
+  need(playback->render(pcm.data(),256)&&gain()==-12,"Rejected edit leaked through the queued accepted batch");
+  edit(-24);need(playback->render(pcm.data(),256)&&gain()==-24,"Explicit retry after draining must publish the complete edit");
+  invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed&&playback->render(pcm.data(),256)&&gain()==-12,"One Undo must recover the pre-retry baseline");
+  invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==baseline&&playback->render(pcm.data(),256)&&gain()==0,"Rejected edits must not leave phantom Undo entries");
+  view=c.view();const auto undoStops=stops,undoBatches=batches;
+  noop();need(c.view()==view&&stops==undoStops&&batches==undoBatches&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Cold no-op after Undo consumed Redo or published parameters");
+  for(auto &change:full)change.value=0;
+  need(playback->chain().enqueueParameters(full),"Fill queue while Redo exists");view=c.view();
+  refused([&]{edit(-24);});
+  need(c.view()==view&&active&&stops==beforeStops,"Rejected edit with Redo changed accepted state");
+  need(playback->render(pcm.data(),256)&&gain()==0,"Second rejected edit reached audio");
+  invoke(c,"history.redo",{{"domain","plugins"}});
+  need(call(c,"plugin.state.get",{{"slot",0}})==changed&&playback->render(pcm.data(),256)&&gain()==-12,"Rejected new edit destroyed the existing Redo branch");
+  auto *retained=playback;playback=nullptr;view=c.view();
+  refused([&]{edit(-24);});playback=retained;
+  need(c.view()==view&&active&&stops==beforeStops,"Active audio without a prepared host must reject without stopping or committing");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"plugin.state.get",{{"slot",0}})==changed&&!c.view()->dirty,"Save/reopen retains the live-edited baseline");
-  std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, overflow fallback, independent history and save/reopen\n";
+  std::cout<<"PASS live worker/UI publication, invalid/dry/no-op/failed batches, atomic overflow rejection, retained Undo/Redo and save/reopen\n";
 }
 
 void triggerInstrumentTests(const std::filesystem::path &directory) {
@@ -579,8 +678,16 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "ParameterActivityControllerTests.inc"
 #include "LiveNativeControllerTests.inc"
 #include "SamplingOperationsChecks.inc"
+#include "DocumentDepartureControllerTests.inc"
+#include "TrackControllerTests.inc"
+#include "TimelineControllerTests.inc"
+#include "PatternTransformControllerTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--pattern-transform") {patternTransformControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--timeline") {timelineControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--tracks") {trackControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--departure") {documentDepartureControllerTests(std::filesystem::u8path(argv[2]));documentCreationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}

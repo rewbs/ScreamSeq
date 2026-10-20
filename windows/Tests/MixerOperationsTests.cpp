@@ -11,8 +11,61 @@ using namespace Tracker;
 using namespace ScreamSeq;
 #define CHECK(x) do { if(!(x)) throw std::runtime_error(std::string(__func__)+":"+std::to_string(__LINE__)+": "+#x); } while(false)
 
+static void controlAdmission() {
+  auto storage=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &document=*storage;
+  bool active=false,refuse=false;unsigned publications=0,stops=0;
+  std::vector<MixerControls> accepted;
+  MixerHostHooks hooks;
+  hooks.feedback=[&]{PlaybackFeedback f;f.audioActive=active;return f;};
+  hooks.controls=[&](const auto &values){++publications;if(refuse)return false;accepted=values;return true;};
+  MixerOperations api(document,[&]{++stops;},hooks);
+  api.invoke("mixer.enable",Json::object());active=true;
+  const auto baseline=document.native();const auto revision=document.revision;
+  const auto undo=document.historyHead(false);const auto stopCount=stops;
+  const auto bus=api.invoke("mixer.get",Json::object())["buses"][0]["id"];
+  for(double gain:{-3.,-12.,-9.})api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",gain},{"preview",true}});
+  CHECK(publications==3 && document.native()==baseline && document.revision==revision && accepted[0].gainDB==-9);
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",0}});
+  CHECK(publications==4 && accepted[0].gainDB==0 && document.revision==revision && document.historyHead(false)==undo);
+  const Json values={{"bus",bus},{"gainDB",-6.123456789},{"preGainDB",-3},{"prePan",-.5},
+    {"pan",.25},{"width",1.5},{"mute",true},{"solo",true}};
+  auto dry=values;dry["dryRun"]=true;api.invoke("mixer.bus.set",dry);
+  CHECK(publications==4 && document.native()==baseline && document.revision==revision);
+  refuse=true;bool rejected=false;
+  try{api.invoke("mixer.bus.set",values);}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  CHECK(rejected && publications==5 && accepted[0].gainDB==0 && document.native()==baseline &&
+    document.revision==revision && document.historyHead(false)==undo);
+  refuse=false;api.invoke("mixer.bus.set",values);const auto changed=document.native();
+  CHECK(publications==6 && document.revision==revision+1 && accepted[0].gainDB==-6.123456789 &&
+    accepted[0].preGainDB==-3 && accepted[0].prePan==-.5 && accepted[0].pan==.25 && accepted[0].width==1.5);
+  api.invoke("mixer.bus.set",values);
+  CHECK(publications==7 && document.native()==changed && document.revision==revision+1 && stops==stopCount);
+  document.undo();CHECK(document.native()==baseline && document.canRedo());
+  const auto undoRevision=document.revision;
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",-24},{"preview",true}});
+  api.invoke("mixer.bus.set",{{"bus",bus},{"gainDB",0}});
+  CHECK(document.canRedo() && document.revision==undoRevision && accepted[0].gainDB==0);
+  document.redo();CHECK(document.native()==changed);
+  document.undo();document.undo();CHECK(!document.native().mixer.active());
+}
+
+static void meterIdentity() {
+  auto document=std::make_unique<Document>(MOD_TYPE_MPT,4);
+  PlaybackFeedback feedback;MixerHostHooks hooks;hooks.feedback=[&]{return feedback;};
+  MixerOperations api(*document,[]{},hooks);api.invoke("mixer.enable",Json::object());
+  const auto &buses=document->native().mixer.buses;
+  feedback.meters.fresh=true;
+  feedback.meters.buses={{buses[1].id,{.75f,.5f}},{buses[0].id,{.125f,.25f}}};
+  const auto rows=api.invoke("mixer.meters",Json::object())["meters"];
+  CHECK(rows.size()==2&&rows[0]["bus"]=="n"+std::to_string(buses[1].id)&&rows[0]["left"]==.75f);
+  CHECK(rows[1]["bus"]=="n"+std::to_string(buses[0].id)&&rows[1]["right"]==.25f);
+  feedback.meters.fresh=false;
+  CHECK(api.invoke("mixer.meters",Json::object())["meters"].empty());
+}
 int main() {
   try {
+    controlAdmission();
+    meterIdentity();
     auto storage=std::make_unique<Document>(MOD_TYPE_MPT,4);auto &document=*storage;
     unsigned stops=0;
     PluginState effect;effect.instanceID="loose-effect";effect.descriptor.name="Gain";effect.descriptor.format="Built-in";effect.descriptor.classID="resonance.gainer.v1";
@@ -169,6 +222,23 @@ int main() {
       request["targets"]=GraphCableEdits::pluginTargets(m.invoke("mixer.get",Json::object())["instruments"],synth.instanceID,0,main,t1,{});m.invoke("mixer.plugin.route",request);
       CHECK(d.native().mixer.instruments.size()==2&&d.native().mixer.instruments[0]==branched.mixer.instruments[0]&&d.native().mixer.instruments[1]==branched.mixer.instruments[2]);
       d.undo();CHECK(d.native()==repatched);
+      // Native Route Here replaces only this instrument output. Preserve the
+      // other output's explicit fan-out, and keep no-op/history semantics.
+      const auto beforeHere=d.native();
+      const Json here={{"plugin",synth.instanceID},{"output",1},{"target",t0}};
+      auto hereDry=here;hereDry["dryRun"]=true;m.invoke("mixer.instrument.route",hereDry);CHECK(d.native()==beforeHere);
+      m.invoke("mixer.instrument.route",here);const auto afterHere=d.native();
+      auto expectedHere=beforeHere;std::erase_if(expectedHere.mixer.instruments,[&](const auto &route){return route.plugin==synth.instanceID&&route.output==1;});
+      expectedHere.mixer.instruments.push_back({synth.instanceID,expectedHere.tracks[0].id,1});
+      CHECK(afterHere==expectedHere);
+      const auto hereRevision=d.revision;const auto hereHistory=d.historyBytes();m.invoke("mixer.instrument.route",here);CHECK(d.revision==hereRevision&&d.historyBytes()==hereHistory);
+      d.undo();CHECK(d.native()==beforeHere);d.redo();CHECK(d.native()==afterHere);
+      CHECK(Project::decodeNativeMetadata(Project::encodeNativeMetadata(afterHere))==afterHere);
+      for(const auto *field:{"plugin","output","target"}){
+        auto invalidHere=here;invalidHere[field]=std::string(field)=="output"?Json(63):Json("missing");
+        const auto revision=d.revision;bool rejected=false;try{m.invoke("mixer.instrument.route",invalidHere);}catch(const Api::ApiError &){rejected=true;}
+        CHECK(rejected&&d.native()==afterHere&&d.revision==revision);
+      }
     }
 
     const auto beforeReturn=native();

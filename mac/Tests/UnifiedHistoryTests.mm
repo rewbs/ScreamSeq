@@ -7,6 +7,52 @@
 #include <chrono>
 #include <thread>
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+static void mixerControlHistory() {
+  TrackerSession *session=[TrackerSession new];[session newSong:YES];
+  auto call=[&](NSString *method,NSDictionary *values,bool write=false)->NSDictionary * {
+    NSError *error=nil;auto params=[values mutableCopy];
+    if(write)params[@"expectedRevision"]=session.automationRevision;
+    auto response=[session automationMethod:method params:params error:&error];
+    if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return response[@"data"];
+  };
+  call(@"mixer.enable",@{},true);
+  NSDictionary *baseline=call(@"mixer.get",@{});
+  NSString *bus=baseline[@"buses"][0][@"id"];
+  NSString *revision=session.automationRevision;
+  for(NSNumber *value in @[@-3,@-12,@-9])call(@"mixer.bus.set",@{@"bus":bus,@"gainDB":value,@"preview":@YES},true);
+  check([session.automationRevision isEqual:revision] &&
+    [call(@"mixer.get",@{})[@"buses"] isEqual:baseline[@"buses"]],"Mixer previews retain saved data and revision");
+  call(@"mixer.bus.set",@{@"bus":bus,@"gainDB":@0},true);
+  check([session.automationRevision isEqual:revision],"Saved-frame reset after previews creates no history");
+  NSError *error=nil;
+  check(![session automationMethod:@"mixer.bus.set" params:@{@"bus":bus,@"gainDB":@-6,@"pan":@2,@"expectedRevision":revision} error:&error],
+    "Invalid simultaneous control patch is rejected");
+  check([session.automationRevision isEqual:revision] &&
+    [call(@"mixer.get",@{})[@"buses"] isEqual:baseline[@"buses"]],"Invalid control patch cannot partly commit");
+  NSDictionary *values=@{@"bus":bus,@"gainDB":@-6.123456789,@"preGainDB":@-3,@"prePan":@-.5,
+    @"pan":@.25,@"width":@1.5,@"mute":@YES,@"solo":@YES};
+  auto dry=[values mutableCopy];dry[@"dryRun"]=@YES;call(@"mixer.bus.set",dry,true);
+  check([session.automationRevision isEqual:revision],"Dry control patch creates no history");
+  call(@"mixer.bus.set",values,true);
+  NSDictionary *changed=call(@"mixer.get",@{});
+  NSDictionary *edited=changed[@"buses"][0];
+  for(NSString *key in @[@"gainDB",@"preGainDB",@"prePan",@"pan",@"width",@"mute",@"solo"])
+    check([edited[key] isEqual:values[key]],"Mixer candidate preserves the exact supplied control values");
+  revision=session.automationRevision;call(@"mixer.bus.set",values,true);
+  check([session.automationRevision isEqual:revision],"Repeated exact control values create no history");
+  call(@"history.undo",@{},true);
+  check([call(@"mixer.get",@{})[@"buses"] isEqual:baseline[@"buses"]],"One Undo reverses the complete control patch");
+  revision=session.automationRevision;
+  call(@"mixer.bus.set",@{@"bus":bus,@"gainDB":@-24,@"preview":@YES},true);
+  call(@"mixer.bus.set",@{@"bus":bus,@"gainDB":@0},true);
+  check(session.canRedo && [session.automationRevision isEqual:revision],"Preview and saved-frame reset preserve Redo");
+  call(@"history.redo",@{},true);
+  check([call(@"mixer.get",@{})[@"buses"] isEqual:changed[@"buses"]],"Redo restores every control exactly");
+  call(@"history.undo",@{},true);call(@"history.undo",@{},true);
+  check(![call(@"mixer.get",@{})[@"active"] boolValue],"Previews, invalid edits and no-ops leave no phantom Undo entries");
+  [session shutdown];
+}
 static void liveHistory() {
   auto doc=Tracker::Document::demo();doc->transaction([](OpenMPT::CSoundFile &song){song.m_nInstruments=4;for(OpenMPT::INSTRUMENTINDEX i=1;i<=4;++i)song.Instruments[i]=new OpenMPT::ModInstrument(i);});doc->song().m_nDefaultGlobalVolume=0;
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".mptm"]];doc->save(path.UTF8String);
@@ -32,6 +78,10 @@ static void liveHistory() {
     throw std::runtime_error("Live topology did not settle while advancing transport");
   };
   settled();
+  const auto orderNoOpRevision=session.automationRevision;
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@0});
+  check([session.automationRevision isEqual:orderNoOpRevision],"Live order no-op preserves revision");
+  settled(); // Requires the same running transport to keep advancing frames.
   const auto source=call(@"graph.song.source.add",@{@"source":@{@"kind":@"amount",@"name":@"Live implicit source",@"amount":@.2}})[@"data"][@"node"];settled();
   check([call(@"graph.get",@{},false)[@"data"][@"mixer"][@"buses"] count]==0,"Adding live song controls preserves implicit document routing");
   call(@"graph.song.source.update",@{@"node":source,@"source":@{@"amount":@.6}});settled();
@@ -164,6 +214,7 @@ static void liveHistory() {
 }
 int main(int argc,char **argv){@autoreleasepool {try {
   if(argc>1&&std::string(argv[1])=="--device"){liveHistory();return 0;}
+  mixerControlHistory();
   Tracker::Document document;auto cell=document.cell(0,1,0);cell.note=49;
   document.edit({{0,1,0,{},cell}});auto first=document.historyHead(false);
   auto external=document.externalHistoryEdit();cell.note=51;document.edit({{0,2,0,{},cell}});
@@ -213,6 +264,13 @@ int main(int argc,char **argv){@autoreleasepool {try {
   check([session editPattern:0 row:2 channel:0 values:@[@55,@1,@0,@0,@0,@0] error:&error],"Branch with a pattern edit");
   check(!session.canRedo,"A document edit discards plugin redo");
   call(@"history.undo",@{},true);check(session.canRedo,"Document branch has redo");
+  const auto orderNoOpRevision=session.automationRevision;
+  call(@"order.edit",@{@"order":@0,@"operation":@"move",@"destination":@0},true);
+  check([session.automationRevision isEqual:orderNoOpRevision]&&session.canRedo,
+    "Order API move-to-self preserves revision and the interleaved Redo branch");
+  check([session editOrder:0 pattern:0 operation:@"assign" error:&error],"Unchanged order assignment succeeds");
+  check([session.automationRevision isEqual:orderNoOpRevision]&&session.canRedo,
+    "Native unchanged assignment preserves revision and the interleaved Redo branch");
   check([session pluginParameter:0 identifier:1 value:-3 record:NO error:&error],"Branch with a plugin edit");
   check(!session.canRedo,"A plugin edit discards document redo");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];

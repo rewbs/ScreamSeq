@@ -21,9 +21,7 @@ struct Owner {
   void close(){const auto parent=window,child=edit;require(DestroyWindow(parent),"Destroy automation dock owner");window=edit=nullptr;require(!IsWindow(parent)&&!IsWindow(child),"Automation dock owner survived destruction");}
 };
 void sizeClient(HWND window,int width,int height){
-  const auto dpi=GetDpiForWindow(window);RECT frame{0,0,MulDiv(width,dpi,96),MulDiv(height,dpi,96)};
-  require(AdjustWindowRectExForDpi(&frame,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi),"Calculate automation client frame");
-  require(SetWindowPos(window,nullptr,0,0,frame.right-frame.left,frame.bottom-frame.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Set automation client bounds");
+  ScreamSeq::Tests::sizeOwnedGuiClient(window,width,height);
 }
 std::wstring text(HWND window){std::wstring result(size_t(GetWindowTextLengthW(window))+1,0);GetWindowTextW(window,result.data(),int(result.size()));result.resize(wcslen(result.c_str()));return result;}
 std::pair<DWORD,DWORD> selection(HWND window){DWORD first=0,last=0;SendMessageW(window,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));return {first,last};}
@@ -42,7 +40,7 @@ struct Fixture {
   std::function<void(const std::string &)> beforeRequest;
   Tool tool;
   explicit Fixture(HWND owner,bool open=true):tool(owner,[this](const std::string &method,const Json &params){return request(method,params);},[this]{return current;},[](const std::string &,uint32_t){},[](const std::string &,uint32_t){}){
-    ScreamSeq::Tests::ownGuiWindow(tool.window());if(open)tool.openAt("plugin-a",7);KillTimer(tool.window(),3);
+    ScreamSeq::Tests::ownGuiWindow(tool.window());if(open){tool.openAt("plugin-a",7);sizeClient(tool.window(),1100,760);}KillTimer(tool.window(),3);
   }
   Json request(const std::string &method,const Json &params){
     if(beforeRequest)beforeRequest(method);
@@ -113,7 +111,7 @@ void formulaAndToolDrafts(Owner &owner){
   Fixture f(owner.window);f.choose(4205,8);f.focus(4209);SetWindowTextW(f.control(4209),L"mix(start, end, t) + -");SendMessageW(f.control(4209),EM_SETSEL,4,9);
   const auto formula=f.control(4209);const auto before=retained(f.tool.snapshot());f.dock(owner.window);
   require(f.tool.snapshot().at("page")=="formula"&&GetFocus()==formula&&selection(formula)==std::pair<DWORD,DWORD>{4,9}&&retained(f.tool.snapshot())==before,"Short dock hid or reconstructed focused formula draft");
-  f.tool.floatWindow();require(GetFocus()==formula&&text(formula)==L"mix(start, end, t) + -"&&selection(formula)==std::pair<DWORD,DWORD>{4,9},"Float lost formula caret/raw text");
+  f.tool.floatWindow();sizeClient(f.tool.window(),1100,760);require(GetFocus()==formula&&text(formula)==L"mix(start, end, t) + -"&&selection(formula)==std::pair<DWORD,DWORD>{4,9},"Float lost formula caret/raw text");
   f.choose(4230,5);f.focus(4233);SetWindowTextW(f.control(4233),L"-001.25");SendMessageW(f.control(4233),EM_SETSEL,1,4);SetWindowTextW(f.control(4231),L"-");
   const auto option=f.control(4233);const auto toolBefore=retained(f.tool.snapshot());f.dock(owner.window);
   require(f.tool.snapshot().at("page")=="tools"&&GetFocus()==option&&selection(option)==std::pair<DWORD,DWORD>{1,4}&&retained(f.tool.snapshot())==toolBefore,"Short dock lost independent tool draft or focus");

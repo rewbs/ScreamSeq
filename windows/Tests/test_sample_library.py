@@ -155,6 +155,43 @@ class SampleLibraryTests(unittest.TestCase):
         if indices:self.desktop.send(control,0x19E,indices[0])
         self.desktop.send(self.tool(),0x111,5404|(1<<16),control);return self.idle_browser()
 
+    def test_browser_search_retains_focus_and_arrows_preview(self):
+        self.open_browser()
+        before = self.client.call('document.get')
+        search = self.control(5401)
+        self.desktop.send(search, 0x201, 1, 4 | (4 << 16))
+        self.desktop.send(search, 0x202, 0, 4 | (4 << 16))
+        for character in 'piano':
+            self.desktop.send(search, 0x102, ord(character))
+            state = self.idle_browser()
+            self.assertEqual(self.desktop.focus(search), search, 'Search lost focus while filtering')
+        self.assertEqual(state['search'], 'piano')
+        self.assertEqual(state['total'], 3)
+        self.assertTrue(state['autoPreview'])
+        files = self.control(5404)
+        self.desktop.send(files, 0x201, 1, 4 | (4 << 16))
+        self.desktop.send(files, 0x202, 0, 4 | (4 << 16))
+        state = self.idle_browser()
+        self.assertEqual(state['selected'], state['items'][0]['path'])
+        self.assertIn('audible', state['inspection'])  # Preview path, silent only in inspection mode.
+        self.assertEqual(self.desktop.focus(files), files)
+        for key, index in ((0x28, 1), (0x28, 2), (0x26, 1)):
+            self.desktop.send(files, 0x100, key, 1)
+            state = self.idle_browser()
+            self.assertEqual(state['selected'], state['items'][index]['path'])
+            self.assertEqual(state['selectedPaths'], [state['selected']])
+            self.assertEqual(self.desktop.focus(files), files, 'Decode stole list focus')
+            self.assertIn('audible', state['inspection'])
+        self.press(5413)  # Auto-preview off: Space still explicitly previews.
+        self.desktop.send(files, 0x100, 0x26, 1)
+        state = self.idle_browser()
+        self.assertNotIn('audible', state['inspection'])
+        self.desktop.send(files, 0x100, 0x20, 1)
+        state = self.idle_browser()
+        self.assertIn('audible', state['inspection'])
+        self.assertEqual(self.desktop.focus(files), files)
+        self.assertEqual(before, self.client.call('document.get'))
+
     def test_native_browser_search_waveform_preview_and_retained_selection(self):
         self.open_browser();before=self.client.call('document.get');state=self.field(5401,'electric piano');self.assertEqual(state['total'],3)
         state=self.select_files([0]);self.assertEqual(len(state['inspection']['peaks']),512);self.assertEqual(state['family']['count'],3)
@@ -183,6 +220,18 @@ class SampleLibraryTests(unittest.TestCase):
         self.assertFalse(self.browser()['previewPlaying']);self.assertEqual(self.browser()['previewPosition'],0)
         self.press(5418);self.desktop.send(self.desktop.hwnd(self.pid),0x111,511);self.assertEqual(self.idle_browser()['gainDB'],'-18')
         self.assertEqual(before,self.client.call('document.get'))
+
+    def test_configured_family_survives_close_and_reopen_before_any_field_edit(self):
+        self.open_browser();self.field(5401,'piano');self.select_files([0]);self.press(5415)
+        original=self.browser()['multisample'];self.assertTrue(original['draft'])
+        before=self.client.call('document.get');self.press(5608,True)
+        self.client.call('document.patch',dict(title='Changed with configured family hidden',expectedRevision=before['revision']))
+        self.press(5415);retained=self.browser()['multisample']
+        for field in ('group','name','octaveShift','documentId','revision'):
+            self.assertEqual(retained[field],original[field],field)
+        self.assertTrue(retained['stale']);self.assertTrue(retained['draft'])
+        self.press(5610,True);self.assertFalse(self.browser()['multisample']['draft'])
+        self.press(5415);self.assertFalse(self.browser()['multisample']['stale'])
 
     def test_native_multisample_roots_stale_guard_retained_draft_and_rebase(self):
         self.open_browser();self.field(5401,'piano');self.select_files([0]);self.press(5415);state=self.browser()['multisample'];self.assertTrue(state['visible']);self.assertEqual(state['octaveShift'],'1')

@@ -1,6 +1,8 @@
 #include "PluginOperations.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/ParameterEdits.hpp"
+#include <limits>
 #include "editor/PluginNoteSources.hpp"
 #include "editor/SignalGroupBypass.hpp"
 #include "windows/Api/SessionAdapter.hpp"
@@ -148,7 +150,7 @@ void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool
   undo_.push_back(std::move(before)); // Allocate history before stopping or publishing.
   auto publish=[&]{
     if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameterOnly && liveParameters_) {if(!changes.empty())liveParameters_(changes);}else if(rackPublication)rackPublication();else if(stop_)stop_();
-    if(!keepEditors&&!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+    if(!keepEditors&&!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();pendingLiveParameters_.clear();}
     project_.preserved.swap(candidate.preserved);
     ++project_.pluginRevision;redo_.clear();
     undo_.back().sequence=document_.externalHistoryEdit();knownHistorySequence_=document_.historySequence();
@@ -183,7 +185,7 @@ void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
   auto rackPublication=!alreadyStopped&&!recorded&&!bypass&&!parameters&&prepareRackPublication_?prepareRackPublication_(projectPluginStates(candidate),projectAbsoluteAutomation(candidate),document_.native()):std::function<void()>{};
   to.push_back(std::move(before));
   try{if(recorded)recorded();else if(bypass)liveBypass_(bypass->first,bypass->second);else if(parameters)liveParameters_(*parameters);else if(rackPublication)rackPublication();else if(!alreadyStopped&&stop_)stop_();}catch(...){to.pop_back();throw;}
-  if(!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();}
+  if(!bypass&&!recordedOnly){editors_.clear();openEditors_.clear();pendingParameters_.clear();pendingLiveParameters_.clear();}
   project_.preserved.swap(candidate.preserved);
   from.pop_back();++project_.pluginRevision;
 }
@@ -215,7 +217,7 @@ void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &d
       // finish the prepared rack publication even if their completion failed.
       completionFailure=std::current_exception();
     }
-    editors_.clear();openEditors_.clear();pendingParameters_.clear();
+    editors_.clear();openEditors_.clear();pendingParameters_.clear();pendingLiveParameters_.clear();
     project_.preserved.swap(candidate.preserved);plugins.pop_back();++project_.pluginRevision;
     if(redo)trimHistory();if(completionFailure)std::rethrow_exception(completionFailure);return;
   }
@@ -245,7 +247,7 @@ void PluginOperations::dropEditor(const std::string &instance,const std::string 
     const std::string key=instance; // The caller's reference may point into the erased entry.
     auto found=editors_.find(key);
     if(found!=editors_.end()){try{found->second->closeEditor();}catch(...){}editors_.erase(found);}
-    openEditors_.erase(key);pendingParameters_.erase(key);
+    openEditors_.erase(key);pendingParameters_.erase(key);pendingLiveParameters_.erase(key);
     editorWarning_="Plugin editor closed after a failure / its last captured state was kept / "+reason;
   }catch(...){}
 }
@@ -264,18 +266,22 @@ bool PluginOperations::flushEditors(bool force) {
   std::set<std::string> postponed;
   for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
     std::map<uint32_t,float> edits;
-    uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
-    for(auto [parameter,v]:edits)liveChanges.push_back({uint32_t(slot),parameter,v,0});
+    uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;pendingLiveParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
+    if(const auto pending=pendingLiveParameters_.find(key);pending!=pendingLiveParameters_.end())
+      for(auto [parameter,v]:pending->second)liveChanges.push_back({uint32_t(slot),parameter,v,0});
     if(!edits.empty())lastEditorChange_=now;
     try{if(!found->second->editorOpen())force=true;}
     catch(const WindowsVST3::UiOwnerBusy &){postponed.insert(key);}
     catch(const std::exception &e){unusable.emplace_back(key,e.what());force=true;}
   }
   if(!liveChanges.empty() && liveParameters_)liveParameters_(liveChanges);
+  // A failed publication leaves notifications here for the next poll, with
+  // later vendor values coalesced by stable instance/parameter identity.
+  pendingLiveParameters_.clear();
   if(!unusable.empty()){
     for(const auto &[key,reason]:unusable)dropEditor(key,reason);
     unusable.clear();
-    if(openEditors_.empty()){pendingParameters_.clear();return true;}
+    if(openEditors_.empty()){pendingParameters_.clear();pendingLiveParameters_.clear();return true;}
   }
   const auto forget=[&]{std::erase_if(pendingParameters_,[&](const auto &entry){return !postponed.contains(entry.first);});};
   // Fast gesture delivery does not serialize vendor state or copy the rack.
@@ -485,8 +491,19 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     if(method=="plugin.state.set"){keys(p,{"slot","data","dryRun"});next.state=unbase64(field(p,"data"));}
     else keys(p,{"slot","plugin","values","dryRun"});
     NativePlugin probe(next,48000);
-    if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> prepared;
-      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));need(seen.insert(id).second,"Duplicate plugin parameter");auto found=std::find_if(available.begin(),available.end(),[&](const auto &x){return x.id==id;});need(found!=available.end()&&found->writable,"Plugin parameter is not writable");prepared.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
+    if(method=="plugin.parameters.set") {auto available=probe.parameters();const auto &values=field(p,"values");need(values.is_array()&&!values.empty()&&values.size()<=4096,"Invalid parameter batch");
+      std::vector<std::pair<uint32_t,double>> requested;requested.reserve(values.size());
+      for(const auto &v:values){keys(v,{"id","value"});requested.emplace_back(uint32_t(integer(field(v,"id"),0,UINT32_MAX)),number(field(v,"value"),-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max())));}
+      std::vector<std::pair<uint32_t,float>> prepared;
+      try{prepared=Tracker::prepareParameterEdits(available,requested);}catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+      // Validate the whole batch before discarding unchanged manual values.
+      // The disposable probe restores saved state, never effective automation.
+      // A no-op must preserve the original opaque bytes, including empty state.
+      std::erase_if(prepared,[&](const auto &edit){
+        const auto found=std::find_if(available.begin(),available.end(),[&](const auto &parameter){return parameter.id==edit.first;});
+        return edit.second==float(found->manualValue.value_or(found->value));
+      });
+      if(prepared.empty())return {{"wouldChange",false},{"dryRun",dry}};
       for(auto [id,value]:prepared){need(probe.parameter(id,value),"Plugin rejected parameter");liveChanges.push_back({uint32_t(index),id,value,0});}if(!dry)touch={{"plugin",state.instanceID},{"parameter",prepared.back().first},{"source","api"}};
     }
     const auto captured=probe.state();rack[index]["state"]=blob(captured.state);rack[index]["audioLayout"]=captured.audioLayout;

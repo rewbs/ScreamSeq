@@ -70,6 +70,17 @@
     std::vector<WorkspaceMenuItem> patternContextItems() const {
         const bool enabled=!busy;
         return {{0,L"Pattern / row "+std::to_wstring(row)+L" / channel "+std::to_wstring(channel+1)},
+            {playbackLoopCommand,L"Loop playback",enabled&&!recoveryRestoring,playbackLoop},
+            {positionRulerCommand,L"Cycle position ruler",enabled},
+            {patternRowsLargerCommand,L"Increase row height",enabled&&!recoveryRestoring&&rowHeight<34},
+            {patternRowsSmallerCommand,L"Decrease row height",enabled&&!recoveryRestoring&&rowHeight>18},
+            {patternToolsCommand,L"Pattern tools…",enabled},
+            {effectPickerCommand,L"Choose effect…",enabled},
+            {inputInstrumentAtCursorCommand,L"Use instrument at cursor",enabled},
+            {playCursorCommand,L"Play from edit cursor",enabled&&!recoveryRestoring},
+            {playSelectionCommand,L"Play selection or pattern",enabled&&!recoveryRestoring},
+            {playSelectionCursorCommand,L"Play selection or pattern from edit cursor",enabled&&!recoveryRestoring},
+            {selectAllFocusedCommand,L"Select &all pattern cells",enabled&&!recoveryRestoring},
             {copyCommand,L"&Copy selection\tCtrl+C",enabled},{cutFocusedCommand,L"Cu&t selection\tCtrl+X",enabled},{pasteCommand,L"&Paste\tCtrl+V",enabled},
             {0,L"Paste special",enabled,false,{{patternPasteMix,L"Mix into empty fields",enabled},{patternPasteMerge,L"Merge nonempty fields",enabled}}},
             {clearCommand,L"&Clear selection\tDelete",enabled},{patternClearField,L"Clear current field\t.",enabled},{patternDeleteChannelRow,L"Delete channel row\tShift+Delete",enabled},{0,L""},
@@ -79,6 +90,10 @@
                 {0,L""},{patternInsertRows,L"Insert rows",enabled},{patternDeleteRows,L"Delete rows",enabled}}},
             {0,L"Record selection",enabled,false,{{patternRenderSampleCommand,selecting?L"To sample":L"Current row to sample",enabled},{patternRenderInstrumentCommand,selecting?L"To instrument":L"Current row to instrument",enabled},{patternRenderOptionsCommand,L"Render options…",enabled}}},
             {scratchGesturesCommand,L"Scratch phrases…",enabled},
+            {noteColumnMuteCommand,noteColumn(channel).at("mute").get<bool>()?L"Unmute current note column":L"Mute current note column",enabled&&view->session.document.value("editable",false)},
+            {noteTrackCreateCommand,L"New note track…",enabled&&view->session.document.value("editable",false)},
+            {noteTrackGroupCommand,L"Group selected note columns…",enabled&&view->session.document.value("editable",false)},
+            {noteTrackUngroupCommand,L"Ungroup current note track (keep routing)",enabled&&view->session.document.value("editable",false)&&noteTrack(channel)!=nullptr},
             {0,L"Inspect",enabled,false,{{notesCommand,L"Precise notes",enabled},{effectsCommand,L"Effects and parameter bindings",enabled},
                 {parameterAutomationCommand,L"Parameter automation…",enabled},{instrumentEnvelopeCommand,L"Instrument…",enabled}}},
             {0,L""},{undoCommand,L"&Undo\tCtrl+Z",enabled&&view->session.document.value("canUndo",false)},
@@ -207,7 +222,7 @@
                 hitChannel>=selected.at("startChannel").get<unsigned>()&&hitChannel<=selected.at("endChannel").get<unsigned>();
             if(!keyboard&&!inside) {
                 auto next=position();next["row"]=hitRow;next["channel"]=hitChannel;next["column"]=hitColumn;next["following"]=false;
-                navigate(next);effectFieldIndex=hitField;selecting=false;anchorRow=hitRow;anchorChannel=hitChannel;
+                navigate(next);effectFieldIndex=hitField;resetPatternSelection();anchorRow=hitRow;anchorChannel=hitChannel;
             }
             workspaceState.focus="pattern";
         } else if(surfaceName=="sample")setWorkspaceCanvasFocus("samples");
@@ -219,7 +234,7 @@
                 if(graphFieldDirty||graphPending||busy)targetReady=false;
                 else {
                     if(differentNode){graphNode=graphCanvas.nodes[size_t(hitNode)].id;graphWireIndex=-1;}
-                    else {const auto &wire=graphCanvas.wires[size_t(hitWire)];graphWireIndex=int(wire.index);graphWireModulation=wire.modulation;graphPageIndex=wire.modulation?2:1;SendMessageW(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);}
+                    else {const auto &wire=graphCanvas.wires[size_t(hitWire)];graphWireIndex=int(wire.index);graphWireModulation=wire.modulation;graphPageIndex=wire.modulation?2:1;ScreamSeq::NativeInputGate::present(controls.at(graphPage),CB_SETCURSEL,graphPageIndex,0);}
                     loadGraphFields();layoutControls();
                 }
             }

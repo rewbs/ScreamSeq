@@ -51,7 +51,7 @@
       else if(id==replaceRow){replaceLegacy_=!replaceLegacy_;++generation_;}
       else if(id==addHit)duplicate();else if(id==removeHit)remove();else if(id==fillRow)retrigger();
       else if(id==applyDraft||id==checkDraft)apply(id==checkDraft);
-    }catch(const std::exception &e){if(id==list)SendMessageW(controls_.at(list),LB_SETCURSEL,selected_,0);if(id==units)selection(units,int(units_));error(e);}
+    }catch(const std::exception &e){if(id==list)ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);if(id==units)selection(units,int(units_));error(e);}
   }
   unsigned snapStep()const{return snap_==0?256:std::max(1u,unitsPerRow*rowsPerBeat_/(snap_==1?16:snap_==2?32:64));}
   unsigned positionAt(float x,bool free)const{
@@ -128,17 +128,18 @@
       RestoreDC(item.hDC,saved);return;
     }
     if(item.CtlID!=list){NativeToolWindow::drawControl(item);return;}
-    NativeControls::recordDraw(item.hwndItem);const auto saved=SaveDC(item.hDC);const bool chosen=(item.itemState&ODS_SELECTED)!=0,disabled=(item.itemState&ODS_DISABLED)!=0;
-    SetDCBrushColor(item.hDC,chosen?RGB(46,79,83):RGB(24,34,45));FillRect(item.hDC,&item.rcItem,reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+    NativeControls::recordDraw(item.hwndItem);const NativeControls::SavedDC saved(item.hDC);if(!saved.saved)return;
+    const auto palette=NativeControls::listColors((item.itemState&ODS_SELECTED)!=0,(item.itemState&ODS_DISABLED)!=0);
+    NativeControls::fill(item.hDC,item.rcItem,palette.background);
     if(item.itemID<draft_.size()){
       const auto columns=hitColumns(draft_[item.itemID]);const auto scale=GetDpiForWindow(window_)/96.f;
       const int inset=int(std::lround(6*scale)),fixed=int(std::lround(194*scale));
       const LONG timeWidth=std::max(1L,(item.rcItem.right-item.rcItem.left-2*inset-fixed)/2);
       const std::array<LONG,6> widths={timeWidth,timeWidth,int(std::lround(50*scale)),int(std::lround(36*scale)),int(std::lround(40*scale)),int(std::lround(68*scale))};
-      auto bounds=item.rcItem;bounds.left+=inset;SetBkMode(item.hDC,TRANSPARENT);SetTextColor(item.hDC,disabled?RGB(103,119,133):RGB(218,232,241));
+      auto bounds=item.rcItem;bounds.left+=inset;SetBkMode(item.hDC,TRANSPARENT);SetTextColor(item.hDC,palette.text);
       const auto old=SelectObject(item.hDC,font_);
       for(size_t column=0;column<columns.size();++column){bounds.right=std::min(item.rcItem.right-inset,bounds.left+widths[column]);
         DrawTextW(item.hDC,columns[column].c_str(),-1,&bounds,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);bounds.left=bounds.right;}
       SelectObject(item.hDC,old);}
-    if(item.itemState&ODS_FOCUS)DrawFocusRect(item.hDC,&item.rcItem);RestoreDC(item.hDC,saved);
+    if((item.itemState&ODS_FOCUS)&&!(item.itemState&ODS_NOFOCUSRECT))DrawFocusRect(item.hDC,&item.rcItem);
   }

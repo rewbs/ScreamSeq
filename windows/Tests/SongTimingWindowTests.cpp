@@ -1,5 +1,6 @@
 #include "../App/SongTimingWindow.hpp"
 #include "PrivateGuiTest.hpp"
+#include "AccessibleControl.hpp"
 #include <iostream>
 
 namespace {
@@ -44,6 +45,9 @@ struct Form {
 std::pair<DWORD,DWORD> selection(HWND window){DWORD start=0,end=0;SendMessageW(window,EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));return {start,end};}
 void retainedDraftAndReload(Owner &owner){
   Form form(owner.window);form.open();require(form.loads==1&&form.tool.snapshot()["loaded"]==true,"Initial open did not load timing");require(GetFocus()==form.control(7601),"Initial open left focus on the tool shell");
+  const std::array<const wchar_t *,7> fieldNames{L"Timing mode",L"Tempo / BPM",L"Ticks per row",L"Rows per beat",L"Rows per bar",L"Groove / comma-separated row durations",L"Swing / percent"};
+  for(size_t i=0;i<fieldNames.size();++i)require(ScreamSeq::Tests::accessibleName(form.control(7601+int(i)))==fieldNames[i],"Timing provider omitted an explicit field name");
+  require(ScreamSeq::Tests::accessibleName(form.control(7710))==L"Timing preview","Timing preview lacks a native accessible name");
   form.write(7602,L"130.");form.write(7605,L"unfinished");SetFocus(form.control(7602));SendMessageW(form.control(7602),EM_SETSEL,1,3);
   const auto raw=form.tool.snapshot().at("draft"),captured=form.tool.snapshot().at("captured");
   auto busy=form.current;busy["busy"]=true;form.tool.update(busy);require(form.tool.snapshot()["pending"]==true,"Busy context did not disable timing actions");

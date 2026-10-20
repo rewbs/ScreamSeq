@@ -101,6 +101,8 @@ public:
 	}
 #if defined(OPENMPT_EDITOR_CORE)
 	constexpr uint32 SamplesIntoTick() const noexcept { return m_nSamplesPerTick - m_nBufferCount; }
+	// Native audition may prepare a voice between ticks without moving this clock.
+	constexpr samplecount_t SamplesRemainingInTick() const noexcept { return m_nBufferCount; }
 	// Native timing may vary inside an ordinary tracker tick. All native
 	// schedulers share this clock instead of inventing additional engine ticks.
 	bool nativeClockActive = false;

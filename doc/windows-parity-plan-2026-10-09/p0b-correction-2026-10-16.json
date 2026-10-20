@@ -1,0 +1,221 @@
+{
+  "sourceBaseRevision": "d39ec5548fc6224f5d395dbf02d6b0eca35b48ac",
+  "changedSourceHashes": {
+    "windows/Session/DocumentOperations.cpp": "225def24fbf952655d63690e07eff81d1ee723f4d9eafe4b195dd5d9917263a1",
+    "windows/Tests/ArrangementControllerTests.inc": "919b7581ff8d00074272918983d430207845f38f2c89ddcd92c73b02d1e8c3fd",
+    "mac/App/SignalGraphEditor.swift": "0cc8f10d86347289cf0377039591ff54f10f9d6c34c9ac69d368ff41f9152d40",
+    "mac/Tests/SignalGraphInterfaceTests.swift": "5cf81e46bc15954ea2656c16cb686fe759cbc8b5bd7b7df6dc508bffa4717149",
+    "mac/Tests/GraphProvenanceInterfaceTests.swift": "af1ee8b45fda7b29ff542329aa32743b14d6ac4c2c9d3beca64ad03e2f6b5a67"
+  },
+  "platform": "macOS 26.5.2 ARM64",
+  "compiler": "Apple Swift version 6.3.2 (swiftlang-6.3.2.1.108 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+  "target": "arm64-apple-macosx14.0",
+  "executable": {
+    "path": "bin/mac-parity-20261016/interface-tests",
+    "sha256": "a07ed194584b9bbf84e26d4fe0ae240c0b6c5722464bb455aaf2c91c91f5b2d6"
+  },
+  "sourceManifest": {
+    "path": "bin/mac-parity-20261016/InterfaceSource.json",
+    "sha256": "993493789f834d5a01eacf3bdd2932d2630de0fe7da70191c0658c9378d60049"
+  },
+  "logs": {
+    "mac-interface-20261016.log": "0af1bae2cdd2249d23713859cc465671b7720199cfdd00e2b62cd89932bfdab6",
+    "mac-interface-20261016-native.log": "8c316347e4fa61907250c1ffff17fc78e5bcd16196def479c6baec1e15813f5d",
+    "mac-interface-20261016-final.log": "a192285e58f3832a9eae9c9891381200678eb31ace8fff010a22a9baf4c23f02"
+  },
+  "results": {
+    "interfaceGroups": "35/35 passed",
+    "portableRunnerTests": "5/5 passed",
+    "windows": "Pending native CI; not executable on this Mac",
+    "intel": "Pending interface CI"
+  },
+  "limits": [
+    "Standalone native handler qualification only; no app build or physical audio/device check",
+    "Initial sandbox run 22/35; native-access rerun 34/35 exposed provenance; corrected full run 35/35",
+    "No test assertions or deadlines relaxed"
+  ],
+  "integratedCandidate": {
+    "parents": [
+      "97858792d9a371f2e026b648d1cf2e8def0952f2",
+      "20acf9f836cc922ee16893bae7cad6064f024dcf"
+    ],
+    "changedSourceHashes": {
+      "windows/Session/DocumentOperations.cpp": "d991d2407bb33a177f5d9b80762059347c5e5115dcee3d6f63af953a8a8cd388",
+      "windows/Tests/ArrangementControllerTests.inc": "919b7581ff8d00074272918983d430207845f38f2c89ddcd92c73b02d1e8c3fd",
+      "mac/App/SignalGraphEditor.swift": "0cc8f10d86347289cf0377039591ff54f10f9d6c34c9ac69d368ff41f9152d40",
+      "mac/Tests/SignalGraphInterfaceTests.swift": "7203011ae862daec3985221ef8c0f89cbd0442e636144db0569733a44a2b5893",
+      "mac/Tests/GraphProvenanceInterfaceTests.swift": "af1ee8b45fda7b29ff542329aa32743b14d6ac4c2c9d3beca64ad03e2f6b5a67"
+    },
+    "executable": {
+      "path": "bin/mac-parity-20261016-merged/interface-tests",
+      "sha256": "b3756aac89bc4195d411b1bc05f3b4e75dc77aa883a05b8c239dfbb33b8fdcf2"
+    },
+    "sourceManifest": {
+      "path": "bin/mac-parity-20261016-merged/InterfaceSource.json",
+      "sha256": "4791613084e6121ef3ba0f8ed0688617e14d7549993e60edbe6b8998bac450db"
+    },
+    "log": {
+      "path": "bin/parity-evidence/mac-interface-20261016-merged.log",
+      "sha256": "b30055e8564e1cdff300f147a3ea526f792cb5974fe28d4ba895878b909004e4"
+    },
+    "results": {
+      "interfaceGroups": "35/35 passed",
+      "portableRunnerTests": "5/5 passed",
+      "windows": "Pending native CI",
+      "intel": "Pending interface CI"
+    },
+    "scope": "Combined remote preflight and fixture checks with local captured-target, rejection/Redo and provenance regressions; existing checkpoint documents preserved."
+  },
+  "ciQualification": {
+    "macos": {
+      "runID": 38846128358,
+      "url": "https://github.com/rewbs/ScreamSeq/actions/runs/38846128358",
+      "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+      "conclusion": "success",
+      "scope": "Standalone interface harness only; no product app rebuild or physical device qualification.",
+      "jobs": [
+        {
+          "architecture": "arm64",
+          "jobID": 116796956194,
+          "conclusion": "success",
+          "interfaceGroups": "35/35 passed",
+          "runnerTests": "5/5 passed",
+          "sourceManifestFilesVerified": 1246,
+          "sourceFingerprint": "91df83013701ff891464cb8d849d0eb35b08a55e3f5b1e45c7d799d2dac55ed0",
+          "executableSHA256": "e88c56596a136a8730427c7fdc94f09feaea8fced139ec86d3eee4702e713e32",
+          "sourceManifestSHA256": "ec1b35bc9d4eb63759e6805b69387cef779c1fffa76177c06a0ce329df2cbb7a",
+          "jobLogSHA256": "1f2c46eade926eafc733e3e7fcc11dca459ebfe2322c07c472deda4fba6245e3",
+          "interfaceLogSHA256": "5936eb82618aed46e1b823e4ae9cb005a6857dcfb2fda7e1c1d01451bb031247",
+          "artifact": {
+            "id": 12023980122,
+            "name": "screamseq-interface-macos-15",
+            "digest": "sha256:b7818133918d14802e558e1a199cfde86f9d37a384db8a64bba152f3542d9206",
+            "size_in_bytes": 5906376,
+            "expires_at": "2026-10-30T03:38:35Z"
+          }
+        },
+        {
+          "architecture": "intel",
+          "jobID": 116796955906,
+          "conclusion": "success",
+          "interfaceGroups": "35/35 passed",
+          "runnerTests": "5/5 passed",
+          "sourceManifestFilesVerified": 1246,
+          "sourceFingerprint": "91df83013701ff891464cb8d849d0eb35b08a55e3f5b1e45c7d799d2dac55ed0",
+          "executableSHA256": "4b54e7616899b70cc9616eb442e08fd4bf5af4653dea0a7f64943097783c2332",
+          "sourceManifestSHA256": "d6c3064cdc85a7b46e7fb66dd25be47ce5acbb067be6319cf461fed8d97ed0ed",
+          "jobLogSHA256": "051dd8cfbef2b321f1a78c0fd358508227920b8bd106dbc2ee8d241f48d56d3a",
+          "interfaceLogSHA256": "779d908ea3cb6caf299cdaecba3570533ecca22ae61b9bde90132621ba57e24e",
+          "artifact": {
+            "id": 12023780904,
+            "name": "screamseq-interface-macos-15-intel",
+            "digest": "sha256:1fac163fe06e14940dad65ae156ebe42e316090ffafcb79dc8aa887b45961213",
+            "size_in_bytes": 5928330,
+            "expires_at": "2026-10-30T03:42:30Z"
+          }
+        }
+      ]
+    },
+    "windows": {
+      "runID": 38846111553,
+      "jobID": 116796904551,
+      "url": "https://github.com/rewbs/ScreamSeq/actions/runs/38846111553",
+      "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+      "conclusion": "failure",
+      "results": {
+        "build": "passed",
+        "portableWorker": "137/137 passed, including document-controller-arrangement",
+        "nativeEditorPreferenceRecovery": "29/29 passed",
+        "scratch": "3/3 passed",
+        "integration": {
+          "cases": 30,
+          "passingCases": 22,
+          "failingCases": 8,
+          "failureRecords": 11,
+          "failedCases": {
+            "test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor (test_workspace_shortcuts.WorkspaceShortcutTests.test_shortcut_changes_and_remapped_transport_preserve_playback_song_and_editor)": 1,
+            "test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take (test_recording.RecordingTests.test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take)": 1,
+            "test_queue_loss_retains_stopped_take_until_explicit_review_and_finish (test_recording.RecordingTests.test_queue_loss_retains_stopped_take_until_explicit_review_and_finish)": 1,
+            "test_stop_drains_multiple_batches_without_later_step_entry (test_recording.RecordingTests.test_stop_drains_multiple_batches_without_later_step_entry)": 1,
+            "test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review (test_recording.RecordingTests.test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review)": 1,
+            "test_sample_dock_typing_live_mode_and_text_focus (test_audition.AuditionTests.test_sample_dock_typing_live_mode_and_text_focus)": 2,
+            "test_native_sample_and_instrument_typing_capture_text_and_close (test_audition.AuditionTests.test_native_sample_and_instrument_typing_capture_text_and_close)": 2,
+            "test_keyup_during_document_wait_never_starts_a_late_voice (test_audition.AuditionTests.test_keyup_during_document_wait_never_starts_a_late_voice)": 2
+          },
+          "seconds": 118.813,
+          "recovery": "All three recovery integration cases passed; prior Save-cleanup timeout remains historical and unexplained."
+        },
+        "typedRoundtrip": {
+          "passed": true,
+          "fixtures": 5
+        },
+        "api": {
+          "baselineMatched": true,
+          "parityComplete": false,
+          "preservationFailures": [
+            "plugin-parameter-stable-identity"
+          ]
+        },
+        "codec": {
+          "baselineMatched": true,
+          "safetyPassed": true,
+          "parityComplete": false
+        },
+        "testInventory": "166 registrations; scheduling inventory passed"
+      },
+      "audioEnvironment": {
+        "services": "AudioEndpointBuilder and Audiosrv started successfully",
+        "devices": [],
+        "diagnosticOnly": true,
+        "interpretation": "Failures occur in audio-dependent startup/clock paths. No-endpoint runner is a material limitation; requires diagnosis on the device-equipped Windows task, not a blanket product pass."
+      },
+      "retainedApp": {
+        "archiveSHA256": "f73da272beefef3fa2f620ecb863355e0a654a4b3f63230ca1d965a007949ce8",
+        "qualification": "Built candidate; test results are separate and may fail.",
+        "buildReceiptSHA256": "c1d0e1671ba14e038efde4c8ab2cac99be9ccd7f6b572b2a5cd4012018b90745",
+        "sourceCommit": "d11b9cbbca5896f7d0775a5d784d5bc8e8ce85c9",
+        "executableSHA256": "5c8f1a5c8f3ebe8be9dbca9b47a2a123fdcd7efcdade9b9cb3237ac5278d830d"
+      },
+      "logsSHA256": {
+        "screamseq-integration-ui.log": "18dff304b0b4ad1e38b2426802b98215776ba87b8b3794162a5542f9b295ba92",
+        "screamseq-retained-editors.log": "608ed41d3c1029079175c7603957eab63b45d9485e9de41529c7980f11f0bd79",
+        "screamseq-windows.log": "9e0d16184733227c73c8174209c3a397f191c187895d233c09ec505798898521",
+        "screamseq-windows-model.log": "a04f464809fbfc8eee310a2926872667face9862c0c1d69b70abe8d740abb27f",
+        "screamseq-conformance-native.log": "54ee1eafd2ed75f43ba88b0a674ef34e41ad773076b7063f79d3adfc517ac396",
+        "screamseq-conformance-tools.log": "2f8966b0e4306b354fc92e81baa249c4a6b38c6896ae7f31e06ee9e814f53169",
+        "screamseq-scratch-ui.log": "201b0a6162bd19edd286c997f5496fd547ca4407ddc087e8d50948cee80ac97a",
+        "screamseq-conformance-project-helper.log": "9c87c20a0fbee63efe1803cd3f6ce6b2c88eb434460eefc86c83709d9eda60c3"
+      },
+      "jobLogSHA256": "58ff69bb68649d592c38c05fdbd430e7f396e5d9fd571bc64e91db466ea824f6",
+      "reportsSHA256": {
+        "audio-services.json": "dc33da12b008a458da0899e3011fea45e0a73894d15c2575f1dfd812fc31ed36",
+        "audio-environment/report.json": "2b4b688a71bd7ec2c56e15a013a657bcccd4a1aed02be7111cf31f96e8b3e432",
+        "parity-conformance/report.json": "d599430a12ed3ceb5dbefdb74ff5e66ea49436a08c549a698c94a9709711e5f3",
+        "parity-conformance/api/report.json": "a072157101d774c462593f16dd8dd7bc5efd0c0498e67a5ae524575df66ece73",
+        "parity-conformance/codec/report.json": "65ead263387c6fd48686016a752a9767d182670ada4c7ec698fbecc2607b01bc",
+        "test-schedule.json": "564cc6a4a1c303736e198f2423ebbcd10457d47dee55f6a5aa5cad66fe2ca5a1"
+      },
+      "artifact": {
+        "id": 12024521205,
+        "name": "screamseq-windows-logs",
+        "digest": "sha256:a9266ca3e99e5ae446d64523338644b12489518544732e2a6789a44a772538eb",
+        "size_in_bytes": 15650654,
+        "expires_at": "2026-10-30T04:08:37Z"
+      },
+      "limits": [
+        "Private-desktop/worker evidence, not foreground UI or physical device qualification",
+        "Existing API/codec baseline agreement does not establish full parity",
+        "No Windows code changed in this CI follow-up; Windows continuation owns remaining native/device diagnosis"
+      ],
+      "sourceManifestVerification": {
+        "files": 1246,
+        "sourceFingerprint": "e28c32aa7d3b37bc5422ea39ed5ed2a2f3e5b4a336cd08adc8279aeca19ab66b",
+        "exactBytes": 12,
+        "matchedAfterLFToCRLF": 1234,
+        "unmatched": 0,
+        "note": "Windows path separators normalized for lookup; text files match the candidate after LF-to-CRLF checkout conversion. The build receipt retains the actual Windows byte hashes."
+      },
+      "retainedAppVerification": "Archive, executable within archive, and build receipt SHA-256 values matched native-app-identity.json; all source commit fields matched the CI head."
+    }
+  }
+}

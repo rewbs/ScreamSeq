@@ -124,7 +124,7 @@ class WorkspaceTests(unittest.TestCase):
             user.SendMessageW(hwnd, message, buttons, packed)
         grid = state['geometry']['pattern']
         # Two ordinary cells, not platform-specific musical data.
-        x, y = grid['x'] + 44, grid['y'] + 56
+        x, y = grid['x'] + 44, grid['y'] + grid['headerHeight'] + 6
         mouse(0x201, x, y, 1)
         mouse(0x200, x + 169.6, y + 54, 1)
         # Capture can queue hover messages at the physical cursor location;
@@ -157,7 +157,7 @@ class WorkspaceTests(unittest.TestCase):
         grid, viewport = state['geometry']['pattern'], state['viewport']
         columns = self.client.call('document.get')['data']['effectColumns']
         x = grid['x'] + 44 + sum(79.2 + 86.4 * count + 4 for count in columns[:channel]) - viewport['horizontalScroll']
-        y = grid['y'] + 56 + (row - viewport['firstRow']) * 18
+        y = grid['y'] + grid['headerHeight'] + 6 + (row - viewport['firstRow']) * 18
         self.assertLess(x, grid['x'] + grid['width'])
         self.assertLess(y, grid['y'] + grid['height'])
         self.mouse(0x201, x, y, 1 | (4 if shift else 0))  # MK_LBUTTON | MK_SHIFT
@@ -329,7 +329,7 @@ class WorkspaceTests(unittest.TestCase):
         # A wheel message carries screen coordinates. Target a real tracker
         # cell so the test also respects independent-region input ownership.
         grid, scale = workspace['geometry']['pattern'], workspace['dpi'] / 96
-        point = wintypes.POINT(round((grid['x'] + 44) * scale), round((grid['y'] + 56) * scale))
+        point = wintypes.POINT(round((grid['x'] + 44) * scale), round((grid['y'] + grid['headerHeight'] + 6) * scale))
         user.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
         self.assertTrue(user.ClientToScreen(hwnd, ctypes.byref(point)))
         location = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
@@ -374,8 +374,8 @@ class WorkspaceTests(unittest.TestCase):
         self.navigate(row=4, channel=0, following=False)
         state = self.client.call('workspace.get')['data']
         grid = state['geometry']['pattern']
-        rows, channels = int((grid['height'] - 50) // 18), int((grid['width'] - 38) // 169.6)
-        self.assertGreater(grid['height'] - 50 - rows * 18, 2)
+        rows, channels = int((grid['height'] - grid['headerHeight']) // 18), int((grid['width'] - 38) // 169.6)
+        self.assertGreater(grid['height'] - grid['headerHeight'] - rows * 18, 2)
         self.assertGreater(grid['width'] - 38 - channels * 169.6, 2)
         # The last wholly rendered cell remains a valid hit.
         self.click_cell(state['viewport']['firstRow'] + rows - 1,
@@ -384,9 +384,9 @@ class WorkspaceTests(unittest.TestCase):
         self.navigate(row=4, channel=0, following=False)
         self.client.call('workspace.panel', {'panel': 'notes', 'focus': True})
         before = self.client.call('context.get')
-        x, y = grid['x'] + 44, grid['y'] + 56
+        x, y = grid['x'] + 44, grid['y'] + grid['headerHeight'] + 6
         if axis == 'row':
-            y = grid['y'] + 50 + rows * 18 + 1
+            y = grid['y'] + grid['headerHeight'] + rows * 18 + 1
         else:
             # Partial channels now render and accept input. The four-DIP
             # separator after a channel is the actual horizontal blank area.
@@ -397,7 +397,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.client.call('workspace.get')['data']['focus'], 'notes')
         # An invalid down must not initiate a selection drag into a valid cell.
         self.mouse(0x201, x, y, 1)
-        self.mouse(0x200, grid['x'] + 44, grid['y'] + 56, 1)
+        self.mouse(0x200, grid['x'] + 44, grid['y'] + grid['headerHeight'] + 6, 1)
         self.mouse(0x202, x, y)
         self.assertEqual(self.client.call('context.get'), before)
 

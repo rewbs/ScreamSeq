@@ -7,26 +7,33 @@
     bool allowSamplePreview=false;
     std::unique_ptr<ScreamSeq::SampleLibraryWindow> sampleBrowser;
 
-    void openSampleBrowser() {
+    void ensureSampleBrowser() {
         prepareSampleLibrary();
         if(!sampleBrowser)sampleBrowser=std::make_unique<ScreamSeq::SampleLibraryWindow>(window,
-            [this](const auto &method,const auto &params){return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
+            [this](const auto &method,const auto &params){if(method=="document.get")return view->session.document;return method.starts_with("sample.library.")?independentOperation(method,params).at("data"):documentOperation(method,params);},
             [this]{return sampleLibrary->status();},
             [this]{return samplePreview.status();},
             [this](double db){samplePreview.gain(float(std::pow(10.,db/20.)));},
             [this]{return ScreamSeq::SampleLibraryWindow::Context{documentId,view->session.revision,view->instruments!=0};},
-            [this](const Json &result,const std::string &document){
-                if(documentId!=document)return;
-                workspaceState.show("samples",position(),cursorSample(),true);setWorkspaceCanvasFocus("samples",true);auto &panel=workspaceState.panel("samples");
-                const auto &first=result.at("samples").at(0);panel.sample=first.at("sample");panel.pinned=true;sampleDraft=false;
-                const auto instrument=first.at("instrument").get<unsigned>();
-                if(instrument||!view->instruments){const auto target=typingTarget(!instrument,instrument?instrument:first.at("sample").get<unsigned>(),49,window);typingSoundId=target.identity;refreshTypingSounds();}
-                layoutControls();
-            },
-            [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";});
-        sampleBrowser->show();
+            [this](const Json &result,const std::string &document){revealCapturedSample(document,result.at("samples").at(0));},
+            [this](unsigned instrument,const std::string &document){if(documentId!=document)return;const auto target=typingTarget(false,instrument,49,window);typingSoundId=target.identity;refreshTypingSounds();status=L"Multi-sample instrument imported / selected for musical typing";},
+            [this](const auto &method,const auto &params,const auto &receipt){return method.starts_with("sample.library.")?sampleLibraryOperationWithOutcome(method,params,receipt):documentOperationWithOutcome(method,params,receipt);});
     }
+    void openSampleBrowser() {ensureSampleBrowser();sampleBrowser->show();}
 
+    virtual void finishSampleLibraryOperation(const std::string &,const Json &){}
+    ScreamSeq::Api::CompletedCall sampleLibraryOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt){
+        rejectDepartureInput();
+        if(libraryWaits>=8)throw ScreamSeq::Api::ApiError(-32002,"Sample library requests are busy",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        prepareSampleLibrary();const auto document=documentId;
+        auto result=awaitLibrary(sampleLibrary->invoke(method,params,receipt,document));
+        finishSampleLibraryOperation(method,result.at("data"));
+        return {method,document,result.at("data").at("libraryRevision").get<std::string>(),std::move(result.at("data"))};
+    }
+    bool protectSampleLibraryClose(){
+        if(!sampleBrowser||!sampleBrowser->protectsClose())return true;
+        sampleBrowser->show();status=L"Not closed / review the sample-library result";frameRequested=true;return false;
+    }
     void prepareSampleLibrary() {
         if(sampleLibrary)return;
         std::vector<std::string> roots;
@@ -47,6 +54,7 @@
             controller->service();MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){
                 if(message.message==WM_QUIT){PostQuitMessage(int(message.wParam));break;}
+                if(filterDepartureMessage(message))continue;
                 if((message.message==WM_KEYDOWN||message.message==WM_SYSKEYDOWN)&&IsChild(window,message.hwnd)&&!ScreamSeq::NativeToolWindow::belongsToTool(message.hwnd)&&handleKey(message.wParam,(message.lParam&(1LL<<30))!=0))continue;
                 if((message.message==WM_KEYUP||message.message==WM_SYSKEYUP)&&handleKeyUp(message.wParam))continue;
                 TranslateMessage(&message);DispatchMessageW(&message);
@@ -62,6 +70,7 @@
     std::vector<std::string> independentWrites()const override {auto methods=ScreamSeq::Samples::Library::writes();methods.insert(methods.end(),{"sample.library.preview","sample.library.preview.stop","audio.settings.set","recovery.save","recovery.restore","midi.settings.set"});if(midiTestBuffer)methods.push_back("midi.test.inject");return methods;}
     Json independentGuards()const override {Json guards={{"sample.library.roots.set",{"expectedLibraryRevision"}},{"sample.library.rescan",{"expectedLibraryRevision"}},{"sample.library.preview",Json::array()},{"sample.library.preview.stop",Json::array()},{"audio.settings.set",{"expectedAudioRevision"}},{"recovery.save",{"expectedRevision"}},{"recovery.restore",{"expectedRevision"}},{"midi.settings.set",{"expectedMidiRevision"}}};if(midiTestBuffer)guards["midi.test.inject"]={"expectedMidiRevision","generation"};return guards;}
     Json independentOperation(const std::string &method,const Json &p) override {
+        rejectDepartureInput();
         if(method.starts_with("recovery."))return recoveryOperation(method,p);
         if(method.starts_with("audio."))return audioOperation(method,p);
         if(method.starts_with("midi."))return midiOperation(method,p);

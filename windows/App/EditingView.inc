@@ -137,7 +137,7 @@
         if(name.empty())name=L"Untitled";
         auto title=(view->dirty ? L"* " : L"")+name+L" - "+wide(view->session.document.at("format").get<std::string>())+L" - ScreamSeq";
         if(busy) title+=L" [Document worker busy]";
-        SetWindowTextW(window,title.c_str());
+        ScreamSeq::NativeInputGate::text(window,title.c_str());
     }
     Json edit(const std::string &method,Json params) {
         params["expectedRevision"]=view->session.revision;
@@ -179,11 +179,25 @@
         edit("pattern.apply",{{"cells",Json::array({cell})}});
         if(column==0) advance();return true;
     }
+    bool copyingPatternClipboard=false;
+    uint64_t patternClipboardSerial=0;
+    DWORD patternClipboardSequence=0;
+    struct PendingPatternPaste {
+        std::string document,revision,mode;
+        Json origin,selection;
+        std::optional<std::string> text;
+        uint64_t copySerial=0;
+        HWND focus{};
+    };
+    std::optional<PendingPatternPaste> pendingPatternPaste;
     bool copyCells() {
+        if(copyingPatternClipboard)throw std::runtime_error("Pattern copy is already pending");
+        copyingPatternClipboard=true;
+        struct CopyGuard{bool &value;~CopyGuard(){value=false;}}copyGuard{copyingPatternClipboard};
         const auto region=selection();const auto clipboardSequence=inspection?0:GetClipboardSequenceNumber();
         auto data=await(std::async(std::launch::async,[snapshot=view,p=patternIndex,region]{return ScreamSeq::patternClipboardText(*snapshot,p,
             region.at("startRow"),region.at("endRow"),region.at("startChannel"),region.at("endChannel"));}));
-        if(inspection){inspectionClipboard=std::move(data);status=L"Pattern selection copied";return true;}
+        if(inspection){inspectionClipboard=std::move(data);++patternClipboardSerial;status=L"Pattern selection copied";return true;}
         if(GetClipboardSequenceNumber()!=clipboardSequence){status=L"Clipboard changed while preparing the selection / copy cancelled";return false;}
         const auto text=wide(data);const auto bytes=(text.size()+1)*sizeof(wchar_t);
         auto memory=GlobalAlloc(GMEM_MOVEABLE,bytes);if(!memory) throw std::bad_alloc();
@@ -193,6 +207,7 @@
         if(GetClipboardSequenceNumber()!=clipboardSequence){CloseClipboard();GlobalFree(memory);status=L"Clipboard changed / copy cancelled";return false;}
         const bool published=EmptyClipboard() && SetClipboardData(CF_UNICODETEXT,memory);
         CloseClipboard();if(!published) {GlobalFree(memory);throw std::runtime_error("Cannot publish pattern clipboard");}
+        ++patternClipboardSerial;patternClipboardSequence=GetClipboardSequenceNumber();
         status=L"Pattern selection copied / precise notes and all FX columns";return true;
     }
     void cutCells(){
@@ -206,8 +221,7 @@
         if(result==ScreamSeq::PatternCutResult::Stale)status=L"Copied / cut cancelled because the song or pattern changed";
         else if(result==ScreamSeq::PatternCutResult::Applied)status=L"Pattern selection cut / document Undo available";
     }
-    void pasteCells(const std::string &mode="overwrite") {
-        const auto origin=position();const auto revision=view->session.revision;
+    std::string readPatternClipboard() {
         std::string text=inspectionClipboard;
         if(!inspection) {
             if(!OpenClipboard(window)) throw std::runtime_error("Clipboard busy");
@@ -223,10 +237,37 @@
                 text.resize(bytes);WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,value.data(),int(value.size()),text.data(),bytes,nullptr,nullptr);
             }
         }
+        return text;
+    }
+    void applyPatternPaste(PendingPatternPaste paste) {
+        if(documentId!=paste.document||view->session.revision!=paste.revision||position()!=paste.origin||selection()!=paste.selection||GetFocus()!=paste.focus)
+            throw std::runtime_error("Paste target changed while waiting / paste again at the intended selection");
+        if(!paste.text){
+            if(copyingPatternClipboard||patternClipboardSerial!=paste.copySerial||(!inspection&&GetClipboardSequenceNumber()!=patternClipboardSequence))
+                throw std::runtime_error("Pending copy did not publish this clipboard / copy and paste again");
+            paste.text=readPatternClipboard();
+        }
+        const auto origin=paste.origin;const auto revision=paste.revision;const auto mode=paste.mode;
+        auto text=std::move(*paste.text);
         auto payload=await(std::async(std::launch::async,[text=std::move(text)]{return ScreamSeq::parsePatternClipboard(text);}));
+        if(documentId!=paste.document||view->session.revision!=revision||position()!=origin||selection()!=paste.selection||GetFocus()!=paste.focus)
+            throw std::runtime_error("Paste target changed while decoding / paste again at the intended selection");
         payload["pattern"]=origin.at("pattern");payload["startRow"]=origin.at("row");payload["startChannel"]=origin.at("channel");
         payload["mode"]=mode;payload["clip"]=true;payload["expectedRevision"]=revision;
         documentOperation("pattern.paste",payload);status=L"Pattern pasted / document Undo available";
+    }
+    void drainPatternPaste() {
+        if(!pendingPatternPaste||busy||copyingPatternClipboard||departureInput||recoveryRestoring)return;
+        auto paste=std::move(*pendingPatternPaste);pendingPatternPaste.reset();
+        try{applyPatternPaste(std::move(paste));}catch(const std::exception &e){status=wide(e.what());}
+        frameRequested=true;
+    }
+    void pasteCells(const std::string &mode="overwrite") {
+        if(pendingPatternPaste)throw std::runtime_error("A paste is already waiting for the document");
+        PendingPatternPaste paste{documentId,view->session.revision,mode,position(),selection(),{},patternClipboardSerial+1,GetFocus()};
+        if(!copyingPatternClipboard)paste.text=readPatternClipboard();
+        if(busy||copyingPatternClipboard){pendingPatternPaste=std::move(paste);status=L"Paste queued for the current selection";return;}
+        applyPatternPaste(std::move(paste));
     }
     std::filesystem::path chooseFile(bool save) {
         std::vector<wchar_t> path(32768);if(save) wcscpy_s(path.data(),path.size(),L"Untitled.screamseq");
@@ -239,17 +280,20 @@
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     bool saveFile(bool saveAs=false) {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
-        auto revision=view->session.revision;auto path=view->path;
+        const auto document=documentId;auto revision=view->session.revision;auto path=view->path;
         auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),towlower);
         if(saveAs || view->session.document.value("requiresSaveAs",false) || path.empty() || (ext!=L".screamseq" && ext!=L".resonance")) path=chooseFile(true);
-        if(path.empty()) return false;
-        documentOperation("document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}});
-        status=L"Native project saved atomically";
-        if(!pluginEditorWarning.empty()) {status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        if(path.empty())return false;
+        if(documentId!=document||view->session.revision!=revision)throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Save; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        retainedNativeCommand("save","document.save",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},{{"path",utf8Path(path)}},[&](const Json &){
+            status=L"Native project saved atomically";
+            if(!pluginEditorWarning.empty()){status+=L" / "+pluginEditorWarning;pluginEditorWarning.clear();}
+        });
         return true;
     }
     bool unsavedChecked=false; // The last protectUnsaved() got as far as knowing whether the song is dirty.
@@ -265,12 +309,23 @@
         if(view->session.revision!=revision) throw ScreamSeq::Api::ApiError(-32001,"Document changed during the prompt; review changes again");
         return choice==IDNO || saveFile();
     }
+    void newFile(bool demo=false) {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectUnsaved())return;
+        const auto revision=view->session.revision;
+        if(!reviewNativeDeparture())return;
+        documentOperation("document.new",{{"expectedRevision",revision},{"demo",demo},{"discard",true}});
+        command(focusPatternCommand);
+        status=demo?L"Opened demo song":L"New song / save as a ScreamSeq project";
+    }
     void openFile() {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake()) return;
         if(!protectUnsaved()) return;
         auto revision=view->session.revision;auto path=chooseFile(false);if(path.empty()) return;
         if(!protectRecordingTake()) return;
+        if(!reviewNativeDeparture())return;
         documentOperation("document.open",{{"expectedRevision",revision},{"path",utf8Path(path)},{"discard",true}});
         status=L"Opened "+path.filename().wstring();
         const auto warnings=view->session.document.value("loadWarnings",Json::array());
@@ -282,17 +337,17 @@
         if(listedCatalog!=view->catalogRevision) {
             refreshTypingSounds();
             const auto sampleSelection=SendMessageW(controls.at(sampleCommandBase),LB_GETCURSEL,0,0);
-            for(int id:{patternChooser,orderChooser,sampleCommandBase}) SendMessageW(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
+            for(int id:{patternChooser,orderChooser,sampleCommandBase}) ScreamSeq::NativeInputGate::present(controls.at(id),id==sampleCommandBase ? LB_RESETCONTENT : CB_RESETCONTENT,0,0);
             for(const auto &[i,sample]:view->samples) {
                 auto label=std::to_wstring(i)+L"  "+wide(sample.at("name").get<std::string>());
-                auto n=SendMessageW(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
+                auto n=ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETITEMDATA,n,i);
             }
-            for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=SendMessageW(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));SendMessageW(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
+            for(const auto &[i,p]:view->patterns) {auto label=L"Pattern "+std::to_wstring(i);auto n=ScreamSeq::NativeInputGate::present(controls.at(patternChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));ScreamSeq::NativeInputGate::present(controls.at(patternChooser),CB_SETITEMDATA,n,i);}
             listedOrderIDs.clear();unsigned order=0;for(const auto &p:view->session.document.at("orders")) {
                 const auto index=p.get<unsigned>();const auto label=std::to_wstring(order)+L" : "+(index==65535?std::wstring(L"End"):index==65534?std::wstring(L"Skip"):L"P"+std::to_wstring(index)+(view->patterns.contains(index)?L"":L" (missing)"));
-                SendMessageW(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
+                ScreamSeq::NativeInputGate::present(controls.at(orderChooser),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));listedOrderIDs.push_back(view->session.document.at("orderMetadata").at(order++).at("id"));
             }
-            if(sampleSelection!=LB_ERR) SendMessageW(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
+            if(sampleSelection!=LB_ERR) ScreamSeq::NativeInputGate::present(controls.at(sampleCommandBase),LB_SETCURSEL,sampleSelection,0);
             listedCatalog=view->catalogRevision;
         }
         unsigned selected=0;for(auto &[p,v]:view->patterns) {if(p==patternIndex) break;++selected;}ScreamSeq::NativeControls::select(controls.at(patternChooser),selected);

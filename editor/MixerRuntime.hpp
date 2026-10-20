@@ -12,6 +12,14 @@ struct MixerControls {
   double prePan = 0;
 };
 struct MixerMeter { float left = 0, right = 0; };
+// Control-owner observation. Identities travel with the sampled routing plan;
+// an editor's current bus order is not an audio-observation identity map.
+struct MixerMeterReading {
+  struct Bus {uint64_t id=0;MixerMeter level;};
+  bool fresh=false;
+  uint64_t revision=0;
+  std::vector<Bus> buses;
+};
 struct MixerAudioInput { uint32_t bus = 0; const float *samples = nullptr; const float *autoFallback = nullptr; }; // Optional native Auto-detector contribution.
 class MixerRuntime {
 public:

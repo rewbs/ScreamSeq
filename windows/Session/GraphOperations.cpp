@@ -426,7 +426,6 @@ Json GraphOperations::invoke(const std::string &method,const Json &p) {
         const auto index=uint16_t(integer(field(p,"instrument"),1,255));
         require(index<=song.GetNumInstruments()&&song.Instruments[index]&&next.instruments.contains(index),"Instrument does not exist");
         target=next.instruments.at(index).id;
-        if(!raw.is_null()) require(!pluginInstrument(host_.rack?host_.rack():host_.cachedRack,index),"Plugin instruments use their output bus graph; this assignment processes sample voices");
         ensureMixer();
       } else target=bus(field(p,"target"));
       auto &assignments=instrument?graph.instrumentAssignments:graph.assignments;

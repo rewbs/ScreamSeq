@@ -42,6 +42,9 @@ class PluginOperations {
   bool graphEditorWindowOpen_=false;
   std::set<std::string> openEditors_;
   std::map<std::string,std::map<uint32_t,float>> pendingParameters_;
+  // Vendor notifications are consumed once. Keep their latest values until
+  // the complete live batch is admitted, independently of opaque-state capture.
+  std::map<std::string,std::map<uint32_t,float>> pendingLiveParameters_;
   std::chrono::steady_clock::time_point lastEditorChange_{};
   std::chrono::steady_clock::time_point lastStateCapture_{};
   Json lastTouched_ = nullptr;

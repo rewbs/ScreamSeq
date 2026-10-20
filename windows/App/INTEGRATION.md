@@ -268,10 +268,46 @@ counts are checked against plugin adapter capacity. Envelope targets use real
 plugin parameter/conflict hooks; inspection catalogue storage is explicitly
 private. See `../MIXER_GRAPH_PROGRESS.md` for current evidence and limits.
 
-The native mixer dock has a captured, revision-guarded bus draft, compact numeric
-controls, main-output selection (including disconnect), mute/solo, group creation
+The Mixer opens channel strips by default. **Strips** and **Details** are separate
+command-palette entries with configurable shortcuts; Details retains its bus
+draft when switching views. Each strip shows the bus name and its Track, Group,
+Return or Master role, so role remains visible after renaming. Strips expose pre/post gain and balance, width,
+mute/solo, stereo meters and a per-bus Details action. Dragging previews a value;
+release or Enter commits once, and Escape restores the current saved value.
+An uncertain result offers Review result and Use current without repeating the
+write. The horizontal scrollbar, Shift+wheel and Ctrl+Page Up/Page Down navigate
+buses. The normal wheel scrolls a short strip vertically. Wheel input over a
+control navigates the viewport without changing the musical value. Tab reveals
+offscreen controls and follows bus order even after native controls are recycled.
+The HWND pool contains visible strips, neighbors and retained focused/gesture
+owners; scrolling never rebinds a captured edit to another bus. This P1 source
+candidate still requires the qualification gates in
+`../../doc/windows-parity-plan-2026-10-09/P1-IMPLEMENTATION.md`.
+
+The native mixer Details dock also opens the retained plugin browser with
+**Add effect…**, targeting the selected stable bus. The browser shows that
+destination, filters to effects and uses existing atomic `plugin.add` insertion.
+**Rack destination** explicitly clears the bus target. Missing buses, replacement
+documents, pending operations and retained drafts cannot silently redirect the
+insertion. This prepared P1 source has not yet been built or qualified.
+
+**Route instrument here…** uses a native menu of the instrument's actual named
+outputs and their current destinations. One choice moves that output to the
+selected bus through `mixer.instrument.route`; other outputs remain unchanged.
+Unsupported ports are unavailable, and missing catalogs never imply a main port.
+The action retains its document/bus/revision across the menu and refuses changed
+context. Both destination actions require Reload when Mixer is stale. These
+prepared controls still require native and hosted-instrument qualification.
+
+The native mixer Details dock has a captured, revision-guarded bus draft, compact numeric
+controls, main-output selection (including disconnect), mute/solo, group/return creation
 and removal, reload, Apply, keyboard access and stereo meters. Unfinished fields
 survive navigation and stale revisions; async completion checks draft generation.
+Name and six-digit RGB color edits share the retained Apply transaction; invalid
+color text stays visible until corrected or reloaded. Add group and Add return
+appear beneath the bus list and in the command palette. A new bus opens its
+Details name field; existing sends remain unchanged. Add/remove commands reject
+while Details has unfinished work, including when invoked from the palette.
 It reuses the same API operations as external clients. Painting reads retained
 UI state, with meter snapshots collected by a UI timer. The reusable graph dock
 adds cached nodes, ports and wires, socket dragging, pan/zoom, definition/property
@@ -316,6 +352,36 @@ explicit overwrite for existing files, and validates dry runs without publicatio
 or baseline changes. Open requires expectedRevision and explicit discard when
 unsaved. Successful-write request-ID deduplication and private PID pipe transport
 remain in the existing adapter/dispatch layers.
+
+Open, Recovery Restore, Close and session-end queries consult the native draft
+registry at final admission. Native Review raises retained work; Discard binds
+the captured owner generations, and Cancel keeps the song and raw fields. API
+`discard:true` does not discard native drafts. Pending/uncertain work refuses
+departure. Failed preparation/admission/Stop retains owners; successful adoption
+retires old document owners while global recovery/library browsers survive.
+Native input and API writes stay protected through refresh. A post-adoption
+refresh failure displays an F5 retry action; it does not repeat Open. Canceled
+OS shutdown releases its admission lease without consuming drafts. A failed
+state read keeps the application open rather than offering an unchecked close.
+
+Sample-recording Record, Stop and Discard retain an unresolved lifecycle request
+if the reply or native completion fails without a proven preflight refusal.
+Review current take reads session state without replaying the request. Until
+that review succeeds, the owner refuses another capture, Keep, Discard, setup
+discard and Close, and its draft census blocks document departure. A microphone
+may still be active after an uncertain Record/Stop; review exposes its current
+state and makes an explicit Stop available. Readback preserves newer name/output
+intent and never consumes an externally created replacement take. Keep's sample
+import/result reconciliation remains distinct from this observation of take state.
+
+Rack and graph plugin location repair retain uncertain reconnect/scan outcomes.
+Review result reads the captured stable target's current location and cached
+candidates. Without an original receipt it labels the outcome unverified,
+preserves the submitted and newer raw paths, and requires explicit Reload before
+another write. A cache scan cannot be classified from song revision equality.
+Malformed, raced or failed readback keeps the owner unresolved; review never
+repeats a scan or reconnect. A known reconnect receipt continues to report its
+original result without treating a different current document as its target.
 
 AssetOperations is registered and retained on the worker, including imports,
 PCM, processing, loop settings, drawing, private clipboard and instrument edits.
@@ -385,6 +451,15 @@ the rack's quick picker. Enter adds the selected row, F6 switches search/list,
 Ctrl+F focuses search and Ctrl+R reloads. Category drafts survive Close; Escape
 discards a draft. Unavailable preferences leave insertion usable. See
 `../PLUGIN_LIBRARY_PROGRESS.md` for native/API and isolated live-audio evidence.
+
+Prepared P1 routing controls use declared `plugin.buses.get` catalogs for plugin
+inputs and outputs. New connections require an explicit named port; unsupported
+or unavailable ports cannot be guessed. Existing saved wires retain their port
+identity. Generic plugin socket gestures retain a draft until ports are chosen.
+The routing owner also retains typed write outcomes: **Review result** reconciles
+an exact receipt or inspects current state without replay, preserving newer raw
+drafts. Unknown observations require Reload before another write. This source
+and its new native/application checks are not yet built or qualified.
 
 The mixer toolbar's **Routing…** button and command palette open a modeless song
 routing canvas alongside the pattern editor. It shows track/group/master buses,

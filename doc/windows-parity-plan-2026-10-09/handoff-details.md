@@ -1,8 +1,12 @@
 # Implementation handoff details
 
+**Status superseded:** [current review](current-review.md) pins main to `16cab100b` and checkout to `07060e1c4`, records successful P0a CI and remaining P0b work. Source/CI status below retains its original checkpoint; use the current review and main plan for the next batch.
+
 This supplements the [implementation plan](README.md). It specifies future work. This review read source, fixtures, images and retained logs; it did not modify product code, launch the app, build, run tests, dispatch workflows or integrate a branch.
 
-## Source and candidate disposition
+**Historical checkpoint:** the candidate discussion below records `e7f165eb4` and earlier source. The [latest planning review](planning-review-refresh.md) pins the inspected checkout to `c76439494` plus pre-existing dirty source and supersedes candidate/evidence status here. The eight-file list records `61a28b489`. Departure tokens, a native registry and selected owner summaries/tests now exist; aggregate application admission/input/retirement remains future work. Cable, stage-role, layout/fixture and timing/nudge corrections also have candidate implementations. Do not implement those foundations or repairs twice; use the latest review's remaining-owner and admission checklist.
+
+## Earlier source and candidate checkpoint
 
 Remote main was rechecked on 9 October 2026 and remains `ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`. There is no post-reference main delta. The current checkout was clean at `61a28b4892b89e6c1e0445dd3b16f975fd222c9e` when this review began. Its eight changed product/test files relative to main are:
 
@@ -53,6 +57,8 @@ Some files already expose snapshots/guards, others need a narrow read-only draft
 Cheapest checks are pure registry/token transition cases and direct native owner summaries. Build the Windows app/workspace target once after the cohesive implementation, then run affected workspace/retained-editor, recovery and recording cases on the same executable. Common message/admission changes trigger the broader workspace/recovery set. Mac's unchanged native draft code can reuse valid evidence; any shared state token/history change requires the relevant Mac editor-draft/session target and app build.
 
 ## P0b role-safe stages and modulation edits
+
+This subsection describes the main-baseline defects and intended contract. Existing candidates `d59c24c8c` and `e7f165eb4` implement the cable/default and role-protection slices; review their current-source disposition before selecting work. Broader graph UI, exact-copy observation and aggregate departure protection remain outstanding.
 
 **Stage identity:** `SongRoutingCanvas.hpp::build` gives Row/Persistent/Ordinary cards distinct display IDs but the same bus ID. `SongRoutingWindow.hpp::inspectFields`, `assignGraph`, `insertAction` and layout enablement derive capabilities from bus/instrument presence. Proposed `StageRole` and capability values must survive canvas projection, selection, snapshots and mutation dispatch. Check capabilities again immediately before issuing a write; merely disabling a button is insufficient. Row/Persistent selection may inspect/edit the shared definition or choose a live copy, but it cannot rewrite the bus's ordinary assignment or insert chain. Keep aggregate auxiliary stage routing separate from individual copy observation.
 

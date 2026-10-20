@@ -439,22 +439,17 @@
     } else if ([method isEqual:@"pattern.timeline.get"]) {
       allowed(@[@"pattern",@"order"]);
       const auto pattern=PATTERNINDEX(integer(p[@"pattern"],0,UINT16_MAX));
-      require(song.Patterns.IsValidPat(pattern),"Pattern does not exist");
-      ORDERINDEX order=ORDERINDEX_INVALID;
-      if(p[@"order"]) { order=ORDERINDEX(integer(p[@"order"],0,song.Order().size()-1));require(song.Order()[order]==pattern,"Order does not contain this pattern"); }
-      else for(ORDERINDEX i=0;i<song.Order().size();++i) if(song.Order()[i]==pattern){order=i;break;}
-      const auto rows=song.Patterns[pattern].GetNumRows();
-      std::vector<double> times(rows,-1.0);double origin=-1;
-      if(order!=ORDERINDEX_INVALID) {
-        GetLengthTarget target;
-        target.onRow=[&](ORDERINDEX o,ROWINDEX row,double seconds){if(o==order && row<times.size() && times[row]<0 && std::isfinite(seconds)){times[row]=seconds;if(origin<0)origin=seconds;}};
-        _document->native().prepareEffects(song);
-        song.GetLength(eNoAdjust,target);
-      }
-      const auto beat=song.Patterns[pattern].GetOverrideSignature()?song.Patterns[pattern].GetRowsPerBeat():song.m_nDefaultRowsPerBeat;
+      const auto timeline=[&] {
+        try {return patternTimeline(*_document,pattern,p[@"order"]
+          ?std::optional<uint32_t>(uint32_t(integer(p[@"order"],0,UINT32_MAX))):std::nullopt);}
+        catch(const std::invalid_argument &error){throw Error(-32602,error.what());}
+      }();
       NSMutableArray *entries=[NSMutableArray array];
-      for(ROWINDEX row=0;row<rows;++row) [entries addObject:@{@"row":@(row),@"beat":@(double(row)/std::max(1u,uint32_t(beat))),@"patternSeconds":times[row]<0?(id)NSNull.null:@(times[row]-origin),@"songSeconds":times[row]<0?(id)NSNull.null:@(times[row])}];
-      result=@{@"pattern":@(pattern),@"order":order==ORDERINDEX_INVALID?(id)NSNull.null:@(order),@"positions":entries,@"semantics":@"First visit to each row in this order occurrence; unreachable rows have null times."};
+      for(const auto &entry:timeline.positions) [entries addObject:@{@"row":@(entry.row),@"beat":@(entry.beat),
+        @"patternSeconds":entry.patternSeconds?@(*entry.patternSeconds):(id)NSNull.null,
+        @"songSeconds":entry.songSeconds?@(*entry.songSeconds):(id)NSNull.null}];
+      result=@{@"pattern":@(timeline.pattern),@"order":timeline.order?@(*timeline.order):(id)NSNull.null,
+        @"positions":entries,@"semantics":@(patternTimelineSemantics)};
     } else if ([method isEqual:@"pattern.get"]) {
       allowed(@[ @"pattern", @"startRow", @"rowCount", @"startChannel", @"channelCount" ]);
       int pattern = int(integer(p[@"pattern"], 0, UINT16_MAX));
@@ -800,10 +795,10 @@
       require([@[ @"before", @"after", @"assign", @"up", @"down", @"remove", @"move" ] containsObject:operation],
               "Unknown order operation");
       auto order = integer(p[@"order"], 0, song.Order().size());
+      require(!p[@"destination"] || [operation isEqual:@"move"], "Destination is only used by move");
       if ([operation isEqual:@"remove"])
         succeeded([self removeOrder:order error:&problem], problem);
       else {
-        require(!p[@"destination"] || [operation isEqual:@"move"], "Destination is only used by move");
         auto pattern = [operation isEqual:@"move"] ? integer(p[@"destination"],0,song.Order().size()-1) : integer(p[@"pattern"] ?: @0, 0, UINT16_MAX);
         succeeded([self editOrder:order pattern:pattern operation:operation error:&problem], problem);
       }
@@ -1313,17 +1308,15 @@
       std::vector<std::pair<uint32_t, float>> values;
       if (!state) {
         const auto parameters = _audio->pluginParameters(slot);
-        std::set<uint32_t> seen;
+        std::vector<std::pair<uint32_t,double>> requested;
         for (id raw in array(p[@"values"], 4096)) {
           NSDictionary *v = object(raw);
           keys(v, @[ @"id", @"value" ]);
-          auto id = uint32_t(integer(v[@"id"], 0, UINT32_MAX));
-          require(seen.insert(id).second, "Duplicate parameter");
-          auto found = std::find_if(parameters.begin(), parameters.end(), [&](const auto &v) { return v.id == id; });
-          require(found != parameters.end() && found->writable, "Plugin parameter does not exist, is read-only or unavailable");
-          values.emplace_back(id, float(number(v[@"value"], found->min, found->max)));
+          requested.emplace_back(uint32_t(integer(v[@"id"],0,UINT32_MAX)),
+            number(v[@"value"],-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max())));
         }
-        require(!values.empty(), "Parameter batch cannot be empty");
+        try { values=Tracker::prepareParameterEdits(parameters,requested); }
+        catch(const std::invalid_argument &e) { throw Error(-32602,e.what()); }
       }
       NSData *bytes = preset ? loadedPreset[@"state"] : state ? base64(p[@"data"], 16 * 1024 * 1024) : nil;
       if (!state) {

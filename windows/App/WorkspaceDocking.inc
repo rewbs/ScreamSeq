@@ -533,7 +533,7 @@
     static std::wstring workspaceRegionTitle(const std::string &id){
         if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";if(id=="graphCurve")return L"Graph curve";if(id=="preciseNotes")return L"Precise notes";
         if(id=="notes")return L"Notes";if(id=="samples")return L"Samples";if(id=="effects")return L"Pattern FX";
-        if(id=="plugins")return L"Plugins";if(id=="mixer")return L"Mixer";if(id=="graph")return L"Graph";return L"Tracker";
+        if(id=="plugins")return L"Plugins";if(id=="mixer")return L"Mixer";if(id=="graph")return L"Graph recipes";return L"Tracker";
     }
     bool workspaceEditorFollowHeld(const std::string &id)const {
         const auto &state=workspaceEditors[workspaceEditorIndex(id)];if(state.pinned)return false;

@@ -113,8 +113,8 @@ std::span<const PatternNoteView> DocumentView::notesAt(unsigned p,unsigned r,uns
 }
 DocumentController::DocumentController(const std::filesystem::path &input,std::string identity,
   std::function<void()> stop,std::function<void(const std::vector<Tracker::Edit>&)> edits,std::function<void()> beforeView,size_t maxCacheBytes,
-  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath)
-  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),thread_([this]{loop();}) {
+  std::function<void(std::span<const Tracker::ParameterChange>)> liveParameters,PlaybackHooks playbackHooks,std::optional<std::filesystem::path> cataloguePath,std::optional<std::filesystem::path> libraryPath,DocumentReplacementAdmission *replacementAdmission)
+  :identity_(std::move(identity)),beforeView_(std::move(beforeView)),maxCacheBytes_(maxCacheBytes),stop_(std::move(stop)),edits_(std::move(edits)),liveParameters_(std::move(liveParameters)),playbackHooks_(std::move(playbackHooks)),cataloguePath_(std::move(cataloguePath)),libraryPath_(std::move(libraryPath)),replacementAdmission_(replacementAdmission),thread_([this]{loop();}) {
   auto task=std::make_shared<std::packaged_task<void()>>([this,input]{open(input);});
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();
@@ -147,15 +147,16 @@ void DocumentController::service() {
   {std::lock_guard lock(mutex_);tasks.swap(main_);}for(auto &task:tasks) task();
 }
 std::shared_ptr<const DocumentView> DocumentController::view() {std::lock_guard lock(mutex_);return view_;}
-std::string DocumentController::revision() const {
-  return identity_+":"+std::to_string(generation_)+":"+std::to_string(document_->revision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex())+":"+std::to_string(project_.pluginRevision);
+std::string DocumentController::revision() const {return revision(document_->revision);}
+std::string DocumentController::revision(uint64_t documentRevision) const {
+  return identity_+":"+std::to_string(generation_)+":"+std::to_string(documentRevision)+":"+std::to_string(document_->song().Order.GetCurrentSequenceIndex())+":"+std::to_string(project_.pluginRevision);
 }
 void DocumentController::open(const std::filesystem::path &path) {
   if(sampleRecording_&&sampleRecording_->hasTake())throw Api::ApiError(-32602,"Add or discard the retained microphone take before replacing this song");
   Project::OpenedProject candidate;
   if(path.empty()) {candidate.document=Tracker::Document::demo();candidate.state=Project::newProjectState(*candidate.document);}
   else if(extension(path)==L".screamseq" || extension(path)==L".resonance") candidate=Project::openNativeProject(path);
-  else {candidate.document=Tracker::Document::open(utf8(path));candidate.state=Project::newProjectState(*candidate.document);candidate.state.path=path;}
+  else {candidate.document=Tracker::Document::open(utf8(path));candidate.state=Project::newProjectState(*candidate.document);candidate.state.path=path;candidate.state.loadSourcePath=path;}
   installCandidate(std::move(candidate));
 }
 void DocumentController::installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit) {
@@ -202,11 +203,29 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
     SampleRecordingOperations::Hooks capture;
     capture.devices=[] {return captureDevices();};capture.capture=[] {return makeWasapiCapture();};
     capture.uniqueID=[] {GUID id{};if(FAILED(CoCreateGuid(&id)))throw std::runtime_error("Cannot allocate microphone take identity");wchar_t text[40]{};StringFromGUID2(id,text,40);std::string value;for(auto p=text;*p;++p)value.push_back(char(*p));return value;};
-    capture.append=[this](auto pcm,auto rate,auto channels,const auto &name,bool instrument,bool dry){return assets_->appendCapturedAudio(pcm,rate,channels,name,instrument,dry);};
+    capture.append=[this](auto pcm,auto rate,auto channels,const auto &name,bool instrument,bool dry,const auto &take){
+      return assets_->appendCapturedAudio(pcm,rate,channels,name,instrument,dry,[this,&take](const Json &imported){
+        auto result=imported;result["take"]=take;return prepareAssetCompletion("sample.recording.commit",result);
+      });
+    };
     initialRecording=std::make_unique<SampleRecordingOperations>(std::move(capture));
   }
-  if(view_) retired_.push_back(view_);
-  try {if(beforeCommit)beforeCommit();if(document_) onMain(stop_);} catch(...) {if(view_) retired_.pop_back();throw;}
+  const auto departing=view_;
+  if(departing) retired_.push_back(departing);
+  bool admitted=false;
+  try {
+    if(beforeCommit)beforeCommit();
+    if(document_)onMain([&] {
+      if(replacementAdmission_) {
+        replacementAdmission_->admit(departing->session.documentId,departing->session.revision);
+        admitted=true;
+      }
+      // Admission and Stop are one UI service callback. The lease remains
+      // active while the worker adopts the already-prepared document below.
+      try{stop_();}
+      catch(...){if(admitted){replacementAdmission_->finish(false);admitted=false;}throw;}
+    });
+  } catch(...) {if(departing)retired_.pop_back();throw;}
   static_assert(std::is_nothrow_swappable_v<Project::ProjectState>);
   document_.swap(candidate.document);std::swap(project_,candidate.state);++generation_;
   assets_.swap(assets);
@@ -215,6 +234,7 @@ void DocumentController::installCandidate(Project::OpenedProject candidate,std::
   if(sampleRecording_)sampleRecording_->documentReplaced();
   else sampleRecording_=std::move(initialRecording);
   install(std::move(next));
+  if(admitted)onMain([this]{replacementAdmission_->finish(true);});
 }
 const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row,uint64_t target,unsigned column) const {
   const auto key=std::tuple(pattern,row,target,column);
@@ -222,7 +242,13 @@ const Tracker::SignalCommand *PatternGraphView::at(uint64_t pattern,unsigned row
   if(position==sorted.end())return nullptr;const auto &c=commands[*position];return std::tuple(c.pattern,c.position/65536,c.target,unsigned(c.column))==key?&c:nullptr;
 }
 void DocumentController::validateGraphViewGrowth(const Tracker::NativeSong &candidate) const {
-  const auto before=graphViewBytes(document_->native()),after=graphViewBytes(candidate);
+  const auto bytes=[&](const Tracker::NativeSong &native){
+    size_t total=graphViewBytes(native);
+    chargeJsonView(noteTrackLayout(native,document_->song()),[&](size_t n){
+      if(n>maxCacheBytes_||total>maxCacheBytes_-n)throw Api::ApiError(-32602,"Edit needs more document view cache headroom");total+=n;
+    });return total;
+  };
+  const auto before=bytes(document_->native()),after=bytes(candidate);
   if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Graph lanes need more document view cache headroom");
 }
 void DocumentController::validateDocumentCandidate(Tracker::Document &candidate) {
@@ -239,7 +265,8 @@ void DocumentController::validateNativeCandidate(const Tracker::NativeSong &cand
       if(n>maxCacheBytes_||total>maxCacheBytes_-n)throw Api::ApiError(-32602,"Edit needs more document view cache headroom");total+=n;
     };
     charge(patternViewBytes(native));charge(graphViewBytes(native));
-    chargeJsonView(entityCatalogs(document_->song(),native),charge);return total;
+    chargeJsonView(entityCatalogs(document_->song(),native),charge);
+    chargeJsonView(noteTrackLayout(native,document_->song()),charge);return total;
   };
   const auto before=bytes(document_->native()),after=bytes(candidate);
   if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))
@@ -276,7 +303,13 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
     cache->notes.reserve(native.preciseNotes.size());for(const auto &n:native.preciseNotes)cache->notes.push_back({patternIndexes.at(n.pattern),channels.at(n.track),n});
     std::sort(cache->notes.begin(),cache->notes.end(),[](const auto &a,const auto &b){return std::tie(a.pattern,a.channel,a.note.position)<std::tie(b.pattern,b.channel,b.note.position);});next->nativePattern=std::move(cache);
   }
-  for(OpenMPT::PATTERNINDEX p=0;p<song.Patterns.Size();++p)if(song.Patterns.IsValidPat(p))next->patternRowsPerBeat[p]=std::max(1u,song.Patterns[p].GetOverrideSignature()?unsigned(song.Patterns[p].GetRowsPerBeat()):song.m_nDefaultRowsPerBeat?unsigned(song.m_nDefaultRowsPerBeat):4u);
+  for(OpenMPT::PATTERNINDEX p=0;p<song.Patterns.Size();++p)if(song.Patterns.IsValidPat(p)) {
+    const auto &pattern=song.Patterns[p];const bool hasSignature=pattern.GetOverrideSignature();
+    charge(128); // Owned map node, key and metrics; budget before allocation.
+    next->patternGridMetrics[p]=ScreamSeqPatternGridMetricsMake(
+      hasSignature?unsigned(pattern.GetRowsPerBeat()):unsigned(song.m_nDefaultRowsPerBeat),
+      hasSignature?unsigned(pattern.GetRowsPerMeasure()):unsigned(song.m_nDefaultRowsPerMeasure));
+  }
   for(unsigned c=0;c<song.GetNumChannels();++c){const auto track=native.tracks.at(c).id;next->effectColumns.push_back(native.performance.columns.contains(track)?native.performance.columns.at(track):1);}
   next->channels=song.GetNumChannels();next->instruments=song.GetNumInstruments();next->path=project.path;
   next->dirty=project.recoveredUnsaved || document.revision!=project.savedRevision || project.pluginRevision!=project.savedPluginRevision;next->hosted=Project::requiresHostedPlayback(document,project);
@@ -339,16 +372,17 @@ std::shared_ptr<DocumentView> DocumentController::buildView(Tracker::Document &d
   result.document={{"title",::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle())},{"format",format},
     {"channels",next->channels},{"effectColumns",next->effectColumns},{"orders",orders},{"orderMetadata",catalogs.at("orderMetadata")},{"patterns",catalogs.at("patterns")},{"tracks",catalogs.at("tracks")},{"samples",samples},{"instruments",instruments},{"nativePlugins",plugins},{"editable",document.editable()},
     {"sequence",song.Order.GetCurrentSequenceIndex()},{"sequences",catalogs.at("sequences")},{"tempo",song.Order().GetDefaultTempo().ToDouble()},{"speed",song.Order().GetDefaultSpeed()},
-    {"formatLimits",{{"patternRowsMin",spec.patternRowsMin},{"patternRowsMax",spec.patternRowsMax},{"patternsMax",spec.patternsMax},{"ordersMax",spec.ordersMax},
+    {"formatLimits",{{"channelsMin",spec.channelsMin},{"channelsMax",spec.channelsMax},{"patternRowsMin",spec.patternRowsMin},{"patternRowsMax",spec.patternRowsMax},{"patternsMax",spec.patternsMax},{"ordersMax",spec.ordersMax},
       {"patternsRemaining",song.Patterns.GetRemainingCapacity()},{"ordersRemaining",song.Order().size()<spec.ordersMax ? size_t(spec.ordersMax)-song.Order().size() : 0}}},
     {"nativeSummary",{{"preciseNotes",native.preciseNotes.size()},{"signalDefinitions",native.signal.library.size()},{"envelopeTemplates",native.envelopeBank.size()}}},
     {"canUndo",same&&plugins_?plugins_->canUndo():document.canUndo()},{"canRedo",same&&plugins_?plugins_->canRedo():document.canRedo()},{"canUndoPlugins",same&&plugins_&&plugins_->canUndo()},{"canRedoPlugins",same&&plugins_&&plugins_->canRedo()},{"openPluginEditors",same&&plugins_?plugins_->openEditorCount():0},{"hasRecoveryTake",project.preserved.contains("recoveryTake")},{"issues",project.issues},{"loadWarnings",project.loadWarnings},{"requiresSaveAs",project.requiresSaveAs},{"loadSourcePath",utf8(project.loadSourcePath)}};
   next->recording=recordingSummary(same?recording_.get():nullptr,result.revision);
+  result.document["trackLayout"]=noteTrackLayout(native,song);
   result.document["hasRecoveryTake"]=same?bool(recording_):project.preserved.contains("recoveryTake");
   {
     std::lock_guard lock(mutex_);
     bool changed=!view_ || view_->session.documentId!=result.documentId || view_->metadataFingerprint!=next->metadataFingerprint;
-    if(view_) for(const auto *key:{"patterns","tracks","samples","instruments","orders","orderMetadata","sequence","sequences","formatLimits","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
+    if(view_) for(const auto *key:{"patterns","tracks","trackLayout","samples","instruments","orders","orderMetadata","sequence","sequences","formatLimits","nativePlugins"}) changed|=view_->session.document.at(key)!=result.document.at(key);
     next->catalogRevision=(view_ ? view_->catalogRevision : 0)+(changed ? 1 : 0);
 
   }
@@ -372,12 +406,34 @@ void DocumentController::publish() {
   if(view_) retired_.push_back(view_);
   install(std::move(next));
 }
-void DocumentController::publishCommitted() {
+std::unique_ptr<AssetOperations::ImportCommit> DocumentController::prepareAssetCompletion(const std::string &method,const Json &result) {
+  struct Completion final:AssetOperations::ImportCommit {
+    std::shared_ptr<const Api::CompletedCall> value;
+    std::shared_ptr<const Api::CompletedCall> &destination;
+    std::shared_ptr<NativeCallReceipt> ticket;
+    Completion(std::shared_ptr<const Api::CompletedCall> call,std::shared_ptr<const Api::CompletedCall> &target,std::shared_ptr<NativeCallReceipt> receipt)
+      :value(std::move(call)),destination(target),ticket(std::move(receipt)){}
+    void committed()noexcept override {destination=value;if(ticket)ticket->publish(value);}
+  };
+  // PreparedAssetImport commits exactly one Document transaction, changing no
+  // plugin revision, sequence or document identity. Capture that next revision
+  // before Stop; failed preflight/Stop/transaction never publishes this receipt.
+  auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{
+    method,identity_+":"+std::to_string(generation_),revision(document_->revision+1),result});
+  return std::make_unique<Completion>(std::move(completed),completedCall_,nativeCallReceipt_);
+}
+void DocumentController::publishCommitted(const std::string &method,const Json &result) {
   publicationPending_=true;
   try {publish();} catch(...) {
     // Shared by ordinary edits and recording commits: a repaired publication
     // must report success after the retained take has already been consumed.
-    try {publish();} catch(...) {throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.");}
+    try {publish();} catch(...) {
+      const auto document=identity_+":"+std::to_string(generation_),current=revision();
+      if(!completedCall_)completedCall_=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,document,current,result});
+      throw Api::ApiError(-32003,"Document operation committed; view publication unavailable. Read state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,document,current},
+        completedCall_);
+    }
   }
 }
 void DocumentController::preflightGrowth(const std::string &method,const Json &params) {
@@ -495,11 +551,20 @@ std::function<void()> DocumentController::prepareRackPublication(const std::vect
 std::function<void()> DocumentController::prepareNativePublication(const Tracker::NativeSong &next) {
   const auto &before=document_->native();
   if(next.mixer==before.mixer&&Tracker::sameSignalProcessing(next.signal,before.signal)&&
-     next.automation==before.automation&&next.scratchGestures==before.scratchGestures)return {};
+     next.automation==before.automation&&next.scratchGestures==before.scratchGestures&&next.columnMutes==before.columnMutes)return {};
   return prepareNativeUpdate(document_->native(),next);
 }
 
 Json DocumentController::operation(const std::string &method,Json params) {
+  const bool replacing=method=="document.open"||method=="document.new";
+  if(method=="document.new") {
+    // Reject malformed/stale creation requests before flushing native plugin
+    // editors; the ordinary write guard also rechecks after that flush.
+    keys(params,{"expectedRevision","demo","discard"});
+    if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())throw Api::ApiError(-32602,"expectedRevision is required");
+    if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
+    (void)flag(params,"demo");(void)flag(params,"discard");
+  }
   if(publicationPending_) publish();
   if(method.starts_with("parameter.activity."))return parameterActivityOperation(method,params);
   if(method.starts_with("recording.")) {
@@ -508,14 +573,14 @@ Json DocumentController::operation(const std::string &method,Json params) {
     catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
     catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
   }
-  if(recording_&&(method=="document.save"||method=="document.open"))
+  if(recording_&&(method=="document.save"||replacing))
     throw Api::ApiError(-32602,"Finish or discard the recording take before saving or opening another song");
   if(method.starts_with("sample.recording.")) {
     if(SampleRecordingOperations::requiresRevision(method)&&!document_->editable())throw Api::ApiError(-32602,"This document is read-only");
     const auto before=revision();
     if(method=="sample.recording.commit")preflightGrowth(method,params);
     auto result=sampleRecording_->invoke(method,params,identity_+":"+std::to_string(generation_),before);
-    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted();}return result;
+    if(revision()!=before){scanWaves_=true;scanPatterns_=true;publishCommitted(method,result);}return result;
   }
   // Browser preferences are independent of the song. Do not flush vendor
   // editors, require a document revision, or allocate musical history here.
@@ -535,7 +600,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
   }
-  if(method=="document.save" || method=="document.open" || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
+  if(method=="document.save" || replacing || (method=="sample.renderSelection"&&!flag(params,"dryRun")) || method.starts_with("plugin.") || method.starts_with("history.") || method.starts_with("graph.") || method.starts_with("mixer.") || method.starts_with("track.") || method.starts_with("envelope.") || method.starts_with("automation.pattern.") || method=="automation.get" || method=="automation.replaceLane" || method=="automation.recorded.edit") {
     flushEditors(true);
   }
   auto writes=DocumentOperations::writes();auto timelineWrites=TimelineOperations::writes();writes.insert(writes.end(),timelineWrites.begin(),timelineWrites.end());
@@ -543,12 +608,13 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const auto patternWrites=PatternOperations::writes();writes.insert(writes.end(),patternWrites.begin(),patternWrites.end());
   auto graphMethods=GraphOperations::reads();const auto graphWrites=GraphOperations::writes();writes.insert(writes.end(),graphWrites.begin(),graphWrites.end());graphMethods.insert(graphMethods.end(),graphWrites.begin(),graphWrites.end());
   auto mixerMethods=MixerOperations::reads();const auto mixerWrites=MixerOperations::writes();writes.insert(writes.end(),mixerWrites.begin(),mixerWrites.end());mixerMethods.insert(mixerMethods.end(),mixerWrites.begin(),mixerWrites.end());
+  auto trackMethods=TrackOperations::reads();const auto trackWrites=TrackOperations::writes();writes.insert(writes.end(),trackWrites.begin(),trackWrites.end());trackMethods.insert(trackMethods.end(),trackWrites.begin(),trackWrites.end());
   auto envelopeMethods=EnvelopeOperations::reads();const auto envelopeWrites=EnvelopeOperations::writes();writes.insert(writes.end(),envelopeWrites.begin(),envelopeWrites.end());envelopeMethods.insert(envelopeMethods.end(),envelopeWrites.begin(),envelopeWrites.end());
   auto patternMethods=PatternOperations::reads();patternMethods.insert(patternMethods.end(),patternWrites.begin(),patternWrites.end());
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
-  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.open";
+  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || replacing;
   if(write) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
@@ -566,7 +632,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(sample>=1 && sample<=65535 && std::floor(sample)==sample) changedSamples_.insert(unsigned(sample));
   }
   scanPatterns_=method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="arrangement.copyBlock";
-  if(write && method!="document.open") preflightGrowth(method,params);
+  if(write && !replacing) preflightGrowth(method,params);
   Json result;
   if(method=="sample.renderSelection") {
     keys(params,{"pattern","firstRow","lastRow","firstChannel","lastChannel","name","createInstrument","tailSeconds","dryRun"});
@@ -595,9 +661,22 @@ Json DocumentController::operation(const std::string &method,Json params) {
         const auto checked=Tracker::importRecordedAudio(*document_,rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,true);
         result["frames"]=checked.frames;result["selectedFrames"]=rendered.selectedFrames;result["preRollFrames"]=rendered.preRollFrames;
         result["tailFrames"]=rendered.tailFrames;result["latencyFrames"]=rendered.latencyFrames;result["automationStartFrame"]=rendered.automationStartFrame;result["clippedValues"]=checked.clippedValues;
-        assets_->appendCapturedAudio(rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,false);
+        assets_->appendCapturedAudio(rendered.pcm,Tracker::selectionRenderRate,2,name,instrument,false,
+          [this,&result](const Json &){return prepareAssetCompletion("sample.renderSelection",result);});
       }
     } catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+  } else if(method=="document.new") {
+    keys(params,{"demo","discard"});
+    const bool demo=flag(params,"demo"),discard=flag(params,"discard");
+    if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard)
+      throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before creating another song");
+    Project::OpenedProject candidate;
+    candidate.document=demo?Tracker::Document::demo():std::make_unique<Tracker::Document>();
+    candidate.state=Project::newProjectState(*candidate.document);
+    // Prepare the response before adoption as well. New/Demo use the same
+    // fallible staging, take protection and native draft lease as Open.
+    Json response={{"demo",demo},{"path",""},{"loadWarnings",Json::array()},{"requiresSaveAs",false},{"loadSourcePath",""}};
+    installCandidate(std::move(candidate));return response;
   } else if(method=="document.save" || method=="document.open") {
     if(method=="document.save") keys(params,{"path","overwrite","dryRun"});else keys(params,{"path","discard"});
     if(!params.contains("path")) throw Api::ApiError(-32602,"path is required");auto path=pathValue(params["path"]);
@@ -619,7 +698,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     keys(params,{"domain"});const auto domain=params.value("domain",Json("all"));
     if(domain!="all"&&domain!="document"&&domain!="plugins")throw Api::ApiError(-32602,"History domain must be all, document or plugins; all use chronological history");
     plugins_->history(method=="history.redo",[&](bool redo,bool alreadyStopped){
-      const auto &candidate=document_->historyNative(redo);validateNativeCandidate(candidate);
+      auto candidate=document_->historyNative(redo);candidate.nextID=std::max(candidate.nextID,document_->native().nextID);validateNativeCandidate(candidate);
       if(alreadyStopped){
         // Grouped plugin history only contains annotate() metadata entries.
         // No live cells or allocating JSON reply may follow native publication.
@@ -628,6 +707,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
       Tracker::validatePluginCapacity(projectPluginStates(project_),candidate.mixer.buses.size());
       auto supported=document_->native();supported.mixer=candidate.mixer;supported.signal=candidate.signal;supported.automation=candidate.automation;
       supported.nextID=candidate.nextID;supported.envelopeBank=candidate.envelopeBank;supported.envelopeLinks=candidate.envelopeLinks;
+      supported.columnMutes=candidate.columnMutes;
+      supported.noteTracks=candidate.noteTracks; // Visual regrouping alone has no renderer schedule.
       // A bank-only history step can use one atomic runtime publication.
       const bool onlyScratch=candidate.scratchGestures!=supported.scratchGestures&&[&]{auto check=document_->native();check.scratchGestures=candidate.scratchGestures;return check==candidate;}();
       if(onlyScratch)supported.scratchGestures=candidate.scratchGestures;
@@ -675,6 +756,21 @@ Json DocumentController::operation(const std::string &method,Json params) {
     hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
     if(playbackHooks_.controls)hooks.controls=[&](const auto &controls){bool accepted=false;onMain([&]{accepted=playbackHooks_.controls(controls);});return accepted;};
     MixerOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
+  } else if(std::find(trackMethods.begin(),trackMethods.end(),method)!=trackMethods.end()) {
+    TrackHostHooks hooks;
+    hooks.validateCandidate=[&](const Tracker::PreparedNoteTrackEdit &prepared){
+      Tracker::validatePluginCapacity(projectPluginStates(project_,false),prepared.native.mixer.buses.size());
+      if(prepared.appendedColumns) {
+        auto staged=std::make_unique<Tracker::Document>(document_->snapshotData());staged->restoreNative(document_->native());
+        staged->transaction([&](OpenMPT::CSoundFile &song,Tracker::NativeSong &native){
+          Tracker::Document::resizeChannels(song,int(song.GetNumChannels()+prepared.appendedColumns));native=prepared.native;
+        });
+        validateDocumentCandidate(*staged);
+      } else validateNativeCandidate(prepared.native);
+    };
+    hooks.prepareColumnMutes=[this](const auto &before,const auto &next){return prepareNativeUpdate(before,next);};
+    TrackOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
+    if(method=="track.create"&&result.value("wouldChange",false)&&!params.value("dryRun",false))scanPatterns_=true;
   } else if(std::find(envelopeMethods.begin(),envelopeMethods.end(),method)!=envelopeMethods.end()) {
     const auto &rack=project_.preserved.at("plugins");auto slotOf=[&](const std::string &id){auto it=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==id;});return size_t(it-rack.begin());};
     EnvelopeHostHooks hooks;hooks.parameterAvailable=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);if(slot>=rack.size())return false;try{const auto parameters=plugins_->invoke("plugin.parameters.get",{{"slot",slot}});return std::any_of(parameters.begin(),parameters.end(),[&](const auto &p){return p.at("id")==parameter;});}catch(const std::exception &){return false;}};
@@ -682,6 +778,10 @@ Json DocumentController::operation(const std::string &method,Json params) {
     hooks.validateCandidate=[this](const auto &next){validateNativeCandidate(next);};
     hooks.parameterAutomationConflicts=[&](const std::string &id,uint32_t parameter){const auto slot=slotOf(id);for(const auto &event:project_.preserved.at("automation"))if(event.at(0)==slot&&event.at(1)==parameter)return true;return false;};
     hooks.preparePublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
+    hooks.prepareCompletion=[this,&method](const Json &value,bool musicalChange){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(document_->revision+(musicalChange?1:0)),value});
+      return [this,completed=std::move(completed),ticket=nativeCallReceipt_]()noexcept{completedCall_=completed;if(ticket)ticket->publish(completed);};
+    };
     EnvelopeOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks),cataloguePath_);result=operations.invoke(method,params);
   } else if(patternMethod) {
     PatternHostHooks hooks;for(const auto &p:project_.preserved.at("plugins"))hooks.plugins.push_back(p.at("instanceID").get<std::string>());
@@ -706,7 +806,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
           if(assigned) throw Api::ApiError(-32602,"Instrument slot belongs to a preserved plugin assignment");
         }
       }
-      result=assets_->invoke(method,params);
+      result=assets_->invoke(method,params,[this,&method](const Json &imported){return prepareAssetCompletion(method,imported);});
     } else if(std::find(timeline.begin(),timeline.end(),method)!=timeline.end()) {
       TimelineOperations operations(*document_,[this]{onMain(stop_);});result=operations.invoke(method,params);
     } else {
@@ -720,23 +820,67 @@ Json DocumentController::operation(const std::string &method,Json params) {
     }
   }
   if(write && (beforeRevision!=revision() || beforePath!=project_.path || beforeSaved!=project_.savedRevision || beforeSavedPlugins!=project_.savedPluginRevision || beforeEditors!=plugins_->openEditorCount() || beforeRecovered!=project_.recoveredUnsaved)) {
-    publishCommitted();
+    publishCommitted(method,result);
   }
   return result;
 }
+Api::CompletedCall DocumentController::invokeOperation(const std::string &method,Json params,const std::shared_ptr<NativeCallReceipt> &receipt) {
+  completedCall_.reset();nativeCallReceipt_=receipt;
+  struct Reset {DocumentController &owner;~Reset(){owner.completedCall_.reset();owner.nativeCallReceipt_.reset();}} reset{*this};
+  const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
+  bool returned=false;
+  try {
+    auto result=operation(method,std::move(params));returned=true;
+    if(completedCall_)return *completedCall_;
+    // Capture on the serial worker, before any later queued operation can edit
+    // the view. Reading view() on the native owner after await is too late.
+    if(receipt){
+      auto completed=std::make_shared<const Api::CompletedCall>(Api::CompletedCall{method,identity_+":"+std::to_string(generation_),revision(),std::move(result)});
+      receipt->publish(completed);
+      return *completed;
+    }
+    return {method,identity_+":"+std::to_string(generation_),revision(),std::move(result)};
+  } catch(...) {
+    const auto failure=std::current_exception();
+    // Only our own publication boundary can supply a failed invocation's
+    // result. An ApiError from a nested callback is never receipt provenance.
+    if(receipt&&completedCall_)receipt->publish(completedCall_);
+    if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
+      publicationPending_=true;scanPatterns_=true;scanWaves_=true;
+      try {publish();} catch(...) {}
+      // Only our own publication boundary can supply this invocation's result.
+      // Never adopt a receipt thrown by a nested host callback, even when its
+      // method and document happen to match.
+      throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,identity_+":"+std::to_string(generation_),revision()},completedCall_);
+    }
+    if(returned)throw Api::ApiError(-32003,"Operation returned but completion identity could not be retained; read state before retrying.",Tracker::WriteOutcome{});
+    // These operations publish one prepared document import, track edit or pattern
+    // transform. The real
+    // recorder's Keep consumes its take only after that import succeeds; an
+    // unchanged revision on failure proves no Keep/import was committed.
+    // This does not classify recording start/stop/discard, files or vendor calls.
+    if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
+        ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new") {
+      const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
+      try {std::rethrow_exception(failure);}
+      catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}
+      catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),rejected);}
+      catch(...){throw Api::ApiError(-32003,"Edit failed before document commit",rejected);}
+    }
+    std::rethrow_exception(failure);
+  }
+}
 std::future<Json> DocumentController::invoke(std::string method,Json params) {
   auto task=std::make_shared<std::packaged_task<Json()>>([this,method=std::move(method),params=std::move(params)]() mutable {
-    const auto before=revision();const auto path=project_.path;const auto saved=project_.savedRevision;
-    try {return operation(method,std::move(params));} catch(...) {
-      if(before!=revision() || path!=project_.path || saved!=project_.savedRevision) {
-        // Includes an exception in an edit/playback callback after the shared
-        // model committed. Preserve/recover the actual new revision, not the old cache.
-        publicationPending_=true;scanPatterns_=true;scanWaves_=true;
-        try {publish();} catch(...) {} // A later snapshot read retries on this worker.
-        throw Api::ApiError(-32003,"Document operation committed but completion failed; read current state before retrying the write.");
-      }
-      throw;
-    }
+    return invokeOperation(method,std::move(params)).result;
+  });
+  auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
+}
+std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt) {
+  auto task=std::make_shared<std::packaged_task<Api::CompletedCall()>>([this,method=std::move(method),params=std::move(params),receipt=std::move(receipt)]() mutable {
+    return invokeOperation(method,std::move(params),receipt);
   });
   auto done=task->get_future();{std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
 }

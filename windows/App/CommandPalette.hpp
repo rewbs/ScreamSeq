@@ -1,4 +1,5 @@
 #pragma once
+#include "NativeInputGate.hpp"
 #include "WorkspaceShortcutKey.hpp"
 #include <windows.h>
 #include <commctrl.h>
@@ -138,17 +139,17 @@ class CommandPalette {
 		for(auto button:{setButton_,sequenceButton_,clearButton_,resetButton_})EnableWindow(button,selected&&configurable());
 		std::wstring detail=selected?commands_[matches_[size_t(at)]].label:L"No matching commands. Try a panel name, action or shortcut, or clear the search.";
 		if(selected&&!entries_[matches_[size_t(at)]].shortcut.empty())detail+=L"  ·  "+entries_[matches_[size_t(at)]].shortcut;
-		SetWindowTextW(detail_,detail.c_str());
+		ScreamSeq::NativeInputGate::text(detail_,detail.c_str());
 		const auto count=message_.empty()?std::to_wstring(matches_.size())+L" / "+std::to_wstring(commands_.size())+L" commands   ·   Enter runs   ·   ↑ / ↓ choose   ·   Esc closes":message_;
-		SetWindowTextW(status_,count.c_str());
+		ScreamSeq::NativeInputGate::text(status_,count.c_str());
 	}
 	void select(int at) {
 		if(matches_.empty())return;
 		at=std::clamp(at,0,static_cast<int>(matches_.size())-1);
-		explicitSelection_=true;SendMessageW(list_,LB_SETCURSEL,at,0);selectionChanged();
+		explicitSelection_=true;ScreamSeq::NativeInputGate::present(list_,LB_SETCURSEL,at,0);selectionChanged();
 	}
 	void focusSearch(bool selectAll) {
-		SetFocus(edit_);SendMessageW(edit_,EM_SETSEL,selectAll?0:GetWindowTextLengthW(edit_),-1);
+		SetFocus(edit_);ScreamSeq::NativeInputGate::present(edit_,EM_SETSEL,selectAll?0:GetWindowTextLengthW(edit_),-1);
 	}
 	static LRESULT CALLBACK input(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data) {
 		auto &p=*reinterpret_cast<CommandPalette *>(data);
@@ -194,7 +195,7 @@ class CommandPalette {
 			return 4;
 		};
 		// Keep native strings available to accessibility while drawing columns.
-		SendMessageW(list_,WM_SETREDRAW,FALSE,0);SendMessageW(list_,LB_RESETCONTENT,0,0);matches_.clear();
+		SendMessageW(list_,WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(list_,LB_RESETCONTENT,0,0);matches_.clear();
 		for(size_t i=0;i<commands_.size();++i)
 			if((retainSelected&&i==previous)||std::all_of(words.begin(),words.end(),[&](const auto &word){return entries_[i].search.find(word)!=std::wstring::npos;}))matches_.push_back(i);
 		std::stable_sort(matches_.begin(),matches_.end(),[&](size_t a,size_t b){const int left=rank(a),right=rank(b);return left!=right?left<right:entries_[a].search<entries_[b].search;});
@@ -202,9 +203,9 @@ class CommandPalette {
 		explicitSelection_=false;
 		for(size_t at=0;at<matches_.size();++at) {
 			const auto i=matches_[at];const auto text=std::wstring(commands_[i].label)+(entries_[i].shortcut.empty()?L"":L"    "+entries_[i].shortcut);
-			SendMessageW(list_,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(i==previous){selected=int(at);explicitSelection_=true;}
+			ScreamSeq::NativeInputGate::present(list_,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));if(i==previous){selected=int(at);explicitSelection_=true;}
 		}
-		if(!matches_.empty())SendMessageW(list_,LB_SETCURSEL,selected,0);
+		if(!matches_.empty())ScreamSeq::NativeInputGate::present(list_,LB_SETCURSEL,selected,0);
 		SendMessageW(list_,WM_SETREDRAW,TRUE,0);InvalidateRect(list_,nullptr,TRUE);selectionChanged();
 	}
 	void draw(const DRAWITEMSTRUCT &d) {
@@ -338,7 +339,7 @@ public:
 			setButton_=button(setID,L"Set shortcut");sequenceButton_=button(sequenceID,L"Set sequence");clearButton_=button(clearID,L"Clear");resetButton_=button(resetID,L"Reset default");
 			for(auto control:{edit_,list_,runButton_,setButton_,sequenceButton_,clearButton_,resetButton_})SetWindowSubclass(control,input,1,reinterpret_cast<DWORD_PTR>(this));position();layout();
 		}
-		explicitSelection_=false;SetWindowTextW(edit_,L"");filter();ShowWindow(window_,SW_SHOW);SetActiveWindow(window_);SetFocus(edit_);
+		explicitSelection_=false;ScreamSeq::NativeInputGate::text(edit_,L"");filter();ShowWindow(window_,SW_SHOW);SetActiveWindow(window_);SetFocus(edit_);
 	}
 };
 }

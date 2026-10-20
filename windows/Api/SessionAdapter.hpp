@@ -1,12 +1,16 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include "../../editor/WriteOutcome.hpp"
+#include "ProtocolLimits.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
+#include <memory>
 #include <stdexcept>
 #include <set>
 #include <string>
@@ -27,10 +31,33 @@ inline bool validEnvelope(const Json &q) {
     && q.contains("id") && bounded(q["id"]) && q.contains("method") && bounded(q["method"])
     && q.contains("params") && q["params"].is_object();
 }
+// Internal native completion receipt. This is not added to the wire error or
+// inferred from a snapshot: only the operation which returned may supply it.
+struct CompletedCall {
+  std::string method,document,revision;
+  Json result;
+};
 struct ApiError : std::runtime_error {
   int code;
-  ApiError(int c, const std::string &message) : std::runtime_error(message), code(c) {}
+  std::optional<Tracker::WriteOutcome> outcome;
+  std::shared_ptr<const CompletedCall> completed;
+  ApiError(int c, const std::string &message, std::optional<Tracker::WriteOutcome> effect = {},
+      std::shared_ptr<const CompletedCall> returned = {})
+    : std::runtime_error(message), code(c), outcome(std::move(effect)),completed(std::move(returned)) {}
 };
+inline Json outcomeData(const Tracker::WriteOutcome &outcome) {
+  const char *state = "unknown";
+  switch(outcome.state) {
+  case Tracker::CommitOutcome::NotCommitted: state="notCommitted"; break;
+  case Tracker::CommitOutcome::NoChange: state="noChange"; break;
+  case Tracker::CommitOutcome::Committed: state="committed"; break;
+  case Tracker::CommitOutcome::Unknown: break;
+  }
+  Json data={{"writeOutcome",state}};
+  if(!outcome.document.empty())data["documentId"]=outcome.document;
+  if(!outcome.revision.empty())data["revision"]=outcome.revision;
+  return data;
+}
 // Owned value snapshots, not references into Document or GUI state. The host
 // supplies the existing Mac wire data dictionaries; no fabricated song defaults.
 struct SessionSnapshot {
@@ -62,6 +89,8 @@ public:
   // (-32003 for engine failure) rather than reporting queued-but-not-started play.
   virtual void play(const Json &settings) = 0;
   virtual void stop() = 0;
+  virtual bool supportsPlaybackLoop() const { return false; }
+  virtual void setPlaybackLoop(bool) { throw ApiError(-32601,"Live playback loop is not available in this host"); }
   virtual void navigate(const Json &) { throw ApiError(-32601,"Navigation is not available in this host"); }
   virtual Json workspace(const std::string &, const Json &) { throw ApiError(-32601,"Workspace is not available in this host"); }
 };
@@ -74,15 +103,16 @@ class SessionAdapter {
   std::deque<Cached> cache_;
   std::size_t cacheBytes_ = 0;
   std::set<std::string> activeWrites_;
-  // Successful writes only, FIFO by insertion (replays do not refresh age).
+  // Successful writes and classified committed/unknown errors, FIFO by
+  // insertion (replays do not refresh age). Unclassified errors remain uncached.
   // Charge compact UTF-8 JSON request + response bytes, excluding newlines.
   // This bounds retained serialized content, not JSON DOM/allocator heap usage.
-  void cacheSuccess(const Json &request, const Json &response) noexcept {
+  void cacheResponse(const Json &request, const Json &response, std::optional<std::size_t> serializedBytes = {}) noexcept {
     try {
       auto canonical=request.dump();
       const auto requestBytes=canonical.size();
       if(requestBytes>maxCacheBytes) return;
-      const auto responseBytes=response.dump().size();
+      const auto responseBytes=serializedBytes ? *serializedBytes : response.dump().size();
       if(responseBytes>maxCacheBytes-requestBytes) return;
       const auto bytes=requestBytes+responseBytes;
       Cached entry{request.at("id").get<std::string>(),std::move(canonical),response,bytes};
@@ -97,6 +127,19 @@ class SessionAdapter {
       // host committed; never turn that successful write into an error envelope
       // with the pre-write revision. Oversize/unserializable entries are not cached.
     }
+  }
+  Json completeWrite(const Json &request, Json response) {
+    // The host has returned, but JSON construction, strict UTF-8 serialization
+    // or the wire bound may still fail. The caller classifies this as unknown
+    // (not as a rejected write) and retains a small, replayable error instead.
+    // Do this before caching: the transport cannot repair the adapter's receipt.
+    std::size_t bytes=0;
+    try {bytes=response.dump().size();}
+    catch(const Json::exception &) {throw ApiError(-32003,"Write completed but response serialization failed; read state before retrying.");}
+    if(bytes>=maxProtocolResponseBytes)
+      throw ApiError(-32003,"Write completed but response exceeds transport limit; read state before retrying.");
+    cacheResponse(request,response,bytes);
+    return response;
   }
   static void require(bool condition, const char *message) {
     if(!condition) throw ApiError(-32602,message);
@@ -115,7 +158,7 @@ class SessionAdapter {
   Json describe() const {
     Json result= {{"protocol","ScreamSeq local API"},{"version",1},
       {"reads",{"api.describe","document.get","pattern.get","transport.get","context.get","workspace.get","workspace.commands.get"}},
-      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.panel","workspace.layout","workspace.shortcut.set"}},{"maxPatternCells",4096},
+      {"writes",{"transport.play","transport.stop","context.set","workspace.input","workspace.ruler","workspace.panel","workspace.layout","workspace.shortcut.set","workspace.keyboard.set"}},{"maxPatternCells",4096},
       {"coordinates","Patterns, rows, channels and orders are zero-based. Samples and instruments are one-based; zero means none."},
       {"noteEncoding","0=empty; 1=C-0, 49=C-4, 61=C-5. Special notes and format command IDs follow document.get."},
       {"audioPortTrims","graph.trim.get/set use stable port keys, -48..48 dB gains, inverse input/output links and dB source modulation. Recipe or song nodes, buses, stages and group boundaries; dryRun, revision guards and unified Undo. Audio followers are not trim sources."},{"platform","windows"},{"musicalEditing",false},{"fullApiParity",false},
@@ -123,21 +166,25 @@ class SessionAdapter {
         {"retainedEntries",cache_.size()},{"retainedSerializedBytes",cacheBytes_},
         {"accounting","compact UTF-8 JSON request plus response; excludes newlines; not heap usage"},
         {"eviction","oldest insertion first; replay does not refresh"},
-        {"scope","successful writes, including no-op and dryRun; exact parsed request replay while retained"},
+        {"scope","successful writes, including no-op and dryRun, and classified committed/unknown errors; exact parsed request replay while retained"},
         {"oversize","success returned without caching; retention failure does not reject a completed write"},
         {"durable",false}}},
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
         {"context.set",{"expectedRevision","expectedContext"}},
         {"workspace.input",{"expectedRevision","expectedContext"}},
-        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()}}},
+        {"workspace.panel",Json::array()},{"workspace.layout",Json::array()},{"workspace.shortcut.set",Json::array()},{"workspace.keyboard.set",{"expectedKeyboard"}}}},
       {"workspaceSubset",{{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"placements",{"right","hide"}},
         {"editorPlacements",{{"automation",{"right","bottom","secondary","float","hide"}},{"instruments",{"right","bottom","secondary","float","hide"}},{"graphCurve",{"right","bottom","secondary","float","hide"}},{"preciseNotes",{"right","bottom","secondary","float","hide"}}}},
         {"layouts",{"Compose","Pattern focus","Sound design","Connected","Graph editing","Save custom","Restore custom","Delete custom","Reload saved"}},
         {"namedLayouts",{{"optionalField","savedName"},{"default","Custom"},{"maximum",24},{"nameCharacters",64}}},
         {"schema","windows/Api/workspace.schema.json"}}},
-      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; other workspace operations accept neither token. Unsupported parameters reject."}};
+      {"transport","Private explicit named pipe; 32 MiB request and response, including newline; one request per connection. Transport writes require expectedRevision; context.set requires expectedRevision and expectedContext. workspace.input also requires both tokens; workspace.keyboard.set guards its separate expectedKeyboard token. Other workspace operations accept neither song/context token. Unsupported parameters reject."}};
+    if(host_ && host_->supportsPlaybackLoop()) {
+      result["writes"].push_back("transport.loop");
+      result["revisionGuards"]["transport.loop"]={"expectedRevision"};
+    }
     if(host_ && host_->supportsDocumentOperations()) {
-      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
+      for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","pattern.timeline.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
       for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
@@ -156,6 +203,10 @@ class SessionAdapter {
         {"plugin.editor.close","slot and expectedRevision; flush pending baseline edits before closing"},
         {"plugin.path.get/scan/set","Explicit VST3 location repair by stable plugin ID. Scan/set require expectedRevision; set also requires path and expectedModuleSHA256 from get. Dry set verifies the scanned binary without vendor-state decoding. Actual set changes only path and uses plugin Undo."},
         {"graph.plugin.path.get/scan/set","The same Windows VST3 location workflow for a graph/node target, using document Undo and preserving the graph recipe's state, ports and routing."}};
+      if(std::find(result["writes"].begin(),result["writes"].end(),"document.new")!=result["writes"].end()) {
+        result["windowsExtensions"]["document.new"]="expectedRevision; optional boolean demo/discard. Fresh document identity and history; discard cannot bypass retained editor drafts or recording takes.";
+        result["documentCreationSchema"]="windows/Api/document-new.schema.json";
+      }
       result["patternEffects"]={{"columns","1–8 FX columns per channel. Code/value cursor fields are 3+2*column and 4+2*column."},
         {"methods","pattern.effects.get/set and pattern.performance.get/set merge ordinary FX 1 with all native commands. pattern.effect.set edits one cell; null clears it."},
         {"commands","tracker, parameter-set, parameter-slide, pitch-set, pitch-slide, note-cut, nudge-forward (NF), nudge-reverse (NR). Nudges: strength value 0..1, durationBeats 1/65536..65536 (default1), bounded by the remaining pattern; legacy row-unit duration is rejected; sample-only, reversal above 0.5 opposing strength. Use pattern.commands for source-format IDs and two-character displayCode; its native array supplies descriptor-driven kind:native operations, typed named parameters, ranges, units, defaults, scope and equivalents. Native UI time defaults to beats, converted with the current pattern rowsPerBeat."},
@@ -259,19 +310,35 @@ public:
     if(std::this_thread::get_id()!=owner_) return errorResponse(q["id"],-32002,"Dispatch onto the session control thread");
     const std::string method=q["method"];
     const auto &p=q["params"];
-    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.input";
+    const bool workspace=method=="workspace.get" || method=="workspace.panel" || method=="workspace.layout" || method=="workspace.commands.get" || method=="workspace.shortcut.set" || method=="workspace.keyboard.set" || method=="workspace.input" || method=="workspace.ruler";
     const auto reads=host_ ? host_->additionalDocumentReads() : std::vector<std::string>{};
     const auto writes=host_ ? host_->additionalDocumentWrites() : std::vector<std::string>{};
     const auto separateReads=host_?host_->independentReads():std::vector<std::string>{};
     const auto separateWrites=host_?host_->independentWrites():std::vector<std::string>{};
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
-    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
+    const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="pattern.timeline.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
     const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
-    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
+    const bool liveLoop=method=="transport.loop" && host_ && host_->supportsPlaybackLoop();
+    const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || liveLoop || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
       return errorResponse(q["id"],-32601,"Unknown method; call api.describe");
     std::string revision;
+    bool hostReturned=false;
+    // Completion can fail after a host accepted a write, including a no-op or
+    // an independently revisioned side effect. Never fabricate a rejection or
+    // advertise the pre-write song revision as authoritative in that case.
+    const auto failure=[&](int code,const std::string &message,std::optional<Tracker::WriteOutcome> outcome) {
+      // A later snapshot/callback can classify its own failure, not the write
+      // that already returned. Only an exception from the host write itself
+      // may supply that write's authoritative outcome and identity.
+      if(write&&hostReturned)outcome=Tracker::WriteOutcome{};
+      auto reply=errorResponse(q["id"],code,message);
+      if(outcome)reply["error"]["data"]=outcomeData(*outcome);
+      else if(!revision.empty())reply["error"]["data"]={{"revision",revision}};
+      if(write&&outcome&&outcome->needsReconciliation())cacheResponse(q,reply);
+      return reply;
+    };
     try {
       if(write) for(const auto &cached:cache_) if(cached.id==q["id"].get_ref<const std::string &>()) {
         // Canonical JSON ignores object key order/whitespace but preserves
@@ -284,10 +351,9 @@ public:
       if(write&&!activeWrites_.insert(requestId).second)throw ApiError(-32002,"Request is still running; retry with the same ID after it completes");
       struct ActiveGuard {std::set<std::string> &ids;const std::string &id;bool active;~ActiveGuard(){if(active)ids.erase(id);}}active{activeWrites_,requestId,write};
       if(independentRead || independentWrite) {
-        auto result=host_->independentOperation(method,p);
+        auto result=host_->independentOperation(method,p);hostReturned=true;
         Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};
-        if(write)cacheSuccess(q,response);
-        return response;
+        return write ? completeWrite(q,std::move(response)) : response;
       }
       SessionSnapshot before;
       if(host_) before=host_->snapshot();
@@ -305,7 +371,7 @@ public:
       else if(method=="context.get") { keys(p,{}); data=before.context; }
       else if(method=="transport.get") { keys(p,{}); data=before.transport; }
       else if(method=="pattern.get") data=getPattern(p);
-      else if(docRead || docWrite) data=host_->documentOperation(method,p);
+      else if(docRead || docWrite) {data=host_->documentOperation(method,p);hostReturned=true;}
       else if(workspace) {
         if(method=="workspace.input") {
           keys(p,{"expectedRevision","expectedContext","instrument","octave"});
@@ -320,16 +386,20 @@ public:
           };
           inputInteger("instrument",1,255);inputInteger("octave",0,8);
         }
-        data=host_->workspace(method,p);
+        data=host_->workspace(method,p);hostReturned=true;
       }
       else if(method=="context.set") {
-        host_->navigate(prepareNavigation(p,before)); data=host_->snapshot().context;
+        host_->navigate(prepareNavigation(p,before));hostReturned=true; data=host_->snapshot().context;
       }
       else if(method=="transport.play") {
         validatePlay(p,before); Json settings=p; settings.erase("expectedRevision");
-        host_->play(settings); data={{"playing",true},{"region",settings}};
+        host_->play(settings);hostReturned=true; data={{"playing",true},{"region",settings}};
+      } else if(liveLoop) {
+        keys(p,{"expectedRevision","enabled"});require(p.contains("enabled") && p.at("enabled").is_boolean(),"enabled must be boolean");
+        const bool enabled=p.at("enabled").get<bool>();
+        host_->setPlaybackLoop(enabled);hostReturned=true;data={{"loop",enabled}};
       } else {
-        keys(p,{"expectedRevision"}); host_->stop(); data={{"playing",false}};
+        keys(p,{"expectedRevision"}); host_->stop();hostReturned=true; data={{"playing",false}};
       }
       const auto after=(write || docRead) ? host_->snapshot() : before;
       Json result={{"revision",after.revision},{"changed",before.revision!=after.revision},
@@ -338,16 +408,11 @@ public:
         result["contextChanged"]=before.context.at("contextRevision")!=after.context.at("contextRevision");
       else if(host_) result["documentId"]=after.documentId;
       Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};
-      if(write) cacheSuccess(q,response);
-      return response;
+      return write ? completeWrite(q,std::move(response)) : response;
     } catch(const ApiError &e) {
-      auto reply=errorResponse(q["id"],e.code,e.what());
-      if(!revision.empty()) reply["error"]["data"]={{"revision",revision}};
-      return reply;
+      return failure(e.code,e.what(),e.outcome);
     } catch(const std::exception &e) {
-      auto reply=errorResponse(q["id"],-32003,e.what());
-      if(!revision.empty()) reply["error"]["data"]={{"revision",revision}};
-      return reply;
+      return failure(-32003,e.what(),{});
     }
   }
 };

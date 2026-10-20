@@ -3,6 +3,7 @@
 #include "windows/Project/NativeMetadata.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/SignalGroupBypass.hpp"
+#include "editor/MixerControlEdit.hpp"
 #include <cmath>
 #include <set>
 namespace ScreamSeq {
@@ -19,7 +20,13 @@ std::string text(const Json &v,size_t maximum){return Project::validatedNativeTe
 std::string id(uint64_t value){return value?"n"+std::to_string(value):"";}
 uint64_t identity(const Json &v){const auto s=text(v,32);need(s.size()>1&&s[0]=='n'&&s[1]!='0',"Invalid native identity");uint64_t n=0;for(size_t i=1;i<s.size();++i){need(s[i]>='0'&&s[i]<='9'&&n<NativeSong::maximumID/10,"Invalid native identity");n=n*10+s[i]-'0';}need(n>0&&n<NativeSong::maximumID,"Invalid native identity");return n;}
 uint64_t allocate(NativeSong &n){need(n.nextID>0&&n.nextID<NativeSong::maximumID,"Native identity limit reached");return n.makeEntity().id;}
-Json meterObjects(const MixerGraph &graph,const PlaybackFeedback &feedback){auto meters=Json::array();for(size_t i=0;i<std::min(graph.buses.size(),feedback.meters.size());++i)meters.push_back({{"bus",id(graph.buses[i].id)},{"left",feedback.meters[i].left},{"right",feedback.meters[i].right}});return meters;}
+Json meterObjects(const MixerGraph &graph,const PlaybackFeedback &feedback){
+  auto meters=Json::array();
+  if(feedback.meters.fresh)for(const auto &meter:feedback.meters.buses)
+    if(std::any_of(graph.buses.begin(),graph.buses.end(),[&](const auto &bus){return bus.id==meter.id;}))
+      meters.push_back({{"bus",id(meter.id)},{"left",meter.level.left},{"right",meter.level.right}});
+  return meters;
+}
 }
 MixerOperations::MixerOperations(Tracker::Document &d,std::function<void()> stop,MixerHostHooks hooks):document_(d),stop_(std::move(stop)),host_(std::move(hooks)){}
 std::vector<std::string> MixerOperations::reads(){return {"mixer.get","mixer.meters"};}
@@ -59,7 +66,16 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
       keys(p,{"bus","name","color","output","preGainDB","prePan","gainDB","pan","width","timingMS","mute","solo","inserts","mainOutputConnected","dryRun","preview"});auto &bus=findBus(field(p,"bus"));affected=bus.id;
       if(p.contains("mainOutputConnected")){need(bus.kind==MixerBusKind::Master,"Only Master has the final output cable");graph.masterOutputDisconnected=!flag(p,"mainOutputConnected");}
       if(p.contains("name"))bus.name=text(p.at("name"),256);if(p.contains("color"))bus.color=uint32_t(integer(p.at("color"),0,0xffffff));if(p.contains("output"))bus.output=p.at("output").is_null()?0:identity(p.at("output"));
-      if(p.contains("preGainDB"))bus.preGainDB=number(p.at("preGainDB"),-96,24);if(p.contains("prePan"))bus.prePan=number(p.at("prePan"),-1,1);if(p.contains("gainDB"))bus.gainDB=number(p.at("gainDB"),-96,24);if(p.contains("pan"))bus.pan=number(p.at("pan"),-1,1);if(p.contains("width"))bus.width=number(p.at("width"),0,2);if(p.contains("timingMS"))bus.timingMS=number(p.at("timingMS"),-500,500);if(p.contains("mute"))bus.mute=flag(p,"mute");if(p.contains("solo"))bus.solo=flag(p,"solo");
+      MixerControlPatch controls;
+      if(p.contains("preGainDB"))controls.preGainDB=number(p.at("preGainDB"),-96,24);
+      if(p.contains("prePan"))controls.prePan=number(p.at("prePan"),-1,1);
+      if(p.contains("gainDB"))controls.gainDB=number(p.at("gainDB"),-96,24);
+      if(p.contains("pan"))controls.pan=number(p.at("pan"),-1,1);
+      if(p.contains("width"))controls.width=number(p.at("width"),0,2);
+      if(p.contains("mute"))controls.mute=flag(p,"mute");
+      if(p.contains("solo"))controls.solo=flag(p,"solo");
+      applyMixerControls(graph,affected,controls);
+      if(p.contains("timingMS"))bus.timingMS=number(p.at("timingMS"),-500,500);
       if(p.contains("inserts")){bus.inserts.clear();for(const auto &v:array(p.at("inserts"),32)){auto id=plugin(v,false);bus.inserts.push_back(id);std::erase(graph.detached,id);for(auto &chain:graph.detachedChains)std::erase(chain.plugins,id);std::erase(graph.disconnectedMainInputs,id);}std::erase_if(graph.detachedChains,[](const auto &c){return c.plugins.empty();});for(const auto &chain:graph.detachedChains)std::erase(graph.disconnectedMainInputs,chain.plugins.front());}
     } else if(method=="mixer.inserts.move"||method=="mixer.inserts.detach") {
       const bool detach=method=="mixer.inserts.detach";
@@ -121,11 +137,11 @@ Json MixerOperations::invoke(const std::string &method,const Json &p) {
       uint64_t inputs=0,outputs=1;uint32_t count=1;for(auto p:in)inputs|=uint64_t(1)<<p;for(auto p:out){outputs|=uint64_t(1)<<p;count=std::max(count,p+1);}processors.push_back({signalBusIdentity(b.id),0,0,false,false,count,outputs,inputs});
     }
     validatePluginCapacity(host_.plugins,graph.buses.size());if(!preview)next.validate(document_.song());if(host_.validateCandidate)host_.validateCandidate(next);const auto plan=compileMixer(signalRoutingGraph(graph,next.signal),tracks,processors,feedback.sampleRate);
-    auto structural=graph;if(structural.buses.size()==original.buses.size())for(size_t i=0;i<structural.buses.size();++i){auto &b=structural.buses[i];const auto &old=original.buses[i];b.preGainDB=old.preGainDB;b.prePan=old.prePan;b.gainDB=old.gainDB;b.pan=old.pan;b.width=old.width;b.mute=old.mute;b.solo=old.solo;b.name=old.name;b.color=old.color;}
-    const bool controlsOnly=structural==original,different=graph!=original||(!preview&&next.signal.layout!=native.signal.layout);need(!preview||(controlsOnly&&graph.active()),"Only mixer gain, balance, width, mute and solo can be previewed live");
+    const auto controlEdit=classifyMixerControlEdit(original,graph);
+    const bool controlsOnly=controlEdit.controlsOnly,different=controlEdit.changed||(!preview&&next.signal.layout!=native.signal.layout);need(!preview||(controlsOnly&&graph.active()),"Only mixer gain, balance, width, mute and solo can be previewed live");
     Json result={{"mixer",Project::encodeMixerMetadata(graph)},{"wouldChange",different},{"preview",preview},{"bus",affected?Json(id(affected)):Json()},{"controlsOnly",controlsOnly}};
     if(!dry&&(different||preview||(method=="mixer.bus.set"&&graph.active()))) {
-      std::vector<MixerControls> controls;const auto projected=projectMixerDetachedChains(graph);if(controlsOnly&&graph.active())for(size_t i=0;i<projected.buses.size();++i){const auto &b=projected.buses[i];controls.push_back({b.preGainDB,b.gainDB,b.pan,b.width,plan.nodes[i].audible,b.prePan});}
+      const auto controls=controlsOnly&&graph.active()?prepareMixerControlFrame(graph,plan):std::vector<MixerControls>{};
       const bool active=graph.active();
       const auto prepared=!controlsOnly&&different&&(host_.prepareNativeUpdate||host_.preparePublication)?(host_.prepareNativeUpdate?host_.prepareNativeUpdate(native,next):host_.preparePublication(next)):std::function<void()>{};
       auto publish=[&]{if(controlsOnly&&active){if(host_.controls&&!host_.controls(controls))throw Api::ApiError(-32002,"Mixer control queue is busy; retry the same revision");need(bool(host_.controls)||!feedback.playing,"Active mixer needs a real live control hook");}else if(prepared)prepared();else if(!controlsOnly&&!host_.prepareNativeUpdate&&!host_.preparePublication&&stop_)stop_();};

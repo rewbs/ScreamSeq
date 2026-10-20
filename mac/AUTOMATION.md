@@ -1038,7 +1038,9 @@ Undo:
 - `track.group {channels:[0,1,2], name:"Chords", output?:"n…"}` groups adjacent,
   ascending, currently ungrouped columns. Notes, column IDs and existing
   column-level inserts/sends survive. The shared group uses the columns' common
-  output. Different outputs require an explicit destination.
+  output. Different outputs require an explicit destination, including a mix of
+  connected and disconnected columns in either order. Grouping disconnected
+  columns requires choosing a group, return or Master destination explicitly.
 - `track.create {columns:3, name:"Chords", output?:"n…"}` appends empty columns
   to every pattern and creates the shared track in one Undo step. Source format
   channel limits and mixer/assigned-instrument capacity are enforced.
@@ -1572,6 +1574,11 @@ Seconds account for the format's tempo/speed, groove and flow commands. They are
 the first visit to that row in the selected occurrence; skipped/unreachable rows
 (and unarranged patterns) have null times. Pattern time begins at the first
 reached row of that occurrence. This read does not change playback or revision.
+Both native platforms use `editor/PatternTimeline` for this calculation; the
+bridge retains the same request/result shape. The document owner prepares the
+derived native FX/timing lookup before the engine walk; audio rendering uses its
+separate prepared song. No Foundation, JSON or native UI types enter the shared
+calculation.
 
 `transport.get` additionally includes `audioActive` (including audition while the
 song transport is stopped) and `voicePositions`. Each native sample voice reports
@@ -1622,7 +1629,7 @@ accepts beats within the row: multiply beats by the pattern's rows per beat
 and 65,536 to obtain the offset units. Timing follows actual tempo, speed and groove.
 
 `instrument.create {empty:true, name:"Lead trigger", expectedRevision:...}` creates
-an empty instrument with no sample mapping. Optional `dryRun:true` validates and
+an empty instrument with no sample mapping. Assigning an instrument plugin to an existing sample-mapped instrument preserves the keymap and plays both sources. The sample layer follows its sample-instrument graph and tracker channel; the plugin layer follows its plugin audio-output routes. `instrument.plugin.set` with an empty plugin ID removes only the plugin assignment. This layering also applies to ordinary notes, precise notes and instrument audition. Optional `dryRun:true` validates and
 returns the prospective slot. It preserves a sample-only song's existing playback
 by creating matching sample instruments before appending the empty trigger.
 Use the returned `instrument` and revision with `instrument.plugin.set` to assign

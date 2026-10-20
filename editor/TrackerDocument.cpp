@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -749,8 +750,30 @@ int Document::addPattern(int rows, bool duplicate, int source)
 	return index;
 }
 void Document::setOrder(int index, int pattern) { editOrder(index, pattern, "assign"); }
+bool Document::orderEditChanges(int index,int pattern,const std::string &operation) const
+{
+    if(!editable())throw std::invalid_argument("This document is read-only.");
+    const auto &sequence=song_->Order();
+    if(index<0||index>=sequence.size())throw std::invalid_argument("Select a valid order.");
+    if(operation=="assign"||operation=="before"||operation=="after") {
+        if(pattern<0||pattern>std::numeric_limits<PATTERNINDEX>::max()||!song_->Patterns.IsValidPat(PATTERNINDEX(pattern)))
+            throw std::invalid_argument("Select a valid pattern.");
+        if(operation=="assign")return sequence[index]!=PATTERNINDEX(pattern);
+        if(sequence.size()>=song_->GetModSpecifications().ordersMax)throw std::invalid_argument("The order list is full.");
+    } else if(operation=="move") {
+        if(pattern<0||pattern>=sequence.size())throw std::invalid_argument("Select a valid destination order.");
+        return pattern!=index;
+    } else if(operation=="up"||operation=="down") {
+        const auto target=index+(operation=="up"?-1:1);
+        if(target<0||target>=sequence.size())throw std::invalid_argument("This order is at the edge of the list.");
+    } else if(operation=="remove") {
+        if(sequence.size()<=1)throw std::invalid_argument("Keep at least one order.");
+    } else throw std::invalid_argument("Unknown order operation.");
+    return true;
+}
 void Document::editOrder(int index, int pattern, const std::string &operation)
 {
+    if(!orderEditChanges(index,pattern,operation))return;
 	transaction([&](CSoundFile &s, NativeSong &native)
 	{
 		auto &sequence = s.Order();
@@ -917,8 +940,12 @@ Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t 
 	noteChannels_.fill(CHANNELINDEX_INVALID);
 	nextPreviewChannel_ = song_->GetNumChannels();
 	if(preview) song_->m_PlayState.m_flags.set(SONG_PAUSED);
-	for(size_t ch = 0; ch < song_->GetNumChannels(); ++ch)
-		mute_[ch].store(song_->ChnSettings[ch].dwFlags[CHN_MUTE]);
+  columnCount_ = song_->GetNumChannels();
+  if(columnCount_ > mute_.size()) throw std::invalid_argument("Renderer channel count exceeds mute capacity");
+	for(size_t ch = 0; ch < columnCount_; ++ch) {
+    importedMutes_[ch] = song_->ChnSettings[ch].dwFlags[CHN_MUTE];
+		mute_[ch].store(importedMutes_[ch]);
+  }
 }
 bool Renderer::enqueue(const std::vector<Edit> &edits)
 {
@@ -978,6 +1005,24 @@ void Renderer::mute(uint32_t ch, bool value) noexcept
 void Renderer::applyColumnMutes(const NativeSong &native, const CSoundFile &source) noexcept
 {
   for (uint16_t c = 0; c < source.GetNumChannels(); ++c) mute(c, effectiveColumnMute(native, source, c));
+}
+std::unique_ptr<ColumnMuteFrame> Renderer::prepareColumnMuteUpdate(const NativeSong &native) const
+{
+  if(native.tracks.size() != columnCount_) throw std::invalid_argument("Column mute update changed the renderer layout");
+  auto frame = std::make_unique<ColumnMuteFrame>(); frame->columns = columnCount_;
+  for(uint16_t c = 0; c < columnCount_; ++c) {
+    const auto track = native.tracks.find(c);
+    if(track == native.tracks.end()) throw std::invalid_argument("Column mute update lost a renderer column");
+    const auto found = native.columnMutes.find(track->second.id);
+    frame->muted[c] = found == native.columnMutes.end() ? importedMutes_[c] : found->second;
+  }
+  return frame;
+}
+bool Renderer::publishColumnMuteUpdate(std::unique_ptr<ColumnMuteFrame> &frame) noexcept
+{
+  if(!frame || frame->columns != columnCount_ || !columnMuteUpdates_.available()) return false;
+  // The single producer owns reclamation; consume() never frees a frame.
+  return columnMuteUpdates_.publish(std::move(frame));
 }
 uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 {
@@ -1076,6 +1121,12 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		auto begin = std::begin(song_->m_PlayState.ChnMix);
 		auto end = std::remove(begin, begin + song_->m_nMixChannels, channel);
 		song_->m_nMixChannels = CHANNELINDEX(std::distance(begin, end));
+		// A live audition may arrive between tracker ticks. Prepare only its
+		// new sample voice now; otherwise it remains absent from ChnMix until
+		// the next tick. At a tick boundary Read() prepares it normally.
+		// ReadNote(channel) preserves the transport clock and other voices.
+		if(chn.nLength && song_->m_PlayState.SamplesRemainingInTick())
+			song_->ReadNote(channel);
 	}
 	noteRead_.store(noteRead, std::memory_order_release);
 	auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);
@@ -1089,6 +1140,8 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 		processed += size;
 	}
 	read_.store(r, std::memory_order_release);
+  if(const auto *frame = columnMuteUpdates_.consume())
+    for(uint16_t c = 0; c < columnCount_; ++c) mute_[c].store(frame->muted[c], std::memory_order_relaxed);
 	std::array<bool, 192> changedMutes{};
 	bool muteChanged = false;
 	for(size_t c = 0; c < song_->GetNumChannels(); ++c)

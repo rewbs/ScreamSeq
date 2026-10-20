@@ -20,14 +20,15 @@ final class PatternToolsPanel: NSView, NSTextFieldDelegate {
   private var generation = 0
   private var requestInFlight = false
   private var previewModel = PatternModel([:])
-  private let operationIDs = ["interpolate", "humanize", "randomize", "scale", "fill", "transpose", "remapInstrument", "reverse", "rotate", "expand", "shrink", "clear", "insertRows", "deleteRows"]
+  private let operationIDs = (0..<Int(SCREAMSEQ_PATTERN_TOOL_COUNT)).map { String(cString:ScreamSeqPatternToolAt(UInt32($0)).identifier!) }
+  private func has(_ option: UInt32) -> Bool { ScreamSeqPatternToolAt(UInt32(operation.indexOfSelectedItem)).options & option != 0 }
   private let scopeIDs = ["selection", "channel", "pattern", "song", "note-track"]
   private let targetIDs = ["volume", "panning", "note", "instrument", "effectParameter"]
   private let filterIDs = ["values", "notes", "all"]
 
   override init(frame: NSRect) {
     super.init(frame: frame)
-    operation.addItems(withTitles: ["Interpolate", "Humanize", "Randomize", "Scale values", "Fill values", "Transpose", "Remap instrument", "Reverse rows", "Rotate rows", "Expand timing", "Shrink timing", "Clear fields", "Insert rows", "Delete rows"])
+    operation.addItems(withTitles: (0..<Int(SCREAMSEQ_PATTERN_TOOL_COUNT)).map { String(cString:ScreamSeqPatternToolAt(UInt32($0)).title!) })
     scope.addItems(withTitles: ["Selection", "Current channel", "Current pattern", "All patterns (including unused)", "Current note track"])
     target.addItems(withTitles: ["Volume", "Panning", "Note", "Instrument", "Effect parameter"])
     curve.addItems(withTitles: ["Linear", "Exponential", "Logarithmic"])
@@ -97,17 +98,15 @@ final class PatternToolsPanel: NSView, NSTextFieldDelegate {
 
   @objc func settingsChanged() {
     invalidate()
-    let op = operationIDs[operation.indexOfSelectedItem]
-    let numeric = ["interpolate", "humanize", "randomize", "scale", "fill"].contains(op)
-    rows["target"]?.isHidden = !numeric
-    rows["range"]?.isHidden = !["interpolate", "randomize", "fill", "remapInstrument"].contains(op)
-    to.isHidden = op == "fill"
-    curve.isHidden = op != "interpolate"
-    rows["amount"]?.isHidden = !["scale", "humanize", "transpose", "rotate", "expand", "shrink", "insertRows", "deleteRows"].contains(op)
-    rows["seed"]?.isHidden = !["randomize", "humanize"].contains(op)
-    rows["fields"]?.isHidden = !["clear", "reverse", "rotate", "expand", "shrink", "insertRows", "deleteRows"].contains(op)
-    swap.isHidden = op != "remapInstrument"
-    allowLoss.isHidden = !["expand", "shrink", "insertRows", "deleteRows"].contains(op)
+    rows["target"]?.isHidden = !has(SCREAMSEQ_TOOL_TARGET)
+    rows["range"]?.isHidden = !(has(SCREAMSEQ_TOOL_FROM) || has(SCREAMSEQ_TOOL_REMAP))
+    to.isHidden = !(has(SCREAMSEQ_TOOL_TO) || has(SCREAMSEQ_TOOL_REMAP))
+    curve.isHidden = !has(SCREAMSEQ_TOOL_CURVE)
+    rows["amount"]?.isHidden = !has(SCREAMSEQ_TOOL_AMOUNT)
+    rows["seed"]?.isHidden = !has(SCREAMSEQ_TOOL_SEED)
+    rows["fields"]?.isHidden = !has(SCREAMSEQ_TOOL_FIELDS)
+    swap.isHidden = !has(SCREAMSEQ_TOOL_REMAP)
+    allowLoss.isHidden = !has(SCREAMSEQ_TOOL_LOSS)
   }
   func controlTextDidChange(_ notification: Notification) { invalidate() }
   func invalidate() {
@@ -144,20 +143,20 @@ final class PatternToolsPanel: NSView, NSTextFieldDelegate {
       }
       p["track"] = track.id
     }
-    if ["clear", "reverse", "rotate", "expand", "shrink", "insertRows", "deleteRows"].contains(op) {
+    if has(SCREAMSEQ_TOOL_FIELDS) {
       p["fields"] = zip(fieldNames, fieldButtons).filter { $0.1.state == .on }.map { $0.0 }
     }
-    if ["rotate", "expand", "shrink", "insertRows", "deleteRows", "transpose", "scale", "humanize"].contains(op) { p["amount"] = try number(amount) }
-    if ["expand", "shrink", "insertRows", "deleteRows"].contains(op) { p["allowDataLoss"] = allowLoss.state == .on }
-    if ["interpolate", "scale", "randomize", "humanize", "fill"].contains(op) {
+    if has(SCREAMSEQ_TOOL_AMOUNT) { p["amount"] = try number(amount) }
+    if has(SCREAMSEQ_TOOL_LOSS) { p["allowDataLoss"] = allowLoss.state == .on }
+    if has(SCREAMSEQ_TOOL_TARGET) {
       p["target"] = targetIDs[target.indexOfSelectedItem]
       p["only"] = filterIDs[filter.indexOfSelectedItem]
     }
-    if ["interpolate", "randomize", "fill"].contains(op) { p["from"] = try number(from) }
-    if ["interpolate", "randomize"].contains(op) { p["to"] = try number(to) }
-    if op == "interpolate" { p["curve"] = ["linear", "exponential", "logarithmic"][curve.indexOfSelectedItem] }
-    if ["randomize", "humanize"].contains(op) { p["seed"] = try number(seed) }
-    if op == "remapInstrument" {
+    if has(SCREAMSEQ_TOOL_FROM) { p["from"] = try number(from) }
+    if has(SCREAMSEQ_TOOL_TO) { p["to"] = try number(to) }
+    if has(SCREAMSEQ_TOOL_CURVE) { p["curve"] = ["linear", "exponential", "logarithmic"][curve.indexOfSelectedItem] }
+    if has(SCREAMSEQ_TOOL_SEED) { p["seed"] = try number(seed) }
+    if has(SCREAMSEQ_TOOL_REMAP) {
       p["fromInstrument"] = try number(from); p["toInstrument"] = try number(to); p["swap"] = swap.state == .on
     }
     return p
@@ -206,14 +205,16 @@ final class PatternToolsPanel: NSView, NSTextFieldDelegate {
       if applying {
         if current { self.prepared = nil }
         self.summary.stringValue = "Applied \(count) cell changes. Undo restores the whole operation."
+        if data["effectsChanged"] as? Bool == true { self.summary.stringValue += " Native note or FX changes were applied too." }
         if result["playbackStopped"] as? Bool == true { self.summary.stringValue += " Playback stopped for this edit." }
         self.summary.stringValue += newer
       } else {
         var prepared = p
         prepared["expectedRevision"] = revision
         self.prepared = prepared
-        self.applyButton.isEnabled = count > 0
+        self.applyButton.isEnabled = count > 0 || data["effectsChanged"] as? Bool == true
         self.summary.stringValue = "\(count) cells will change."
+        if data["effectsChanged"] as? Bool == true { self.summary.stringValue += " Native note or FX data will also change." }
         if data["previewTruncated"] as? Bool == true { self.summary.stringValue += " Showing the first 512 changes." }
         let changes = data["changes"] as? [[String: Any]] ?? []
         self.details.string = changes.map { self.describe($0) }.joined(separator: "\n")
