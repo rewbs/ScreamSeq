@@ -143,7 +143,7 @@ private:
       }
     }
   }
-  size_t storageBytes()const {
+  size_t storageBytes()const noexcept {
     size_t result=sizeof(*this)+events_.capacity()*sizeof(Event)+pending_.capacity()*sizeof(size_t)+
       rackIDs_.capacity()*sizeof(std::string)+key_.token.capacity()+key_.revision.capacity()+key_.plugin.capacity();
     for(const auto &id:rackIDs_)result+=id.capacity();
@@ -187,6 +187,8 @@ public:
   std::span<const Event> events()const noexcept{return events_;}
   bool retired()const noexcept{return retired_;}
   bool sealed()const noexcept{return endTime_.has_value();}
+  size_t retainedStorageBytes()const noexcept{return storageBytes();}
+  uint64_t sourceLossCount()const noexcept{return sourceLoss_;}
   Loss loss()const noexcept {
     return {sourceLoss_-initialSourceLoss_,overflow_,
       size_t(std::count_if(events_.begin(),events_.end(),[](const auto &e){return !e.frame;}))};

@@ -97,10 +97,25 @@ The Windows x64 return from this successful ARM artifact was dispatched at
 12:46:49 UTC, again with no build; receipt
 `windows-arm-return-dispatch.json` identifies its exact inputs and run
 **39424938001**. The Intel return was accepted at 12:47:55 UTC as run
-**39425081819**, with receipt `windows-intel-return-dispatch.json`. Both are
-confirmed live at the 12:48 UTC checkpoint. Inspect those handles rather than
-resubmitting. Their return results remain required; the successful outward
-exchange alone is not the full reciprocal gate.
+**39425081819**, with receipt `windows-intel-return-dispatch.json`.
+**Both returns are terminal success**, with all ten files passed on each.
+ARM return job `118635001897` finished its last file at 12:48:03 UTC;
+Intel return job `118635497933` at 12:49:07 UTC. Do not poll/restart them.
+
+The downloaded final artifacts were then checked locally without launching an
+app: complete v2 manifest/leg/source/input lineage validation, every archived
+output hash, and direct typed-tree comparison of all twenty final files to
+their originating Windows output. All passed. Receipt:
+`reciprocal-verification.json`; verifier: `verify-reciprocal.py`.
+
+| Return | Artifact | Archive SHA-256 | Retained manifest SHA-256 |
+| --- | --- | --- | --- |
+| Through Mac ARM | `12265378061` | `713a1dd502eb0a5664c0793e9f44b60f85dd3de4e2943daf9e3bcbf5281f5247` | `0d1ef63e014f6cad235e3f3446e5b2074f9803c8e1d9dbcf89480c943500abbf` |
+| Through Mac Intel | `12264934013` | `59900090c2424fc04b3088e3949cd5f41f6363a9acfe8d735ac8b1bf9a7eea5a` | `2a383b41be3023825f4b9f9a967b8d2161fdd8ed211f675b2995b01c47496b69` |
+
+This closes the ten-file reciprocal persistence gate for **db42/e4f36 only**.
+It does not qualify the newer graph correction, history fixture repair or
+recorded-take owner, and is not completion of the full parity inventory.
 
 ## Traceable artifacts
 

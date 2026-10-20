@@ -1,8 +1,8 @@
 // The real Windows plugin/session history owner and shared timeline, with
 // controlled input times. This does not exercise native UI/vendor ingestion.
+#include "editor/hosted/RecordedGestureTake.hpp"
 void recordedGestureCommitTests(const std::filesystem::path &directory) {
   using namespace Tracker;
-  using Capture=RecordedGestureCapture;
   auto document=Document::demo();auto project=Project::newProjectState(*document);
   unsigned stops=0,publications=0;
   PluginOperations operations(*document,project,[&]{++stops;});
@@ -37,31 +37,42 @@ void recordedGestureCommitTests(const std::filesystem::path &directory) {
   const auto revision=[&]{return std::to_string(document->revision)+":"+std::to_string(project.pluginRevision);};
   auto clock=std::make_shared<RecordingFrameTimeline>();
   need(clock->publish(1000,1200,0,960,48000,7),"Capture commit clock fixture failed");
-  const auto sharedBefore=std::make_shared<const std::vector<ParameterChange>>(before);
-  std::vector<std::unique_ptr<Capture>> retained;
-  std::vector<Capture *> owners;
+  std::vector<RecordedGestureCapture *> owners;
+  std::vector<RecordedGestureTake::Provider> providers;
+  for(const auto &plugin:rack)providers.push_back({plugin.instanceID,operations.parameterEditSource(plugin.instanceID)});
+  RecordedGestureTake take("native-gesture",revision(),1000,clock,rack,before,providers);
   for(size_t i=0;i<rack.size();++i) {
-    const auto source=operations.parameterEditSource(rack[i].instanceID);
-    auto owner=std::make_unique<Capture>(Capture::Key{"native-gesture",revision(),rack[i].instanceID,1,7,source.incarnation,1000},
-      clock,rack,sharedBefore,document->native(),operations.parameterMetadata(rack[i].instanceID),source.dropped);
-    owner->append({1,i?-12.f:-9.f,i?1100u:1050u},7,source.incarnation);owner->seal(1150);
-    owners.push_back(owner.get());retained.push_back(std::move(owner));
+    need(take.append(rack[i].instanceID,{1,i?-12.f:-9.f,i?1100u:1050u},providers[i].source,
+      revision(),7,document->native(),operations.parameterMetadata(rack[i].instanceID))==RecordedGestureTake::Intake::Captured,
+      "Native take lost original provider input");
   }
+  take.seal(1150);
+  for(const auto &provider:providers)need(take.drained(provider.plugin,provider.source,revision(),7),"Native take drain refused");
+  owners=take.preparedOwners(revision(),7);
+  bool takeChanged=false;
+  const auto commitTake=[&](const std::string &current){
+    return take.commit(current,7,false,[&](auto currentOwners,bool acknowledgeLoss){
+      takeChanged=operations.commitRecordedGestures(currentOwners,current,7,acknowledgeLoss);return true;
+    });
+  };
   const auto sequence=document->historySequence(),pluginRevision=project.pluginRevision;
   const auto stopped=stops;
   // Saturate the real prepared timeline queue before asking the native owner
   // to commit. No fake success, relaxed assertions or device dependencies.
   for(unsigned n=0;n<3;++n)need(chain.publishRecordedAutomation(chain.prepareRecordedAutomation(before)),"Could not fill the recorded publication queue");
   bool rejected=false;
-  try{operations.commitRecordedGestures(owners,revision(),7);}catch(const std::exception &){rejected=true;}
+  try{commitTake(revision());}catch(const std::exception &){rejected=true;}
   need(rejected&&projectBytes()==baselineBytes&&document->historySequence()==sequence&&
     project.pluginRevision==pluginRevision&&!owners[0]->retired()&&!owners[1]->retired()&&stops==stopped,
     "Publication refusal changed saved music/history or consumed part of a gesture");
   render(-9);
   rejected=false;
-  try{operations.commitRecordedGestures(owners,"another-revision",7);}catch(const std::exception &){rejected=true;}
+  try{commitTake("another-revision");}catch(const std::exception &){rejected=true;}
   need(rejected&&projectBytes()==baselineBytes,"Stale capture changed project state");
-  need(operations.commitRecordedGestures(owners,revision(),7)&&owners[0]->retired()&&owners[1]->retired(),
+  rejected=false;
+  try{operations.commitRecordedGestures(owners,"another-revision",7);}catch(const std::exception &){rejected=true;}
+  need(rejected&&projectBytes()==baselineBytes,"Native completion accepted an independently stale take context");
+  need(commitTake(revision())&&takeChanged&&take.completed()&&owners[0]->retired()&&owners[1]->retired(),
     "Native capture commit did not retire the complete accepted gesture");
   need(document->historySequence()==sequence+1&&project.pluginRevision==pluginRevision+1&&publications==1&&stops==stopped,
     "Several captured targets did not share one live Undo transaction");
@@ -83,14 +94,18 @@ void recordedGestureCommitTests(const std::filesystem::path &directory) {
   need(projectBytes()==baselineBytes&&operations.canRedo()&&stops==stopped,
     "One native Undo did not restore the exact capture baseline");
   // An identical capture is retired without consuming the existing Redo.
-  retained.clear();owners.clear();
   const auto source=operations.parameterEditSource(rack[0].instanceID);
-  auto noOp=std::make_unique<Capture>(Capture::Key{"no-op",revision(),rack[0].instanceID,1,7,source.incarnation,1000},
-    clock,rack,sharedBefore,document->native(),operations.parameterMetadata(rack[0].instanceID),source.dropped);
-  noOp->append({1,-6,1050},7,source.incarnation);noOp->seal(1150);owners.push_back(noOp.get());
+  const std::array<RecordedGestureTake::Provider,1> noOpProvider{{{rack[0].instanceID,source}}};
+  RecordedGestureTake noOp("no-op",revision(),1000,clock,rack,before,noOpProvider);
+  need(noOp.append(rack[0].instanceID,{1,-6,1050},source,revision(),7,document->native(),
+    operations.parameterMetadata(rack[0].instanceID))==RecordedGestureTake::Intake::Captured,"No-op take lost original input");
+  noOp.seal(1150);need(noOp.drained(rack[0].instanceID,source,revision(),7),"No-op take did not drain");
   const auto beforeNoOpRevision=revision();
   const auto beforeNoOpSequence=document->historySequence();
-  need(!operations.commitRecordedGestures(owners,revision(),7)&&noOp->retired()&&operations.canRedo()&&
+  bool noOpChanged=true;
+  need(noOp.commit(revision(),7,false,[&](auto currentOwners,bool loss){
+    noOpChanged=operations.commitRecordedGestures(currentOwners,revision(),7,loss);return true;
+  })&&!noOpChanged&&noOp.completed()&&operations.canRedo()&&
     revision()==beforeNoOpRevision&&document->historySequence()==beforeNoOpSequence,
     "No-op capture consumed Redo or added history");
   history(true);render(-21);

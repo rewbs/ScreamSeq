@@ -17,7 +17,11 @@ All three native CI jobs are now terminal. The [current CI review](GESTURE-CI-RE
 records x64's 157 worker/48 native passes, both Macs' 133/134 native and 35/35
 interface results, retained x64 follow-ups, the unbuilt graph selector repair
 and protected-source history test correction. Next native build is no earlier
-than **13:27:48 UTC**. Extended reciprocal execution is proceeding without builds.
+than **13:27:48 UTC**. The ten-file Windows → both Macs → Windows reciprocal
+gate passed, including direct final-to-origin typed-tree checks of all twenty
+returns, without builds. The [shared take owner](RECORDED-TAKE-OWNER-2026-10-20.md)
+and its shared/native publication regressions are the next prepared source,
+**unbuilt**; native arming/intake/recovery/UI remain outstanding.
 Shared main remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
 Use the [extended exchange](EXTENDED-EXCHANGE-2026-10-20.md) for the final

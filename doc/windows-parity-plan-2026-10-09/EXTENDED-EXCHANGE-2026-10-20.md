@@ -105,6 +105,14 @@ foreground ergonomics, physical device/vendor qualification and the remaining
 A01–A18 gates are still independent outstanding work.
 # Protected launch follow-up
 
+**Completed follow-up:** run `39424598212` passed all ten inputs on both Macs.
+Windows returns `39424938001` and `39425081819` also passed all ten files each.
+The downloaded final artifacts passed lineage/hash checks and direct typed
+comparison to the original Windows inputs. See the
+[candidate CI review](GESTURE-CI-REVIEW-2026-10-20.md) for exact source,
+artifact identities and scope. The failed initial run below remains evidence
+of the runner defect; it is not the current exchange result.
+
 The first current-candidate extended exchange is run `39423914064`, using
 retained Mac apps from `39418201597` and Windows outputs from `39418201506`.
 Apple Silicon passed the five original, two render/import, composing-history
