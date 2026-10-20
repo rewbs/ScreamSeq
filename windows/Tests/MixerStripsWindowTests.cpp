@@ -191,7 +191,7 @@ void pendingKeyboardIntent(HWND owner) {
         "Escape for older input suppressed the explicit release of a newer gesture");
       continue;
     }
-    check(f.writes==0&&f.tool.hasGesture()&&text(f.control(102))==L"-12"&&f.previews==1,
+    check(f.writes==0&&f.tool.hasGesture()&&text(f.control(102))==L"-12.0"&&f.previews==1,
       "Queued Escape discarded or committed newer unfinished input");
     f.duringRead={};f.tool.update();
     check(f.writes==0&&f.tool.hasGesture()&&f.audible==-12,"Newer retained input was not available for preview");
@@ -246,7 +246,7 @@ void pendingTextRetention(HWND owner) {
     check(f.tool.hasGesture()&&text(f.control(102))==L"newer"&&f.writes==1,
       "Cancel's pumped reset discarded newer raw input");
     f.duringRead={};f.press(12);
-    check(!f.tool.hasGesture()&&text(f.control(102))==L"-9"&&f.audible==-9&&f.writes==1,
+    check(!f.tool.hasGesture()&&text(f.control(102))==L"-9.0"&&f.audible==-9&&f.writes==1,
       "Explicit Cancel failed to restore the current saved value without a second write");
   }
 }

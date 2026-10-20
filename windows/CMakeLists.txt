@@ -153,6 +153,12 @@ if(BUILD_TESTING)
     set_tests_properties(workspace-restore-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;docking" TIMEOUT 120)
     # Separate owned processes keep the existing 90-second private-child bound;
     # sharing the executable avoids another compilation of the native app TU.
+    add_test(NAME workspace-restore-advanced-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-restore-advanced-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;docking"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=restore-advanced" TIMEOUT 120)
+    add_test(NAME workspace-source-navigation-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-source-navigation-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;docking"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=source-navigation" TIMEOUT 120)
     add_test(NAME workspace-draft-census-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-departure-tests COMMAND workspace-restore-tests)
     add_test(NAME workspace-receipt-tests COMMAND workspace-restore-tests)

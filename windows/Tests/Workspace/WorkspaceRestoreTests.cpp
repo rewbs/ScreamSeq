@@ -1131,6 +1131,22 @@ int wmain(int argc,wchar_t **argv) {
             std::cout<<std::unitbuf; // Retain completed cases even if a later owned case times out.
             wchar_t group[32]{};const auto length=GetEnvironmentVariableW(L"SCREAMSEQ_WORKSPACE_TEST_GROUP",group,DWORD(std::size(group)));
             if(length) {
+                if(length<std::size(group)&&std::wstring_view(group)==L"restore-advanced") {
+            thirdHiddenCurveFailureIsAtomic();std::cout<<"PASS Curve staging: third hidden read/malformed points leave all candidates unadopted\n";
+            successfulCurveAdoptionMatchesApi();std::cout<<"PASS Curve adoption: worker values and normal callbacks retained\n";
+            busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
+            pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
+            guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
+            fourthHiddenNotesFailureIsAtomic();std::cout<<"PASS Notes staging: fourth hidden read/malformed data preserve all-before-any adoption\n";
+            preciseOwnerControlsAreLazyAndRetained();std::cout<<"PASS Notes native controls: lazy sole owner, hidden HWND/raw/caret retention\n";
+            fourOwnerLegacyLayoutContracts();std::cout<<"PASS V4 restore: seven-field exception and hand-authored V3/V2 aliases\n";
+            preparationReadScopeAndBusyGuard();std::cout<<"PASS read scope: mutation rejection and busy/recovery pre-queue guards\n";
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"source-navigation") {
+            provenanceNavigationUsesCapturedTargets();std::cout<<"PASS source navigation: clean retained owners retarget explicitly; drafts retain exact fields\n";
+                    return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
                     applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();std::cout<<"PASS native plugin search/value controls: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
@@ -1214,16 +1230,7 @@ int wmain(int argc,wchar_t **argv) {
             pumpedInputWinsOverPreparedLayout();std::cout<<"PASS pumped input: newer cursor/focus and native draft retained\n";
             sevenFieldLegacyRetainsExistingEditors();std::cout<<"PASS legacy: seven-field layouts preserve native drafts, pins and placement\n";
             compactRestoreAndResizeKeepVisibleFocus();std::cout<<"PASS region focus: compact restore/resize and retained native headers\n";
-            thirdHiddenCurveFailureIsAtomic();std::cout<<"PASS Curve staging: third hidden read/malformed points leave all candidates unadopted\n";
-            successfulCurveAdoptionMatchesApi();std::cout<<"PASS Curve adoption: worker values and normal callbacks retained\n";
-            busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
-            pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
-            guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
-            fourthHiddenNotesFailureIsAtomic();std::cout<<"PASS Notes staging: fourth hidden read/malformed data preserve all-before-any adoption\n";
-            preciseOwnerControlsAreLazyAndRetained();std::cout<<"PASS Notes native controls: lazy sole owner, hidden HWND/raw/caret retention\n";
-            fourOwnerLegacyLayoutContracts();std::cout<<"PASS V4 restore: seven-field exception and hand-authored V3/V2 aliases\n";
-            preparationReadScopeAndBusyGuard();std::cout<<"PASS read scope: mutation rejection and busy/recovery pre-queue guards\n";
-            provenanceNavigationUsesCapturedTargets();std::cout<<"PASS source navigation: clean retained owners retarget explicitly; drafts retain exact fields\n";
+
         });
         return 0;
     }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}

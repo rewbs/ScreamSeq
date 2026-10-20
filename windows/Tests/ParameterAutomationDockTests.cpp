@@ -47,6 +47,11 @@ struct Fixture {
     if(method=="automation.pattern.get"){++reads;return {{"patternID","pattern-a"},{"rows",64},{"rowsPerBeat",4},{"lanes",Json::array({{{"id","lane-a"},{"plugin","plugin-a"},{"parameter",7},{"enabled",true},{"points",saved}}})}};}
     if(method=="plugin.parameters.get")return Json::array({{{"id",7},{"name","Filter resonance"}},{{"id",8},{"name","A second selectable parameter"}}});
     if(method=="automation.formula.preview"){++previews;Json values=Json::array();for(const auto &point:params.at("points"))values.push_back(Json::array({point.at("position"),point.at("value")}));return {{"values",values}};}
+    if(method=="automation.pattern.transform"){
+      require(params.at("dryRun")==true&&params.at("expectedRevision")==current.revision,"Preview must be a guarded dry run");
+      auto after=saved;after[0]["value"]=.125;
+      return {{"wouldChange",true},{"after",after},{"clippedValues",0}};
+    }
     if(method=="automation.pattern.set"){
       require(params.at("expectedRevision")==current.revision,"Apply lost captured revision");writes.emplace_back(method,params);
       if(!params.at("dryRun").get<bool>()){saved=params.at("points");current.revision="r"+std::to_string(writes.size());}return {{"wouldChange",true}};
