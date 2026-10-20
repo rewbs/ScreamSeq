@@ -61,14 +61,8 @@ private:
     owner.dropped=current.dropped;
     // Every target on a provider has the same original/current loss counts.
     // Do not sum these duplicates when reporting queue loss.
-    for(auto &target:targets_)if(target->key().plugin==owner.initial.plugin) {
+    for(auto &target:targets_)if(target->key().plugin==owner.initial.plugin)
       target->sourceLoss(current.dropped,current.incarnation);
-      // Notifications may arrive before their presentation interval. Resolve
-      // them on ordinary (including empty) polls while the bounded clock ring
-      // still has that interval; waiting until release can lose a long take's
-      // early input even though coverage was available during recording.
-      target->resolve();
-    }
     return true;
   }
   void requireReady(const std::string &revision,uint64_t epoch,bool acknowledgeLoss) const {
@@ -138,7 +132,12 @@ public:
   }
   bool observeProvider(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);
-    return owner&&!completed_&&current(revision,epoch)&&observe(*owner,provider);
+    if(!owner||completed_||!current(revision,epoch)||!observe(*owner,provider))return false;
+    // Resolve once per native poll, including empty polls, while the bounded
+    // clock ring still retains delayed coverage. Do not rescan pending times
+    // for every notification in a dense input batch.
+    for(auto &target:targets_)if(target->key().plugin==plugin)target->resolve();
+    return true;
   }
   // Call for every original notification before coalescing. A failed or full
   // take still owns its providers: native adapters must not divert its edits
@@ -192,7 +191,7 @@ public:
   bool drained(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);
     if(!owner||!end_||completed_)return false;
-    if(!current(revision,epoch)||!observe(*owner,provider))return false;
+    if(!observeProvider(plugin,provider,revision,epoch))return false;
     owner->drained=true;return true;
   }
   std::vector<RecordedGestureCapture *> preparedOwners(const std::string &revision,uint64_t epoch,bool acknowledgeLoss=false) const {

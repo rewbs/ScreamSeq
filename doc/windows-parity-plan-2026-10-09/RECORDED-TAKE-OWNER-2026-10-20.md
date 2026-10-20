@@ -19,6 +19,8 @@ owner through either session:
   valid early events when a long take overwrites the bounded clock ring.
   A regression supplies delayed coverage, resolves it on an empty provider
   poll, evicts all original intervals, and checks the exact saved point.
+  Resolution runs once per provider poll/drain, not once per raw notification
+  in a dense batch; the raw intake path only validates and appends.
 
 `windows/Tests/Plugins/EditNotificationTests.cpp` now routes real fixture VST3
 callbacks through the take. It retains two ordered events until after release,
