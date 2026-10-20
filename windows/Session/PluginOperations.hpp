@@ -2,6 +2,7 @@
 #include "HostedProject.hpp"
 #include "GraphOperations.hpp"
 #include "windows/Plugins/PluginLibrary.hpp"
+#include "editor/hosted/RecordedGestureCapture.hpp"
 #include <deque>
 #include <functional>
 #include <map>
@@ -93,6 +94,13 @@ public:
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
   std::vector<Tracker::PluginAudioBus> audioBusMetadata(const std::string &identity);
   std::vector<Tracker::PluginParameter> parameterMetadata(const std::string &identity);
+  Tracker::PluginEditSource parameterEditSource(const std::string &identity);
+  // Worker-only capture completion. The session supplies its current full
+  // revision/clock epoch and retains the owners through this call. Normal
+  // manual/vendor ingestion, release barriers and recovery belong to that
+  // session; this entry point never flushes or serializes a live vendor.
+  bool commitRecordedGestures(std::span<Tracker::RecordedGestureCapture *const>,
+    const std::string &revision,uint64_t playbackEpoch,bool acknowledgeLoss=false);
   // Both API domain names and all UI Undo entry points share chronological
   // history. The callback applies one document entry; alreadyStopped prevents
   // repeating a fallible transport hook halfway through a grouped operation.

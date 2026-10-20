@@ -105,6 +105,30 @@ recording or change project identities/storage, and the existing native
 consumers have not yet switched to recorded capture. Use the paired pop result,
 not a stable plugin ID or two independently observed provider pointers.
 
+## Windows capture completion boundary
+
+`windows/Session/PluginOperations::commitRecordedGestures` now prepares the
+whole retained capture against current native parameter catalogues, actual
+editor-provider incarnations, source loss and the current saved point baseline.
+Its caller supplies the session's current full revision and original playback
+epoch. A stale revision or even a mismatched point baseline with an accidentally
+reused token rejects. Current source snapshots are read once per plugin so all
+parameters agree on the same loss-counter observation.
+
+The method uses `RecordedGestureCapture::publishBatch` and the existing
+recorded-only `PluginOperations::commit` path. It stages one history entry and
+one prepared timeline, preserves unrelated typed JSON rows and the complete
+saved rack, and retires input only after admission. It does not serialize
+effective vendor state. Unchanged captures retire without advancing revision,
+creating history, publishing a redundant timeline or consuming Redo.
+
+This is an internal completion entry point, **not yet called by the UI or API**.
+The native session still needs to own arming, intake and departure/recovery,
+pass its authoritative revision, enforce the original playback lifetime,
+restore/cancel audible previews and prevent ordinary vendor-state flushing
+from treating recorded movement as manual state. `parameterEditSource` supplies
+the retained editor's provider identity for creating those owners.
+
 ## Prepared checks
 
 `editor/Tests/RecordedGestureCaptureTests.inc` is included by the existing
@@ -137,6 +161,13 @@ There is no extra native build target.
   Replacement events are rejected by an earlier capture owner. Existing
   Windows/Mac vendor notification tests now check the paired source identity
   alongside original callback timestamps and audible delivery.
+- `windows/Tests/RecordedGestureCommitTests.inc` runs with the existing
+  `document-controller-live-recorded-publication` registration. It exercises the
+  actual Windows plugin history owner with two captured targets, real prepared
+  queue saturation/refusal, one Undo/Redo, no-op preservation of Redo, typed
+  untouched rows/opaque state, shared rendered PCM and native file save/reopen.
+  It supplies controlled events directly; it is not UI, vendor ingestion,
+  recovery or external API evidence.
 
 Only source inspection and `git diff --check` have run. Build and execute these
 checks with the pending clear/Undo/snapshot repairs in the next coordinated

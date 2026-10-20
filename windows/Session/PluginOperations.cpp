@@ -75,6 +75,55 @@ std::vector<PluginAudioBus> PluginOperations::audioBusMetadata(const std::string
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }
+PluginEditSource PluginOperations::parameterEditSource(const std::string &identity) {
+  return editor(slot({{"plugin",identity}})).editSource();
+}
+bool PluginOperations::commitRecordedGestures(std::span<RecordedGestureCapture *const> owners,
+    const std::string &revision,uint64_t playbackEpoch,bool acknowledgeLoss) {
+  need(!owners.empty()&&owners.size()<=RecordedGestureCapture::batchTargetCapacity,"Recorded gesture needs 1 to 128 targets");
+  const auto rack=projectPluginStates(project_);
+  const auto before=projectAbsoluteAutomation(project_);
+  struct Provider {PluginEditSource source;std::vector<PluginParameter> parameters;};
+  std::map<std::string,Provider> providers;
+  std::vector<RecordedGestureCapture::BatchInput> inputs;inputs.reserve(owners.size());
+  for(auto *owner:owners) {
+    need(owner&&owner->key().revision==revision&&owner->matchesBaseline(before),
+      "Recorded gesture belongs to another document revision or point baseline; input retained");
+    const auto &key=owner->key();
+    auto found=providers.find(key.plugin);
+    if(found==providers.end()) {
+      auto &provider=editor(slot({{"plugin",key.plugin}}));
+      auto catalog=provider.parameters();const auto source=provider.editSource();
+      found=providers.emplace(key.plugin,Provider{source,std::move(catalog)}).first;
+    }
+    owner->sourceLoss(found->second.source.dropped,found->second.source.incarnation);
+    inputs.push_back({owner,found->second.source.incarnation,found->second.parameters});
+  }
+  const auto candidate=RecordedGestureCapture::prepareBatch(inputs,revision,playbackEpoch,rack,document_.native(),acknowledgeLoss);
+  const auto documentRevision=document_.revision,pluginRevision=project_.pluginRevision;
+  RecordedGestureCapture::publishBatch(candidate,inputs,[&](const auto &points,bool changed) {
+    need(document_.revision==documentRevision&&project_.pluginRevision==pluginRevision,
+      "Song changed before recorded gesture publication; input retained");
+    if(!changed)return true;
+    // Overlay preserves original order. Keep every untouched typed JSON row
+    // verbatim; rebuilding all rows would normalize unrelated imported values.
+    auto next=project_.preserved.at("automation");
+    need(points.size()>=before.size(),"Recorded capture cannot erase existing points");
+    for(size_t i=0;i<points.size();++i) {
+      const auto &point=points[i];
+      if(i<before.size()) {
+        const auto &old=before[i];
+        need(point.slot==old.slot&&point.id==old.id&&point.frame==old.frame,"Recorded capture changed an existing target or time");
+        if(point.value!=old.value)next[i][2]=point.value;
+      } else next.push_back(Json::array({point.slot,point.id,point.value,point.frame}));
+    }
+    // commit stages the complete history and prepared audio publication before
+    // adoption. Queue refusal throws before any saved state or owner retirement.
+    commit(project_.preserved.at("plugins"),std::move(next),true);
+    return true;
+  });
+  return candidate.changed();
+}
 std::vector<std::string> PluginOperations::reads(){return {"graph.plugin.preview.get","plugin.parameters.preview.get","plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
 std::vector<std::string> PluginOperations::writes(){return {"graph.plugin.preview.set","graph.plugin.preview.commit","graph.plugin.preview.cancel","plugin.parameters.preview.set","plugin.parameters.preview.commit","plugin.parameters.preview.cancel","automation.replaceLane","automation.recorded.edit","automation.recorded.clear","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 void PluginOperations::prepareRecipe(Tracker::GraphPluginRecipe &recipe) {

@@ -721,6 +721,7 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "TimelineControllerTests.inc"
 #include "PatternTransformControllerTests.inc"
 #include "ModuleExportControllerTests.inc"
+#include "RecordedGestureCommitTests.inc"
 int main(int argc,char **argv) {
   try {
     if(argc==3 && std::string(argv[1])=="--module-export") {moduleExportControllerTests(std::filesystem::u8path(argv[2]));return 0;}
@@ -739,7 +740,7 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--sampling") {samplingOperationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-rack-publication") {liveRackPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-graph-publication") {liveGraphPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
-    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));recordedGestureCommitTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}

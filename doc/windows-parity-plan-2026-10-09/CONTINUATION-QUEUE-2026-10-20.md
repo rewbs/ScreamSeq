@@ -19,6 +19,12 @@ The same batch adds actual notification-provider incarnation/loss snapshots
 through `NativePlugin`, `PluginChain` and Mac `AudioDevice`, including preset
 replacement guards. Qualify the shared recorded target, both native notification
 targets and live rack/preset checks together; no build has run for this source.
+The Windows native completion entry point now joins the whole capture to the
+existing recorded-only publication/Undo path, preserving typed untouched rows
+and saved plugin bytes. Its controlled-input regression joins the existing live
+recorded-publication registration. UI/API ingestion and recovery are still
+outstanding; do not describe the internal completion method as a working
+Windows Record control.
 
 **All current CI jobs are terminal.** Intel matched Apple Silicon's 134 native/
 35 interface passes and the same exact `/plugins/0/state` Undo failure.

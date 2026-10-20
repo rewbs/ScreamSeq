@@ -149,7 +149,7 @@ private:
     for(const auto &id:rackIDs_)result+=id.capacity();
     return result;
   }
-  static bool sameBaseline(const std::vector<ParameterChange> &a,const std::vector<ParameterChange> &b) {
+  static bool sameBaseline(std::span<const ParameterChange> a,std::span<const ParameterChange> b) {
     return a.size()==b.size()&&std::equal(a.begin(),a.end(),b.begin(),[](const auto &x,const auto &y){
       return x.slot==y.slot&&x.id==y.id&&x.frame==y.frame&&std::bit_cast<uint32_t>(x.value)==std::bit_cast<uint32_t>(y.value);});
   }
@@ -183,6 +183,7 @@ public:
   RecordedGestureCapture(const RecordedGestureCapture &)=delete;
   RecordedGestureCapture &operator=(const RecordedGestureCapture &)=delete;
   const Key &key()const noexcept{return key_;}
+  bool matchesBaseline(std::span<const ParameterChange> points)const noexcept{return sameBaseline(*before_,points);}
   std::span<const Event> events()const noexcept{return events_;}
   bool retired()const noexcept{return retired_;}
   bool sealed()const noexcept{return endTime_.has_value();}
