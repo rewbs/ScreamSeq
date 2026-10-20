@@ -428,7 +428,11 @@
 		if(workspaceState.focus!="pattern"||!trackerWorkspaceVisible()) return false;
         if(key==VK_DIVIDE||key==VK_MULTIPLY){command(key==VK_DIVIDE?inputOctaveDownCommand:inputOctaveUpCommand);return true;}
         if(shift&&key==VK_OEM_2&&column>=3){openEffectEditor();return true;}
-        if(key==VK_DECIMAL){command(patternClearField);return true;}
+        if(key==VK_DECIMAL){
+            const auto effect=column>=3?view->effect(patternIndex,row,channel,(column-3)/2):std::nullopt;
+            if(column>=4&&column%2==0&&effect&&(effect->kind==Tracker::PatternCommandKind::NudgeForward||effect->kind==Tracker::PatternCommandKind::NudgeReverse))return enterEffect(key);
+            command(patternClearField);return true;
+        }
 		if(key==VK_F4&&!shift) {command(effectPickerCommand);return true;}
 		if(key==VK_RETURN) {if(workspaceState.focus=="pattern"&&column==1){command(inputInstrumentAtCursorCommand);return true;}if(beginPatternNudgeEdit())return true;if(workspaceState.focus=="pattern"&&column>=4&&column%2==0)openInlineEffect();else command(workspaceState.focus=="pattern"&&column>=3?effectsCommand:notesCommand);return true; }
         if(key==VK_INSERT) {command(patternInsertRows);return true;}

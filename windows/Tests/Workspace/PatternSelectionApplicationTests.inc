@@ -2,6 +2,13 @@ void applicationWholePatternSelection() {
   RestoreFixture fixture;auto &app=*fixture.app;
   app.command(patternCommand);auto cursor=app.position();cursor["row"]=8;cursor["channel"]=1;cursor["column"]=0;cursor["following"]=false;app.navigate(cursor);
   const auto before=songState(app),position=app.position();const auto firstRow=app.firstRow;const auto scroll=app.horizontalScroll;
+  SetFocus(app.window);
+  app.runWorkspaceShortcut(selectChannelCommand);
+  restoreCheck(app.selection()==RestoreJson{{"startRow",0},{"endRow",app.patternRows()-1},{"startChannel",1},{"endChannel",1}}&&app.position()==position&&songState(app)==before,
+    "Select channel changed cursor/song or selected another channel");
+  app.runWorkspaceShortcut(selectRowCommand);
+  restoreCheck(app.selection()==RestoreJson{{"startRow",8},{"endRow",8},{"startChannel",0},{"endChannel",app.view->channels-1}}&&app.position()==position&&songState(app)==before,
+    "Select row changed cursor/song or selected another row");
   app.runWorkspaceShortcut(selectAllFocusedCommand);
   const RestoreJson expected={{"startRow",0},{"endRow",app.patternRows()-1},{"startChannel",0},{"endChannel",app.view->channels-1}};
   restoreCheck(app.selection()==expected&&songState(app)==before&&app.position()==position&&app.firstRow==firstRow&&app.horizontalScroll==scroll,

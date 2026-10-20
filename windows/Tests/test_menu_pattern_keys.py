@@ -3,7 +3,6 @@ import ctypes
 from ctypes import wintypes as w
 import unittest
 import test_workspace_shortcuts as shortcuts
-from client import ApiError
 
 user = shortcuts.user
 user.GetMenu.argtypes = [w.HWND]
