@@ -1,4 +1,6 @@
 """Owned application loop controls; live case requires an actual WASAPI endpoint."""
+import ctypes
+from ctypes import wintypes
 import os
 import time
 import unittest
@@ -90,6 +92,13 @@ class TransportLoopTests(unittest.TestCase):
         self.assertEqual(self.read('workspace.get')['viewport'], viewport)
 
     def test_stopped_loop_guards_native_toggle_replay_and_history(self):
+        window = self.desktop.hwnd(self.pid)
+        workspace = self.read('workspace.get')
+        rect, scale = workspace['geometry']['pattern'], workspace['dpi'] / 96
+        x, y = round((rect['x'] + 44) * scale), round((rect['y'] + rect['headerHeight'] + 6) * scale)
+        self.desktop.send(window, 0x201, 1, x | (y << 16))
+        self.desktop.send(window, 0x202, 0, x | (y << 16))
+        self.assertEqual(self.desktop.focus(window), window)
         description = self.read('api.describe')
         self.assertIn('transport.loop', description['writes'])
         self.assertEqual(description['revisionGuards']['transport.loop'], ['expectedRevision'])
@@ -116,12 +125,34 @@ class TransportLoopTests(unittest.TestCase):
         command = next(c for c in commands if c['name'] == 'Playback / Toggle region or song loop')
         identifier = int(command['id'].rsplit('.', 1)[1])
         window = self.desktop.hwnd(self.pid)
-        control = private_desktop.user.GetDlgItem(window, identifier)
-        self.assertTrue(control)
-        self.assertTrue(private_desktop.user.IsWindowVisible(control))
-        self.assertTrue(private_desktop.user.IsWindowEnabled(control))
-        self.desktop.send(window, 0x111, identifier, control)
+        # Loop is now in the native Playback menu; the old duplicate sidebar
+        # button intentionally stays hidden. Exercise that real menu item and
+        # its guarded message dispatch instead of clicking a retired control.
+        user = private_desktop.user
+        user.GetMenu.argtypes = [wintypes.HWND]
+        user.GetMenu.restype = wintypes.HMENU
+        user.GetSubMenu.argtypes = [wintypes.HMENU, ctypes.c_int]
+        user.GetSubMenu.restype = wintypes.HMENU
+        user.GetMenuState.argtypes = [wintypes.HMENU, wintypes.UINT, wintypes.UINT]
+        user.GetMenuState.restype = wintypes.UINT
+        menu = user.GetMenu(window)
+        playback = user.GetSubMenu(menu, 3)
+        self.assertTrue(menu and playback)
+        self.desktop.send(window, 0x211, 0)  # WM_ENTERMENULOOP
+        self.desktop.send(window, 0x116, menu)  # WM_INITMENU
+        state = user.GetMenuState(playback, 32000 + identifier, 0)
+        self.assertNotEqual(state, 0xFFFFFFFF)
+        self.assertFalse(state & 3, 'Loop menu command is disabled')
+        self.assertFalse(state & 8, 'Loop menu check disagrees with transport')
+        self.desktop.send(window, 0x212, 0)  # WM_EXITMENULOOP
+        self.desktop.send(window, 0x111, 32000 + identifier)
         self.assertTrue(self.read('transport.get')['loop'])
+        # Native menu checks are refreshed when the menu opens, not by reading
+        # a closed HMENU immediately after its command has been dispatched.
+        self.desktop.send(window, 0x211, 0)
+        self.desktop.send(window, 0x116, menu)
+        self.assertTrue(user.GetMenuState(playback, 32000 + identifier, 0) & 8)
+        self.desktop.send(window, 0x212, 0)
         self.assertEqual(self.doc(), before)
         self.assertEqual(self.read('context.get'), context)
 
