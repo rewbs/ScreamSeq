@@ -96,5 +96,155 @@ static void recordedGestureCapture() {
   rejects([&]{(void)late.prepare(key.revision,7,9,rack,document.native(),catalog);});
   check(late.loss().unmapped==1&&late.prepare(key.revision,7,9,rack,document.native(),catalog,true).points()==before,
     "Cached mapping beyond final Stop bound became recorded music");
+  // A first notification can reach the worker only after normal Stop. Preserve
+  // its original arm/event times, but refuse a gesture armed after the stop.
+  RecordedGestureCapture delayed(key,shortened,rack,before,document.native(),catalog,2);
+  delayed.append({1,-9,1050},7,9);delayed.seal(1100);
+  check(delayed.prepare(key.revision,7,9,rack,document.native(),catalog).points()[0].value==-9,
+    "Late first target lost its retained pre-Stop clock");
+  auto postStopKey=key;postStopKey.startTime=1100;
+  rejects([&]{RecordedGestureCapture rejected(postStopKey,shortened,rack,before,document.native(),catalog,2);});
+
+  // Native coordinators retain a common immutable snapshot for all targets.
+  // These two independent vendor incarnations must publish one combined point
+  // set: individually preparing then committing snapshots would lose a sibling.
+  using Capture=RecordedGestureCapture;
+  const auto sharedBefore=std::make_shared<const std::vector<ParameterChange>>(before);
+  auto secondKey=key;secondKey.plugin="other-gain";secondKey.providerEpoch=19;
+  Capture firstTarget(key,clock,rack,sharedBefore,document.native(),catalog,2);
+  Capture secondTarget(secondKey,clock,rack,sharedBefore,document.native(),catalog,4);
+  firstTarget.append({1,-9,1050},7,9);secondTarget.append({1,-6,1100},7,19);
+  firstTarget.seal(1150);secondTarget.seal(1150);
+  std::array<Capture::BatchInput,2> inputs{{{&firstTarget,9,catalog},{&secondTarget,19,catalog}}};
+  auto combined=Capture::prepareBatch(inputs,key.revision,7,rack,document.native());
+  check(combined.targets()==2&&combined.changed()&&combined.points()==std::vector<ParameterChange>{{0,1,-9,240},{1,1,-3,120},{1,1,-6,480}},
+    "Multi-target preparation overwrote a sibling or original unrelated point");
+  unsigned admissions=0;
+  check(!Capture::publishBatch(combined,inputs,[&](const auto &,bool){++admissions;return false;}),
+    "Refused multi-target publication reported success");
+  rejects([&]{Capture::publishBatch(combined,inputs,[](const auto &,bool)->bool{throw std::runtime_error("Atomic fixture refusal");});});
+  check(admissions==1&&!firstTarget.retired()&&!secondTarget.retired()&&
+    firstTarget.events().size()==1&&secondTarget.events().size()==1,"Refusal lost one target");
+  auto missingMember=std::span<const Capture::BatchInput>(inputs).first(1);
+  rejects([&]{Capture::publishBatch(combined,missingMember,[](const auto &,bool){return true;});});
+  auto duplicateInputs=inputs;duplicateInputs[1]=duplicateInputs[0];
+  rejects([&]{(void)Capture::prepareBatch(duplicateInputs,key.revision,7,rack,document.native());});
+  rejects([&]{Capture::publishBatch(combined,duplicateInputs,[](const auto &,bool){return true;});});
+  auto staleProvider=inputs;staleProvider[1].providerEpoch=20;
+  rejects([&]{Capture::publishBatch(combined,staleProvider,[](const auto &,bool){return true;});});
+  secondTarget.append({1,-12,1100},7,19);called=false;
+  rejects([&]{Capture::publishBatch(combined,inputs,[&](const auto &,bool){called=true;return true;});});
+  check(!called&&!firstTarget.retired()&&!secondTarget.retired(),"Late sibling input partly published an old candidate");
+  combined=Capture::prepareBatch(inputs,key.revision,7,rack,document.native());
+  PluginChain combinedChain(rack,48000,true);
+  admissions=0;
+  check(Capture::publishBatch(combined,inputs,[&](const auto &points,bool changed){
+    ++admissions;check(changed,"Combined gesture lost its history flag");
+    return combinedChain.publishRecordedAutomation(combinedChain.prepareRecordedAutomation(points));
+  })&&admissions==1&&firstTarget.retired()&&secondTarget.retired(),"Gesture was not admitted and retired as one unit");
+  settled(combinedChain,-21);
+  rejects([&]{Capture::publishBatch(combined,inputs,[](const auto &,bool){return true;});});
+
+  Capture baselineOwner(key,clock,rack,sharedBefore,document.native(),catalog,2);baselineOwner.seal(1150);
+  const auto incompatible=[&](auto targetKey,auto targetClock,auto targetBefore) {
+    Capture target(targetKey,targetClock,rack,targetBefore,document.native(),catalog,4);target.seal(1150);
+    const std::array<Capture::BatchInput,2> group{{{&baselineOwner,9,catalog},{&target,targetKey.providerEpoch,catalog}}};
+    rejects([&]{(void)Capture::prepareBatch(group,key.revision,7,rack,document.native());});
+  };
+  auto separateKey=secondKey;separateKey.token="different-gesture";incompatible(separateKey,clock,sharedBefore);
+  auto separateClock=std::make_shared<RecordingFrameTimeline>();
+  check(separateClock->publish(1000,1200,0,960,48000,7),"Separate gesture clock fixture failed");
+  incompatible(secondKey,separateClock,sharedBefore);
+  auto changedBefore=before;changedBefore[0].value=-18;
+  incompatible(secondKey,clock,std::make_shared<const std::vector<ParameterChange>>(changedBefore));
+  incompatible(key,clock,sharedBefore); // Different owner, overlapping target.
+  const std::vector<Capture::BatchInput> tooMany(Capture::batchTargetCapacity+1,{&baselineOwner,9,catalog});
+  rejects([&]{(void)Capture::prepareBatch(tooMany,key.revision,7,rack,document.native());});
+
+  // Two legal individual additions can exceed the project-wide cap together.
+  std::vector<ParameterChange> almostFull;
+  for(size_t i=0;i<maximumRecordedPoints-1;++i)almostFull.push_back({0,1,-6,uint64_t(i)+2000});
+  const auto sharedFull=std::make_shared<const std::vector<ParameterChange>>(std::move(almostFull));
+  Capture capacityA(key,clock,rack,sharedFull,document.native(),catalog,2);
+  Capture capacityB(secondKey,clock,rack,sharedFull,document.native(),catalog,4);
+  capacityA.append({1,-9,1050},7,9);capacityB.append({1,-6,1050},7,19);
+  capacityA.seal(1150);capacityB.seal(1150);
+  check(capacityA.prepare(key.revision,7,9,rack,document.native(),catalog).points().size()==maximumRecordedPoints&&
+    capacityB.prepare(key.revision,7,19,rack,document.native(),catalog).points().size()==maximumRecordedPoints,
+    "Individual point-limit fixture was not independently legal");
+  const std::array<Capture::BatchInput,2> capacityInputs{{{&capacityA,9,catalog},{&capacityB,19,catalog}}};
+  rejects([&]{(void)Capture::prepareBatch(capacityInputs,key.revision,7,rack,document.native());});
+  check(!capacityA.retired()&&!capacityB.retired()&&sharedFull->size()==maximumRecordedPoints-1,
+    "Combined capacity refusal lost or mutated the original inputs");
+
+  // Provider-wide loss is one shared counter, not independent parameter loss.
+  const auto gainParameter=*std::find_if(catalog.begin(),catalog.end(),[](const auto &p){return p.id==1;});
+  std::vector<PluginParameter> multiCatalog{gainParameter};
+  auto extra=gainParameter;extra.id=2;multiCatalog.push_back(extra);
+  auto sameProviderKey=key;sameProviderKey.parameter=2;
+  Capture providerA(key,clock,rack,sharedBefore,document.native(),multiCatalog,2);
+  Capture providerB(sameProviderKey,clock,rack,sharedBefore,document.native(),multiCatalog,2);
+  providerA.seal(1150);providerB.seal(1150);providerA.sourceLoss(5,9);
+  const std::array<Capture::BatchInput,2> providerInputs{{{&providerA,9,multiCatalog},{&providerB,9,multiCatalog}}};
+  rejects([&]{(void)Capture::prepareBatch(providerInputs,key.revision,7,rack,document.native(),true);});
+  providerB.sourceLoss(5,9);
+  const auto reviewedBatch=Capture::prepareBatch(providerInputs,key.revision,7,rack,document.native(),true);
+  check(!reviewedBatch.changed()&&reviewedBatch.loss(0).source==3&&reviewedBatch.loss(1).source==3,
+    "Reviewed provider loss changed music or fabricated independent counters");
+
+  // Recycling native-owner storage must not revive an old candidate whose
+  // token, target and input version happen to match the replacement instance.
+  alignas(Capture) std::byte reusedStorage[sizeof(Capture)];
+  auto reused=std::construct_at(reinterpret_cast<Capture *>(reusedStorage),key,clock,rack,sharedBefore,document.native(),catalog,2);
+  reused->seal(1150);
+  std::array<Capture::BatchInput,1> reusedInputs{{{reused,9,catalog}}};
+  const auto obsolete=Capture::prepareBatch(reusedInputs,key.revision,7,rack,document.native());
+  std::destroy_at(reused);
+  reused=std::construct_at(reinterpret_cast<Capture *>(reusedStorage),key,clock,rack,sharedBefore,document.native(),catalog,2);
+  reusedInputs[0].owner=reused;
+  reused->seal(1150);called=false;
+  rejects([&]{Capture::publishBatch(obsolete,reusedInputs,[&](const auto &,bool){called=true;return true;});});
+  check(!called&&!reused->retired(),"Recycled owner storage revived an obsolete recording");
+  std::destroy_at(reused);
+
+  // Aggregate retained input is bounded even when each parameter's queue fits.
+  std::vector<PluginParameter> manyCatalog{gainParameter};
+  for(uint32_t id=2;id<=13;++id){auto parameter=gainParameter;parameter.id=id;manyCatalog.push_back(parameter);}
+  std::vector<std::unique_ptr<Capture>> manyOwners;
+  std::vector<Capture::BatchInput> manyInputs;
+  for(uint32_t id=1;id<=13;++id) {
+    auto targetKey=key;targetKey.parameter=id;
+    auto owner=std::make_unique<Capture>(targetKey,clock,rack,sharedBefore,document.native(),manyCatalog,2);
+    for(size_t event=0;event<Capture::eventCapacity;++event)owner->append({id,-6,1050},7,9);
+    owner->seal(1150);manyInputs.push_back({owner.get(),9,manyCatalog});manyOwners.push_back(std::move(owner));
+  }
+  rejects([&]{(void)Capture::prepareBatch(manyInputs,key.revision,7,rack,document.native());});
+  check(std::all_of(manyOwners.begin(),manyOwners.end(),[](const auto &owner){
+    return !owner->retired()&&owner->events().size()==Capture::eventCapacity&&!owner->loss().any();}),
+    "Aggregate budget refusal consumed individually valid input");
+
+  // Project identity is stable across processor replacement; capture-source
+  // identity is not. Preparing a replacement must not prematurely retire the
+  // active source, and the stable facade must report the adopted vendor.
+  NativePlugin facade(gain(),48000,true);
+  const auto originalProvider=facade.editSource();
+  check(originalProvider.incarnation&&!originalProvider.dropped,"Native notification source was not initialized");
+  PluginEdit emptyEvent;PluginEditSource emptySource;
+  check(!facade.popEdit(emptyEvent,emptySource)&&emptySource==originalProvider,"Empty native queue lost source identity");
+  NativePlugin replacement(facade.state(),48000,true);
+  check(replacement.editSource().incarnation!=originalProvider.incarnation&&replacement.state().instanceID==facade.state().instanceID,
+    "Independent processors with one project identity shared a notification incarnation");
+  check(replacement.parameter(1,-9),"Replacement fixture parameter rejected");
+  auto preparedPreset=facade.preparePreset(replacement.state(),true,{});
+  const auto preparedProvider=preparedPreset->vendor->editSource();
+  check(preparedProvider.incarnation!=originalProvider.incarnation&&facade.editSource()==originalProvider,
+    "Preset preparation replaced or reused the active notification source");
+  facade.adoptPreset(*preparedPreset);
+  check(facade.editSource()==preparedProvider&&!facade.popEdit(emptyEvent,emptySource)&&emptySource==preparedProvider,
+    "Stable facade attributed replacement notifications to its previous vendor");
+  auto actualProviderKey=key;actualProviderKey.providerEpoch=originalProvider.incarnation;
+  Capture sourceGuard(actualProviderKey,clock,rack,sharedBefore,document.native(),catalog,originalProvider.dropped);
+  rejects([&]{sourceGuard.append({1,-9,1050},7,facade.editSource().incarnation);});
+  check(sourceGuard.events().empty(),"A replacement provider contaminated an earlier captured gesture");
   check(before==std::vector<ParameterChange>{{0,1,-6,240},{1,1,-3,120}},"Capture preparation mutated the original music");
 }

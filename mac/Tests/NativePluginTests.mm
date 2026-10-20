@@ -293,8 +293,10 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         const auto beforeEdit=mach_absolute_time();
         [slider sendAction:slider.action to:slider.target];
         const auto afterEdit=mach_absolute_time();
-        PluginEdit edit;
-        check(plugin.popEdit(edit) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
+        const auto originalSource=plugin.editSource();
+        PluginEdit edit;PluginEditSource source;
+        check(plugin.popEdit(edit,source) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
+        check(originalSource.incarnation&&source==originalSource&&!source.dropped,"Custom editor notification lost its provider incarnation");
         check(beforeEdit&&edit.hostTime>=beforeEdit&&edit.hostTime<=afterEdit&&plugin.droppedEdits()==0,"Native facade retains custom editor callback time and loss count");
         // The controller gesture must reach audio without a main-window poll or forwarding call.
         buffer.fill(.2);

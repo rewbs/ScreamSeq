@@ -99,6 +99,10 @@ public:
   }
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
   bool popPluginEdit(size_t slot,PluginEdit &event) {return plugins_&&plugins_->popEdit(slot,event);}
+  bool popPluginEdit(size_t slot,PluginEdit &event,PluginEditSource &source) {
+    source={};return plugins_&&plugins_->popEdit(slot,event,source);
+  }
+  PluginEditSource pluginEditSource(size_t slot) const noexcept {return plugins_?plugins_->editSource(slot):PluginEditSource{};}
   uint64_t droppedPluginEdits(size_t slot) const noexcept {return plugins_?plugins_->droppedEdits(slot):0;}
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
   NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}

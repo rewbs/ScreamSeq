@@ -34,14 +34,19 @@ int main(int argc,char **argv){try{
   auto send=[&](double value){int accepted=-1;WindowsVST3::pluginMainCall([&]{accepted=gesture(value);});return accepted;};
   {
     PluginChain chain({state},48000,true);
+    const auto originalSource=chain.editSource(0);
+    check(originalSource.incarnation&&!originalSource.dropped&&!chain.editSource(1).incarnation,
+      "Rack notification source needs a real incarnation and invalid-slot sentinel");
     const auto before=ScreamSeq::hostTime100ns();
     check(send(.375)==1,"Fixture gesture accepted");
     const auto after=ScreamSeq::hostTime100ns();
     Sleep(2);const auto drain=ScreamSeq::hostTime100ns();
-    PluginEdit event;
-    check(chain.popEdit(0,event)&&event.id==7&&event.value==.375f,"Rack facade preserves accepted value");
+    PluginEdit event;PluginEditSource source;
+    check(chain.popEdit(0,event,source)&&event.id==7&&event.value==.375f,"Rack facade preserves accepted value");
+    check(source==originalSource,"Timestamped drain lost its actual notification provider");
     check(before&&event.hostTime>=before&&event.hostTime<=after&&event.hostTime<drain,"Rack facade preserves original callback time across delayed drain");
-    check(!chain.popEdit(0,event)&&!chain.popEdit(1,event),"Notification consumed exactly once");
+    check(!chain.popEdit(0,event,source)&&source==originalSource,"Empty queue changed its provider or consumed an event twice");
+    check(!chain.popEdit(1,event,source)&&!source.incarnation,"Missing slot retained another slot's provider identity");
     check(chain.droppedEdits(0)==0,"Ordinary notification is not reported lost");
     std::array<float,256> pcm;pcm.fill(1);
     beginAudit();const auto okay=chain.process(pcm.data(),128);endAudit(okay);

@@ -162,6 +162,8 @@ struct GraphControlPlan {
 };
 class NativePlugin {
   static constexpr uint32_t maximumFrames = 4096;
+  static uint64_t nextEditIncarnation();
+  const uint64_t editIncarnation_=nextEditIncarnation(); // Allocated off audio at construction.
   std::atomic<double> latency_{0};
   std::atomic<double> tail_{0};
   PluginDescriptor descriptor_;
@@ -334,6 +336,8 @@ public:
   }
   bool popEdit(uint32_t &, float &) noexcept;
   bool popEdit(PluginEdit &) noexcept;
+  bool popEdit(PluginEdit &,PluginEditSource &) noexcept;
+  PluginEditSource editSource() const noexcept;
   uint64_t droppedEdits() const noexcept;
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };
@@ -644,6 +648,8 @@ public:
   std::vector<size_t> openEditors() const;
   bool popEdit(size_t slot, uint32_t &, float &) noexcept;
   bool popEdit(size_t slot, PluginEdit &) noexcept;
+  bool popEdit(size_t slot,PluginEdit &,PluginEditSource &) noexcept;
+  PluginEditSource editSource(size_t slot) const noexcept;
   uint64_t droppedEdits(size_t slot) const noexcept;
   bool parameter(uint32_t slot, uint32_t id, float value) noexcept;
   // Single control producer. One release publishes the complete batch, or no

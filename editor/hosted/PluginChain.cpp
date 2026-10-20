@@ -664,14 +664,23 @@ bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
   PluginEdit event;if(!popEdit(slot,event))return false;id=event.id;value=event.value;return true;
 }
 bool PluginChain::popEdit(size_t slot, PluginEdit &event) noexcept {
+  PluginEditSource source;return popEdit(slot,event,source);
+}
+bool PluginChain::popEdit(size_t slot,PluginEdit &event,PluginEditSource &source) noexcept {
+  source={};
+  if(slot>=rack_.size())return false;
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
-  if(w-r==queue_.size()||slot >= rack_.size() || !rack_[slot]->plugin->popEdit(event))return false;
+  if(w-r==queue_.size()){source=rack_[slot]->plugin->editSource();return false;}
+  if(!rack_[slot]->plugin->popEdit(event,source))return false;
   const auto id=event.id;const auto value=event.value;
   auto &entry=*rack_[slot];
   queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity};write_.store(w+1,std::memory_order_release);
   for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id){entry.parameters[n].value=value;entry.previewed[n]=false;}
   for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==id)p.value=value;
   return true;
+}
+PluginEditSource PluginChain::editSource(size_t slot) const noexcept {
+  return slot<rack_.size()?rack_[slot]->plugin->editSource():PluginEditSource{};
 }
 uint64_t PluginChain::droppedEdits(size_t slot) const noexcept {
   return slot<rack_.size()?rack_[slot]->plugin->droppedEdits():0;

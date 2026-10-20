@@ -10,9 +10,15 @@ must not override current source or the active goal.
 
 **New capture source, unbuilt:** [shared gesture owner](RECORDED-GESTURE-OWNER-2026-10-20.md)
 retains original timestamps, pending clock coverage, epoch/revision/target guards,
-loss accounting and atomic point candidates. Its regression checks join the
-existing shared recorded-automation target. Native adapters, multi-target vendor
-coordination, API/recovery and Record controls remain incomplete.
+loss accounting and atomic multi-target point candidates. Several parameters now
+share one before-state and one publication, with combined point/input/storage
+limits and all-or-none retirement. Its regression checks join the existing shared
+recorded-automation target. Native ingestion/grouping, API/recovery and Record
+controls remain incomplete.
+The same batch adds actual notification-provider incarnation/loss snapshots
+through `NativePlugin`, `PluginChain` and Mac `AudioDevice`, including preset
+replacement guards. Qualify the shared recorded target, both native notification
+targets and live rack/preset checks together; no build has run for this source.
 
 **All current CI jobs are terminal.** Intel matched Apple Silicon's 134 native/
 35 interface passes and the same exact `/plugins/0/state` Undo failure.
@@ -24,8 +30,8 @@ Do not poll/restart those completed jobs. Next build remains **11:48 UTC**.
 on the unchanged CI binary under Windows ARM64 emulation, using silent output
 and never-switched private desktops. No skips, errors or build; 23.328 seconds.
 This is additional bounded evidence, not a retroactive CI pass. Intel's build
-finished at **10:47:45 UTC** and its test job remains active. Next coordinated
-build **not before 11:48 UTC**; poll job `118569881392` without restarting it.
+finished at **10:47:45 UTC** and its test job is terminal. Next coordinated
+build **not before 11:48 UTC**; do not poll or restart job `118569881392`.
 
 **Latest CI review and prepared repair:** [clock/recovery CI review](CLOCK-CI-REVIEW-2026-10-20.md).
 Windows x64 passed its build, 156/157 portable/worker registrations, all 48 native

@@ -7,6 +7,13 @@
 #include <cmath>
 #include <stdexcept>
 namespace Tracker {
+uint64_t NativePlugin::nextEditIncarnation() {
+  static std::atomic<uint64_t> next{1};
+  auto value=next.load(std::memory_order_relaxed);
+  do {if(value==UINT64_MAX)throw std::overflow_error("Plugin edit incarnation exhausted");}
+  while(!next.compare_exchange_weak(value,value+1,std::memory_order_relaxed));
+  return value;
+}
 std::vector<PluginDescriptor> NativePlugin::builtins() {
   std::vector<PluginDescriptor> result;
   for (const auto &effect : nativeEffects()) {
@@ -209,5 +216,15 @@ void NativePlugin::closeEditor() {auto *p=publishedVendor();if(p->backend_)p->ba
 bool NativePlugin::editorOpen() const {const auto *p=publishedVendor();return p->backend_&&p->backend_->editorOpen();}
 bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept {auto *p=publishedVendor();return p->backend_&&p->backend_->popEdit(id,value);}
 bool NativePlugin::popEdit(PluginEdit &event) noexcept {auto *p=publishedVendor();return p->backend_&&p->backend_->popEdit(event);}
+bool NativePlugin::popEdit(PluginEdit &event,PluginEditSource &source) noexcept {
+  auto *p=publishedVendor();
+  const bool found=p->backend_&&p->backend_->popEdit(event);
+  source={p->editIncarnation_,p->backend_?p->backend_->droppedEdits():0};
+  return found;
+}
+PluginEditSource NativePlugin::editSource() const noexcept {
+  const auto *p=publishedVendor();
+  return {p->editIncarnation_,p->backend_?p->backend_->droppedEdits():0};
+}
 uint64_t NativePlugin::droppedEdits() const noexcept {const auto *p=publishedVendor();return p->backend_?p->backend_->droppedEdits():0;}
 } // namespace Tracker
