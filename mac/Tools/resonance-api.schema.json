@@ -2909,6 +2909,10 @@
               "maximum": 63,
               "description": "Final zero-based rack slot. Intervening items retain relative order."
             },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate the move without changing rack order, parameter previews or history."
+            },
             "plugin": {
               "type": "string",
               "minLength": 1,

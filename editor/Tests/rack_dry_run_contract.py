@@ -16,6 +16,9 @@ def rack_dry_run_contract(client, directory, expect_error):
 
     gain = next(p for p in read('plugin.discover', format='Built-in')
                 if p['classID'] == 'resonance.gainer.v1')
+    # Two processors make both a real permutation and either edge no-op
+    # reproducible even when the caller begins with an empty rack.
+    write('plugin.add', descriptor=gain)
     write('plugin.add', descriptor=gain)
     plugin = doc()['data']['nativePlugins'][-1]['instanceID']
     slot = len(doc()['data']['nativePlugins']) - 1
@@ -52,6 +55,22 @@ def rack_dry_run_contract(client, directory, expect_error):
         assert not reply['changed'] and not reply['playbackStopped']
         assert reply['data'] == dict(wouldChange=changed, dryRun=True)
         unchanged()
+    for fields, changed in ((dict(position=0), True), (dict(direction=-1), True),
+                            (dict(position=slot), False), (dict(direction=1), False)):
+        reply = write('plugin.move', plugin=plugin, dryRun=True, **fields)
+        assert not reply['changed'] and not reply['playbackStopped']
+        assert reply['data'] == dict(wouldChange=changed, dryRun=True)
+        unchanged()
+    for fields in (dict(position=True), dict(position=-1), dict(position=slot+1),
+                   dict(position=.5), dict(direction=0), dict(direction=True),
+                   dict(direction=-1, position=0), dict(), dict(position=0, unexpected=True)):
+        expect_error(-32602, lambda fields=fields: write('plugin.move', plugin=plugin, dryRun=True, **fields))
+        unchanged()
+    expect_error(-32602, lambda: write('plugin.move', plugin=plugin, position=0, dryRun=1))
+    expect_error(-32602, lambda: write('plugin.move', plugin='missing', position=0, dryRun=True))
+    expect_error(-32001, lambda: client.call('plugin.move',
+        dict(plugin=plugin, position=0, dryRun=True, expectedRevision='stale')))
+    unchanged()
     for fields in (
             dict(values=[]), dict(values=[dict(id=1, value=True)]),
             dict(values=[dict(id=1, value=-9), dict(id=1, value=-3)]),
@@ -74,6 +93,9 @@ def rack_dry_run_contract(client, directory, expect_error):
     assert owner['active'] and not owner['audible']
     parameters(-9, dryRun=True)
     write('plugin.bypass', plugin=plugin, bypass=True, dryRun=True)
+    write('plugin.move', plugin=plugin, position=0, dryRun=True)
+    write('plugin.move', plugin=plugin, direction=1, dryRun=True)
+    expect_error(-32602, lambda: write('plugin.move', plugin=plugin, position=slot+1, dryRun=True))
     expect_error(-32602, lambda: parameters(1000, dryRun=True))
     assert read('plugin.parameters.preview.get') == owner, 'Dry run cancelled or replaced preview ownership'
     unchanged()
@@ -89,4 +111,13 @@ def rack_dry_run_contract(client, directory, expect_error):
     write('plugin.bypass', plugin=plugin, bypass=True)
     write('history.undo')
     assert state() == changed, 'Real bypass edit no longer undoes independently'
-    print('PASS rack dry runs: atomic validation, exact state/save, preview isolation, Redo and real-edit history')
+    before_move = saved('rack-dry-run-move-before')
+    before_ids = [p['instanceID'] for p in doc()['data']['nativePlugins']]
+    write('plugin.move', plugin=plugin, position=0)
+    assert [p['instanceID'] for p in doc()['data']['nativePlugins']] == [plugin] + before_ids[:-1]
+    after_move = saved('rack-dry-run-move-after')
+    write('history.undo')
+    assert saved('rack-dry-run-move-undone') == before_move, 'Real move did not Undo exactly in one step'
+    write('history.redo')
+    assert saved('rack-dry-run-move-redone') == after_move, 'Real move did not Redo exactly in one step'
+    print('PASS rack dry runs: parameters/bypass/move, atomic validation, exact state/save, preview isolation, Redo and real-edit history')

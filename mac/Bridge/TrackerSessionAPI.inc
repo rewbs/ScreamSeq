@@ -223,6 +223,7 @@
           @"units":@"Whole ticks 0..65535; values 0..64, rounded to integers. Linear segments only; source-format point limits apply.",
           @"anchors":@"Loop/sustain/release markers follow retained nodes. Replaced nodes select the nearest resulting tick, earlier on ties; previews report reattachments.",
           @"history":@"Preview/no-op preserves transport, revision and Redo. Apply stops playback and makes one document Undo. Optional RSENVS1 snapshot corrections retain envelope losses in native projects."},
+        @"pluginRack": @"plugin.move accepts exactly one stable plugin or slot, and direction (+/-1) or absolute position. dryRun validates without changing rack order, parameter previews or history; wouldChange is false at an outward edge or the current position. Real moves retain plugin identities and remap indexed recorded automation in one Undo.",
         @"pluginInstruments": @{@"channels": @16, @"maxAssignments": @255,
           @"identity": @"Stable plugin instance ID; each tracker instrument has one owner. Assignments share one processor, plugin state, automation and output routing.",
           @"history": @"Replacement uses unified Undo; unsupported active instrument-adapter changes reject without stopping playback. Preview and no-op leave song/transport unchanged. Instrument aliases/non-default MIDI channels require native project v5; ordinary single-channel projects remain v4."},
@@ -1280,12 +1281,18 @@
       succeeded([self removePlugins:ids sources:sources dryRun:dry error:&problem],problem);
       result=@{@"wouldChange":@YES,@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.move"]) {
-      allowed(@[ @"slot", @"plugin", @"direction", @"position" ]);
+      allowed(@[ @"slot", @"plugin", @"direction", @"position", @"dryRun" ]);
       const auto slot = pluginSlot();
       require(bool(p[@"direction"]) != bool(p[@"position"]), "Supply direction or position");
       const auto direction = p[@"position"] ? NSInteger(integer(p[@"position"], 0, _plugins.size()-1)) - NSInteger(slot) : NSInteger(number(p[@"direction"], -1, 1));
       if (!p[@"position"]) require(direction == -1 || direction == 1, "Direction must be -1 or 1");
-      succeeded([self movePlugin:slot direction:direction error:&problem], problem);
+      const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      const auto target=NSInteger(slot)+direction;
+      const bool changed=target>=0 && target<NSInteger(_plugins.size()) && target!=NSInteger(slot);
+      // A dry run validates the requested permutation without flushing manual
+      // parameters, querying vendor state or publishing a rack/history edit.
+      if(!dry && changed)succeeded([self movePlugin:slot direction:direction error:&problem], problem);
+      result=@{@"wouldChange":@(changed),@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.bypass"]) {
       allowed(@[ @"slot", @"plugin", @"bypass", @"dryRun" ]);
       const auto slot=pluginSlot();const bool bypass=boolean(p[@"bypass"]);

@@ -57,6 +57,11 @@ is retained under
 for exchange. Both native workflows request the check. No new build ran; Mac
 execution and the reciprocal return journey remain pending.
 
+The subsequent [rack dry-run follow-up](RACK-DRY-RUN-2026-10-20.md)
+also prepares Mac `plugin.move` validation parity. The expanded shared contract
+passes on retained Windows B3; Mac native/socket assertions and schema are
+updated but still need Mac execution. This did not require a product build.
+
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context
 case passed, and five subsequent keyboard/browser cases passed. See

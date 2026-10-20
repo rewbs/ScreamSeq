@@ -75,3 +75,35 @@ cross-platform build opportunity, compile the new Mac adapter/tests with the
 earlier shared preview changes, execute parameter-activity plus the shared
 contract, and capture updated API observations. Broaden on any state/history
 change, queue publication, preview cancellation or native API mismatch.
+
+## Rack move follow-up, 20 October 06:23 UTC
+
+Current-source review found the same missing flag on Mac `plugin.move`.
+Windows already validates direction/position dry runs. The Mac dispatcher now
+accepts strict boolean `dryRun`, validates the target and reports `wouldChange`
+without calling `movePlugin`, flushing manual parameters, querying vendor state
+or publishing history. Current-position and outward-edge moves report no change.
+Real changed moves retain the existing shared `RackMove` and native publication
+path. Actual playback admission is not reserved by validation.
+
+The shared contract now starts with two processors and covers valid changed and
+no-op moves, invalid types/bounds/identity/fields, stale revision, active
+parameter-preview preservation, exact saved tree, the existing Redo branch and
+one-step exact Undo/Redo of a subsequent real move. Mac's existing
+`sessionRackDryRuns` also has direct bridge assertions. `api.describe`, the
+public guide and schema document the flag. Schema fingerprint is now
+`ab3d6701fee0096d00656d27411aa59f162c979ddfbb4cae42614a4c9c30a787`.
+
+The expanded Windows actual-PID case passed in **2.377 seconds** using retained
+B3 source `b3fe23e45a14763c1f34fe602f8340a49385e93a`, executable SHA-256
+`636657a5c4fad99673ca0f28c5f1e0185b30f4828af0e5b1e31e83b672e08297`.
+`bin/rack-move-dry-run-20261020/receipt.json` and `windows.log` retain identity,
+contract hash and results. Thirty complete-schema checks passed with
+`jsonschema 4.25.1`; `schema-checks.json` retains each request/expectation.
+The dependency was installed as wheels into ignored `bin/schema-tools-jsonschema`;
+no product build ran. The private QA process exited and the binary stayed unchanged.
+
+**Mac adapter and native/socket changes remain uncompiled/unexecuted.**
+No conformance observation was changed to claim success. This small API
+correction joins the pending Mac batch; it does not reopen unchanged Windows
+DSP or require another Windows build by itself.

@@ -163,7 +163,8 @@ static void sessionRackDryRuns() {
     if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
     return reply[@"data"];
   };
-  call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  for(int i=0;i<2;++i)
+    call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
   NSString *plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
   auto parameters=[&](double value,bool dry){return call(@"plugin.parameters.set",
     @{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(value)}],@"dryRun":@(dry)},true);};
@@ -177,12 +178,24 @@ static void sessionRackDryRuns() {
     "Changed bypass dry run reported no change");
   check(![call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@NO,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
     "No-op bypass dry run reported a change");
+  NSData *beforeMove=session.serializedData;
+  check([call(@"plugin.move",@{@"plugin":plugin,@"position":@1,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "Changed rack move dry run reported no change");
+  for(NSDictionary *fields in @[@{@"position":@0},@{@"direction":@(-1)}]) {
+    NSMutableDictionary *p=[fields mutableCopy];p[@"plugin"]=plugin;p[@"dryRun"]=@YES;
+    check(![call(@"plugin.move",p,true)[@"wouldChange"] boolValue],"Rack edge/current-position dry run reported a change");
+  }
+  check([beforeMove isEqual:session.serializedData],"Rack move dry run changed serialized project state");
   check([revision isEqual:session.automationRevision]&&[state() isEqual:original],"Dry run changed revision or opaque state");
   NSDictionary *key=@{@"plugin":plugin,@"parameter":@1,@"gesture":@"native-rack-dry-run"};
   auto preview=[key mutableCopy];preview[@"value"]=@(-18);call(@"plugin.parameters.preview.set",preview,true);
   NSDictionary *owner=call(@"plugin.parameters.preview.get",@{});
   check([owner[@"active"] boolValue],"Dry-run fixture preview missing");
   parameters(-9,true);call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@YES},true);
+  call(@"plugin.move",@{@"plugin":plugin,@"position":@1,@"dryRun":@YES},true);
+  check(![session automationMethod:@"plugin.move"
+    params:@{@"plugin":plugin,@"position":@2,@"dryRun":@YES,@"expectedRevision":session.automationRevision} error:&error]&&error.code==-32602,
+    "Out-of-range dry-run rack move accepted");
   NSDictionary *bad=@{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(-9)},@{@"id":@1,@"value":@(-3)}],
     @"dryRun":@YES,@"expectedRevision":session.automationRevision};
   check(![session automationMethod:@"plugin.parameters.set" params:bad error:&error]&&error.code==-32602,
@@ -196,6 +209,12 @@ static void sessionRackDryRuns() {
   check([session historyUndo:YES error:&error]&&[state() isEqual:changed],"Real parameter edit did not redo");
   call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@NO},true);
   check([session historyUndo:NO error:&error]&&[state() isEqual:changed],"Real bypass edit did not undo independently");
+  beforeMove=session.serializedData;
+  call(@"plugin.move",@{@"plugin":plugin,@"position":@1},true);
+  check([[session snapshot:0][@"nativePlugins"][1][@"instanceID"] isEqual:plugin],"Real move lost plugin identity");
+  NSData *afterMove=session.serializedData;
+  check([session historyUndo:NO error:&error]&&[beforeMove isEqual:session.serializedData],"Real move did not Undo exact state once");
+  check([session historyUndo:YES error:&error]&&[afterMove isEqual:session.serializedData],"Real move did not Redo exact state once");
   [session shutdown];
 }
 int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();sessionRecipePreview();sessionRackDryRuns();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, rack/recipe preview history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

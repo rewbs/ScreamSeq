@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "6b5ae853d5d5c3940f3942c5353f6c8b6c10a2877f6f2431b072b03fbdec4e8c",
+    "sha256": "ab3d6701fee0096d00656d27411aa59f162c979ddfbb4cae42614a4c9c30a787",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -898,7 +898,7 @@
       "id": "API-PLUGIN-POSITION",
       "phase": "P4b",
       "status": "implemented-pending-qualification",
-      "finding": "Windows plugin.move accepts direction and dryRun; Mac also supports absolute position. Source prepared on codex/plugin-edit-parity at dc18fa8d3; changed vector expectations are not native passes. See PLUGIN-EDIT-BATCH-2026-10-19.md.",
+      "finding": "Current Windows and Mac source support absolute position and direction. Windows B3 actual-app checks qualify position/history/persistence and move dry runs; Mac now has move dry-run source and native/socket assertions prepared but uncompiled. See PLUGIN-EDIT-BATCH-2026-10-19.md and RACK-DRY-RUN-2026-10-20.md. Retained observation baselines are not updated as proof of Mac execution.",
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
@@ -907,8 +907,8 @@
     {
       "id": "API-PLUGIN-DRY-RUN",
       "phase": "P4b",
-      "status": "unresolved",
-      "finding": "Windows plugin parameter/bypass writes accept dryRun while Mac rejects that field. Add consistent preparation semantics rather than removing Windows validation.",
+      "status": "implemented-pending-qualification",
+      "finding": "Windows B3 actual-app checks pass dry-run parameter, bypass and rack-move preservation, including active preview ownership, exact saved state and Redo. Mac source now accepts all three flags using validation without publication; native and shared socket assertions await Mac compilation/execution. See RACK-DRY-RUN-2026-10-20.md. Old observation baselines remain unchanged.",
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
