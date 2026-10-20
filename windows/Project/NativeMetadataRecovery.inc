@@ -1,5 +1,6 @@
 // Tolerant file import is deliberately separate from the strict API/encoder.
 Tracker::NativeSong recoverNativeMetadata(Json &metadata,const Tracker::Document &snapshot,Tracker::ProjectLoadRecovery &report) {
+  const MetadataIntegerImportScope integerRepresentations;
   Tracker::NativeSong snapshotNative;snapshotNative.reconcile(snapshot.song());
   const auto base=encodeNativeMetadata(snapshotNative);
   auto decode=[&](const Json &tree){auto model=decodeNativeMetadata(tree);model.validate(snapshot.song());return model;};
