@@ -1874,7 +1874,7 @@ Document, plugin, recorded automation and routing edits share chronological Undo
 
 `plugin.add` accepts optional `target` (stable mixer bus ID) for an effect: adding the processor and routing it to the bus is one Undo action. Optional `before` inserts before that stable plugin instance on the target bus; optional `position:{x,y}` saves its graph position in the same transaction. For blank-canvas placement, use `detached:true` and optional `position`; this is exclusive with `target`, `before` and `parent`. The saved `mixer.detached` list holds these effect identities, distinct from unassigned legacy rack effects that retain their Master fallback. `mixer.inserts.move` accepts one detached effect, assigns it to the specified bus and clears its detached marker in the same Undo transaction. Removal also clears the marker. Returning to implicit routing with `mixer.enable {enabled:false}` preserves it. Omit `target` and `detached` for instruments.
 
-`graph.node.add` accepts `insertEdge` (exact index in definition.audio, mutually exclusive with `insertAfter`) and preserves the original source tap, destination port and gain while inserting the new effect. `plugin.move` accepts exactly one of `direction` (±1) or `position` (final zero-based slot); arbitrary moves preserve other processors’ relative order.
+`graph.node.add` accepts `insertEdge` (exact index in definition.audio, mutually exclusive with `insertAfter`) and preserves the original source tap, destination port and gain while inserting the new effect. `plugin.move` accepts exactly one of `direction` (±1) or `position` (final zero-based slot); arbitrary moves preserve other processors’ relative order. Supply exactly one `plugin` stable instance identity or `slot`. Recorded automation follows the same shared rack permutation; stable routes and opaque plugin state are retained.
 
 `mixer.get {includeImplicit:true}` and `graph.get {includeImplicitMixer:true}` expose default channel → Master routing without modifying the document. The first routing edit creates that topology in the same Undo step. There is no UI enable prerequisite; explicit `mixer.enable` remains available to agents.
 
@@ -2213,7 +2213,8 @@ Undo/Redo follows the same preparation and publication rules.
 Use a fresh token for each drag, exactly one stable parameter, and no bus changes.
 Consecutive accepted edits with the same graph/node/parameter/token coalesce into
 one chronological Undo. Any intervening edit, Undo branch, document replacement,
-or different target starts a new entry; every accepted value still advances the
+or different target starts a new entry; reusing a token after Undo/Redo cannot
+merge back into its earlier entry. Every accepted value still advances the
 revision. Failed publication preserves the original history entry. Omitting the
 token retains independent transactions. The shared-plugin sidebar uses this path.
 

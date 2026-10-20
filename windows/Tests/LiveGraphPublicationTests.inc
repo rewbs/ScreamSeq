@@ -17,6 +17,13 @@ void liveGraphPublicationTests(const std::filesystem::path &directory) {
   need(rejected&&c.view()==before&&active&&stops==stopped&&value()==-3,"Full graph queue changed model/history/transport");
   render();invoke(c,"history.undo");need(value()==-6&&active&&stops==stopped,"Graph Undo lost baseline or stopped playback");render();
   invoke(c,"history.redo");need(value()==-3&&active&&stops==stopped,"Graph Redo lost baseline or stopped playback");render();
+  auto gesture=[&](double gain){return invoke(c,"graph.plugin.set",{{"graph",graph},{"node",node},{"gesture","live-drag"},{"parameters",Json::array({{{"id",1},{"value",gain}}})}});};
+  gesture(-9);gesture(-12);gesture(-15);const auto grouped=c.view();rejected=false;
+  try{gesture(-18);}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  need(rejected&&c.view()==grouped&&active&&stops==stopped&&value()==-15,"Refused gesture changed saved state, transport or history");
+  render();invoke(c,"history.undo");need(value()==-3&&active&&stops==stopped,"Grouped live drag did not restore its exact starting value in one Undo");render();
+  invoke(c,"history.redo");need(value()==-15,"Grouped drag Redo included a refused preview");render();
+  gesture(-21);render();invoke(c,"history.undo");need(value()==-15,"Reused gesture token merged across Undo/Redo");render();
   invoke(c,"graph.plugin.bypass",{{"graph",graph},{"node",node},{"bypass",true}});render();
   need(call(c,"graph.plugin.get",{{"graph",graph},{"node",node}}).at("bypass")==true&&active&&stops==stopped,"Recipe bypass was not published live");
   const auto bypassed=c.view();rejected=false;

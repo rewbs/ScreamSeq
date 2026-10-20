@@ -34,6 +34,7 @@
         const bool localText=text&&(focusedEdit||id==undoCommand||id==redoCommand);
         if(preparingWorkspaceLayout||documentDrafts.departing()||(!localText&&(busy||recoveryRestoring)))refuse(L"Finish the current document operation first");
         if((id==pluginAutomate||id==pluginActivity)&&!hasPluginParameterTarget())refuse(L"Select an available plugin parameter in the rack first");
+        if(id==pluginMove&&(selectedPluginSlot()<0||listedPlugins.size()<2||pluginDraft||pluginPresetPending))refuse(L"Select a plugin in a rack with multiple entries and finish its current edit first");
         // USER32 captures this owner while tracking the native menu. That is
         // not an editor drag; retain the guard for real drags and other capture.
         const auto capture=GetCapture();GUITHREADINFO gui{sizeof(gui)};

@@ -1484,11 +1484,23 @@
             {
               "if": {
                 "properties": {
-                  "operation": { "const": "move" }
+                  "operation": {
+                    "const": "move"
+                  }
                 }
               },
-              "then": { "required": ["destination"] },
-              "else": { "not": { "required": ["destination"] } }
+              "then": {
+                "required": [
+                  "destination"
+                ]
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "destination"
+                  ]
+                }
+              }
             }
           ],
           "required": [
@@ -2896,33 +2908,66 @@
               "minimum": 0,
               "maximum": 63,
               "description": "Final zero-based rack slot. Intervening items retain relative order."
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Stable instance identity; supply exactly one of plugin or slot."
             }
           },
           "required": [
-            "slot",
             "expectedRevision"
           ],
           "additionalProperties": false,
-          "oneOf": [
+          "allOf": [
             {
-              "required": [
-                "direction"
-              ],
-              "not": {
-                "required": [
-                  "position"
-                ]
-              }
+              "oneOf": [
+                {
+                  "required": [
+                    "direction"
+                  ],
+                  "not": {
+                    "required": [
+                      "position"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "position"
+                  ],
+                  "not": {
+                    "required": [
+                      "direction"
+                    ]
+                  }
+                }
+              ]
             },
             {
-              "required": [
-                "position"
-              ],
-              "not": {
-                "required": [
-                  "direction"
-                ]
-              }
+              "oneOf": [
+                {
+                  "required": [
+                    "slot"
+                  ],
+                  "not": {
+                    "required": [
+                      "plugin"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "plugin"
+                  ],
+                  "not": {
+                    "required": [
+                      "slot"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         }

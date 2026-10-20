@@ -1,3 +1,27 @@
+void applicationPluginRackPosition() {
+    RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
+    const auto first=addRestoreGain(app),second=addRestoreGain(app),third=addRestoreGain(app);
+    app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.selectedPlugin=first;
+    app.refreshPluginDetails();app.layoutControls();
+    const auto original=app.view->session.document.at("nativePlugins");const auto target=app.capturePluginMove();
+    restoreCheck(IsWindowVisible(app.controls.at(pluginMove))&&IsWindowEnabled(app.controls.at(pluginMove))&&app.menuCommandState(pluginMove).enabled,"Rack position action is not discoverable or enabled");
+    app.movePluginTo(target,2);app.layoutControls();
+    restoreCheck(app.selectedPlugin==first&&app.selectedPluginSlot()==2,"Moving a plugin lost its stable inspector selection");
+    const auto &rack=app.view->session.document.at("nativePlugins");
+    restoreCheck(rack[0].at("instanceID")==second&&rack[1].at("instanceID")==third&&rack[2].at("instanceID")==first,"Position action swapped endpoints instead of preserving intervening order");
+    app.edit("history.undo",RestoreJson::object());restoreCheck(app.view->session.document.at("nativePlugins")==original,"Rack position action is not one Undo");
+    const auto before=songState(app);
+    // A native popup pumps messages. Captured selection/revision/generation must
+    // still agree on return; never apply the old row number to a new plugin.
+    const auto captured=app.capturePluginMove();app.selectedPlugin=second;
+    restoreRejected([&]{app.movePluginTo(captured,2);});restoreCheck(songState(app)==before,"Changed selection redirected a captured rack move");
+    app.selectedPlugin=first;app.edit("document.patch",{{"title","Intervening edit"}});
+    const auto changed=songState(app);restoreRejected([&]{app.movePluginTo(captured,2);});restoreCheck(songState(app)==changed,"Stale popup move mutated the song");
+    app.refreshPluginDetails();app.selectedParameter=1;app.setPluginParameterField();rawDraftText(app.controls.at(pluginValue),L"1e");
+    restoreRejected([&]{app.capturePluginMove();});app.layoutControls();
+    restoreCheck(app.pluginDraft&&!IsWindowEnabled(app.controls.at(pluginMove)),"Rack move discarded an incomplete parameter draft");
+}
+
 void applicationPluginSearch() {
     RestoreFixture fixture;auto &app=*fixture.app;
     // Establish logical client size independently of desktop DPI/monitor caps.

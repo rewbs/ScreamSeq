@@ -142,6 +142,36 @@ void applicationMixingGraphUsability(){
   fixture.close();
 }
 
+void applicationRecipeParameterInspector(){
+  RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
+  const auto plugin=addRestoreGain(app);
+  const auto graph=app.edit("graph.create",{{"name","Recipe controls"}}).at("graph").get<std::string>();
+  const auto node=app.edit("graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0},{"insertEdge",0}}).at("node").get<std::string>();
+  app.graphID=graph;app.restoreLayoutConfiguration(layoutFor(app,"graph"));app.refreshGraph();app.graphNode=node;app.graphPageIndex=3;app.loadGraphFields();app.layoutControls();
+  app.graphControlCommand(graphLoadPlugin);
+  const auto key="recipe:"+graph+":"+node;auto *editor=app.graphPluginParameters.at(key).get();const auto pane=editor->window();ScreamSeq::Tests::ownGuiWindow(pane);
+  auto snapshot=editor->snapshot();
+  restoreCheck(editor->visible()&&app.graphEditorVisible()&&snapshot.at("graph")==graph&&snapshot.at("node")==node&&snapshot.at("plugin")=="","Recipe parameter action lost its captured target or hid the graph");
+  const auto before=app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}}),rack=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
+  const auto &rows=snapshot.at("rows");const auto row=std::find_if(rows.begin(),rows.end(),[](const auto &r){return r.at("id")==1;});restoreCheck(row!=rows.end(),"Recipe gain parameter is missing");
+  const auto value=GetDlgItem(pane,row->at("valueControl").get<int>());SetWindowTextW(value,L"-9");
+  // Complete the same guarded submission used by the idle autosave timer.
+  SendMessageW(pane,WM_COMMAND,3964,LPARAM(GetDlgItem(pane,3964)));
+  const auto after=app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}});
+  bool changed=false;for(const auto &p:after.at("parameters"))if(p.at("id")==1)changed=p.at("manualValue")==-9;
+  restoreCheck(changed&&!editor->snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.state.get",{{"plugin",plugin}})==rack,"Recipe field failed to save or changed the rack instance");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}})==before,"Recipe parameter did not restore in one Undo");
+  app.edit("history.redo",RestoreJson::object());SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));
+  SetWindowTextW(value,L"1e");const auto dirty=editor->snapshot();app.graphNode.clear();
+  app.openGraphRecipeParameters(graph,node,"Recipe controls");restoreCheck(editor->window()==pane&&editor->snapshot()==dirty,"Reopening a recipe editor discarded or retargeted its draft");
+  app.edit("document.patch",{{"title","External edit"}});SendMessageW(pane,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("revision")==dirty.at("revision")&&restoreText(value)==L"1e","Recipe refresh rebased an incomplete captured draft");
+  SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));
+  const auto path=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));
+  restoreCheck(editor->retired()&&app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}})==after,"Recipe parameters failed persistence or document replacement retirement");
+  fixture.close();
+}
+
 void applicationGraphParameterInspector(){
   RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());const auto plugin=addRestoreGain(app),other=addRestoreGain(app);
   app.openSongRouting();auto *graph=app.songRoutingWindow.get();ScreamSeq::Tests::ownGuiWindow(graph->window());

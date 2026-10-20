@@ -1510,3 +1510,31 @@ The window is resizable, constrained to its monitor work area, and retired on
 document replacement. Read-only search does not become an unsaved musical draft.
 `workspace.get.effectPicker` exposes `visible`, `captured`, `search`, `matches`,
 `selected` (catalogue index) and `current` while the owner exists.
+
+### Rack positions and recipe parameter gestures
+
+`plugin.move` accepts exactly one stable `plugin` identity or transient `slot`,
+and exactly one `direction` (-1/+1) or final zero-based `position`. Moving across
+several entries preserves their relative order. Recorded automation follows its
+original processor; stable routing, aliases and opaque plugin bytes are retained.
+Windows `dryRun` validates the whole move without changing history or playback.
+A same-position move or a direction beyond a rack endpoint is a no-op, preserving
+Redo. A changed move is one chronological Undo operation. The Windows rack's
+**Move to…** button and command palette expose final positions with one-based
+labels; the native menu captures and rechecks the song, revision and selection.
+
+`graph.plugin.set` accepts the same optional `gesture` token as Mac. It must be
+nonempty, at most 80 characters, and accompany exactly one parameter and no bus
+changes. Consecutive accepted edits to the same graph/node/parameter/token can
+share one Undo entry. Another edit, different target or token, document replacement,
+or Undo/Redo starts a new entry. Dry runs, no-ops and refused publication do not
+advance gesture ownership. Each accepted value is durable and revision-guarded;
+this API is not a transient preview or cancellation protocol.
+
+Reusable graph nodes expose **All parameters…** from their Plugin controls page.
+The retained editor shares the rack's pages of up to ten values, sliders, choices,
+typed-value autosave and failure review. It captures the graph/node identity;
+selecting another node does not retarget a draft. Its edits use `graph.plugin.set`
+and preserve the original rack processor. Sliders still save on release. The
+workspace's parameter-window snapshots now include `graph` and `node` (empty for
+a rack editor); `plugin` is empty for a recipe editor.

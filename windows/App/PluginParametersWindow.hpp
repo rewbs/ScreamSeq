@@ -5,7 +5,7 @@
 #include <set>
 
 namespace ScreamSeq {
-// Independent, modeless editor for one stable rack identity. Graph navigation
+// Independent, modeless editor for one stable rack or graph recipe identity. Graph navigation
 // cannot retarget its text, and document replacement retires it via the registry.
 class PluginParametersWindow final : public NativeToolWindow {
   using Json=Api::Json;
@@ -19,12 +19,14 @@ class PluginParametersWindow final : public NativeToolWindow {
   bool dirty()const{return std::any_of(rows_.begin(),rows_.end(),[](const auto &r){return r.dirty;});}
   int pages()const{return std::max(1,int((parameters_.size()+pageSize-1)/pageSize));}
   Request request_;Context context_;NativeWriteCompletion::Write write_;std::function<bool()> available_;
-  std::string plugin_,document_,revision_;Json parameters_=Json::array(),report_,submitted_;
+  std::string plugin_,graph_,node_,document_,revision_;Json parameters_=Json::array(),report_,submitted_;
+  Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
+  const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;uint64_t generation_=0;
   bool setting_=false,pending_=false,needsReload_=false;HWND pendingFocus_{};
   NativeWriteCompletion completion_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
-    return describeDraft(document_,revision_,plugin_,generation_,dirty(),pending_,completion_.retained()&&!pending_);
+    return describeDraft(document_,revision_,graph_.empty()?plugin_:target().dump(),generation_,dirty(),pending_,completion_.retained()&&!pending_);
   }
   void status(const std::wstring &text){status_=text;set(statusLabel,text);}
   void error(const std::exception &e)override{status(wide(e.what())+(completion_.retained()?L" / Review result before another edit":L""));layout();}
@@ -46,7 +48,8 @@ class PluginParametersWindow final : public NativeToolWindow {
     NativeInputGate::present(controls_.at(parameter),CB_SETCURSEL,page_,0);setting_=false;layout();
   }
   Json readParameters(){
-    auto data=request_("plugin.parameters.get",{{"plugin",plugin_}});
+    auto data=request_(graph_.empty()?"plugin.parameters.get":"graph.plugin.get",target());
+    if(!graph_.empty())data=data.at("parameters").get<Json>();
     if(!data.is_array()||data.size()>4096)throw std::runtime_error("Invalid plugin parameter catalogue");
     std::set<uint32_t> ids;for(const auto &p:data){(void)p.at("name").get<std::string>();const auto &id=p.at("id");if(!id.is_number_integer()||id.get<double>()<0||id.get<double>()>UINT32_MAX||!ids.insert(id.get<uint32_t>()).second)throw std::runtime_error("Invalid or duplicate plugin parameter identity");}
     return data;
@@ -82,9 +85,9 @@ class PluginParametersWindow final : public NativeToolWindow {
       const auto v=number(control(i,value));if(v<f.minimum||v>f.maximum||(f.kind!=PluginParameterField::Kind::Number&&std::floor(v)!=v))throw std::runtime_error("Enter a value in the displayed range for "+f.name);
       const auto id=parameters_[size_t(r.index)].at("id");values.push_back({{"id",id},{"value",v}});raw.push_back({{"id",id},{"value",utf8(field(control(i,value)))}});
     }
-    submitted_={{"plugin",plugin_},{"expectedRevision",revision_},{"values",std::move(values)}};
+    submitted_=target();submitted_["expectedRevision"]=revision_;submitted_[graph_.empty()?"values":"parameters"]=std::move(values);
     const auto generation=generation_;pending_=true;layout();
-    try{completion_.submit(write_,"plugin.parameters.set",submitted_,document_,generation,raw);pending_=false;finishResult();}
+    try{completion_.submit(write_,writeMethod(),submitted_,document_,generation,raw);pending_=false;finishResult();}
     catch(...){pending_=false;layout();throw;}layout();
   }
   void review(){
@@ -167,7 +170,8 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
 public:
-  PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)){
+  PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available,std::string graph={},std::string node={}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)),graph_(std::move(graph)),node_(std::move(node)){
+    if(graph_.empty()!=node_.empty()||plugin_.empty()==graph_.empty())throw std::invalid_argument("Parameter editor requires one rack identity or graph/node pair");
     const auto captured=context_();document_=captured.first;revision_=captured.second;minimumClientWidth_=620;minimumClientHeight_=650;
     const auto title=wide(name)+L" — Parameters";create(L"ScreamSeq.PluginParameters",title.c_str(),720,740);combo(parameter);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Retry values"}})button(id,text);
@@ -179,6 +183,6 @@ public:
   void show(){NativeToolWindow::show();SetTimer(window_,7,250,nullptr);SetFocus(controls_.at(parameter));}
   void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
-    return {{"visible",visible()},{"plugin",plugin_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",parameters_.empty()?-1:page_*pageSize},{"page",page_},{"pages",pages()},{"rows",rows},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
+    return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",parameters_.empty()?-1:page_*pageSize},{"page",page_},{"pages",pages()},{"rows",rows},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
 };
 }

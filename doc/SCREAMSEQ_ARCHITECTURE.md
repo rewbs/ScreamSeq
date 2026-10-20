@@ -329,3 +329,10 @@ selects an existing instrument plugin and MIDI channel, and links to **Add
 plugin…** and **Plugin rack…**. The menu route is **Tools → Sound → Plugin rack**.
 The assignment uses the captured stable instrument identity/revision and the
 existing `instrument.plugin.set` transaction, preserving history and sample data.
+
+`editor/RackMove.hpp` is the shared control-owner permutation for final rack
+positions and positional recorded automation. Both session adapters prepare
+candidate copies, then retain their native atomic publication/history paths.
+Routing and plugin identities remain stable. Windows rack and reusable-recipe
+parameter windows share one retained native owner; the target determines the
+existing rack or graph API, without adding another musical state representation.

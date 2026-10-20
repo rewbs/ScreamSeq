@@ -21,6 +21,7 @@
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/RackMove.hpp"
 #include "editor/PluginNoteSources.hpp"
 #include "editor/AutomationTools.hpp"
 #include "editor/InstrumentEnvelopeTools.hpp"
@@ -406,7 +407,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   uint64_t _graphEditorGraph, _graphEditorNode;
   NSString *_graphEditorID,*_graphEditorDocument;
   NSString *_graphParameterGesture,*_graphParameterGestureDocument;
-  uint64_t _graphParameterGestureSequence,_graphParameterGestureGraph,_graphParameterGestureNode;
+  uint64_t _graphParameterGestureSequence,_graphParameterGestureRevision,_graphParameterGestureGraph,_graphParameterGestureNode;
   uint32_t _graphParameterGestureID;
   NSString *_automationDocumentID;
   uint64_t _pluginRevision;
@@ -2133,15 +2134,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       return YES;
     if (target == slot) return YES;
     auto states = (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()))) ? _audio->pluginStates() : _plugins;
-    auto moved = std::move(states[slot]);
-    states.erase(states.begin() + slot);
-    states.insert(states.begin() + target, std::move(moved));
+    const Tracker::RackMove move(states.size(),size_t(slot),size_t(target));
+    move.apply(states);
     auto automation = _automation;
     for (auto &point : automation) {
-      if (point.slot == slot)
-        point.slot = uint32_t(target);
-      else if (target > slot && point.slot > slot && point.slot <= target) --point.slot;
-      else if (target < slot && point.slot >= target && point.slot < slot) ++point.slot;
+      point.slot = uint32_t(move.remap(point.slot));
     }
     [self applyPluginGraph:states automation:automation];
     return YES;

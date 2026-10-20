@@ -45,7 +45,7 @@
     void installPluginControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
             {pluginAdd,L"Add"},{pluginRescan,L"Rescan"},{pluginEditor,L"Editor"},{pluginBypass,L"Bypass"},
-            {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginUndo,L"Undo"},{pluginRedo,L"Redo"},
+            {pluginRemove,L"Remove"},{pluginUp,L"Up"},{pluginDown,L"Down"},{pluginMove,L"Move to…"},{pluginUndo,L"Undo"},{pluginRedo,L"Redo"},
             {pluginAutomate,L"Automation…"},{pluginActivity,L"Activity…"},{pluginApply,L"Retry"},{pluginAssign,L"Assign"},{pluginsCommand,L"Plugins"},{pluginNewInstrument,L"New trigger"},
             {pluginLoadProgram,L"Load program"},{pluginTogglePort,L"Enable port"},{pluginAliases,L"Assigned instruments…"},{pluginSavePreset,L"Save preset…"},{pluginLoadPreset,L"Load preset…"},{pluginBrowse,L"Browse…"},{pluginReconnect,L"Reconnect plugin…"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
@@ -294,7 +294,10 @@
         place(pluginPage,x,y+4,std::min(180.0f,r.w-406),230,show);
         place(pluginLibrary,r.x+8,y+35,r.w-254,250,show);place(pluginBrowse,r.x+r.w-240,y+35,78,24,show);place(pluginAdd,r.x+r.w-154,y+35,64,24,show);place(pluginRescan,r.x+r.w-86,y+35,78,24,show);
         place(pluginList,r.x+8,y+67,210,std::max(24.0f,r.h-75),show);
-        float bx=x;for(auto [id,w]:std::initializer_list<std::pair<int,float>>{{pluginEditor,66.0f},{pluginBypass,72.0f},{pluginRemove,68.0f},{pluginUp,44.0f},{pluginDown,52.0f}}) {place(id,bx,y+67,w,24,show);bx+=w+4;}
+        float bx=x;for(auto [id,w]:std::initializer_list<std::pair<int,float>>{{pluginEditor,66.0f},{pluginBypass,72.0f},{pluginRemove,68.0f},{pluginUp,44.0f},{pluginDown,52.0f},{pluginMove,78.0f}}) {
+            const bool visible=show&&((id!=pluginUp&&id!=pluginDown)||r.w>=680);
+            place(id,bx,y+67,w,24,visible);if(visible)bx+=w+4;
+        }
         const auto valueControl=pluginValueControl();
         const float valueWidth=valueControl==pluginValue?86.0f:std::clamp(r.w*.22f,100.0f,260.0f);
         const float parameterWidth=std::max(80.0f,r.w-320-valueWidth);
@@ -324,6 +327,7 @@
         EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginReconnect),selected&&plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginUp),selected && slot>0);EnableWindow(controls.at(pluginDown),selected && size_t(slot+1)<listedPlugins.size());
+        EnableWindow(controls.at(pluginMove),selected&&listedPlugins.size()>1&&!busy&&!pluginDraft&&!pluginPresetPending);
         ScreamSeq::NativeControls::text(controls.at(pluginBypass),selected && plugin.value("bypass",false)?L"Enable":L"Bypass");
         const bool writable=pluginParameterField.editable();
         EnableWindow(controls.at(pluginApply),selected&&writable);EnableWindow(controls.at(pluginValue),selected&&writable);
@@ -339,8 +343,34 @@
     bool hasPluginParameterTarget()const {
         return selectedPluginSlot()>=0&&std::any_of(pluginParameters.begin(),pluginParameters.end(),[&](const auto &p){return p.at("id")==selectedParameter;});
     }
+    struct PluginMoveTarget {std::string document,revision,plugin;uint64_t generation;};
+    PluginMoveTarget capturePluginMove()const {
+        if(busy||pluginPresetPending||pluginDraft||selectedPluginSlot()<0)throw std::runtime_error("Finish the current plugin edit before moving it");
+        return {documentId,view->session.revision,selectedPlugin,pluginDraftGeneration};
+    }
+    void movePluginTo(const PluginMoveTarget &target,size_t position) {
+        if(busy||pluginPresetPending||pluginDraft||target.document!=documentId||target.revision!=view->session.revision||target.plugin!=selectedPlugin||target.generation!=pluginDraftGeneration)
+            throw std::runtime_error("Song or plugin selection changed while choosing a position; choose again");
+        documentOperation("plugin.move",{{"expectedRevision",target.revision},{"plugin",target.plugin},{"position",position}});
+        pluginDetailsRevision.clear();
+    }
+    void showPluginMoveMenu() {
+        const auto target=capturePluginMove();const auto &rack=view->session.document.at("nativePlugins");
+        std::vector<ScreamSeq::NativeContextMenu::Item> items;
+        items.push_back({0,L"Final rack position"});
+        for(size_t i=0;i<rack.size();++i) {
+            const bool selected=rack[i].at("instanceID")==target.plugin;
+            auto label=std::to_wstring(i+1)+L"  ·  "+wide(rack[i].at("name").get<std::string>());
+            // Plugin labels are data, not menu mnemonic markup.
+            for(size_t at=0;(at=label.find(L'&',at))!=std::wstring::npos;at+=2)label.insert(at,1,L'&');
+            items.push_back({int(i+1),std::move(label),!selected,selected});
+        }
+        RECT button{};GetWindowRect(controls.at(pluginMove),&button);
+        const auto chosen=ScreamSeq::NativeContextMenu::show(window,{button.left,button.bottom},items);
+        if(chosen>0)movePluginTo(target,size_t(chosen-1));
+    }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginActivity)return false;
+        if(id<pluginList || id>pluginMove)return false;
         if(busy){if(id==pluginValueChoice||id==pluginValueToggle)syncPluginDiscreteCandidate();throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");}
         workspaceState.focus="plugins";
         if(id==pluginValueChoice||id==pluginValueToggle){pluginDiscreteValue(id);return true;}
@@ -416,6 +446,7 @@
         else if(id==pluginBypass)edit("plugin.bypass",{{"slot",slot},{"bypass",!view->session.document.at("nativePlugins")[slot].value("bypass",false)}});
         else if(id==pluginRemove)edit("plugin.remove",{{"slot",slot}});
         else if(id==pluginUp || id==pluginDown)edit("plugin.move",{{"slot",slot},{"direction",id==pluginUp?-1:1}});
+        else if(id==pluginMove)showPluginMoveMenu();
         else if(id==pluginAssign) {auto selected=SendMessageW(controls.at(pluginInstrument),CB_GETCURSEL,0,0);if(selected==CB_ERR)throw std::runtime_error("Choose a tracker instrument");auto instrument=SendMessageW(controls.at(pluginInstrument),CB_GETITEMDATA,selected,0);edit("plugin.assign",{{"slot",slot},{"instrument",instrument}});}
         return true;
     }

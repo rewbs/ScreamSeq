@@ -122,6 +122,7 @@ jobs:
             python -m unittest -v `
               test_workspace_shortcuts.WorkspaceShortcutTests `
               test_menu_pattern_keys.MenuPatternTests `
+              test_plugin_edit_parity.PluginEditParityTests `
               test_mixer_strips_ui.MixerStripsUITests `
               test_note_tracks.NoteTrackAppTests `
               test_pattern_tools.PatternToolsAppTests `

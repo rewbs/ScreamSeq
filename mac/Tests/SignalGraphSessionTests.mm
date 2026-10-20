@@ -54,6 +54,8 @@ int main(){@autoreleasepool{try{
   call(@"graph.plugin.set",@{@"graph":graph,@"node":node,@"parameters":@[@{@"id":@1,@"value":@(-12)}],@"gesture":@"drag-one"},true);
   call(@"history.undo",@{},true);check([parameterState isEqual:data()],"One Undo restores the start of a graph parameter drag");
   call(@"history.redo",@{},true);auto dragState=data();
+  call(@"graph.plugin.set",@{@"graph":graph,@"node":node,@"parameters":@[@{@"id":@1,@"value":@(-18)}],@"gesture":@"drag-one"},true);
+  call(@"history.undo",@{},true);check([dragState isEqual:data()],"Reusing a graph gesture token after Undo/Redo starts a new history entry");
   call(@"graph.layout.set",@{@"positions":@[@{@"node":@"gesture-break",@"x":@1,@"y":@2}]},true);auto interleavedState=data();
   call(@"graph.plugin.set",@{@"graph":graph,@"node":node,@"parameters":@[@{@"id":@1,@"value":@(-15)}],@"gesture":@"drag-one"},true);
   call(@"history.undo",@{},true);check([interleavedState isEqual:data()],"Intervening layout edits break graph drag coalescing");

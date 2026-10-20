@@ -196,7 +196,7 @@
       "id": "title-utf16-over-limit",
       "method": "document.patch",
       "params": {
-        "title": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
+        "title": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵"
       },
       "expected": {
         "windows": -32602,
@@ -240,12 +240,14 @@
         "position": 0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-PLUGIN-POSITION",
-      "phase": "P4b"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     },
     {
       "id": "plugin-slot-real",
@@ -386,12 +388,14 @@
         "gesture": "parity-one-gesture"
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-GRAPH-GESTURE",
-      "phase": "P5"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     }
   ],
   "rejectedRequestIDReuse": {

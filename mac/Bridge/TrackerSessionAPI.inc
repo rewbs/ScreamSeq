@@ -1275,7 +1275,7 @@
       succeeded([self removePlugins:ids sources:sources dryRun:dry error:&problem],problem);
       result=@{@"wouldChange":@YES,@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.move"]) {
-      allowed(@[ @"slot", @"direction", @"position" ]);
+      allowed(@[ @"slot", @"plugin", @"direction", @"position" ]);
       const auto slot = pluginSlot();
       require(bool(p[@"direction"]) != bool(p[@"position"]), "Supply direction or position");
       const auto direction = p[@"position"] ? NSInteger(integer(p[@"position"], 0, _plugins.size()-1)) - NSInteger(slot) : NSInteger(number(p[@"direction"], -1, 1));

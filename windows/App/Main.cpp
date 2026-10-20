@@ -133,7 +133,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
-    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,
+    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,pluginMove=334,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
     effectFieldBase=700,effectChoiceBase=720,

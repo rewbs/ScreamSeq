@@ -326,7 +326,7 @@ int main(int argc,char **argv){@autoreleasepool {try {
   check(![session addPlugin:descriptor target:@"n9999999" error:&invalid] && [session.automationRevision isEqual:beforeFailure],"Invalid destination leaves plugin, route and history unchanged");
   call(@"plugin.add",@{@"descriptor":descriptor},true);call(@"plugin.add",@{@"descriptor":descriptor},true);
   auto original=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
-  call(@"plugin.move",@{@"slot":@0,@"position":@2},true);
+  call(@"plugin.move",@{@"plugin":original[0],@"position":@2},true);
   auto moved=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
   check([moved[2] isEqual:original[0]]&&[moved[0] isEqual:original[1]]&&[moved[1] isEqual:original[2]],"Rack moves insert in order, rather than swapping endpoints");
   call(@"history.undo",@{},true);check([[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"] isEqual:original],"Rack drag is one undoable edit");

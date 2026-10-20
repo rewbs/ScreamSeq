@@ -51,8 +51,8 @@
           auto plan=controls?_audio->prepareGraphControls(next):nullptr;
           auto routing=!plan?_audio->prepareMixerRouting(next):nullptr;
           if(!plan && !routing){if(_audio->active())throw Error(-32002,"This plugin recipe or port edit cannot yet be prepared during playback; stop playback and retry");_audio->stop();}
-          const bool merge=gesture&&[gesture isEqual:_graphParameterGesture]&&[_automationDocumentID isEqual:_graphParameterGestureDocument]&&graphID==_graphParameterGestureGraph&&nodeID==_graphParameterGestureNode&&gestureParameter==_graphParameterGestureID;
+          const bool merge=gesture&&[gesture isEqual:_graphParameterGesture]&&[_automationDocumentID isEqual:_graphParameterGestureDocument]&&graphID==_graphParameterGestureGraph&&nodeID==_graphParameterGestureNode&&gestureParameter==_graphParameterGestureID&&_document->revision==_graphParameterGestureRevision;
           _document->annotate([&](NativeSong &n){n=next;},[&]{if(plan)require(_audio->publishGraphControls(std::move(plan)),"Graph parameter queue is busy; retry the edit");if(routing&&!_audio->publishMixerRouting(routing))throw Error(-32002,"Routing publication is busy; retry the edit");},merge?_graphParameterGestureSequence:0);
-          _graphParameterGesture=gesture;_graphParameterGestureDocument=_automationDocumentID;_graphParameterGestureGraph=graphID;_graphParameterGestureNode=nodeID;_graphParameterGestureID=gestureParameter;_graphParameterGestureSequence=_document->historySequence();
+          _graphParameterGesture=gesture;_graphParameterGestureDocument=_automationDocumentID;_graphParameterGestureGraph=graphID;_graphParameterGestureNode=nodeID;_graphParameterGestureID=gestureParameter;_graphParameterGestureSequence=_document->historySequence();_graphParameterGestureRevision=_document->revision;
         }if(!dry&&[method isEqual:@"graph.plugin.editor.commit"])_graphEditorRecipe=node->plugin;}
       }

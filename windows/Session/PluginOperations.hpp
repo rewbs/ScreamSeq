@@ -40,6 +40,9 @@ class PluginOperations {
   uint64_t graphEditorGraph_=0,graphEditorNode_=0;
   std::string graphEditorID_;
   bool graphEditorWindowOpen_=false;
+  std::string graphParameterGesture_;
+  uint64_t graphParameterGestureSequence_=0,graphParameterGestureRevision_=0,graphParameterGestureGraph_=0,graphParameterGestureNode_=0;
+  uint32_t graphParameterGestureID_=0;
   std::set<std::string> openEditors_;
   std::map<std::string,std::map<uint32_t,float>> pendingParameters_;
   // Vendor notifications are consumed once. Keep their latest values until

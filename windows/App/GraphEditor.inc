@@ -20,7 +20,7 @@
     void installGraphControls(){
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{graphCommand,L"Graph"},{graphNew,L"New"},{graphClone,L"Clone graph"},{graphRemove,L"Delete graph"},
             {graphAddSource,L"+ Source"},{graphAddEffect,L"+ Effect"},{graphFit,L"Fit"},{graphApply,L"Apply"},{graphReload,L"Reload"},{graphSetProperty,L"Set property"},
-            {graphConnect,L"Add / update wire"},{graphDeleteWire,L"Delete wire"},{graphDeleteNode,L"Delete node"},{graphLoadPlugin,L"Load plugin controls"},{graphSetParameter,L"Apply parameter"},{graphReconnect,L"Reconnect plugin…"},
+            {graphConnect,L"Add / update wire"},{graphDeleteWire,L"Delete wire"},{graphDeleteNode,L"Delete node"},{graphLoadPlugin,L"All parameters…"},{graphSetParameter,L"Set parameter"},{graphReconnect,L"Reconnect plugin…"},
             {graphOpenPlugin,L"Interface"},{graphSavePlugin,L"Save draft"},{graphClosePlugin,L"Close"},{graphAssign,L"Assign graph"},{graphUnassign,L"Clear assignment"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         for(int id:{graphLibrary,graphKind,graphRack,graphNodePicker,graphPage,graphProperty,graphSource,graphDestination,graphWire,graphParameter,graphBus})controls[id]=CreateWindowExW(0,L"COMBOBOX",L"",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
@@ -273,7 +273,7 @@
             }
             graphDraft[modulation?"modulation":"audio"]=std::move(edges);graphDirty=true;graphFieldDirty=false;++graphGeneration;loadGraphFields();rebuildGraphCanvas();return true;
         }
-        if(id==graphLoadPlugin){graphLoadPluginControls();return true;}
+        if(id==graphLoadPlugin){graphLoadPluginControls();auto node=graphSelectedNode();if(node)openGraphRecipeParameters(graphID,graphNode,node->at("name").get<std::string>());return true;}
         if(id==graphSetParameter){graphRequireCurrent(false);if(graphDirty)throw std::runtime_error("Apply the graph before editing its plugin");const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i<0||graphPluginTarget!=graphNode||!graphPluginData.contains("parameters"))throw std::runtime_error("Load plugin controls first");const auto value=graphNumber(graphParameterValue);const auto parameter=graphPluginData.at("parameters").at(size_t(i)).at("id");const auto generation=graphGeneration;graphPending=true;try{documentOperation("graph.plugin.set",{{"expectedRevision",graphRevision},{"graph",graphID},{"node",graphNode},{"parameters",Json::array({{{"id",parameter},{"value",value}}})}});graphPending=false;if(generation==graphGeneration){graphFieldDirty=false;refreshGraph();graphLoadPluginControls();}}catch(...){graphPending=false;throw;}return true;}
         if(id==graphOpenPlugin){auto result=graphMutate("graph.plugin.editor.open",{{"graph",graphID},{"node",graphNode}});graphEditorToken=result.at("editor").get<std::string>();graphEditorTokenNode=graphNode;graphEditorTokenGraph=graphID;return true;}
         if(id==graphSavePlugin||id==graphClosePlugin){Json p={{"editor",graphEditorToken}};if(id==graphSavePlugin){p["graph"]=graphEditorTokenGraph;p["node"]=graphEditorTokenNode;}graphMutate(id==graphSavePlugin?"graph.plugin.editor.commit":"graph.plugin.editor.close",p);if(id==graphClosePlugin)graphEditorToken.clear();return true;}

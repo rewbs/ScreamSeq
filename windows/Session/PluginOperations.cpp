@@ -1,4 +1,5 @@
 #include "PluginOperations.hpp"
+#include "editor/RackMove.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
@@ -489,7 +490,18 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     Json routing={{"plugin",state.instanceID},{"name",state.descriptor.name},{"isInstrument",state.descriptor.instrument||state.descriptor.type==audioUnitMusicDeviceType},{"assignments",assignments},{"instruments",instruments}};
     if(get)return routing;if(assign)return Json::object();return {{"wouldChange",changed},{"dryRun",dry},{"routing",routing}};
   }
-  if(method=="plugin.move") {keys(p,{"slot","direction","dryRun"});const auto direction=number(field(p,"direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");const auto target=int(index)+int(direction);if(target<0||target>=rack.size())return Json::object();std::swap(rack[index],rack[target]);for(auto &point:automation){if(point[0]==index)point[0]=target;else if(point[0]==target)point[0]=index;}}
+  if(method=="plugin.move") {
+    keys(p,{"slot","plugin","direction","position","dryRun"});
+    need(p.contains("direction")!=p.contains("position"),"Supply direction or position");
+    int target;
+    if(p.contains("position"))target=int(integer(p.at("position"),0,rack.size()-1));
+    else {const auto direction=number(p.at("direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");target=int(index)+int(direction);}
+    if(target<0||size_t(target)>=rack.size())return {{"wouldChange",false},{"dryRun",dry}};
+    const Tracker::RackMove move(rack.size(),index,size_t(target));
+    // Prepare both copies before the existing atomic history/publication path.
+    for(auto &point:automation)point[0]=move.remap(point.at(0).get<size_t>());
+    move.apply(rack);
+  }
   else if(method=="plugin.bypass") {keys(p,{"slot","plugin","bypass","dryRun"});need(p.contains("bypass"),"bypass is required");rack[index]["bypass"]=flag(p,"bypass");}
   else if(method=="plugin.state.set"||method=="plugin.parameters.set") {
     auto next=state;
