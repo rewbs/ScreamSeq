@@ -1,11 +1,14 @@
 #include "editor/hosted/HostedAudio.hpp"
 #include "editor/hosted/RecordedCapture.hpp"
+#include "editor/RecordingFrameClock.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <thread>
 #ifdef _WIN32
 #include "windows/Audio/RealtimeAudit.hpp"
 #elif !defined(TRACKER_SANITIZER)
@@ -14,6 +17,7 @@ extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
 #endif
 using namespace Tracker;
 static void check(bool condition,const char *message){if(!condition)throw std::runtime_error(message);}
+#include "RecordingFrameClockTests.inc"
 static void process(PluginChain &chain,float *pcm,unsigned frames) {
   bool okay;
 #ifdef _WIN32
@@ -91,6 +95,7 @@ static void capturePreparation() {
 }
 int main() {
   try {
+    recordingFrameClock();
     capturePreparation();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};
@@ -123,7 +128,7 @@ int main() {
     check(chain.publishRecordedAutomation(replace(-18)),"Timeline after manual prefix rejected");settled(chain,-18);
     check(chain.publishRecordedAutomation(replace(-12)),"Timeline before manual suffix rejected");
     check(chain.parameter(0,1,-3),"Manual suffix rejected");settled(chain,-3);
-    std::cout<<"PASS recorded timeline rate/partition parity, boundary catch-up/removal, saved baseline after seek, stale/full queue rejection and callback audit\n";
+    std::cout<<"PASS recorded frame clock bounds/lifecycle/overwrite, timeline rate/partition parity, boundary catch-up/removal, saved baseline after seek, stale/full queue rejection and callback audit\n";
     return 0;
   }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}
 }

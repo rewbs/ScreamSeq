@@ -1,6 +1,7 @@
 #pragma once
 #include "AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/RecordingFrameClock.hpp"
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreAudio/CoreAudio.h>
 #include <atomic>
@@ -12,6 +13,9 @@ struct DeviceInfo {
 class AudioDevice {
   AudioUnit unit_ = nullptr;
   std::unique_ptr<Renderer> renderer_;
+  std::shared_ptr<RecordingFrameTimeline> frameTimeline_;
+  uint64_t captureGeneration_=0;
+  bool captureFrames_=false;
   std::unique_ptr<PluginChain> plugins_;
   uint64_t pluginEpoch_=0;
   std::vector<PluginState> pluginStates_;
@@ -143,6 +147,7 @@ public:
   bool playing() const { return playing_.load() && !previewing_; }
   bool active() const { return playing_.load(); }
   Renderer *renderer() { return renderer_.get(); }
+  std::shared_ptr<const RecordingFrameTimeline> recordingFrameTimeline() const {return frameTimeline_;}
   Telemetry telemetry() const;
   double sampleRate() const { return sampleRate_; }
   uint32_t bufferSize() const { return bufferSize_; }

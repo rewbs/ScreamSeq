@@ -20,6 +20,7 @@ struct HostedPlaybackSettings {
 class HostedProjectPlayback final {
   Tracker::NativeSong native_;
   bool offline_=false;
+  bool captureFrames_=true;
   std::unique_ptr<Tracker::PluginChain> chain_;
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
   std::shared_ptr<RecordingTimeline> timeline_;

@@ -72,6 +72,7 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
 {
   // Match the shared built-in processor range, including an empty rack.
   offline_=offline;
+  captureFrames_=!settings.audition;
   rate_=rate;
   require(rate>=8000 && rate<=384000,"Unsupported hosted playback sample rate");
   native_=document.native();if(settings.liveEditing&&!native_.mixer.active())native_.ensureMixer();native_.validate(document.song());auto states=projectPluginStates(project);
@@ -148,6 +149,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     // The final device notification still carries its original generation.
     // It must never revive the timing invalidated by a processor failure.
     timeline_->generation.store(0,std::memory_order_release);
+    timeline_->absoluteFrames.invalidate();
     timeline_->stopped.store(time.stopped,std::memory_order_release);
     std::fill_n(stereo,size_t(frames)*2,0.0f);return false;
   }
@@ -163,20 +165,26 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     const auto end=timeline_->endHostTime.load();
     if(time.hostTime&&end>time.hostTime)timeline_->endHostTime.store(time.hostTime,std::memory_order_release);
     timeline_->stopped.store(true,std::memory_order_release);
+    timeline_->absoluteFrames.close(time.generation,time.hostTime);
     return true;
   }
   for(uint32_t at=0;at<frames;) {
-    if(offline_&&chain_->latencyChangePending()) {std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
+    if(offline_&&chain_->latencyChangePending()) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     const auto origin=time.offset(at),end=time.offset(at+count);
     const bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;
     renderer_->recordingTime(mapped?origin.hostTime:0,mapped?double(hostTicksPerSecond)/rate_:0);
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
-    renderer_->render(buffer,count);
+    const auto frame=renderer_->telemetry().frames;
+    const auto received=renderer_->render(buffer,count);
     // A notification inside the last slice must also fail an offline render;
     // there may be no next callback in which to detect its stale compensation.
-    if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {timeline_->generation.store(0,std::memory_order_release);std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
+    if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
     if(mapped){
+      if(captureFrames_&&received) {
+        const auto musicEnd=time.offset(at+received);
+        if(musicEnd.valid)timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
+      }
       if(!timeline_->firstHostTime.load(std::memory_order_relaxed))timeline_->firstHostTime.store(origin.hostTime,std::memory_order_release);
       timeline_->endHostTime.store(end.hostTime,std::memory_order_release);
     }

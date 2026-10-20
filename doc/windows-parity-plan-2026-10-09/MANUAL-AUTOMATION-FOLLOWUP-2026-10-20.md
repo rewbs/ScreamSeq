@@ -1,5 +1,9 @@
 # Manual automation recording: remaining A13/P4b work
 
+Newer source-only follow-up:
+[shared absolute frame clock and native adapters](RECORDING-FRAME-CLOCK-2026-10-20.md).
+This does not complete event ingestion or Windows capture; its tests are unbuilt.
+
 Source audit at candidate `8c750f7d61966b3dc125ffaf49c34e8678697a25`.
 This is not new implementation or a runtime pass. Keep the current CI repair
 ahead of this larger shared/native change.

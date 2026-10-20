@@ -161,6 +161,9 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
   std::optional<NativeSong> implicit;
   if(native&&!native->mixer.active()&&!isolatedSample){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   renderer_ = std::make_unique<Renderer>(bytes, uint32_t(sampleRate_), order, preview, sourcePath, sequence, region, native);
+  frameTimeline_=std::make_shared<RecordingFrameTimeline>();
+  ++captureGeneration_;if(!captureGeneration_)++captureGeneration_;
+  captureFrames_=!preview&&!isolatedSample;
   if (native && !preview) {renderer_->applyColumnMutes(*native, renderer_->song());renderer_->preparePreciseNotes(*native);}
   previewing_ = preview;
   // The sample inspector's finite Audition button uses a standalone sample
@@ -195,6 +198,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
       }
   } catch (...) {
     playing_ = false;
+    frameTimeline_->invalidate();
     throw;
   }
 }
@@ -246,6 +250,7 @@ void AudioDevice::stop() {
   playing_ = false;
   if (unit_)
     AudioOutputUnitStop(unit_);
+  if(frameTimeline_)frameTimeline_->close(captureGeneration_,mach_absolute_time());
 }
 void AudioDevice::refreshPluginLatencies(const NativeSong &native) {
   if(!plugins_)return;
@@ -275,6 +280,8 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
       const UInt32 frames = std::min<UInt32>(callbackFrames - done, maximumBlockFrames);
       auto *const output = callbackOutput + size_t(done) * 2;
       const UInt32 blockStart = done;
+      const auto capturedFrame=self.renderer_->telemetry().frames;
+      UInt32 capturedFrames=0;
       done += frames;
       if (self.plugins_) {
         self.plugins_->beginRenderBlock();
@@ -285,6 +292,7 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
                                           ? timestamp->mHostTime + uint64_t(std::llround(blockStart * ticksPerFrame)) : 0,
           ticksPerFrame);
         auto received = self.renderer_->render(output, frames);
+        capturedFrames=received;
         if (received < frames) {
           if (self.plugins_)
             self.plugins_->endNotes();
@@ -297,8 +305,18 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
         }
       } else
         self.tailFrames_ = self.tailFrames_ > frames ? self.tailFrames_ - frames : 0;
-      if (self.plugins_ && !self.plugins_->process(output, frames))
+      if (self.plugins_ && !self.plugins_->process(output, frames)) {
         self.playing_ = false;
+        if(self.frameTimeline_)self.frameTimeline_->invalidate();
+      } else if(self.renderer_->faulted()) {
+        if(self.frameTimeline_)self.frameTimeline_->invalidate();
+      } else if(self.captureFrames_&&capturedFrames&&self.frameTimeline_&&timestamp&&
+                (timestamp->mFlags&kAudioTimeStampHostTimeValid)&&timestamp->mHostTime) {
+        const long double first=static_cast<long double>(timestamp->mHostTime)+blockStart*ticksPerFrame;
+        const long double last=static_cast<long double>(timestamp->mHostTime)+(blockStart+capturedFrames)*ticksPerFrame;
+        if(std::isfinite(first)&&std::isfinite(last)&&first>=1&&last<static_cast<long double>(UINT64_MAX))
+          self.frameTimeline_->publish(uint64_t(first),uint64_t(last),capturedFrame,capturedFrames,self.sampleRate_,self.captureGeneration_);
+      }
       if (self.renderEnded_ && self.plugins_) {
         const auto budget = uint64_t(std::ceil((self.plugins_->tail() + self.plugins_->latency()) * self.sampleRate_));
         if (budget > self.tailBudgetFrames_) self.tailFrames_ += budget - self.tailBudgetFrames_;
@@ -308,8 +326,12 @@ OSStatus AudioDevice::callback(void *ref, AudioUnitRenderActionFlags *, const Au
         if (self.plugins_->tailRevision() != self.tailRevision_) self.tailFrames_ = std::max(self.tailFrames_, budget);
       }
       if (self.plugins_) self.tailRevision_ = self.plugins_->tailRevision();
-      if (self.renderEnded_ && !self.tailFrames_)
+      if (self.renderEnded_ && !self.tailFrames_) {
         self.playing_ = false;
+        // Keep the last musical presentation bound; callback execution can
+        // precede that bound, so wall time here must not trim queued audio.
+        if(self.frameTimeline_)self.frameTimeline_->close(self.captureGeneration_,0);
+      }
       for (uint32_t frame = 0; frame < frames; ++frame) {
         left = std::max(left, std::abs(output[frame * 2]));
         right = std::max(right, std::abs(output[frame * 2 + 1]));
