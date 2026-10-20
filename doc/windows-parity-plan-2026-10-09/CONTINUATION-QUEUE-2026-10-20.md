@@ -8,6 +8,18 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Current candidate `28d757f65` built on Windows ARM64:** the
+[clock/recovery qualification](CLOCK-RECOVERY-QUALIFICATION-2026-10-20.md)
+records 19/20 targeted registrations, all 21 actual codec safety cases and four
+exact integral-real project save/reopen passes. The one snapshot failure is a
+NaN equality assertion; its byte-exact correction is prepared but unbuilt.
+Two Windows codec observations differ and remain pending paired x64 review.
+The same candidate is pushed; Windows run **39405368407** and Mac run
+**39405368725** were still building at 10:13 UTC. Poll those handles and retain
+their timestamps/results. No new local build before **11:09 UTC**, extended by
+later CI completion. All older “unbuilt”/live-run checkpoints below describe
+their original time and are superseded only within this report's explicit scope.
+
 **Codec review completed:** [13 Mac expectation changes](CODEC-OBSERVATION-REVIEW-2026-10-20.md)
 are proven extension/archive preservation improvements on both architectures.
 Inputs, admission, protection, Windows expectations and historical reports stay

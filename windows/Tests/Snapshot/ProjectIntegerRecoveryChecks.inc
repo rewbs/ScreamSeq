@@ -78,7 +78,11 @@ void projectIntegerRecovery() {
     CHECK(partial.state.preserved["plugins"].size()==slot);
     CHECK(partial.state.preserved["plugins"]==initial.state.preserved["plugins"]);
     CHECK(partial.state.preserved["automation"].empty());
-    CHECK(partial.state.preserved["screamseqLoadRecovery"]["sourceSections"]["plugins"]==P::decodePlist(original)["plugins"]);
+    // NaN is deliberately among the invalid inputs and is unequal to itself
+    // under JSON numeric comparison. Compare stored bytes to require exact
+    // preservation, including the rejected real's representation.
+    CHECK(P::encodePlist(partial.state.preserved["screamseqLoadRecovery"]["sourceSections"]["plugins"])==
+      P::encodePlist(P::decodePlist(original)["plugins"]));
     rejects([&]{P::saveNativeProject(*partial.document,partial.state,malformed,true);});
     CHECK(P::readProjectBytes(malformed)==original);
   }
