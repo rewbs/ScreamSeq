@@ -23,6 +23,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;uint64_t generation_=0;
+  std::string previewToken_;uint32_t previewParameter_=0;
   bool setting_=false,pending_=false,needsReload_=false;HWND pendingFocus_{};
   NativeWriteCompletion completion_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
@@ -31,6 +32,36 @@ class PluginParametersWindow final : public NativeToolWindow {
   void status(const std::wstring &text){status_=text;set(statusLabel,text);}
   void error(const std::exception &e)override{status(wide(e.what())+(completion_.retained()?L" / Review result before another edit":L""));layout();}
   void requireReady()const{if(pending_||completion_.retained()||needsReload_)throw std::runtime_error("Review or reload the previous parameter result before editing");}
+  void cancelPreview(){
+    if(previewToken_.empty())return;
+    if(pending_)throw std::runtime_error("Wait for the current preview request before cancelling");
+    const auto current=context_();
+    if(current.first!=document_)throw std::runtime_error("Original preview song is unavailable; review before closing");
+    pending_=true;
+    try{request_("plugin.parameters.preview.cancel",{{"expectedRevision",current.second},{"plugin",plugin_},{"parameter",previewParameter_},{"gesture",previewToken_}});}
+    catch(...){pending_=false;throw;}
+    pending_=false;
+    previewToken_.clear();
+  }
+  void previewSlider(int row,double value){
+    if(!graph_.empty())return; // Recipe controls need their own copy publication.
+    if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed; slider draft retained. Reload before editing");
+    if(previewToken_.empty()){
+      previewToken_="slider:"+std::to_string(reinterpret_cast<uintptr_t>(window_))+":"+std::to_string(generation_);
+      previewParameter_=parameters_.at(size_t(rows_[row].index)).at("id").get<uint32_t>();
+    }
+    pending_=true;
+    try{
+      const auto result=request_("plugin.parameters.preview.set",{{"expectedRevision",revision_},{"plugin",plugin_},{"parameter",previewParameter_},{"gesture",previewToken_},{"value",value}});
+      pending_=false;status(result.at("audible").get<bool>()?L"Auditioning value / release saves once / Escape restores":L"Release saves this value / Escape restores");
+    }catch(...){
+      pending_=false;const auto failure=std::current_exception();
+      try{const auto observed=request_("plugin.parameters.preview.get",Json::object());
+        if(!observed.at("active").get<bool>()||observed.at("gesture")!=previewToken_||observed.at("plugin")!=plugin_||observed.at("parameter")!=previewParameter_)previewToken_.clear();
+      }catch(...){} // Unknown preview ownership remains explicit until Reload.
+      std::rethrow_exception(failure);
+    }
+  }
   void presentPage(){
     setting_=true;
     for(int i=0;i<pageSize;++i){auto &r=rows_[i];r={};const auto index=page_*pageSize+i;if(size_t(index)>=parameters_.size())continue;
@@ -57,6 +88,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   void load(bool completing=false){
     cancelAutomaticEdit();
     if(!completing&&completion_.retained())throw std::runtime_error("Review the parameter result first");
+    if(!completing)cancelPreview();
     const auto context=context_();if(context.first!=document_)throw std::runtime_error("This parameter editor belongs to another song");
     const auto generation=generation_;pending_=true;layout();
     try{
@@ -70,6 +102,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   void finishResult(){
     const auto result=completion_.returned();if(!result)throw std::runtime_error("Parameter result is uncertain / use Review result");
     const auto report=Json{{"outcome","returned"},{"submission",submitted_},{"result",result->result}};
+    previewToken_.clear();
     if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation())load(true);
     report_=report;completion_.finish();status(dirty()?L"Earlier edit completed / newer fields retained":L"Parameter applied / one Undo restores it");
   }
@@ -85,9 +118,13 @@ class PluginParametersWindow final : public NativeToolWindow {
       const auto v=number(control(i,value));if(v<f.minimum||v>f.maximum||(f.kind!=PluginParameterField::Kind::Number&&std::floor(v)!=v))throw std::runtime_error("Enter a value in the displayed range for "+f.name);
       const auto id=parameters_[size_t(r.index)].at("id");values.push_back({{"id",id},{"value",v}});raw.push_back({{"id",id},{"value",utf8(field(control(i,value)))}});
     }
-    submitted_=target();submitted_["expectedRevision"]=revision_;submitted_[graph_.empty()?"values":"parameters"]=std::move(values);
+    const bool preview=!previewToken_.empty();
+    if(preview&&values.size()!=1)throw std::runtime_error("Finish the captured slider before editing other parameters");
+    submitted_=target();submitted_["expectedRevision"]=revision_;
+    if(preview){submitted_["gesture"]=previewToken_;submitted_["parameter"]=previewParameter_;submitted_["value"]=values[0].at("value");}
+    else submitted_[graph_.empty()?"values":"parameters"]=std::move(values);
     const auto generation=generation_;pending_=true;layout();
-    try{completion_.submit(write_,writeMethod(),submitted_,document_,generation,raw);pending_=false;finishResult();}
+    try{completion_.submit(write_,preview?"plugin.parameters.preview.commit":writeMethod(),submitted_,document_,generation,raw);pending_=false;finishResult();}
     catch(...){pending_=false;layout();throw;}layout();
   }
   void review(){
@@ -139,12 +176,12 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(code==TB_LINEUP||code==TB_LINEDOWN){const auto step=f.step>0?f.step:(f.maximum-f.minimum)/100;candidate=std::clamp(f.value+(code==TB_LINEUP?-step:step),f.minimum,f.maximum);}
     if(f.step>0)candidate=std::clamp(f.minimum+std::round((candidate-f.minimum)/f.step)*f.step,f.minimum,f.maximum);
     sliderRow_=row;setting_=true;set(control(row,value),Json(candidate));setting_=false;r.dirty=true;++generation_;
-    if(code==TB_THUMBTRACK||code==TB_THUMBPOSITION)status(L"Release the slider to apply this value / Escape cancels");
+    if(code==TB_THUMBTRACK||code==TB_THUMBPOSITION){if(graph_.empty())previewSlider(row,candidate);else status(L"Release the slider to save this recipe value / Escape cancels");}
     else{sliderRow_=-1;commit();}return true;
   }
   void controlCaptureChanged(HWND child)override{if(sliderRow_>=0&&child==controls_.at(control(sliderRow_,slider)))SetTimer(window_,8,1,nullptr);}
   bool key(WPARAM key,bool ctrl,bool)override{
-    if(key==VK_ESCAPE){if(sliderRow_>=0){sliderRow_=-1;ReleaseCapture();++generation_;presentPage();status(L"Slider cancelled / plugin unchanged");}else hide();return true;}
+    if(key==VK_ESCAPE){if(sliderRow_>=0||!previewToken_.empty()){cancelPreview();sliderRow_=-1;ReleaseCapture();++generation_;presentPage();status(L"Slider cancelled / saved parameter restored");}else hide();return true;}
     if(ctrl&&key=='R'){action(reload,BN_CLICKED);return true;}
     if(ctrl&&(key==VK_NEXT||key==VK_PRIOR)){requireReady();changePage(page_+(key==VK_NEXT?1:-1));return true;}
     if(key==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id>=rowBase&&(id-rowBase)%stride==value){commit();return true;}wchar_t type[24]{};GetClassNameW(GetFocus(),type,24);if(!_wcsicmp(type,L"Button")){action(id,BN_CLICKED);return true;}}return false;
@@ -181,7 +218,7 @@ public:
     finish();load();
   }
   void show(){NativeToolWindow::show();SetTimer(window_,7,250,nullptr);SetFocus(controls_.at(parameter));}
-  void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
+  void hide()override{if(!previewToken_.empty()){cancelPreview();sliderRow_=-1;++generation_;presentPage();}KillTimer(window_,7);NativeToolWindow::hide();}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
     return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",parameters_.empty()?-1:page_*pageSize},{"page",page_},{"pages",pages()},{"rows",rows},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
 };

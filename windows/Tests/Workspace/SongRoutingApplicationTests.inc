@@ -233,15 +233,27 @@ void applicationGraphParameterInspector(){
   const auto track=GetDlgItem(window,4001+int(index)*10);
   SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
   restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider tracking committed before gesture completion");
+  const auto preview=app.documentOperation("plugin.parameters.preview.get",RestoreJson::object());
+  restoreCheck(preview.at("active")==true&&preview.at("plugin")==plugin&&preview.at("parameter")==found->at("id"),"Slider tracking did not retain its stable preview owner");
   SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Slider release retained its transient owner");
   const auto slid=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
   restoreCheck(slid[index].at("value")!=after[index].at("value")&&!editor->snapshot().at("dirty").get<bool>(),"Slider release failed to modify the plugin");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider gesture needed more than one Undo");click(3955);
   SendMessageW(track,TBM_SETPOS,TRUE,9000);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,1);
   restoreCheck(!editor->snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Escape committed a cancelled slider");
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Escape retained an audible preview owner");
   SetFocus(track);SendMessageW(track,WM_KEYDOWN,VK_RIGHT,1);SendMessageW(track,WM_KEYUP,VK_RIGHT,1);
   restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[index].at("value")!=after[index].at("value"),"Native slider arrow key did not modify the parameter");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider keyboard step failed Undo");click(3955);
+  SendMessageW(track,TBM_SETPOS,TRUE,6500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="plugin.parameters.preview.commit"){SetWindowTextW(GetDlgItem(window,rawControl),L"Newer slider text");throw std::runtime_error("Drop slider completion after commit");}};
+  SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));app.sampleMutationCompletion={};
+  restoreCheck(!editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Slider completion failure lost the newer draft or its result");
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Committed slider retained a transient preview after completion loss");
+  const auto acceptedSlider=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+  click(3955);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==acceptedSlider&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Review replayed the slider or overwrote a newer draft");
+  click(3955);app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider completion recovery created extra history");click(3955);
   // Unrelated graph edits must not silently rebase a typed parameter draft.
   SetWindowTextW(GetDlgItem(window,rawControl),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
   restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(field.value).c_str());click(applyControl);

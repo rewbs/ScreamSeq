@@ -2,6 +2,7 @@
 #include "TimelineOperations.hpp"
 #include "windows/Audio/WasapiCapture.hpp"
 #include "editor/hosted/SelectionRender.hpp"
+#include "editor/hosted/ParameterEdits.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"
@@ -555,6 +556,7 @@ std::function<void()> DocumentController::prepareNativePublication(const Tracker
   return prepareNativeUpdate(document_->native(),next);
 }
 
+#include "ParameterPreviewOperations.inc"
 Json DocumentController::operation(const std::string &method,Json params) {
   const bool replacing=method=="document.open"||method=="document.new";
   if(method=="document.new") {
@@ -566,6 +568,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     (void)flag(params,"demo");(void)flag(params,"discard");
   }
   if(publicationPending_) publish();
+  if(method.starts_with("plugin.parameters.preview."))return parameterPreviewOperation(method,params);
   if(method.starts_with("parameter.activity."))return parameterActivityOperation(method,params);
   if(method.starts_with("recording.")) {
     try{return recordingOperation(method,params);}
@@ -593,6 +596,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     const auto count=plugins_->openEditorCount();bool changed=false;
     try{changed=plugins_->flushEditors(force);}
     catch(const std::exception &e){plugins_->editorWarning(std::string("Plugin editor state was not captured / ")+e.what());changed=true;}
+    if(changed&&parameterPreview_.active())cancelParameterPreview();
     if(changed || count!=plugins_->openEditorCount())publish();
   };
   if(method=="flushPluginEditors") {
@@ -619,6 +623,9 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
+    // A document mutation/save uses the accepted baseline. Never serialize or
+    // carry a temporary audible value into another edit or plugin topology.
+    if(!flag(params,"dryRun"))cancelParameterPreview();
   }
   const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();const bool beforeRecovered=project_.recoveredUnsaved;
   changedPatterns_.clear();
@@ -865,7 +872,8 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // This does not classify recording start/stop/discard, files or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="graph.update") {
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="graph.update"
+        ||method=="plugin.parameters.preview.commit") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}

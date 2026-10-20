@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "mac/Tools"))
 from resonance_api import APIError, Client, drum_roll, endpoints
 from test_audio_fanout import audio_fanout
 from test_scratch_gestures import scratch_gestures
+sys.path.insert(0, str(ROOT / 'editor/Tests'))
+from parameter_preview_contract import parameter_preview_contract
 import plistlib
 
 
@@ -2311,6 +2313,7 @@ def main():
                 graph_stage_routing(client, directory)
                 audio_fanout(client, directory)
                 scratch_gestures(client, directory)
+                parameter_preview_contract(client, directory, expect_error)
                 print("PASS local API socket: private discovery/permissions, JSON framing, real crescendo-roll client, dry run, one-step undo, preserved cells/effects, retry deduplication, competing writers and method schema; no windows or audio output")
             finally:
                 process.terminate()

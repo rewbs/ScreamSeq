@@ -13,6 +13,7 @@
 #include "../Project/NativeProject.hpp"
 #include "../Audio/PresentationClock.hpp"
 #include "editor/NoteRecording.hpp"
+#include "editor/ParameterPreviewOwner.hpp"
 #include "editor/PatternDisplay.h"
 #include <atomic>
 #include <condition_variable>
@@ -116,6 +117,10 @@ class DocumentController {
   std::unique_ptr<PluginOperations> plugins_;
   std::unique_ptr<HostedProjectPlayback> playback_;
   uint64_t playbackDocumentGeneration_=0;
+  Tracker::ParameterPreviewOwner parameterPreview_;
+  HostedProjectPlayback *parameterPreviewHost_=nullptr;
+  Json parameterPreviewOperation(const std::string &,const Json &);
+  void cancelParameterPreview();
   Project::ProjectState project_;
   std::unique_ptr<RecordingTake> recording_;
   std::string identity_;

@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "f78bc3f0962ed01d15585c29d46419e5aed7c1d9884aa442fb02305f46c748f5",
+    "sha256": "ab879fa08639d0027cbbc0ed505dfdb6ea95b6a77127b36220381e3d0b40ba23",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -160,6 +160,10 @@
       "plugin.meters",
       "plugin.move",
       "plugin.parameters.get",
+      "plugin.parameters.preview.cancel",
+      "plugin.parameters.preview.commit",
+      "plugin.parameters.preview.get",
+      "plugin.parameters.preview.set",
       "plugin.parameters.set",
       "plugin.preset.inspect",
       "plugin.preset.load",
@@ -296,6 +300,7 @@
         "plugin.instruments.get",
         "plugin.library.get",
         "plugin.parameters.get",
+        "plugin.parameters.preview.get",
         "plugin.path.get",
         "plugin.preset.inspect",
         "plugin.programs.get",
@@ -433,6 +438,9 @@
         "plugin.instruments.set",
         "plugin.library.set",
         "plugin.move",
+        "plugin.parameters.preview.cancel",
+        "plugin.parameters.preview.commit",
+        "plugin.parameters.preview.set",
         "plugin.parameters.set",
         "plugin.path.scan",
         "plugin.path.set",
@@ -545,6 +553,20 @@
           }
         },
         "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-EDIT-BATCH-2026-10-19.md"
+      },
+      "pendingInventoryReview20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "plugin.parameters.preview.get"
+        ],
+        "writesAdded": [
+          "plugin.parameters.preview.cancel",
+          "plugin.parameters.preview.commit",
+          "plugin.parameters.preview.set"
+        ],
+        "removed": [],
+        "evidence": "doc/windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md",
+        "note": "Expected inventory only. Earlier executable receipts do not qualify these additions; native runtime capture remains required."
       }
     },
     "macos": {
@@ -602,6 +624,7 @@
         "plugin.locations.get",
         "plugin.meters",
         "plugin.parameters.get",
+        "plugin.parameters.preview.get",
         "plugin.preset.inspect",
         "plugin.programs.get",
         "plugin.state.get",
@@ -733,6 +756,9 @@
         "plugin.library.set",
         "plugin.locations.trust",
         "plugin.move",
+        "plugin.parameters.preview.cancel",
+        "plugin.parameters.preview.commit",
+        "plugin.parameters.preview.set",
         "plugin.parameters.set",
         "plugin.preset.load",
         "plugin.preset.save",
@@ -790,7 +816,21 @@
         "workspace.shortcut.set"
       ],
       "missingSharedMethods": [],
-      "additionalMethods": []
+      "additionalMethods": [],
+      "pendingInventoryReview20261020": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "plugin.parameters.preview.get"
+        ],
+        "writesAdded": [
+          "plugin.parameters.preview.cancel",
+          "plugin.parameters.preview.commit",
+          "plugin.parameters.preview.set"
+        ],
+        "removed": [],
+        "evidence": "doc/windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md",
+        "note": "Expected inventory only. Earlier executable receipts do not qualify these additions; native runtime capture remains required."
+      }
     }
   },
   "contracts": [
@@ -864,6 +904,18 @@
       "sources": [
         "windows/Session/PluginOperations.cpp",
         "mac/Bridge/TrackerSessionAPI.inc"
+      ]
+    },
+    {
+      "id": "API-PARAMETER-PREVIEW",
+      "phase": "P4b/P5",
+      "status": "implemented-pending-qualification",
+      "finding": "Both adapters share transient gesture ownership and catalog validation. Windows graph rack inspector previews tracking values and commits once on release. Shared native PCM tests, worker lifecycle, Windows native inspector and shared socket/pipe contract are required; no native pass is claimed by this expected inventory update. Recipe previews remain open.",
+      "sources": [
+        "editor/ParameterPreviewOwner.hpp",
+        "windows/Session/ParameterPreviewOperations.inc",
+        "mac/Bridge/ParameterPreviewAPI.inc",
+        "editor/Tests/parameter_preview_contract.py"
       ]
     }
   ]

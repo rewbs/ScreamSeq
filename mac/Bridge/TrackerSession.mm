@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include "editor/ParameterProvenance.hpp"
 #include "editor/ParameterBaseline.hpp"
+#include "editor/ParameterPreviewOwner.hpp"
 #include "editor/GraphEditing.hpp"
 #include "editor/GraphTrims.hpp"
 #include "editor/GraphClipboard.hpp"
@@ -384,6 +385,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   NSDictionary *_playbackRegion;
   std::unique_ptr<Document> _document;
   std::unique_ptr<AudioDevice> _audio;
+  ParameterPreviewOwner _parameterPreview;
+  BOOL _parameterPreviewCommitting;
   std::unique_ptr<MidiInput> _midi;
   std::unique_ptr<PluginInventory> _pluginInventory;
   std::unique_ptr<PluginLibrary> _pluginLibrary;
@@ -827,6 +830,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return [self projectDataForRecovery:NO];
 }
 - (NSData *)projectDataForRecovery:(BOOL)recovery {
+  if(!recovery&&!_parameterPreviewCommitting)[self cancelParameterPreview];
   [self commitManualParameters];
   _document->validateSamples();
   auto bytes = _document->snapshotData();
@@ -1052,6 +1056,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     @"latencyPending":@(active && _audio->pluginLatencyChanged())};
 }
 - (NSDictionary *)telemetry {
+  [self refreshParameterPreview];
   auto t = _audio->telemetry();
   auto positions=[NSMutableArray array];
   if(_audio->active() && _audio->renderer()) for(const auto &v:_audio->renderer()->voicePositions())
@@ -1078,6 +1083,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   };
 }
 - (NSDictionary *)snapshot:(NSInteger)pattern {
+  [self refreshParameterPreview];
   auto &s = _document->song();
   auto samples = [NSMutableArray array];
   auto instruments = [NSMutableArray array];
@@ -1321,6 +1327,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)historyUndo:(BOOL)redo error:(NSError **)error {
   try {
+    if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     [self synchronizeHistory];
     _parameterGestureSequence = 0;
     auto head = [&]() -> uint64_t { const auto &history=redo?_effectRedo:_effectUndo; return [self nextHistoryIsPlugin:redo] ? history.back().sequence : _document->historyHead(redo); };
@@ -1842,6 +1849,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (void)applyPluginGraph:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
+  if(!_parameterPreviewCommitting)[self cancelParameterPreview];
   [self synchronizeHistory];
   EffectSnapshot before{_plugins, _automation, _manualParameters};
   _effectUndo.reserve(_effectUndo.size() + 1);
@@ -1865,6 +1873,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)restoreEffectHistory:(BOOL)redo error:(NSError **)error {
   try {
+    if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     auto &source = redo ? _effectRedo : _effectUndo;
     auto &destination = redo ? _effectUndo : _effectRedo;
     if (source.empty())
@@ -2245,6 +2254,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                alreadyApplied:(BOOL)alreadyApplied
                         error:(NSError **)error {
   try {
+    if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     if (slot < 0 || size_t(slot) >= _plugins.size() || identifier < 0 || uint64_t(identifier) > UINT32_MAX || !std::isfinite(value))
       throw std::runtime_error("Invalid plugin parameter edit");
     const bool recording = record && _audio->playing();
@@ -2472,5 +2482,6 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       @"seconds":@(double(pcm.frames)/rate),@"previewSeconds":@(double(frames)/rate),@"peaks":peaks,@"pcm":data};
   } catch(const std::exception &e){failure(error,e);return nil;}
 }
+#include "ParameterPreviewAPI.inc"
 #include "TrackerSessionAPI.inc"
 @end

@@ -71,6 +71,17 @@ publication. The helper returns a bounded candidate and owns no document, plugin
 history or audio callback. Windows and Mac retain their native publication/state
 and history adapters; extraction does not change the public parameter API.
 
+Transient rack slider ownership lives in `editor/ParameterPreviewOwner.hpp`.
+It binds one gesture token to a stable plugin/parameter, document revision and
+native host generation. Windows `ParameterPreviewOperations.inc` and Mac
+`ParameterPreviewAPI.inc` use the existing bounded `PluginChain` preview queue;
+the native adapters retain publication, transport and UI ownership. Preview
+does not alter manual/opaque state or history. Release uses the ordinary durable
+parameter edit, and cancellation restores the current accepted baseline. Recipe
+copies use a different publication path. See the [preview qualification
+checkpoint](windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md)
+for execution status and pending gates.
+
 ## Editing and API invariants
 
 - Native IDs are stable across insert/reorder; indices are transient views. Whole-collection API writes need read/merge/write.

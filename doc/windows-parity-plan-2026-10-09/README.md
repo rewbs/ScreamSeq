@@ -3,7 +3,8 @@
 **Current implementation checkpoint (19 October):** the planning inventory below
 is historical. Shared main is `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`; see the
 [main integration record](../MAIN_INTEGRATION_2026-10-19.md) and
-[plugin/graph continuation](PLUGIN-EDIT-BATCH-2026-10-19.md) for implemented,
+[plugin/graph continuation](PLUGIN-EDIT-BATCH-2026-10-19.md) and
+[rack preview source batch](PARAMETER-PREVIEW-BATCH-2026-10-19.md) for implemented,
 qualified and still-pending work. Do not implement an old absence claim without
 checking those records and current source.
 

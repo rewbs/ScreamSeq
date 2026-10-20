@@ -1,4 +1,5 @@
 #include "editor/hosted/HostedAudio.hpp"
+#include "editor/ParameterPreviewOwner.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -90,7 +91,28 @@ static void refusal(){
   check(chain.cancelParameterPreviews(0,ids),"Cancel after draining failed");render(chain,2048,128);
   check(chain.states()==original&&!chain.hasParameterPreview(0,1),"Cancellation did not recover exact accepted state");
 }
+static void ownership(){
+  ParameterPreviewOwner owner;const ParameterPreviewOwner::Key key{"drag","stable-plugin",1};
+  const auto first=owner.prepare(key,"doc:1",7,-6,true);
+  check(!owner.publish(first,[]{return false;})&&!owner.active(),"Refused first preview acquired ownership");
+  check(owner.publish(first,[]{return true;}),"Accepted preview lost ownership");
+  auto rejected=[&](auto operation){bool failed=false;try{operation();}catch(const std::invalid_argument &){failed=true;}check(failed,"Conflicting preview owner was accepted");};
+  rejected([&]{ParameterPreviewOwner::validateKey({std::string("bad\0token",9),"stable-plugin",1});});
+  rejected([&]{ParameterPreviewOwner::validateKey({std::string(81,'x'),"stable-plugin",1});});
+  rejected([&]{owner.prepare({"other","stable-plugin",1},"doc:1",7,-9,true);});
+  rejected([&]{owner.prepare(key,"doc:2",7,-9,true);});
+  rejected([&]{owner.prepare(key,"doc:1",8,-9,true);});
+  rejected([&]{owner.cancel({"drag","different-plugin",1},[](const auto &){return true;});});
+  const auto next=owner.prepare(key,"doc:1",7,-12,true);
+  check(!owner.publish(next,[]{return false;})&&owner.active()->value==-6,"Queue refusal replaced the accepted preview");
+  bool threw=false;try{owner.publish(next,[]()->bool{throw std::runtime_error("publication failure");});}catch(const std::runtime_error &){threw=true;}
+  check(threw&&owner.active()->value==-6,"Throwing publication lost cancellation ownership");
+  check(!owner.cancel(key,[](const auto &){return false;})&&owner.active(),"Refused cancel forgot the audible preview");
+  check(owner.cancel(key,[](const auto &){return true;})&&!owner.active(),"Accepted cancel retained ownership");
+  check(owner.cancel(key,[](const auto &){throw std::runtime_error("should not publish");return false;}),"Repeated cancel was not harmless");
+}
 int main(){try{
+  ownership();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   refusal();
   std::cout<<"PASS transient parameter PCM, manual/opaque state isolation, reopen, current-baseline cancel, atomic refusal and callback audit\n";

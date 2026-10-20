@@ -1,10 +1,13 @@
 """Rack order and recipe-gesture contracts through a disposable PID pipe."""
 import copy
 import plistlib
+import sys
 import unittest
 
 import test_graph_mixer_app as support
 from client import ApiError
+sys.path.insert(0, str(support.ROOT / 'editor/Tests'))
+from parameter_preview_contract import parameter_preview_contract
 
 
 class PluginEditParityTests(unittest.TestCase):
@@ -17,6 +20,16 @@ class PluginEditParityTests(unittest.TestCase):
 
     def ids(self):
         return [p['instanceID'] for p in self.doc()['data']['nativePlugins']]
+
+    def test_transient_parameter_preview_contract_and_reopen(self):
+        def expect_error(code, action):
+            with self.assertRaises(ApiError) as error:
+                action()
+            self.assertEqual(error.exception.code, code)
+        path, plugin, accepted = parameter_preview_contract(self.client, self.folder, expect_error)
+        self.write('document.open', path=str(path), discard=True)
+        self.assertEqual(self.read('plugin.state.get', plugin=plugin), accepted)
+        self.assertFalse(self.read('plugin.parameters.preview.get')['active'])
 
     def saved(self, name):
         path = self.folder / (name + '.screamseq')

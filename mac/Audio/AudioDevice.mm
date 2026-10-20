@@ -170,6 +170,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
                  ? nullptr
                  : std::make_unique<PluginChain>(pluginStates_, sampleRate_, false, automation_,
                                                  uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
+  ++pluginEpoch_;
   if (plugins_)
     plugins_->attachInstruments(*renderer_, native);
   if (plugins_ && native)
@@ -209,6 +210,7 @@ void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::
   stop();
   renderer_.reset();
   plugins_ = std::move(next);
+  ++pluginEpoch_;
   restoreParameterActivity();
   pluginStates_ = states;
   automation_ = automation;

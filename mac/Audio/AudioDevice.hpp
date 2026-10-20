@@ -13,6 +13,7 @@ class AudioDevice {
   AudioUnit unit_ = nullptr;
   std::unique_ptr<Renderer> renderer_;
   std::unique_ptr<PluginChain> plugins_;
+  uint64_t pluginEpoch_=0;
   std::vector<PluginState> pluginStates_;
   std::vector<size_t> pendingEditors_;
   std::vector<ParameterChange> automation_;
@@ -76,6 +77,13 @@ public:
   }
   bool pluginParameterBatch(std::span<const ParameterChange> changes) {
     return plugins_ && plugins_->enqueueParameters(changes);
+  }
+  uint64_t pluginEpoch()const noexcept{return pluginEpoch_;}
+  bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
+  bool cancelPluginParameterPreview(size_t slot,uint32_t id){
+    if(!plugins_||!plugins_->hasParameterPreview(slot,id))return true;
+    if(!active())plugins_->applyPending();
+    const std::array<uint32_t,1> ids{id};return plugins_->cancelParameterPreviews(slot,ids);
   }
   bool pluginBypass(size_t slot,bool value) {
     if(slot>=pluginStates_.size()||(plugins_&&!plugins_->bypass(slot,value)))return false;

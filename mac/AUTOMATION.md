@@ -319,7 +319,7 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 | Samples | `sample.get`, `sample.waveform.get`, `sample.snap.get`, `sample.loops.set`, `sample.patch`, `sample.process`, `sample.draw`, `sample.crossfade`, `sample.copyToNew`, `sample.import`, `sample.pcm.get`, `sample.pcm.set` |
 | Sample clipboard | `sample.clipboard.get`, `sample.clipboard.copy`, `sample.clipboard.set`, `sample.cut`, `sample.delete`, `sample.paste` |
 | Instruments | `instrument.get`, `instrument.create`, `instrument.import`, `instrument.patch`, `instrument.envelope.get`, `instrument.envelope.copy`, `instrument.envelope.transform`; metadata, keymaps, volume/pan/pitch envelopes, shared tools and note behavior |
-| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
+| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.parameters.preview.get/set/commit/cancel`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
 | Plugin preset files | `plugin.preset.inspect`, `plugin.preset.save`, `plugin.preset.load`; native preset files with stable target identity and separate file/song revision checks |
 | Automation | `automation.target.get`, `automation.get`, `automation.replaceLane`, `automation.pattern.get/set/remove/copy/transform`; stable target learning, absolute lanes and pattern-relative envelopes |
 | History | `history.undo`, `history.redo` use one chronological history; optional legacy domain names are aliases |
@@ -327,6 +327,36 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 `plugin.discover` uses the same persistent inventory as the plugin picker. Pass `{"rescan": true}` to refresh it after installing, removing or updating plugins. A first scan or explicit rescan may take several seconds; cached reads do not launch scanner processes. Discovery does not change the song revision.
 
 `pattern.get` returns at most 4,096 cells per request and supports row/channel pagination. `pattern.apply` accepts up to 4,096 distinct cell patches, validates the entire batch before changing anything, and supports `dryRun`. A parameter batch or lane replacement likewise forms one plugin-history step. There are no cross-domain transactions or general dry runs yet.
+
+### Transient rack parameter gestures
+
+`plugin.parameters.preview.set` takes `expectedRevision`, stable `plugin`, integer
+`parameter`, a nonempty `gesture` token (at most 80 UTF-8 bytes, without NUL), and `value` in the
+catalog's native units. It validates the entire request before publishing one
+bounded audio update. The reply includes `active`, `gesture`, `plugin`,
+`parameter`, captured `revision`, `value` and `audible`. It does not start a device:
+an inactive host retains the gesture with `audible:false`. Saved manual values,
+opaque state, document revision and Undo history remain unchanged while dragging.
+
+Only one preview is retained per session. Updates must keep its token, stable
+target, document revision and audio-host generation. A competing gesture rejects;
+it cannot take over another editor's preview. `plugin.parameters.preview.get {}`
+reads ownership and reconciles a retired document/host. `cancel` takes the same
+identity fields and a current `expectedRevision`, without `value`. It restores
+the **current accepted baseline**, not a stale value captured at drag start.
+Cancellation is idempotent after retirement. A full live queue reports busy and
+retains ownership so the client can inspect and explicitly retry cancellation.
+
+`plugin.parameters.preview.commit` takes the same fields as `set`, including the
+final `value`. It uses the ordinary parameter-edit path and creates one Undo step
+only if the accepted value changes. A no-op release restores the baseline and
+preserves history. A stale release rejects rather than overwriting an intervening
+edit. Ordinary accepted edits and explicit Save cancel the preview; recovery
+serialization uses accepted state. A read or preview does not commit the value.
+Unknown write outcomes require inspecting both preview ownership and the current
+parameter before retrying. These transient operations do not accept `dryRun`.
+They address rack processors; graph recipe controls have a separate publication
+path and are not supported by these four operations.
 
 ### Sample processing and waveform queries
 
