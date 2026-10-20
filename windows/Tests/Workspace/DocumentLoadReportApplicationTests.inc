@@ -9,8 +9,12 @@ void applicationDocumentLoadReport() {
     app.documentOperation("document.open",{{"expectedRevision",app.view->session.revision},{"path",utf8Path(source)}});
     const auto warnings=app.view->session.document.at("loadWarnings");
     restoreCheck(!warnings.empty()&&app.view->session.document.at("requiresSaveAs")==true,"Load report fixture did not exercise real file recovery");
-    const auto button=app.controls.at(documentLoadReportCommand);SetFocus(button);
-    app.command(documentLoadReportCommand);auto *report=app.documentLoadReportWindow.get();
+    // The contextual sidebar retired the duplicate global button. Exercise the
+    // actual File menu from the focused tracker and retain that return target.
+    ScreamSeq::Tests::ownGuiWindow(app.window);SetFocus(app.window);const auto entryFocus=GetFocus();
+    restoreCheck(entryFocus==app.window,"Load-report menu fixture has no focused native entry point");
+    menuBegin(app);menuChoose(app,documentLoadReportCommand);auto *report=app.documentLoadReportWindow.get();
+    restoreCheck(report&&report->visible(),"Native File menu did not open the load report");
     const auto owner=report->window(),text=GetDlgItem(owner,8301);ScreamSeq::Tests::ownGuiWindow(owner);
     const auto before=songState(app),snapshot=report->snapshot();
     restoreCheck(snapshot.at("context").at("warnings")==warnings&&snapshot.at("context").at("sourcePath")==utf8Path(source)&&
@@ -38,7 +42,7 @@ void applicationDocumentLoadReport() {
     restoreCheck(saved.at("context").at("warnings")==warnings&&saved.at("context").at("sourcePath")==utf8Path(source)&&
         saved.at("context").at("path")==utf8Path(copy)&&saved.at("context").at("requiresSaveAs")==false&&!IsWindowVisible(GetDlgItem(owner,8303)),
         "Save a copy erased load provenance or left the completed save requirement visible");
-    report->hide();restoreCheck(GetFocus()==button,"Closing load report did not restore its entry-point focus");
+    report->hide();restoreCheck(GetFocus()==entryFocus,"Closing load report did not restore its menu entry-point focus");
     app.openDocumentLoadReport();restoreCheck(report->snapshot().at("context").at("warnings")==warnings,"Reopening the report discarded load warnings");
     MINMAXINFO limits{};SendMessageW(owner,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));
     SetWindowPos(owner,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);

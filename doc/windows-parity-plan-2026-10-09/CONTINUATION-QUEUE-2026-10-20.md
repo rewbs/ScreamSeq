@@ -62,13 +62,25 @@ the final log's exact build-completion time before scheduling another Windows
 build; **08:28:51 UTC** is a conservative earliest coordinated boundary from
 this observation.
 
-Independent module-export implementation has started in the existing
+The x64 run has since completed failed. Its build and all 153 portable/worker
+checks passed; two native UI fixtures targeted intentionally removed sidebar
+buttons. Their replacements now exercise the real menus and await compilation.
+The retained artifact and audio probe establish that hosted CI had no WASAPI
+endpoints. Reusing its exact x64 executable locally yielded ten passing
+live-output cases, followed by a separately passing corrected loop-menu case,
+without a rebuild. Exact scope, hashes, original failures and persistence
+results are in [x64 qualification](X64-CI-QUALIFICATION-2026-10-20.md).
+Keep the next build boundary at **08:28:51 UTC**.
+
+Independent module-export implementation has advanced in the existing
 `C:/Users/P14/.codex/worktrees/windows-parity-workspace/ScreamSeq` checkout,
-temporary branch `codex/module-export-followup`, commit `b7b87e5ff`.
-Its first source change returns the exact shared validated module bytes and
-reuses that preparation in existing save/validation paths. It is unbuilt.
-The feature branch's export-follow-up document records unfinished endpoint/UI,
-metadata policy, Mac protection and standalone-test gates. Neither the PR head
+temporary branch `codex/module-export-followup`, commit `b8646d785`.
+It now includes shared loss admission, validated bytes, the Windows API/native
+Export command and retained-result review, Mac recovery/gesture preservation,
+and prepared worker/native/Mac regressions. It is unbuilt. The feature branch's
+export-follow-up document records remaining actual pipe/socket replay and
+post-publication fault coverage, native gates and standalone-test scheduling.
+Neither the PR head
 nor the qualification checkout includes this feature work. Continue it and
 reconcile back into the corrected integration branch before its own gate;
 do not leave a long-lived platform branch.
