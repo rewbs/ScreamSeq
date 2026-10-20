@@ -93,6 +93,23 @@ published `draftCount`, `selectedEvent`, raw fields and unchanged document.
 This pass is independent evidence of application behavior, not a retroactive
 pass for the failed C++ group or a foreground visual review.
 
+Five additional actual-app interaction cases passed on the same unchanged
+executable on 20 October, **9.695 seconds**:
+`test_pattern_backspace_clears_and_undo_restores`,
+`test_real_menu_loop_allows_new_song`,
+`test_retained_editor_global_bindings_preserve_focus_and_raw_draft`,
+`test_browser_search_retains_focus_and_arrows_preview`, and
+`test_native_preview_gain_applies_immediately_and_partial_text_preserves_target`.
+Their test methods are unchanged since the built source. The first three live in
+`windows/Tests/test_workspace_shortcuts.py`, the last two in
+`windows/Tests/test_sample_library.py`. Logs and the executable/source receipt:
+`bin/context-panel-20261019/interaction-regression-configured.{log,json}`.
+The initial invocation stopped in fixture setup because TMPDIR was unset;
+`interaction-regression.{log,json}` retains those five setup errors. Setting the
+existing required scratch-directory variable allowed the tests to execute.
+These are isolated native-message/API checks, not audible-preview or visual
+qualification, and do not qualify subsequent unbuilt source.
+
 Build only ScreamSeq and workspace-restore-tests for this Windows presentation
 batch. Run the new private-desktop `workspace-context-panel-tests`, existing
 workspace restore/region, menu and shortcut tests where their binaries match,

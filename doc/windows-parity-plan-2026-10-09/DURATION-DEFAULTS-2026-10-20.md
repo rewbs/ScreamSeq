@@ -89,3 +89,7 @@ metadata tests. The next candidate must also satisfy the recipe/sample gates;
 this correction grants no exception to the one-build-per-hour limit. Repeat
 the new duration capture on Mac and Windows x64 in the final integration gate,
 including reciprocal saves of the resulting files.
+
+Both platform CI workflows now explicitly request `--duration-defaults` in their
+existing conformance step. Their existing Python discovery also includes the
+new verifier safety tests. This is scheduling source, not a CI execution.
