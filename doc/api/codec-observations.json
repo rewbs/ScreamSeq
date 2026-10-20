@@ -169,21 +169,10 @@
       "question": "Integral real versus integer metadata validation",
       "inputSHA256": "8f2330d96f7bac7dc2835528e7013ba947e3cd07df6cef12262155ac72621624",
       "accepted": true,
-      "requiresSaveAs": true,
-      "loadWarnings": [
-        "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
-        "Skipped native section automation because its identities could not be recovered",
-        "Skipped native section mixer because its identities could not be recovered",
-        "Skipped native section noteTracks because its identities could not be recovered",
-        "Skipped native section columnMutes because its identities could not be recovered",
-        "Skipped native section performance because its identities could not be recovered",
-        "Skipped native section preciseNotes because its identities could not be recovered",
-        "Skipped native section signalGraph because its identities could not be recovered",
-        "Skipped native section envelopeBank because its identities could not be recovered",
-        "Skipped native section scratchGestures because its identities could not be recovered"
-      ],
-      "savedTypedSHA256": "1000f91158ca87853cb9c83636a1217b56bba1d81915dd2c0600206ca5701fea",
-      "differenceCount": 68
+      "requiresSaveAs": false,
+      "loadWarnings": [],
+      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "differenceCount": 1
     },
     {
       "id": "boolean-next-id",
@@ -213,7 +202,7 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities do not match the embedded song; native sections kept inactive: Expected metadata integer",
+        "Native identities do not match the embedded song; native sections kept inactive: Metadata integer out of range",
         "Skipped native section automation because its identities could not be recovered",
         "Skipped native section mixer because its identities could not be recovered",
         "Skipped native section noteTracks because its identities could not be recovered",
@@ -224,7 +213,7 @@
         "Skipped native section envelopeBank because its identities could not be recovered",
         "Skipped native section scratchGestures because its identities could not be recovered"
       ],
-      "savedTypedSHA256": "f47d20fbab8b13c6637731e51f92fbea43fa55f86e0ff29e52fb8537d39d6a14",
+      "savedTypedSHA256": "1a328cc417bd537d2a9309fc4aa1e7250b969175f0a74ab1d7e2a753e4d77bc3",
       "differenceCount": 68
     },
     {
@@ -587,6 +576,20 @@
       },
       "scope": "13 reviewed preservation/archive changes; all input, admission, protection and unchanged-case expectations retained",
       "details": "../windows-parity-plan-2026-10-09/CODEC-OBSERVATION-REVIEW-2026-10-20.md"
+    },
+    {
+      "date": "2026-10-20",
+      "platform": "windows",
+      "sourceCommit": "28d757f65c66b970a5b57599984c60a51ac69f85",
+      "builtCISource": "dc0479ec466015280566ba7b9341daf865c03730",
+      "run": 39405368407,
+      "job": 118569879460,
+      "reportSHA256": {
+        "arm64": "badab593641070ebd42afd4852ae78fbd0b961d84bb01016439c8c4071599c56",
+        "x64": "e4648548b1fa6d135c431485ed8634b500d0dcf82072348276c5f0a313a1e067"
+      },
+      "scope": "Two paired observations: integral-real nextID preserves native music and matches Mac; fractional nextID retains rejection/archive/protection with only diagnostic wording changed. Other 19 expectations unchanged.",
+      "details": "../windows-parity-plan-2026-10-09/CLOCK-CI-REVIEW-2026-10-20.md"
     }
   ]
 }

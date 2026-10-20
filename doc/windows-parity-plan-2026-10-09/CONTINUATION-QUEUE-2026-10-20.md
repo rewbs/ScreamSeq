@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Latest CI review and prepared repair:** [clock/recovery CI review](CLOCK-CI-REVIEW-2026-10-20.md).
+Windows x64 passed its build, 156/157 portable/worker registrations, all 48 native
+editor groups and complete composing/envelope-bank journeys. Its remaining
+failures and device limits are retained. Paired ARM64/x64 evidence reconciles
+only two codec expectations. Mac Apple Silicon passed 134 native and 35
+interface groups, but F04 found an exact opaque-state Undo defect. Its cache
+restoration repair and regression are prepared, **unbuilt**. Intel job
+**118569881392** in run **39405368725** remains building at the review's latest poll.
+Next coordinated build **not before 11:23 UTC**, extended by Intel completion;
+batch all three pending repairs and do not dispatch a replacement run.
+
 **Next source batch:** [clear recorded automation](RECORDED-CLEAR-BATCH-2026-10-20.md)
 adds the Windows action and both API endpoints, fixes Mac's live-state capture/
 Stop path, and shares guarded manual-baseline restoration. All native tests are

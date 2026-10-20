@@ -1883,23 +1883,29 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
       // Numeric history must not replace a playing processor or lose its LFO,
       // tail, recorded timeline, custom interface, or autosave-folded baseline.
       if(saved.automation!=_automation)throw std::runtime_error("Recorded automation changed; retry parameter history after restoring its timeline");
-      std::vector<ParameterChange> changes;auto nextManual=_manualParameters;
+      // Save may have folded pending values into opaque blobs since this entry
+      // was captured. Restore that exact saved representation as well as the
+      // live scalars; synthesizing a new default blob loses an imported empty
+      // state and can change vendor-private data on a later save.
+      auto nextPlugins=saved.plugins;
+      auto nextManual=saved.manual;
+      if(nextPlugins.size()!=_plugins.size())throw std::runtime_error("Historical parameter rack changed; restore its routing before its values");
+      for(size_t slot=0;slot<nextPlugins.size();++slot) {
+        const auto &old=nextPlugins[slot],&target=_plugins[slot];
+        if(target.instanceID!=old.instanceID||target.descriptor!=old.descriptor||target.audioLayout!=old.audioLayout||target.bypass!=old.bypass||target.instrument!=old.instrument||target.midiChannel!=old.midiChannel||target.aliases!=old.aliases||target.auxiliaryInputs!=old.auxiliaryInputs||target.auxiliaryOutputs!=old.auxiliaryOutputs)
+          throw std::runtime_error("Historical parameter rack changed; restore its routing before its values");
+      }
+      std::vector<ParameterChange> changes;
       changes.reserve(saved.parameterValues.size());current.parameterValues.reserve(saved.parameterValues.size());
-      nextManual.reserve(nextManual.size()+saved.parameterValues.size());
       for(const auto &point:saved.parameterValues) {
         if(point.slot>=saved.plugins.size())throw std::runtime_error("Historical parameter processor is unavailable");
-        const auto &old=saved.plugins[point.slot];const auto target=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==old.instanceID;});
-        if(target==_plugins.end()||target->descriptor!=old.descriptor||target->audioLayout!=old.audioLayout||target->bypass!=old.bypass||target->instrument!=old.instrument||target->midiChannel!=old.midiChannel||target->aliases!=old.aliases||target->auxiliaryInputs!=old.auxiliaryInputs||target->auxiliaryOutputs!=old.auxiliaryOutputs)
-          throw std::runtime_error("Historical parameter processor changed; restore its routing before its values");
-        const auto slot=uint32_t(target-_plugins.begin());
+        const auto slot=point.slot;
         const auto value=[self manualValueForHistory:slot identifier:point.id alreadyApplied:NO];
         current.parameterValues.push_back({slot,point.id,value,0});changes.push_back({slot,point.id,point.value,0});
-        const auto previous=std::find_if(nextManual.begin(),nextManual.end(),[&](const auto &p){return p.slot==slot&&p.id==point.id;});
-        if(previous==nextManual.end())nextManual.push_back(changes.back());else previous->value=point.value;
       }
       // All allocation and history staging precedes the all-or-nothing queue.
       if(!_audio->pluginParameterBatch(changes))throw std::runtime_error("Plugin parameter queue is busy; retry history (song and playback preserved)");
-      _manualParameters.swap(nextManual);++_pluginRevision;
+      _plugins.swap(nextPlugins);_manualParameters.swap(nextManual);++_pluginRevision;
       destination.push_back(std::move(current));source.pop_back();trimEffectHistory(destination);return YES;
     }
     // Missing effects remain opaque and repairable when restoring history too.
