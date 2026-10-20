@@ -78,8 +78,12 @@ temporary branch `codex/module-export-followup`, commit `b8646d785`.
 It now includes shared loss admission, validated bytes, the Windows API/native
 Export command and retained-result review, Mac recovery/gesture preservation,
 and prepared worker/native/Mac regressions. It is unbuilt. The feature branch's
-export-follow-up document records remaining actual pipe/socket replay and
-post-publication fault coverage, native gates and standalone-test scheduling.
+export-follow-up document records newly prepared actual pipe/socket replay,
+post-publication native fault coverage, real filesystem refusal and protected
+source-alias checks. The full snapshot suite is now scheduled against matching
+libraries in normal Windows CMake, with current migration checks and bundled
+F04. These additions have static checks only; native compilation and actual
+runtime execution remain open.
 Neither the PR head
 nor the qualification checkout includes this feature work. Continue it and
 reconcile back into the corrected integration branch before its own gate;

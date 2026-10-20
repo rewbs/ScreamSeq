@@ -638,6 +638,15 @@ if(BUILD_TESTING)
     set_tests_properties(${name} PROPERTIES FIXTURES_REQUIRED ${scratch}-scratch RESOURCE_LOCK ${scratch}-scratch
       LABELS "worker;functional;no-realtime-audit" TIMEOUT 120)
   endfunction()
+  # Compile preservation/export checks against this build's actual libraries,
+  # rather than a standalone project pointing at a possibly stale engine path.
+  add_executable(snapshot-tests Tests/Snapshot/SnapshotTests.cpp)
+  target_link_libraries(snapshot-tests PRIVATE ScreamSeqProject)
+  target_link_options(snapshot-tests PRIVATE /STACK:8388608)
+  screamseq_scratch(snapshot)
+  screamseq_worker_test(snapshot-tests snapshot snapshot-tests)
+  set_tests_properties(snapshot-tests PROPERTIES ENVIRONMENT
+    "TMPDIR=${CMAKE_CURRENT_BINARY_DIR}/test-scratch/snapshot;SCREAMSEQ_SNAPSHOT_REFERENCE_PROJECT=${ROOT}/editor/Tests/Fixtures/Parity20261009/fixtures/04-complete-reference.screamseq")
   screamseq_scratch(windows-save)
   screamseq_worker_test(windows-save-tests windows-save windows-save-tests "${CMAKE_CURRENT_BINARY_DIR}/test-scratch/windows-save")
   # The document worker modes share one directory, in the documented order:
@@ -669,7 +678,7 @@ if(BUILD_TESTING)
   else()
     message(STATUS "native-project-tests is built but not registered: set SCREAMSEQ_REFERENCE_PROJECT to the Mac reference project")
   endif()
-  add_custom_target(worker-tests DEPENDS native-audio-bus-tests native-project-tests document-controller-tests envelope-operations-tests windows-save-tests
+  add_custom_target(worker-tests DEPENDS snapshot-tests native-audio-bus-tests native-project-tests document-controller-tests envelope-operations-tests windows-save-tests
     native-metadata-tests live-parameter-tests parameter-preview-tests recorded-automation-tests audio-port-trim-tests hosted-project-tests project-preservation-tests binary-plist-tests mixer-document-tests track-operations-tests graph-document-tests scratch-gesture-api-tests)
 endif()
 

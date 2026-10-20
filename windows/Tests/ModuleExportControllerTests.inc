@@ -46,6 +46,23 @@ void moduleExportControllerTests(const std::filesystem::path &directory) {
     need(stale&&controller.view()==before&&Project::readProjectBytes(output)==exportedBytes,"Stale export wrote a destination");
     invoke(controller,"document.exportModule",{{"path",output.generic_string()},{"overwrite",true}});
     need(controller.view()==before&&Project::readProjectBytes(output)==exportedBytes,"Explicit replacement changed the document or exported data");
+    {
+      // Admit and serialize normally, then let the real filesystem refuse
+      // replacement. The worker must not invent a success/noncommit receipt.
+      Project::FileDetail::Handle locked(CreateFileW(output.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,
+        OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr));
+      need(locked.value!=INVALID_HANDLE_VALUE,"Cannot establish owned export publication lock");
+      const auto receipt=std::make_shared<NativeCallReceipt>();bool failed=false;
+      auto pending=controller.invokeCompleted("document.exportModule",
+        {{"path",output.generic_string()},{"overwrite",true},{"expectedRevision",before->session.revision}},receipt);
+      while(pending.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)controller.service();
+      try{(void)pending.get();}catch(const std::system_error &){failed=true;}
+      need(failed&&!receipt->read()&&controller.view()==before&&stops==beforeStops&&
+        Project::readProjectBytes(output)==exportedBytes,"Failed export publication changed the destination or supplied a false receipt");
+      for(const auto &entry:std::filesystem::directory_iterator(directory))
+        need(entry.path().filename().wstring().find(output.filename().wstring()+L".staged.")!=0,
+          "Failed export publication leaked a staging file");
+    }
     invoke(controller,"history.redo");
     need(controller.view()->session.document.at("title")=="Later edit","Export consumed or replaced Redo");
     invoke(controller,"history.undo");
@@ -81,6 +98,15 @@ void moduleExportControllerTests(const std::filesystem::path &directory) {
   try{invoke(recovered,"document.save",{{"path",source.generic_string()},{"overwrite",true}});}
   catch(const Api::ApiError &){protectedSource=true;}
   need(protectedSource&&Project::readProjectBytes(source)==original,"Export unlocked the original recovered project");
+  const auto alias=directory/"export-protected-alias.it";
+  std::filesystem::create_hard_link(source,alias);
+  for(bool dry:{true,false}) {
+    bool refused=false;
+    try{invoke(recovered,"document.exportModule",{{"path",alias.generic_string()},{"overwrite",true},{"dryRun",dry}});}
+    catch(const Api::ApiError &error){refused=error.code==-32003&&error.outcome&&error.outcome->state==Tracker::CommitOutcome::NotCommitted;}
+    need(refused&&recovered.view()==before&&Project::readProjectBytes(alias)==original&&Project::readProjectBytes(source)==original,
+      "Export bypassed recovered-source protection through a format-matching hard-link alias");
+  }
   future["futureExtension"]=Json::binary({0,255,42});
   const auto opaque=directory/"export-opaque.screamseq";const auto opaqueBytes=Project::encodePlist(future);
   Project::writeProjectFile(opaque,opaqueBytes,false);

@@ -2,6 +2,8 @@
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
 #include "windows/Project/NativeProject.hpp"
+#include "windows/Project/BinaryPlist.hpp"
+#include "windows/Project/ProjectIO.hpp"
 #include <windows.h>
 #ifdef small
 #undef small
@@ -112,7 +114,7 @@ void structureConservation() {
     ScreamSeq::Project::saveNativeProject(*doc,state,file,true);
     auto reopened=ScreamSeq::Project::openNativeProject(file);
     CHECK(core(*reopened.document)==after); CHECK(reopened.document->native()==afterNative);
-    CHECK(reopened.state.preserved.at("version")==4); CHECK(reopened.state.preserved.at("native").at("version")==14);
+    CHECK(reopened.state.preserved.at("version")==6); CHECK(reopened.state.preserved.at("native").at("version")==17);
     std::filesystem::remove(file);
   }
 }
@@ -158,13 +160,32 @@ void titlesAndLegacy() {
       CHECK(copy->song().m_songName==title); CHECK(copy->song().GetCharsetInternal()==doc->song().GetCharsetInternal());
       doc->undo(); doc->redo(); CHECK(doc->song().m_songName==title);
       const auto file=std::filesystem::u8path(std::getenv("TMPDIR"))/std::filesystem::u8path("snapshot-exact-title-音楽.screamseq");
-      for(unsigned version:{4,5}) {
-        auto state=ScreamSeq::Project::newProjectState(*doc); state.preserved["version"]=version;
-        ScreamSeq::Project::saveNativeProject(*doc,state,file,true);
+      for(unsigned version:{4,5,6}) {
+        auto state=ScreamSeq::Project::newProjectState(*doc);
+        auto tree=ScreamSeq::Project::nativeProjectTree(*doc,state);tree["version"]=version;
+        const auto input=file.parent_path()/"snapshot-title-source.screamseq";
+        const auto original=ScreamSeq::Project::encodePlist(tree);
+        ScreamSeq::Project::writeProjectFile(input,original,true);
+        auto recovered=ScreamSeq::Project::openNativeProject(input);
+        CHECK(core(*recovered.document)==core(*doc));CHECK(recovered.document->native()==doc->native());
+        if(version!=6) {
+          CHECK(recovered.state.requiresSaveAs&&!recovered.state.loadWarnings.empty());
+          rejects([&]{ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,input,true);});
+          CHECK(ScreamSeq::Project::readProjectBytes(input)==original);
+          // Writers remain strict; only file-open recovery may normalize a
+          // historical container, and it must retain its protected source.
+          auto invalid=state;invalid.preserved["version"]=version;
+          rejects([&]{(void)ScreamSeq::Project::serializeNativeProject(*doc,invalid);});
+        } else CHECK(!recovered.state.requiresSaveAs);
+        ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,file,true);
+        CHECK(ScreamSeq::Project::readProjectBytes(input)==original);
         auto reopened=ScreamSeq::Project::openNativeProject(file);
         CHECK(reopened.document->song().m_songName==title);
         CHECK(reopened.document->song().GetCharsetInternal()==doc->song().GetCharsetInternal());
-        CHECK(reopened.document->native()==doc->native()); CHECK(reopened.state.preserved.at("version")==version);
+        CHECK(core(*reopened.document)==core(*doc));CHECK(reopened.document->native()==doc->native());
+        CHECK(reopened.state.preserved.at("version")==6);CHECK(reopened.state.preserved.at("native").at("version")==17);
+        CHECK(!reopened.state.requiresSaveAs);
+        std::filesystem::remove(input);
       }
       std::filesystem::remove(file);
     }
@@ -212,13 +233,14 @@ void malformedArchives() {
   bad=bytes;bad[8]=std::byte{0xff};rejects([&]{splitSongSnapshot(bad);});
   rejects([&]{auto d=std::make_unique<Document>(packSongSnapshot(bytes,parts.samples));});
 }
-void actualMacFixture() {
-  const auto path=std::getenv("SCREAMSEQ_REFERENCE_PROJECT");
-  if(!path || !*path) {std::cout<<"SKIP actual Mac fixture: set SCREAMSEQ_REFERENCE_PROJECT\n";return;}
+void parityReferenceFixture() {
+  const auto path=std::getenv("SCREAMSEQ_SNAPSHOT_REFERENCE_PROJECT");
+  CHECK(path&&*path); // Missing qualification inputs are failures, not passes.
   auto project=ScreamSeq::Project::openNativeProject(std::filesystem::u8path(path));
   CHECK(project.document->song().GetTitle()=="Midnight Circuit");
-  CHECK(project.document->song().GetNumSamples()==4); CHECK(project.document->song().GetNumInstruments()==7);
-  CHECK(project.document->native().preciseNotes.size()==4); CHECK(project.document->native().envelopeBank.size()==3);
+  // Bundled F04, pinned by Parity20261009/fixtures/manifest.json.
+  CHECK(project.document->song().GetNumSamples()==7); CHECK(project.document->song().GetNumInstruments()==7);
+  CHECK(project.document->native().preciseNotes.size()==8); CHECK(project.document->native().envelopeBank.size()==1);
   const auto expected=core(*project.document); const auto native=project.document->native();
   const auto plugins=project.state.preserved.at("plugins");
   auto copy=std::make_unique<Document>(project.document->snapshotData());
@@ -388,11 +410,14 @@ void patternNameSave(MODTYPE type, bool preserveSamples) {
   checkRejectedSave(*doc,preserveSamples);
 }
 int main(int argc,char **argv) {
+  if(!std::getenv("TMPDIR")||!*std::getenv("TMPDIR")) {
+    std::cerr<<"TMPDIR must name an owned scratch directory\n";return 1;
+  }
   unsigned failed=0,run=0;
   std::vector<std::pair<std::string,std::function<void()>>> tests{
       {"titleSnapshot",titleSnapshot},{"sparseSnapshot",sparseSnapshot},{"structureConservation",structureConservation},
       {"moduleExportLoss",moduleExportLoss},{"titlesAndLegacy",titlesAndLegacy},{"malformedArchives",malformedArchives},
-      {"actualMacFixture",actualMacFixture},{"exactPatternGroove",exactPatternGroove}};
+      {"parityReferenceFixture",parityReferenceFixture},{"exactPatternGroove",exactPatternGroove}};
   for(const auto &[type,name]:std::vector<std::pair<MODTYPE,std::string>>{
       {MOD_TYPE_MOD,"MOD"},{MOD_TYPE_XM,"XM"},{MOD_TYPE_S3M,"S3M"},{MOD_TYPE_IT,"IT"},{MOD_TYPE_MPT,"MPTM"}}) {
     tests.emplace_back("idleCellSnapshot/"+name,[type]{idleCellSnapshot(type);});

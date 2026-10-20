@@ -14,7 +14,7 @@ from native_roundtrip import ROOT, owned_client, write_json
 from project_tree import EvidenceError, differences, read_bytes, read_project, sha256
 
 CONTRACTS = ("parameter_preview", "recipe_parameter", "recipe_preview",
-             "rack_dry_run", "integer_api", "request_replay")
+             "rack_dry_run", "integer_api", "request_replay", "module_export")
 
 
 def run(executable, output):
@@ -64,7 +64,7 @@ def run(executable, output):
                             raise EvidenceError(f"Expected API rejection {code}")
 
                     contract = getattr(module, name + "_contract")
-                    contract(client, directory, Error if name == "request_replay" else expect_error)
+                    contract(client, directory, Error if name in ("request_replay", "module_export") else expect_error)
                     first, second = directory / "final.screamseq", directory / "reopened.screamseq"
                     client.call("document.save", dict(expectedRevision=client.call("document.get")["revision"], path=str(first)))
                     first_bytes = read_bytes(first)

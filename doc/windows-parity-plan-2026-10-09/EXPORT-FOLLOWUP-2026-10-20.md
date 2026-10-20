@@ -196,3 +196,59 @@ fault coverage; inspect failed/uncertain publication outcomes and source aliases
 run the bounded native/worker/Mac batches on a frozen candidate. Review the real
 Windows dialog and Mac sheet when foreground inspection is authorized. Full-song
 audio export and manual automation capture remain separate open requirements.
+
+### Retry, failure and schedule batch (20 October, unbuilt)
+
+The next source batch adds `editor/Tests/module_export_contract.py` to the
+fresh-process editing-contract runner used by Mac CI and to the Windows
+actual-pipe application suite. It prepares dirty work with pending Redo, checks
+dry/invalid/stale admission, then publishes both exclusive and replacement
+exports. An owned external writer changes the destination before exact request-ID
+replay: the retained result must return without overwriting that change. A
+retained rejection must remain rejected after the destination is removed.
+Conflicting ID reuse rejects. Full document readback, native file/dirty fields
+where exposed, Redo, chronological Undo and an exact typed saved baseline are
+checked. The common runner additionally saves/reopens the final native tree.
+
+`ModuleExportApplicationTests.inc` now injects a native completion failure after
+real publication and separately drops every receipt route after publication.
+Re-entering Export reviews the known result; an uncertain-result acknowledgement
+rechecks the destination and refuses if it changes during the prompt. Subsequent
+Review records the current observation as unverified, never a fabricated success.
+Both paths preserve externally replaced bytes, native path/dirty state and song
+history, without repeating the operation.
+
+`ModuleExportControllerTests.inc` also exercises a real Windows filesystem
+replacement refusal using an owned read handle without delete sharing. It checks
+unchanged bytes/state, absence of a success receipt and staging cleanup. A
+format-matching hard-link alias of a recovered source must reject in dry and
+real modes, preserving both links' bytes and the protected session.
+
+The complete 48-case `SnapshotTests.cpp` is now registered as `snapshot-tests`
+in the normal Windows CMake worker schedule, linking that same build's
+`ScreamSeqProject`/`TrackerEditor` libraries. It has an owned scratch fixture and
+the bundled F04 input. Historical version-4/5 writer expectations are replaced
+with actual legacy-container recovery, strict writer rejection, source protection
+and version-6/metadata-17 save-copy checks; Unicode titles, exact core/native
+state and PCM assertions remain. The old unavailable Mac fixture is replaced by
+F04's declared seven samples, seven instruments, eight precise notes and one
+bank entry. A missing reference now fails rather than printing SKIP then PASS.
+The standalone entry point gets the same scratch/reference setup; it is no
+longer required for this batch's snapshot qualification.
+
+Only static checks have run for this batch: changed Python sources parse, the
+API schema parses, and `git diff --check` passes. No native compilation, new
+runtime test or foreground interaction has run. This is prepared coverage, not
+passing evidence. Keep the next coordinated build no earlier than
+**08:28:51 UTC** on 20 October.
+
+Next qualification: freeze the merged candidate; build both native platforms
+once with the pending Mac compiler fix and Windows menu fixtures. On Windows run
+`snapshot-tests`, `document-controller-module-export`,
+`workspace-command-result-tests`, affected menu/departure/song-properties groups,
+and `PluginEditParityTests.test_module_export_contract_and_reopen`. On Mac run
+sample-project/project-recovery tests and the fresh socket export contract.
+Retain original failures, actual output files and exact hashes. Shared Document
+preparation also requires both platforms' existing sample/persistence gates;
+broaden on a preservation or dispatch failure. Reciprocal fixtures, foreground
+dialogs and the remaining parity journeys remain separate requirements.
