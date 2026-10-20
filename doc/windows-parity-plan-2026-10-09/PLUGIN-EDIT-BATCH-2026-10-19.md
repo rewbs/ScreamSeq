@@ -8,15 +8,17 @@ to main at `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. See the
 Windows evidence. The original planning matrix remains a historical inventory;
 its statements about features absent from main must be reconciled with that merge.
 
-This batch is **source prepared, pending compilation and native qualification**.
+This batch is **compiled and partially qualified, with one discovered recovery
+fix prepared but not yet compiled**. The qualification follow-up below takes
+precedence over the preparation notes.
 It is on temporary branch `codex/plugin-edit-parity`, based on shared main. It
 does not close P4, P5, the reciprocal-file gate or overall Windows parity.
 
 The user requires at most one build per hour. The latest local build finished
 `2026-10-20T00:41:19.518934Z`; this batch must not build before
-`2026-10-20T01:42:00Z` (18:42 Pacific on 19 October). No build has run for this
-batch. Source review, fixture preparation and interpreter-only checks proceed
-before that gate. A failed compile does not authorize an immediate extra build.
+`2026-10-20T01:42:00Z` (18:42 Pacific on 19 October). The single build ran after
+that gate, from 01:42:08 to 01:44:52 UTC. The next build must not start before
+02:45 UTC (19:45 Pacific). A failed check does not authorize an immediate rebuild.
 
 ## Observed gaps and prepared changes
 
@@ -168,6 +170,50 @@ playhead remains in its requested pattern/range. Assertions for transport,
 document/history, focus, Undo and persistence remain. See
 [the exact evidence record](MAIN-CI-FOLLOWUP-2026-10-19.json). Hosted CI is still
 red; these baseline passes do not qualify the new graph/plugin implementation.
+
+## Qualification follow-up
+
+The frozen candidate is `1d6c2a21106411c3885169cfd5689dd369e1ceab`, built once
+for Windows ARM64. Its executable SHA-256 is
+`3b58452a58ddc5ea35ba2c720a126578b080b14b729b1c293812265bf652f76e`.
+The [qualification record](PLUGIN-EDIT-QUALIFICATION-2026-10-19.json) pins the
+build receipt, logs, test source and conformance reports.
+
+- All nine selected CTest groups passed, including the scratch fixture dependency
+  automatically selected by CTest. The configured schedule has 195 registrations,
+  zero unscheduled entries and zero repeated registrations.
+- Four new plugin API cases passed, including final positions, exact saved state,
+  automation remapping, gesture grouping and reused-token history boundaries.
+- The 19 application cases initially produced 14 passes, three failures/errors
+  and two optional provider skips. Two fixture corrections pass on the same
+  executable: bounded retries of read-only observations while the retained
+  parameter editor refreshes, and using the visible **Set point** action to
+  validate an unselected raw curve point. Writes and native actions are never
+  retried. All exact state/identity/history assertions remain.
+- One real product defect remains in this candidate. A rejected invalid
+  `graph.update` leaves the document unchanged but lacks a known rejection
+  outcome. The new retained command owner therefore preserves an unknown result;
+  Reload opens its acknowledgement dialog. Source now classifies this operation
+  at the controller's prepared-document boundary, after its committed/returned
+  branches, and adds a native regression requiring direct Reload with no unknown
+  result. `Document::annotate` validates and stages history before publication;
+  publication refusal rolls back that history entry. This fix and regression are
+  **uncompiled**. The failing real-PID test remains a required next-build check.
+- All five original supplied fixtures pass exact typed save/reopen/save
+  comparisons. All 28 API vectors match their recorded expectations, and all 21
+  codec vectors match the baseline with safety checks passing. Existing recorded
+  platform differences remain; this is not a claim of complete API/codec parity
+  or a reciprocal edited-fixture gate.
+- Main's Intel Mac run has now also completed: 127/128 model tests and all 35
+  interface groups pass, with the same alias PCM fixture failure as Apple Silicon.
+  Neither result qualifies this candidate's Mac changes.
+
+The next eligible build is **2026-10-20 02:45 UTC / 19 October 19:45 Pacific**.
+Build the app and workspace/controller tests together after batching further
+necessary fixes. Rerun command-result recovery, the invalid-cycle real-PID case,
+and controller graph/receipt tests affected by the outcome change. Reuse other
+evidence only after reviewing the changed inputs. Do not merge this candidate
+to main as fully qualified before this recovery fix and Mac changes are checked.
 
 ## Next dependency after this batch
 

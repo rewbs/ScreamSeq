@@ -127,7 +127,7 @@ class GraphCurveHostTests(GraphCurveNativeMixin, unittest.TestCase):
         self.field(445, 'Second source renamed')
         self.assertTrue(self.ready()['graphEditor']['fieldDraft'])
         self.assertEqual(self.content(), captured)
-        self.command(486)  # Invalid raw curve point is not a routing write.
+        self.command(488)  # Set point validates an unselected raw point; no Apply is needed.
         self.assertEqual(self.doc(), song)
         self.assertEqual(self.content(), captured)
         self.main_command(430)

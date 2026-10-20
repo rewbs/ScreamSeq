@@ -3,13 +3,26 @@ import os
 import ctypes
 from ctypes import wintypes
 import unittest
+import time
 import test_graph_mixer_app as support
 import private_desktop
 
 
 class GraphEditorTests(unittest.TestCase):
     doc = support.GraphMixerAppTests.doc
-    read = support.GraphMixerAppTests.read
+    def read(self, method, **fields):
+        # The retained parameter inspector refreshes through the same worker.
+        # Retry only read-only observations, never a write or native gesture.
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                return support.GraphMixerAppTests.read(self, method, **fields)
+            except support.ApiError as error:
+                if (error.code != -32002 or
+                        not (method.endswith('.get') or method == 'plugin.discover') or
+                        time.monotonic() >= deadline):
+                    raise
+                time.sleep(.02)
     write = support.GraphMixerAppTests.write
     rejected = support.GraphMixerAppTests.rejected
     add_gain = support.GraphMixerAppTests.add_gain

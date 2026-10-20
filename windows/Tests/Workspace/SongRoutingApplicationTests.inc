@@ -158,6 +158,12 @@ void applicationRecipeAutomaticEdits(){
   restoreCheck(read()==renamed&&app.graphDirty,"Node movement committed before release");app.graphMouseUp(x+60,y+30);
   const auto moved=read();restoreCheck(moved!=renamed&&!app.graphDirty,"Node release did not save its position");
   app.edit("history.undo",RestoreJson::object());restoreCheck(read()==renamed,"One node drag created multiple Undo entries");app.refreshGraph();
+  // A rejected definition has a known non-commit outcome. Reload must discard
+  // that draft directly, without an uncertain-result acknowledgement dialog.
+  app.graphDraft["audio"].push_back({{"source",node},{"target",node},{"output",0},{"input",0},{"gain",1}});app.graphDirty=true;++app.graphGeneration;
+  restoreRejected([&]{app.graphSaveCompletedEdit();});
+  restoreCheck(!app.nativeCommandCompletion.retained()&&app.graphDirty&&read()==renamed,"Invalid recipe acquired uncertain-result ownership or changed the song");
+  app.graphControlCommand(graphReload);restoreCheck(!app.graphDirty&&read()==renamed,"Reload failed to discard a rejected recipe directly");
   rawDraftText(app.controls.at(graphPropertyValue),L"Before lost completion");app.graphFieldChanged();unsigned writes=0;
   app.sampleMutationCompletion=[&](const std::string &method){if(method=="graph.update"){++writes;rawDraftText(app.controls.at(graphPropertyValue),L"Later raw name");app.graphFieldChanged();throw std::runtime_error("Owned graph completion failure");}};
   restoreRejected([&]{app.graphControlCommand(graphSetProperty);});

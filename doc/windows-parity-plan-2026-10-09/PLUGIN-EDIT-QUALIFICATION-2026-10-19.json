@@ -1,0 +1,244 @@
+{
+  "format": "screamseq-plugin-edit-qualification-v1",
+  "status": "partial; graph rejection recovery fix requires next build",
+  "build": {
+    "sourceCommit": "1d6c2a21106411c3885169cfd5689dd369e1ceab",
+    "startedAtUTC": "2026-10-20T01:42:08.0209878+00:00",
+    "configureExit": 0,
+    "buildExit": 0,
+    "completedAtUTC": "2026-10-20T01:44:52.4860878+00:00",
+    "executableSHA256": "3b58452a58ddc5ea35ba2c720a126578b080b14b729b1c293812265bf652f76e",
+    "output": "C:/Users/P14/.codex/worktrees/parity-ci-layout/ScreamSeq/bin/windows-parity-p1/PluginEdit-Release",
+    "targets": [
+      "ScreamSeq",
+      "workspace-restore-tests",
+      "document-controller-tests",
+      "rack-move-tests"
+    ],
+    "jobs": 2
+  },
+  "nextBuildNotBeforeUTC": "2026-10-20T02:45:00Z",
+  "receiptSHA256": "0a10dabc84b43fc4ebedef1f68e58d24fa1de1c140521aea0878816ac4f1b588",
+  "native": {
+    "passed": 9,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "workspace-command-result-tests",
+        "classname": "workspace-command-result-tests",
+        "time": "86.2605",
+        "status": "run"
+      },
+      {
+        "name": "workspace-plugin-search-tests",
+        "classname": "workspace-plugin-search-tests",
+        "time": "7.51491",
+        "status": "run"
+      },
+      {
+        "name": "rack-move",
+        "classname": "rack-move",
+        "time": "0.0651786",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-scratch",
+        "classname": "document-controller-scratch",
+        "time": "0.0980818",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-live-parameters",
+        "classname": "document-controller-live-parameters",
+        "time": "0.388358",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-live-rack-publication",
+        "classname": "document-controller-live-rack-publication",
+        "time": "1.19069",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-live-graph-publication",
+        "classname": "document-controller-live-graph-publication",
+        "time": "1.25438",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-graph-recipes",
+        "classname": "document-controller-graph-recipes",
+        "time": "1.56609",
+        "status": "run"
+      },
+      {
+        "name": "document-controller-unified-plugin-history",
+        "classname": "document-controller-unified-plugin-history",
+        "time": "1.13836",
+        "status": "run"
+      }
+    ]
+  },
+  "application": {
+    "initial": {
+      "scheduled": 19,
+      "passed": 14,
+      "failed": 1,
+      "errors": 2,
+      "skipped": 2
+    },
+    "correctedFixtureChecks": {
+      "passed": 2,
+      "failed": 0,
+      "binaryUnchanged": true
+    },
+    "remainingFailure": "test_native_field_target_guards_small_window_and_invalid_cycle: rejected graph.update retains an unknown result, so Reload opens acknowledgement instead of discarding directly",
+    "optionalSkips": [
+      "native provider port fixture",
+      "installed ARM64 vendor effect"
+    ]
+  },
+  "conformance": {
+    "passed": true,
+    "parityComplete": false,
+    "fixtureLegs": [
+      {
+        "fixture": "01-midnight-circuit.screamseq",
+        "passed": true,
+        "originalToFirst": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "firstToSecond": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        }
+      },
+      {
+        "fixture": "02-editors-and-effects.screamseq",
+        "passed": true,
+        "originalToFirst": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "firstToSecond": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        }
+      },
+      {
+        "fixture": "03-routing-and-modulation.screamseq",
+        "passed": true,
+        "originalToFirst": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "firstToSecond": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        }
+      },
+      {
+        "fixture": "04-complete-reference.screamseq",
+        "passed": true,
+        "originalToFirst": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "firstToSecond": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        }
+      },
+      {
+        "fixture": "05-arrangement-copy-after.screamseq",
+        "passed": true,
+        "originalToFirst": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        },
+        "firstToSecond": {
+          "equal": true,
+          "differenceCount": 0,
+          "truncated": false,
+          "differences": []
+        }
+      }
+    ],
+    "apiCases": 28,
+    "apiBaselineMatched": true,
+    "codecCases": 21,
+    "codecBaselineMatched": true,
+    "codecSafetyPassed": true,
+    "inputsUnchanged": true,
+    "binaryUnchanged": true,
+    "originalCorpusUnchanged": true
+  },
+  "schedule": {
+    "registered": 195,
+    "unscheduled": [],
+    "repeated": []
+  },
+  "uncompiledChanges": [
+    "windows/Session/DocumentController.cpp",
+    "windows/Tests/Workspace/SongRoutingApplicationTests.inc"
+  ],
+  "fixtureSourceSHA256": {
+    "windows/Tests/test_graph_editor.py": "31cbdb5722444530ed4e706a79678dbccf54fd8bb0301337acb099068656384a",
+    "windows/Tests/test_graph_curve_host.py": "ef95f3ba6a56918f69cbd94df3a97d6d6d4222d2bacdeeb023cbdab77f48eb11"
+  },
+  "evidenceSHA256": {
+    "candidate-build.json": "b2dd1674e93b4b4cb159690fe9f754fdf91da8a9848611aede12571ebe642127",
+    "candidate-BuildInfo.json": "0a10dabc84b43fc4ebedef1f68e58d24fa1de1c140521aea0878816ac4f1b588",
+    "candidate-build.log": "7ab94036bddbe1c73cbe5abd2a33b6545a96c4c8ded165fc6126905edcdade39",
+    "candidate-native.log": "f978c659e595f9b09355faf5e46fe124b3961950a8afa4b764ea5b9a16f017d0",
+    "candidate-native.xml": "343510cf4318d394705494d611a143e2eb64c22135ad43cda748da146ab5455d",
+    "candidate-application.log": "a95bc70e6ee1223ed816cb2c76163fdca0a504090fac253f9be5088edcff1dd0",
+    "candidate-fixture-corrections.log": "b18fef9455621f5f79016cdd42ee690867d098a297ab45cbb28ed628e20ced2d",
+    "candidate-schedule.json": "d843d87483a4b29c01cdad4d5a3eefadf494ee371e4184441bfa7d679f0b4762",
+    "candidate-conformance/report.json": "940b98beeeea2644a9b57ac668e759cbf525e57830ad650e4dab7258580bb852",
+    "candidate-conformance/api/report.json": "5ba770270282f24c56e601baf934c0d6978b080c4a273d9e044638439c48d517",
+    "candidate-conformance/codec/report.json": "69aed58271ed7f51fb12763d2db5c227d8adc78c805cb8b218529d0fe92f5c01"
+  },
+  "baselineMainMac": {
+    "run": 39349699645,
+    "sourceCommit": "07424c0c675c57caf7828ea23b6c7a4a13a5cf4b",
+    "architectures": {
+      "arm64": {
+        "modelPassed": 127,
+        "modelFailed": 1,
+        "interfaceGroupsPassed": 35
+      },
+      "x86_64": {
+        "modelPassed": 127,
+        "modelFailed": 1,
+        "interfaceGroupsPassed": 35
+      }
+    },
+    "failure": "plugin-aliases plugin-only PCM fixture; correction prepared, not qualified on Mac"
+  },
+  "limitations": [
+    "No candidate Mac or x64 build",
+    "No reciprocal candidate Mac/Windows edited-fixture round trip",
+    "No audible slider preview or presentation performance claim",
+    "Not merged to main; do not treat this as a fully qualified release"
+  ]
+}

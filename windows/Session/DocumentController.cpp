@@ -859,10 +859,13 @@ Api::CompletedCall DocumentController::invokeOperation(const std::string &method
     // transform. The real
     // recorder's Keep consumes its take only after that import succeeds; an
     // unchanged revision on failure proves no Keep/import was committed.
+    // graph.update likewise prepares a copied definition and publishes it through
+    // Document::annotate. Failed validation/preparation leaves the recipe and
+    // history untouched; a later completion failure is handled above.
     // This does not classify recording start/stop/discard, files or vendor calls.
     if(method=="instrument.importMultisample"||method=="sample.importMany"||method=="sample.renderSelection"||method=="sample.recording.commit"
         ||method=="sample.import"||method=="instrument.import"||method=="instrument.create"
-        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new") {
+        ||method=="track.group"||method=="track.create"||method=="track.ungroup"||method=="track.column.set"||method=="pattern.transform"||method=="document.new"||method=="graph.update") {
       const Tracker::WriteOutcome rejected{Tracker::CommitOutcome::NotCommitted};
       try {std::rethrow_exception(failure);}
       catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),rejected);}
