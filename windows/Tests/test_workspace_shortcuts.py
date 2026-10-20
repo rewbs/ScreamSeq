@@ -532,6 +532,16 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.desktop.send(curve, 0x111, 481 | (1 << 16), shape)
         curve_ready(self.control(curve, 485))
         self.field(curve, 485, 'mix(start,end,t)')
+        # Settle the parent's automatic point save before capturing the child
+        # workbench's document baseline. Child text edits must remain local.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            parent = self.state()['graphCurve']
+            if not any(parent[key] for key in ('dirty', 'fieldDraft', 'pending')):
+                break
+            time.sleep(.02)
+        else:
+            self.fail(f'Parent curve did not save its valid fixture: {parent}')
         expand = self.control(curve, 498)
         curve_ready(expand)
         self.desktop.send(expand, 0xF5)  # Open this curve's retained workbench once.
@@ -592,7 +602,8 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.command(124)  # Inspection's private pattern clipboard.
         self.navigate(row=8, following=False)
         tool = self.automation()
-        edit = self.field(tool, 4207, '3.')
+        # Incomplete exponent remains a draft; a valid '3.' now autosaves.
+        edit = self.field(tool, 4207, '3e')
         self.focus_control(edit)
         before = self.doc()
         points = self.state()['parameterAutomation']['points']
@@ -600,14 +611,14 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.key(ord('L'), hwnd=edit, ctrl=True, alt=True)
         self.assertEqual(self.state()['liveKeyboard'], not enabled)
         self.assertEqual(self.desktop.focus(tool), edit)
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         self.bind(507, ['ctrl+alt+q'])
         self.key(ord('L'), hwnd=edit, ctrl=True, alt=True)
         self.assertEqual(self.state()['liveKeyboard'], not enabled)
         self.key(ord('Q'), hwnd=edit, ctrl=True, alt=True)
         self.assertEqual(self.state()['liveKeyboard'], enabled)
         self.assertEqual(self.desktop.focus(tool), edit)
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         self.assertEqual(self.state()['parameterAutomation']['points'], points)
         self.assertTrue(self.state()['parameterAutomation']['fieldDraft'])
         self.assertEqual(self.doc(), before)
@@ -618,7 +629,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.pending(True)
         self.key(0xBA, hwnd=edit, shift=True)
         self.assertEqual(self.state()['liveKeyboard'], not enabled)
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         self.assertEqual(self.desktop.focus(tool), edit)
         self.assertEqual(self.doc(), before)
         # A floating editor's own canvas must not use stale main-workspace
@@ -641,7 +652,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.assertIn('Focus the tracker or sample', self.state()['status'])
         self.assertEqual(self.doc(), before)
         self.assertEqual(self.state()['parameterAutomation']['points'], points)
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         # Running the same global action through the palette must restore its
         # original editor field just as the configurable shortcut does.
         self.focus_control(edit)
@@ -654,7 +665,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.ready()
         self.assertEqual(self.state()['liveKeyboard'], not enabled)
         self.assertEqual(self.desktop.focus(tool), edit)
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         self.assertEqual(self.doc(), before)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'requires the owned silent audio fixture')
