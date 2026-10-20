@@ -8,6 +8,14 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Reciprocal gate now passed for frozen `54fa2babc` / merge `d79321c7c`:**
+[retained fixture exchange](RETAINED-EXCHANGE-2026-10-20.md). No-build run
+39399717354 completed successfully on both Mac architectures. Windows return
+legs passed F01–F05 plus rendered/imported derivatives. All seven Mac saved
+inputs are byte-identical across architectures, with lineage/hash validation;
+the one Windows return run covers both identical input sets. No native build
+was started. This does not qualify newer source repairs or complete parity.
+
 **Newest evidence:** all three CI jobs are terminal. Intel matched Apple
 Silicon's 134 native/35 interface passes and conformance failures. Retained x64
 then passed all seven editing contracts, edited metadata, composing history,
@@ -22,13 +30,14 @@ fields unnecessarily deactivate native music during file import. The scoped
 checks are source-only. Strict canonical/API validation remains unchanged.
 Keep the next coordinated build no earlier than **10:03 UTC**. Reciprocal
 fixture workflows reuse retained binaries and do not count as a new build.
-No-build exchange run **39399717354** was dispatched once from unchanged remote
+Historical dispatch boundary: no-build exchange run **39399717354** was dispatched once from unchanged remote
 head `54fa2babc`, using Mac app run 39393737331 and Windows fixture run
 39393737358. At 09:20:28 UTC, Apple Silicon job **118551112695** passed;
-Intel job **118551112822** is live in its owned native checks. Full-build and
+Intel job **118551112822** was live in its owned native checks. Full-build and
 interface-build jobs are explicitly skipped. Fetch these artifacts, verify their
 retained identities/lineage, then perform the Windows return leg; do not dispatch
-the same input leg again. Local dispatch receipt is
+the same input leg again. The newer reciprocal result above supersedes this
+in-progress checkpoint. Local dispatch receipt is
 `bin/export-capture-20261020/retained-exchange-dispatch.json`.
 
 **Newer native CI evidence (09:02:42 UTC):**
