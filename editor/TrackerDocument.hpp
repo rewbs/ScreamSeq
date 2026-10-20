@@ -102,6 +102,7 @@ class Document
 	void validateSampleSlot(const SampleSlotUndo &edit, bool redo) const;
 	SampleAllocation prepareSampleSlot(const SampleSlotUndo &edit, bool redo) const;
 	void applySampleSlot(const SampleSlotUndo &edit, bool redo, SampleAllocation allocation) noexcept;
+	std::vector<std::byte> prepareModuleBytes(bool preserveSamples);
 public:
 	class PreparedSampleCopy {
 		friend class Document;
@@ -160,7 +161,11 @@ public:
     // A gesture may replace only the latest pure metadata edit, with no
     // intervening document/host edit or Undo branch. Revision still advances.
     void annotate(const std::function<void(NativeSong &)> &change,const std::function<void()> &beforeCommit,uint64_t mergeSequence = 0);
-	std::vector<std::byte> serialize(); // Unchecked module base; use save/validateModuleSampleExport for export.
+	std::vector<std::byte> serialize(); // Unchecked module base; use moduleExportData for lossless export.
+	// Returns the exact bytes validated by roundtrip structure/sample/timing
+	// checks. Native adapters own destination admission and atomic publication.
+	// Native metadata/plugin compatibility remains the session's responsibility.
+	std::vector<std::byte> moduleExportData();
 	std::vector<std::byte> snapshotData(); // Module + exact sample/timing/title/pattern/order corrections.
 	bool editable() const;
 	std::vector<std::byte> playbackData();

@@ -249,7 +249,15 @@ std::unique_ptr<Document> moduleBaseline(MODTYPE type) {
   auto converted=std::make_unique<Document>(doc->serialize());
   // No title, topology, setting or cell correction may hide the isolated edit.
   CHECK(core(*converted)==core(*doc));
-  doc->validateModuleSampleExport();
+  const auto before=core(*doc);
+  const auto beforeNative=doc->native();
+  const auto revision=doc->revision,history=doc->historySequence();
+  const auto undo=doc->canUndo(),redo=doc->canRedo();
+  const auto exportBytes=doc->moduleExportData();
+  Document exported(exportBytes);
+  CHECK(core(exported)==before);
+  CHECK(core(*doc)==before&&doc->native()==beforeNative);
+  CHECK(doc->revision==revision&&doc->historySequence()==history&&doc->canUndo()==undo&&doc->canRedo()==redo);
   return doc;
 }
 std::unique_ptr<Document> idleCellDocument(MODTYPE type) {
@@ -294,6 +302,7 @@ template<typename F> void rejectsPatternLoss(F &&operation) {
 void idleCellExport(MODTYPE type) {
   auto doc=idleCellDocument(type);
   rejectsPatternLoss([&]{doc->validateModuleSampleExport();});
+  rejectsPatternLoss([&]{(void)doc->moduleExportData();});
 }
 struct ExportDestination {
   std::filesystem::path directory, file;

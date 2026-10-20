@@ -115,3 +115,29 @@ Relative effort: **M** for shared validated preparation, Windows API/native
 command and Mac consistency; separate **L** estimate for full-song audio export
 until its source and cancellation boundaries are audited. No user decision is
 needed to preserve the existing lossless-export policy.
+
+## Isolated implementation in progress
+
+Temporary branch `codex/module-export-followup` uses the existing
+`windows-parity-workspace/ScreamSeq` checkout, starting at `951048a02`.
+It is separate from the frozen PR candidate and qualification checkout.
+
+The first prepared change adds `Document::moduleExportData()`, returning the exact
+module bytes that passed structure, sample and timing validation. The existing
+validation-only method and `save(path, preserveSamples)` share the same private
+preparation; the legacy save argument/default and native filesystem code remain
+unchanged. Snapshot checks now inspect the returned bytes, reload their musical
+state, retain history/state, and reject dormant pattern-cell loss.
+
+This is **unbuilt source**, not a user-facing export feature. The Windows
+endpoint/command, shared metadata/loss report, Mac recovery-protection change
+and actual-app acceptance remain to implement. The modified Windows snapshot
+cases currently belong to the separate `windows/Tests/Snapshot` CMake project;
+they must be explicitly scheduled with matching engine inputs at qualification,
+alongside Mac sample-archive/session and new actual endpoint checks. Do not
+mistake a default app build for execution of this standalone target.
+
+Continue this branch while current CI results are collected, then reconcile
+with the corrected integration branch before its own frozen, bounded build
+batch. Preserve the one-main integration policy; this is a temporary feature
+branch, not a platform fork.
