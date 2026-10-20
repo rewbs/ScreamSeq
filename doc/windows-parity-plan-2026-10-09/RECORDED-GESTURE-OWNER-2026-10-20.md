@@ -169,11 +169,11 @@ There is no extra native build target.
   It supplies controlled events directly; it is not UI, vendor ingestion,
   recovery or external API evidence.
 
-Only source inspection and `git diff --check` have run. Build and execute these
-checks with the pending clear/Undo/snapshot repairs in the next coordinated
-batch, **not before 11:48 UTC**. In addition to the existing shared recorded-
-automation target, retain both native plugin-notification targets and the
-existing live rack/preset checks: source pairing changes the rack drain adapter.
+These shared and Windows checks now pass on `db42b1421`; see the
+[qualification record](GESTURE-BATCH-QUALIFICATION-2026-10-20.md).
+Mac execution remains pending in that candidate's current CI. Source pairing
+changes the rack drain adapter, so retain the native notification and existing
+live rack/preset gates rather than treating the pure helper tests as sufficient.
 
 ## Native integration still required
 

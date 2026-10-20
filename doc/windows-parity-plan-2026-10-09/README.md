@@ -1,5 +1,14 @@
 # ScreamSeq Windows parity implementation plan
 
+**Latest executed checkpoint (20 October, `db42b1421`):**
+[gesture/clear/history qualification](GESTURE-BATCH-QUALIFICATION-2026-10-20.md)
+records the successful Windows ARM64 batch, all 24 selected CTest registrations
+and two actual-app clear checks. Windows x64 and both Mac architectures are in
+the current PR qualification batch. Gesture arming/intake/recovery and final
+shared-main integration remain open. The checkpoints below retain their
+historical scope; consult the [current queue](CONTINUATION-QUEUE-2026-10-20.md)
+before acting on an old failure or source-only label.
+
 **Current implementation checkpoint (19 October):** the planning inventory below
 is historical. Shared main is `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`; see the
 [main integration record](../MAIN_INTEGRATION_2026-10-19.md) and

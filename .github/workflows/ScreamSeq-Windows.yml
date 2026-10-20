@@ -24,13 +24,17 @@ on:
         type: choice
         options: [exchange, windows]
         default: exchange
+      extended_exchange:
+        description: 'Also require edited opaque metadata, composing history and envelope-bank saved outputs'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
+  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}-${{ inputs.extended_exchange || false }}
   cancel-in-progress: true
 
 jobs:
@@ -214,3 +218,4 @@ jobs:
       input-run: ${{ inputs.fixture_run }}
       input-artifact: ${{ inputs.fixture_artifact }}
       input-layout: ${{ inputs.fixture_layout }}
+      extended-exchange: ${{ inputs.extended_exchange || false }}

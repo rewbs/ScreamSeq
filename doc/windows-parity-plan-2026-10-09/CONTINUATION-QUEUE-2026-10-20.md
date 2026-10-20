@@ -8,7 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**New capture source, unbuilt:** [shared gesture owner](RECORDED-GESTURE-OWNER-2026-10-20.md)
+**Latest executed boundary:** candidate `db42b1421` passed its one Windows ARM64
+build, all 24 selected CTest registrations (21 executable checks plus three
+scratch setups), and two actual-app clear checks. See the
+[qualification record](GESTURE-BATCH-QUALIFICATION-2026-10-20.md) for exact
+source/executable identity, scope, current CI handles and the hourly gate.
+Windows x64 job `118612292760` and Mac Intel job `118612293867` are building
+this candidate. Apple Silicon job `118612294240` completed its build at
+12:11:19 UTC; its model/host step failed at 12:13:44 UTC, with the cause pending
+the job log. Later interface/conformance steps are continuing. Shared main remains
+`07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
+Use the [extended exchange](EXTENDED-EXCHANGE-2026-10-20.md) for the final
+current-candidate reciprocal gate; the old seven-file exchange omits the
+newer edited metadata/history/bank outputs.
+
+**Capture foundation now locally qualified:** [shared gesture owner](RECORDED-GESTURE-OWNER-2026-10-20.md)
 retains original timestamps, pending clock coverage, epoch/revision/target guards,
 loss accounting and atomic multi-target point candidates. Several parameters now
 share one before-state and one publication, with combined point/input/storage
@@ -17,8 +31,8 @@ recorded-automation target. Native ingestion/grouping, API/recovery and Record
 controls remain incomplete.
 The same batch adds actual notification-provider incarnation/loss snapshots
 through `NativePlugin`, `PluginChain` and Mac `AudioDevice`, including preset
-replacement guards. Qualify the shared recorded target, both native notification
-targets and live rack/preset checks together; no build has run for this source.
+replacement guards. Shared/Windows notification and live publication checks
+passed locally; the current Mac notification/host gate remains pending.
 The Windows native completion entry point now joins the whole capture to the
 existing recorded-only publication/Undo path, preserving typed untouched rows
 and saved plugin bytes. Its controlled-input regression joins the existing live
@@ -26,7 +40,9 @@ recorded-publication registration. UI/API ingestion and recovery are still
 outstanding; do not describe the internal completion method as a working
 Windows Record control.
 
-**All current CI jobs are terminal.** Intel matched Apple Silicon's 134 native/
+## Earlier checkpoints (historical)
+
+**The preceding `28d757f65` CI jobs are terminal.** Intel matched Apple Silicon's 134 native/
 35 interface passes and the same exact `/plugins/0/state` Undo failure.
 Its retained `undo-plugin.screamseq` is byte-identical to the ARM artifact.
 See the appended Intel checkpoint in [device follow-up](DEVICE-FOLLOWUP-2026-10-20.md).
@@ -320,20 +336,24 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | B3 built; corrected metadata passes. Its API executable stops on reused fixture IDs, and codec qualification stops at an unclassified protected-source refusal. Follow-up source corrections are prepared. | At the next permitted build, qualify explicit pre-commit file outcomes, fresh-ID API cases and previously unreached real-pipe tests. Rerun the actual codec corpus without weakening uncertainty/source checks. Obtain Mac/x64 execution and reuse unchanged evidence. |
-| 2 / S–M | At the frozen candidate, Mac `TrackerSessionAPI.inc` excludes rack `dryRun`; Windows accepts it. The later [Mac correction](RACK-DRY-RUN-2026-10-20.md) is source only, with a shared contract passed on the existing Windows app. The API corpus still retains `API-PLUGIN-DRY-RUN`. | Qualify Mac dry runs using existing shared parameter preparation and accepted manual values. Preserve active preview ownership, queues, Redo, revision, opaque bytes and transport. Check changed and no-op batches, full-batch rejection, unavailable/read-only targets, stale guards and subsequent real edits. Do not count a method-name match as parity. |
-| 3 / M | [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md), cache accounting and [terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) now pass B3's shared/actual-app checks. Mac and remaining real-pipe paths are open. | Preserve the old observation baseline until both hosts execute and changes are reviewed. Qualify remaining completion failures without advertising a pre-write revision or converting uncertain side effects into proven rejection. |
-| 4 / L | The executed corpus still records Mac's unknown-extension loss. B3's shared codec/preservation/owner tests pass on Windows; [Mac session ownership](MAC-PRESERVATION-BATCH-2026-10-20.md) remains uncompiled/unexecuted on Mac. | Qualify staged Mac load/save/recovery ownership, XML admission, inactive archives, owned plugin/take state and actual merged-tree validation. Execute reciprocal edited-file checks before updating observations. Large-file peak memory and unsupported-encoding archive limits remain explicit risks. |
+| 1 / M | Current `db42b1421` has local capture/publication, clear, snapshot, API and preservation passes. The new cross-platform CI is running; preceding Mac composing qualification exposed exact plugin-state Undo loss, repaired in this candidate. | Inspect the existing three CI jobs; retain their exact artifacts and rerun only affected failures. Confirm Mac composing Undo and both-host clear, metadata and contracts. Do not repeat the completed local batch. |
+| 2 / L | Shared original-time capture, actual provider identity and Windows atomic completion now have local checks. Native gesture ingestion, Windows controls and capture recovery remain incomplete; Mac still uses poll-time recording. | Complete native input ownership/barriers, independent manual baseline restoration, retained take/recovery and public arm/status/failure semantics together. Use the existing recorded-only publication/history path. No Record toggle before these obligations work. |
+| 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
+| 4 / M–L | Typed preservation and both native ownership adapters exist and have preceding paired corpus execution; this is no longer an uncompiled Mac port. New exact-history behavior and final current-candidate exchange remain open. | Qualify current Mac history and perform reciprocal edited F01–F05/output checks on retained same-candidate binaries. Keep source protection, opaque state, exact typed comparisons and merged-tree validation. Large-file memory and unsupported encodings remain explicit risks. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
 | 6 / M | Native control/event checks do not establish visual ergonomics, DPI, UIA or physical input quality. Computer use remains stopped after the user's Escape. | Retain A16/P8 as open. Resume foreground inspection only with renewed authorization. Check 100/150/200% DPI, compact/normal layouts, focus visibility, hidden tab stops, high contrast and Narrator on the usable candidate. Avoid further speculative UI redesign based on screenshots alone. |
 | 7 / L, equipment-dependent | Real vendor/device lifecycle and physical audio/MIDI remain separately unqualified. Optional unavailable provider tests are skips, not passes. | Use explicit fixture providers/devices; preserve musician sessions and audio defaults. Qualify architecture mismatch, editor lifecycle, latency changes, reconnect, capture/overflow and physical measurements with their existing strict limits. Keep silent private-desktop observations separate from audible evidence. |
 | 8 / M | Shared-main final gate and reciprocal edited files remain open. | Run both native platforms from the integrated candidate, reciprocal F01–F05 and edited outputs, sustained display/audio checks, full composing journeys and compatibility/error paths. Confirm source/binary fingerprints and clean main integration before claiming parity. |
 
 Effort is relative implementation/qualification scope, not elapsed-time estimates
-or percent complete. Priorities 2–4 can be cohesive subsequent batches; they must
-not delay investigation of a failure in the frozen batch.
+or percent complete. Continue source work while the existing qualification runs;
+new evidence may reorder the queue. Any later build must satisfy the hourly gate.
 
-## Unknown-metadata ownership plan
+## Original unknown-metadata ownership plan (historical)
+
+The following records the implementation obligations at the original audit,
+not today's compilation status. See priority 4 and the preceding paired CI
+review for executed evidence; keep its acceptance requirements for final exchange.
 
 Confirmed source boundaries:
 

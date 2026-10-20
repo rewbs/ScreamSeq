@@ -21,6 +21,9 @@ on:
       input-layout:
         default: windows
         type: string
+      extended-exchange:
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -44,6 +47,7 @@ jobs:
           APP_RUN: ${{ inputs.app-run }}
           INPUT_RUN: ${{ inputs.input-run }}
           INPUT_ARTIFACT: ${{ inputs.input-artifact }}
+          EXTENDED_EXCHANGE: ${{ inputs.extended-exchange }}
           INPUT_LAYOUT: ${{ inputs.input-layout }}
         run: |
           python - <<'PY'
@@ -54,6 +58,8 @@ jobs:
               raise SystemExit('A fixture run requires its numeric ID and exact artifact name')
           if os.environ['INPUT_LAYOUT'] not in {'windows', 'exchange'}:
               raise SystemExit('Unknown preceding artifact layout')
+          if os.environ['EXTENDED_EXCHANGE'] == 'true' and not os.environ['INPUT_RUN']:
+              raise SystemExit('Extended exchange requires an explicit preceding fixture run')
           PY
       - name: Download the explicit built candidate from this repository
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
@@ -78,10 +84,14 @@ jobs:
           APP_RUN: ${{ inputs.app-run }}
           APP_ARTIFACT: ${{ inputs.app-artifact }}
           INPUT_ARTIFACT: ${{ inputs.input-artifact }}
+          EXTENDED_EXCHANGE: ${{ inputs.extended-exchange }}
           SCREAMSEQ_FETCH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           args=(--app-artifact bin/retained-app --output bin/retained-result)
+          if [[ "$EXTENDED_EXCHANGE" == "true" ]]; then
+            args+=(--extended-exchange)
+          fi
           if [[ -n "$INPUT_RUN" ]]; then
             args+=(--input-artifact bin/retained-input --input-layout "$INPUT_LAYOUT")
           fi
