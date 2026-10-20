@@ -102,7 +102,8 @@ constexpr int songPropertiesCommand=627;
 constexpr int keyboardSettingsCommand=628;
 constexpr int exitCommand=629;
 constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
-static_assert(selectRowCommand<700,"Application commands must not overlap effect field controls");
+constexpr int contextPanelCommand=635,contextActionFirst=636,contextActionLast=641;
+static_assert(contextActionLast<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -347,6 +348,7 @@ public:
             {"positionMode",positionMode},{"ruler",rulerSnapshot()},
 			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
+            {"contextPanel",contextPanelSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
@@ -751,6 +753,7 @@ public:
     #include "WorkspaceContextMenus.inc"
     #include "WorkspaceMenuBar.inc"
     #include "WorkspaceAccessibility.inc"
+    #include "WorkspaceContextPanel.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -959,6 +962,7 @@ public:
 	}
 	void draw() {
         frameRequested=false;
+        refreshContextPanel();
         auditionWasAnimating=auditionOnly&&auditionAnimating();
         if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
             try {

@@ -1383,6 +1383,20 @@ operation must finish first. This changes row spacing, not font size.
 
 Custom saved layouts retain a nondefault height in optional local
 `patternRowHeight`; a missing field restores the historical 18-DIP default.
+
+The left context panel follows the active editor and dispatches existing native
+commands; it owns no independent musical target or draft. `workspace.get.contextPanel`
+reports `visible`, `editor` and its current `actions` (command ID, label, native
+visibility and enabled state). The command catalog exposes the toggle as
+`windows.command.635` for shortcut customization; its default is Ctrl+B and the
+View menu always provides Show context panel. Existing explicit shortcut
+assignments take precedence over this newly introduced default.
+Saved layout configurations may include boolean `contextPanelVisible`. Missing
+means `true`, preserving older layouts; this preference never enters song
+metadata or document Undo. Hiding reclaims 164 DIPs in both legacy and region
+layouts, preserves editor drafts and only moves keyboard focus if its current
+control is being hidden. Panel actions use the existing owners' target, revision,
+Undo and completion semantics.
 The height is never written to project files. A malformed height refuses the
 entire restore before preparing or changing editors. Older app versions may
 reject layouts containing the new field; their existing saved layouts still

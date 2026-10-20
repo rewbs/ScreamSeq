@@ -62,6 +62,7 @@
         else if(id==playbackLoopCommand)result.checked=playbackLoop;
         else if(id==liveKeysCommand)result.checked=liveKeyboard;
         else if(id==dockToggle)result.checked=workspaceState.lowerVisible;
+        else if(id==contextPanelCommand)result.checked=workspaceState.contextPanelVisible;
         else if(id==composeCommand)result.checked=workspaceState.layout=="Compose";
         else if(id==patternCommand)result.checked=workspaceState.layout=="Pattern focus";
         else if(id==soundCommand)result.checked=workspaceState.layout=="Sound design";
@@ -77,7 +78,7 @@
             {0,L"&Edit",true,false,commands({undoCommand,redoCommand,0,cutFocusedCommand,copyFocusedCommand,pasteFocusedCommand,deleteFocusedCommand,selectAllFocusedCommand,selectChannelCommand,selectRowCommand,selectPatternCommand,0,patternToolsCommand})},
             {0,L"&Song",true,false,commands({arrangementCommand,arrangementMatrixCommand,songTimingCommand,songPropertiesCommand,0,noteTrackCreateCommand,noteTrackGroupCommand,noteTrackUngroupCommand,0,newPatternCommand,duplicatePatternCommand,editSectionCommand})},
             {0,L"&Playback",true,false,commands({togglePlaybackCommand,stopCommand,0,playCursorCommand,playSelectionCommand,playSelectionCursorCommand,0,playbackLoopCommand,followCommand,liveKeysCommand,0,auditionCommand,midiRecordingCommand})},
-            {0,L"&View",true,false,commands({paletteCommand,0,composeCommand,patternCommand,soundCommand,connectedWorkspaceCommand,graphEditingWorkspaceCommand,0,layoutsCommand,saveLayoutCommand,restoreLayoutCommand,dockToggle})},
+            {0,L"&View",true,false,commands({paletteCommand,contextPanelCommand,0,composeCommand,patternCommand,soundCommand,connectedWorkspaceCommand,graphEditingWorkspaceCommand,0,layoutsCommand,saveLayoutCommand,restoreLayoutCommand,dockToggle})},
             {0,L"&Tools",true,false,{
                 {0,L"Pattern",true,false,commands({effectPickerCommand,effectsCommand,notesCommand,graphCommandsCommand,scratchGesturesCommand,patternRenderOptionsCommand,0,positionRulerCommand,patternRowsLargerCommand,patternRowsSmallerCommand})},
                 {0,L"Sound",true,false,commands({sampleBrowseCommand,sampleImportCommand,sampleDetailCommand,sampleRecordCommand,instrumentEnvelopeCommand,instrumentImportCommand,pluginsCommand,pluginBrowse,0,mixerCommand,mixerRouting,graphCommand,graphWorkflowCommand})},
@@ -101,7 +102,7 @@
         // Playback-follow movement must not prevent saving, stopping, opening
         // preferences or choosing a view. Selection edits keep the full guard.
         switch(id){
-        case stopCommand:case exitCommand:case paletteCommand:case layoutsCommand:case audioSettingsCommand:case keyboardSettingsCommand:case reloadShortcutsCommand:
+        case contextPanelCommand:case stopCommand:case exitCommand:case paletteCommand:case layoutsCommand:case audioSettingsCommand:case keyboardSettingsCommand:case reloadShortcutsCommand:
         case composeCommand:case patternCommand:case soundCommand:case connectedWorkspaceCommand:case graphEditingWorkspaceCommand:return true;
         case playbackLoopCommand:return current.at("loop")==menuGuard.at("loop");
         case liveKeysCommand:return current.at("live")==menuGuard.at("live");

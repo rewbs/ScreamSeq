@@ -11,6 +11,7 @@
             {dockInstrumentCommand,L"Workspace / Dock instrument beside the tracker",L"Ctrl+Alt+D in editor"},
             {saveLayoutCommand,L"Workspace / Save custom layout",L""},{restoreLayoutCommand,L"Workspace / Restore custom layout",L""},
             {dockToggle,L"Workspace / Toggle lower dock",L"Ctrl+J"},
+            {contextPanelCommand,L"Workspace / Show context panel",L"Ctrl+B"},
             {liveKeysCommand,L"Keyboard / Toggle live musical typing",L"Ctrl+Alt+L"},
             {inputOctaveDownCommand,L"Keyboard / Lower input octave",L""},
             {inputOctaveUpCommand,L"Keyboard / Raise input octave",L""},

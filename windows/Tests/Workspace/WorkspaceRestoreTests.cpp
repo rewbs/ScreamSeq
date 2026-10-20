@@ -1074,6 +1074,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "TransportApplicationTests.inc"
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
+#include "ContextPanelApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
 #include "EffectPickerApplicationTests.inc"
 #include "DocumentLoadReportApplicationTests.inc"
@@ -1202,6 +1203,10 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
                     timedRestoreCase("retained rack parameters and preview lifecycle",applicationGraphParameterInspector);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
+                    timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"recipe-edits") {
