@@ -22,6 +22,10 @@ gate passed, including direct final-to-origin typed-tree checks of all twenty
 returns, without builds. The [shared take owner](RECORDED-TAKE-OWNER-2026-10-20.md)
 and its shared/native publication regressions are the next prepared source,
 **unbuilt**; native arming/intake/recovery/UI remain outstanding.
+Pre-build review also repaired fatal identity failures masked by earlier
+capacity loss, and resolves pending timestamps on ordinary polls before clock
+ring eviction. Real Windows VST3 callback and Mac NSSlider-to-take checks are
+prepared in the existing native targets; see the same take-owner record.
 Shared main remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
 Use the [extended exchange](EXTENDED-EXCHANGE-2026-10-20.md) for the final

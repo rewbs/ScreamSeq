@@ -4,6 +4,39 @@
 layer over `RecordedGestureCapture`, not a user-facing Record feature.
 No API, project format, native UI or audio callback behavior changes yet.
 
+### Review corrections and native-input checks
+
+The next batch also fixes two source-level defects found before exposing this
+owner through either session:
+
+- A capacity/storage/allocation refusal is reviewable, but a later document,
+  playback-clock or provider identity failure must supersede it permanently.
+  Otherwise partial-take consent could mask that later failure. Four ordered
+  overflow-then-identity regressions now exercise actual refusal and ensure
+  the publisher is never called, even when the original arguments are restored.
+- Ordinary provider polls resolve pending original timestamps while their
+  presentation interval is still available. Waiting until release could lose
+  valid early events when a long take overwrites the bounded clock ring.
+  A regression supplies delayed coverage, resolves it on an empty provider
+  poll, evicts all original intervals, and checks the exact saved point.
+
+`windows/Tests/Plugins/EditNotificationTests.cpp` now routes real fixture VST3
+callbacks through the take. It retains two ordered events until after release,
+excludes pre-arm/post-release events, requires the explicit owner barrier plus
+empty paired pop, checks 96 kHz to canonical 48 kHz mapping against original
+callback timestamps, and publishes once. The existing overflow and PCM/audit
+checks remain.
+
+`mac/Tests/NativePluginTests.mm` now feeds the fixture's actual NSSlider action
+through this same shared owner after release. It checks exact original-time
+publication and leaves the existing audible callback assertion intact.
+
+These checks are **prepared, not executed**. They use controlled presentation
+coverage; they will not prove device latency, session arming, manual-state
+exclusion, recovery or the final native Record workflow. Run them in the
+existing `plugin-edit-notification` and `native-plugins` registrations with
+the shared/worker checks below, not as a separate build.
+
 ## Why another ownership boundary is needed
 
 The per-parameter capture and atomic publication already exist. A native

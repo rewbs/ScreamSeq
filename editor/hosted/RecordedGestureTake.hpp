@@ -36,8 +36,14 @@ private:
     const auto found=std::find_if(sources_.begin(),sources_.end(),[&](const auto &s){return s.initial.plugin==plugin;});
     return found==sources_.end()?nullptr:&*found;
   }
+  static bool reviewable(Failure reason) noexcept {
+    return reason==Failure::Capacity||reason==Failure::Storage||reason==Failure::Allocation;
+  }
   void refuse(Failure reason) noexcept {
-    if(failure_==Failure::None)failure_=reason;
+    // Loss consent cannot rehabilitate a later identity/target failure. Keep
+    // the first fatal reason, but promote an earlier reviewable loss when a
+    // native drain observes a changed document, clock or notification source.
+    if(failure_==Failure::None||(reviewable(failure_)&&!reviewable(reason)))failure_=reason;
     if(rejected_!=UINT64_MAX)++rejected_;
   }
   bool current(const std::string &revision,uint64_t epoch) noexcept {
@@ -55,12 +61,18 @@ private:
     owner.dropped=current.dropped;
     // Every target on a provider has the same original/current loss counts.
     // Do not sum these duplicates when reporting queue loss.
-    for(auto &target:targets_)if(target->key().plugin==owner.initial.plugin)
+    for(auto &target:targets_)if(target->key().plugin==owner.initial.plugin) {
       target->sourceLoss(current.dropped,current.incarnation);
+      // Notifications may arrive before their presentation interval. Resolve
+      // them on ordinary (including empty) polls while the bounded clock ring
+      // still has that interval; waiting until release can lose a long take's
+      // early input even though coverage was available during recording.
+      target->resolve();
+    }
     return true;
   }
   void requireReady(const std::string &revision,uint64_t epoch,bool acknowledgeLoss) const {
-    const bool reviewedLoss=acknowledgeLoss&&(failure_==Failure::Capacity||failure_==Failure::Storage||failure_==Failure::Allocation);
+    const bool reviewedLoss=acknowledgeLoss&&reviewable(failure_);
     if(completed_||(failure_!=Failure::None&&!reviewedLoss)||revision!=revision_||epoch!=playbackEpoch_||!end_||
        (!acknowledgeLoss&&std::any_of(sources_.begin(),sources_.end(),[](const auto &s){return s.dropped!=s.initial.source.dropped;}))||
        std::any_of(sources_.begin(),sources_.end(),[](const auto &s){return !s.drained;}))

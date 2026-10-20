@@ -121,7 +121,54 @@ static void recordedGestureTake() {
   check(put(*take,0,{1,-9,1050},{9,2})==Take::Intake::Refused&&
     take->target(0).loss().overflow==1&&take->eventCount()==RecordedGestureCapture::eventCapacity,
     "Per-target overflow was lost or counted as retained input");
+  // A later native identity failure must supersede reviewable capacity loss.
+  // Restoring the old arguments and consenting to a partial take cannot undo
+  // observation of a different document/clock/provider.
+  for(int invalid=0;invalid<4;++invalid) {
+    take=make();
+    for(size_t i=0;i<RecordedGestureCapture::eventCapacity;++i)put(*take,0,{1,-9,1050},{9,2});
+    check(put(*take,0,{1,-9,1050},{9,2})==Take::Intake::Refused&&take->failure()==Take::Failure::Capacity,
+      "Capacity fixture did not retain its partial take");
+    take->seal(1160);
+    auto observed=PluginEditSource{9,2};if(invalid==0)observed.incarnation=11;if(invalid==1)observed.dropped=1;
+    check(!take->drained(rack[0].instanceID,observed,invalid==2?"changed":"revision",invalid==3?8:7),
+      "Changed context satisfied the native drain");
+    check(take->failure()==(invalid<2?Take::Failure::Provider:Take::Failure::Context)&&
+      take->eventCount()==RecordedGestureCapture::eventCapacity&&take->target(0).loss().overflow==1,
+      "Reviewable loss masked a later identity failure or discarded retained events");
+    take->drained(rack[0].instanceID,{9,2},"revision",7);take->drained(rack[1].instanceID,{10,5},"revision",7);
+    called=false;
+    rejects([&]{take->commit("revision",7,true,[&](auto,bool){called=true;return true;});});
+    check(!called&&!take->completed(),"Partial-take consent bypassed an observed identity failure");
+  }
   // A missing timestamp stays visible; no native adapter may replace it with now.
   take=make();check(put(*take,0,{1,-9,0},{9,2})==Take::Intake::Captured&&
     take->target(0).events()[0].hostTime==0&&take->target(0).loss().unmapped==1,"Unknown timestamp was approximated");
+
+  // An ordinary empty provider poll must resolve newly available clock
+  // coverage before a long recording evicts that interval. It must still not
+  // count as the release drain.
+  auto longClock=std::make_shared<RecordingFrameTimeline>();
+  check(longClock->publish(1000,1100,0,480,48000,7),"Long take clock failed to start");
+  Take longTake("long-take","revision",1000,longClock,rack,before,providers);
+  check(put(longTake,0,{1,-18,1120},{9,2})==Take::Intake::Captured&&
+    longTake.target(0).loss().unmapped==1,"Early notification did not retain its pending timestamp");
+  check(longClock->publish(1100,1200,480,480,48000,7),"Long take delayed coverage failed");
+  check(longTake.observeProvider(rack[0].instanceID,{9,2},"revision",7)&&
+    longTake.target(0).events()[0].frame==576,"Idle provider poll did not resolve original timestamp");
+  uint64_t end=1200;
+  for(size_t i=0;i<RecordingFrameClock::capacity;++i) {
+    end=1300+i*100;
+    check(longClock->publish(end-100,end,960+i*480,480,48000,7),"Long take clock ring did not advance");
+  }
+  check(!longClock->locate(1120,7),"Clock eviction fixture retained the early interval");
+  longTake.seal(end);longClock->close(7,end);
+  rejects([&]{longTake.preparedOwners("revision",7);});
+  for(const auto &provider:providers)
+    check(longTake.drained(provider.plugin,provider.source,"revision",7),"Long take release drain refused");
+  auto longOwners=longTake.preparedOwners("revision",7);
+  const std::array<RecordedGestureCapture::BatchInput,1> longInputs{{{longOwners[0],9,catalog}}};
+  const auto longCandidate=RecordedGestureCapture::prepareBatch(longInputs,"revision",7,rack,document.native());
+  check(longCandidate.points()==std::vector<ParameterChange>{{0,1,-6,240},{1,1,-3,120},{0,1,-18,576}}&&
+    !longCandidate.loss(0).any(),"Long recording lost an early resolved event after clock-ring eviction");
 }

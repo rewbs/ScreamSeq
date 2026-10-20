@@ -3,6 +3,7 @@
 #include "windows/Audio/HostClock.hpp"
 #include "windows/Audio/RealtimeAudit.hpp"
 #include "editor/hosted/HostedAudio.hpp"
+#include "editor/hosted/RecordedGestureTake.hpp"
 #include <windows.h>
 #include <array>
 #include <filesystem>
@@ -53,6 +54,72 @@ int main(int argc,char **argv){try{
     for(auto value:pcm)check(value==.375f,"Timestamped drain preserves audible parameter delivery");
     check(send(.625)==1,"Second gesture accepted");uint32_t id=0;float value=0;
     check(chain.popEdit(0,id,value)&&id==7&&value==.625f,"Old facade overload still consumes exact value");
+  }
+  {
+    // Real vendor callbacks enter the shared take before any coalescing.
+    // The clock coverage is controlled: this checks notification/capture
+    // integration and original-time mapping, not device presentation latency.
+    NativePlugin plugin(state,96000,true);
+    const auto catalog=plugin.parameters();
+    const std::array<PluginState,1> rack{state};
+    const std::array<RecordedGestureTake::Provider,1> providers{{{state.instanceID,plugin.editSource()}}};
+    NativeSong native;
+    check(send(.125)==1,"Pre-arm fixture gesture failed");
+    Sleep(2);
+    const auto arm=ScreamSeq::hostTime100ns();
+    auto timeline=std::make_shared<RecordingFrameTimeline>();
+    check(timeline->publish(arm,arm+1,0,1,96000,29),"Native take clock failed to start");
+    RecordedGestureTake take("vendor-take","revision",arm,timeline,rack,{},providers);
+    check(send(.25)==1,"First recorded fixture gesture failed");
+    Sleep(2);
+    check(send(.75)==1,"Second recorded fixture gesture failed");
+    uint64_t release=0;
+    // This synchronous fixture's notifications all originate on the vendor
+    // UI owner. Its FIFO barrier precedes seal; an empty poll alone is not it.
+    WindowsVST3::pluginMainCall([&]{release=ScreamSeq::hostTime100ns();});
+    check(release>arm+1,"Vendor release did not advance the host clock");
+    take.seal(release);
+    check(timeline->publish(arm+1,release,1,959,96000,29),"Native take coverage did not advance");
+    timeline->close(29,release);
+    Sleep(2);
+    check(send(.5)==1,"Post-release fixture gesture failed");
+    const auto delivery=ScreamSeq::hostTime100ns();
+    check(!timeline->locate(delivery,29),"Delayed delivery accidentally remained in recording coverage");
+    PluginEdit event;PluginEditSource source;unsigned captured=0,outside=0;
+    while(plugin.popEdit(event,source)) {
+      check(source==providers[0].source,"Native take changed notification provider");
+      const auto accepted=take.append(state.instanceID,event,source,"revision",29,native,catalog);
+      if(accepted==RecordedGestureTake::Intake::Captured)++captured;
+      else {check(accepted==RecordedGestureTake::Intake::Outside,"Native take refused valid vendor input");++outside;}
+    }
+    check(captured==2&&outside==2&&take.eventCount()==2&&take.targetCount()==1,
+      "Native take lost delayed input or included pre-arm/post-release input");
+    check(source==providers[0].source&&take.observeProvider(state.instanceID,source,"revision",29),
+      "Empty paired pop lost provider evidence");
+    bool refused=false;
+    try{(void)take.preparedOwners("revision",29);}catch(const std::invalid_argument &){refused=true;}
+    check(refused,"An ordinary empty poll was mistaken for the native release barrier");
+    check(take.drained(state.instanceID,source,"revision",29),"Native release drain was refused");
+    const auto events=take.target(0).events();
+    check(events[0].value==.25f&&events[1].value==.75f&&
+      events[0].hostTime<events[1].hostTime&&events[1].hostTime<release&&events[0].frame&&events[1].frame,
+      "Delayed native callbacks lost their original order, values or clock mapping");
+    for(const auto &input:events) {
+      const auto expected=uint64_t((1.L+static_cast<long double>(input.hostTime-(arm+1))*959/(release-(arm+1)))/2);
+      check(*input.frame==expected,"Native take used delivery time or failed 96k-to-48k canonical conversion");
+    }
+    check(events[0].frame!=events[1].frame,"Fixture failed to separate its two recorded times");
+    std::vector<ParameterChange> saved;
+    unsigned publications=0;
+    check(take.commit("revision",29,false,[&](auto owners,bool loss){
+      const std::array<RecordedGestureCapture::BatchInput,1> inputs{{{owners[0],source.incarnation,catalog}}};
+      auto candidate=RecordedGestureCapture::prepareBatch(inputs,"revision",29,rack,native,loss);
+      return RecordedGestureCapture::publishBatch(candidate,inputs,[&](const auto &points,bool changed){
+        check(changed,"Native take was unexpectedly a no-op");saved=points;++publications;return true;
+      });
+    })&&take.completed()&&publications==1&&saved==std::vector<ParameterChange>{
+      {0,7,.25f,*events[0].frame},{0,7,.75f,*events[1].frame}},
+      "Real vendor input did not publish the complete original-time take once");
   }
   {
     auto plugin=platformPluginBackendFactory().create(state,48000,true);
