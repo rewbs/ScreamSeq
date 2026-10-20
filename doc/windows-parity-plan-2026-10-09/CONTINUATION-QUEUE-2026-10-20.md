@@ -53,7 +53,7 @@ the newer source or a visual review.
 | 1 / M | Frozen ARM64 batch has bounded passing evidence and one failed native metadata test. Shared preview paths also change Mac bridge/audio adapters. | Rebuild and rerun the corrected metadata test at the next permitted opportunity; preserve full-model and unit assertions. Obtain Mac/x64 execution; reuse unchanged passing evidence and retain both apps on the same integration line. |
 | 2 / S–M | At the frozen candidate, Mac `TrackerSessionAPI.inc` excludes rack `dryRun`; Windows accepts it. The later [Mac correction](RACK-DRY-RUN-2026-10-20.md) is source only, with a shared contract passed on the existing Windows app. The API corpus still retains `API-PLUGIN-DRY-RUN`. | Qualify Mac dry runs using existing shared parameter preparation and accepted manual values. Preserve active preview ownership, queues, Redo, revision, opaque bytes and transport. Check changed and no-op batches, full-batch rejection, unavailable/read-only targets, stale guards and subsequent real edits. Do not count a method-name match as parity. |
 | 3 / M | [Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md) and [terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) are prepared but unbuilt. The retained Windows app reproduces both differences. | Qualify numeric bounds/adapters, terminal-error retention, busy retries, uncertain side effects, exact cache accounting and both shared app contracts in the next batch. API vectors retain the old baseline until both hosts execute. Generic host failures now require reconciliation without advertising the pre-write revision; prove that behavior with the native real-pipe cases. |
-| 4 / L | Unknown root/native/entity extensions are retained by Windows and dropped by canonical Mac save with warnings/source protection. This is observed in `doc/api/codec-observations.json` and still present in source. | Converge lossless preservation, then reciprocal edited-file qualification. See the ownership plan below. Do not copy Mac's loss into Windows to make the baseline equal. |
+| 4 / L | Unknown root/native/entity extensions are retained by Windows and dropped by canonical Mac save with warnings/source protection. The [shared typed foundation](PROPERTY-TREE-BATCH-2026-10-20.md) is now prepared but unbuilt; Mac session integration remains open. | Connect staged Mac load/save/recovery ownership to the shared codec/merge and native data bridge. Preserve XML imports, accepted recovery trees, budgets and opaque plugin state; then execute reciprocal edited-file checks. Do not copy Mac's loss into Windows to make the baseline equal. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
 | 6 / M | Native control/event checks do not establish visual ergonomics, DPI, UIA or physical input quality. Computer use remains stopped after the user's Escape. | Retain A16/P8 as open. Resume foreground inspection only with renewed authorization. Check 100/150/200% DPI, compact/normal layouts, focus visibility, hidden tab stops, high contrast and Narrator on the usable candidate. Avoid further speculative UI redesign based on screenshots alone. |
 | 7 / L, equipment-dependent | Real vendor/device lifecycle and physical audio/MIDI remain separately unqualified. Optional unavailable provider tests are skips, not passes. | Use explicit fixture providers/devices; preserve musician sessions and audio defaults. Qualify architecture mismatch, editor lifecycle, latency changes, reconnect, capture/overflow and physical measurements with their existing strict limits. Keep silent private-desktop observations separate from audible evidence. |
@@ -67,9 +67,11 @@ not delay investigation of a failure in the frozen batch.
 
 Confirmed source boundaries:
 
-- Windows `windows/Project/ProjectPreservation.hpp` contains exact stored-value
+- Shared `editor/project/ProjectPreservation.hpp` contains exact stored-value
   comparison, known-schema identity matching, canonical promotion and three-way
-  merge. It refuses ambiguous edits to arrays with opaque extensions.
+  merge. The Windows path forwards to it. It refuses ambiguous edits to arrays
+  with opaque extensions; the newly prepared plugin-instance identity support
+  and Mac data bridge await compilation.
 - `NativeMetadataRecovery.inc` preserves understood canonical fields and warns
   about uninterpreted extensions; `NativeProject.cpp::nativeProjectTree`
   merges against the captured pre-edit baseline and validates the actual saved
@@ -79,9 +81,10 @@ Confirmed source boundaries:
   `projectDataForRecovery:` constructs a new root with encoded native metadata.
   Merely changing a warning would not preserve the dropped contents.
 
-Proposed boundary: share preservation policy, stable-identity matching and merge
-decisions in `editor/`, while retaining native property-list I/O, atomic file
-publication and session lifetime in each platform adapter. Mac must retain its
+The typed codec and preservation policy have moved into `editor/project/`;
+the [foundation batch](PROPERTY-TREE-BATCH-2026-10-20.md) records the remaining
+native integration. Retain atomic file publication and session lifetime in each
+platform adapter. Mac must retain its
 original property tree and a canonical baseline for the loaded document; reset
 or replace them only with successful document replacement/save. Failed loads,
 failed saves, Undo/Redo, recovery snapshots and edited identities need explicit

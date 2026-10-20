@@ -1,4 +1,5 @@
 #include "BinaryPlist.hpp"
+// Platform-independent typed storage; native adapters own file publication.
 #include <algorithm>
 #include <bit>
 #include <cmath>

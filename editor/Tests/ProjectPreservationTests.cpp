@@ -1,4 +1,4 @@
-#include "../../Project/ProjectPreservation.hpp"
+#include "editor/project/ProjectPreservation.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
@@ -44,6 +44,21 @@ int main() {
 		Json integral={{"value",1}},floating={{"value",1.0}};
 		check(ScreamSeq::Project::mergePreserved(integral,integral,floating)["value"].is_number_float(),"known scalar type changes persist");
 		std::cout<<"PASS exact scalar types and float bits\n";
+		const Json rack=Json::array({{{"instanceID","plugin-a"},{"state",Json::binary({1,2})}},
+			{{"instanceID","plugin-b"},{"state",Json::binary({3,4})}}});
+		Json opaqueRack=rack;opaqueRack[0]["extension"]=Json::binary({0,255});
+		opaqueRack[0]["id"]="incidental-opaque-key";
+		Json changedRack=Json::array({rack[1],rack[0]});changedRack[1]["state"]=Json::binary({5,6});
+		const auto mergedRack=ScreamSeq::Project::mergePreserved(opaqueRack,rack,changedRack,"/plugins");
+		check(mergedRack[1]["state"]==changedRack[1]["state"]&&mergedRack[1]["extension"]==opaqueRack[0]["extension"]&&
+			mergedRack[1]["id"]=="incidental-opaque-key"&&!mergedRack[0].contains("extension"),
+			"Plugin opaque extension must follow known instanceID, not slot or incidental opaque id");
+		const auto promoted=ScreamSeq::Project::canonicalizePreservedMetadata(opaqueRack,Json::array({rack[1],rack[0]}),"/plugins");
+		check(promoted[1]["extension"]==opaqueRack[0]["extension"]&&!promoted[0].contains("extension"),
+			"Canonical plugin promotion retargeted an opaque extension");
+		check(ScreamSeq::Project::mergePreserved(opaqueRack,rack,Json::array({rack[1]}),"/plugins")==Json::array({rack[1]}),
+			"Removed plugin identity was resurrected");
+		std::cout<<"PASS plugin instance identities, opaque keys, state edits and removal\n";
 		return 0;
 	} catch(const std::exception &e) {std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}
 }

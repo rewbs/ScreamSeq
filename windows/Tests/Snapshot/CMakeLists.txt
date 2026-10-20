@@ -8,7 +8,7 @@ set(SCREAMSEQ_ENGINE_LIB_DIR "${ROOT}/bin/windows-workspace/Release" CACHE PATH 
 add_executable(snapshot-tests SnapshotTests.cpp
   "${ROOT}/editor/TrackerDocument.cpp" "${ROOT}/editor/SampleArchive.cpp"
   "${ROOT}/windows/Project/NativeProject.cpp" "${ROOT}/windows/Project/NativeMetadata.cpp"
-  "${ROOT}/windows/Project/BinaryPlist.cpp")
+  "${ROOT}/editor/project/BinaryPlist.cpp")
 add_executable(snapshot-editing-tests "${ROOT}/windows/Tests/Editing/DocumentOperationsTests.cpp"
   "${ROOT}/windows/Session/DocumentOperations.cpp"
   "${ROOT}/editor/TrackerDocument.cpp" "${ROOT}/editor/SampleArchive.cpp")

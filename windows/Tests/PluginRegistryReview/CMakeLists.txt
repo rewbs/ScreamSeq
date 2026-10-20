@@ -18,7 +18,7 @@ include("${ROOT}/windows/Plugins/Provider.cmake")
 add_executable(RegistryReview RegistryTests.cpp
   "${ROOT}/windows/Plugins/Module.cpp" "${ROOT}/windows/Plugins/Scanner.cpp"
   "${SCREAMSEQ_VST3_BACKEND_DIR}/WindowsVST3.cpp"
-  "${ROOT}/windows/Project/BinaryPlist.cpp" ${SCREAMSEQ_VST3_SDK_SOURCES})
+  "${ROOT}/editor/project/BinaryPlist.cpp" ${SCREAMSEQ_VST3_SDK_SOURCES})
 target_include_directories(RegistryReview PRIVATE "${ROOT}" "${ROOT}/src" "${ROOT}/common" "${ROOT}/include" "${ROOT}/include/nlohmann-json/include" "${SCREAMSEQ_VST3_SDK}")
 target_link_libraries(RegistryReview PRIVATE bcrypt user32 ole32)
 target_link_options(RegistryReview PRIVATE /STACK:8388608)

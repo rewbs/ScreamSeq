@@ -1,4 +1,4 @@
-#include "BinaryPlist.hpp"
+#include "editor/project/BinaryPlist.hpp"
 #include <bit>
 #include <cstdint>
 #include <iostream>
