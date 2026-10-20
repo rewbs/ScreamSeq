@@ -29,6 +29,20 @@ def write_json(path, value):
         stream.write("\n")
 
 
+def opened_launch_document(document, snapshot, context):
+    """Match a normal file or the exact protected source of Save a copy."""
+    expected = str(document)
+    if context.get("file") == expected:
+        return True
+    # AppController deliberately clears documentURL for recovered/extended
+    # projects. The session still reports the original loaded source. Requiring
+    # both protection and that exact source avoids accepting the startup song,
+    # a different document, or an arbitrary missing context path.
+    return (context.get("file") in (None, "")
+            and snapshot.get("requiresSaveAs") is True
+            and snapshot.get("loadSourcePath") == expected)
+
+
 @contextmanager
 def owned_client(executable, output, identity, document=None):
     if sys.platform == "win32":
@@ -77,12 +91,19 @@ def owned_client(executable, output, identity, document=None):
                                 raise EvidenceError("Private endpoint does not belong to the launched process")
                             client = Client(found[0]["socket"], timeout=20)
                             client.fixture_recovery_directory = recovery
-                            client.call("document.get")
-                            if document is not None and client.call("context.get")["data"].get("file") != str(document):
-                                if time.monotonic() >= deadline:
-                                    raise EvidenceError("Owned app did not open the requested launch document")
-                                time.sleep(.05)
-                                continue
+                            current = client.call("document.get")
+                            if document is not None:
+                                context = client.call("context.get")["data"]
+                                snapshot = current["data"]
+                                identity["launchDocument"] = dict(
+                                    documentId=current.get("documentId"), revision=current.get("revision"),
+                                    file=context.get("file"), requiresSaveAs=snapshot.get("requiresSaveAs"),
+                                    loadSourcePath=snapshot.get("loadSourcePath"))
+                                if not opened_launch_document(document, snapshot, context):
+                                    if time.monotonic() >= deadline:
+                                        raise EvidenceError("Owned app did not open the requested launch document")
+                                    time.sleep(.05)
+                                    continue
                             break
                         if process.poll() is not None:
                             raise EvidenceError(f"Owned app exited during startup: {process.returncode}")

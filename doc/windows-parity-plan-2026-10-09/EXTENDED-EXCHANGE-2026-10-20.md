@@ -103,3 +103,25 @@ main candidate afterward.
 This closes a hole in the planned validation scope. Gesture controls/recovery,
 foreground ergonomics, physical device/vendor qualification and the remaining
 A01–A18 gates are still independent outstanding work.
+# Protected launch follow-up
+
+The first current-candidate extended exchange is run `39423914064`, using
+retained Mac apps from `39418201597` and Windows outputs from `39418201506`.
+Apple Silicon passed the five original, two render/import, composing-history
+and envelope-bank files. Its opaque-metadata leg failed at launch identity,
+before any Save: `Owned app did not open the requested launch document`.
+Artifact `12263879560` retains that failure; it is not a successful exchange.
+
+`mac/App/main.swift::refreshPattern` deliberately clears `documentURL` when
+`requiresSaveAs` is true. The session retains `loadSourcePath`. The runner now
+accepts that exact protected-source identity only when the context file is
+empty, the protection flag is Boolean true, and the loaded source exactly
+equals the requested path. It records the observed launch identity, keeps
+the isolated PID/socket checks, and still compares both complete saved trees.
+This changes qualification tooling, not file admission or source protection.
+
+Four runner safety tests passed in 5.345 seconds, including nine normal/
+protected/wrong-source identity cases, uncertain-save refusal and binary/
+output collision guards. A new retained-app execution is required; the
+tooling check alone does not close the failed metadata leg.
+

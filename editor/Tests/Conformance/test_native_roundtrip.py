@@ -11,6 +11,23 @@ from project_tree import CORPUS, sha256
 
 
 class RoundtripSafetyTests(unittest.TestCase):
+    def test_launch_identity_requires_exact_normal_or_protected_source(self):
+        expected = "/owned/opaque.screamseq"
+        cases = [
+            ({}, {"file": expected}, True),
+            ({"requiresSaveAs": True, "loadSourcePath": expected}, {"file": None}, True),
+            ({"requiresSaveAs": True, "loadSourcePath": expected}, {"file": ""}, True),
+            ({}, {"file": None}, False),
+            ({"requiresSaveAs": False, "loadSourcePath": expected}, {"file": None}, False),
+            ({"requiresSaveAs": 1, "loadSourcePath": expected}, {"file": None}, False),
+            ({"requiresSaveAs": True, "loadSourcePath": "/other/song.screamseq"}, {"file": None}, False),
+            ({"requiresSaveAs": True, "loadSourcePath": expected}, {"file": "/other/song.screamseq"}, False),
+            ({"requiresSaveAs": True}, {"file": None}, False),
+        ]
+        for snapshot, context, matches in cases:
+            with self.subTest(snapshot=snapshot, context=context):
+                self.assertIs(native_roundtrip.opened_launch_document(expected, snapshot, context), matches)
+
     def test_mac_launch_reopens_actual_save_and_stops_on_uncertain_save(self):
         source = next((CORPUS / "fixtures").glob("*.screamseq"))
         for fail in (False, True):
