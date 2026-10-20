@@ -8,6 +8,19 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Latest checkpoint:** candidate `8c750f7d61966b3dc125ffaf49c34e8678697a25`
+built successfully on Windows ARM64 at 07:00–07:01 UTC.
+[Commit-outcome qualification](COMMIT-OUTCOME-QUALIFICATION-2026-10-20.md)
+records all eight selected native checks, the actual-app linked-envelope
+regression, F01–F05, complete codec safety/baseline, duration, edited metadata
+and composing history as passed. The aggregate conformance result remains
+failed for three unchanged API baseline differences; no baseline was relaxed.
+[Draft PR #5](https://github.com/rewbs/ScreamSeq/pull/5) started the coordinated
+Mac/x64 batch, still building at this checkpoint. Next local build is no earlier
+than **08:01:13 UTC**. Earlier pending-build statements below are historical;
+the next action is to inspect those live CI runs and their retained results,
+then review actual cross-platform observations and exchange saved files.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:
