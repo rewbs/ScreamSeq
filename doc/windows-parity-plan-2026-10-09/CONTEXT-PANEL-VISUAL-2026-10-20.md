@@ -1,5 +1,62 @@
 # Context panel foreground inspection
 
+## Recheck: candidate 55d11e131
+
+The single Windows ARM64 build ran from 23:06:29 to 23:09:35 UTC on
+2026-10-20. Source was the clean frozen commit
+`55d11e131f6e74916d3aa2fb79fcb83bf72a01c1`; executable SHA-256 was
+`525f0d8ce08ab6669022cc4a1053041f1790d766707e169e5d401a583c372a87`.
+Output: `parity-ci-layout/ScreamSeq/bin/windows-parity-p1/ContextRepaint-Release`.
+Build and check receipts are in the primary checkout's
+`bin/context-repaint-20261020/`. No second build was run. The next build is
+not before **2026-10-21 00:09:36 UTC** (17:09:36 Pacific on October 20).
+
+All eleven selected CTest registrations passed, accounting for the isolated
+rerun described below. They cover controls, context panel, advanced retained
+workspace, parameter preview, recipe edits, notification intake, recorded
+automation, live parameter/recorded publication and recovery, plus the scratch
+fixture setup. The private-desktop real-vendor ownership case also passed.
+The context regression now retains a partially typed sample range, exact
+text selection and GetFocus across both sidebar toggles, then cancels it.
+
+The first recipe run passed both functional cases but failed its foreground
+preservation guard because visible QA interaction overlapped that test. The
+original failing log is retained. With GUI input stopped, that test alone
+passed unchanged in 4.77 seconds. Keep visible QA and private-desktop observers
+sequential; do not disable this guard. No broader suite or rebuild was repeated.
+
+Computer Use inspected owned PID 4868, with the executable path and
+`--inspection --automation` command line verified. In the disposable Midnight
+Circuit demo, live observations established:
+
+- `Step 1` is fully readable in the widened selector.
+- Sidebar hide/show reclaims width; sample, plugin and graph contexts show
+  their appropriate actions. Captions remain clean through repeated toggles
+  and maximize/restore at 1286x762 and 1440x854 screenshot dimensions.
+- Clicking the sample Start field then Ctrl+A visibly selects its text.
+  Typing `12`, restoring the sidebar with Ctrl+B, then typing `3` yields `123`
+  in that same field, without changing the pattern cell or sample.
+- Hiding the sidebar again and pressing Backspace changes the field to `12`.
+  Tab moves to End (Ctrl+A visibly selects `256`); Shift+Tab returns the caret
+  to Start. Escape cancels the draft and restores `0`, with no song save.
+- The previous mixed button captions did not recur in these sequences.
+
+The accessibility snapshot still reports the top-level window as focused,
+even when actual keyboard input and the visible caret establish child edit
+focus. Some immediate accessibility values also lag the corresponding image.
+This is an unresolved accessibility/provider-or-observer question, not a
+keyboard focus failure or a screen-reader pass. Investigate the custom root
+provider/host-child focus handoff separately; do not substitute this snapshot
+for direct native focus assertions or visible keyboard evidence.
+
+Alt+F4 closed only the owned QA process; its persistent launch session exited
+successfully and process inventory confirmed exit. Hardware audio remained
+disabled. No audible-preview, Narrator, other DPI/multi-monitor, narrow-window
+drag-resize or sustained presentation-performance claim is made. Windows x64
+native-UI CI and both Mac shared-header builds remain pending for this candidate.
+
+## Earlier inspection: candidate 7fb99d0b2
+
 The user explicitly renewed permission to inspect the isolated QA window.
 Computer Use (`@oai/sky`) inspected the existing Windows ARM64 executable
 from candidate `7fb99d0b2`, SHA-256

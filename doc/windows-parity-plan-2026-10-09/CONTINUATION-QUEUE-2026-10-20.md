@@ -8,14 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**Foreground UI follow-up:** renewed permission enabled inspection of the
-retained `7fb99d0b2` QA app. Context switching and Ctrl+B width reclamation
-worked; stale sibling-button pixels on layout changes and a clipped step
-value did not. [Visual review and pending corrections](CONTEXT-PANEL-VISUAL-2026-10-20.md)
-add Windows control/context tests and require another visible check on the
-next built candidate. No new build was run; the QA process is closed.
+**Latest executed boundary: `55d11e131`.** One six-target Windows ARM64 build
+completed at 23:09:35 UTC. Eleven selected CTest registrations and the
+private-desktop vendor-ownership case passed, with one unchanged recipe-test
+rerun after foreground QA interfered with its foreground-preservation guard.
+The [visible recheck](CONTEXT-PANEL-VISUAL-2026-10-20.md) confirmed clean captions
+after sidebar hide/show and maximize/restore, readable step value, and actual
+sample-field typing, Backspace, Tab/Shift+Tab and Escape across sidebar changes.
+Native tests also assert partial text, selection and focus retention.
+The owned QA process is closed. Root-only accessibility focus reporting remains
+unresolved; screen-reader and full x64 native-UI qualification are outstanding.
+Next build **not before 2026-10-21 00:09:36 UTC**. Do not trigger CI before that
+gate; batch remaining source first. Both Mac builds must compile the new shared
+headers. No second build or new CI dispatch was performed for this checkpoint.
 
-**Latest executed boundary:** candidate `7fb99d0b2` passed one Windows ARM64
+**Previous executed boundary:** candidate `7fb99d0b2` passed one Windows ARM64
 five-target build, all six selected CTest registrations (five checks plus
 scratch setup), and the affected actual-app graph parameter/bus-assignment
 case. See [take batch qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md).
@@ -27,17 +34,16 @@ manual-state protection, recovery and UI/API integration.
 Windows CI run **39430710486**, job **118654733984**, is terminal failure:
 157 worker/48 native passes, with ten endpoint-dependent application failures.
 Mac run **39430710525** ARM job **118654733396** passed all 134 native and
-35 interface groups; Intel job **118654733679** is still building.
-See the terminal log review in the take batch qualification. Reuse the live
-Intel handle; do not dispatch a new build. Next build is no earlier than
-**14:54:39 UTC**, extended to one hour after later Intel compilation/harness
-completion. Local source and CI merge source have identical
+35 interface groups; Intel job **118654733679** also passed 134 native and
+35 interface groups, finishing at 14:16:21 UTC. These jobs are terminal;
+do not poll or restart them. Their old hourly gate was clear before the local
+23:06 build above. Local source and CI merge source at that earlier boundary have identical
 Git trees. Shared main remains `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
 
-**Next source batch, unbuilt:** [native recorded vendor ownership](RECORDED-VENDOR-OWNERSHIP-2026-10-20.md)
+**Native recorded vendor ownership, now locally qualified:** [scope and limits](RECORDED-VENDOR-OWNERSHIP-2026-10-20.md)
 protects manual state/recovery, retains raw intake and previews across refusal,
 and restores open or explicitly closed providers before releasing ownership.
-The real-vendor worker fixture and private-desktop CI scheduling are prepared.
+The real-vendor worker fixture passed locally; private-desktop CI scheduling is prepared.
 There are no production arming callers yet. Session barriers, recovery,
 Mac intake and both-host API/UI remain required before exposing Record.
 

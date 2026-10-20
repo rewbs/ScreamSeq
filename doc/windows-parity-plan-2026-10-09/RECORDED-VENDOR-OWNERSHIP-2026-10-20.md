@@ -77,6 +77,21 @@ failure expands investigation to its affected owner, not an automatic full
 rebuild. Both Mac builds must compile the shared header in the coordinated CI
 batch. This source review is not an execution pass.
 
+## Local execution checkpoint
+
+Candidate `55d11e131` compiled this scope in the single 23:06–23:09 UTC ARM64
+build. The private-desktop `RecoveryControllerTests` manual-vendor case passed
+with the newly built document-controller executable, scanner and notification
+fixture cache. Its native path calls `recordedEditorOwnershipTests` before the
+ordinary recovery checks; missing fixture/cache is not a skip. The selected
+shared recorded-automation, live publication/parameter and recovery CTest
+registrations also passed. See the [build and UI checkpoint](CONTEXT-PANEL-VISUAL-2026-10-20.md)
+for exact hashes, receipts and the unrelated recipe observer rerun.
+
+This is Windows ARM64 internal ownership evidence. Windows x64 and both Mac
+shared-header builds are still required; production arming and the following
+integration remain absent. No second build was started within the hourly limit.
+
 ## Required next integration
 
 DocumentController must own arming, current revision/epoch, native UI/vendor
