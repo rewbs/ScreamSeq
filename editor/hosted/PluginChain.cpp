@@ -661,13 +661,20 @@ void PluginChain::showEditor(size_t slot) {
   rack_[slot]->plugin->showEditor();
 }
 bool PluginChain::popEdit(size_t slot, uint32_t &id, float &value) noexcept {
+  PluginEdit event;if(!popEdit(slot,event))return false;id=event.id;value=event.value;return true;
+}
+bool PluginChain::popEdit(size_t slot, PluginEdit &event) noexcept {
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
-  if(w-r==queue_.size()||slot >= rack_.size() || !rack_[slot]->plugin->popEdit(id, value))return false;
+  if(w-r==queue_.size()||slot >= rack_.size() || !rack_[slot]->plugin->popEdit(event))return false;
+  const auto id=event.id;const auto value=event.value;
   auto &entry=*rack_[slot];
   queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity};write_.store(w+1,std::memory_order_release);
   for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id){entry.parameters[n].value=value;entry.previewed[n]=false;}
   for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==id)p.value=value;
   return true;
+}
+uint64_t PluginChain::droppedEdits(size_t slot) const noexcept {
+  return slot<rack_.size()?rack_[slot]->plugin->droppedEdits():0;
 }
 
 bool PluginChain::graphController(uint8_t cc,uint8_t value) noexcept {if(cc>=128||value>=128)return false;songControllers_[cc].store(value,std::memory_order_relaxed);if(signalGraph_)signalGraph_->controller(cc,value);if(sampleSignalGraph_)sampleSignalGraph_->controller(cc,value);return bool(mixerTransition_)||bool(signalGraph_)||bool(sampleSignalGraph_);}

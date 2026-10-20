@@ -87,4 +87,12 @@ struct ParameterChange {
   uint64_t frame;
   bool operator==(const ParameterChange &) const = default;
 };
+// Transient native editor notification, never project storage. hostTime uses
+// the platform presentation-clock domain (Windows QPC in 100 ns; Mac host ticks).
+// Zero means unavailable; consumers must not replace it with their poll time.
+struct PluginEdit {
+  uint32_t id=0;
+  float value=0;
+  uint64_t hostTime=0;
+};
 } // namespace Tracker

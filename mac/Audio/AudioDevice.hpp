@@ -98,6 +98,8 @@ public:
       plugins_->showEditor(slot);
   }
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
+  bool popPluginEdit(size_t slot,PluginEdit &event) {return plugins_&&plugins_->popEdit(slot,event);}
+  uint64_t droppedPluginEdits(size_t slot) const noexcept {return plugins_?plugins_->droppedEdits(slot):0;}
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
   NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}

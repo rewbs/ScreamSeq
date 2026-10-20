@@ -93,6 +93,7 @@ class MacPluginBackend final : public PluginBackend {
   std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
   std::unique_ptr<PluginAudioBufferPlan> audio_;
   void *editorWindow_ = nullptr, *editorDelegate_ = nullptr, *parameterListener_ = nullptr;
+  uint64_t retiredEditorDrops_ = 0; // Main-run-loop owner, retained across editor reopen.
 public:
   MacPluginBackend(const PluginState &, double rate, bool offline);
   ~MacPluginBackend() override;
@@ -124,21 +125,21 @@ public:
   void closeEditor() override;
   bool editorOpen() const override;
   bool popEdit(uint32_t &, float &) noexcept override;
+  bool popEdit(PluginEdit &) noexcept override;
+  uint64_t droppedEdits() const noexcept override;
   static std::vector<PluginDescriptor> discover();
 };
 namespace {
 struct AUEditObserver {
   AUEventListenerRef listener = nullptr;
-  struct Edit {
-    uint32_t id;
-    float value;
-  };
-  std::array<Edit, 1024> events{};
+  std::array<PluginEdit,1024> events{};
   uint32_t read = 0, write = 0;
-  static void callback(void *ref, void *, const AudioUnitEvent *event, UInt64, Float32 value) {
+  uint64_t dropped=0; // Listener and consumer both belong to the main run loop.
+  static void callback(void *ref, void *, const AudioUnitEvent *event, UInt64 hostTime, Float32 value) {
     auto &s = *static_cast<AUEditObserver *>(ref);
-    if (event->mEventType == kAudioUnitEvent_ParameterValueChange && s.write - s.read < s.events.size())
-      s.events[s.write++ % s.events.size()] = {event->mArgument.mParameter.mParameterID, value};
+    if(event->mEventType!=kAudioUnitEvent_ParameterValueChange)return;
+    if(s.write-s.read>=s.events.size()){++s.dropped;return;}
+    s.events[s.write++ % s.events.size()]={event->mArgument.mParameter.mParameterID,value,hostTime};
   }
   ~AUEditObserver() {
     if (listener)
@@ -561,7 +562,11 @@ void MacPluginBackend::closeEditor() {
   }
   auto close = ^{
     if (parameterListener_) {
-      delete static_cast<AUEditObserver *>(parameterListener_);
+      auto *observer=static_cast<AUEditObserver *>(parameterListener_);
+      // Closing the native view retires this listener. Report queued events
+      // discarded here as well as overflow; reopening must not reset evidence.
+      retiredEditorDrops_+=observer->dropped+uint32_t(observer->write-observer->read);
+      delete observer;
       parameterListener_ = nullptr;
     }
     if (editorWindow_) {
@@ -583,15 +588,21 @@ void MacPluginBackend::closeEditor() {
     dispatch_sync(dispatch_get_main_queue(), close);
 }
 bool MacPluginBackend::popEdit(uint32_t &id, float &value) noexcept {
+  PluginEdit event;if(!popEdit(event))return false;id=event.id;value=event.value;return true;
+}
+bool MacPluginBackend::popEdit(PluginEdit &event) noexcept {
   if (vst_)
-    return vst_->popEdit(id, value);
+    return vst_->popEdit(event);
   auto *observer = static_cast<AUEditObserver *>(parameterListener_);
   if (!observer || observer->read == observer->write)
     return false;
-  auto event = observer->events[observer->read++ % observer->events.size()];
-  id = event.id;
-  value = event.value;
+  event=observer->events[observer->read++ % observer->events.size()];
   return true;
+}
+uint64_t MacPluginBackend::droppedEdits() const noexcept {
+  if(vst_)return vst_->droppedEdits();
+  const auto *observer=static_cast<const AUEditObserver *>(parameterListener_);
+  return retiredEditorDrops_+(observer?observer->dropped:0);
 }
 namespace {
 class MacBackendFactory final : public PluginBackendFactory {

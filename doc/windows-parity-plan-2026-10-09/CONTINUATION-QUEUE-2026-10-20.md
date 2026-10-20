@@ -8,6 +8,13 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**New source, unbuilt:** [original-time plugin notifications](PLUGIN-EDIT-TIMESTAMPS-2026-10-20.md)
+now preserve VST3 callback/AU listener timestamps through the shared host
+interface and expose backend loss counters. Native/worker checks are prepared.
+Existing consumers retain their old behavior: Windows capture and the Mac
+poll-time ingestion replacement remain outstanding. Include this slice in the
+next coordinated build, no earlier than **10:03 UTC**; do not build it separately.
+
 **Reciprocal gate now passed for frozen `54fa2babc` / merge `d79321c7c`:**
 [retained fixture exchange](RETAINED-EXCHANGE-2026-10-20.md). No-build run
 39399717354 completed successfully on both Mac architectures. Windows return

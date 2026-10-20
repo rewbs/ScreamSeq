@@ -329,6 +329,8 @@ public:
     outputDelayPosition_ = 0;
   }
   bool popEdit(uint32_t &, float &) noexcept;
+  bool popEdit(PluginEdit &) noexcept;
+  uint64_t droppedEdits() const noexcept;
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };
 class PluginChain {
@@ -637,6 +639,8 @@ public:
   void showEditor(size_t slot);
   std::vector<size_t> openEditors() const;
   bool popEdit(size_t slot, uint32_t &, float &) noexcept;
+  bool popEdit(size_t slot, PluginEdit &) noexcept;
+  uint64_t droppedEdits(size_t slot) const noexcept;
   bool parameter(uint32_t slot, uint32_t id, float value) noexcept;
   // Single control producer. One release publishes the complete batch, or no
   // values on failure. Caller validates IDs/ranges against its baseline catalog.

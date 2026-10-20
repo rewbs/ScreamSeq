@@ -15,6 +15,7 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/ivstunits.h"
 #import <AppKit/AppKit.h>
+#include <mach/mach_time.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -414,10 +415,6 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
         }
     releasesPending = false;
   }
-  struct Edit {
-    uint32_t id;
-    float value;
-  };
   // UI bookkeeping is a bounded SPSC queue. Audible edits are independent of it
   // and coalesced per parameter: every host point for an editor gesture lands at
   // offset 0, so only the newest value of a parameter can reach the processor.
@@ -425,7 +422,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // newest published slot), whereas one atomic per parameter can: the editor
   // thread stores, rendering takes the value with a single exchange. A long
   // gesture while the transport is stopped therefore cannot overflow.
-  std::array<Edit, 8192> edits{};
+  std::array<PluginEdit,8192> edits{};
   std::unique_ptr<std::atomic<float>[]> pendingEdits;
   std::atomic<uint32_t> pendingGeneration{0};
   uint32_t appliedGeneration = 0; // Render owner only.
@@ -467,7 +464,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
       droppedEdits.fetch_add(1, std::memory_order_relaxed);
       return kResultOk;
     }
-    edits[w % edits.size()] = {id, normalized};
+    edits[w % edits.size()] = {id,normalized,mach_absolute_time()};
     editWrite.store(w + 1, std::memory_order_release);
     return kResultOk;
   }
@@ -769,6 +766,9 @@ bool VST3Plugin::parameter(uint32_t id, double value, uint32_t offset) noexcept 
   return impl_->setParameter(id, value, offset);
 }
 bool VST3Plugin::popEdit(uint32_t &id, float &value) noexcept {
+  PluginEdit event;if(!popEdit(event))return false;id=event.id;value=event.value;return true;
+}
+bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
   auto &s = *impl_;
   auto r = s.editRead.load(std::memory_order_relaxed);
   if (r == s.editWrite.load(std::memory_order_acquire)) {
@@ -784,8 +784,7 @@ bool VST3Plugin::popEdit(uint32_t &id, float &value) noexcept {
   }
   auto e = s.edits[r % s.edits.size()];
   s.editRead.store(r + 1, std::memory_order_release);
-  id = e.id;
-  value = e.value;
+  event=e;
   return true;
 }
 void VST3Plugin::transport(const PluginTransport &t) noexcept {

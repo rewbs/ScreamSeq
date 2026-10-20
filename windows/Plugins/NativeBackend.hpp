@@ -30,6 +30,8 @@ public:
  void closeEditor()override;
  bool editorOpen()const override;
  bool popEdit(uint32_t &,float &)noexcept override;
+ bool popEdit(PluginEdit &)noexcept override;
+ uint64_t droppedEdits()const noexcept override;
  PluginFailure failure()const noexcept override;
 };
 }

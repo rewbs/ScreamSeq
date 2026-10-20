@@ -1,5 +1,10 @@
 # Manual automation recording: remaining A13/P4b work
 
+Latest source-only slice:
+[original-time vendor notifications and loss counters](PLUGIN-EDIT-TIMESTAMPS-2026-10-20.md).
+Consumers are not switched to capture from those timestamps yet; the new checks
+remain unbuilt.
+
 Newer source-only follow-up:
 [shared absolute frame clock and native adapters](RECORDING-FRAME-CLOCK-2026-10-20.md).
 This does not complete event ingestion or Windows capture; its tests are unbuilt.

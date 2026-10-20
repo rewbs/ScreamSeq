@@ -1,4 +1,5 @@
 #include "windows/Plugins/WindowsVST3.hpp"
+#include "windows/Audio/HostClock.hpp"
 #include <windows.h>
 #include <filesystem>
 #include <iostream>
@@ -13,9 +14,14 @@ int main(int argc,char **argv){try{
  for(int repeat=0;repeat<3;++repeat){const auto baseline=.125*(repeat+1);check(p->parameter(7,baseline,0),"manual baseline rejected");
   uint32_t pendingID=0;float pendingValue=0;check(!p->popEdit(pendingID,pendingValue),"manual baseline fabricated an editor gesture");
   // No process/state/timer call may synchronize the controller before show.
-  p->showEditor();check(initial()==baseline,"createView observed stale controller baseline");check(p->editorOpen(),"editor not open");check(counts(0)==repeat+1&&counts(2)>=repeat+1,"plugin-owned attach/frame-resize callbacks");
+  const auto before=ScreamSeq::hostTime100ns();p->showEditor();const auto after=ScreamSeq::hostTime100ns();
+  check(initial()==baseline,"createView observed stale controller baseline");check(p->editorOpen(),"editor not open");check(counts(0)==repeat+1&&counts(2)>=repeat+1,"plugin-owned attach/frame-resize callbacks");
   HWND host=FindWindowW(L"ScreamSeq.VST3.PrivateEditor",L"Resonance Test Gain");check(host!=nullptr,"native host HWND absent");DWORD pid=0;GetWindowThreadProcessId(host,&pid);check(pid==GetCurrentProcessId(),"wrong HWND process");check(GetWindow(host,GW_CHILD)!=nullptr,"plugin-owned child HWND absent");RECT client{};GetClientRect(host,&client);check(client.right==520&&client.bottom==220,"IPlugFrame resize did not resize native client");
-  uint32_t id=0;float value=0;check(p->popEdit(id,value)&&id==7&&value==.625f,"native editor commit value not queued");std::array<float,128> pcm;pcm.fill(1);check(p->process(pcm.data(),64,0,nullptr,0,{}),"editor edit audio processing");check(pcm[0]==.625f,"native editor gain not applied");
+  Sleep(2);const auto drain=ScreamSeq::hostTime100ns();PluginEdit event;
+  check(p->popEdit(event)&&event.id==7&&event.value==.625f,"native editor commit value not queued");
+  check(before&&event.hostTime>=before&&event.hostTime<=after&&event.hostTime<drain,"native editor timestamp lost across delayed drain");
+  check(p->droppedEdits()==0,"ordinary reopen cycle lost notifications");
+  std::array<float,128> pcm;pcm.fill(1);check(p->process(pcm.data(),64,0,nullptr,0,{}),"editor edit audio processing");check(pcm[0]==.625f,"native editor gain not applied");
   check(GetForegroundWindow()==foreground,"editor stole foreground focus");
   if(repeat==1){DWORD_PTR result=0;check(SendMessageTimeoutW(host,WM_CLOSE,0,0,SMTO_ABORTIFHUNG,1000,&result)!=0,"scoped HWND close message");}else p->closeEditor();check(!p->editorOpen()&&!IsWindow(host)&&counts(1)==repeat+1,"editor remove/close lifetime");
  }

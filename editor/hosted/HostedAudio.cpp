@@ -208,4 +208,6 @@ void NativePlugin::showEditor() {
 void NativePlugin::closeEditor() {auto *p=publishedVendor();if(p->backend_)p->backend_->closeEditor();}
 bool NativePlugin::editorOpen() const {const auto *p=publishedVendor();return p->backend_&&p->backend_->editorOpen();}
 bool NativePlugin::popEdit(uint32_t &id, float &value) noexcept {auto *p=publishedVendor();return p->backend_&&p->backend_->popEdit(id,value);}
+bool NativePlugin::popEdit(PluginEdit &event) noexcept {auto *p=publishedVendor();return p->backend_&&p->backend_->popEdit(event);}
+uint64_t NativePlugin::droppedEdits() const noexcept {const auto *p=publishedVendor();return p->backend_?p->backend_->droppedEdits():0;}
 } // namespace Tracker

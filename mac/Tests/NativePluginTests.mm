@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <dlfcn.h>
+#include <mach/mach_time.h>
 using namespace Tracker;
 using namespace OpenMPT;
 #ifdef TRACKER_SANITIZER
@@ -289,10 +290,12 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
               slider = (NSSlider *)item;
         check(slider != nil, "plugin-owned slider attached");
         slider.doubleValue = .72;
+        const auto beforeEdit=mach_absolute_time();
         [slider sendAction:slider.action to:slider.target];
-        uint32_t id;
-        float value;
-        check(plugin.popEdit(id, value) && id == 7 && std::abs(value - .72) < 1e-5, "custom editor parameter callback");
+        const auto afterEdit=mach_absolute_time();
+        PluginEdit edit;
+        check(plugin.popEdit(edit) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
+        check(beforeEdit&&edit.hostTime>=beforeEdit&&edit.hostTime<=afterEdit&&plugin.droppedEdits()==0,"Native facade retains custom editor callback time and loss count");
         // The controller gesture must reach audio without a main-window poll or forwarding call.
         buffer.fill(.2);
         check(plugin.process(buffer.data(), 128, 0) && std::abs(buffer[0] - .144) < 1e-5,

@@ -33,6 +33,7 @@ public:
   void closeEditor();
   bool editorOpen() const;
   bool popEdit(uint32_t &, float &) noexcept;
+  bool popEdit(PluginEdit &) noexcept;
   // Editor values ignored as invalid/unknown, plus UI notifications lost to a
   // full queue. Diagnostic only: neither stops rendering.
   uint64_t droppedEdits() const noexcept;
