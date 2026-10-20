@@ -8,6 +8,20 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Newest result:** pushed candidate `54fa2babc` passed its one Windows ARM64
+build at 08:33:39 UTC. Targeted checks passed 11/12 CTest registrations and the
+actual-app export replay/reopen contract. The snapshot target passed 47/48
+internal cases; one historical RSONGS1 writer assertion is corrected locally
+but remains unbuilt. The same-frame recorded-capture admission/render checks
+passed; this does not implement Windows capture or qualify the Mac adapter.
+[Export/capture qualification](EXPORT-CAPTURE-QUALIFICATION-2026-10-20.md)
+records exact hashes, scope, original failure and live CI handles.
+Mac Apple Silicon/Intel and Windows x64 are building in runs 39393737331 and
+39393737358. Poll those handles rather than restarting them. Do not push another
+build-triggering commit during the cooldown; the local lower bound is
+09:33:40 UTC and later CI completion may extend the coordinated boundary.
+The older checkpoint chronology below is supporting history.
+
 **Latest checkpoint:** candidate `8c750f7d61966b3dc125ffaf49c34e8678697a25`
 built successfully on Windows ARM64 at 07:00–07:01 UTC.
 [Commit-outcome qualification](COMMIT-OUTCOME-QUALIFICATION-2026-10-20.md)

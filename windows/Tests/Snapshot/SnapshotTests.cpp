@@ -1,6 +1,7 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
+#include "editor/ProjectLoadRecovery.hpp"
 #include "windows/Project/NativeProject.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
@@ -193,14 +194,27 @@ void titlesAndLegacy() {
   auto original=std::make_unique<Document>(MOD_TYPE_MPT,4);
   auto module=original->serialize(); auto base=std::make_unique<Document>(module);
   auto samples=encodeSampleArchive(base->song(),base->song());
-  auto legacy=packSongSnapshot(module,samples);
-  CHECK(legacy[6]==std::byte{'1'}); CHECK(splitSongSnapshot(legacy).timing.empty());
+  const auto canonical=packSongSnapshot(module,samples);
+  CHECK(canonical[6]==std::byte{'2'});CHECK(splitSongSnapshot(canonical).timing.empty());
+  // Reconstruct the historical writer's actual 16-byte header independently
+  // (db496a399:editor/SampleArchive.cpp), then exercise file-open migration.
+  std::vector<std::byte> legacy;
+  for(const auto c:std::string("RSONGS1\0",8))legacy.push_back(std::byte(uint8_t(c)));
+  CHECK(module.size()<=UINT32_MAX&&samples.size()<=UINT32_MAX);
+  for(const auto length:{uint32_t(module.size()),uint32_t(samples.size())})
+    for(unsigned shift=0;shift<32;shift+=8)legacy.push_back(std::byte(uint8_t(length>>shift)));
+  legacy.insert(legacy.end(),module.begin(),module.end());legacy.insert(legacy.end(),samples.begin(),samples.end());
+  CHECK(!isSongSnapshot(legacy));rejects([&]{(void)splitSongSnapshot(legacy);});
+  ProjectLoadRecovery recovery;
+  CHECK(recoverLegacySongSnapshot(legacy,recovery)&&recovery.protectSource&&!recovery.lossy&&!recovery.warnings.empty());
+  CHECK(legacy==canonical); // All payload bytes survive; only framing changes.
   auto loaded=std::make_unique<Document>(legacy); CHECK(core(*loaded)==core(*base));
+  recovery={};CHECK(!recoverLegacySongSnapshot(legacy,recovery)&&legacy==canonical&&recovery.warnings.empty());
   base->song().Order().SetDefaultTempo(TEMPO(143.75));
   auto timing=encodeTimingArchive(base->song(),loaded->song()); CHECK(!timing.empty());
   legacy=packSongSnapshot(module,samples,timing); CHECK(legacy[6]==std::byte{'2'});
   loaded=std::make_unique<Document>(legacy); CHECK(core(*loaded)==core(*base));
-  // A representable song needs no new extension; 1/2 framing remains minimal.
+  // Current framing is always version 2, even without a timing override.
   const auto exact=encodeSampleArchive(loaded->song(),loaded->song());
   CHECK(exact==samples);
 }
