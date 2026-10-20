@@ -89,6 +89,14 @@ nor the qualification checkout includes this feature work. Continue it and
 reconcile back into the corrected integration branch before its own gate;
 do not leave a long-lived platform branch.
 
+**Local reconciliation at 08:13 UTC:** the complete export batch through
+`2be5dbaf6` was fast-forwarded into `codex/plugin-edit-parity` in the primary
+checkout. It includes the existing Mac compiler correction and Windows native
+menu-fixture repairs. The temporary export checkout remains at the same commit.
+Remote PR #5 is still frozen at `8c750f7d6`; nothing was pushed and no build was
+started during this cooldown. Continue from the primary checkout for the next
+coordinated batch, preserving the **08:28:51 UTC** earliest build boundary.
+
 Remote main was checked on 20 October and remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`. Its existing CI runs were queried
 again, without triggering a build:
