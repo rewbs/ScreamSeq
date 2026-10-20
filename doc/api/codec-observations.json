@@ -301,10 +301,10 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Ignored unsupported project field: parityUnknown"
+        "Retained unsupported project field without interpretation: parityUnknown"
       ],
-      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
-      "differenceCount": 1
+      "savedTypedSHA256": "f8ef15b8972c468ca12d19ba44f6d40e989efcc98f0c43e41ad05b1c4dc97f83",
+      "differenceCount": 0
     },
     {
       "id": "unknown-native",
@@ -313,10 +313,10 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Ignored unsupported metadata field: parityUnknown"
+        "Retained unsupported metadata field without interpretation: parityUnknown"
       ],
-      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
-      "differenceCount": 1
+      "savedTypedSHA256": "9242931779a5c0bc8796852928dd19ddb4c78e665f5ae9aebd5daeda0909e94a",
+      "differenceCount": 0
     },
     {
       "id": "unknown-track",
@@ -325,10 +325,10 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Ignored unsupported metadata field: parityUnknown"
+        "Retained unsupported metadata field without interpretation: parityUnknown"
       ],
-      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
-      "differenceCount": 1
+      "savedTypedSHA256": "a71c0d293ac8933114a694ce76c19b6db2d84b065727efa4d7d6371a63ece0d6",
+      "differenceCount": 0
     },
     {
       "id": "unknown-node",
@@ -337,10 +337,10 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Ignored unsupported metadata field: parityUnknown"
+        "Retained unsupported metadata field without interpretation: parityUnknown"
       ],
-      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
-      "differenceCount": 1
+      "savedTypedSHA256": "d553bf5187cb7dcc915ef544ee8c6f5cddee5e8bd00e35711566017f44a7365c",
+      "differenceCount": 0
     },
     {
       "id": "reordered-tracks",
@@ -359,10 +359,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities could not be recovered (Invalid or duplicate native song identity); recovered the embedded song without its optional native metadata."
+        "Native identities could not be recovered (Invalid or duplicate native song identity); recovered the embedded song without its optional native metadata.",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
-      "differenceCount": 82
+      "savedTypedSHA256": "19d55d81d8e58223704f3da3c86317b0e1a8ccc5d690a93e8ff07630f99b232c",
+      "differenceCount": 83
     },
     {
       "id": "deleted-track-record",
@@ -371,10 +372,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities could not be recovered (Native metadata does not match the song structure); recovered the embedded song without its optional native metadata."
+        "Native identities could not be recovered (Native metadata does not match the song structure); recovered the embedded song without its optional native metadata.",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
-      "differenceCount": 80
+      "savedTypedSHA256": "66b7363b14601786193202e4bc29fda36475e8864761d78d005862e1282bc04e",
+      "differenceCount": 81
     },
     {
       "id": "future-container",
@@ -407,10 +409,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Skipped preciseNotes[0]: Invalid or duplicate precise note event"
+        "Skipped preciseNotes[0]: Invalid or duplicate precise note event",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "f211839d6d5715bea733ca2fdaeec0654d788d9411d3826277adca8f24fc0d19",
-      "differenceCount": 25
+      "savedTypedSHA256": "3d18fd4e86dc54f7ce0bbf199f0e59f20954b58667fca90d4199aa50ce4a850c",
+      "differenceCount": 26
     },
     {
       "id": "missing-non-nudge-duration",
@@ -419,10 +422,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Skipped performance.commands[0]: Invalid or duplicate FX-column command"
+        "Skipped performance.commands[0]: Invalid or duplicate FX-column command",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "a430c21439cf6131d7130bcbe954c535929efeafbe4a538fc588d3369fd9d67a",
-      "differenceCount": 62
+      "savedTypedSHA256": "7d191ab55dc883fceefafb2c0550afe6ead140016ce225685447c25f781219f6",
+      "differenceCount": 63
     },
     {
       "id": "missing-scratch-library",
@@ -432,10 +436,11 @@
       "requiresSaveAs": true,
       "loadWarnings": [
         "Skipped performance.commands[3]: Scratch command references a missing gesture; remove or change its uses first",
-        "Skipped performance.commands[7]: Scratch command references a missing gesture; remove or change its uses first"
+        "Skipped performance.commands[7]: Scratch command references a missing gesture; remove or change its uses first",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "1fea536d2f4801d30c57407f3a3dfb82b1824375854b34069d6df828ac7acc4e",
-      "differenceCount": 35
+      "savedTypedSHA256": "6de89ba6ee42cf72942fe1643c4d107f644d0d74a6d07bc33bea4701340cd72a",
+      "differenceCount": 36
     },
     {
       "id": "integer-real-next-id",
@@ -454,10 +459,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities could not be recovered (Expected a number, not a boolean); recovered the embedded song without its optional native metadata."
+        "Native identities could not be recovered (Expected an integer, not a boolean); recovered the embedded song without its optional native metadata.",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
-      "differenceCount": 82
+      "savedTypedSHA256": "aea4fb529ed4284c466b197b980ea68b7aab42b189a356fc9cf37de5fb553fd3",
+      "differenceCount": 83
     },
     {
       "id": "fractional-next-id",
@@ -466,10 +472,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities could not be recovered (Expected an integer); recovered the embedded song without its optional native metadata."
+        "Native identities could not be recovered (Expected an integer within its allowed range); recovered the embedded song without its optional native metadata.",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
-      "differenceCount": 82
+      "savedTypedSHA256": "c528c50bd00abb1a9eb7da3d0ac6ccd05a4ba6e650c9721500646b15f70a623b",
+      "differenceCount": 83
     },
     {
       "id": "unsafe-next-id",
@@ -478,10 +485,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Native identities could not be recovered (Number outside its allowed range); recovered the embedded song without its optional native metadata."
+        "Native identities could not be recovered (Expected an integer within its allowed range); recovered the embedded song without its optional native metadata.",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "2b7b61fb3e52280944fe81df219369b7a951b9327485b014efc51e66da3dfb41",
-      "differenceCount": 82
+      "savedTypedSHA256": "c3c63dfea23e92828e01c78ca1dde62421bde516247b8aab5ae798878fd8f332",
+      "differenceCount": 83
     },
     {
       "id": "supplementary-unicode",
@@ -527,9 +535,11 @@
       "accepted": true,
       "requiresSaveAs": true,
       "loadWarnings": [
-        "Ignored unsupported project field: parityInvalidEncoding"
+        "Retained unsupported project field without interpretation: parityInvalidEncoding",
+        "Original property encoding could not be interpreted losslessly; retained the complete source as inactive recovery data: Binary plist: invalid ASCII",
+        "Original metadata is retained in inactive recovery data; active musical fields use the validated recovered model."
       ],
-      "savedTypedSHA256": "9e6bed351b918cd051eec7d8dc1d9be57f7b81f42aaa2a688c51a85ce3169086",
+      "savedTypedSHA256": "89fdeb8a78a354484171dd394a2eb5e0d4167badd369efd31d7b3945d0d9b405",
       "differenceCount": null
     }
   ],
@@ -560,5 +570,23 @@
     "reportSHA256": "72fb4bfc9e693393473d5c68fd92426f60881ac544e8f06a7962e8e612b646ce",
     "loadPath": "recovery.restore of exact staged bytes; same-session rejection checks and effective-source overwrite protection",
     "preservation": "Unknown root/native/track/node extension fields are warned, protected and dropped by canonical Mac save; Windows preserves them. This is a P6 convergence gap, not a loss waiver."
-  }
+  },
+  "reviews": [
+    {
+      "date": "2026-10-20",
+      "platform": "macos",
+      "builtSource": "d79321c7ccf59e7fdf0a4b2918d6906b41097ef4",
+      "run": 39393737331,
+      "jobs": [
+        118531234979,
+        118531235347
+      ],
+      "reportSHA256": {
+        "macos": "00b2f5e7b0fbec57a42e6cbde5de346ec56471a7018ba4dd9c619c3791050269",
+        "intel": "18796984125b5c4b46f2b62ffc3c85800f98485107291b0c442f512f62ef8cd9"
+      },
+      "scope": "13 reviewed preservation/archive changes; all input, admission, protection and unchanged-case expectations retained",
+      "details": "../windows-parity-plan-2026-10-09/CODEC-OBSERVATION-REVIEW-2026-10-20.md"
+    }
+  ]
 }
