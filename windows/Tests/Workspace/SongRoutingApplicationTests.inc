@@ -252,8 +252,56 @@ void applicationGraphParameterInspector(){
   restoreCheck(!editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Slider completion failure lost the newer draft or its result");
   restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Committed slider retained a transient preview after completion loss");
   const auto acceptedSlider=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+  SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,1);
+  restoreCheck(!editor->visible()&&!editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Escape erased an uncertain slider completion or newer text");editor->show();
   click(3955);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==acceptedSlider&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Review replayed the slider or overwrote a newer draft");
   click(3955);app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider completion recovery created extra history");click(3955);
+  app.edit("plugin.parameters.preview.set",{{"plugin",other},{"parameter",found->at("id")},{"gesture","competing-inspector"},{"value",candidate}});
+  SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+  const auto competing=app.documentOperation("plugin.parameters.preview.get",RestoreJson::object());
+  restoreCheck(editor->snapshot().at("needsReload")==true&&competing.at("active")==true&&competing.at("gesture")=="competing-inspector"&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Refused preview fell through to a durable slider edit or took another owner");
+  click(3955);
+  {
+    bool loseOwnershipRead=true;
+    ScreamSeq::PluginParametersWindow recovering(app.window,plugin,"Preview recovery fixture",
+      [&](const auto &method,const auto &params){if(method=="plugin.parameters.preview.get"&&loseOwnershipRead){loseOwnershipRead=false;throw std::runtime_error("Drop ownership read after rejected preview");}return app.documentOperation(method,params);},
+      [&]{return std::pair(app.documentId,app.view->session.revision);},
+      [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+    recovering.show();ScreamSeq::Tests::ownGuiWindow(recovering.window());const auto recoveredTrack=GetDlgItem(recovering.window(),4001+int(index)*10);
+    SendMessageW(recoveredTrack,TBM_SETPOS,TRUE,7500);SendMessageW(recovering.window(),WM_HSCROLL,TB_THUMBTRACK,LPARAM(recoveredTrack));
+    restoreCheck(recovering.snapshot().at("needsReload")==true&&!loseOwnershipRead,"Unknown preview recovery fixture did not reject tracking and lose its ownership read");
+    SendMessageW(recovering.window(),WM_COMMAND,3955,LPARAM(GetDlgItem(recovering.window(),3955)));
+    restoreCheck(recovering.snapshot().at("needsReload")==false&&recovering.snapshot().at("dirty")==false&&app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("gesture")=="competing-inspector","Reload could not reconcile an unknown preview without cancelling another owner");
+    recovering.hide();
+  }
+  app.edit("plugin.parameters.preview.cancel",{{"plugin",other},{"parameter",found->at("id")},{"gesture","competing-inspector"}});
+  for(int mode=0;mode<3;++mode){
+    HWND pumpingWindow=nullptr;bool pumped=false;
+    const auto beforePump=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto pumpRevision=app.view->session.revision;
+    ScreamSeq::PluginParametersWindow pumping(app.window,plugin,"Deferred slider fixture",
+      [&](const auto &method,const auto &params){auto result=app.documentOperation(method,params);
+        if(method=="plugin.parameters.preview.set"&&!pumped){
+          pumped=true;const auto heldTrack=GetDlgItem(pumpingWindow,4001+int(index)*10);SendMessageW(heldTrack,TBM_SETPOS,TRUE,8500);
+          SendMessageW(pumpingWindow,WM_HSCROLL,TB_THUMBPOSITION,LPARAM(heldTrack));
+          if(mode==1)SendMessageW(pumpingWindow,WM_KEYDOWN,VK_ESCAPE,1);
+          if(mode==2)SendMessageW(heldTrack,WM_CAPTURECHANGED,0,0);else SendMessageW(pumpingWindow,WM_HSCROLL,TB_ENDTRACK,LPARAM(heldTrack));
+          SendMessageW(pumpingWindow,WM_TIMER,8,0);
+          restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==beforePump,"Pumped slider event committed recursively inside its preview request");
+        }return result;},
+      [&]{return std::pair(app.documentId,app.view->session.revision);},
+      [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+    pumpingWindow=pumping.window();pumping.show();ScreamSeq::Tests::ownGuiWindow(pumpingWindow);const auto pumpingTrack=GetDlgItem(pumpingWindow,4001+int(index)*10);
+    SendMessageW(pumpingTrack,TBM_SETPOS,TRUE,4500);SendMessageW(pumpingWindow,WM_HSCROLL,TB_THUMBTRACK,LPARAM(pumpingTrack));SendMessageW(pumpingWindow,WM_TIMER,8,0);
+    restoreCheck(pumped&&!pumping.snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Deferred release/cancel did not finish its retained preview");
+    const auto afterPump=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+    if(mode==1)restoreCheck(afterPump==beforePump&&app.view->session.revision==pumpRevision,"Escape during preview wait committed a value or created history");
+    else{
+      double final=field.minimum+(field.maximum-field.minimum)*.85;if(field.step>0)final=std::clamp(field.minimum+std::round((final-field.minimum)/field.step)*field.step,field.minimum,field.maximum);
+      restoreCheck(std::abs(afterPump[index].at("value").get<double>()-final)<1e-5&&afterPump!=beforePump,"Deferred release did not commit the final trackbar position");
+      app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==beforePump,"Deferred slider gesture required more than one Undo");
+    }
+    pumping.hide();
+  }
   // Unrelated graph edits must not silently rebase a typed parameter draft.
   SetWindowTextW(GetDlgItem(window,rawControl),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
   restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(field.value).c_str());click(applyControl);

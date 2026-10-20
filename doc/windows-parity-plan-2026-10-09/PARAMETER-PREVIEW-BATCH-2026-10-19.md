@@ -58,6 +58,15 @@ unresolved API/codec differences and assertions remain unchanged.
    rejection/Reload correction is included in this same build and native group.
    Added release-completion failure preserves newer text, retires the committed
    preview, and reviews without another commit or Undo entry.
+   A refused/uncertain tracking request blocks release until Reload instead of
+   falling back to a durable edit. Competing-editor and dropped ownership-read
+   cases retain the other owner; Reload reconciles before cancelling. Escape and
+   Close preserve newer text and the retained result after completion loss.
+   Pending worker requests may pump native input: release/capture-loss timers
+   remain deferred until the request finishes, the final trackbar position is
+   read before committing, and a deferred Escape takes precedence over release.
+   Native cases pump those three event sequences during the preview request and
+   require one commit/Undo or an unchanged revision on cancellation.
 4. `test_plugin_edit_parity`: new shared `editor/Tests/parameter_preview_contract.py`
    runs over a disposable Windows PID pipe and checks silent ownership, type/key
    validation, history, stale release and exact accepted save trees. Windows adds
@@ -88,8 +97,10 @@ changed shared behavior, or the final integration gate.
 - Source checks on 20 October UTC: all three changed Python scripts parse;
   all four schema field inventories match their operation contracts; both
   dispatch inventories contain the four additions; `git diff --check` passes.
-  A full JSON Schema validator is not installed in this runtime. These checks
-  neither execute the new fixtures nor establish native behavior.
+  PowerShell `Test-Json` also validates all four successful request shapes against
+  the complete bundled schema and rejects unknown keys, boolean parameter IDs and
+  empty gestures. Receipt: `bin/parameter-preview-parity-20261019/schema-checks.json`.
+  These checks neither execute the new fixtures nor establish native behavior.
 - No native execution or audible result is claimed for this source checkpoint.
   Strict syntax/schema checks establish only fixture/schema consistency.
 - Review completion failures after durable commit separately from precommit
