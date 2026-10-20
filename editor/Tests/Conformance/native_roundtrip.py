@@ -187,6 +187,8 @@ def main(argv=None):
                         help="Also run the bounded API baseline corpus on an owned copy of F04")
     parser.add_argument("--codec-vectors", action="store_true",
                         help="Observe recovery on owned F04 derivatives, retaining typed differences")
+    parser.add_argument("--duration-defaults", action="store_true",
+                        help="Check omitted zero-duration commands through exact save/reopen comparisons")
     args = parser.parse_args(argv)
     report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[], parityComplete=False,
                   qualificationScope="Five no-edit fixture legs; optional API evidence baseline is not a parity pass")
@@ -266,13 +268,20 @@ def main(argv=None):
                     observationComplete=codec_report["observationComplete"], parityComplete=False,
                     baselineMatched=codec_report["baselineMatched"],
                     report="codec/report.json", sha256=sha256(read_bytes(output / "codec/report.json")))
+            if args.duration_defaults:
+                from duration_defaults import run
+                duration_report = run(client, output / "duration-defaults")
+                report["durationDefaults"] = dict(passed=duration_report["passed"],
+                    report="duration-defaults/report.json",
+                    sha256=sha256(read_bytes(output / "duration-defaults/report.json")))
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
         report["passed"] = (len(report["fixtures"]) == len(sources) and all(row["passed"] for row in report["fixtures"])
                             and report["inputsUnchanged"] and report["binaryUnchanged"]
                             and report.get("api", {}).get("baselineMatched", True)
                             and report.get("codec", {}).get("safetyPassed", True)
-                            and report.get("codec", {}).get("baselineMatched", True))
+                            and report.get("codec", {}).get("baselineMatched", True)
+                            and report.get("durationDefaults", {}).get("passed", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

@@ -17,6 +17,11 @@ handles](SAMPLE-LOOP-HANDLES-2026-10-20.md), are subsequent source batches await
 qualification. They are not yet merged to main; do not count them as completed
 cross-platform parity.
 
+The [zero-duration file-load correction](DURATION-DEFAULTS-2026-10-20.md)
+records a newly reproduced loss of valid commands, distinct from the old invalid
+slide vector. Its decoder fix and native tests are also awaiting the batched
+build; the existing codec baseline has not been relaxed.
+
 **Planning only.** Reviewed against latest remote main **`16cab100b898f66726cfab6c2386887a9bcf5fd4`**, the supplied Mac baseline **`ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`**, and checkout **`03321c22a525f9fb0e11bda257bde404bdf47213`** with five pre-existing uncommitted retirement source/test changes. Latest source/evidence corrections are in the [final planning review](final-planning-review.md), backed by its [inspection snapshot](final-planning-snapshot.json). The remote main and all reference/peer input hashes were rechecked. No product code was modified, application launched, build/test started, or implementation undertaken for this review. Existing changes were left untouched; local `main` is stale and was not used as the latest source.
 
 **Recommended first remaining batch: P0b retained-work safety.** Reuse the branch's existing typed results, native Review paths and direct-render protection. Finish unknown-outcome reconciliation and the complete owner census, then wire final document-departure admission across Open/API/recovery/Close/session end. P0a build/take/layout repairs are already on main. Follow with P0c typed fixture/API conformance, P1 native Mixer strips and P2 named/grouped tracks; P3–P7 complete composing, asset, graph, persistence and device work; P8 is the cross-platform integration gate.

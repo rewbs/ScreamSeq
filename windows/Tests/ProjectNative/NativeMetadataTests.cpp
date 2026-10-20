@@ -136,6 +136,12 @@ void optionalDefaults(const Json &encoded) {
   compare("/signalGraph","layout",Json::array()); compare("/signalGraph","instrumentAssignments",Json::array());
   compare("/performance/commands/2","pitchRange",2);
   compare("/performance/commands/6","durationBeats",1);
+  for(size_t index=0;index<encoded.at("performance").at("commands").size();++index) {
+    auto missing=encoded;auto &command=missing["performance"]["commands"][index];
+    const bool zero=command.at("duration")==0;command.erase("duration");
+    if(zero)check(decodeNativeMetadata(missing)==decodeNativeMetadata(encoded),"Absent zero command duration changes the musical model");
+    else rejects([&]{decodeNativeMetadata(missing);},"Missing slide duration accepted");
+  }
   compare("/envelopeBank/entries/0/shape","rowsPerBeat",4); compare("/envelopeBank/entries/0/shape","instrument",false); compare("/envelopeBank/entries/0/shape","flags",1); compare("/envelopeBank/entries/0/shape","markers",Json::array({0,0,0,0,UINT32_MAX}));
   compare("/envelopeBank/entries/0/shape/points/0","curve","linear");
   compare("/envelopeBank/links/0/target","pattern","");
@@ -209,6 +215,15 @@ static void nativePatternMetadataChecks() {
   native.performance.commands[0].arguments[0]=.123456789012345;
   doc.restoreNative(native);const auto encoded=encodeNativeMetadata(native);
   check(decodeNativeMetadata(encoded)==native,"All typed native operations must roundtrip exactly");
+  for(size_t index=0;index<native.performance.commands.size();++index) {
+    auto missing=encoded;missing["performance"]["commands"][index].erase("duration");
+    if(native.performance.commands[index].duration==0) {
+      const auto decoded=decodeNativeMetadata(missing);
+      check(decoded==native,"Absent native zero duration changes the musical model");
+      doc.restoreNative(decoded);
+      check(encodeNativeMetadata(doc.native())==encoded,"Zero duration default changes canonical native metadata");
+    } else rejects([&]{decodeNativeMetadata(missing);},"Missing required native duration accepted");
+  }
   auto bad=encoded;bad["performance"]["commands"][0]["parameters"]["gain"]=true;rejects([&]{decodeNativeMetadata(bad);},"Native numeric parameter accepts bool");
   bad=encoded;bad["performance"]["commands"][0]["parameters"]["unknown"]=1;rejects([&]{decodeNativeMetadata(bad);},"Unknown native parameter accepted");
   bad=encoded;bad["performance"]["commands"][0].erase("parameters");rejects([&]{decodeNativeMetadata(bad);},"Missing native payload accepted");

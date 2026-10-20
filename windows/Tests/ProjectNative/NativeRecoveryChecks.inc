@@ -11,6 +11,13 @@ static void nativeRecoveryChecks() {
   auto tiny=good;tiny["performance"]["commands"][0].erase("durationBeats");tiny["performance"]["commands"][0]["duration"]=1;
   report={};auto minimum=recoverNativeMetadata(tiny,*doc,report);check(minimum.performance.commands[0].durationBeats==1.0/65536&&report.warnings.size()==2&&report.lossy&&report.protectSource,"tiny legacy duration is bounded and separately reported");
   auto rich=richDocument();auto encoded=encodeNativeMetadata(rich->native());const auto intact=rich->native();auto richSnapshot=std::make_unique<Document>(rich->snapshotData());
+  auto omitted=encoded;
+  for(auto &command:omitted["performance"]["commands"])if(command.at("duration")==0)command.erase("duration");
+  report={};auto zeroDefaults=recoverNativeMetadata(omitted,*richSnapshot,report);
+  check(zeroDefaults==intact&&!report.lossy&&!report.protectSource&&report.warnings.empty(),
+    "Missing zero durations must retain commands without recovery loss or warnings");
+  auto recoveredSnapshot=std::make_unique<Document>(rich->snapshotData());recoveredSnapshot->restoreNative(zeroDefaults);
+  check(encodeNativeMetadata(recoveredSnapshot->native())==encoded,"Recovered zero defaults changed canonical metadata");
   auto mixed=encoded;auto unknown=mixed["performance"]["commands"][0];unknown["kind"]=99;mixed["performance"]["commands"].insert(mixed["performance"]["commands"].begin()+1,unknown);
   report={};const auto partial=recoverNativeMetadata(mixed,*richSnapshot,report);
   check(partial==intact,"one unknown command must preserve all valid commands and mutually dependent mixer/graph/note tracks");
