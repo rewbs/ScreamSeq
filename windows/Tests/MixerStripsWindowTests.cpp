@@ -152,11 +152,11 @@ void pendingSliderInput(HWND owner) {
   f.duringWrite=[&]{f.slide(420);f.slide(420,TB_ENDTRACK);};
   f.slide(360,TB_ENDTRACK);
   check(f.writes==1&&f.find("n1")["gainDB"]==-12&&f.tool.hasGesture()&&
-    text(f.control(102))==L"-18"&&!f.tool.documentDraft()->uncertain,
+    text(f.control(102))==L"-18.0"&&!f.tool.documentDraft()->uncertain,
     "Final completion lost a newer slider gesture or recursively committed it");
   f.tool.update();check(f.writes==1&&f.previews==0,"Completed write replayed a newer gesture against its stale revision");
   SendMessageW(f.control(101),WM_CAPTURECHANGED,0,0);f.tool.hide();f.tool.show();f.tool.update();
-  check(f.tool.hasGesture()&&text(f.control(102))==L"-18"&&f.writes==1&&f.previews==0,
+  check(f.tool.hasGesture()&&text(f.control(102))==L"-18.0"&&f.writes==1&&f.previews==0,
     "Hiding or capture loss discarded newer slider input after an earlier final completed");
   f.press(12);check(f.writes==1&&!f.tool.hasGesture()&&f.audible==-12,"Cancel failed to reset the newer slider to current saved state");
 }

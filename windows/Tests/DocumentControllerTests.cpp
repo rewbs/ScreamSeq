@@ -219,19 +219,19 @@ void liveParameterTests(const std::filesystem::path &directory) {
   // saved state, revision, touch or chronological history can be adopted.
   std::vector<Tracker::ParameterChange> full(4096,{0,1,-12,0});need(playback->chain().enqueueParameters(full),"Fill live queue");
   view=c.view();const auto touched=call(c,"automation.target.get",Json::object());const auto beforeBatches=batches;
-  const auto refused=[&](auto action){
+  const auto refused=[&](const char *message,auto action){
     bool classified=false;try{action();}catch(const Api::ApiError &e){
       classified=e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
     }
-    need(classified,"Live queue rejection must report a known uncommitted operation");
+    need(classified,message);
   };
-  refused([&]{edit(-24);});
+  refused("Full queue parameter edit must report a known uncommitted operation",[&]{edit(-24);});
   need(active&&stops==beforeStops&&batches==beforeBatches&&c.view()==view&&
     call(c,"plugin.state.get",{{"slot",0}})==changed&&call(c,"automation.target.get",Json::object())==touched,
     "Full queue changed transport, accepted state, view, history or last-touched target");
   edit(-24,true);edit(-12);
   need(c.view()==view&&batches==beforeBatches,"Dry run and no-op must remain harmless with a full queue");
-  refused([&]{invoke(c,"history.undo",{{"domain","plugins"}});});
+  refused("Full queue Undo must report a known uncommitted operation",[&]{invoke(c,"history.undo",{{"domain","plugins"}});});
   need(c.view()==view&&active&&stops==beforeStops,"Failed live Undo changed history or stopped playback");
   need(playback->render(pcm.data(),256)&&gain()==-12,"Rejected edit leaked through the queued accepted batch");
   edit(-24);need(playback->render(pcm.data(),256)&&gain()==-24,"Explicit retry after draining must publish the complete edit");
@@ -243,13 +243,13 @@ void liveParameterTests(const std::filesystem::path &directory) {
   noop();need(c.view()==view&&stops==undoStops&&batches==undoBatches&&call(c,"plugin.state.get",{{"slot",0}})==baseline,"Cold no-op after Undo consumed Redo or published parameters");
   for(auto &change:full)change.value=0;
   need(playback->chain().enqueueParameters(full),"Fill queue while Redo exists");view=c.view();
-  refused([&]{edit(-24);});
+  refused("Full queue edit with Redo must report a known uncommitted operation",[&]{edit(-24);});
   need(c.view()==view&&active&&stops==beforeStops,"Rejected edit with Redo changed accepted state");
   need(playback->render(pcm.data(),256)&&gain()==0,"Second rejected edit reached audio");
   invoke(c,"history.redo",{{"domain","plugins"}});
   need(call(c,"plugin.state.get",{{"slot",0}})==changed&&playback->render(pcm.data(),256)&&gain()==-12,"Rejected new edit destroyed the existing Redo branch");
   auto *retained=playback;playback=nullptr;view=c.view();
-  refused([&]{edit(-24);});playback=retained;
+  refused("Unavailable live host must report a known uncommitted operation",[&]{edit(-24);});playback=retained;
   need(c.view()==view&&active&&stops==beforeStops,"Active audio without a prepared host must reject without stopping or committing");
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"plugin.state.get",{{"slot",0}})==changed&&!c.view()->dirty,"Save/reopen retains the live-edited baseline");

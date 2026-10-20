@@ -88,7 +88,9 @@ void annotationBudgetTests(const std::filesystem::path &directory) {
       original=measured.view()->session.document.at(key)[0];id=original.at("id").get<std::string>();beforeBytes=measured.view()->cacheBytes;
       invoke(measured,"song.annotate",{{"id",id},{"name",name},{"annotation",notes},{"color",0xFFFFFF}});targetBytes=measured.view()->cacheBytes;
       const auto growth=name.size()+notes.size()-original.at("name").get<std::string>().size()-original.at("annotation").get<std::string>().size();
-      need(targetBytes==beforeBytes+growth,"Annotation accounting did not charge exact projected UTF-8 string growth");
+      // Columns appear in both the legacy track catalogue and trackLayout.
+      const auto copies=std::string_view(key)=="tracks"?2u:1u;
+      need(targetBytes==beforeBytes+copies*growth,"Annotation accounting did not charge exact projected UTF-8 string growth");
     }
     unsigned stops=0;DocumentController limited(path,"annotation-budget",[&]{++stops;},[](const auto &){},{},targetBytes-1);
     const auto before=limited.view();bool rejected=false;

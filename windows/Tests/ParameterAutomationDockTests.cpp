@@ -81,10 +81,15 @@ void minimumBoundsAndActions(Owner &owner){
     for(const auto page:{4241,4242,4243,4244}){
       f.click(page);if(page==4244)f.choose(4230,5);checkBounds(f,&available);
       const auto view=f.tool.snapshot();require(view.at("shortDock").get<bool>()&&view.at("compact").get<bool>(),"Minimum dock did not use short pages");
-      for(const auto action:{4215,4216,4218,4310})require(IsWindowVisible(f.control(action)),"Short page hid persistent Apply/Verify/Reload/status");
+      for(const auto action:{4216,4218,4310})require(IsWindowVisible(f.control(action)),"Short page hid persistent Verify/Reload/status");
+      require(!IsWindowVisible(f.control(4215)),"Clean automatically saved editor exposed a redundant Apply action");
       if(page==4242){const auto height=view.at("canvas")[3].get<float>();require(height>=100&&height<=120,"Short dock curve is not 100–120 DIPs tall");}
     }
   }
+  // Explicit tool previews still need a visible, reachable Use preview action.
+  f.click(4244);f.choose(4230,4);f.click(4238);
+  require(IsWindowVisible(f.control(4215))&&text(f.control(4215))==L"Use preview","Tool preview lost its explicit acceptance action");
+  for(const auto page:{4241,4242,4243,4244}){f.click(page);checkBounds(f,&available);require(IsWindowVisible(f.control(4215)),"Preview acceptance is unreachable on a short page");}
   for(int id=4201;id<=4244;++id)require(available.contains(id),"An original automation action/field is unreachable from all short pages");
   require(f.tool.window()==window&&f.current.revision=="r0"&&f.writes.empty(),"Reflow recreated the editor or changed song state");
   f.tool.floatWindow();sizeClient(window,440,500);require(!f.tool.snapshot().at("shortDock").get<bool>(),"Floating minimum incorrectly uses dock reflow");

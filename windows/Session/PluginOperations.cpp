@@ -167,7 +167,12 @@ std::optional<std::vector<ParameterChange>> PluginOperations::parameterOnlyChang
     NativePlugin probe(before[i],48000),target(after[i],48000);const auto current=probe.parameters();
     for(const auto &p:target.parameters()){const auto old=std::find_if(current.begin(),current.end(),[&](const auto &v){return v.id==p.id;});if(old==current.end())return {};if(p.value==old->value)continue;
       if(!p.writable||!old->writable||!probe.parameter(p.id,p.value))return {};changes.push_back({uint32_t(i),p.id,p.value,0});}
-    if(probe.state().state!=after[i].state)return {};
+    // An empty saved state means the plugin's defaults. Compare the restored
+    // target's canonical defaults for admission, but retain its original empty
+    // bytes in history. Otherwise an ordinary parameter Undo would fall back
+    // to stopping playback and bypass the live queue's atomic refusal.
+    const auto targetBytes=after[i].state.empty()?target.state().state:after[i].state;
+    if(probe.state().state!=targetBytes)return {};
   }}catch(const std::exception &){return {};}
   return changes;
 }

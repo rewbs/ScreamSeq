@@ -316,8 +316,13 @@ void hostHooks() {
   auto result=api.invoke("graph.get",Json::object()); CHECK(result["plugins"][0]["id"]=="rack-actual-test"); CHECK(result["instruments"][0]["plugin"]==true);
   CHECK(result["activity"][0]["role"]=="instrument"); CHECK(result["activity"][0]["instrument"]==nativeID(f.doc->native().instruments.at(1).id));
   const auto before=f.doc->native(); const auto revision=f.doc->revision; auto stops=f.stops;
-  bool threw=false; try { api.invoke("graph.instrument.assign",{{"instrument",1},{"graph",graph}}); } catch(const ScreamSeq::Api::ApiError &e){ CHECK(e.code==-32602); threw=true; }
-  CHECK(threw); CHECK(f.doc->native()==before); CHECK(f.doc->revision==revision); CHECK(f.stops==stops);
+  // Plugin and sample assignments coexist: the sample layer may have a graph.
+  api.invoke("graph.instrument.assign",{{"instrument",1},{"graph",graph}});
+  CHECK(f.doc->native().signal.instrumentAssignments.size()==1);
+  CHECK(f.doc->native().signal.instrumentAssignments[0].target==before.instruments.at(1).id);
+  CHECK(api.invoke("graph.get",Json::object())["instruments"][0]["plugin"]==true);
+  CHECK(f.doc->revision!=revision);CHECK(f.stops==stops+1);
+  f.doc->undo();CHECK(f.doc->native()==before);bool threw=false;
   const auto n=api.invoke("graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0}}).at("node"); CHECK(requested==0);
   CHECK(f.doc->native().signal.library[0].nodes.back().plugin==baseline.recipe);
   CHECK(definition(f)["nodes"].back()["name"]=="Effect");
