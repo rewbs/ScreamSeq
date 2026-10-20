@@ -56,6 +56,11 @@ explicit Apply; numeric loop edits already save automatically.
 
 ## Required bounded checks
 
+**Subsequent result:** native handle and actual-app loop save/reopen checks
+passed on Windows ARM64 candidate `b1581c9c8`; see
+[qualification](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md). Foreground visual,
+DPI and physical input quality remain open.
+
 Add these sources to the planned recipe/sample candidate before its single
 configure/build. The earliest next build remains **04:50 UTC on 20 October**.
 

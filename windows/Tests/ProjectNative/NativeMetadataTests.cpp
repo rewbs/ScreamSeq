@@ -136,10 +136,14 @@ void optionalDefaults(const Json &encoded) {
   compare("/signalGraph","layout",Json::array()); compare("/signalGraph","instrumentAssignments",Json::array());
   compare("/performance/commands/2","pitchRange",2);
   compare("/performance/commands/6","durationBeats",1);
+  const auto durationBaseline=decodeNativeMetadata(encoded);
   for(size_t index=0;index<encoded.at("performance").at("commands").size();++index) {
     auto missing=encoded;auto &command=missing["performance"]["commands"][index];
-    const bool zero=command.at("duration")==0;command.erase("duration");
-    if(zero)check(decodeNativeMetadata(missing)==decodeNativeMetadata(encoded),"Absent zero command duration changes the musical model");
+    const auto &original=durationBaseline.performance.commands.at(index);
+    // NF/NR use durationBeats and deliberately omit the row-unit field.
+    check(command.contains("duration")==!isNudge(original.kind),"Canonical command duration uses the wrong units");
+    command.erase("duration");
+    if(original.duration==0)check(decodeNativeMetadata(missing)==durationBaseline,"Absent zero command duration changes the musical model");
     else rejects([&]{decodeNativeMetadata(missing);},"Missing slide duration accepted");
   }
   compare("/envelopeBank/entries/0/shape","rowsPerBeat",4); compare("/envelopeBank/entries/0/shape","instrument",false); compare("/envelopeBank/entries/0/shape","flags",1); compare("/envelopeBank/entries/0/shape","markers",Json::array({0,0,0,0,UINT32_MAX}));

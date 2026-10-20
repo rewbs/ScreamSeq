@@ -60,6 +60,12 @@ representation must decode to the same musical command.
 
 ## Bounded qualification
 
+**Subsequent result:** the three actual-app derivative checks pass on ARM64
+candidate `b1581c9c8`. The native C++ group stopped at a new test's assumption
+that NF/NR contain `duration`; its test-only correction is unbuilt. See
+[candidate qualification](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md) for exact
+scope, preserved failure and next build gate.
+
 Add `native-metadata-tests` to the already prepared recipe/sample build. Its
 source coverage now removes duration independently from every command in the
 rich model and every native operation: valid zero defaults preserve the whole

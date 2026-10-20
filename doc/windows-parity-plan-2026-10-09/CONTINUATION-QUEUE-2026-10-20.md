@@ -27,14 +27,18 @@ The returned job summaries are retained in
 [Windows](https://github.com/rewbs/ScreamSeq/actions/runs/39349699781) and
 [Mac](https://github.com/rewbs/ScreamSeq/actions/runs/39349699645).
 
-The next Windows candidate is frozen at
+The Windows candidate is frozen at
 `b1581c9c8bc7d776d637d8c6ac094e8c3db7780a` in the qualification worktree.
 It combines recipe preview ownership, sample release/loop gestures, the corrected
 sidebar fixture and zero-duration file defaults. Seven native build targets,
 the selected native/application checks, and exact fixture/API/codec/duration
-checks are prepared under `bin/recipe-sample-20261020/`. Its build gate is
-**20 October 04:50 UTC**. A build or test pass must be recorded before upgrading
-any of those source-only claims.
+checks are retained under `bin/recipe-sample-20261020/`.
+[Qualification](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md) records a successful
+04:50–04:53 UTC build, 16/17 native groups passed, 21 application cases passed,
+two provider skips and successful fixture/API/codec/duration checks against
+their pinned baselines. The native metadata test failed on an NF/NR field
+assumption; a test-only correction is prepared but unbuilt. The next build gate
+is **20 October 05:53:34 UTC**.
 
 The context-panel binary at `e79133155` has separate bounded evidence: seven
 native groups passed, one native context fixture failed, one actual-app context
@@ -46,7 +50,7 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Frozen batch remains uncompiled; shared preview paths also change Mac bridge/audio adapters. | Run the single prepared ARM64 build and its targeted checks. Resolve actual failures without changing assertions to manufacture a pass. Obtain Mac/x64 execution at the next permitted build opportunity; retain both apps on the same integration line. |
+| 1 / M | Frozen ARM64 batch has bounded passing evidence and one failed native metadata test. Shared preview paths also change Mac bridge/audio adapters. | Rebuild and rerun the corrected metadata test at the next permitted opportunity; preserve full-model and unit assertions. Obtain Mac/x64 execution; reuse unchanged passing evidence and retain both apps on the same integration line. |
 | 2 / S–M | At the frozen candidate, Mac `TrackerSessionAPI.inc` excludes rack `dryRun`; Windows accepts it. The later [Mac correction](RACK-DRY-RUN-2026-10-20.md) is source only, with a shared contract passed on the existing Windows app. The API corpus still retains `API-PLUGIN-DRY-RUN`. | Qualify Mac dry runs using existing shared parameter preparation and accepted manual values. Preserve active preview ownership, queues, Redo, revision, opaque bytes and transport. Check changed and no-op batches, full-batch rejection, unavailable/read-only targets, stale guards and subsequent real edits. Do not count a method-name match as parity. |
 | 3 / M | API numeric-type and rejected-request-ID reuse policies still differ. `editor/Tests/Conformance/api-vectors.json` retains `API-INTEGER-TYPES` and the rejected reuse discrepancy. | Define one API-number/replay contract before changing adapters. Inspect `mac/Bridge/AutomationValidation.hpp`, `mac/App/AutomationServer.swift`, Windows API validators and `windows/Api/PipeServer.cpp`. Keep boolean rejection, finite/integral/range checks, stable string identities, uncertain-result protection and legitimate busy retries. File-decoder numeric rules are a separate compatibility contract. Update vectors only with both hosts' new execution evidence. |
 | 4 / L | Unknown root/native/entity extensions are retained by Windows and dropped by canonical Mac save with warnings/source protection. This is observed in `doc/api/codec-observations.json` and still present in source. | Converge lossless preservation, then reciprocal edited-file qualification. See the ownership plan below. Do not copy Mac's loss into Windows to make the baseline equal. |

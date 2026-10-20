@@ -9,18 +9,22 @@ qualified and still-pending work. Do not implement an old absence claim without
 checking those records and current source.
 
 **20 October continuation:** [context-panel qualification](CONTEXT-PANEL-2026-10-19.md)
-records a successful ARM64 build, seven native groups passed and one retained
-layout-test failure with an unbuilt fixture correction. [Recipe parameter
+and the [combined candidate results](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md)
+record a successful ARM64 build, 16 of 17 native groups passed, 21 application
+cases passed and two provider skips. The corrected context-panel fixture now
+passes. The new metadata test failed on an NF/NR field assumption; its test-only
+correction awaits a later build. [Recipe parameter
 previews](RECIPE-PREVIEW-BATCH-2026-10-20.md) and [sample strokes on
 release](SAMPLE-STROKE-BATCH-2026-10-20.md), including [direct loop
-handles](SAMPLE-LOOP-HANDLES-2026-10-20.md), are subsequent source batches awaiting
+handles](SAMPLE-LOOP-HANDLES-2026-10-20.md), have this bounded Windows ARM64
 qualification. They are not yet merged to main; do not count them as completed
 cross-platform parity.
 
 The [zero-duration file-load correction](DURATION-DEFAULTS-2026-10-20.md)
 records a newly reproduced loss of valid commands, distinct from the old invalid
-slide vector. Its decoder fix and native tests are also awaiting the batched
-build; the existing codec baseline has not been relaxed.
+slide vector. All three actual-app derivatives pass two saves/reopens on the
+candidate; the C++ test correction still needs execution. The existing codec
+baseline has not been relaxed.
 
 [Mac rack dry runs](RACK-DRY-RUN-2026-10-20.md) are a subsequent source batch,
 outside the frozen `b1581c9c8` build. The shared contract passes on the existing

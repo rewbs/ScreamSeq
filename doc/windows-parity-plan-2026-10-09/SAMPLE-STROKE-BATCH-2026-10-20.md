@@ -45,6 +45,12 @@ Mac remains unchanged.
 
 ## Bounded qualification
 
+**Subsequent result:** native mutation/readback groups and all four selected
+actual-app sample cases passed on Windows ARM64 candidate `b1581c9c8`, including
+release commit, cancellation, history and the dense/4096-point checks. See
+[candidate qualification](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md); visual and
+physical audition claims remain open.
+
 Batch with the pending recipe-preview build and context test correction.
 The last build completed at 03:49:50 UTC; **no configure/build before
 04:50 UTC on 20 October**. Compile the app and workspace harness once alongside

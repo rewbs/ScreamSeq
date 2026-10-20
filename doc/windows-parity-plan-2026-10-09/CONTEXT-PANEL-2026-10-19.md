@@ -1,5 +1,11 @@
 # Contextual left panel
 
+**Latest qualification:** the corrected native context group and actual-app
+width/focus case both passed on `b1581c9c8`. See the
+[20 October candidate results](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md).
+The earlier failure below remains historical evidence; visual/DPI review is
+still open.
+
 ## Scope and observed problem
 
 Requested independently of Windows/Mac parity. The Windows workspace's fixed

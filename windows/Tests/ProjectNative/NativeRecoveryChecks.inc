@@ -12,7 +12,8 @@ static void nativeRecoveryChecks() {
   report={};auto minimum=recoverNativeMetadata(tiny,*doc,report);check(minimum.performance.commands[0].durationBeats==1.0/65536&&report.warnings.size()==2&&report.lossy&&report.protectSource,"tiny legacy duration is bounded and separately reported");
   auto rich=richDocument();auto encoded=encodeNativeMetadata(rich->native());const auto intact=rich->native();auto richSnapshot=std::make_unique<Document>(rich->snapshotData());
   auto omitted=encoded;
-  for(auto &command:omitted["performance"]["commands"])if(command.at("duration")==0)command.erase("duration");
+  for(size_t index=0;index<intact.performance.commands.size();++index)
+    if(intact.performance.commands[index].duration==0)omitted["performance"]["commands"][index].erase("duration");
   report={};auto zeroDefaults=recoverNativeMetadata(omitted,*richSnapshot,report);
   check(zeroDefaults==intact&&!report.lossy&&!report.protectSource&&report.warnings.empty(),
     "Missing zero durations must retain commands without recovery loss or warnings");

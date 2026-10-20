@@ -49,6 +49,12 @@ open parameter editor.
 
 ## Required bounded qualification
 
+**Subsequent result:** the Windows ARM64 shared, worker, native inspector and
+actual-app preview checks passed on `b1581c9c8`; see
+[candidate qualification](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md).
+Mac/x64 and cross-platform integration remain open. The checklist below records
+the original scope, not a claim that all platforms have executed it.
+
 The source-only batch adds:
 
 - `parameter-edit`: exact normalized bases, disabled contributions, invalid
