@@ -3014,6 +3014,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate without changing accepted state, history, transport or an active preview. Returns wouldChange."
             }
           },
           "required": [
@@ -3362,6 +3366,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate without changing accepted state, history, transport or an active preview. Returns wouldChange."
             }
           },
           "required": [

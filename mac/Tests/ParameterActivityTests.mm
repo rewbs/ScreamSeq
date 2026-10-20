@@ -155,4 +155,47 @@ static void sessionRecipePreview() {
   check([session openPath:path error:&error]&&!active()&&manual()==-9,"Native recipe save/reopen lost its stable target");
   [[NSFileManager defaultManager]removeItemAtPath:path error:nil];[session shutdown];
 }
-int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();sessionRecipePreview();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, rack/recipe preview history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}
+static void sessionRackDryRuns() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{
+    auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:p error:&error];
+    if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return reply[@"data"];
+  };
+  call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  NSString *plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  auto parameters=[&](double value,bool dry){return call(@"plugin.parameters.set",
+    @{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(value)}],@"dryRun":@(dry)},true);};
+  auto state=[&]{return call(@"plugin.state.get",@{@"slot":@0});};
+  parameters(-6,false);NSDictionary *accepted=state();
+  check([session historyUndo:NO error:&error],"Dry-run fixture Undo failed");
+  NSDictionary *original=state();NSString *revision=session.automationRevision;
+  check([parameters(-12,true)[@"wouldChange"] boolValue],"Changed parameter dry run reported no change");
+  check(![parameters(0,true)[@"wouldChange"] boolValue],"No-op parameter dry run reported a change");
+  check([call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "Changed bypass dry run reported no change");
+  check(![call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@NO,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "No-op bypass dry run reported a change");
+  check([revision isEqual:session.automationRevision]&&[state() isEqual:original],"Dry run changed revision or opaque state");
+  NSDictionary *key=@{@"plugin":plugin,@"parameter":@1,@"gesture":@"native-rack-dry-run"};
+  auto preview=[key mutableCopy];preview[@"value"]=@(-18);call(@"plugin.parameters.preview.set",preview,true);
+  NSDictionary *owner=call(@"plugin.parameters.preview.get",@{});
+  check([owner[@"active"] boolValue],"Dry-run fixture preview missing");
+  parameters(-9,true);call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@YES},true);
+  NSDictionary *bad=@{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(-9)},@{@"id":@1,@"value":@(-3)}],
+    @"dryRun":@YES,@"expectedRevision":session.automationRevision};
+  check(![session automationMethod:@"plugin.parameters.set" params:bad error:&error]&&error.code==-32602,
+    "Duplicate-parameter dry run accepted");
+  check([call(@"plugin.parameters.preview.get",@{}) isEqual:owner]&&[revision isEqual:session.automationRevision]&&
+    [state() isEqual:original],"Dry run changed preview ownership, revision or saved state");
+  call(@"plugin.parameters.preview.cancel",key,true);
+  check([session historyUndo:YES error:&error]&&[state() isEqual:accepted],"Dry run destroyed the existing Redo branch");
+  parameters(-9,false);NSDictionary *changed=state();
+  check([session historyUndo:NO error:&error]&&[state() isEqual:accepted],"Real parameter edit did not undo once");
+  check([session historyUndo:YES error:&error]&&[state() isEqual:changed],"Real parameter edit did not redo");
+  call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@NO},true);
+  check([session historyUndo:NO error:&error]&&[state() isEqual:changed],"Real bypass edit did not undo independently");
+  [session shutdown];
+}
+int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();sessionRecipePreview();sessionRackDryRuns();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, rack/recipe preview history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

@@ -1287,8 +1287,12 @@
       if (!p[@"position"]) require(direction == -1 || direction == 1, "Direction must be -1 or 1");
       succeeded([self movePlugin:slot direction:direction error:&problem], problem);
     } else if ([method isEqual:@"plugin.bypass"]) {
-      allowed(@[ @"slot", @"plugin", @"bypass" ]);
-      succeeded([self bypassPlugin:pluginSlot() bypass:boolean(p[@"bypass"]) error:&problem], problem);
+      allowed(@[ @"slot", @"plugin", @"bypass", @"dryRun" ]);
+      const auto slot=pluginSlot();const bool bypass=boolean(p[@"bypass"]);
+      const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      const bool changed=_plugins[slot].bypass!=bypass;
+      if(!dry)succeeded([self bypassPlugin:slot bypass:bypass error:&problem],problem);
+      result=@{@"wouldChange":@(changed),@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.assign"]) {
       allowed(@[ @"slot", @"instrument" ]);
       succeeded([self assignPlugin:pluginSlot()
@@ -1298,10 +1302,10 @@
     } else if ([method isEqual:@"plugin.state.set"] || [method isEqual:@"plugin.parameters.set"] || [method isEqual:@"plugin.preset.load"]) {
       const bool preset = [method isEqual:@"plugin.preset.load"];
       const bool state = preset || [method isEqual:@"plugin.state.set"];
-      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"plugin", @"values" ]);
+      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"plugin", @"values", @"dryRun" ]);
       const auto slot = preset ? instanceSlot() : pluginSlot();
       NSDictionary *loadedPreset = nil;
-      const bool dry = preset && p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
+      const bool dry = (preset || !state) && p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       if (preset) {
         loadedPreset = PluginPreset::read(string(p[@"path"], 8192));
         if (![string(p[@"expectedPresetRevision"], 80) isEqual:loadedPreset[@"presetRevision"]])
@@ -1335,7 +1339,8 @@
           const auto old=std::find_if(manual.begin(),manual.end(),[&](const auto &v){return v.slot==slot&&v.id==id;});
           if(old==manual.end())manual.push_back(changes.back());else old->value=value;
         }
-        if(!changes.empty()) {
+        result=@{@"wouldChange":@(!changes.empty()),@"dryRun":@(dry)};
+        if(!dry&&!changes.empty()) {
           [self synchronizeHistory];
           const bool continued=changes.size()==1 && _parameterGesture && _parameterGestureSequence &&
             _parameterGestureSequence==_document->historySequence() && _parameterGestureSlot==slot && _parameterGestureID==changes.front().id;

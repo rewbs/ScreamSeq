@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "aca6aaea23fb938744cb8163166c916408405772ccf7397a79d6470e74668d53",
+    "sha256": "6b5ae853d5d5c3940f3942c5353f6c8b6c10a2877f6f2431b072b03fbdec4e8c",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",

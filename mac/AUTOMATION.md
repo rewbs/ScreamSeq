@@ -169,6 +169,13 @@ Filter/EQ Channels choices are 0 Stereo, 1 Left, 2 Right, 3 Mid, 4 Side. Output 
 
 For example, after adding EQ10, `plugin.parameters.set` with `values: [{id: 10, value: 120}, {id: 11, value: -3}, {id: 12, value: 0.8}, {id: 13, value: 1}]` makes its first band a −3 dB low shelf at 120 Hz. Include the returned slot and `expectedRevision`. Add an `automation.pattern.set` lane targeting parameter 11 to automate that band’s gain.
 
+`plugin.parameters.set` and `plugin.bypass` also accept `dryRun:true`. They validate
+the target and complete requested change, returning `data.wouldChange` and
+`data.dryRun` without publishing parameters/bypass, consuming history, changing
+saved opaque state or cancelling an active parameter preview. A dry run still
+requires the current `expectedRevision`; it does not reserve a queue or guarantee
+that a later real write will be admitted. Invalid batches fail as a whole.
+
 Filter/EQ tail estimates derive from pole decay, with a −160 dB rendering floor and additional resonance/gain margin. They prepare bounds for all known absolute and pattern automation before export, and can grow during live playback. Filter control changes while draining allow a fresh decay interval from the edit; offline rendering still caps the total tail at 60 seconds. Within one render run the budget never shrinks; reopening or starting playback builds a fresh estimate from state and automation. Cascaded section estimates are added conservatively, so extreme low-frequency/high-Q settings can append several seconds. WAV export retains its existing maximum 60-second tail. IIR tails are mathematically infinite; this is a tested rendering threshold, not exact extinction or a guarantee for every adversarial modulated signal.
 
 Comb tuning is `440 × 2^((Note + Transpose − 69)/12)` Hz; the corresponding delay is clamped to at least four samples. Thus the highest effective tuning is one quarter of the current sample rate; the requested note remains saved. MIDI numbering is explicit: C4 = 60 and A4 = 69. The native Note field accepts numeric MIDI values or names such as `C4`, `C#4`, `B♭3`. The API uses numbers; Note is rounded to the nearest semitone, while Transpose provides fine tuning. `step: 1` tells an agent which controls quantize.
