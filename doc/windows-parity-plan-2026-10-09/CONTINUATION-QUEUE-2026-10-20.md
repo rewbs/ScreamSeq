@@ -13,10 +13,12 @@ build, all 24 selected CTest registrations (21 executable checks plus three
 scratch setups), and two actual-app clear checks. See the
 [qualification record](GESTURE-BATCH-QUALIFICATION-2026-10-20.md) for exact
 source/executable identity, scope, current CI handles and the hourly gate.
-Windows x64 job `118612292760` and Mac Intel job `118612293867` are building
-this candidate. Apple Silicon job `118612294240` completed its build at
-12:11:19 UTC; its model/host step failed at 12:13:44 UTC, with the cause pending
-the job log. Later interface/conformance steps are continuing. Shared main remains
+All three native CI jobs are now terminal. The [current CI review](GESTURE-CI-REVIEW-2026-10-20.md)
+records x64's 157 worker/48 native passes, both Macs' 133/134 native and 35/35
+interface results, retained x64 follow-ups, the unbuilt graph selector repair
+and protected-source history test correction. Next native build is no earlier
+than **13:27:48 UTC**. Extended reciprocal execution is proceeding without builds.
+Shared main remains
 `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`.
 Use the [extended exchange](EXTENDED-EXCHANGE-2026-10-20.md) for the final
 current-candidate reciprocal gate; the old seven-file exchange omits the

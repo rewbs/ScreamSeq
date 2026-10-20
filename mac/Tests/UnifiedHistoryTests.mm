@@ -33,6 +33,9 @@ static void exactParameterHistory() {
   fixture["futureHistorySentinel"]={{"integer",int64_t(9007199254740993LL)},{"real",1.0},{"bytes",Project::Value::binary({0,255,7})}};
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
   check([NativePropertyTree::encode(fixture) writeToFile:path atomically:YES]&&[session openPath:path error:&error],"Open imported empty-state history fixture");
+  NSData *sourceBytes=[NSData dataWithContentsOfFile:path];
+  check(sourceBytes!=nil&&[[session snapshot:0][@"requiresSaveAs"] boolValue],
+    "Unknown history-fixture extension protects its original file");
   const auto baseline=tree();
   check(baseline["plugins"][0]["state"].get_binary().empty()&&!baseline["plugins"][1]["state"].get_binary().empty(),"Empty and nonempty opaque baselines retained");
   set(-6);const auto firstEdit=tree();
@@ -52,8 +55,24 @@ static void exactParameterHistory() {
   call(@"history.undo",@{});same(noteEdit,"Second parameter Undo restores original folded blob");
   call(@"history.redo",@{});same(pendingRestored,"Redo restores exact earlier pending state");
   call(@"history.redo",@{});same(latest,"Redo restores exact latest saved state");
-  check([session savePath:path error:&error]&&[session openPath:path error:&error],"Save/reopen exact parameter history");
+  // The opaque sentinel deliberately makes this an imported compatibility
+  // fixture. Saving must preserve that source, even after a successful Undo.
+  NSString *beforeRefusal=session.automationRevision;error=nil;
+  check(![session savePath:path error:&error]&&error!=nil&&
+    [error.localizedDescription containsString:@"Save a new .screamseq copy"]&&
+    [session.automationRevision isEqual:beforeRefusal]&&
+    [[NSData dataWithContentsOfFile:path] isEqual:sourceBytes],
+    "Protected history fixture refuses overwrite without changing source or revision");
+  same(latest,"Protected-source Save refusal preserves the complete edited tree");
+  NSString *copyPath=[path.stringByDeletingPathExtension stringByAppendingString:@"-copy.screamseq"];
+  error=nil;
+  if(![session savePath:copyPath error:&error])
+    throw std::runtime_error(std::string("Save exact parameter history copy: ")+error.localizedDescription.UTF8String);
+  if(![session openPath:copyPath error:&error])
+    throw std::runtime_error(std::string("Reopen exact parameter history copy: ")+error.localizedDescription.UTF8String);
   same(latest,"Reopened history result retains complete typed tree");
+  check([[NSData dataWithContentsOfFile:path] isEqual:sourceBytes],"History Save a copy preserves imported source bytes");
+  [NSFileManager.defaultManager removeItemAtPath:copyPath error:nil];
   [NSFileManager.defaultManager removeItemAtPath:path error:nil];[session shutdown];
 }
 static void mixerControlHistory() {

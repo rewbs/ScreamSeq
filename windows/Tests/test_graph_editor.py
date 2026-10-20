@@ -270,8 +270,36 @@ class GraphEditorTests(unittest.TestCase):
         self.field(459, '-18')
         self.command(461)
         self.assertEqual(next(p['value'] for p in self.read('graph.plugin.get', graph=graph, node=plugin)['parameters'] if p['id'] == 1), -18)
+        # All parameters now opens a retained, polling inspector. This case
+        # continues with the inline bus form; close that separate window before
+        # the API setup mutation. Busy native selectors have their own explicit
+        # regression in WorkspaceRestoreTests, including retained raw fields.
+        inspectors = []
+        @private_desktop.callback
+        def find_inspector(hwnd, unused):
+            pid = wintypes.DWORD()
+            private_desktop.user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            name = ctypes.create_unicode_buffer(128)
+            private_desktop.user.GetClassNameW(hwnd, name, len(name))
+            if pid.value == self.pid and name.value == 'ScreamSeq.PluginParameters':
+                inspectors.append(hwnd)
+            return True
+        self.assertTrue(private_desktop.user.EnumDesktopWindows(self.desktop.desktop, find_inspector, 0))
+        self.assertEqual(len(inspectors), 1)
+        self.desktop.send(inspectors[0], 0x10)
         self.write('mixer.enable')
-        self.desktop.send(self.desktop.hwnd(self.pid), 0x113, 4)
+        # The API publication and graph catalogue timer are distinct owners.
+        # Wait for the captured revision and actual choices, not one timer tick.
+        revision = self.doc()['revision']
+        deadline = time.monotonic() + 5
+        while True:
+            self.desktop.send(self.desktop.hwnd(self.pid), 0x113, 4)
+            state = self.state()
+            if state['expectedRevision'] == revision and self.desktop.send(self.control(465), 0x146) > 0:
+                break
+            if time.monotonic() >= deadline:
+                self.fail(f'Graph assignment catalogue did not adopt mixer revision: {state}')
+            time.sleep(.02)
         self.select(443, 4)
         before = self.doc()
         self.field(468, '2')

@@ -1,5 +1,11 @@
 # Recorded capture, clear and exact-history qualification
 
+**Latest:** all three native CI jobs are terminal. See the
+[CI review and retained follow-ups](GESTURE-CI-REVIEW-2026-10-20.md) for the
+confirmed failures, prepared repairs and extended exchange. The live-job
+statements below describe the earlier checkpoint. Next native build is no
+earlier than **13:27:48 UTC** on 20 October.
+
 ## Frozen candidate and executed local checks
 
 Candidate `db42b142196471f0a34fe67554c55dfc9de68439` built on Windows ARM64

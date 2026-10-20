@@ -713,6 +713,39 @@ void busyCurveSourcePickerRetainsPreparedTarget() {
             "Busy source picker adopted Curve, changed retained drafts/music/focus, or leaked native windows");
     });
 }
+void busyGraphTargetSelectorsRetainCapturedFields() {
+    withRestoreFixture([](RestoreApplication &app) {
+        app.edit("mixer.enable",RestoreJson::object());
+        addRestoreGain(app);
+        const auto source=createRestoreCurveSource(app);
+        app.graphNode=app.edit("graph.node.add",{{"graph",source.graph},{"kind","plugin"},{"slot",0}}).at("node").get<std::string>();
+        app.refreshGraph();app.graphLoadPluginControls();
+        const auto field=app.controls.at(graphPropertyValue);
+        SetFocus(field);SetWindowTextW(field,L"Retained target draft");
+        SendMessageW(field,EM_SETSEL,2,8);
+        restoreCheck(app.graphFieldDirty,"Busy target fixture did not retain its text");
+        const auto before=restoreState(app),song=songState(app);
+        const auto generation=app.graphGeneration;
+        for(int id:{graphLibrary,graphPage,graphProperty,graphBus,graphWire,graphNodePicker,graphParameter}) {
+            const auto picker=app.controls.at(id);
+            const auto choice=controlState(picker);
+            restoreCheck(SendMessageW(picker,CB_GETCURSEL,0,0)!=CB_ERR,"Busy target fixture has no selected item");
+            for(int gate=0;gate<3;++gate) {
+                SendMessageW(picker,CB_SETCURSEL,WPARAM(-1),0);
+                app.busy=gate==0;app.graphPending=gate==1;app.dragging=gate==2?6:0;
+                bool refused=false;
+                try{(void)app.graphControlCommand(id);}
+                catch(const ScreamSeq::Api::ApiError &error){refused=error.code==-32002;}
+                app.busy=false;app.graphPending=false;app.dragging=0;
+                restoreCheck(refused&&controlState(picker)==choice,
+                    "Busy graph rejection left the displayed target different from its captured owner");
+                restoreCheck(app.graphGeneration==generation&&GetFocus()==field&&restoreState(app)==before,
+                    "Busy graph target rejection changed fields, selection, focus or generation");
+            }
+        }
+        restoreCheck(songState(app)==song,"Busy graph target rejection changed song/history");
+    });
+}
 void pumpedCurvePatternChangeRejectsPreparedTarget() {
     withRestoreFixture([](RestoreApplication &app) {
         const auto source=createRestoreCurveSource(app);const auto song=songState(app);const auto roots=restoreRoots();
@@ -1149,6 +1182,7 @@ int wmain(int argc,wchar_t **argv) {
             thirdHiddenCurveFailureIsAtomic();std::cout<<"PASS Curve staging: third hidden read/malformed points leave all candidates unadopted\n";
             successfulCurveAdoptionMatchesApi();std::cout<<"PASS Curve adoption: worker values and normal callbacks retained\n";
             busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
+            busyGraphTargetSelectorsRetainCapturedFields();std::cout<<"PASS graph targets: busy/pending/drag refusal restores all captured selectors and fields\n";
             pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
             guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
             fourthHiddenNotesFailureIsAtomic();std::cout<<"PASS Notes staging: fourth hidden read/malformed data preserve all-before-any adoption\n";

@@ -241,17 +241,37 @@
     Json graphMutate(const std::string &method,Json p,bool commitFields=false){graphRequireCurrent(!commitFields);p["expectedRevision"]=graphRevision;const auto generation=graphGeneration;graphPending=true;try{auto result=documentOperation(method,p);graphPending=false;if(generation==graphGeneration){if(commitFields)graphFieldDirty=false;if(method=="graph.create"||method=="graph.clone")graphID=result.at("graph").get<std::string>();if(method=="graph.node.add")graphNode=result.at("node").get<std::string>();refreshGraph();}return result;}catch(...){graphPending=false;throw;}}
     void graphLoadPluginControls(){graphRequireCurrent();auto node=graphSelectedNode();if(!node||node->at("kind")!="plugin")throw std::runtime_error("Select an effect node");const auto generation=graphGeneration;const auto target=graphNode;auto catalog=documentOperation("graph.plugin.get",{{"graph",graphID},{"node",graphNode}});if(generation!=graphGeneration||target!=graphNode)throw std::runtime_error("Plugin catalog completed for an older draft; current fields retained");graphPluginData=std::move(catalog);graphExposedNode=graphPluginTarget=graphNode;ScreamSeq::NativeInputGate::present(controls.at(graphParameter),CB_RESETCONTENT,0,0);for(const auto &p:graphPluginData.at("parameters")){auto name=wide(p.at("name").get<std::string>()+" / "+p.at("unitLabel").get<std::string>());ScreamSeq::NativeInputGate::present(controls.at(graphParameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}ScreamSeq::NativeInputGate::present(controls.at(graphParameter),CB_SETCURSEL,0,0);graphParameterSelected();}
     void graphParameterSelected(){const auto i=SendMessageW(controls.at(graphParameter),CB_GETCURSEL,0,0);if(i>=0&&graphPluginData.contains("parameters")&&size_t(i)<graphPluginData.at("parameters").size()){const auto &p=graphPluginData.at("parameters")[size_t(i)];graphExposedParameter=p.at("id").get<uint32_t>();settingGraphFields=true;graphText(graphParameterValue,p.at("value"));settingGraphFields=false;graphFieldDirty=false;rebuildGraphCanvas();}}
+    void restoreGraphTargetSelection(int id){
+        // Native combo selection changes before CBN_SELCHANGE reaches us.
+        // Rejection must restore the displayed captured target, including when
+        // a retained parameter inspector is using the document worker.
+        int selected=-1;
+        if(id==graphNodePicker){graphFillNodes(id,graphNode);return;}
+        if(id==graphPage)selected=graphPageIndex;
+        else if(id==graphProperty)selected=graphPropertyIndex;
+        else if(id==graphBus)selected=graphBusIndex;
+        else if(id==graphWire)selected=graphWireIndex+1;
+        else if(id==graphLibrary){
+            if(graphData.contains("library"))for(size_t i=0;i<graphData.at("library").size();++i)
+                if(graphData.at("library")[i].at("id")==graphID)selected=int(i);
+        }else if(id==graphParameter){
+            if(graphPluginData.contains("parameters"))for(size_t i=0;i<graphPluginData.at("parameters").size();++i)
+                if(graphPluginData.at("parameters")[i].at("id")==graphExposedParameter)selected=int(i);
+        }else return;
+        ScreamSeq::NativeInputGate::present(controls.at(id),CB_SETCURSEL,selected,0);
+    }
     bool graphControlCommand(int id){
         if(id<graphCommand||id>graphReconnect)return false;
         if(busy||graphPending||dragging>=6){
             // A late native selection notification may already have changed
             // the combo. Keep it consistent with the retained model target.
-            if(id==graphNodePicker)graphFillNodes(id,graphNode);
+            restoreGraphTargetSelection(id);
             throw ScreamSeq::Api::ApiError(-32002,"Graph editor is busy");
         }
         setWorkspaceCanvasFocus("graph");
         if(nativeCommandCompletion.retained()&&id!=graphCommand){
             if(id==graphReload){reviewNativeCommand();layoutControls();return true;}
+            restoreGraphTargetSelection(id);
             throw std::runtime_error("Review the earlier command result before changing the graph");
         }
         if(id==graphReconnect){graphRequireCurrent();openPluginPath({{"graph",graphID},{"node",graphNode}});return true;}
