@@ -54,4 +54,29 @@ void applicationWorkerPresentation(){
     restoreCheck(!app.busy&&restoreText(app.window)==title&&IsWindowEnabled(action)&&probe.titles==2&&probe.enables==2,
         "Slow failure did not restore title and native actions exactly once");
     std::cout<<"Worker presentation: 12 short waits preserve native title/actions; slow failure shows/restores busy; admission remains guarded\n";
+    app.inputCompletion=nullptr;
+    // A keyboard release can be dispatched by a different read's await pump.
+    // The strips must retain it until admission is free, then submit once.
+    app.edit("mixer.enable",RestoreJson::object());app.command(mixerStripsCommand);app.mixerStrips->update();
+    const auto strips=app.mixerStrips->window(),width=GetDlgItem(strips,109);
+    restoreCheck(width!=nullptr,"Mixer worker fixture has no width slider");SetFocus(width);
+    SendMessageW(width,TBM_SETPOS,TRUE,150);
+    SendMessageW(strips,WM_HSCROLL,MAKEWPARAM(TB_THUMBTRACK,150),reinterpret_cast<LPARAM>(width));
+    std::promise<RestoreJson> otherRead;app.inputCompletion=&otherRead;
+    app.postedInput=[&]{
+        restoreCheck(app.busy,"Width release fixture did not enter an unrelated worker wait");
+        SendMessageW(width,WM_KEYUP,VK_RIGHT,0);
+        restoreCheck(app.mixerStrips->hasGesture(),"Busy worker discarded the width gesture");
+    };
+    restoreCheck(PostMessageW(app.window,restoreInputMessage,0,0),"Post width release during another worker read");
+    (void)app.await(otherRead.get_future());app.inputCompletion=nullptr;
+    SendMessageW(strips,WM_TIMER,3,0);
+    const auto state=app.mixerStrips->snapshot();
+    restoreCheck(!app.mixerStrips->hasGesture()&&state.at("report").at("fields").at("width")==1.5,
+        "Unrelated worker wait lost the physical width release");
+    const auto bus=state.at("report").at("fields").at("bus");
+    const auto mixer=app.documentOperation("mixer.get",RestoreJson::object());
+    const auto saved=std::find_if(mixer.at("buses").begin(),mixer.at("buses").end(),[&](const auto &item){return item.at("id")==bus;});
+    restoreCheck(saved!=mixer.at("buses").end()&&saved->at("width")==1.5,"Deferred width release did not reach the shared document");
+    std::cout<<"Worker presentation: real await preserves a width key release and commits after the unrelated read\n";
 }

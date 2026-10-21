@@ -18,7 +18,7 @@ struct Owner {
 struct Fixture {
   Json data={{"active",true},{"buses",Json::array()}};
   std::string revision="r1";unsigned writes=0,previews=0;bool unknown=false;Json lastWrite,lastPreview;
-  double audible=-6.123456789;
+  double audible=-6.123456789;bool workerAvailable=true;
   std::function<void()> duringWrite;
   std::function<void(const std::string &)> duringRead;
   ScreamSeq::MixerStripsWindow tool;
@@ -33,7 +33,7 @@ struct Fixture {
       if(duringWrite){auto callback=std::exchange(duringWrite,{});callback();}
       if(unknown)throw ScreamSeq::Api::ApiError(-32003,"Owned lost response",Tracker::WriteOutcome{});
       return {method,"owned-song",revision,{{"wouldChange",true}}};
-    },[]{},[](const auto &){},[]{}) {
+    },[]{},[](const auto &){},[]{},[this]{return workerAvailable;}) {
     for(unsigned i=0;i<busCount;++i)data["buses"].push_back({{"id","n"+std::to_string(i+1)},{"kind",i+1==busCount?"master":"track"},
       {"name",i+1==busCount?"Master":"Track "+std::to_string(i+1)},{"gainDB",i==0?audible:0},
       {"pan",0},{"preGainDB",0},{"prePan",0},{"width",1},{"mute",false},{"solo",false}});
@@ -110,6 +110,36 @@ void stableStripPresentation(HWND owner){
   SetFocus(f.control(103));f.tool.update();
   check(probe.positions==0&&probe.layouts==0,"Unchanged focus layout rewrote or reordered neighbor sliders");
   std::cout<<"Mixer presentation: 20 fader/meter previews leave neighboring slider position, layout and paint untouched\n";
+}
+void unrelatedWorkerInput(HWND owner){
+  for(int part:{1,3,8,9})for(bool keyboard:{false,true}){
+    Fixture f(owner);const auto control=f.control(100+part);SetFocus(control);
+    const auto message=part==1?WM_VSCROLL:WM_HSCROLL;
+    const int value=part==1?360:150;
+    SendMessageW(control,TBM_SETPOS,TRUE,value);
+    SendMessageW(f.tool.window(),message,MAKEWPARAM(TB_THUMBTRACK,value),reinterpret_cast<LPARAM>(control));
+    check(IsWindowEnabled(f.control(12)),"Starting a slider did not expose Cancel without a layout");
+    f.workerAvailable=false;
+    if(keyboard)SendMessageW(control,WM_KEYUP,VK_RIGHT,0);
+    else SendMessageW(f.tool.window(),message,MAKEWPARAM(TB_ENDTRACK,value),reinterpret_cast<LPARAM>(control));
+    f.tool.update();SendMessageW(f.tool.window(),WM_TIMER,3,0);
+    check(f.writes==0&&f.previews==0&&f.tool.hasGesture(),"Release entered a busy worker or lost its intent");
+    f.workerAvailable=true;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+    const auto key=part==1?"gainDB":part==3?"pan":part==8?"prePan":"width";
+    check(f.writes==1&&!f.tool.hasGesture()&&f.find("n1")[key]==(part==1?-12.:part==9?1.5:.5),
+      "Busy-worker release failed to commit exactly once to the captured control");
+    f.tool.update();SendMessageW(f.tool.window(),WM_TIMER,3,0);
+    check(f.writes==1,"Completed deferred release was submitted again");
+  }
+  for(bool stale:{false,true}){
+    Fixture f(owner);f.slide(360);f.workerAvailable=false;f.slide(360,TB_ENDTRACK);
+    if(stale){f.find("n1")["gainDB"]=-3;f.revision="external";}
+    else {SendMessageW(f.control(101),WM_KEYDOWN,VK_ESCAPE,0);f.slide(360,TB_ENDTRACK);}
+    f.workerAvailable=true;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+    check(f.writes==0,"Deferred release rebased a stale gesture or overrode Escape");
+    if(stale){check(f.tool.hasGesture(),"Stale deferred input was discarded");f.press(12);}
+    check(!f.tool.hasGesture()&&f.audible==(stale?-3.:-6.123456789),"Cancellation lost the current saved value");
+  }
 }
 void layoutAndIdentity(HWND owner) {
   Fixture f(owner);
@@ -355,6 +385,6 @@ void viewportPool(HWND owner) {
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);stableStripPresentation(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingKeyboardIntent(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);stableStripPresentation(owner.window);unrelatedWorkerInput(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingKeyboardIntent(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

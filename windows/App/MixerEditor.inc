@@ -18,7 +18,8 @@
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
             [this]{if(nativeCommandPending||nativeCommandCompletion.retained())throw std::runtime_error("Review the previous command result before adjusting the mixer");if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft first");},
             [this](const auto &bus){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the retained Mixer Details draft before changing buses");mixerTarget=bus;mixerStripsMode=false;refreshMixer();layoutControls();SetFocus(controls.at(mixerName));},
-            [this]{mixerStripsMode=true;revealWorkspaceMainEditor("mixer");layoutControls();});
+            [this]{mixerStripsMode=true;revealWorkspaceMainEditor("mixer");layoutControls();},
+            [this]{return !busy&&!recoveryRestoring;});
         mixerStrips->dock(window);
         mixerStrips->musicalTyping([this](HWND,WPARAM key,bool repeat){return workspaceMusicalKey(key,repeat);},
             [this](WPARAM key){return releaseTypedKey(key);},[this]{releaseTypedNotes(window);});

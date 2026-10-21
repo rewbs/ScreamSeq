@@ -57,4 +57,51 @@ mixer tests. Repeat visible silent-playback fader/balance interaction and keyboa
 focus checks. Preserve failed evidence and report any remaining limitation.
 No shared model, Mac, audio callback, project format or plugin state changes.
 
-Results and executable provenance follow after execution.
+## First candidate results and corrections
+
+Candidate `5ea1aec9644dbf27846ab5f87230622b5a0aa8b2` built successfully
+from 06:22:49 through **06:24:41 UTC on 2026-10-21**. Its ARM64 Release
+executable hash is `39f59ead10b09061e8fcda4e07e477fff9a747d228c2afe23234ad21e94a0fac`.
+The next build must start **no earlier than 07:24:42 UTC**, retaining the user's
+one-build-per-hour limit. Receipts and complete logs are under
+`bin/mixer-flicker-20261021/` in the primary checkout.
+
+- 14 of 15 selected native tests passed, including the new short/long worker
+  presentation test, context panel, restore, departure, receipts, command result,
+  menus, transport, pattern selection, sample input and plugin search checks.
+  The mixer harness failed its existing Cancel action assertion.
+- 5 of 6 actual-app checks passed. The same 24 previews now produced **zero**
+  neighboring slider layout messages. Preview/history/save/reopen and retained
+  drafts passed. The keyboard width commit check failed (saved width 1.0 instead
+  of 1.5). A bounded diagnostic repeated the timing-sensitive width failure five
+  times in 20 iterations. No failed assertion was relaxed.
+- A 205.48-second visible silent-playback run on owned PID 40132 exercised gain
+  drag, gain arrow key and balance drag. The gain key changed -30.1 to -30.2 dB;
+  the API confirmed the gain drag's captured bus and completed write. Audio ran
+  at 48 kHz/480 frames, with 20,545 callbacks and zero reported faults, deadline
+  overruns, starvation indicators or device errors. This is bounded interaction
+  evidence, **not temporal flicker or sustained frame-pacing qualification**.
+  The disposable demo was closed without saving. No candidate package was released.
+
+Corrections awaiting the next coordinated build:
+
+1. Update Cancel availability explicitly in `enableEdits()`. It previously
+   depended on the redundant readout-triggered layout being removed.
+2. Supply worker availability to the mixer strip owner. Defer an unsubmitted
+   release/Enter or Escape while another worker call pumps input, then service
+   it after admission is free. Preserve the original document/revision and
+   generation checks. Never retry a submitted/uncertain write. Skip previews
+   while an unrelated worker operation is active. Expose `queuedInput` in the
+   inspection snapshot so bounded UI waiters observe this real pending intent.
+3. Add deterministic native coverage for all four slider kinds, mouse/key
+   release, Cancel availability, Escape precedence, stale revision refusal and
+   exactly one write. Extend the real Application `await` harness to pump a
+   width key release during an unrelated read and verify its saved result.
+
+The correction batch must rerun the complete mixer-strip harness, worker
+presentation and context/command/departure checks, plus actual-app mixer tests.
+Reuse the first candidate's unchanged broader restore and presentation evidence
+unless new failures or further edits invalidate it. After passing, run isolated
+visible playback with gain, balance, pre-balance and width, including keyboard
+focus. Package a separate production Release directory with matching provenance;
+do not replace either existing Downloads package or the musician's process.

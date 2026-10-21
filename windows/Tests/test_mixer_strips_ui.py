@@ -50,7 +50,9 @@ class MixerStripsUITests(unittest.TestCase):
                 break
             observer = self.client.__class__(self.client.pipe, timeout=min(.5, remaining))
             state = observer.call('workspace.get')['data']
-            if not state['documentBusy'] and not state['pendingViewCommands'] and not state['mixerStrips'].get('pending', False):
+            strips = state['mixerStrips']
+            if (not state['documentBusy'] and not state['pendingViewCommands']
+                    and not strips.get('pending', False) and not strips.get('queuedInput', False)):
                 return state
             time.sleep(.01)
         self.fail('Mixer did not settle: ' + str(state))

@@ -18,6 +18,8 @@ private:
     preGainLabel=10,prePanLabel=11,widthLabel=12,role=13,lastPart=role};
   Read request_;Context context_;NativeWriteCompletion::Write write_;
   std::function<void()> admit_,reveal_;std::function<void(const std::string &)> details_;
+  std::function<bool()> available_;
+  bool workerAvailable()const{return !available_||available_();}
   NativeWriteCompletion completion_;Tracker::MixerGesture gesture_;
   Json data_=Json::object(),report_=Json::object();std::string document_,revision_;
   std::vector<std::string> bindings_;std::vector<size_t> positions_;size_t first_=0,lastVisibleCount_=0,viewportTotal_=0;
@@ -105,6 +107,9 @@ private:
     enableEdits();
   }
   void enableEdits() {
+    // Gesture availability is independent of geometry. A fader readout update
+    // must not need a whole-window layout just to expose cancellation.
+    EnableWindow(controls_.at(cancel),gesture_.active()&&!pending_&&!completion_.retained());
     for(size_t i=0;i<bindings_.size();++i)for(int part:{fader,gain,pan,mute,solo,preGain,prePan,width}) {
       const int id=base+int(i)*stride+part;
       const bool available=bus(bindings_[i])!=nullptr;
@@ -149,6 +154,9 @@ private:
   }
   void commit() {
     if(!gesture_.active()||pending_||completion_.retained())return;
+    // An unrelated worker read can pump the physical release. Capture intent
+    // before submission, never retry a write whose outcome might be uncertain.
+    if(!workerAvailable()){deferredCommit_=true;SetTimer(window_,3,50,nullptr);return;}
     checkCurrent();admit_();
     if(rawDirty_)gesture_.update(number(capturedControl_));
     Pending guard(pending_);
@@ -161,6 +169,7 @@ private:
   void restoreCurrent(bool acknowledge=false) {
     if(!gesture_.active()||pending_)return;
     if(completion_.retained()&&!acknowledge)throw std::runtime_error("Review the uncertain mixer result before cancelling");
+    if(!workerAvailable()&&!acknowledge){deferredCancel_=gesture_.generation();deferredCommit_=false;SetTimer(window_,3,50,nullptr);return;}
     const auto generation=gesture_.generation();Pending guard(pending_);reload();
     if(document_==gesture_.context().document)if(const auto *saved=bus(gesture_.context().bus)) {
       const auto &v=saved->at(Tracker::mixerControlKey(gesture_.control()));
@@ -173,7 +182,7 @@ private:
     status_=acknowledge?L"Current saved state accepted / the edit was not repeated":L"Gesture cancelled / current saved value restored";
   }
   bool finishDeferredInput() {
-    if(pending_||!gesture_.active()||completion_.retained())return false;
+    if(pending_||!workerAvailable()||!gesture_.active()||completion_.retained())return false;
     if(deferredCancel_) {
       const auto generation=*deferredCancel_;deferredCancel_.reset();
       // Escape applies only to input already present when it was pressed.
@@ -197,7 +206,7 @@ private:
     status_=L"Result uncertain / saved state inspected. Use current acknowledges it without repeating the edit";
   }
   void preview() {
-    if(pending_||completion_.retained()||rawDirty_||previewBlocked_||!gesture_.needsPreview())return;
+    if(pending_||!workerAvailable()||completion_.retained()||rawDirty_||previewBlocked_||!gesture_.needsPreview())return;
     checkCurrent();admit_();Pending guard(pending_);const auto value=gesture_.value();
     previewInFlight_=true;
     struct PreviewGuard{bool &flag;~PreviewGuard(){flag=false;}}previewGuard{previewInFlight_};
@@ -344,7 +353,6 @@ private:
     position(review,8,4,112,24,completion_.retained());position(accept,126,4,110,24,completion_.retained());
     stripTop_=34;sliderTop_=75;
     EnableWindow(controls_.at(previous),first_>0);EnableWindow(controls_.at(next),first_+visibleCount()<viewportTotal_);
-    EnableWindow(controls_.at(cancel),gesture_.active()&&!pending_&&!completion_.retained());
     EnableWindow(controls_.at(review),!pending_);EnableWindow(controls_.at(accept),observed_&&!pending_);
     // Keep the two horizontal controls clear of the button row at short dock
     // heights. The previous h-172 rule overlapped Balance and Mute at 226 DIPs.
@@ -480,7 +488,7 @@ private:
   void timer(UINT_PTR id)override {
     if(id!=3)return;
     KillTimer(window_,3);
-    if(pending_){SetTimer(window_,3,50,nullptr);return;}
+    if(pending_||!workerAvailable()){SetTimer(window_,3,50,nullptr);return;}
     if(finishDeferredInput()){layout();requestPaint();return;}
     if(captureLost_&&gesture_.active()&&!completion_.retained()){captureLost_=false;restoreCurrent();layout();requestPaint();}
   }
@@ -520,9 +528,10 @@ private:
   void reviewDocumentDraft()override {reveal_();show();SetFocus(window_);}
 public:
   MixerStripsWindow(HWND owner,Read read,Context context,NativeWriteCompletion::Write write,
-      std::function<void()> admit,std::function<void(const std::string &)> details,std::function<void()> reveal)
+      std::function<void()> admit,std::function<void(const std::string &)> details,std::function<void()> reveal,
+      std::function<bool()> available={})
     :NativeToolWindow(owner),request_(std::move(read)),context_(std::move(context)),write_(std::move(write)),
-     admit_(std::move(admit)),reveal_(std::move(reveal)),details_(std::move(details)) {
+     admit_(std::move(admit)),reveal_(std::move(reveal)),details_(std::move(details)),available_(std::move(available)) {
     INITCOMMONCONTROLSEX common{sizeof(common),ICC_BAR_CLASSES};
     if(!InitCommonControlsEx(&common))throw std::runtime_error("Cannot initialize native mixer sliders");
     create(L"ScreamSeqMixerStrips",L"Mixer strips",900,330);
@@ -545,6 +554,7 @@ public:
         {"pinned",pinned(i)},{"inViewport",positions_[i]>=first_&&positions_[i]<first_+visibleCount()}});
     return {{"visible",visible()},{"firstBus",first_},{"visibleCapacity",visibleCount()},{"allocatedStrips",bindings_.size()},
       {"strips",strips},{"gesture",gesture_.active()},{"generation",gesture_.generation()},{"pending",pending_},
+      {"queuedInput",deferredCommit_||deferredCancel_.has_value()},
       {"completion",completion_.snapshot()},{"report",report_}};
   }
   void hide()override {
@@ -562,7 +572,7 @@ public:
     requestPaint();
   }
   void update() {
-    if(retired()||!visible()||pending_)return;
+    if(retired()||!visible()||pending_||!workerAvailable())return;
     try {
       bool relayout=GetFocus()!=lastLayoutFocus_;
       if(finishDeferredInput())relayout=true;
