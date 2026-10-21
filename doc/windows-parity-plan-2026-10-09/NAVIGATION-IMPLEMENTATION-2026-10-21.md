@@ -231,3 +231,35 @@ changes require both native platform builds at the batch gate; reciprocal
 save/reopen and plugin-state preservation remain final integration checks. This
 is discovery/proposed work, not an implemented Record control or a new runtime
 claim. Navigation qualification remains the immediate release prerequisite.
+
+## Unlocked foreground observations — 21 October, 21:27–21:34 UTC
+
+After the user unlocked Windows, a fresh isolated process (PID 11316) ran the
+unchanged `bc7d03f10` executable/hash above, with inspection/audio disabled and
+disposable Midnight Circuit. This checks the already-built navigation changes;
+it does **not** qualify the unbuilt `30c654692` envelope-bank correction.
+Evidence is `correction/unlocked-observations.json`, `unlocked-workspace.json`
+and `unlocked-context.json`, plus the Computer Use observations in this thread.
+
+- Default-size Pattern and mixing graph were visible together. Enable/Fit
+  showed readable Track 1–8 and Master labels. Maximize/restore preserved their
+  position. A native Size interaction reduced Main to compact tabs without
+  losing graph nodes; Graph/Inspector controls remained usable.
+- Gain accepted `-6.5`; Tab/Shift+Tab returned to it and Backspace left `-6.`.
+  Ctrl+Alt+D floated the graph with immediate accessibility focus explicitly
+  on edit ID 3807, value `-6.`. Explicit Dock and the floating-window menu reused
+  that same draft. API readback confirmed the retained text and placement.
+- Ctrl+Alt+P returned to Pattern; Down moved the editing cursor from row 0 to
+  row 1, confirmed by the accessible grid and API. All editors clearly separated
+  Editor panels from Separate windows, and the respective graph destinations
+  docked/floated the owner.
+
+Computer Use reports the floating graph only as related transient UI, not as a
+separately targetable window. A subsequent `type_text` reactivated Main and its
+pattern-paste handler, so **floating typing continuity is not qualified by that
+attempt**. Immediate post-shortcut field focus is directly observed; retain the
+native focus/caret regression gate for both directions. Docked child controls
+remain root-only in the accessibility tree. This is neither full screen-reader
+qualification nor temporal flicker/audio evidence. The failed automated gates
+still prohibit packaging this candidate. Recheck the new executable after its
+next gated build; preserve this bounded evidence rather than repeating discovery.
