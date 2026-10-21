@@ -151,3 +151,71 @@ Additional gates for the coordinated correction build:
 - Include an automation-point drag in isolated live computer-use inspection of
   the final candidate. Update the follow-up automation and frozen build-script
   commit to include this batch before the 07:24:42 UTC build gate.
+
+## Correction qualification and production package
+
+Frozen source `6bea5c08ff9fa9eec49df5f50b48fe7953a5c73f` built once, on
+2026-10-21 from **07:27:33 to 07:29:40 UTC**, after the hourly gate. All five
+planned targets compiled successfully. The existing PluginParametersWindow
+enum/floating-point warning remains. No additional build was run. A subsequent
+build must start no earlier than **08:29:41 UTC** under the conservative gate.
+
+The candidate passed **17/17 native gates** (281.49 seconds) and **9/9
+actual-app checks** (19.16 seconds). Source and executable hashes were unchanged
+through qualification. Receipts and original logs are retained in
+`bin/mixer-flicker-20261021/correction/` in the primary checkout:
+`build.json`, `native.xml`, `native.log`, `app.log` and `checks.json`.
+
+- Mixer previews again produced **zero neighboring layout messages across 24
+  previews**, versus 24 in the original failing baseline. Native checks also
+  observed zero neighboring position/layout/paint messages across 20 fader and
+  meter previews, with focus retained. These are measured native-message
+  regressions, not a screen recording or display-frame timing measurement.
+- All four slider types passed deferred mouse/key release checks while another
+  worker operation held admission, including exactly one final write, Cancel,
+  Escape precedence and stale revision refusal. The previously failing keyboard
+  width and Cancel checks now pass. Actual-app mixer Undo/Redo, retained drafts
+  and native save/reopen passed.
+- Parameter automation, graph-source automation and envelope-template drags all
+  retained sampled curves during movement and restored them after Escape. The
+  parameter editor additionally passed release/save, one-step Undo, Redo and
+  native reopen checks. Native local-preview checks cover interpolation modes,
+  scripted timing, invalid formulas and focus/capture without worker writes.
+
+The separate production ARM64 Release package is:
+
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-ui-fixes-6bea5c08f/ScreamSeq.exe`
+
+Executable SHA-256:
+`4c6f23d4abd82520175fb576e0eb37507c01c3a6edb1ce5fea837c91c4cbd86c`.
+The package includes the scanner, ARM64 CRT, retained OpenMPT/third-party/VST3
+notices, `BuildInfo.json` and `ReleaseProvenance.json`. All 22 listed packaged
+files were hash-checked; older Downloads builds were preserved. The correction
+`package.ps1` uses the new receipts and commit, not the failed candidate's paths.
+
+### Live UI qualification remains blocked
+
+There were no running ScreamSeq processes before launching the packaged
+executable as owned PID 37944 with `--audio-test-silent --automation
+--audio-test-allow-stop --seconds 900` and a private report destination. Its
+exact executable and command line were verified. Computer Use found the QA
+window, but its capture showed wallpaper and activation failed twice with
+`GetCursorPos failed: Access is denied. (0x80070005)`, including one fresh-window
+recovery attempt. No further desktop input was attempted. The user was asked
+to unlock the desktop.
+
+A read-only API snapshot confirmed actual silent playback: 12,820 callbacks,
+6,153,600 frames (128.2 seconds at 48 kHz/480 frames), maximum callback
+3,837.9 microseconds, no reported callback overrun or processor fault. This
+snapshot is **not** a completed audio qualification report. Only the owned,
+unchanged disposable demo process was terminated after saving the snapshot;
+no musician session or system audio default was changed. The expected normal
+shutdown report was not produced. Details are in `live-check.json`,
+`live-transport.json` and `live-workspace.json`.
+
+Visible gain/balance/pre-balance/width interaction, automation point dragging
+and keyboard focus on this final package remain to be checked after desktop
+access is restored. Automated focus/capture and drag checks passed, but no
+claim of live temporal flicker elimination or sustained frame pacing is made.
+This outstanding UI check needs no rebuild: reuse the packaged executable and
+hash above. No push or merge was performed in this follow-up.
