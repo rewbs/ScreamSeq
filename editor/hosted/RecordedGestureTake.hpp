@@ -13,6 +13,27 @@ public:
   };
   enum class Intake { Outside, Captured, Refused };
   enum class Failure { None, Context, Provider, Target, Capacity, Storage, Allocation };
+  // Detached, read-only recovery evidence. Native adapters serialize this on
+  // the control owner. It deliberately cannot be installed as a live take:
+  // host times and provider incarnations belong to the original process.
+  struct Review {
+    struct Source {Provider initial;uint64_t dropped=0;bool drained=false;};
+    struct Target {
+      RecordedGestureCapture::Key key;
+      float minimum=0,maximum=0;
+      RecordedGestureCapture::Loss loss;
+      std::vector<RecordedGestureCapture::Event> events;
+    };
+    std::string token,revision;
+    uint64_t playbackEpoch=0,startTime=0,rejected=0;
+    std::optional<uint64_t> endTime,stoppedEndTime;
+    Failure failure=Failure::None;
+    bool completed=false;
+    std::vector<std::string> rack;
+    std::vector<ParameterChange> baseline;
+    std::vector<Source> sources;
+    std::vector<Target> targets;
+  };
 private:
   struct Source {
     Provider initial;
@@ -139,6 +160,29 @@ public:
     const auto found=std::find_if(sources_.begin(),sources_.end(),[&](const auto &s){return s.initial.plugin==plugin;});
     if(found==sources_.end())throw std::invalid_argument("Provider is not armed in this take");
     return found->dropped-found->initial.source.dropped;
+  }
+  Review review()const {
+    Review result;
+    result.token=token_;result.revision=revision_;result.playbackEpoch=playbackEpoch_;
+    result.startTime=start_;result.endTime=end_;result.rejected=rejected_;
+    result.stoppedEndTime=timeline_->stoppedEndTime(playbackEpoch_);
+    result.failure=failure_;result.completed=completed_;result.baseline=*before_;
+    result.rack.reserve(rack_.size());result.sources.reserve(sources_.size());
+    result.targets.reserve(targets_.size());
+    for(const auto &plugin:rack_)result.rack.push_back(plugin.instanceID);
+    for(const auto &s:sources_)result.sources.push_back({s.initial,s.dropped,s.drained});
+    for(const auto &target:targets_) {
+      result.targets.push_back({target->key_,target->minimum_,target->maximum_,target->loss(),target->events_});
+      auto &copy=result.targets.back();
+      // Stop can shorten previously published presentation coverage before
+      // the next worker poll. Preserve the raw event, but not a false frame.
+      if(result.stoppedEndTime)for(auto &event:copy.events)
+        if(event.frame&&event.hostTime>=*result.stoppedEndTime)event.frame.reset();
+      copy.loss.unmapped=size_t(std::count_if(copy.events.begin(),copy.events.end(),[](const auto &event){return !event.frame;}));
+    }
+    // Do not mutate live mappings, consume vendor notifications, seal,
+    // acknowledge a drain or retire history here.
+    return result;
   }
   bool observeProvider(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);

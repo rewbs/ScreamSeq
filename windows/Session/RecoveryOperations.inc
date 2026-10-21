@@ -5,6 +5,7 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       // alter the document, saved baselines, Undo, manual gestures or playback.
       auto copiedProject=project_;
       if(recording_)overlayRecording(copiedProject,*recording_);
+      const bool gestureRecording=plugins_->overlayRecordedRecovery(copiedProject);
       const bool editorChanged=plugins_->overlayRecoveryState(copiedProject);
       auto bytes=std::make_shared<const std::vector<std::byte>>(Project::serializeNativeProject(*document_,copiedProject));
       if(bytes->size()>Project::maximumProjectBytes)throw Api::ApiError(-32602,"Recovery project exceeds the 600 MiB limit");
@@ -30,9 +31,10 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       const auto &song=document_->song();
       result->title=::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle());
       if(!project_.path.empty())result->source=project_.path;
-      result->hasRecording=copiedProject.preserved.contains("recoveryTake");
+      result->hasRecording=copiedProject.preserved.contains("recoveryTake")||
+        copiedProject.preserved.contains("screamseqPluginGestureRecovery");
       result->hasOpenEditors=plugins_->openEditorCount()!=0;
-      result->needsProtection=editorChanged || bool(recording_) || result->hasRecording || project_.recoveredUnsaved ||
+      result->needsProtection=editorChanged || gestureRecording || bool(recording_) || result->hasRecording || project_.recoveredUnsaved ||
         document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision;
       return std::shared_ptr<const RecoverySnapshot>(std::move(result));
 }
@@ -68,8 +70,9 @@ std::future<std::shared_ptr<const DocumentView>> DocumentController::recover(
           throw Api::ApiError(-32001,"Manual plugin state changed before recovery restore; capture current work again");
         if(!discard) {
           auto copiedProject=project_;
-          if(recording_ || project_.recoveredUnsaved || document_->revision!=project_.savedRevision ||
+          if(recording_ || plugins_->hasRecordedEditors() || project_.recoveredUnsaved || document_->revision!=project_.savedRevision ||
             project_.pluginRevision!=project_.savedPluginRevision || project_.preserved.contains("recoveryTake") ||
+            project_.preserved.contains("screamseqPluginGestureRecovery") ||
             plugins_->overlayRecoveryState(copiedProject))
             throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before recovering");
         }

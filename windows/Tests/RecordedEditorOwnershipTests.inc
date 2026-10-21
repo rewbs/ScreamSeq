@@ -36,6 +36,22 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
     auto copy=project;
     need(!operations.overlayRecoveryState(copy)&&Project::encodePlist(Project::nativeProjectTree(*document,copy))==encoded(),
       "Recovery folded recorded vendor values into the saved manual baseline");
+    need(operations.overlayRecordedRecovery(copy),"Recovery omitted an owned plugin gesture take");
+    const auto archived=Project::serializeNativeProject(*document,copy);
+    const auto &takes=copy.preserved.at("screamseqPluginGestureRecovery");
+    need(takes.size()==1&&takes[0].at("reviewOnly")==true&&takes[0].at("version")==1&&
+      takes[0].at("providers").size()==1&&takes[0].at("providers")[0].at("plugin")==id,
+      "Recovery archive lost its review-only marker or stable provider identity");
+    need(operations.overlayRecordedRecovery(copy)&&Project::serializeNativeProject(*document,copy)==archived,
+      "Repeated recovery capture duplicated or changed the same retained take");
+    auto reopened=Project::openNativeProjectBytes(archived);
+    need(Project::encodePlist(reopened.state.preserved.at("screamseqPluginGestureRecovery"))==Project::encodePlist(takes)&&
+      Project::encodePlist(reopened.state.preserved.at("plugins"))==Project::encodePlist(project.preserved.at("plugins"))&&
+      projectAbsoluteAutomation(reopened.state)==projectAbsoluteAutomation(project),
+      "Recovery roundtrip changed raw gesture evidence, saved vendor state or accepted automation");
+    copy.preserved.erase("screamseqPluginGestureRecovery");
+    need(Project::serializeNativeProject(*document,copy)==encoded(),
+      "Gesture recovery changed unrelated project content");
   };
   auto clock=std::make_shared<RecordingFrameTimeline>();const auto arm=ScreamSeq::hostTime100ns();
   need(clock->publish(arm,arm+1,0,1,48000,41),"Owned recording clock failed");
@@ -56,6 +72,27 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   need(take->eventCount()==2&&previews==1&&manual==beforeManual&&encoded()==baselineBytes&&
     document->historySequence()==sequence&&operations.openEditorCount()==1&&stops==beforeStops,
     "Preview refusal lost input, captured manual state, closed the editor or changed history");
+  protectedRecovery();
+  {
+    auto copy=project;operations.overlayRecordedRecovery(copy);
+    const auto &target=copy.preserved.at("screamseqPluginGestureRecovery")[0].at("targets")[0];
+    const auto &original=take->target(0);
+    need(target.at("events").size()==2&&target.at("events")[0].at("value")==.25f&&
+      target.at("events")[1].at("value")==.75f&&target.at("unmapped")==original.loss().unmapped&&
+      !target.at("events")[1].contains("frame"),
+      "Recovery after refused preview lost raw order or invented uncovered frames");
+    for(size_t i=0;i<original.events().size();++i) {
+      const auto &event=original.events()[i];const auto &saved=target.at("events")[i];
+      need(saved.at("hostTime")==std::to_string(event.hostTime)&&saved.contains("frame")==event.frame.has_value()&&
+        (!event.frame||saved.at("frame")==std::to_string(*event.frame)),
+        "Recovery did not preserve exact original timestamps and mapped frames");
+    }
+    copy.preserved["screamseqPluginGestureRecovery"][0]["take"]="earlier-recovered-take";
+    operations.overlayRecordedRecovery(copy);
+    need(copy.preserved.at("screamseqPluginGestureRecovery").size()==2&&
+      copy.preserved.at("screamseqPluginGestureRecovery")[0].at("take")=="earlier-recovered-take",
+      "A new capture overwrote an earlier recovery archive");
+  }
   send(.5);rejectPreview=false;operations.flushEditors(true);
   need(take->eventCount()==3&&previews==2&&audible==std::vector<ParameterChange>{{0,7,.5f,0}}&&
     encoded()==baselineBytes&&manual==beforeManual,"Preview retry coalesced raw input or leaked into manual publication");

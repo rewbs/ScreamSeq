@@ -99,6 +99,9 @@ public:
   // Does not consume notifications, commit history, stop playback or apply the
   // graph recipe editor's explicit-Apply draft.
   bool overlayRecoveryState(Project::ProjectState &copy) const;
+  // Archive already captured original-time input without touching providers,
+  // playback, manual state or history. Restoring the archive never rearms it.
+  bool overlayRecordedRecovery(Project::ProjectState &copy) const;
   void editorWarning(std::string text){editorWarning_=std::move(text);}
   std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;

@@ -263,3 +263,36 @@ remain root-only in the accessibility tree. This is neither full screen-reader
 qualification nor temporal flicker/audio evidence. The failed automated gates
 still prohibit packaging this candidate. Recheck the new executable after its
 next gated build; preserve this bounded evidence rather than repeating discovery.
+
+## Follow-up candidate — 21 October, 22:05–22:19 UTC
+
+Frozen source `86538cb4226d74c257eefc86c88ceb1ee82cc1b9` built once in the
+clean qualification checkout, 22:05:43.746–22:07:41.647 UTC. ARM64 Release
+executable SHA-256:
+`318bb274d082efc31d83371d580454d5eac44372f73b44f67fb2d39a133d4098`.
+Receipts are in `bin/navigation-20261021/followup/`; the next conservative
+build gate is **23:07:42 UTC**. Do not repeat this build.
+
+All **22 native registrations and 14 actual-app checks passed**. Native controls
+took 6.22 seconds, the other 21 registrations 299.69 seconds, and the actual-app
+checks 29.31 seconds. This includes the previously failing graph double-click
+destination, Pattern menu focus, retained Note context navigation, all three
+envelope drag regressions, and Bank capture/link/master/history/native reopen.
+Mixer previews again caused zero neighboring-strip layout messages across 24
+previews. Source and executable hashes were unchanged through the checks.
+
+A fresh isolated QA process, PID 35936, launched the exact executable with
+`--inspection --automation --seconds 900` and disposable Midnight Circuit.
+Computer Use discovered the correct window, but activation and one freshly
+discovered retry both failed with `GetCursorPos: Access is denied (0x80070005)`.
+The user was asked to unlock the desktop. `foreground-check.json` records
+**blocked**, not passed. There is no new visible, keyboard, temporal or audio
+claim. The prior unlocked observations above remain bounded evidence for
+unchanged navigation source, but do not substitute for inspecting this executable.
+
+Production packaging remains pending the fresh foreground check. The prepared
+`followup/package.ps1` requires that receipt and will produce
+`~/Downloads/ScreamSeq-Windows-ARM64-navigation-86538cb42/ScreamSeq.exe` only after
+it passes. That path is a planned destination, not a delivered binary. Nothing
+was pushed or merged. Subsequent recording recovery edits are a separate,
+unbuilt source batch; see [the staged recording recovery batch](PLUGIN-GESTURE-RECOVERY-2026-10-21.md).
