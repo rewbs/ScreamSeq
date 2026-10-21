@@ -219,3 +219,54 @@ access is restored. Automated focus/capture and drag checks passed, but no
 claim of live temporal flicker elimination or sustained frame pacing is made.
 This outstanding UI check needs no rebuild: reuse the packaged executable and
 hash above. No push or merge was performed in this follow-up.
+
+### Resumed live interaction check
+
+After the user restored desktop access and requested continuation, the same
+packaged executable/hash was launched as isolated PID 37760 with silent output,
+automation and a private report path. There were no existing ScreamSeq
+processes at launch. No build or test-suite rerun was needed.
+
+Computer Use successfully exercised gain, balance, pre-balance and width during
+demo playback. API reads confirmed Track 1 (`n2`) retained the edits: gain
+-57 dB, balance 0.75, pre-balance approximately 0.42, width 1.50. After dragging,
+arrow input remained on the gain fader (-57.1 to -57.0 dB), and another Left
+arrow on width changed the saved value from 1.50 to 1.49. All four sliders
+accepted drag and subsequent arrow input. No lost edit or busy-worker error
+was observed in this bounded interaction.
+
+After stopping playback, a guarded API setup added the built-in Gainer and
+the same two-point gain curve used by the regression. Computer Use dragged
+the first point in the floating inspector from row 8/value 0.25 to row
+10/value approximately 0.379509. The resulting curve was visible and saved.
+The inspector was then docked through the supported workspace API; another
+drag moved the point to row 12/value approximately 0.518868. Right-arrow input
+then moved the same selected point to row 13 (position 3328), with focus on
+the automation canvas, 1024 preview samples, no pending operation, no dirty
+draft and the saved status. The other point stayed at position 8192/value
+0.75. This verifies the real drag/release path and docked keyboard focus.
+
+The floating inspector is not independently enumerated by Computer Use;
+targeting its parent for keyboard input activated the main window instead.
+That attempted floating-key check is inconclusive, not an application focus
+failure. The docked keyboard check above and the passing native focus/capture
+checks provide the relevant verified evidence. Live captures occur after
+each drag, so continuous mid-drag geometry remains supported by the three
+automated regressions rather than by a frame-by-frame screen capture.
+
+The QA session closed normally, discarding only its disposable edits.
+`live-resumed-playback.json` records 370.71 seconds of total process activity,
+6,165 drawn frames and zero occluded frames. Audio ran for 15,494 callbacks
+(7,438,080 frames, 154.94 seconds at 48 kHz/480 frames) before being stopped
+for the envelope check. Maximum callback time was 4,577.4 microseconds, with
+zero processor faults, deadline overruns, starvation indicators or device
+errors. These results are bounded to this demo and interaction sequence;
+`sustainedPresentationQualified` and `realtimeAuditPassed` remain false.
+
+The requested live mixer/envelope interaction check is now complete. The
+measured repaint regressions and these live interactions support the fixes;
+they do not establish display-frame pacing or eliminate every possible
+flicker source. Detailed API snapshots are `resumed-mixer-*.json`,
+`resumed-envelope-*.json` and `resumed-docked-key.json` beside the existing
+qualification receipts. No product source changed, and nothing was pushed
+or merged during this resumed check.
