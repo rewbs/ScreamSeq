@@ -115,7 +115,7 @@
             place(id,0,0,1,1,false);
         updateDocumentLoadReport();
         refreshPlaybackLoopControl();
-        EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
+        EnableWindow(controls.at(playbackLoopCommand),!presentationBusy()&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
         place(recoveryCommand,client.right/s-178,client.bottom/s-26,168,23);
 		auto g=geometry(); bool show=workspaceInspectorVisible();
@@ -134,7 +134,7 @@
         const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
         ScreamSeq::NativeControls::text(controls.at(noteColumnMuteCommand),(columnMuted?L"Unmute ":L"Mute ")+std::to_wstring(channel+1));
         ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
-        EnableWindow(controls.at(noteColumnMuteCommand),!busy&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
+        EnableWindow(controls.at(noteColumnMuteCommand),!presentationBusy()&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
         place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
 		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
 		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);

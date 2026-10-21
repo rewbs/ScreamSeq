@@ -42,7 +42,7 @@
             contextPanelEditor=std::move(current);
         }
         RECT client{};GetClientRect(window,&client);
-        const bool available=!busy&&!recoveryRestoring&&!preparingWorkspaceLayout&&!documentDrafts.departing();
+        const bool available=!presentationBusy()&&!recoveryRestoring&&!preparingWorkspaceLayout&&!documentDrafts.departing();
         const ContextPanelStamp stamp{contextPanelEditor,view->session.revision,graphID,graphNode,mixerTarget,selectedPlugin,
             client.bottom,int(GetDpiForWindow(window)),workspaceState.contextPanelVisible,available,hasPluginParameterTarget()};
         if(!force&&contextPanelStamp&&*contextPanelStamp==stamp)return;

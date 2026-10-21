@@ -503,6 +503,11 @@ public:
     unsigned patternRows() const {return view->pattern(patternIndex).rows;}
 
     bool busy=false;
+    // Admission is immediate; presenting every short worker round trip as a
+    // disabled workspace makes live mixer/parameter previews flash at audio UI
+    // cadence. Only a sustained wait needs that visible state.
+    bool deferBusyPresentation=false;
+    bool presentationBusy() const {return busy&&!deferBusyPresentation;}
     // Nested modal loops (message boxes, file choosers) dispatch this window's
     // messages. Close/shutdown must not prompt again or destroy the window
     // underneath them.
@@ -522,10 +527,14 @@ public:
     uint64_t stopGeneration=0;
     template<class T> T await(std::future<T> future) {
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy");
-        busy=true;updateTitle();if(!departureInput)updateSongTools();
-        struct Guard {Application &app;~Guard(){app.busy=false;app.updateTitle();if(!app.departureInput)app.updateSongTools();}} guard{*this};
+        busy=true;deferBusyPresentation=true;const auto started=GetTickCount64();
+        struct Guard {Application &app;~Guard(){const bool presented=!app.deferBusyPresentation;app.busy=false;app.deferBusyPresentation=false;
+            if(presented){app.updateTitle();if(!app.departureInput)app.updateSongTools();app.refreshContextPanel();app.frameRequested=true;}}} guard{*this};
         std::exception_ptr presentationError;
         while(future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready) {
+            if(deferBusyPresentation&&GetTickCount64()-started>=150){
+                deferBusyPresentation=false;updateTitle();if(!departureInput)updateSongTools();refreshContextPanel();frameRequested=true;
+            }
             controller->service();
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {

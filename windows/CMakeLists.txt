@@ -201,6 +201,9 @@ if(BUILD_TESTING)
     add_test(NAME workspace-context-panel-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-context-panel-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;presentation"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=context-panel" TIMEOUT 120)
+    add_test(NAME workspace-worker-presentation-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-worker-presentation-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;presentation"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=worker-presentation" TIMEOUT 30)
     set_tests_properties(workspace-pattern-display-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;presentation"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=pattern-display" TIMEOUT 120)
     set_tests_properties(workspace-pattern-selection-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;selection"

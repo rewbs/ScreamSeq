@@ -29,6 +29,7 @@ private:
   float stripTop_=34,sliderTop_=75,sliderHeight_=32;
   int scrollOffset_=0,contentHeight_=0,wheelHorizontal_=0,wheelVertical_=0;bool layingOut_=false;
   HWND lastLayoutFocus_{};
+  std::vector<int> tabOrder_;
   // 240 visible strips, two neighbors and distinct focus/gesture reservations.
   static constexpr size_t maximumVisibleStrips=240,maximumStrips=maximumVisibleStrips+4;
   bool retained()const noexcept{return gesture_.active()||pending_||completion_.retained();}
@@ -246,10 +247,12 @@ private:
       const wchar_t *roleName=kind=="track"?L"Track":kind=="group"?L"Group":kind=="return"?L"Return":kind=="master"?L"Master":L"Bus";
       set(id+name,value.at("name"));set(id+role,roleName);set(id+gain,value.at("gainDB"));
       set(id+preGain,value.at("preGainDB"));
-      NativeInputGate::present(controls_.at(id+fader),TBM_SETPOS,TRUE,LPARAM(std::lround((24-value.at("gainDB").get<double>())*10)));
-      NativeInputGate::present(controls_.at(id+pan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("pan").get<double>()+1)*100)));
-      NativeInputGate::present(controls_.at(id+prePan),TBM_SETPOS,TRUE,LPARAM(std::lround((value.at("prePan").get<double>()+1)*100)));
-      NativeInputGate::present(controls_.at(id+width),TBM_SETPOS,TRUE,LPARAM(std::lround(value.at("width").get<double>()*100)));
+      const auto slider=[&](int part,long position){const auto control=controls_.at(id+part);
+        if(SendMessageW(control,TBM_GETPOS,0,0)!=position)NativeInputGate::present(control,TBM_SETPOS,TRUE,position);};
+      slider(fader,std::lround((24-value.at("gainDB").get<double>())*10));
+      slider(pan,std::lround((value.at("pan").get<double>()+1)*100));
+      slider(prePan,std::lround((value.at("prePan").get<double>()+1)*100));
+      slider(width,std::lround(value.at("width").get<double>()*100));
       const auto title=std::wstring(roleName)+L" "+wide(value.at("name").get<std::string>());
       set(id+fader,title+L" gain / dB");
       set(id+pan,title+L" balance / 0 left, 100 center, 200 right");
@@ -321,7 +324,10 @@ private:
     SetScrollInfo(window_,SB_HORZ,&scroll,TRUE);
   }
   void layout()override {
-    if(layingOut_)return;
+    // Setting the fader's numeric readout emits EN_CHANGE synchronously. The
+    // base owner requests layout after that notification even though action()
+    // correctly ignores it. Do not rebind/reorder every strip per pointer move.
+    if(layingOut_||setting_)return;
     struct LayoutGuard {bool &value;LayoutGuard(bool &v):value(v){value=true;}~LayoutGuard(){value=false;}}guard(layingOut_);
     const auto [w,clientHeight]=size();const size_t total=data_.contains("buses")?data_["buses"].size():0;
     contentHeight_=std::max(347,int(clientHeight));const float h=float(contentHeight_);
@@ -363,10 +369,13 @@ private:
     std::vector<size_t> ordered;
     for(size_t i=0;i<bindings_.size();++i)if(positions_[i]!=SIZE_MAX)ordered.push_back(i);
     std::stable_sort(ordered.begin(),ordered.end(),[&](size_t a,size_t b){return positions_[a]<positions_[b];});
-    for(int id:{previous,next,cancel,review,accept})
-      SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
-    for(const auto i:ordered)for(int part=0;part<=lastPart;++part)
-      SetWindowPos(controls_.at(base+int(i)*stride+part),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+    std::vector<int> tabOrder{previous,next,cancel,review,accept};
+    for(const auto i:ordered)for(int part=0;part<=lastPart;++part)tabOrder.push_back(base+int(i)*stride+part);
+    if(tabOrder!=tabOrder_){
+      for(const auto id:tabOrder)
+        SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+      tabOrder_=std::move(tabOrder);
+    }
     enableEdits();
     resetPresentation_=false;
     lastLayoutFocus_=GetFocus();

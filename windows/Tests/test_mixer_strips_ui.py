@@ -159,6 +159,30 @@ class MixerStripsUITests(unittest.TestCase):
         self.assertEqual(self.read('mixer.get'), saved)
         self.assertEqual(self.strip(bus)['bus'], bus)
 
+    def test_preview_does_not_relayout_neighboring_strip(self):
+        bus, base = self.open_strips()
+        neighbor = next(item for item in self.settle()['mixerStrips']['strips']
+                        if item['bus'] != bus and item['inViewport'])
+        control = self.control(neighbor['controlBase'] + 1)
+        private_desktop.user.GetPropW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
+        private_desktop.user.GetPropW.restype = wintypes.HANDLE
+        self.assertTrue(private_desktop.user.GetPropW(control, 'ScreamSeq.ControlInspection'))
+        def layouts():
+            return private_desktop.user.GetPropW(control, 'ScreamSeq.LayoutCount') or 0
+        self.slide(base + 1, 330)
+        self.refresh()
+        before = layouts()
+        original = self.read('mixer.get')
+        for position in range(331, 355):
+            self.slide(base + 1, position)
+            self.refresh()
+        delta = layouts() - before
+        print('Neighbor strip layout messages across 24 previews:', delta)
+        self.assertEqual(delta, 0, 'Moving one fader relayouts another strip')
+        self.assertEqual(self.read('mixer.get'), original, 'Transient preview became a saved edit')
+        self.slide(base + 1, 354, notification=8)
+        self.assertAlmostEqual(self.bus(bus)['gainDB'], -11.4)
+
     def test_keyboard_control_cancel_and_details_preserve_target(self):
         bus, base = self.open_strips()
         self.field(base + 7, '-9.123456789')

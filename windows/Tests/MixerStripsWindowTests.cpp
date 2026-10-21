@@ -73,6 +73,44 @@ void interactions(HWND owner) {
   f.press(13);check(f.writes==2&&f.tool.documentDraft()->uncertain,"Review repeated a durable mixer edit");
   f.press(14);check(f.writes==2&&!f.tool.hasGesture()&&f.audible==-15,"Accept current repeated or lost the saved result");
 }
+struct StripPresentationProbe {
+  HWND control;unsigned positions=0,layouts=0,paints=0;
+  explicit StripPresentationProbe(HWND h):control(h){
+    check(SetWindowSubclass(h,observe,93,reinterpret_cast<DWORD_PTR>(this)),"Observe unrelated strip presentation");
+  }
+  ~StripPresentationProbe(){RemoveWindowSubclass(control,observe,93);}
+  static LRESULT CALLBACK observe(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){
+    auto &probe=*reinterpret_cast<StripPresentationProbe *>(data);
+    if(m==TBM_SETPOS)++probe.positions;
+    if(m==WM_WINDOWPOSCHANGING)++probe.layouts;
+    if(m==WM_PAINT)++probe.paints;
+    return DefSubclassProc(h,m,w,l);
+  }
+};
+void stableStripPresentation(HWND owner){
+  Fixture f(owner);const auto active=f.control(101),neighbor=f.control(117);
+  SetFocus(active);f.tool.update();
+  // Enter the gesture before observing: disabling competing edits once is
+  // intentional. Its repeated previews must not redraw/reorder those controls.
+  f.slide(330);f.tool.update();UpdateWindow(neighbor);
+  StripPresentationProbe probe(neighbor);
+  for(int value=331;value<351;++value){
+    f.slide(value);f.tool.update();
+    Tracker::MixerMeterReading reading;f.tool.meters(reading);
+    UpdateWindow(f.tool.window());UpdateWindow(neighbor);
+    check(GetFocus()==active,"Mixer preview moved focus from its captured fader");
+  }
+  check(probe.positions==0&&probe.layouts==0&&probe.paints==0,
+    "Fader readout or meter updates repaint/rebind unrelated strips");
+  check(f.writes==0&&f.previews>1,"Presentation check did not exercise transient previews");
+  f.slide(350,TB_ENDTRACK);
+  check(f.writes==1&&f.find("n1")["gainDB"]==-11,"Presentation optimization changed the final mixer commit");
+  // Focus changes still reconcile reservations, without rewriting unchanged
+  // trackbar positions or churning an already-correct native tab order.
+  SetFocus(f.control(103));f.tool.update();
+  check(probe.positions==0&&probe.layouts==0,"Unchanged focus layout rewrote or reordered neighbor sliders");
+  std::cout<<"Mixer presentation: 20 fader/meter previews leave neighboring slider position, layout and paint untouched\n";
+}
 void layoutAndIdentity(HWND owner) {
   Fixture f(owner);
   f.tool.dockBounds(0,0,528,226);f.tool.update();
@@ -317,6 +355,6 @@ void viewportPool(HWND owner) {
 }
 int main(){try {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingKeyboardIntent(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
+  ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMixerStrips",[]{Owner owner;interactions(owner.window);stableStripPresentation(owner.window);layoutAndIdentity(owner.window);inputAndWidth(owner.window);pendingSliderInput(owner.window);pendingKeyboardIntent(owner.window);pendingTextRetention(owner.window);viewportPool(owner.window);});
   std::cout<<"PASS native mixer gesture coalescing, exact no-op, stale cancel, raw retention, capture loss and uncertain result review\n";return 0;
 }catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -136,8 +136,8 @@
         auto name=view->path.empty() ? wide(view->session.document.value("title",std::string())) : view->path.filename().wstring();
         if(name.empty())name=L"Untitled";
         auto title=(view->dirty ? L"* " : L"")+name+L" - "+wide(view->session.document.at("format").get<std::string>())+L" - ScreamSeq";
-        if(busy) title+=L" [Document worker busy]";
-        ScreamSeq::NativeInputGate::text(window,title.c_str());
+        if(presentationBusy()) title+=L" [Document worker busy]";
+        ScreamSeq::NativeControls::text(window,title);
     }
     Json edit(const std::string &method,Json params) {
         params["expectedRevision"]=view->session.revision;

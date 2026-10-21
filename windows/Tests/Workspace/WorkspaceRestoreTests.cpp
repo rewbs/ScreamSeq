@@ -1113,6 +1113,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
 #include "ContextPanelApplicationTests.inc"
+#include "WorkerPresentationApplicationTests.inc"
 #include "ModuleExportApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
 #include "EffectPickerApplicationTests.inc"
@@ -1248,6 +1249,10 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
                     timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"worker-presentation") {
+                    timedRestoreCase("short and sustained worker presentation",applicationWorkerPresentation);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"recipe-edits") {
