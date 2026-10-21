@@ -62,6 +62,13 @@ LRESULT CALLBACK appearanceNotifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PT
 }
 void retainedThemeChange(HWND main){
   Tool outer(main);outer.show();Tool inner(outer.window());inner.dock(outer.window());inner.dockBounds(0,100,480,240);inner.show();
+  {
+    const auto dc=CreateCompatibleDC(nullptr);require(dc,"Create tool button color probe");
+    const auto brush=SendMessageW(inner.window(),WM_CTLCOLORBTN,reinterpret_cast<WPARAM>(dc),reinterpret_cast<LPARAM>(inner.control(2)));
+    const auto background=GetDCBrushColor(dc);DeleteDC(dc);
+    require(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&background==ScreamSeq::NativeControls::colors(ScreamSeq::NativeControls::Surface::inspector,ScreamSeq::NativeControls::highContrast()).background,
+      "Tool button color request fell through to the light default brush");
+  }
   const auto edit=inner.control(1),selector=inner.control(3);SetFocus(edit);SendMessageW(edit,EM_SETSEL,2,7);
   const auto beforeOuterLayouts=outer.layouts,beforeInnerLayouts=inner.layouts,beforeReleases=inner.deactivations;
   const auto undo=SendMessageW(edit,EM_CANUNDO,0,0);unsigned notifications=0;

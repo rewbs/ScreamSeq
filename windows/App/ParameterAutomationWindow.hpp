@@ -236,8 +236,9 @@ private:
   }
   void resumeVisiblePresentation()noexcept override{if(previewNeeded_)SetTimer(window_,3,120,nullptr);}
   void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(!visible())return;if(pending_||dragging_){SetTimer(window_,3,120,nullptr);return;}if(previewNeeded_)previewNow();}
-  void drawControl(const DRAWITEMSTRUCT &d)override{
-    if(d.CtlType!=ODT_BUTTON||d.CtlID<pageTarget||d.CtlID>pageTools){NativeToolWindow::drawControl(d);return;}
+  void drawControl(const DRAWITEMSTRUCT &item)override{
+    if(item.CtlType!=ODT_BUTTON||item.CtlID<pageTarget||item.CtlID>pageTools){NativeToolWindow::drawControl(item);return;}
+    const NativeControls::ItemBuffer buffer(item);const auto &d=buffer.item();
     NativeControls::recordDraw(d.hwndItem);const auto saved=SaveDC(d.hDC);
     const bool selected=int(d.CtlID)-pageTarget==compactPage_,contrast=NativeControls::highContrast();
     NativeControls::fill(d.hDC,d.rcItem,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):selected?RGB(38,69,75):RGB(35,49,63));
@@ -247,7 +248,7 @@ private:
     static constexpr std::array<const wchar_t *,4> names={L"Target",L"Curve",L"Formula",L"Tools"};
     DrawTextW(d.hDC,names[size_t(d.CtlID-pageTarget)],-1,&label,DT_SINGLELINE|DT_VCENTER|DT_CENTER|DT_NOPREFIX);
     if(selected){RECT edge=d.rcItem;edge.top=edge.bottom-std::max(1,MulDiv(2,GetDpiForWindow(window_),96));NativeControls::fill(d.hDC,edge,contrast?GetSysColor(COLOR_HIGHLIGHTTEXT):RGB(114,216,191));}
-    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);
+    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);buffer.publish();
   }
   void layout()override{
     if(ready_)set(apply,reviewRequired_?L"Use preview":L"Retry changes");

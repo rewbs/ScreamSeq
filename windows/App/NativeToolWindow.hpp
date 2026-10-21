@@ -378,7 +378,7 @@ protected:
       case WM_HSCROLL:case WM_VSCROLL:if(self->ready_&&self->controlScroll(m,w,reinterpret_cast<HWND>(l)))return 0;break;
       case WM_DRAWITEM:self->drawControl(*reinterpret_cast<DRAWITEMSTRUCT *>(l));return TRUE;
       case WM_MEASUREITEM:reinterpret_cast<MEASUREITEMSTRUCT *>(l)->itemHeight=unsigned(22*GetDpiForWindow(h)/96);return TRUE;
-      case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:return NativeControls::controlColor(reinterpret_cast<HDC>(w),reinterpret_cast<HWND>(l),NativeControls::Surface::inspector);
+      case WM_CTLCOLORBTN:case WM_CTLCOLORSTATIC:case WM_CTLCOLOREDIT:case WM_CTLCOLORLISTBOX:return NativeControls::controlColor(reinterpret_cast<HDC>(w),reinterpret_cast<HWND>(l),NativeControls::Surface::inspector);
       case WM_KEYDOWN:case WM_SYSKEYDOWN:if(self->workspaceShortcut(w,(l&(1LL<<30))!=0,true)||(self->musicalKey_&&self->musicalKey_(GetFocus(),w,(l&(1LL<<30))!=0))||self->key(w,(GetKeyState(VK_CONTROL)&0x8000)!=0,(GetKeyState(VK_SHIFT)&0x8000)!=0)||(self->workspaceKeys_&&self->workspaceKeys_(w,(l&(1LL<<30))!=0))||self->workspaceShortcut(w,(l&(1LL<<30))!=0,false))return 0;break;
       case WM_KEYUP:case WM_SYSKEYUP:if((self->musicalRelease_&&self->musicalRelease_(w))||self->keyUp(w))return 0;break;
       case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:{POINT p{GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(h,&p);const float scale=96.0f/GetDpiForWindow(h);if(self->wheel(m,p.x*scale,p.y*scale,w))return 0;break;}

@@ -1086,7 +1086,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             const BOOL dark=!ScreamSeq::NativeControls::highContrast();DwmSetWindowAttribute(window,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
             ScreamSeq::NativeControls::refreshTheme(window,message,wp,lp);app->frameRequested=true;break;}
         case WM_MEASUREITEM: reinterpret_cast<MEASUREITEMSTRUCT *>(lp)->itemHeight=unsigned(22*GetDpiForWindow(window)/96);return TRUE;
-        case WM_CTLCOLORLISTBOX:case WM_CTLCOLOREDIT:case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLORBTN:case WM_CTLCOLORLISTBOX:case WM_CTLCOLOREDIT:case WM_CTLCOLORSTATIC:
             return ScreamSeq::NativeControls::controlColor(reinterpret_cast<HDC>(wp),reinterpret_cast<HWND>(lp),ScreamSeq::NativeControls::Surface::main);
         case WM_COMMAND:
             if(!lp&&!HIWORD(wp)&&app->dispatchMenuBar(LOWORD(wp)))return 0;

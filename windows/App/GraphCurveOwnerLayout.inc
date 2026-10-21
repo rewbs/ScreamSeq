@@ -6,8 +6,9 @@
     if(pointFields_)return selected_>=0?L"Point changes save after typing / correct invalid values":L"Enter point fields, then Set point";
     return status_;
   }
-  void drawControl(const DRAWITEMSTRUCT &d)override{
-    if(d.CtlType!=ODT_BUTTON||d.CtlID<pageCurve||d.CtlID>pageTools){NativeToolWindow::drawControl(d);return;}
+  void drawControl(const DRAWITEMSTRUCT &item)override{
+    if(item.CtlType!=ODT_BUTTON||item.CtlID<pageCurve||item.CtlID>pageTools){NativeToolWindow::drawControl(item);return;}
+    const NativeControls::ItemBuffer buffer(item);const auto &d=buffer.item();
     NativeControls::recordDraw(d.hwndItem);const auto saved=SaveDC(d.hDC);
     const bool selected=int(d.CtlID)-pageCurve==page_,contrast=NativeControls::highContrast();
     NativeControls::fill(d.hDC,d.rcItem,contrast?GetSysColor(selected?COLOR_HIGHLIGHT:COLOR_WINDOW):selected?RGB(38,69,75):RGB(35,49,63));
@@ -17,7 +18,7 @@
     static constexpr std::array<const wchar_t *,3> names={L"Curve",L"Formula",L"Tools"};
     DrawTextW(d.hDC,names[size_t(d.CtlID-pageCurve)],-1,&label,DT_SINGLELINE|DT_VCENTER|DT_CENTER|DT_NOPREFIX);
     if(selected){RECT edge=d.rcItem;edge.top=edge.bottom-std::max(1,MulDiv(2,GetDpiForWindow(window_),96));NativeControls::fill(d.hDC,edge,contrast?GetSysColor(COLOR_HIGHLIGHTTEXT):RGB(114,216,191));}
-    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);
+    if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){RECT r=d.rcItem;InflateRect(&r,-3,-3);DrawFocusRect(d.hDC,&r);}RestoreDC(d.hDC,saved);buffer.publish();
   }
   void layout()override{
     if(!ready_)return;

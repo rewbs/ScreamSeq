@@ -5,6 +5,13 @@ void applicationWorkerPresentation(){
     app.command(mixerCommand);SetFocus(app.window);app.refreshContextPanel();
     const auto action=app.controls.at(contextActionFirst);
     restoreCheck(IsWindowEnabled(action),"Mixer context action unavailable before worker wait");
+    {
+        const auto dc=CreateCompatibleDC(nullptr);restoreCheck(dc,"Create workspace button color probe");
+        const auto brush=SendMessageW(app.window,WM_CTLCOLORBTN,reinterpret_cast<WPARAM>(dc),reinterpret_cast<LPARAM>(action));
+        const auto background=GetDCBrushColor(dc);DeleteDC(dc);
+        restoreCheck(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&background==ScreamSeq::NativeControls::colors(ScreamSeq::NativeControls::Surface::main,ScreamSeq::NativeControls::highContrast()).background,
+          "Workspace button color request fell through to the light default brush");
+    }
     struct Probe {
         HWND window,action;unsigned titles=0,enables=0;
         static LRESULT CALLBACK observe(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){

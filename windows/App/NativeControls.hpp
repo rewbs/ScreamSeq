@@ -211,6 +211,12 @@ inline LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DW
   if(s->edit&&m==WM_CHAR&&w==1){SendMessageW(h,EM_SETSEL,0,-1);return 0;}
   if(themeMessage(m)){s->contrast=highContrast();InvalidateRect(h,nullptr,FALSE);}
   if(s->button){
+    // BS_OWNERDRAW's native erase uses the system button-face brush before
+    // WM_DRAWITEM supplies our complete buffered frame. That light rectangle
+    // is observable on enable/release and when a retained page is exposed.
+    // Keep the previous pixels until the owner publishes the whole item.
+    // Standard check/radio/push buttons retain their native erase behavior.
+    if(m==WM_ERASEBKGND&&(GetWindowLongPtrW(h,GWL_STYLE)&BS_TYPEMASK)==BS_OWNERDRAW)return 1;
     if(m==WM_MOUSEMOVE&&!s->hot&&IsWindowEnabled(h)){
       TRACKMOUSEEVENT tracking{sizeof(tracking),TME_LEAVE,h,0};
       if(TrackMouseEvent(&tracking)){s->hot=true;InvalidateRect(h,nullptr,FALSE);}

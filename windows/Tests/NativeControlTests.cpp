@@ -138,6 +138,27 @@ void nativeControlAppearance(HWND parent,HFONT font){
   require(button.window,"Create appearance fixture button");ScreamSeq::Tests::ownGuiWindow(button.window);
   install(button.window);SendMessageW(button.window,WM_SETFONT,reinterpret_cast<WPARAM>(font),FALSE);
   Bitmap bitmap(180,36);DRAWITEMSTRUCT draw{};draw.CtlType=ODT_BUTTON;draw.hwndItem=button.window;draw.hDC=bitmap.dc;draw.rcItem={0,0,180,36};
+  {
+    FixtureResources stock;
+    stock.window=CreateWindowW(L"BUTTON",L"Stock erase baseline",WS_CHILD|BS_OWNERDRAW,0,0,180,36,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    require(stock.window,"Create stock button erase baseline");ScreamSeq::Tests::ownGuiWindow(stock.window);
+    fill(bitmap.dc,draw.rcItem,RGB(7,19,31));
+    SendMessageW(stock.window,WM_ERASEBKGND,reinterpret_cast<WPARAM>(bitmap.dc),0);
+    require(bitmap.at(10,6)!=RGB(7,19,31),"Stock button baseline did not exercise native background erasure");
+    std::cout<<"Stock owner-button erase replaced retained pixels with COLORREF "<<bitmap.at(10,6)<<'\n';
+  }
+  // Test the intermediate erase, not just the final owner-drawn screenshot.
+  // The old subclass allowed BUTTON to replace this with COLOR_BTNFACE.
+  // Cover both normal and system-color presentation without changing the OS.
+  for(bool contrast:{false,true})for(bool enabled:{true,false}){
+    state(button.window)->contrast=contrast;EnableWindow(button.window,enabled);
+    const auto sentinel=RGB(7,19,31);fill(bitmap.dc,draw.rcItem,sentinel);
+    require(SendMessageW(button.window,WM_ERASEBKGND,reinterpret_cast<WPARAM>(bitmap.dc),0)!=0,
+      "Owner-drawn button did not consume its background erase");
+    for(int y=0;y<bitmap.height;++y)for(int x=0;x<bitmap.width;++x)
+      require(bitmap.at(x,y)==sentinel,"Owner-drawn button exposed a blank system-face frame before its complete item");
+  }
+  state(button.window)->contrast=highContrast();EnableWindow(button.window,TRUE);
   SetTextColor(bitmap.dc,RGB(1,2,3));SetBkColor(bitmap.dc,RGB(4,5,6));SetBkMode(bitmap.dc,OPAQUE);
   const auto originalFont=GetCurrentObject(bitmap.dc,OBJ_FONT);
   buttonItem(draw,Surface::inspector,false,false);require(bitmap.at(10,6)==RGB(35,49,63),"Inspector action lost its normal surface");
