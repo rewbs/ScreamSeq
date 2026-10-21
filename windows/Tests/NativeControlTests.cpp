@@ -166,13 +166,30 @@ void nativeControlAppearance(HWND parent,HFONT font){
     require(palette.text==expected&&palette.detail==expected,"High-contrast secondary list text does not retain the system foreground");
   }
   require(GetTextColor(bitmap.dc)==RGB(1,2,3)&&GetBkColor(bitmap.dc)==RGB(4,5,6)&&GetBkMode(bitmap.dc)==OPAQUE,"Native list draw leaked DC state");
+  // No cleared-but-unlabelled intermediate item may reach the destination.
+  const RECT all{0,0,180,36};const auto sentinel=RGB(7,19,31);
+  fill(bitmap.dc,all,sentinel);draw.rcItem={24,8,156,32};
+  {
+    const ItemBuffer buffered(draw);const auto &item=buffered.item();
+    require(item.hDC!=draw.hDC,"Owner-drawn item did not acquire an offscreen buffer");
+    fill(item.hDC,item.rcItem,RGB(80,90,100));
+    require(bitmap.at(30,12)==sentinel,"Owner-drawn background reached the target before item completion");
+    buffered.publish();
+  }
+  require(bitmap.at(30,12)==RGB(80,90,100)&&bitmap.at(23,12)==sentinel&&bitmap.at(156,12)==sentinel&&bitmap.at(30,7)==sentinel,
+    "Buffered item did not publish exactly its offset bounds");
+  for(unsigned i=0;i<4;++i)listItem(draw,L"Buffer warm-up",false);
+  GdiFlush();const auto handles=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
+  for(unsigned i=0;i<200;++i){buttonItem(draw,Surface::main,false,false);listItem(draw,L"Retained row",false);}
+  GdiFlush();require(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)==handles,"Buffered native item paints leaked GDI resources");
+  require(bitmap.at(23,12)==sentinel&&bitmap.at(156,12)==sentinel,"Owner-drawn item changed pixels outside its bounds");
   const auto brush=controlColor(bitmap.dc,button.window,Surface::main,true);
   require(brush==reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH))&&GetTextColor(bitmap.dc)==GetSysColor(COLOR_WINDOWTEXT)&&GetBkColor(bitmap.dc)==GetSysColor(COLOR_WINDOW),"Native field ignores system text/background roles");
   EnableWindow(button.window,FALSE);controlColor(bitmap.dc,button.window,Surface::inspector,true);
   require(GetTextColor(bitmap.dc)==GetSysColor(COLOR_GRAYTEXT),"Disabled native field ignores system disabled text");
   // This explicitly selects the system-color rendering branch without changing
   // the musician's OS theme. Foreground high-contrast qualification is separate.
-  std::cout<<"Native appearance: pressed/hot/active/disabled, focus cues, system colors and DC isolation\n";
+  std::cout<<"Native appearance: pressed/hot/active/disabled, focus cues, system colors, DC isolation and atomic buffered items\n";
 }
 void reportDrawing(HWND parent,HFONT font){
   using namespace ScreamSeq::NativeReportList;

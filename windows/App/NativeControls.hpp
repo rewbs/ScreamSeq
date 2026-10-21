@@ -89,6 +89,33 @@ struct SavedDC {
   ~SavedDC(){if(saved)RestoreDC(dc,saved);}
   SavedDC(const SavedDC &)=delete;SavedDC &operator=(const SavedDC &)=delete;
 };
+// Publish a complete owner-drawn item in one blit. Painting its background and
+// caption directly into a window DC exposes a blank intermediate button/row.
+class ItemBuffer {
+  DRAWITEMSTRUCT original_,item_;
+  HDC memory_{};HBITMAP bitmap_{};HGDIOBJ previous_{};
+public:
+  explicit ItemBuffer(const DRAWITEMSTRUCT &item):original_(item),item_(item){
+    const auto width=item.rcItem.right-item.rcItem.left,height=item.rcItem.bottom-item.rcItem.top;
+    if(width<=0||height<=0)return;
+    memory_=CreateCompatibleDC(item.hDC);bitmap_=CreateCompatibleBitmap(item.hDC,width,height);
+    if(memory_&&bitmap_){
+      previous_=SelectObject(memory_,bitmap_);
+      if(previous_&&previous_!=HGDI_ERROR){item_.hDC=memory_;item_.rcItem={0,0,width,height};}
+    }
+  }
+  void publish()const{
+    if(memory_&&item_.hDC==memory_)
+      BitBlt(original_.hDC,original_.rcItem.left,original_.rcItem.top,item_.rcItem.right,item_.rcItem.bottom,memory_,0,0,SRCCOPY);
+  }
+  ~ItemBuffer(){
+    if(memory_&&item_.hDC==memory_)
+      SelectObject(memory_,previous_);
+    if(bitmap_)DeleteObject(bitmap_);if(memory_)DeleteDC(memory_);
+  }
+  const DRAWITEMSTRUCT &item()const{return item_;}
+  ItemBuffer(const ItemBuffer &)=delete;ItemBuffer &operator=(const ItemBuffer &)=delete;
+};
 struct ListColors {COLORREF background,text,detail;};
 inline ListColors listColors(bool selected,bool disabled,bool contrast=highContrast()) {
   if(contrast){const auto foreground=GetSysColor(disabled?COLOR_GRAYTEXT:selected?COLOR_HIGHLIGHTTEXT:COLOR_WINDOWTEXT);
@@ -96,7 +123,8 @@ inline ListColors listColors(bool selected,bool disabled,bool contrast=highContr
   const auto foreground=disabled?RGB(111,126,140):selected?RGB(164,240,221):RGB(218,232,241);
   return {selected?RGB(43,73,80):RGB(24,34,45),foreground,disabled?foreground:selected?RGB(164,240,221):RGB(153,181,196)};
 }
-inline void buttonItem(const DRAWITEMSTRUCT &d,Surface surface,bool active=false,bool contrast=highContrast()) {
+inline void buttonItem(const DRAWITEMSTRUCT &item,Surface surface,bool active=false,bool contrast=highContrast()) {
+  const ItemBuffer buffer(item);const auto &d=buffer.item();
   const SavedDC saved(d.hDC);if(!saved.saved)return;const auto palette=colors(surface,contrast);
   const bool disabled=(d.itemState&ODS_DISABLED)!=0,pressed=!disabled&&(d.itemState&ODS_SELECTED)!=0;
   const auto retained=state(d.hwndItem);const bool hot=!disabled&&retained&&retained->hot;
@@ -118,8 +146,10 @@ inline void buttonItem(const DRAWITEMSTRUCT &d,Surface surface,bool active=false
   if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)) {
     rect=d.rcItem;const int focusInset=std::max(2,MulDiv(3,GetDpiForWindow(d.hwndItem),96));InflateRect(&rect,-focusInset,-focusInset);DrawFocusRect(d.hDC,&rect);
   }
+  buffer.publish();
 }
-inline void listItem(const DRAWITEMSTRUCT &d,std::wstring_view text,bool contrast=highContrast()) {
+inline void listItem(const DRAWITEMSTRUCT &item,std::wstring_view text,bool contrast=highContrast()) {
+  const ItemBuffer buffer(item);const auto &d=buffer.item();
   const SavedDC saved(d.hDC);if(!saved.saved)return;
   const auto palette=listColors((d.itemState&ODS_SELECTED)!=0,(d.itemState&ODS_DISABLED)!=0,contrast);
   fill(d.hDC,d.rcItem,palette.background);SetBkMode(d.hDC,TRANSPARENT);SetTextColor(d.hDC,palette.text);
@@ -127,6 +157,7 @@ inline void listItem(const DRAWITEMSTRUCT &d,std::wstring_view text,bool contras
   auto rect=d.rcItem;const int inset=std::max(1,MulDiv(7,GetDpiForWindow(d.hwndItem),96));rect.left+=inset;rect.right-=inset;
   DrawTextW(d.hDC,text.data(),int(text.size()),&rect,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
   if((d.itemState&ODS_FOCUS)&&!(d.itemState&ODS_NOFOCUSRECT)){InflateRect(&rect,-1,-1);DrawFocusRect(d.hDC,&rect);}
+  buffer.publish();
 }
 inline void comboItem(const DRAWITEMSTRUCT &d){
   const int saved=SaveDC(d.hDC);

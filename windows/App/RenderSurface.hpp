@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi1_3.h>
+#include <dcomp.h>
 #include <d2d1_1.h>
 #include <dwrite.h>
 #include <wrl/client.h>
@@ -17,6 +18,7 @@
 #include <string_view>
 #include <cmath>
 #include <initializer_list>
+#include <algorithm>
 
 namespace ScreamSeq {
 using Microsoft::WRL::ComPtr;
@@ -38,6 +40,9 @@ class RenderSurface {
 	ComPtr<ID3D11Device> device_;
 	ComPtr<ID3D11DeviceContext> immediate_;
 	ComPtr<IDXGISwapChain2> swap_;
+	ComPtr<IDCompositionDevice> composition_;
+	ComPtr<IDCompositionTarget> compositionTarget_;
+	ComPtr<IDCompositionVisual> compositionVisual_;
 	ComPtr<ID2D1Factory1> factory_;
 	ComPtr<ID2D1Device> d2dDevice_;
 	ComPtr<ID2D1DeviceContext> context_;
@@ -83,9 +88,13 @@ class RenderSurface {
 		return result == D2DERR_RECREATE_TARGET || result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET ||
 			result == DXGI_ERROR_DEVICE_HUNG || result == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
 	}
-	// Releases every device-dependent resource. The flip-model swapchain must be
-	// gone (released and flushed) before another one is created for this window.
+	// Release the visual's swapchain reference and the HWND layer as well as the
+	// rendering device. A retry must be able to bind the same layer again.
 	void discard() noexcept {
+		if(compositionTarget_) compositionTarget_->SetRoot(nullptr);
+		if(compositionVisual_) compositionVisual_->SetContent(nullptr);
+		if(composition_) composition_->Commit();
+		compositionTarget_.Reset(); compositionVisual_.Reset(); composition_.Reset();
 		if(context_) context_->SetTarget(nullptr);
 		bitmap_.Reset(); brush_.Reset(); context_.Reset(); d2dDevice_.Reset();
 		if(ready_) { CloseHandle(ready_); ready_ = nullptr; }
@@ -97,7 +106,7 @@ class RenderSurface {
 	void create() {
 		try {
 			RECT rect{}; GetClientRect(window_, &rect);
-			width_ = rect.right; height_ = rect.bottom;
+			width_ = std::max(1L,rect.right); height_ = std::max(1L,rect.bottom);
 			dpi_ = static_cast<float>(GetDpiForWindow(window_));
 			D3D_FEATURE_LEVEL level{};
 			check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
@@ -110,15 +119,25 @@ class RenderSurface {
 			DXGI_SWAP_CHAIN_DESC1 desc{};
 			desc.Width = width_; desc.Height = height_; desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 			desc.SampleDesc.Count = 1; desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-			desc.BufferCount = 2; desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+			desc.BufferCount = 2; desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+			desc.Scaling = DXGI_SCALING_STRETCH; desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 			desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 			ComPtr<IDXGISwapChain1> chain;
-			check(swapFactory->CreateSwapChainForHwnd(device_.Get(), window_, &desc, nullptr, nullptr, &chain), "Create flip swapchain");
+			// The workspace and retained tools contain GDI/native child controls.
+			// Presenting a flip chain directly to their owner HWND competes with
+			// that redirected content. Compose the canvas below the children so
+			// they remain visible without repainting every control on every frame.
+			check(swapFactory->CreateSwapChainForComposition(device_.Get(), &desc, nullptr, &chain), "Create composition swapchain");
 			check(chain.As(&swap_), "Query waitable swapchain");
 			check(swap_->SetMaximumFrameLatency(1), "Set frame latency");
 			ready_ = swap_->GetFrameLatencyWaitableObject();
 			if(!ready_) throw std::runtime_error("No frame latency event");
-			check(swapFactory->MakeWindowAssociation(window_, DXGI_MWA_NO_ALT_ENTER), "Disable automatic fullscreen");
+			check(DCompositionCreateDevice(dxgi.Get(),IID_PPV_ARGS(&composition_)), "Create composition device");
+			check(composition_->CreateTargetForHwnd(window_,FALSE,&compositionTarget_), "Bind canvas below native controls");
+			check(composition_->CreateVisual(&compositionVisual_), "Create canvas visual");
+			check(compositionVisual_->SetContent(swap_.Get()), "Attach canvas swapchain");
+			check(compositionTarget_->SetRoot(compositionVisual_.Get()), "Attach canvas visual");
+			check(composition_->Commit(), "Commit canvas composition");
 			check(factory_->CreateDevice(dxgi.Get(), &d2dDevice_), "Create D2D device");
 			check(d2dDevice_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &context_), "Create D2D context");
 			check(context_->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &brush_), "Create brush");

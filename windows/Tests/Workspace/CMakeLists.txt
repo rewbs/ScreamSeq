@@ -30,6 +30,6 @@ target_compile_definitions(native-tool-window-tests PRIVATE NOMINMAX UNICODE _UN
 if(MSVC)
   target_compile_options(native-tool-window-tests PRIVATE /utf-8 /permissive- /Zc:__cplusplus /Zc:preprocessor)
 endif()
-target_link_libraries(native-tool-window-tests PRIVATE d3d11 d2d1 dwrite dxgi dwmapi comctl32)
+target_link_libraries(native-tool-window-tests PRIVATE d3d11 d2d1 dwrite dxgi dcomp dwmapi comctl32)
 add_test(NAME native-tool-window-tests COMMAND native-tool-window-tests)
 set_tests_properties(native-tool-window-tests PROPERTIES LABELS "native-ui;private-desktop" TIMEOUT 30)

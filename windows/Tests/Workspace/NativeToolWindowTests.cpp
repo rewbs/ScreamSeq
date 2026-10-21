@@ -92,6 +92,47 @@ void compactHeaderMeasurement(){
   require(surface.textCacheSize()<=4096,"Header measurement bypassed the retained text budget");
   std::cout<<"Measured full/compact/short pattern headers fit and reuse the bounded DirectWrite cache\n";
 }
+void composedCanvasRetainsNativeChildren(){
+  Window owner(L"ScreamSeq.DockTest.Host");ShowWindow(owner.value,SW_SHOWNOACTIVATE);
+  const auto edit=CreateWindowW(L"EDIT",L"Partial -",WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL,
+    12,12,220,28,owner.value,nullptr,GetModuleHandleW(nullptr),nullptr);
+  require(edit!=nullptr,"Create composition focus fixture");ScreamSeq::Tests::ownGuiWindow(edit);
+  ScreamSeq::NativeControls::install(edit,true);SetFocus(edit);
+  SendMessageW(edit,EM_SETSEL,9,9);SendMessageW(edit,EM_REPLACESEL,TRUE,reinterpret_cast<LPARAM>(L"?"));
+  SendMessageW(edit,EM_SETSEL,2,7);const auto undo=SendMessageW(edit,EM_CANUNDO,0,0);
+  ScreamSeq::ComPtr<IDCompositionDevice> observer;
+  ScreamSeq::check(DCompositionCreateDevice(nullptr,IID_PPV_ARGS(&observer)),"Create independent composition observer");
+  // The lower composition layer must actually be owned by the surface. A
+  // second target on the upper layer remains legal: native children sit between.
+  for(unsigned pass=0;pass<3;++pass){
+    {
+      ScreamSeq::RenderSurface surface(owner.value);
+      ScreamSeq::ComPtr<IDCompositionTarget> occupied,upper;
+      require(FAILED(observer->CreateTargetForHwnd(owner.value,FALSE,&occupied))&&!occupied,
+        "Canvas is not isolated on the composition layer below native controls");
+      ScreamSeq::check(observer->CreateTargetForHwnd(owner.value,TRUE,&upper),"Upper composition layer should remain available");
+      ValidateRect(edit,nullptr);
+      for(unsigned frame=0;frame<12;++frame){
+        surface.begin();surface.fill(0,0,surface.width(),surface.height(),frame%2?0x18222d:0x10151f);
+        require(surface.finishDrawing(),"Composition fixture lost its drawing device");
+        ScreamSeq::check(surface.present(),"Present isolated canvas");
+      }
+      DWORD first=0,last=0;SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+      require(GetFocus()==edit&&text(edit)==L"Partial -?"&&first==2&&last==7&&SendMessageW(edit,EM_CANUNDO,0,0)==undo,
+        "Repeated canvas presentation disturbed native draft, focus, selection or Undo");
+      require(!GetUpdateRect(edit,nullptr,FALSE),"Canvas presentation invalidates unchanged native children");
+      require(SetWindowPos(owner.value,nullptr,0,0,1000+int(pass)*20,720,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Resize composed window");
+      surface.begin();require(surface.finishDrawing(),"Resize lost its composition device");ScreamSeq::check(surface.present(),"Present resized composition");
+      ShowWindow(owner.value,SW_HIDE);ShowWindow(owner.value,SW_SHOWNOACTIVATE);
+    }
+    ScreamSeq::ComPtr<IDCompositionTarget> released;
+    ScreamSeq::check(observer->CreateTargetForHwnd(owner.value,FALSE,&released),"Destroyed surface leaked its HWND composition target");
+    // A partially failed creation must release every resource it acquired.
+    rejected([&]{ScreamSeq::RenderSurface blocked(owner.value);},"Duplicate composition binding was accepted");
+    SetFocus(edit);
+  }
+  std::cout<<"Composition: native draft/focus retained across 36 frames, resize, visibility and three target recreations\n";
+}
 void retainedDock(HWND main,HWND host){
   Tool tool(main);
   const auto window=tool.window(),edit=tool.control(1),combo=tool.control(3);
@@ -208,6 +249,7 @@ int wmain(int argc,wchar_t **argv){
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
     HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);retainedThemeChange(main.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
     require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");
+    composedCanvasRetainsNativeChildren();
     {Window main(type.lpszClassName);completionClassification();pluginPathCompletionReview(main.value);pluginPathReadback(main.value);pluginLibraryCompletionReview(main.value);sampleBrowserCompletionReview(main.value);sampleLibraryRecovery(main.value);renderCompletionReview(main.value);importCompletionReview(main.value);recordingCompletionReview(main.value);recordingLifecycleReview(main.value);nativeOwnerRetirement(main.value);nativeInputGate(main.value);earlyNestedDraftOwner(main.value);}
     std::cout<<"Native result review: reconnect/render/import/Keep retain postcommit failures without repeating writes\n";
     });std::cout<<"Native tool docking: retained HWNDs, focus, keyboard, ownership and bounds passed\n";return 0;

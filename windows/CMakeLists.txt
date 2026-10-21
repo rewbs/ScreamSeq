@@ -29,7 +29,7 @@ endif()
 add_library(ScreamSeqNativeUiOptions INTERFACE)
 target_sources(ScreamSeqNativeUiOptions INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/Resources/ScreamSeq.manifest")
 target_sources(ScreamSeqNativeUiOptions INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/App/NativeAccessibilityGuids.cpp")
-target_link_libraries(ScreamSeqNativeUiOptions INTERFACE ole32 oleaut32 oleacc uuid uiautomationcore)
+target_link_libraries(ScreamSeqNativeUiOptions INTERFACE ole32 oleaut32 oleacc uuid uiautomationcore dcomp)
 
 # Keep the engine configuration and shared editor source list aligned with mac/.
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
