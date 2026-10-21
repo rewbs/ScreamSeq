@@ -4,12 +4,12 @@
         Json origin=Json::object();
         bool pinned=false, configured=false;
     };
-    std::array<WorkspaceEditorPanel,4> workspaceEditors=[] {
-        std::array<WorkspaceEditorPanel,4> panels;
-        panels[2].preferred="secondary";panels[3].preferred="secondary";
+    std::array<WorkspaceEditorPanel,5> workspaceEditors=[] {
+        std::array<WorkspaceEditorPanel,5> panels;
+        panels[2].preferred="secondary";panels[3].preferred="secondary";panels[4].preferred="right";
         return panels;
     }();
-    static constexpr std::array<const char *,4> workspaceEditorNames{"automation","instruments","graphCurve","preciseNotes"};
+    static constexpr std::array<const char *,5> workspaceEditorNames{"automation","instruments","graphCurve","preciseNotes","mixingGraph"};
     std::string activeWorkspaceEditor="automation";
     bool dockTrackerSelected=false, changingEditorPlacement=false, followingEditors=false;
     Regions::Config regionConfiguration;
@@ -50,8 +50,8 @@
     };
     static bool isWorkspaceEditor(const std::string &id){return Regions::nativePanel(id);}
     static size_t workspaceEditorIndex(const std::string &id){
-        if(id=="automation")return 0;if(id=="instruments")return 1;if(id=="graphCurve")return 2;if(id=="preciseNotes")return 3;
-        throw ScreamSeq::Api::ApiError(-32602,"Choose automation, instruments, graphCurve or preciseNotes");
+        if(id=="automation")return 0;if(id=="instruments")return 1;if(id=="graphCurve")return 2;if(id=="preciseNotes")return 3;if(id=="mixingGraph")return 4;
+        throw ScreamSeq::Api::ApiError(-32602,"Choose automation, instruments, graphCurve, preciseNotes or mixingGraph");
     }
     ScreamSeq::NativeToolWindow *workspaceEditorWindow(const std::string &id)const {
         switch(workspaceEditorIndex(id)) {
@@ -59,6 +59,7 @@
         case 1:return instrumentEnvelopeWindow.get();
         case 2:return graphCurveWindow.get();
         case 3:return preciseNoteWindow.get();
+        case 4:return songRoutingWindow.get();
         }
         return nullptr;
     }
@@ -68,6 +69,7 @@
         case 1:return instrumentEnvelopeWindow?instrumentEnvelopeWindow->snapshot():Json::object();
         case 2:return graphCurveWindow?graphCurveWindow->snapshot():Json::object();
         case 3:return preciseNoteWindow?preciseNoteSnapshot():Json::object();
+        case 4:return songRoutingWindow?songRoutingWindow->snapshot():Json::object();
         }
         return Json::object();
     }
@@ -84,6 +86,7 @@
         case 1:return instrumentEnvelopeWindow&&instrumentEnvelopeWindow->retainedDraft();
         case 2:return graphCurveWindow&&graphCurveWindow->retainedDraft();
         case 3:return preciseNoteWindow&&preciseNoteWindow->retainedDraft();
+        case 4:return songRoutingWindow&&songRoutingWindow->retainedDraft();
         }
         return false;
     }
@@ -245,6 +248,7 @@
     bool editorWorkspaceKey(const std::string &id,WPARAM key,bool repeat) {
         const bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0,alt=(GetKeyState(VK_MENU)&0x8000)!=0;
         if(ctrl&&alt&&key=='D'){if(!repeat)workspaceEditorRequest({{"panel",id},{"placement",workspaceEditorWindow(id)->docked()?"float":defaultWorkspaceDockLocation(id)},{"focus",true}});return true;}
+        if(ctrl&&alt)return workspaceShortcutKey(key,repeat);
         return false;
     }
     void configureWorkspaceEditor(const std::string &id) {
@@ -273,6 +277,7 @@
         layoutControls();
     }
     void ensureWorkspaceEditor(const std::string &id) {
+        if(id=="mixingGraph"){if(!songRoutingWindow)openSongRouting();return;}
         if(id=="preciseNotes"){if(!preciseNoteWindow)openNoteEditor();return;}
         if(id=="graphCurve") {
             // Guide can create an owner without ever opening/capturing a curve.
@@ -290,6 +295,7 @@
         case 1:return instrumentEnvelopeWindow->followCursor();
         case 2:return graphCurveWindow->followSelection();
         case 3:return preciseNoteWindow->followSelection();
+        case 4:return false; // Whole-song routing has no cursor-follow target.
         }
         return false;
     }
@@ -377,7 +383,7 @@
             Json captured=Json::object();
             if(tool) {
                 const auto snapshot=id==std::string_view("preciseNotes")?preciseNoteOperationGuard():workspaceEditorSnapshot(id);
-                for(const auto *key:{"initialized","generation","document","expectedRevision","pattern","patternID","graph","node","plugin","parameter","instrument","index","page","selectedPoint","retainedDraft","pending","revision","trackID","row","channel","units","snap","dragging"})
+                for(const auto *key:{"initialized","generation","document","expectedRevision","pattern","patternID","graph","node","plugin","parameter","instrument","index","page","selectedPoint","retainedDraft","pending","revision","trackID","row","channel","units","snap","dragging","selected","wire","filter","fields","layoutDraft","inspector"})
                     if(snapshot.contains(key))captured[key]=snapshot.at(key);
             }
             editors.push_back({{"identity",reinterpret_cast<uintptr_t>(tool)},
@@ -413,6 +419,7 @@
         std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instruments;
         std::unique_ptr<ScreamSeq::GraphCurveWindow> graphCurve;
         std::unique_ptr<ScreamSeq::PreciseNoteWindow> preciseNotes;
+        std::unique_ptr<ScreamSeq::SongRoutingWindow> mixingGraph;
     };
     PreparedWorkspaceEditors prepareWorkspaceDockConfiguration(const Regions::Config &v,const Json &guard,
         const ScreamSeq::GraphCurveWindow::Context &curveContext,
@@ -442,6 +449,10 @@
             prepared.preciseNotes->initializeHidden(noteContext.selected);
             validateWorkspacePreparation(guard);
         }
+        if(v.locations[4]!=Regions::Placement::hidden&&!songRoutingWindow){
+            prepared.mixingGraph=makeSongRoutingWindow(prepared.preparing);
+            validateWorkspacePreparation(guard);
+        }
         // An existing Guide-only owner and all its child HWNDs survive unchanged.
         // It can remain empty until explicit open/Follow; no hidden read is
         // performed into an already live native owner during restore.
@@ -462,6 +473,10 @@
         if(prepared.graphCurve) {
             graphCurveWindow=std::move(prepared.graphCurve);
             configureWorkspaceEditor("graphCurve");captureWorkspaceEditorOrigin("graphCurve");
+        }
+        if(prepared.mixingGraph){
+            songRoutingWindow=std::move(prepared.mixingGraph);
+            configureWorkspaceEditor("mixingGraph");captureWorkspaceEditorOrigin("mixingGraph");
         }
         if(prepared.preciseNotes){
             preciseNoteWindow=std::move(prepared.preciseNotes);connectPreciseNoteTyping();
@@ -493,7 +508,10 @@
         }
         if(dock&&regions.mode==Regions::Mode::tabs){
             float x=regions.tabs.x+4;const auto y=regions.tabs.y+2;
-            for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,80.f},{editorAutomationTab,96.f},{editorInstrumentTab,96.f},{editorGraphCurveTab,100.f},{editorPreciseNotesTab,100.f}}){place(id,x,y,width,24);x+=width+4;}
+            for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{editorTrackerTab,80.f},{editorAutomationTab,96.f},{editorInstrumentTab,96.f},{editorGraphCurveTab,100.f},{editorPreciseNotesTab,100.f},{editorMixingGraphTab,112.f}}){
+                if(id!=editorTrackerTab){const std::string panel=id==editorAutomationTab?"automation":id==editorInstrumentTab?"instruments":id==editorGraphCurveTab?"graphCurve":id==editorPreciseNotesTab?"preciseNotes":"mixingGraph";
+                    const auto config=currentWorkspaceRegions();if(std::find(config.selected.begin(),config.selected.end(),panel)==config.selected.end())continue;}
+                place(id,x,y,width,24);x+=width+4;}
             const auto mainButton=regionControlBase+regionControlStride;
             place(mainButton,x,y,116,24);ScreamSeq::NativeControls::text(controls.at(mainButton),workspaceRegionTitle(lowerEditorName())+L" ▾");x+=120;
             for(size_t i=0;i<3;++i)if(regions.hosts[i].visible&&isWorkspaceEditor(regions.hosts[i].selected)){
@@ -503,7 +521,7 @@
         }
         const auto placeOnce=[&](int id){const auto found=shown.find(id);if(found==shown.end())apply(id,0,0,1,1,false);else{const auto &r=found->second;apply(id,r.x,r.y,r.w,r.h,true);}};
         for(int id=editorTrackerTab;id<=editorReturnCommand;++id)placeOnce(id);
-        placeOnce(editorGraphCurveTab);placeOnce(editorPreciseNotesTab);
+        placeOnce(editorGraphCurveTab);placeOnce(editorPreciseNotesTab);placeOnce(editorMixingGraphTab);placeOnce(mixingGraphFloatCommand);
         for(int id=regionControlBase;id<=regionControlEnd;++id)if(controls.contains(id))placeOnce(id);
         for(const auto *id:workspaceEditorNames) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);if(!tool)continue;
@@ -520,8 +538,8 @@
             if(id==std::string_view("graphCurve")&&tool->visible())captureWorkspaceEditorOrigin(id);
         }
         ScreamSeq::NativeControls::active(controls.at(editorTrackerTab),tracker);
-        for(const auto &[button,panel]:std::array<std::pair<int,const char *>,4>{{
-            {editorAutomationTab,"automation"},{editorInstrumentTab,"instruments"},{editorGraphCurveTab,"graphCurve"},{editorPreciseNotesTab,"preciseNotes"}}}) {
+        for(const auto &[button,panel]:std::array<std::pair<int,const char *>,5>{{
+            {editorAutomationTab,"automation"},{editorInstrumentTab,"instruments"},{editorGraphCurveTab,"graphCurve"},{editorPreciseNotesTab,"preciseNotes"},{editorMixingGraphTab,"mixingGraph"}}}) {
             const auto *tool=workspaceEditorWindow(panel);
             ScreamSeq::NativeControls::active(controls.at(button),tool&&tool->visible());
         }
@@ -532,7 +550,7 @@
         if(ownedWorkspaceFocus&&!workspaceFocusVisible(GetFocus()))focusVisibleWorkspaceCanvas();
     }
     static std::wstring workspaceRegionTitle(const std::string &id){
-        if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";if(id=="graphCurve")return L"Graph curve";if(id=="preciseNotes")return L"Precise notes";
+        if(id=="mixingGraph")return L"Mixing graph";if(id=="automation")return L"Automation";if(id=="instruments")return L"Instrument";if(id=="graphCurve")return L"Graph curve";if(id=="preciseNotes")return L"Precise notes";
         if(id=="notes")return L"Notes";if(id=="samples")return L"Samples";if(id=="effects")return L"Pattern FX";
         if(id=="plugins")return L"Plugins";if(id=="mixer")return L"Mixer";if(id=="graph")return L"Graph recipes";return L"Tracker";
     }
@@ -552,6 +570,7 @@
         const auto config=currentWorkspaceRegions();const auto &id=config.selected[region];if(!isWorkspaceEditor(id))return;
         const auto base=regionControlBase+int(region)*regionControlStride;
         const auto &panel=workspaceEditors[workspaceEditorIndex(id)];
+        if(id=="mixingGraph"){place(base+1,x,y,60,24);ScreamSeq::NativeControls::text(controls.at(base+1),L"Move");place(mixingGraphFloatCommand,x+64,y,52,24);return;}
         const std::array<std::wstring,4> labels={L"…",panel.pinned?L"Pinned":workspaceEditorFollowHeld(id)?L"Follow held":L"Following",L"Cursor",L"Return"};
         for(size_t action=0;action<4;++action){const float width=std::array<float,4>{28,70,54,54}[action];
             place(base+int(action)+1,x,y,width,24);ScreamSeq::NativeControls::text(controls.at(base+int(action)+1),labels[action]);x+=width+4;
@@ -619,7 +638,7 @@
         if(!hasWorkspaceDock())return false;std::vector<std::pair<std::string,HWND>> regions;
         if(trackerWorkspaceVisible())regions.emplace_back("pattern",window);
         if(workspaceMainEditorVisible(lowerEditorName()))regions.emplace_back(lowerEditorName(),window);
-        for(const auto *id:{"instruments","automation","graphCurve","preciseNotes"})if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible())regions.emplace_back(id,tool->window());
+        for(const auto *id:workspaceEditorNames)if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible())regions.emplace_back(id,tool->window());
         if(regions.empty())return true;const auto focused=focusedWorkspaceRegion(GetFocus());
         auto current=std::find_if(regions.begin(),regions.end(),[&](const auto &item){return item.first==focused;});
         auto next=current==regions.end()||++current==regions.end()?regions.begin():current;
@@ -628,18 +647,19 @@
     void openConnectedWorkspace(){
         auto configuration=layoutConfiguration();configuration["layout"]="Compose";configuration["active"]="notes";
         configuration["hidden"]=Json::array({true,true});configuration["lowerVisible"]=true;configuration["lowerEditor"]="graph";
-        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::right,Regions::Placement::hidden,Regions::Placement::hidden};
+        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::right,Regions::Placement::hidden,Regions::Placement::hidden,Regions::Placement::hidden};
         regions.selected={"instruments","graph","automation"};regions.compactSelection="pattern";configuration["editors"]=Regions::encode(regions);
         restoreLayoutConfiguration(configuration);
     }
     void openGraphEditingWorkspace(){
         auto configuration=layoutConfiguration();configuration["layout"]="Compose";configuration["active"]="notes";
         configuration["hidden"]=Json::array({true,true});configuration["lowerVisible"]=true;configuration["lowerEditor"]="graph";
-        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::hidden,Regions::Placement::right,Regions::Placement::hidden};
+        Regions::Config regions;regions.locations={Regions::Placement::secondary,Regions::Placement::hidden,Regions::Placement::right,Regions::Placement::hidden,Regions::Placement::hidden};
         regions.selected={"graphCurve","graph","automation"};regions.compactSelection="pattern";configuration["editors"]=Regions::encode(regions);
         restoreLayoutConfiguration(configuration);
     }
     bool workspaceEditorCommand(int id) {
+        if(id==mixingGraphPanelCommand||id==editorMixingGraphTab||id==mixingGraphFloatCommand){workspaceEditorRequest({{"panel","mixingGraph"},{"placement",id==mixingGraphFloatCommand?"float":"right"},{"focus",true}});return true;}
         if(id==dockPreciseNotesCommand){workspaceEditorRequest({{"panel","preciseNotes"},{"placement","secondary"},{"focus",true}});return true;}
         if(id==editorPreciseNotesTab){const auto &state=workspaceEditors[workspaceEditorIndex("preciseNotes")];workspaceEditorRequest({{"panel","preciseNotes"},{"placement",state.location=="hide"?state.preferred:state.location},{"focus",true}});return true;}
 

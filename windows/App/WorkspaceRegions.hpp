@@ -9,16 +9,16 @@
 
 namespace ScreamSeq::WorkspaceRegions {
 using Json=Api::Json;
-enum class Panel { automation, instruments, graphCurve, preciseNotes };
+enum class Panel { automation, instruments, graphCurve, preciseNotes, mixingGraph };
 enum class Region { right, bottom, secondary };
 enum class Placement { right, bottom, secondary, floating, hidden };
 enum class Mode { none, regions, tabs };
-inline constexpr std::array<std::string_view,4> panelNames{"automation","instruments","graphCurve","preciseNotes"};
+inline constexpr std::array<std::string_view,5> panelNames{"automation","instruments","graphCurve","preciseNotes","mixingGraph"};
 inline constexpr std::array<std::string_view,3> regionNames{"right","bottom","secondary"};
 inline constexpr std::array<std::string_view,5> mainBottomNames{"samples","effects","plugins","mixer","graph"};
 
 struct Config {
-  std::array<Placement,4> locations{Placement::hidden,Placement::hidden,Placement::hidden,Placement::hidden};
+  std::array<Placement,5> locations{Placement::hidden,Placement::hidden,Placement::hidden,Placement::hidden,Placement::hidden};
   std::array<std::string,3> selected{"","graph",""};
   std::string compactSelection="pattern";
   // Desired DIPs, never rewritten by solve(). rightWidth is the native editor
@@ -101,7 +101,7 @@ inline Json encode(const Config &config) {
   validate(config);
   Json locations=Json::object();
   for(size_t i=0;i<panelNames.size();++i)locations[std::string(panelNames[i])]=name(config.locations[i]);
-  return {{"version",4},{"locations",std::move(locations)},
+  return {{"version",5},{"locations",std::move(locations)},
     {"selected",{{"right",config.selected[0]},{"bottom",config.selected[1]},{"secondary",config.selected[2]}}},
     {"compactSelection",config.compactSelection},{"rightWidth",config.rightWidth},{"bottomHeight",config.bottomHeight}};
 }
@@ -120,17 +120,19 @@ inline Config decodeEditors(const Json *editors,const Config &current,std::strin
     result.compactSelection=value.at("tracker").get<bool>()||result.selected[0].empty()?"pattern":result.selected[0];result.bottomHeight=legacyLowerHeight;
   }else{
     keys(value,{"version","locations","selected","compactSelection","rightWidth","bottomHeight"});
-    need(value.at("version").is_number_integer()&&(value.at("version")==2||value.at("version")==3||value.at("version")==4));
+    need(value.at("version").is_number_integer()&&(value.at("version")==2||value.at("version")==3||value.at("version")==4||value.at("version")==5));
     const auto version=value.at("version").get<int>();legacy=version<4;
     if(version==2)keys(value.at("locations"),{"automation","instruments"});
     else if(version==3)keys(value.at("locations"),{"automation","instruments","graphCurve"});
-    else keys(value.at("locations"),{"automation","instruments","graphCurve","preciseNotes"});
-    keys(value.at("selected"),{"right","bottom","secondary"});const size_t count=version==2?2:version==3?3:4;
+    else if(version==4)keys(value.at("locations"),{"automation","instruments","graphCurve","preciseNotes"});
+    else keys(value.at("locations"),{"automation","instruments","graphCurve","preciseNotes","mixingGraph"});
+    keys(value.at("selected"),{"right","bottom","secondary"});const size_t count=size_t(version);
     for(size_t i=0;i<count;++i)result.locations[i]=placement(string(value.at("locations").at(std::string(panelNames[i]))));
     for(size_t i=0;i<3;++i)result.selected[i]=string(value.at("selected").at(std::string(regionNames[i])));
     result.compactSelection=string(value.at("compactSelection"));result.rightWidth=number(value.at("rightWidth"),440);result.bottomHeight=number(value.at("bottomHeight"),128);
     // A new identity cannot be smuggled into an older version via selection.
     if(legacy){need(result.compactSelection!="preciseNotes");for(const auto &id:result.selected)need(id!="preciseNotes");}
+    if(version<5){need(result.compactSelection!="mixingGraph");for(const auto &id:result.selected)need(id!="mixingGraph");}
     if(version==2)for(const auto &id:result.selected)need(id!="graphCurve");
   }
   if(legacy&&result.selected[1]=="notes"){

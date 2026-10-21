@@ -105,6 +105,10 @@ constexpr int exitCommand=629;
 constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
 constexpr int contextPanelCommand=635,contextActionFirst=636,contextActionLast=641;
 constexpr int exportModuleCommand=642;
+constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixingGraphTab=645,
+    allEditorsCommand=646,navigationPatternCommand=647,navigationSamplesCommand=648,
+    navigationInstrumentsCommand=649,navigationPluginsCommand=650,navigationMixerCommand=651,
+    navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
 static_assert(contextActionLast<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
@@ -338,7 +342,7 @@ public:
             pins[id]=p.pinned;origins[id]=p.origin;locations[id]=p.location;
             const auto data=workspaceEditorSnapshot(id);
             inspectionData[id]=data;
-            targets[id]=data.empty()?"Not opened":id==std::string("instruments")?"Instrument "+std::to_string(data.value("index",0u)):"Pattern "+std::to_string(data.value("pattern",0u));
+            targets[id]=data.empty()?"Not opened":id==std::string("mixingGraph")?"Song routing":id==std::string("instruments")?"Instrument "+std::to_string(data.value("index",0u)):"Pattern "+std::to_string(data.value("pattern",0u));
             if(tool&&tool->visible())visible.push_back(id);
         }
 		auto g=geometry();
@@ -348,7 +352,7 @@ public:
 			{"verticalDivider",rect(g.verticalDivider)},{"horizontalDivider",rect(g.horizontalDivider)}}},
 			{"dpi",GetDpiForWindow(window)},{"viewport",{{"firstRow",firstRow},{"firstChannel",firstChannel()},{"horizontalScroll",horizontalScroll}}},{"gridTiming",patternGridTiming()},
             {"positionMode",positionMode},{"ruler",rulerSnapshot()},
-			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
+			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes","mixingGraph"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
             {"contextPanel",contextPanelSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
@@ -763,6 +767,7 @@ public:
     #include "WorkspaceShortcutDispatch.inc"
     #include "WorkspaceContextMenus.inc"
     #include "WorkspaceMenuBar.inc"
+    #include "WorkspaceNavigation.inc"
     #include "WorkspaceAccessibility.inc"
     #include "WorkspaceContextPanel.inc"
     #include "DeferredViews.inc"

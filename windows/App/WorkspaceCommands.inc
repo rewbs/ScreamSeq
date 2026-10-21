@@ -1,5 +1,16 @@
     std::vector<ScreamSeq::WorkspaceCommand> defaultWorkspaceCommands()const {
         return {
+            {navigationPatternCommand,L"Navigate / Pattern (focus only)",L""},
+            {navigationSamplesCommand,L"Navigate / Samples panel",L""},
+            {navigationInstrumentsCommand,L"Navigate / Instruments panel",L""},
+            {navigationPluginsCommand,L"Navigate / Plugins panel",L""},
+            {navigationMixerCommand,L"Navigate / Mixer panel",L""},
+            {navigationAutomationCommand,L"Navigate / Automation panel",L""},
+            {mixingGraphPanelCommand,L"Navigate / Song mixing graph beside Pattern",L""},
+            {mixingGraphFloatCommand,L"Window / Float song mixing graph",L"Ctrl+Alt+D in graph"},
+            {allEditorsCommand,L"Navigate / All editors",L""},
+            {navigationWindowsCommand,L"Window / Open separate window",L""},
+            {navigationLayoutsCommand,L"Workspace / Choose layout",L""},
             {layoutsCommand,L"Workspace / Manage saved layouts",L"Ctrl+Alt+W"},
             {connectedWorkspaceCommand,L"Workspace / Connected editors",L""},
             {graphEditingWorkspaceCommand,L"Workspace / Graph editing",L""},
@@ -120,7 +131,7 @@
 			{soundCommand,L"Workspace / Sound design",L"Ctrl+3"},{notesCommand,L"Pattern / Precise note row editor",L"Enter on a note cell"},
 			{samplesCommand,L"Inspect / Sample & loops",L""},{pinCommand,L"Panel / Toggle pin",L"Ctrl+P"},
 			{cursorCommand,L"Panel / Follow editing cursor",L"Ctrl+Home"},{returnCommand,L"Panel / Return to opening position",L"Ctrl+Alt+Backspace"},
-			{focusPatternCommand,L"Focus / Pattern",L"Esc (also stops)"},{nextPanelCommand,L"Focus / Next panel",L"F6"},
+			{focusPatternCommand,L"Focus / Pattern",L"Focus only; transport and layout retained"},{nextPanelCommand,L"Focus / Next panel",L"F6"},
 			{followCommand,L"Playback / Toggle follow",L"F"},{playCommand,L"Playback / Play demo",L"Space"},{stopCommand,L"Playback / Stop",L"Esc"},
 			{widerCommand,L"Layout / Widen inspector",L"Ctrl+Alt+Left"},{narrowerCommand,L"Layout / Narrow inspector",L"Ctrl+Alt+Right"},
 			{tallerCommand,L"Layout / Enlarge lower dock",L"Ctrl+Alt+Up"},{shorterCommand,L"Layout / Reduce lower dock",L"Ctrl+Alt+Down"}};

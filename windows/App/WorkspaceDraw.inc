@@ -25,6 +25,7 @@
             const auto target=editor=="graph"?wide(node?node->value("name",graphNode):graphDraft.value("name",std::string("Choose a recipe"))):
                 editor=="mixer"?wide(mixerDraft.value("name",std::string("Choose a bus"))):editor=="plugins"?wide(selectedPlugin):
                 editor=="samples"?L"Selected sample "+std::to_wstring(selectedSample()):
+                editor=="mixingGraph"?std::wstring(L"Whole-song audio routing"):
                 editor=="instruments"||editor=="automation"||editor=="graphCurve"?std::wstring(L"Active editor keeps its target"):
                 L"P"+std::to_wstring(patternIndex)+L" / R"+std::to_wstring(row)+L" / CH"+std::to_wstring(channel+1);
             s.uiText(target,12,109,142,muted);
@@ -34,12 +35,8 @@
         }
         // The timing form remains in Song and the context panel. Keep this optional
         // summary whole at narrow widths instead of drawing a clipped fragment.
-        const auto timingWidth=width-854;
-        if(timingWidth>=100){
-            auto timing=tempoText(view->session.document.at("tempo").get<double>())+L" BPM";
-            if(timingWidth>=260)timing+=L"   /   "+std::to_wstring(view->session.document.at("speed").get<unsigned>())+L" ticks   /   "+wide(view->session.document.at("format").get<std::string>());
-            s.uiText(timing,846,58,timingWidth,muted);
-        }
+        s.uiText(L"EDITORS",12,58,146,muted);
+
 		// Virtualized grid: field colors and geometry are shared by hit-testing.
 		if(trackerWorkspaceVisible()){
 		const auto r=patternGridRect(); s.clip(r.x,r.y,r.w,r.h);s.fill(r.x,r.y,r.w,r.h,0x10161e);

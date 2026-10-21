@@ -281,9 +281,9 @@ RestoreJson layoutFor(RestoreApplication &app,const char *editor,bool bothNative
     // exactly the prospective native read instead of another Main cache.
     const char *main=precise?"plugins":editor;
     result["lowerEditor"]=main;result["lowerVisible"]=true;result["lowerHeight"]=360;
-    auto &editors=result["editors"];restoreCheck(editors.at("version")==4,"Restore fixture requires editors V4");
+    auto &editors=result["editors"];restoreCheck(editors.at("version")==5,"Restore fixture requires editors V5");
     if(bothNative) {
-        editors["locations"]={{"automation","float"},{"instruments","float"},{"graphCurve","hide"},{"preciseNotes","hide"}};
+        editors["locations"]={{"automation","float"},{"instruments","float"},{"graphCurve","hide"},{"preciseNotes","hide"},{"mixingGraph","hide"}};
         editors["selected"]={{"right",""},{"bottom",main},{"secondary",""}};editors["compactSelection"]="pattern";
     } else if(ScreamSeq::WorkspaceRegions::mainBottom(editors.at("selected").at("bottom").get<std::string>()))editors["selected"]["bottom"]=main;
     if(precise){editors["locations"]["preciseNotes"]="bottom";editors["selected"]["bottom"]="preciseNotes";}
@@ -513,7 +513,7 @@ void compactRestoreAndResizeKeepVisibleFocus() {
         createRestoreInstrument(app);resizeRestoreClient(app,1000,720);
         auto layout=layoutFor(app,"graph");layout["hidden"]={true,true};
         ScreamSeq::WorkspaceRegions::Config regions;
-        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right,ScreamSeq::WorkspaceRegions::Placement::hidden,ScreamSeq::WorkspaceRegions::Placement::hidden};
+        regions.locations={ScreamSeq::WorkspaceRegions::Placement::secondary,ScreamSeq::WorkspaceRegions::Placement::right,ScreamSeq::WorkspaceRegions::Placement::hidden,ScreamSeq::WorkspaceRegions::Placement::hidden,ScreamSeq::WorkspaceRegions::Placement::hidden};
         regions.selected={"instruments","graph","automation"};regions.compactSelection="graph";
         layout["editors"]=ScreamSeq::WorkspaceRegions::encode(regions);
         app.workspaceState.focus="pattern";SetFocus(app.window);const auto song=songState(app);
@@ -593,8 +593,8 @@ RestoreJson curveRequest(const RestoreCurveSource &source) {
 RestoreJson curveLayout(RestoreApplication &app,bool allNative) {
     auto result=layoutFor(app,allNative?"notes":"graph",allNative);
     auto &editors=result["editors"];
-    restoreCheck(editors.at("version")==4,"Graph curve restore fixture requires strict editors V4");
-    if(!allNative)editors["locations"]={{"automation","hide"},{"instruments","hide"},{"graphCurve","float"},{"preciseNotes","hide"}};
+    restoreCheck(editors.at("version")==5,"Graph curve restore fixture requires strict editors V5");
+    if(!allNative)editors["locations"]={{"automation","hide"},{"instruments","hide"},{"graphCurve","float"},{"preciseNotes","hide"},{"mixingGraph","hide"}};
     else editors["locations"]["graphCurve"]="float";
     editors["selected"]={{"right",""},{"bottom",allNative?"preciseNotes":"graph"},{"secondary",""}};
     editors["compactSelection"]="pattern";
@@ -957,7 +957,7 @@ void fourOwnerLegacyLayoutContracts() {
             if(version==3)legacy["editors"]["locations"]["graphCurve"]="float";
             app.preparationReads.clear();app.restoreLayoutConfiguration(legacy);
             const auto encoded=app.workspaceDockConfiguration();
-            restoreCheck(encoded.at("version")==4&&encoded.at("locations").size()==4&&encoded.at("locations").at("preciseNotes")=="bottom"&&encoded.at("selected").at("bottom")=="preciseNotes"&&encoded.at("compactSelection")=="preciseNotes","Historical Notes did not migrate to canonical V4 native identity");
+            restoreCheck(encoded.at("version")==5&&encoded.at("locations").size()==5&&encoded.at("locations").at("preciseNotes")=="bottom"&&encoded.at("selected").at("bottom")=="preciseNotes"&&encoded.at("compactSelection")=="preciseNotes","Historical Notes did not migrate to canonical V5 native identity");
             restoreCheck(encoded.at("locations").at("graphCurve")==(version==3?"float":"hide")&&encoded.at("rightWidth")==523&&encoded.at("bottomHeight")==411,"V3/V2 migration borrowed live placement or lost desired sizes");
             restoreCheck(app.preparationReads.empty()&&app.preciseNoteWindow->operationGuard()==oldNative&&app.workspacePreparationGuard().at("inspectors")==inspector,"Migration reloaded a retained owner or changed inspector intent");
         }
@@ -1113,6 +1113,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
 #include "ContextPanelApplicationTests.inc"
+#include "NavigationApplicationTests.inc"
 #include "WorkerPresentationApplicationTests.inc"
 #include "ModuleExportApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
@@ -1249,6 +1250,8 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
                     timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
+                    timedRestoreCase("navigation placements and retained graph",applicationNavigation);
+                    timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"worker-presentation") {

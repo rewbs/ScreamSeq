@@ -55,15 +55,20 @@
         }
         editor->show();
     }
-    void openSongRouting(){
-        if(!songRoutingWindow||songRoutingWindow->retired())songRoutingWindow=std::make_unique<ScreamSeq::SongRoutingWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &node){
+    std::unique_ptr<ScreamSeq::SongRoutingWindow> makeSongRoutingWindow(std::shared_ptr<bool> preparing={}){
+        return std::make_unique<ScreamSeq::SongRoutingWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return std::pair(documentId,view->session.revision);},[this](const auto &node){
             if(busy)throw std::runtime_error("Document worker is busy");
             if(!node.graph.empty()){if(graphDirty||graphFieldDirty)throw std::runtime_error("Apply or Reload the existing graph draft first");graphID=node.graph;command(graphCommand);}
             else if(!node.plugin.empty())openGraphPluginParameters(node.plugin);
             else if(!node.bus.empty()){if(mixerDirty||mixerPending)throw std::runtime_error("Apply or Reload the captured mixer draft first");mixerTarget=node.bus;command(mixerDetailsCommand);}
         },[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
           [this](const auto &document,const auto &bus,const auto &name){openPluginLibrary(document,bus,name);},[this]{return !busy&&!recoveryRestoring;});
-        songRoutingWindow->show();
+    }
+    void openSongRouting(){
+        const bool created=!songRoutingWindow||songRoutingWindow->retired();
+        if(!songRoutingWindow||songRoutingWindow->retired()){songRoutingWindow=makeSongRoutingWindow();workspaceEditors[workspaceEditorIndex("mixingGraph")].configured=false;}
+        configureWorkspaceEditor("mixingGraph");finishWorkspaceEditorOpen("mixingGraph");
+        songRoutingWindow->show();if(created)songRoutingWindow->fitView();
     }
     bool mixerEditorVisible() const {return workspaceMainEditorVisible("mixer");}
     void installMixerControls() {

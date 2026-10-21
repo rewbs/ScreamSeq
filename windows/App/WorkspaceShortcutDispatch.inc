@@ -7,6 +7,7 @@
     static std::string shortcutCommandID(int id){return "windows.command."+std::to_string(id);}
     static std::vector<std::string> defaultShortcutKeys(int id) {
         switch(id) {
+        case navigationPatternCommand:return {"ctrl+alt+p"};
         case keyboardHelpCommand:return {"f1"};
         case selectChannelCommand:return {"ctrl+l"};case selectPatternCommand:return {"ctrl+shift+a"};case selectRowCommand:return {"ctrl+r"};
         case inputInstrumentPreviousCommand:return {"alt+up"};case inputInstrumentNextCommand:return {"alt+down"};

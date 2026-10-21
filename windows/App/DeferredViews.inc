@@ -6,6 +6,8 @@
     bool drainingViews=false;
     static bool viewOpeningCommand(int id) {
         switch(id){
+        case mixingGraphPanelCommand:case mixingGraphFloatCommand:case editorMixingGraphTab:
+        case navigationInstrumentsCommand:case navigationAutomationCommand:case navigationSamplesCommand:case navigationPluginsCommand:case navigationMixerCommand:
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:
         case effectsCommand:case mixerCommand:case mixerStripsCommand:case mixerDetailsCommand:case mixerAddEffect:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:case graphTrimsCommand:
@@ -18,7 +20,7 @@
         }
     }
     Json viewCommandTarget(int id)const {
-        if(id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==sampleRecordCommand||id==audioSettingsCommand)return Json::array();
+        if(id==mixingGraphPanelCommand||id==mixingGraphFloatCommand||id==editorMixingGraphTab||id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==sampleRecordCommand||id==audioSettingsCommand)return Json::array();
         if(id==curveBank)return graphCurveOperationGuard();
         if(id==notesCommand||id==dockPreciseNotesCommand||id==editorPreciseNotesTab)return preciseNoteSelectionGuard();
         if(id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});

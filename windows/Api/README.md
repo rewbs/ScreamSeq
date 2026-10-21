@@ -1585,3 +1585,28 @@ selecting another node does not retarget a draft. Its edits use `graph.plugin.se
 and preserve the original rack processor. Sliders still save on release. The
 workspace's parameter-window snapshots now include `graph` and `node` (empty for
 a rack editor); `plugin` is empty for a recipe editor.
+
+
+### Windows navigation and song mixing graph (editors V5)
+
+The editor strip opens panels with explicit placement. **Pattern** returns keyboard
+focus to the current pattern without changing cursor, selection, transport or the
+saved layout (default shortcut Ctrl+Alt+P). **All editors** separates editor panels
+from separate windows. **Windows** opens modeless tools; **Layouts** changes the
+whole workspace. Existing command IDs and layout shortcuts remain compatible.
+
+`workspace.panel {"panel":"mixingGraph","placement":"right","focus":true}`
+opens the retained song mixing graph beside Pattern. `placement:"float"` moves
+that same owner to a window. It also accepts bottom, secondary and hide. Its
+snapshot is `inspection.mixingGraph`; placement does not write song history.
+Routing is whole-song state, so cursor-follow has no routing target to change.
+
+The compact graph has a canvas and an Inspector toggle (F6); they share every
+field, selection and raw draft. Float/Dock is explicit. Ctrl+Alt+D toggles its
+placement. Small workspaces use the existing compact workspace tabs, including
+Pattern. Wide floating graphs show the canvas and inspector together.
+
+Saved editor preferences now encode V5, adding `locations.mixingGraph`.
+V2–V4 preferences migrate with the graph hidden; omitted editor preferences
+retain current placement. Project/music metadata and plugin state are unchanged.
+Newer workspace preferences are not readable by older Windows binaries.

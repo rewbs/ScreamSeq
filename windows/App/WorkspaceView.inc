@@ -100,14 +100,8 @@
 		};
 		place(playCommand,174,12,64,26);place(stopCommand,242,12,60,26);place(followCommand,306,12,90,26);
 		place(paletteCommand,402,12,154,26);
-        place(instrumentEnvelopeCommand,564,12,126,26);
-        place(audioSettingsCommand,698,12,110,26);
-        place(midiRecordingCommand,816,12,60,26);
-		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
-        place(layoutsCommand,480,52,80,26);
-        place(mixerCommand,564,52,76,26);
-        place(parameterAutomationCommand,644,52,96,26);
-        place(liveKeysCommand,744,52,92,26);
+        for(int id:{instrumentEnvelopeCommand,audioSettingsCommand,midiRecordingCommand,composeCommand,patternCommand,soundCommand,layoutsCommand,mixerCommand,parameterAutomationCommand})place(id,0,0,1,1,false);
+        layoutNavigation(place);
         // Global file/history/song commands remain in native menus and the
         // command palette. The left column now belongs to the current task.
         for(int id:{openCommand,saveCommand,saveAsCommand,documentLoadReportCommand,songPropertiesCommand,
@@ -189,6 +183,10 @@
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
 			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
             {contextPanelCommand,L"Hide context panel"},
+            {navigationPatternCommand,L"Pattern"},{navigationSamplesCommand,L"Samples"},{navigationInstrumentsCommand,L"Instruments"},
+            {navigationPluginsCommand,L"Plugins"},{navigationMixerCommand,L"Mixer"},{mixingGraphPanelCommand,L"Mixing graph"},
+            {navigationAutomationCommand,L"Automation"},{allEditorsCommand,L"All editors ▾"},{navigationWindowsCommand,L"Windows ▾"},
+            {navigationLayoutsCommand,L"Layouts ▾"},{mixingGraphFloatCommand,L"Float"},{editorMixingGraphTab,L"Mixing graph"},
             {positionRulerCommand,L"Row"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
@@ -262,6 +260,8 @@
             if(id==keyboardSettingsCommand){openKeyboardSettings();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
+            if(id>=mixingGraphPanelCommand&&id<=navigationLayoutsCommand&&deferView(id))return;
+            if(navigationCommand(id))return;
             if(workspaceEditorCommand(id))return;
             if(id==layoutsCommand){openLayoutWindow();return;}
             if(id>=dockNotes&&id<=dockGraph){selectDockTab(id);return;}

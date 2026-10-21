@@ -86,6 +86,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_native_controls_use_retained_workspace_path(self):
         self.button('Pattern focus')
         self.assertTrue(self.client.call('workspace.get')['data']['focusLayout'])
+
         self.button('Compose')
         self.button('Notes')
         self.navigate(row=8)
@@ -111,6 +112,32 @@ class WorkspaceTests(unittest.TestCase):
         user.SendMessageW(edit, 0xC, 0, ctypes.addressof(query))
         user.SendMessageW(edit, 0x100, 0x0D, 0)
         self.assertTrue(self.client.call('workspace.get')['data']['focusLayout'])
+
+    def test_mixing_graph_navigation_retains_one_owner(self):
+        before = self.client.call('document.get')
+        context = self.client.call('context.get')['data']
+        self.button('Mixing graph')
+        state = self.client.call('workspace.get')['data']
+        self.assertEqual(state['locations']['mixingGraph'], 'right')
+        self.assertTrue(state['inspection']['mixingGraph']['docked'])
+        self.assertIn('mixingGraph', state['visible'])
+        captured = state['inspection']['mixingGraph']
+        for placement in ('float', 'right', 'hide', 'right'):
+            state = self.client.call('workspace.panel', {'panel': 'mixingGraph', 'placement': placement, 'focus': placement != 'hide'})['data']
+            self.assertEqual(state['locations']['mixingGraph'], placement)
+            current = state['inspection']['mixingGraph']
+            for field in ('generation', 'document', 'expectedRevision', 'selected', 'wire', 'fields'):
+                self.assertEqual(current[field], captured[field], field)
+        layout = state['editorDock']['configuration']
+        self.button('Pattern')
+        state = self.client.call('workspace.get')['data']
+        self.assertEqual(state['focus'], 'pattern')
+        self.assertTrue(state['editorDock']['trackerVisible'])
+        # Only compact focus selection may change when returning to Pattern.
+        for field in ('locations', 'selected', 'rightWidth', 'bottomHeight'):
+            self.assertEqual(state['editorDock']['configuration'][field], layout[field])
+        self.assertEqual(self.client.call('context.get')['data'], context)
+        self.assertEqual(self.client.call('document.get')['revision'], before['revision'])
 
     def test_grid_selection_and_dock_resize_are_readable(self):
         state = self.client.call('workspace.get')['data']
@@ -224,14 +251,14 @@ class WorkspaceTests(unittest.TestCase):
         context = self.client.call('context.get')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide', 'mixingGraph': 'hide'})
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'notes', ['notes']))
         for name in ('Pattern focus', 'Compose'):
             self.client.call('workspace.layout', {'name': name})
             self.assertEqual(self.client.call('workspace.get')['data']['locations']['samples'], 'hide')
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide', 'mixingGraph': 'hide'})
         self.assertEqual(state['right'], 'notes')
         for field in ('pins', 'inspection', 'returnPoints'):
             self.assertEqual(state[field], before[field])
@@ -242,11 +269,11 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'pattern', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide', 'mixingGraph': 'hide'})
         self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('', 'pattern', []))
-        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'hide', 'samples': 'hide', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide', 'mixingGraph': 'hide'})
         self.client.call('workspace.panel', {'panel': 'notes', 'placement': 'right'})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('notes', 'pattern', ['notes']))
@@ -255,7 +282,7 @@ class WorkspaceTests(unittest.TestCase):
         self.client.call('workspace.panel', {'panel': 'samples', 'focus': True})
         state = self.client.call('workspace.get')['data']
         self.assertEqual((state['right'], state['focus'], state['visible']), ('samples', 'samples', ['samples']))
-        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide'})
+        self.assertEqual(state['locations'], {'notes': 'right', 'samples': 'right', 'automation': 'hide', 'instruments': 'hide', 'graphCurve': 'hide', 'preciseNotes': 'hide', 'mixingGraph': 'hide'})
         # Complete validation must precede placement changes.
         with self.assertRaises(ApiError) as invalid:
             self.client.call('workspace.panel', {'panel': 'samples', 'placement': 'hide', 'pinned': 1})
@@ -299,8 +326,8 @@ class WorkspaceTests(unittest.TestCase):
     def test_describe_advertises_only_the_supported_workspace_subset(self):
         description = self.client.call('api.describe')['data']
         self.assertEqual(description.get('workspaceSubset'), {
-            'panels': ['notes', 'samples', 'automation', 'instruments', 'graphCurve', 'preciseNotes'], 'placements': ['right', 'hide'],
-            'editorPlacements': {'automation': ['right', 'bottom', 'secondary', 'float', 'hide'], 'instruments': ['right', 'bottom', 'secondary', 'float', 'hide'], 'graphCurve': ['right', 'bottom', 'secondary', 'float', 'hide'], 'preciseNotes': ['right', 'bottom', 'secondary', 'float', 'hide']},
+            'panels': ['notes', 'samples', 'automation', 'instruments', 'graphCurve', 'preciseNotes', 'mixingGraph'], 'placements': ['right', 'hide'],
+            'editorPlacements': {'automation': ['right', 'bottom', 'secondary', 'float', 'hide'], 'instruments': ['right', 'bottom', 'secondary', 'float', 'hide'], 'graphCurve': ['right', 'bottom', 'secondary', 'float', 'hide'], 'preciseNotes': ['right', 'bottom', 'secondary', 'float', 'hide'], 'mixingGraph': ['right', 'bottom', 'secondary', 'float', 'hide']},
             'layouts': ['Compose', 'Pattern focus', 'Sound design', 'Connected', 'Graph editing', 'Save custom', 'Restore custom', 'Delete custom', 'Reload saved'],
             'namedLayouts': {'optionalField': 'savedName', 'default': 'Custom', 'maximum': 24, 'nameCharacters': 64},
             'schema': 'windows/Api/workspace.schema.json'})

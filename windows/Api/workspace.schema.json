@@ -248,14 +248,15 @@
     },
     "editorPanel": {
       "type": "object",
-      "description": "Retained automation, instrument/envelope, Graph curve or precise-note row editor. preciseNotes is independent of the read-only notes inspector. Graph curve and preciseNotes prefer secondary; other editors prefer float. Fixed regions fall back to compact tabs, retaining HWNDs, raw fields, capture and desired placement.",
+      "description": "Retained automation, instrument/envelope, Graph curve or precise-note row editor. preciseNotes is independent of the read-only notes inspector. Graph curve and preciseNotes prefer secondary; mixingGraph prefers right, other editors prefer float. mixingGraph is whole-song routing and does not follow the pattern cursor. Fixed regions fall back to compact tabs, retaining HWNDs, raw fields, capture and desired placement.",
       "properties": {
         "panel": {
           "enum": [
             "automation",
             "instruments",
             "graphCurve",
-            "preciseNotes"
+            "preciseNotes",
+            "mixingGraph"
           ]
         },
         "placement": {
@@ -333,7 +334,7 @@
           "additionalProperties": false
         }
       ],
-      "description": "Presentation only. Editors V4 records automation, instruments, graphCurve and preciseNotes. V2/V3 hide new owners except a legacy bottom Notes selection migrates to preciseNotes bottom. V4 has no editable Main notes identity. A seven-field lowerEditor notes alias reveals the sole owner at its existing placement, or bottom when hidden; otherwise missing editors retains current placements. Restore stages missing owners and validates document, source, raw generation, focus and layout before adoption; existing owners retain drafts/pins/targets. Built-in Connected and Graph editing deliberately hide preciseNotes without destroying it."
+      "description": "Presentation only. Editors V5 adds mixingGraph to automation, instruments, graphCurve and preciseNotes; V4 layouts migrate with mixingGraph hidden. V2/V3 hide new owners except a legacy bottom Notes selection migrates to preciseNotes bottom. V4 has no editable Main notes identity. A seven-field lowerEditor notes alias reveals the sole owner at its existing placement, or bottom when hidden; otherwise missing editors retains current placements. Restore stages missing owners and validates document, source, raw generation, focus and layout before adoption; existing owners retain drafts/pins/targets. Built-in Connected and Graph editing deliberately hide preciseNotes without destroying it."
     }
   }
 }

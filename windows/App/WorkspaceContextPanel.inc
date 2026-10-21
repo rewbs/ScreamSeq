@@ -50,18 +50,24 @@
         const bool sample=editor=="samples",graph=editor=="graph",mixer=editor=="mixer",
             plugins=editor=="plugins",instrument=editor=="instruments",
             automation=editor=="automation"||editor=="graphCurve";
-        const bool pattern=!sample&&!graph&&!mixer&&!plugins&&!instrument&&!automation;
+        const bool routing=editor=="mixingGraph";
+        const bool pattern=!sample&&!graph&&!mixer&&!plugins&&!instrument&&!automation&&!routing;
         contextActions={};
-        if(graph) {
+        if(routing){
+            contextPanelTitle=L"SONG MIXING GRAPH";
+            contextActions={{{navigationPatternCommand,L"Return to Pattern"},{mixingGraphFloatCommand,L"Float graph"},
+                {mixingGraphPanelCommand,L"Dock graph beside Pattern"},{navigationMixerCommand,L"Mixer panel"},
+                {navigationPluginsCommand,L"Plugin rack panel"},{allEditorsCommand,L"All editors"}}};
+        } else if(graph) {
             contextPanelTitle=L"GRAPH RECIPE";
             const auto node=graphSelectedNode();
             contextActions={{{graphLoadPlugin,L"Plugin parameters…",node&&node->at("kind")=="plugin"},
                 {graphFit,L"Fit graph",!graphID.empty()},{graphWorkflowCommand,L"Groups & modulation…"},
                 {graphTrimsCommand,L"Audio port trims…"},{pluginBrowse,L"Add plugins to rack…"},
-                {mixerRouting,L"Song mixing graph…"}}};
+                {mixingGraphPanelCommand,L"Song mixing graph panel"}}};
         } else if(mixer) {
             contextPanelTitle=L"MIXER";
-            contextActions={{{mixerRouting,L"Routing & connections…"},{mixerAddEffect,L"Add bus effect…",!mixerTarget.empty()},
+            contextActions={{{mixingGraphPanelCommand,L"Song mixing graph panel"},{mixerAddEffect,L"Add bus effect…",!mixerTarget.empty()},
                 {mixerRouteInstrument,L"Route instrument…",!mixerTarget.empty()},{mixerAdd,L"Add group"},
                 {mixerAddReturn,L"Add return"},{mixerDetailsCommand,L"Bus details…"}}};
         } else if(plugins) {
@@ -69,7 +75,7 @@
             contextActions={{{pluginBrowse,L"Add plugins…"},{pluginEditor,L"Plugin editor…",!selectedPlugin.empty()},
                 {pluginAutomate,L"Automate parameter…",hasPluginParameterTarget()},
                 {pluginActivity,L"Parameter activity…",hasPluginParameterTarget()},
-                {pluginAliases,L"Instrument assignments…",!selectedPlugin.empty()},{mixerRouting,L"Routing & connections…"}}};
+                {pluginAliases,L"Instrument assignments…",!selectedPlugin.empty()},{mixingGraphPanelCommand,L"Song mixing graph panel"}}};
         } else if(sample) {
             contextPanelTitle=L"SAMPLES";
             contextActions={{{sampleDetailCommand,L"Waveform & loops…"},{sampleBrowseCommand,L"Browse & preview…"},
@@ -78,13 +84,13 @@
         } else if(instrument) {
             contextPanelTitle=L"INSTRUMENT";
             contextActions={{{pluginsCommand,L"Plugin rack"},{pluginBrowse,L"Add plugins…"},
-                {sampleBrowseCommand,L"Browse samples…"},{mixerRouting,L"Routing & connections…"},
+                {sampleBrowseCommand,L"Browse samples…"},{mixingGraphPanelCommand,L"Song mixing graph panel"},
                 {parameterActivityCommand,L"Parameter activity…"}}};
         } else if(automation) {
             contextPanelTitle=editor=="graphCurve"?L"GRAPH CURVE":L"AUTOMATION";
             contextActions={{{parameterActivityCommand,L"Parameter activity…"},{graphWorkflowCommand,L"Modulation & sources…"},
                 {absoluteAutomationCommand,L"Song automation…"},{graphCommand,L"Graph recipes"},
-                {mixerRouting,L"Routing & connections…"}}};
+                {mixingGraphPanelCommand,L"Song mixing graph panel"}}};
         } else {
             contextPanelTitle=editor=="effects"?L"PATTERN EFFECTS":editor=="preciseNotes"||editor=="notes"?L"NOTES":L"PATTERN";
             contextActions={{{notesCommand,L"Precise notes…"},{patternToolsCommand,L"Selection tools…"},
