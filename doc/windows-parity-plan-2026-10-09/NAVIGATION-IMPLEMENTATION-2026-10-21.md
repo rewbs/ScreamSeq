@@ -296,3 +296,36 @@ Production packaging remains pending the fresh foreground check. The prepared
 it passes. That path is a planned destination, not a delivered binary. Nothing
 was pushed or merged. Subsequent recording recovery edits are a separate,
 unbuilt source batch; see [the staged recording recovery batch](PLUGIN-GESTURE-RECOVERY-2026-10-21.md).
+
+## Final foreground check and production package
+
+After the user unlocked Windows again, fresh isolated PID 25564 ran the exact
+`86538cb42` executable with inspection/automation enabled and audio hardware
+disabled. The earlier blocked receipt is retained as
+`followup/foreground-blocked.json`; `followup/foreground-check.json` now records
+the passing **bounded navigation** qualification and its limitations.
+
+Fresh Computer Use observations confirmed default-size Pattern plus Mixing
+graph, readable Enable/Fit labels, maximize/restore, compact Graph/Inspector,
+gain text `-6.5`, Tab/Shift+Tab and Backspace leaving `-6.`, and Ctrl+Alt+D with
+immediate accessible focus on floating gain edit 3807. Explicit Dock and the
+Separate windows menu preserved that draft. Ctrl+Alt+P followed by Down moved
+Pattern selection from row 0 to row 1. All editors visibly separates Editor
+panels from Separate windows and explicitly labels the graph destinations.
+`followup/unlocked-workspace.json` confirms floating placement and retained gain.
+
+The earlier narrow 889px resize observation is reused: the only `windows/App`
+change from `bc7d03f10` to this candidate is `GraphCurveOwnerChildren.inc`, so
+the relevant navigation/layout inputs are unchanged. Floating typing continuity
+remains outside the tool's targetability; native focus/caret gates passed.
+Docked graph accessibility remains root-only. These observations do not establish
+temporal flicker, audio performance or full screen-reader qualification.
+
+The production ARM64 Release package was created at:
+`~/Downloads/ScreamSeq-Windows-ARM64-navigation-86538cb42/ScreamSeq.exe`.
+Executable SHA-256 remains
+`318bb274d082efc31d83371d580454d5eac44372f73b44f67fb2d39a133d4098`.
+Scanner, ARM64 VC runtime DLLs, retained notices, source-hash BuildInfo and
+ReleaseProvenance accompany it. All packaged hashes and source/copy executable
+hashes were verified. No additional build, push or main merge occurred. The
+later recording recovery prerequisite is deliberately absent from this package.
