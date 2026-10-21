@@ -49,7 +49,7 @@ private:
   void requireCurrent()const{require(current(),"Song changed / captured automation retained; Reload before applying");}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
-  void rebuild(){canvas_.rebuild(points_,values_);requestPaint();}
+  void rebuild(){canvas_.rebuildDraft(points_,values_,double(rows_)*256,rowsPerBeat_,visible());requestPaint();}
   void schedule(){previewNeeded_=true;if(visible())resumeVisiblePresentation();}
   bool reviewRequired_=false;
   bool displayControl(int id)const override{return id!=apply||reviewRequired_||automaticEditFailed_;}

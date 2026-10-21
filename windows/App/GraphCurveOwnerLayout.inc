@@ -89,7 +89,7 @@
     const bool retainedWorkbench=workbench_&&(workbench_->visible()||workbench_->retainedDraft());
     EnableWindow(controls_.at(expand),!pending_&&!openingChild_&&(retainedWorkbench||(hasTarget()&&kind_==8)));
     for(int i=0;i<3;++i)NativeControls::active(controls_.at(pageCurve+i),page_==i);
-    canvas_.rebuild(points_,values_);
+    canvas_.rebuildDraft(points_,values_,double(rows_)*256,rowsPerBeat_,visible());
     if(pending_&&focused&&IsChild(window_,focused)&&!GetFocus())pendingFocus_=focused;
     if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;
       if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);

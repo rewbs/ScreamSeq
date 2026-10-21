@@ -149,6 +149,46 @@ void curveMappingAndKeyboard(Owner &owner){
   f.current.revision="outside";const auto retainedBefore=retained(f.tool.snapshot());key(GetFocus(),VK_RETURN,true);
   require(f.writes.size()==1&&retained(f.tool.snapshot())==retainedBefore&&f.tool.snapshot().at("stale").get<bool>(),"Stale Apply changed song, draft or captured revision");
 }
+void localDraftInterpolation(){
+  ScreamSeq::AutomationDraftPreview preview;
+  static constexpr const char *names[]={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse"};
+  for(size_t kind=0;kind<std::size(names);++kind){
+    Json points=Json::array({{{"position",0},{"value",.2},{"curve",names[kind]}},{{"position",8192},{"value",.8},{"curve","linear"}}});
+    const std::vector<Tracker::AutomationPoint> shared{{0,.2,Tracker::AutomationCurve(kind)},{8192,.8}};
+    const auto &values=preview.values(points,16384,4,0,16384);
+    require(values.size()==257,"Draft presentation exceeded or lost its bounded sample set");
+    for(const auto &sample:values)require(std::abs(sample[1].get<double>()-Tracker::automationValue(shared,sample[0].get<double>(),16384,4))<1e-12,
+      "Draft curve differs from shared musical interpolation");
+    points[0]["value"]=.4;
+    require(preview.values(points,16384,4,0,16384)[0][1]==.4,"Moving a point retained stale draft samples");
+  }
+  Json scripted=Json::array({{{"position",0},{"value",0},{"curve","scripted"},{"formula","clamp(beat/16,0,1)"}}});
+  require(preview.values(scripted,16384,4,0,16384)[128][1]==.5,"Scripted draft lost its beat clock");
+  require(preview.values(scripted,16384,8,0,16384)[128][1]==.25,"Timing change reused stale formula samples");
+  scripted[0]["formula"]="mix(start,end,t) + sin(";
+  require(preview.values(scripted,16384,4,0,16384).empty(),"Invalid formula showed a misleading valid preview");
+  scripted[0]["formula"]=".75";
+  require(preview.values(scripted,16384,4,0,16384)[128][1]==.75,"Corrected formula kept stale invalid geometry");
+  require(preview.values(Json::array(),16384,4,0,16384).empty(),"Empty envelope retained another curve");
+}
+void liveDragPresentation(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.click(4242);
+  const auto original=f.saved,initial=f.tool.snapshot();const auto handle=initial.at("handles")[0];
+  const auto scale=GetDpiForWindow(f.tool.window())/96.;
+  const auto at=[&](double dx,double dy){return MAKELPARAM(int(std::lround((handle.at("x").get<double>()+dx)*scale)),int(std::lround((handle.at("y").get<double>()+dy)*scale)));};
+  SendMessageW(f.tool.window(),WM_LBUTTONDOWN,MK_LBUTTON,at(0,0));
+  const auto reads=f.reads,previews=f.previews;
+  for(int delta:{8,16,24}){
+    SendMessageW(f.tool.window(),WM_MOUSEMOVE,MK_LBUTTON,at(delta,-delta));
+    const auto state=f.tool.snapshot();
+    require(state.at("previewSamples").get<size_t>()>2&&state.at("points")!=original,"Point drag erased the envelope or failed to move it");
+    require(GetFocus()==f.tool.window()&&GetCapture()==f.tool.window(),"Local curve rendering lost keyboard focus or pointer capture");
+    require(f.reads==reads&&f.previews==previews&&f.writes.empty(),"Pointer motion called the worker or saved history");
+  }
+  key(f.tool.window(),VK_ESCAPE);
+  require(f.tool.snapshot().at("points")==original&&f.tool.snapshot().at("previewSamples").get<size_t>()>2&&f.writes.empty(),
+    "Escape failed to restore visible unsaved curve without a write");
+}
 void hiddenInitialization(Owner &owner){
   SetActiveWindow(owner.window);SetFocus(owner.edit);const auto outside=GetFocus();
   {
@@ -225,7 +265,7 @@ int main(){try{
   ScreamSeq::Tests::runPrivateGui(L"ScreamSeqParameterDock",[]{
     // Like the existing retained-tool fixture, this uses intrinsic User32
     // controls; every real HWND is checked after creation below.
-    Owner owner;minimumBoundsAndActions(owner);pointDraftAndAxes(owner);formulaAndToolDrafts(owner);curveMappingAndKeyboard(owner);hiddenInitialization(owner);hiddenPreviewResume(owner);owner.close();
+    localDraftInterpolation();Owner owner;minimumBoundsAndActions(owner);pointDraftAndAxes(owner);formulaAndToolDrafts(owner);curveMappingAndKeyboard(owner);liveDragPresentation(owner);hiddenInitialization(owner);hiddenPreviewResume(owner);owner.close();
   });
   std::cout<<"PASS automation short dock: 440x300/310 page bounds, complete actions, unchanged floating minimum, retained HWND/text/caret/axes/context, curve hit mapping, guarded keyboard Apply, pure hidden initialization and ordinary preview timer resumption\n";return 0;
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

@@ -75,7 +75,7 @@ private:
   void requireCurrent()const{require(current(),"Song changed / captured curve retained; Reload before applying");}
   void status(std::wstring text){status_=std::move(text);if(ready_)set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what()));}
-  void rebuild(){canvas_.rebuild(points_,values_);requestPaint();}
+  void rebuild(){canvas_.rebuildDraft(points_,values_,double(rows_)*256,rowsPerBeat_,visible());requestPaint();}
   void schedule(){previewNeeded_=true;if(visible())resumeVisiblePresentation();}
   bool displayControl(int id)const override{return id!=apply||automaticEditFailed_;}
   void queueCurveEdit(UINT delay=600){queueAutomaticEdit([this]{

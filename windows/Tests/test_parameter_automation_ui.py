@@ -89,6 +89,41 @@ class ParameterAutomationUITests(unittest.TestCase):
         self.press(4214);self.press(4215);self.assertFalse(self.saved()[0]['enabled']);self.write('history.undo',domain='document');self.assertEqual(self.saved(),saved);self.write('history.redo',domain='document');self.assertFalse(self.saved()[0]['enabled'])
         path=self.folder/'native-parameters.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4219);self.select(4204,1);self.assertEqual(self.state()['points'],saved[0]['points']);self.assertFalse(self.state()['enabled']);self.press(4217);self.assertEqual(self.saved(),[])
 
+    def test_curve_stays_visible_and_tracks_drag_before_release(self):
+        plugin=self.add_gain()
+        points=[dict(position=2048,value=.25,curve='smooth'),dict(position=8192,value=.75,curve='linear')]
+        self.write('automation.pattern.set',pattern=0,plugin=plugin,parameter=1,points=points)
+        self.start();self.select(4204,1)
+        before=self.doc();handle=self.state()['handles'][0]
+        self.mouse(0x201,handle['x'],handle['y'])
+        try:
+            for amount in (8,16,24):
+                self.mouse(0x200,handle['x']+amount,handle['y']-amount)
+                state=self.state()
+                self.assertGreater(state['previewSamples'],2,'Envelope disappeared while dragging')
+                self.assertNotEqual(state['points'],points)
+                self.assertFalse(state['pending'],'Pointer motion entered the document worker')
+                self.assertEqual(self.doc(),before,'Drag changed history before release')
+        finally:
+            self.key(0x1B)
+        self.assertEqual(self.state()['points'],points)
+        self.assertGreater(self.state()['previewSamples'],2,'Cancel left the restored curve blank')
+        handle=self.state()['handles'][0]
+        self.mouse(0x201,handle['x'],handle['y'])
+        self.mouse(0x200,handle['x']+24,handle['y']-24)
+        edited=self.state()['points']
+        self.mouse(0x202,handle['x']+24,handle['y']-24);self.idle()
+        saved=self.saved()
+        self.assertEqual(saved[0]['points'],edited,'Release failed to save the displayed curve')
+        self.write('history.undo',domain='document')
+        self.assertEqual(self.saved()[0]['points'],points,'Drag did not form one Undo step')
+        self.write('history.redo',domain='document')
+        self.assertEqual(self.saved(),saved)
+        path=self.folder/'live-envelope.screamseq'
+        self.write('document.save',path=str(path))
+        self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.saved(),saved,'Reopen changed the displayed-and-saved curve')
+
     def test_search_target_stale_close_and_independent_cursor(self):
         first=self.add_gain();second=self.add_gain();self.start();self.press(4212);draft=self.state()['points'];self.select(4202,1);self.assertEqual(self.state()['plugin'],first);self.assertEqual(self.state()['points'],draft)
         self.field(4203,'nonexistent parameter');self.assertEqual(self.state()['filteredCount'],0);self.assertEqual(self.state()['points'],draft);self.field(4203,'');self.press(4239);self.start();self.assertTrue(self.state()['dirty']);self.assertEqual(self.state()['points'],draft)

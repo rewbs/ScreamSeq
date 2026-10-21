@@ -105,3 +105,49 @@ unless new failures or further edits invalidate it. After passing, run isolated
 visible playback with gain, balance, pre-balance and width, including keyboard
 focus. Package a separate production Release directory with matching provenance;
 do not replace either existing Downloads package or the musician's process.
+
+## Envelope drag rendering (same pending build)
+
+The user additionally reported that moving automation points makes the envelope
+disappear. Source confirms that ParameterAutomationWindow, GraphCurveWindow and
+EnvelopeBankWindow clear their sampled values on each move, then defer the
+worker preview until dragging ends. The native line renderer therefore has no
+curve to draw throughout the gesture.
+
+Three new actual-app regressions were run against the unchanged first candidate
+(`5ea1aec96` executable above). All three failed specifically with
+`previewSamples == 0` during a drag: parameter automation, graph-source curves
+and envelope templates. The log is `bin/mixer-flicker-20261021/envelope-baseline.log`.
+This reproduced the reported disappearance without a new build.
+
+`windows/App/AutomationDraftPreview.hpp` now provides a UI-owned preview of the
+current unsaved points. It reuses `Tracker::automationValue` and `CurveFormula`,
+including the captured span and rows-per-beat clock, samples at a fixed 257
+positions, and caches samples/formula programs across unchanged layouts and
+point moves. It calls no worker, audio or history API. `AutomationCanvas` uses
+this fallback when a visible participating editor has no validated worker
+samples. Ordinary worker validation remains, as do existing save-on-release,
+Undo, revision, focus/capture and bank Save master semantics. Hidden preparation
+does not start preview sampling. Invalid formulas produce no misleading
+replacement curve and retain the normal validation diagnostic path.
+
+Only the three affected automation owners opt into this fallback. Instrument
+and absolute/song automation already build their curve geometry directly from
+points. Scratch gesture canvases have their own cycle timing and are unchanged.
+No Mac, DSP, native project, plugin state or musical API mutation changed.
+
+Additional gates for the coordinated correction build:
+
+- Build `parameter-automation-dock-tests` and `graph-curve-window-tests` together
+  with the already planned app/workspace/mixer targets, then run both complete
+  native suites. The parameter suite now checks all eight built-in interpolation
+  modes, scripted beat timing, invalid/corrected formulas, bounded samples, live
+  point changes and Escape with focus/capture retained and no worker/write calls.
+- Run the three new actual-app regressions. Parameter drag also checks one Undo,
+  Redo and native save/reopen after release; the other two check visible draft
+  geometry, unchanged saved history during movement and restored geometry after
+  Escape. Existing assertions were not weakened. Python syntax and `git diff
+  --check` passed; new C++ and passing executable evidence remain pending.
+- Include an automation-point drag in isolated live computer-use inspection of
+  the final candidate. Update the follow-up automation and frozen build-script
+  commit to include this batch before the 07:24:42 UTC build gate.

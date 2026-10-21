@@ -91,6 +91,21 @@ class EnvelopeBankUITests(GraphCurveNativeMixin, unittest.TestCase):
         self.assertTrue(self.bank()['selected'], self.bank())
         return target
 
+    def test_template_curve_stays_visible_during_drag(self):
+        self.capture();self.idle()
+        original=self.bank()['shape'];before=self.doc();handle=self.bank()['handles'][0]
+        self.bmouse(0x201,handle,1)
+        try:
+            self.bmouse(0x200,dict(x=handle['x']+24,y=handle['y']-24),1)
+            state=self.bank()
+            self.assertGreater(state['previewSamples'],2,'Template envelope disappeared while dragging')
+            self.assertNotEqual(state['shape'],original)
+            self.assertEqual(self.doc(),before,'Template drag saved before an explicit master edit')
+        finally:
+            self.desktop.send(self.bank_hwnd(),0x100,0x1B)
+        self.assertEqual(self.bank()['shape'],original)
+        self.assertGreater(self.bank()['previewSamples'],2)
+
     def test_capture_link_master_history_and_native_reopen(self):
         graph, node = self.capture()
         template = self.bank()['selected']

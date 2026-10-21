@@ -1,5 +1,6 @@
 #pragma once
 #include "WorkspaceState.hpp"
+#include "AutomationDraftPreview.hpp"
 namespace ScreamSeq {
 // Screen geometry is rebuilt after draft/viewport changes, never during paint.
 struct AutomationCanvas {
@@ -8,10 +9,14 @@ struct AutomationCanvas {
   double start=0,end=16384;
   double valueLow=0,valueHigh=1;
   std::vector<Point> handles,curve;
+  AutomationDraftPreview draftPreview;
   Point screen(double position,double value)const{return {viewport.x+float((position-start)/std::max(1.0,end-start))*viewport.w,viewport.y+float((valueHigh-value)/std::max(.0001,valueHigh-valueLow))*viewport.h};}
   double position(float x)const{return start+(x-viewport.x)*std::max(1.0,end-start)/std::max(1.0f,viewport.w);}
   double value(float y)const{return std::clamp(valueHigh-double(y-viewport.y)/std::max(1.0f,viewport.h)*(valueHigh-valueLow),0.0,1.0);}
   void rebuild(const Api::Json &points,const Api::Json &values){handles.clear();curve.clear();for(const auto &p:points)handles.push_back(screen(p.at("position").get<double>(),p.at("value").get<double>()));for(const auto &v:values)curve.push_back(screen(v[0].get<double>(),v[1].get<double>()));}
+  void rebuildDraft(const Api::Json &points,const Api::Json &values,double span,double beat,bool visible){
+    rebuild(points,visible&&values.empty()?draftPreview.values(points,span,beat,start,end):values);
+  }
   int hit(float x,float y)const{int found=-1;double distance=9;for(size_t i=0;i<handles.size();++i){const auto &p=handles[i];const auto d=std::hypot(x-p.x,y-p.y);if(d<distance){distance=d;found=int(i);}}return found;}
   void fit(unsigned rows){start=0;end=double(rows)*256;valueLow=0;valueHigh=1;}
   void zoom(double factor,unsigned rows){const auto span=std::clamp((end-start)/factor,64.0,double(rows)*256);const auto center=(start+end)/2;start=std::clamp(center-span/2,0.0,double(rows)*256-span);end=start+span;}

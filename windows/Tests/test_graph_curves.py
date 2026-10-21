@@ -35,6 +35,26 @@ class GraphCurveTests(GraphCurveNativeMixin, unittest.TestCase):
         self.curve_api_idle()
         return self.read('graph.automation.get', graph=graph, node=node, pattern=pattern)
 
+    def test_curve_stays_visible_during_drag(self):
+        graph,node=self.setup_curve()
+        points=[dict(position=2048,value=.25,curve='smooth'),dict(position=8192,value=.75,curve='linear')]
+        self.write('graph.automation.set',graph=graph,node=node,pattern=0,points=points)
+        self.command(487)
+        before=self.doc();handle=self.curve_canvas()['handles'][0]
+        self.mouse(0x201,handle,1)
+        try:
+            for amount in (8,16,24):
+                self.mouse(0x200,dict(x=handle['x']+amount,y=handle['y']-amount),1)
+                state=self.state()
+                self.assertGreater(state['previewSamples'],2,'Graph envelope disappeared while dragging')
+                self.assertNotEqual(state['points'],points)
+                self.assertFalse(state['pending'])
+                self.assertEqual(self.doc(),before,'Drag changed history before release')
+        finally:
+            self.key(0x1B)
+        self.assertEqual(self.state()['points'],points)
+        self.assertGreater(self.state()['previewSamples'],2)
+
     def test_native_curve_points_rejection_history_other_pattern_and_reopen(self):
         graph, node = self.setup_curve()
         pattern = self.write('pattern.create', rows=32)['pattern']
