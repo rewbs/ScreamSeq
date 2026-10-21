@@ -2,8 +2,8 @@
 
 ## Scope and source finding
 
-The user reported widespread Windows UI flicker in the ARM64 Release package
-from main `b98631b48`. That package has the same product source as `55d11e131`.
+The user reported widespread Windows UI flicker. The current ARM64 Release package
+inspected here is from main `b98631b48`, with the same product source as `55d11e131`.
 Its earlier moved-control invalidation fix prevents stale sibling captions;
 it does not separate native-control painting from canvas presentation.
 
@@ -79,4 +79,80 @@ library typing or temporal flicker measurement is claimed from that attempt.
 Alt+F4 closed the owned main process and its launch session exited successfully.
 No project or preferences were saved, and hardware audio was disabled.
 
-Execution results will be appended after the new build and recheck.
+## Execution results
+
+One coordinated build from clean source `f8183a7b1cf271fee5c38150b6f01b9b0862110d`
+started **04:39:49 UTC** and completed **04:42:02 UTC** on 21 October 2026.
+Configure and all seven Release targets passed, using the existing ARM64 cache
+and two build jobs. Executable SHA-256:
+`e511954c7457ecd2ecfc4d5f07b53403f24ace4998b883883dfb783000b732f1`.
+The existing enum/floating-point warning in `PluginParametersWindow.hpp` remains.
+No second build or CI push was performed. The next build gate is no earlier
+than **05:42:03 UTC**, using this build's completion time conservatively.
+
+All **nine selected native tests passed** in 73.83 seconds. This includes the
+new composition/lifecycle checks and atomic-item pixel/resource checks, plus
+every existing workspace, graph and retained-editor check selected above.
+All **three actual-app checks passed** on one private desktop in 7.62 seconds:
+idle rendering sleeps and edits wake it; guarded document/transport startup;
+and the renderer probe draws 120 frames and reports a real GPU/window. The probe
+explicitly does not qualify sustained presentation. Source and executable hash
+were unchanged after testing.
+
+Local receipts and original outputs are retained under
+`bin/flicker-20261021/`: `build.json`, `BuildInfo.json`, `configure.log`,
+`build.log`, `checks.json`, `native.xml`, `native.log`, `app.log` and the
+build/check/package scripts. These generated artifacts are not committed.
+
+### Visible packaged-build inspection
+
+After the private-desktop tests finished, launched the packaged executable as
+owned PID **40892**, with `--inspection --automation --seconds 900` and a new
+report path. Verified the process path; no musician process was present.
+Computer Use targeted returned main window **11143784**.
+
+- Pattern, plugin-rack, sample waveform and graph-recipe controls were visible.
+  Native buttons, selectors, lists and fields retained complete labels in the
+  settled states, including after maximizing and restoring the main window.
+- In sample Start, Ctrl+A selected `0`; typing `12` replaced it. Ctrl+B hid the
+  sidebar while preserving the draft/caret; Backspace changed it to `1`.
+  Tab then Ctrl+A selected End's `256`. Shift+Tab then Ctrl+A selected Start's
+  `1`. Ctrl+B restored the sidebar with that selection intact. Escape restored
+  the original range `0..256`. No song edit was applied or saved.
+- The retained plugin library displayed its search field, selectors, buttons
+  and populated builtin list. Its inspection-mode unavailable-preferences
+  message was visible; no browser preferences were written.
+- Accessibility continued to report the main root as focused even while text
+  selection and editing visibly worked. This pre-existing accessibility gap
+  is not claimed fixed. The floating library was observable but not separately
+  targetable by Computer Use; its keyboard behavior is covered by native tests,
+  not a claimed foreground typing pass.
+- An immediate graph-tab transition capture showed old canvas content behind
+  newly positioned controls; the next capture showed the correct settled graph.
+  Separate HWND layout and GPU presentation are not an atomic frame transaction.
+  These snapshots do not establish a temporal flicker rate or absence on every
+  adapter. The verified mechanisms are lower-layer canvas isolation and complete
+  owner-drawn item publication, not an exhaustive no-flicker guarantee.
+
+Alt+F4 closed the owned QA process. `visible-qa.json` records 200.72 seconds,
+22 drawn frames, 109 retained text layouts and zero audio callbacks/device
+errors; `sustainedPresentationQualified` remains false. No hardware audio,
+project save or user-session replacement occurred.
+
+## Usable package
+
+The optimized ARM64 executable, scanner, redistributable VC143 CRT DLLs and
+retained attribution folders are in:
+
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-flicker-f8183a7b1/ScreamSeq.exe`
+
+The package's executable has the qualified SHA-256 above. Every manifest file
+hash was rechecked after the visible run; those same binaries were zipped,
+without another build. ZIP SHA-256:
+`a7ca7eaced9470b124a50c76e304c317fbfa9e47b5081b9cae78fd198531c9c8`.
+
+The prior main package remains untouched. This fix is on the temporary
+`codex/windows-flicker` branch based on shared main; it has not been pushed or
+merged. No Mac or shared model inputs changed, so a redundant Mac build/full
+musical suite was not run for this Windows-only patch. This targeted result
+does not supersede outstanding full-suite or cross-platform parity work.
