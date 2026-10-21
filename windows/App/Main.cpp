@@ -109,7 +109,9 @@ constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixi
     allEditorsCommand=646,navigationPatternCommand=647,navigationSamplesCommand=648,
     navigationInstrumentsCommand=649,navigationPluginsCommand=650,navigationMixerCommand=651,
     navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
-static_assert(contextActionLast<700,"Application commands must not overlap effect field controls");
+constexpr int navigationEffectsCommand=655,navigationRecipesCommand=656,
+    floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660;
+static_assert(contextActionLast<700&&floatCurveCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,

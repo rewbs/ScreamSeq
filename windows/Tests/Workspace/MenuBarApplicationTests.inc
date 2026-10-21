@@ -41,6 +41,14 @@ void applicationMenuBar(){
         menuChoose(app,songPropertiesCommand);restoreCheck(app.songPropertiesWindow&&app.songPropertiesWindow->visible(),"Playback/cursor movement prevented opening document properties");
         app.songPropertiesWindow->hide();SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=9;app.navigate(next);const auto before=songState(app);
         menuChoose(app,patternToolsCommand);restoreCheck(!app.patternToolsWindow&&songState(app)==before,"Stale selection menu opened an editor on a different target");
+        SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=11;app.navigate(next);
+        menuChoose(app,mixingGraphPanelCommand);
+        restoreCheck(app.songRoutingWindow&&app.songRoutingWindow->visible()&&app.songRoutingWindow->docked()&&songState(app)==before,
+            "Cursor movement blocked whole-song graph navigation or changed the song");
+        SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=12;app.navigate(next);
+        menuChoose(app,navigationPatternCommand);
+        restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="pattern"&&app.position().at("row")==12&&songState(app)==before,
+            "Focus-only Pattern menu action was blocked by cursor movement or restored an old position");
         SetFocus(app.window);SetCapture(app.window);menuBegin(app);
         const bool capturedDisabled=(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED)!=0;
         SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);ReleaseCapture();

@@ -355,7 +355,12 @@
         layoutControls();
         if(state.location=="hide"&&workspaceState.focus==id)setWorkspaceCanvasFocus("pattern");
         if(p.value("return",false)){setWorkspaceCanvasFocus("pattern");navigate(returnPoint);SetFocus(window);}
-        else if(p.value("focus",false)&&tool){tool->show();setWorkspaceCanvasFocus(id);SetFocus(tool->window());}
+        else if(p.value("focus",false)&&tool){
+            tool->show();setWorkspaceCanvasFocus(id);
+            // Moving the focused owner must not turn continued text entry
+            // into canvas shortcuts. A different destination starts on its canvas.
+            SetFocus(tool->owns(previousFocus)&&IsWindowVisible(previousFocus)&&IsWindowEnabled(previousFocus)?previousFocus:tool->window());
+        }
         else if(workspaceFocusVisible(previousFocus))SetFocus(previousFocus);
         else if(!workspaceFocusVisible(GetFocus()))focusVisibleWorkspaceCanvas();
         ensureCursorVisible();
@@ -659,7 +664,17 @@
         restoreLayoutConfiguration(configuration);
     }
     bool workspaceEditorCommand(int id) {
-        if(id==mixingGraphPanelCommand||id==editorMixingGraphTab||id==mixingGraphFloatCommand){workspaceEditorRequest({{"panel","mixingGraph"},{"placement",id==mixingGraphFloatCommand?"float":"right"},{"focus",true}});return true;}
+        if(id==mixingGraphPanelCommand||id==editorMixingGraphTab||id==mixingGraphFloatCommand){
+            workspaceEditorRequest({{"panel","mixingGraph"},{"placement",id==mixingGraphFloatCommand?"float":"right"},{"focus",true}});
+            if(id==mixingGraphPanelCommand&&workspaceState.lowerVisible&&Regions::mainBottom(currentWorkspaceRegions().selected[1])&&workspaceRegionGeometry().mode==Regions::Mode::tabs){
+                // Prefer Pattern plus routing over an unnecessary third Main
+                // editor. Retain its owner/draft and reopen it from the strip.
+                workspaceState.lowerVisible=false;
+                if(workspaceRegionGeometry().mode!=Regions::Mode::regions)workspaceState.lowerVisible=true;
+                layoutControls();
+            }
+            return true;
+        }
         if(id==dockPreciseNotesCommand){workspaceEditorRequest({{"panel","preciseNotes"},{"placement","secondary"},{"focus",true}});return true;}
         if(id==editorPreciseNotesTab){const auto &state=workspaceEditors[workspaceEditorIndex("preciseNotes")];workspaceEditorRequest({{"panel","preciseNotes"},{"placement",state.location=="hide"?state.preferred:state.location},{"focus",true}});return true;}
 

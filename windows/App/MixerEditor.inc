@@ -73,7 +73,7 @@
     bool mixerEditorVisible() const {return workspaceMainEditorVisible("mixer");}
     void installMixerControls() {
         for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{mixerCommand,L"Mixer"},{mixerEnable,L"Enable mixer"},{mixerAdd,L"Add group"},
-            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Retry"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Mixing graph…"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
+            {mixerRemove,L"Remove"},{mixerReload,L"Reload"},{mixerApply,L"Retry"},{mixerMute,L"Mute off"},{mixerSolo,L"Solo off"},{mixerRouting,L"Mixing graph panel"},{mixerStripsCommand,L"Strips"},{mixerDetailsCommand,L"Details"},{mixerAddReturn,L"Add return"}})
             controls[id]=CreateWindowExW(0,L"BUTTON",label,WS_CHILD|WS_TABSTOP|BS_OWNERDRAW,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerList]=CreateWindowExW(0,L"LISTBOX",L"Mixer buses",WS_CHILD|WS_TABSTOP|WS_VSCROLL|LBS_NOTIFY|LBS_OWNERDRAWFIXED|LBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerList)),GetModuleHandleW(nullptr),nullptr);
         controls[mixerOutput]=CreateWindowExW(0,L"COMBOBOX",L"Main output",WS_CHILD|WS_TABSTOP|WS_VSCROLL|CBS_DROPDOWNLIST|CBS_OWNERDRAWFIXED|CBS_HASSTRINGS,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(mixerOutput)),GetModuleHandleW(nullptr),nullptr);
@@ -252,7 +252,7 @@
     bool mixerControlCommand(int id) {
         if(id<mixerCommand||id>mixerRouteInstrument)return false;
         workspaceState.focus="mixer";
-        if(id==mixerRouting){openSongRouting();return true;}
+        if(id==mixerRouting){command(mixingGraphPanelCommand);return true;}
         if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand){
             if(id==mixerStripsCommand)mixerStripsMode=true;if(id==mixerDetailsCommand)mixerStripsMode=false;
             graphEditorOpen=false;mixerEditorOpen=true;workspaceState.layout="Compose";

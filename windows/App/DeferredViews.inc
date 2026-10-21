@@ -6,6 +6,7 @@
     bool drainingViews=false;
     static bool viewOpeningCommand(int id) {
         switch(id){
+        case navigationEffectsCommand:case navigationRecipesCommand:case floatInstrumentCommand:case floatAutomationCommand:case floatNotesCommand:case floatCurveCommand:
         case mixingGraphPanelCommand:case mixingGraphFloatCommand:case editorMixingGraphTab:
         case navigationInstrumentsCommand:case navigationAutomationCommand:case navigationSamplesCommand:case navigationPluginsCommand:case navigationMixerCommand:
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:
@@ -22,11 +23,11 @@
     Json viewCommandTarget(int id)const {
         if(id==mixingGraphPanelCommand||id==mixingGraphFloatCommand||id==editorMixingGraphTab||id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==sampleRecordCommand||id==audioSettingsCommand)return Json::array();
         if(id==curveBank)return graphCurveOperationGuard();
-        if(id==notesCommand||id==dockPreciseNotesCommand||id==editorPreciseNotesTab)return preciseNoteSelectionGuard();
-        if(id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});
+        if(id==floatNotesCommand||id==notesCommand||id==dockPreciseNotesCommand||id==editorPreciseNotesTab)return preciseNoteSelectionGuard();
+        if(id==floatCurveCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==editorGraphCurveTab)return Json::array({graphID,graphNode,graphCurveSelectionSerial,patternIndex});
         if(id==patternRenderOptionsCommand)return Json::array({view->session.revision,patternIndex,selection()});
-        if(id==graphCommand)return Json::array({graphID,graphNode,graphGeneration});
-        if(id==mixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand||id==mixerAddEffect)return Json::array({mixerTarget});
+        if(id==graphCommand||id==navigationRecipesCommand)return Json::array({graphID,graphNode,graphGeneration});
+        if(id==mixerCommand||id==navigationMixerCommand||id==mixerStripsCommand||id==mixerDetailsCommand||id==mixerAddEffect)return Json::array({mixerTarget});
         return Json::array({patternIndex,row,channel,column,selectedSample(),typingSoundId,selectedPlugin,selectedParameter});
     }
     bool deferView(int id) {

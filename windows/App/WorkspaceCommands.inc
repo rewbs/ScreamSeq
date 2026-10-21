@@ -1,5 +1,9 @@
     std::vector<ScreamSeq::WorkspaceCommand> defaultWorkspaceCommands()const {
         return {
+            {navigationEffectsCommand,L"Navigate / Pattern effects panel",L""},
+            {navigationRecipesCommand,L"Navigate / Graph recipes panel",L""},
+            {floatInstrumentCommand,L"Window / Float instruments",L""},{floatAutomationCommand,L"Window / Float pattern automation",L""},
+            {floatNotesCommand,L"Window / Float precise notes",L""},{floatCurveCommand,L"Window / Float graph-source curve",L""},
             {navigationPatternCommand,L"Navigate / Pattern (focus only)",L""},
             {navigationSamplesCommand,L"Navigate / Samples panel",L""},
             {navigationInstrumentsCommand,L"Navigate / Instruments panel",L""},
@@ -49,7 +53,7 @@
             {mixerAddReturn,L"Mix / Add return bus",L""},
             {mixerAddEffect,L"Mix / Add effect to selected bus…",L""},
             {mixerRouteInstrument,L"Mix / Route instrument output here…",L""},
-            {mixerRouting,L"Mix / Mixing graph — routing, effects, groups and returns",L""},
+            {mixerRouting,L"Mix / Song mixing graph panel — routing, effects, groups and returns",L""},
             {graphCommandsCommand,L"Pattern / Graph command editor",L"Enter on a graph lane"},
             {graphLanesFocus,L"Pattern / Focus graph command lanes",L"F6 from pattern"},
             {parameterAutomationCommand,L"Automation / Pattern parameter curves and tools",L""},

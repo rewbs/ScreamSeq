@@ -221,7 +221,7 @@ struct RestoreFixture {
     void cleanup()noexcept {
         if(app){
             app->beforeRead={};app->postedInput={};app->fault=RestoreApplication::Fault::none;
-            app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+            app->songRoutingWindow.reset();app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         }
         if(root){DestroyWindow(root);root=nullptr;}
         if(app){app->window=nullptr;app.reset();}
@@ -232,9 +232,9 @@ struct RestoreFixture {
     void close() {
         const auto owned=root;const auto children=app->controls;
         std::vector<HWND> tools;
-        for(const auto *id:{"automation","instruments","graphCurve","preciseNotes"})
+        for(const auto *id:{"automation","instruments","graphCurve","preciseNotes","mixingGraph"})
             if(auto *tool=app->workspaceEditorWindow(id))tools.push_back(tool->window());
-        app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
+        app->songRoutingWindow.reset();app->preciseNoteWindow.reset();app->graphCurveWindow.reset();app->instrumentEnvelopeWindow.reset();app->parameterAutomationWindow.reset();app->palette.reset();
         restoreCheck(DestroyWindow(owned)!=FALSE,"Destroy restore test owner");root=nullptr;app->window=nullptr;
         restoreCheck(!IsWindow(owned),"Restore owner survived destruction");
         for(const auto tool:tools)restoreCheck(!IsWindow(tool),"Retained native owner survived explicit destruction");
@@ -961,8 +961,10 @@ void fourOwnerLegacyLayoutContracts() {
             restoreCheck(encoded.at("locations").at("graphCurve")==(version==3?"float":"hide")&&encoded.at("rightWidth")==523&&encoded.at("bottomHeight")==411,"V3/V2 migration borrowed live placement or lost desired sizes");
             restoreCheck(app.preparationReads.empty()&&app.preciseNoteWindow->operationGuard()==oldNative&&app.workspacePreparationGuard().at("inspectors")==inspector,"Migration reloaded a retained owner or changed inspector intent");
         }
-        const auto before=restoreState(app);auto invalid=app.layoutConfiguration();invalid["lowerEditor"]="notes";
-        restoreRejected([&]{app.restoreLayoutConfiguration(invalid);});restoreCheck(restoreState(app)==before,"Invalid V4 Main Notes alias changed live state");
+        const auto before=restoreState(app);
+        for(const int version:{4,5}){auto invalid=app.layoutConfiguration();invalid["lowerEditor"]="notes";invalid["editors"]["version"]=version;
+            if(version==4)invalid["editors"]["locations"].erase("mixingGraph");
+            restoreRejected([&]{app.restoreLayoutConfiguration(invalid);});restoreCheck(restoreState(app)==before,"Invalid V4/V5 Main Notes alias changed live state");}
         restoreCheck(songState(app)==song,"Legacy/V4 migration edited song/history/playback");
     });
 }
@@ -1252,6 +1254,7 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
                     timedRestoreCase("navigation placements and retained graph",applicationNavigation);
                     timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
+                    timedRestoreCase("navigation resize and explicit destinations",applicationNavigationResizeAndDestinations);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"worker-presentation") {

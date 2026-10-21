@@ -45,7 +45,7 @@
             const auto &savedEditors=v.at("editors");
             if(savedEditors.contains("selected")){const auto raw=savedEditors.at("selected").at("bottom").get<std::string>();
                 if(raw=="notes"||Regions::mainBottom(raw))need(raw==requestedEditor); } // Validate before alias migration.
-            if(savedEditors.value("version",0)==4)need(!legacyNotes); // V4 uses native placement explicitly.
+            if(savedEditors.value("version",0)>=4)need(!legacyNotes); // V4 onward uses native placement explicitly.
             need(!Regions::mainBottom(editorConfiguration->selected[1])||editorConfiguration->selected[1]==editor);
         }
         if(legacyNotes&&!editorConfiguration){
@@ -118,7 +118,7 @@
         layoutWindow->open();
     }
     void selectDockTab(int id) {
-        if(id==dockNotes){command(notesCommand);return;}
+        if(id==dockNotes){workspaceEditorRequest({{"panel","preciseNotes"},{"placement","bottom"},{"focus",true}});return;}
         workspaceState.lowerVisible=true;
-        command(id==dockNotes?notesCommand:id==dockSamples?samplesCommand:id==dockEffects?effectsCommand:id==dockPlugins?pluginsCommand:id==dockMixer?mixerCommand:graphCommand);
+        command(id==dockSamples?samplesCommand:id==dockEffects?effectsCommand:id==dockPlugins?pluginsCommand:id==dockMixer?mixerCommand:graphCommand);
     }

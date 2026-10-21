@@ -133,7 +133,9 @@ void applicationMixingGraphUsability(){
   SetWindowTextW(GetDlgItem(window,3807),L"-.");const auto captured=tool->snapshot().at("expectedRevision");app.edit("mixer.bus.set",{{"bus",bus},{"gainDB",-3.0}});SendMessageW(window,WM_TIMER,7,0);
   restoreCheck(tool->snapshot().at("expectedRevision")==captured&&tool->snapshot().at("draft")==true&&restoreText(GetDlgItem(window,3807))==L"-.","Automatic graph refresh discarded or rebased raw input");
   click(3839);restoreCheck(!library->visible(),"Dirty graph opened an effect browser against another revision");click(3815);
-  select(bus);const auto canvas=tool->snapshot().at("canvas");const auto node=*std::find_if(canvas.at("nodes").begin(),canvas.at("nodes").end(),[&](const auto &n){return n.at("id")==bus;});
+  select(bus);if(tool->snapshot().at("compact")==true&&tool->snapshot().at("inspector")==true)click(3846);
+  const auto canvas=tool->snapshot().at("canvas");restoreCheck(canvas.at("viewport")[2]>0,"Graph canvas must be visible before native double-click");
+  const auto node=*std::find_if(canvas.at("nodes").begin(),canvas.at("nodes").end(),[&](const auto &n){return n.at("id")==bus;});
   const auto rect=node.at("rect");const auto scale=GetDpiForWindow(window)/96.f;const auto point=MAKELPARAM(int((rect[0].get<float>()+rect[2].get<float>()/2)*scale),int((rect[1].get<float>()+rect[3].get<float>()/2)*scale));
   restoreCheck(GetClassLongPtrW(window,GCL_STYLE)&CS_DBLCLKS,"Graph window did not register double-click input");SendMessageW(window,WM_LBUTTONDBLCLK,MK_LBUTTON,point);
   restoreCheck(app.mixerTarget==bus&&!app.mixerStripsMode,"Graph double-click did not open the selected bus inspector");

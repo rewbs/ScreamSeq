@@ -116,7 +116,8 @@
         const bool dock=workspaceState.layout!="Pattern focus"&&workspaceState.lowerVisible;
         float tabX=g.lowerTabs.x+6;
         for(int id:{dockNotes,dockSamples,dockEffects,dockPlugins,dockMixer,dockGraph}) {
-            place(id,tabX,g.lowerTabs.y+3,78,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");tabX+=82;
+            const float width=id==dockNotes?104.f:id==dockGraph?108.f:78.f;
+            place(id,tabX,g.lowerTabs.y+3,width,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");tabX+=width+4;
         }
         place(dockToggle,g.lowerTabs.x+g.lowerTabs.w-102,g.lowerTabs.y+3,96,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
@@ -130,8 +131,8 @@
         ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
         EnableWindow(controls.at(noteColumnMuteCommand),!presentationBusy()&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
         place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
-		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,80,24,show);
-		place(samplesCommand,g.inspector.x+90,g.inspector.y+4,128,24,show);
+		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,104,24,show);
+		place(samplesCommand,g.inspector.x+114,g.inspector.y+4,128,24,show);
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
 		place(cursorCommand,g.inspector.x+110,g.inspector.y+34,70,24,show);
 		place(returnCommand,g.inspector.x+184,g.inspector.y+34,70,24,show);
@@ -189,7 +190,7 @@
             {navigationLayoutsCommand,L"Layouts ▾"},{mixingGraphFloatCommand,L"Float"},{editorMixingGraphTab,L"Mixing graph"},
             {positionRulerCommand,L"Row"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
-			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
+			{notesInspectorCommand,L"Note context"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
 			{cursorCommand,L"Cursor"},{returnCommand,L"Return"},{paletteCommand,L"Commands [Ctrl+K]"},
             {instrumentEnvelopeCommand,L"Instrument…"},{sampleDetailCommand,L"Detail…"},{liveKeysCommand,L"Live keys"},{sampleBrowseCommand,L"Browse samples…"},
             {audioSettingsCommand,L"Audio settings…"},{scratchGesturesCommand,L"Scratch phrases…"},
@@ -198,10 +199,10 @@
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
             {songPropertiesCommand,L"Settings…"},
             {noteColumnMuteCommand,L"Mute column"},
-            {layoutsCommand,L"Layouts…"},{dockNotes,L"Notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
+            {layoutsCommand,L"Layouts…"},{dockNotes,L"Precise notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
-            {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph"},{dockToggle,L"Collapse dock"},
-            {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graphs…"},{parameterAutomationCommand,L"Automation…"},
+            {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph recipes"},{dockToggle,L"Collapse dock"},
+            {openCommand,L"Open"},{saveCommand,L"Save"},{saveAsCommand,L"Save As"},{undoCommand,L"Undo"},{redoCommand,L"Redo"},{graphCommandsCommand,L"Graph cmds…"},{parameterAutomationCommand,L"Automation…"},
             {sampleImportCommand,L"Import…"},{sampleAllCommand,L"All"},{sampleReverseCommand,L"Reverse"},{sampleNormalizeCommand,L"Normalize"},
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
             {sampleLoopToggleCommand,L"Loop off"},{sampleLoopModeCommand,L"Forward"},{sampleLoopSelectCommand,L"Use selection"},
@@ -260,7 +261,7 @@
             if(id==keyboardSettingsCommand){openKeyboardSettings();return;}
             if(id==reloadShortcutsCommand){if(!workspaceShortcuts->reload())throw std::runtime_error(workspaceShortcuts->diagnostic());workspaceShortcutChanged();status=L"Saved shortcuts reloaded";return;}
             if((id==connectedWorkspaceCommand||id==openGraphCurveCommand||id==dockGraphCurveCommand||id==graphEditingWorkspaceCommand||id==editorGraphCurveTab||id==dockPreciseNotesCommand||id==editorPreciseNotesTab||id==dockAutomationCommand||id==dockInstrumentCommand||id==editorAutomationTab||id==editorInstrumentTab)&&deferView(id))return;
-            if(id>=mixingGraphPanelCommand&&id<=navigationLayoutsCommand&&deferView(id))return;
+            if(id>=mixingGraphPanelCommand&&id<=floatCurveCommand&&deferView(id))return;
             if(navigationCommand(id))return;
             if(workspaceEditorCommand(id))return;
             if(id==layoutsCommand){openLayoutWindow();return;}

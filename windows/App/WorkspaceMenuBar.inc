@@ -103,7 +103,8 @@
         // preferences or choosing a view. Selection edits keep the full guard.
         switch(id){
         case contextPanelCommand:case stopCommand:case exitCommand:case paletteCommand:case layoutsCommand:case audioSettingsCommand:case keyboardSettingsCommand:case reloadShortcutsCommand:
-        case composeCommand:case patternCommand:case soundCommand:case connectedWorkspaceCommand:case graphEditingWorkspaceCommand:return true;
+        case composeCommand:case patternCommand:case soundCommand:case connectedWorkspaceCommand:case graphEditingWorkspaceCommand:
+        case navigationPatternCommand:case allEditorsCommand:case navigationWindowsCommand:case mixingGraphPanelCommand:case mixingGraphFloatCommand:return true;
         case playbackLoopCommand:return current.at("loop")==menuGuard.at("loop");
         case liveKeysCommand:return current.at("live")==menuGuard.at("live");
         case followCommand:return current.at("position").at("following")==menuGuard.at("position").at("following");

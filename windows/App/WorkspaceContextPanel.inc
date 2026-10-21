@@ -56,7 +56,7 @@
         if(routing){
             contextPanelTitle=L"SONG MIXING GRAPH";
             contextActions={{{navigationPatternCommand,L"Return to Pattern"},{mixingGraphFloatCommand,L"Float graph"},
-                {mixingGraphPanelCommand,L"Dock graph beside Pattern"},{navigationMixerCommand,L"Mixer panel"},
+                {mixingGraphPanelCommand,L"Dock next to Pattern"},{navigationMixerCommand,L"Mixer panel"},
                 {navigationPluginsCommand,L"Plugin rack panel"},{allEditorsCommand,L"All editors"}}};
         } else if(graph) {
             contextPanelTitle=L"GRAPH RECIPE";
