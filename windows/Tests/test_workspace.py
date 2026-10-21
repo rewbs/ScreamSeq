@@ -88,7 +88,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue(self.client.call('workspace.get')['data']['focusLayout'])
 
         self.button('Compose')
-        self.button('Notes')
+        self.button('Note context')
         self.navigate(row=8)
         self.button('Follow target')
         self.assertTrue(self.client.call('workspace.get')['data']['pins']['notes'])

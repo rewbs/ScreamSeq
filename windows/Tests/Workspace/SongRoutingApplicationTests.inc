@@ -98,7 +98,7 @@ void applicationSongRoutingCatalogRefusal(){
 // Graph-to-browser insertion exercises real native controls and the shared
 // atomic plugin.add path, including publication, history and persistence.
 void applicationMixingGraphUsability(){
-  RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());
+  RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,900);app.edit("mixer.enable",RestoreJson::object());
   app.openSongRouting();auto *tool=app.songRoutingWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
   const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
   const auto select=[&](const std::string &identity){const auto nodes=tool->snapshot().at("canvas").at("nodes");for(size_t i=0;i<nodes.size();++i)if(nodes[i].at("id")==identity){SendMessageW(GetDlgItem(window,3802),CB_SETCURSEL,i,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(3802,CBN_SELCHANGE),LPARAM(GetDlgItem(window,3802)));return;}throw std::runtime_error("Missing graph usability node");};
@@ -134,9 +134,12 @@ void applicationMixingGraphUsability(){
   restoreCheck(tool->snapshot().at("expectedRevision")==captured&&tool->snapshot().at("draft")==true&&restoreText(GetDlgItem(window,3807))==L"-.","Automatic graph refresh discarded or rebased raw input");
   click(3839);restoreCheck(!library->visible(),"Dirty graph opened an effect browser against another revision");click(3815);
   select(bus);if(tool->snapshot().at("compact")==true&&tool->snapshot().at("inspector")==true)click(3846);
+  click(3816); // Fit the enlarged graph before clicking a visible node.
   const auto canvas=tool->snapshot().at("canvas");restoreCheck(canvas.at("viewport")[2]>0,"Graph canvas must be visible before native double-click");
   const auto node=*std::find_if(canvas.at("nodes").begin(),canvas.at("nodes").end(),[&](const auto &n){return n.at("id")==bus;});
-  const auto rect=node.at("rect");const auto scale=GetDpiForWindow(window)/96.f;const auto point=MAKELPARAM(int((rect[0].get<float>()+rect[2].get<float>()/2)*scale),int((rect[1].get<float>()+rect[3].get<float>()/2)*scale));
+  const auto rect=node.at("rect"),viewport=canvas.at("viewport");const auto x=rect[0].get<float>()+rect[2].get<float>()/2,y=rect[1].get<float>()+rect[3].get<float>()/2;
+  restoreCheck(x>=viewport[0].get<float>()&&x<viewport[0].get<float>()+viewport[2].get<float>()&&y>=viewport[1].get<float>()&&y<viewport[1].get<float>()+viewport[3].get<float>(),"Fitted bus is outside the clickable graph viewport");
+  const auto scale=GetDpiForWindow(window)/96.f;const auto point=MAKELPARAM(int(x*scale),int(y*scale));
   restoreCheck(GetClassLongPtrW(window,GCL_STYLE)&CS_DBLCLKS,"Graph window did not register double-click input");SendMessageW(window,WM_LBUTTONDBLCLK,MK_LBUTTON,point);
   restoreCheck(app.mixerTarget==bus&&!app.mixerStripsMode,"Graph double-click did not open the selected bus inspector");
   const auto saved=app.documentOperation("mixer.get",RestoreJson::object()).at("buses");const auto path=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));

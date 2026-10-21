@@ -86,6 +86,9 @@ class EnvelopeBankUITests(GraphCurveNativeMixin, unittest.TestCase):
         self.command(490)
         self.command(497)
         self.assertTrue(self.bank()['visible'])
+        self.assertFalse(self.state()['dirty'], 'Bank opening must finish the queued curve save')
+        self.assertEqual(self.bank()['expectedRevision'], self.doc()['revision'])
+        self.assertEqual(self.saved(*target)['points'], self.state()['points'])
         self.bfield(1004, 'Native ramp')
         self.bcommand(1005)
         self.assertTrue(self.bank()['selected'], self.bank())
@@ -109,8 +112,8 @@ class EnvelopeBankUITests(GraphCurveNativeMixin, unittest.TestCase):
     def test_capture_link_master_history_and_native_reopen(self):
         graph, node = self.capture()
         template = self.bank()['selected']
-        self.assertTrue(self.state()['dirty'])  # Capturing doesn't implicitly Apply.
-        self.assertEqual(self.saved(graph, node)['points'], [])
+        self.assertFalse(self.state()['dirty'])
+        self.assertEqual(self.saved(graph, node)['points'], self.state()['points'])
         self.bcommand(1008)  # Use linked.
         self.assertFalse(self.bank()['visible'])
         first = self.saved(graph, node)['points']

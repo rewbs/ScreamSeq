@@ -25,6 +25,13 @@
   }
   void openBank(){
     if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}
+    // A completed point edit may still be waiting on the debounce timer.
+    // Finish it before the Bank captures a revision; otherwise that timer
+    // immediately makes the newly opened Bank stale while its name is typed.
+    // Failed or busy saves retain the curve and do not create a child against
+    // a revision that is about to change.
+    flushAutomaticEdit();
+    require(!dirty_,"Finish the pending curve edit before opening the bank");
     requireCurrent();require(!pointFields_,"Set or discard point fields before opening the bank");
     const auto now=context_();const auto target=resolve(now,target_);const auto document=document_;
     auto token=std::make_shared<uint64_t>(generation_);

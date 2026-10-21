@@ -126,6 +126,33 @@ void automaticCurve(Owner &owner){
   f.field(Tool::pointValue,L"-.");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
   require(f.writes.size()==2&&text(field)==L"-."&&IsWindowVisible(f.control(Tool::apply)),"Invalid point was saved/retried or lacks recovery action");
 }
+void bankOpeningFinishesQueuedCurve(Owner &owner){
+  {
+    Fixture f(owner.window);f.page(2);f.click(Tool::ramp);
+    const auto points=f.tool.snapshot().at("points");
+    require(f.writes.empty(),"Bank fixture did not retain its queued edit");
+    f.current.busy=true;f.click(Tool::bank);
+    require(f.writes.empty()&&!f.tool.envelopeBankSnapshot().at("visible").get<bool>()&&f.tool.snapshot().at("points")==points,
+      "Busy curve opened a Bank against a pending revision or discarded points");
+    f.current.busy=false;f.click(Tool::bank);
+    const auto bank=f.tool.envelopeBankSnapshot();
+    require(bank.at("visible").get<bool>()&&bank.at("expectedRevision")==f.current.revision&&
+      f.writes.size()==1&&f.saved.at("pattern-a")==points&&!f.tool.snapshot().at("dirty").get<bool>(),
+      "Bank opening did not finish exactly one queued curve save before capturing its revision");
+    const auto child=childTool(f.tool.window(),L"ScreamSeq.EnvelopeBank"),name=GetDlgItem(child,1004);
+    type(name,L"A newly captured ramp");
+    SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+    require(f.writes.size()==1&&f.tool.envelopeBankSnapshot().at("expectedRevision")==f.current.revision&&
+      f.tool.envelopeBankSnapshot().at("sourceCurrent").get<bool>()&&text(name)==L"A newly captured ramp"&&GetFocus()==name,
+      "An expired curve timer invalidated the Bank, repeated a save or stole capture-name focus");
+  }
+  {
+    Fixture f(owner.window);f.page(2);f.click(Tool::ramp);f.page(0);f.field(Tool::pointValue,L"-.");f.page(2);f.click(Tool::bank);
+    require(f.writes.empty()&&!f.tool.envelopeBankSnapshot().at("visible").get<bool>()&&
+      f.tool.snapshot().at("fieldDraft").get<bool>()&&text(f.control(Tool::pointValue))==L"-.",
+      "Invalid point opened a Bank, changed music or lost raw text");
+  }
+}
 void minimumPages(Owner &owner){
   Fixture f(owner.window);const auto window=f.tool.window();f.dock(owner.window);std::set<int> reachable;const auto reads=f.reads;
   for(int height:{300,310}){f.tool.dockBounds(0,48,440,float(height));for(int page:{0,1,2}){
@@ -371,7 +398,8 @@ int wmain(int argc,wchar_t **argv){try{
   ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqGraphCurveOwner",argc,argv,[]{
     const auto result=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(result,"Initialize graph curve test COM");struct Com{~Com(){CoUninitialize();}} com;
     Owner owner;
-    automaticCurve(owner);minimumPages(owner);std::cout<<"PASS graph curve minimum pages and reachable actions\n";
+    automaticCurve(owner);bankOpeningFinishesQueuedCurve(owner);std::cout<<"PASS Bank opening flushes queued curve edits and preserves busy/invalid input\n";
+    minimumPages(owner);std::cout<<"PASS graph curve minimum pages and reachable actions\n";
     retainedFieldsAndFocus(owner);std::cout<<"PASS retained HWND/raw fields/caret/axes and focused short transition\n";
     stableIdentityAndExplicitRecapture(owner);std::cout<<"PASS stable pattern identity, deleted target and explicit successful recapture\n";
     pumpedReadGuards(owner);std::cout<<"PASS pumped read identity/generation guards preserve newer state\n";

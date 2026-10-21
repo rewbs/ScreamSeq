@@ -9,11 +9,12 @@ Implementation is local on `codex/windows-flicker`, based on main
 checkpoint. This is Windows presentation work; shared musical data, audio,
 Mac sources, plugin state, project storage and attribution are unchanged.
 
-**Not yet release-qualified.** Candidate `aa0392133b04a387832dc2841efccc2b776fb635`
-built successfully, passed 20 of 22 selected native registrations and all 13
-actual-app checks. Two native failures and additional visible issues prompted
-a correction batch. The correction source and new regressions require the
-next permitted build. Do not package the first candidate as a passing release.
+**Not yet release-qualified.** The second candidate
+`bc7d03f103a81f2079507de06284103741e60d10` built successfully, passed 20 of 22
+selected native registrations and 11 of 13 actual-app checks. The original
+restore failure is resolved. Follow-up corrections below are source-only and
+need the next permitted build. Neither candidate may be packaged as a passing
+release.
 
 ## Implemented source
 
@@ -146,3 +147,87 @@ formula/bank return paths, accessibility of native children, and careful promoti
 of high-use windows such as Arrangement. This checkpoint does not claim that all
 55 destinations, all 117 parity rows, vendor plugins, screen-reader behavior or
 all display/DPI combinations are qualified.
+
+## Second-candidate results and follow-up — 21 October, 21:16 UTC
+
+Receipts are in `bin/navigation-20261021/correction/` (ignored local evidence).
+The single ARM64 Release build started at **21:02:45.683 UTC** and completed
+at **21:04:37.584 UTC**. Configure/build both exited zero. Executable SHA256:
+`ddf3850297bda824d60a6ecba08d2833e5952d5d44bde5358146a05801422736`.
+`checks.json` confirms frozen source and unchanged executable through all checks.
+The next conservative build gate is **2026-10-21 22:04:38 UTC**. Never rerun
+the existing correction build/check scripts: their receipts are final.
+
+Observed failures and source changes:
+
+| Check | Observation / diagnosis | Follow-up |
+| --- | --- | --- |
+| `workspace-command-result-tests` | Graph double-click did not open Mixer Details. The fixture added nodes, hid the canvas through Inspector, then clicked a node rectangle without checking that it was inside the visible viewport. | Establish a 1440 × 900 DIP client, return to Graph, use the real Fit action and assert the node center is in the viewport before the same double-click, target, history and save/reopen assertions. This diagnosis still needs the rebuilt native test. |
+| `workspace-menu-bar-tests` | Pattern menu assertion failed after cursor motion. The setup forced focus to Main while logical focus still named a compact graph; layout repairs this invalid focus, invalidating the menu's captured HWND. | Capture the menu from the actual retained graph HWND. Keep the unchanged cursor/song assertions and explicitly assert Pattern receives focus. Do not relax the production focus/target guard. Needs rebuilt test. |
+| `test_native_controls_use_retained_workspace_path` | Requested the obsolete button label `Notes`. | Use the implemented `Note context` label. A separate isolated run against the same executable passed (`renamed-label-check.log`); all pin/follow/return and palette assertions remain. |
+| `test_template_curve_stays_visible_during_drag` | Bank capture refused with “Song changed; bank draft retained” before the drag. Source shows the curve's queued automatic save can advance the revision after the Bank captures it. | `GraphCurveOwnerChildren.inc::openBank` flushes the queued completed edit before creating the child. Busy, failed or invalid edits retain their data and prevent a new child. Existing retained Bank owners are raised without flushing/replacing their drafts. New deterministic native checks cover busy/invalid input, exactly one save, expired timer, capture-name text/focus and current revision. The app capture fixture asserts saved points and revision before continuing its original drag assertions. Needs rebuilt checks. |
+
+The other mixer/envelope checks passed, including zero neighboring-strip layout
+messages across 24 previews. This is bounded automated evidence, not a fresh
+foreground temporal-flicker qualification.
+
+Foreground diagnostic QA used the exact second-candidate executable with
+`--inspection --automation --seconds 900`, disposable Midnight Circuit, PID
+34440. Fresh discovery found the correct process/window. Computer Use activation
+failed twice with `GetCursorPos: Access is denied (0x80070005)`. No UI interaction
+or visual/keyboard pass was obtained. The user was asked to unlock the desktop;
+do not reuse this PID or handle for the next run. No production package, push or
+merge was made.
+
+Next validation must use new `followup/` receipts and a separate
+`Navigation-Followup-Release` output, frozen to the follow-up commit. Keep the
+22 native registrations and 13 actual-app checks, adding the Bank capture/link/
+history/native-reopen test because the opening boundary now flushes a completed
+edit. Preserve all new failures and do not weaken assertions. After passing,
+perform the full foreground checklist in the correction gate above, including
+Ctrl+Alt+D field focus, then adapt packaging to that receipt and executable hash.
+
+### Recording integration discovery retained for the next batch
+
+Source rechecked at `bc7d03f10`: `RecordedGestureTake` already owns original-time
+events, stable identities, clock epoch, provider incarnation/loss, bounded
+storage, sealing/draining and atomic multi-target completion. Do not duplicate
+it. `windows/Session/RecordedPluginEditors.inc` already intercepts uncoalesced
+vendor input, retains preview retry data and excludes owned vendor state from
+manual persistence. `beginRecordedEditors` still has no production arming
+caller. `DocumentController` owns only the MIDI take and single-parameter preview.
+
+The next coherent implementation needs these native adapter boundaries together:
+
+1. Add a worker-owned plugin take to `DocumentController.hpp` and a dedicated
+   session include, using `HostedProject::recordingTimeline()` and retaining its
+   `absoluteFrames` owner. Arm against document revision, stable rack IDs and
+   the playback epoch. Flush earlier manual input before claiming providers.
+2. Define an actual native intake barrier across `WindowsVST3.cpp`'s
+   `pluginMainCall` owner and native parameter-control messages. Preserve each
+   event's original timestamp/sequence; a later worker timestamp or ordinary
+   empty poll cannot establish Stop. Drain in bounded turns; capture precedes
+   preview coalescing. Do not block or allocate in the audio callback.
+3. Extend `ParameterPreviewOperations.inc` with transient multi-target delivery
+   and release restoration. Reuse `PluginOperations::commitRecordedGestures`
+   and the existing prepared live-publication/history path. Queue refusal must
+   retain the take; failed baseline restoration must retain vendor exclusion.
+4. Integrate save/open/history/Stop admission in `DocumentController.cpp` and
+   recoverable retained input in `RecoveryOperations.inc`. MIDI recovery alone
+   is insufficient. Recovery needs raw unmapped events, mapped canonical frames,
+   provider/loss metadata and explicit review; never replay recovered vendor
+   notifications against a new provider incarnation.
+5. Expose guarded begin/status/finish/discard operations in the API/schema and
+   native recording controls only with the lifecycle above. Use existing
+   recorded-point operations for persisted edits. Adapt the Mac session's
+   poll-time consumer to the shared original-time capture contract before
+   claiming cross-platform timing parity.
+
+Validate with `RecordedEditorOwnershipTests.inc`, recorded-automation/frame-clock
+fixtures, live publication refusal/Undo tests and recovery roundtrips. Add a real
+vendor and native-slider take with delayed polling, Stop, queue saturation and
+provider replacement, followed by canonical point/PCM comparisons. Shared-header
+changes require both native platform builds at the batch gate; reciprocal
+save/reopen and plugin-state preservation remain final integration checks. This
+is discovery/proposed work, not an implemented Record control or a new runtime
+claim. Navigation qualification remains the immediate release prerequisite.

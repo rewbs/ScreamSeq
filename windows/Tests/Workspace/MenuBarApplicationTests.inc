@@ -45,10 +45,13 @@ void applicationMenuBar(){
         menuChoose(app,mixingGraphPanelCommand);
         restoreCheck(app.songRoutingWindow&&app.songRoutingWindow->visible()&&app.songRoutingWindow->docked()&&songState(app)==before,
             "Cursor movement blocked whole-song graph navigation or changed the song");
-        SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=12;app.navigate(next);
+        // Invoke from the actual graph owner. Focusing Main while its logical
+        // canvas is still the graph creates an invalid focus that layout must
+        // repair, correctly invalidating a menu captured before that repair.
+        SetFocus(app.songRoutingWindow->window());menuBegin(app);next=app.position();next["row"]=12;app.navigate(next);
         menuChoose(app,navigationPatternCommand);
-        restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="pattern"&&app.position().at("row")==12&&songState(app)==before,
-            "Focus-only Pattern menu action was blocked by cursor movement or restored an old position");
+        restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="pattern","Pattern menu did not focus the visible tracker");
+        restoreCheck(app.position().at("row")==12&&songState(app)==before,"Pattern menu restored an old position or changed music");
         SetFocus(app.window);SetCapture(app.window);menuBegin(app);
         const bool capturedDisabled=(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED)!=0;
         SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);ReleaseCapture();
