@@ -17,11 +17,11 @@ import tarfile
 import zipfile
 
 from native_roundtrip import ROOT, main as native_main, write_json
-from project_tree import CORPUS, EvidenceError, read_bytes, sha256
+from project_tree import CORPUS, EvidenceError, digest, read_bytes, read_project, sha256
 
 
-def read_json(path):
-    return json.loads(read_bytes(path, 16 * 1024 * 1024).decode("utf-8-sig"))
+def read_json(path, limit=16 * 1024 * 1024):
+    return json.loads(read_bytes(path, limit).decode("utf-8-sig"))
 
 
 def one(root, pattern):
@@ -156,10 +156,49 @@ def prior_leg(report_path, identity, expected_names):
     return sources
 
 
-def input_legs(artifact, layout, target_identity):
+EXTENDED_LEGS = {
+    "metadata": ("editedMetadata", "edited-metadata", "screamseq-edited-metadata-v1", "stages", "opaque-reopened.screamseq"),
+    "history": ("composingHistory", "composing-history", "screamseq-composing-history-v1", "saves", "reopened.screamseq"),
+    "envelope-bank": ("envelopeBank", "envelope-bank", "screamseq-envelope-bank-journey-v1", "saves", "reopened.screamseq"),
+}
+
+
+def edited_journey_input(parent_path, key, directory, format_name, rows_key, expected_name):
+    """Use only a verified final save from a completed native editing journey."""
+    parent = read_json(parent_path)
+    entry = parent.get(key, {})
+    relative = directory + "/report.json"
+    if entry.get("passed") is not True or entry.get("report") != relative:
+        raise EvidenceError(f"Missing successful native editing journey: {directory}")
+    report_path = parent_path.parent / relative
+    check_hash(report_path, entry["sha256"])
+    # The native Mac audit includes full document replies: the verified F04
+    # composing report is 21.3 MB. Keep small receipts at their original bound
+    # and admit only these explicit, already hash-checked journey reports here.
+    report = read_json(report_path, 32 * 1024 * 1024)
+    if (report.get("format") != format_name or report.get("passed") is not True
+            or report.get("inputsAndOutputsUnchanged") is not True
+            or report.get("sourceSHA256") != sha256(read_bytes(CORPUS / "fixtures/04-complete-reference.screamseq"))):
+        raise EvidenceError(f"Native editing journey lacks exact source/preservation evidence: {directory}")
+    name = report.get("exchangeInput")
+    if (name != expected_name or not isinstance(name, str) or not name.endswith(".screamseq")
+            or PurePosixPath(name).name != name or "\\" in name or ":" in name):
+        raise EvidenceError(f"Invalid edited journey exchange filename: {directory}")
+    rows = [row for row in report.get(rows_key, []) if row.get("file") == name]
+    if len(rows) != 1 or rows[0].get("comparison", {}).get("equal") is not True:
+        raise EvidenceError(f"Final edited save lacks its exact typed comparison: {directory}")
+    path = report_path.parent / name
+    check_hash(path, rows[0]["sha256"])
+    if digest(read_project(path)) != rows[0].get("typedSHA256"):
+        raise EvidenceError(f"Edited journey typed fingerprint differs: {directory}")
+    return [path], dict(reportSHA256=sha256(read_bytes(report_path)), inputSHA256=rows[0]["sha256"])
+
+
+def input_legs(artifact, layout, target_identity, extended=False):
     original_names = sorted(path.name for path in (CORPUS / "fixtures").glob("*.screamseq"))
     edited_names = ["rendered.screamseq", "imported.screamseq"]
     lineage = {}
+    extra = {}
     if layout == "windows":
         identity = identity_at(one(artifact, "native-app-identity.json"))
         report_path = one(artifact, "parity-conformance/report.json")
@@ -178,12 +217,29 @@ def input_legs(artifact, layout, target_identity):
             raise EvidenceError("Originating native edited-fixture test has no passing CTest result")
         edited = [asset_report.parent / name for name in edited_names]
         lineage.update(nativeAssetReportSHA256=sha256(read_bytes(asset_report)), nativeTestLogSHA256=sha256(read_bytes(log)))
+        if extended:
+            lineage["editedJourneys"] = {}
+            for name, selectors in EXTENDED_LEGS.items():
+                extra[name], lineage["editedJourneys"][name] = edited_journey_input(report_path, *selectors)
     else:
         exchange_path = one(artifact, "retained-run.json")
         exchange = read_json(exchange_path)
-        if (exchange.get("format") != "screamseq-retained-run-v1" or exchange.get("passed") is not True
-                or exchange.get("mode") != "exchange" or set(exchange.get("legs", {})) != {"no-edit", "edited"}):
+        required_legs = {"no-edit", "edited"} | (set(EXTENDED_LEGS) if extended else set())
+        expected_format = "screamseq-retained-run-v2" if extended else "screamseq-retained-run-v1"
+        if (exchange.get("format") != expected_format or exchange.get("passed") is not True
+                or exchange.get("mode") != "exchange" or set(exchange.get("legs", {})) != required_legs):
             raise EvidenceError("Prior exchange is incomplete or failed")
+        if extended:
+            origin = exchange.get("lineage", {})
+            if (set(origin.get("inputs", {})) != required_legs
+                    or origin.get("sourceIdentity", {}).get("sourceCommit") != target_identity["sourceCommit"]):
+                raise EvidenceError("Extended exchange lost its originating input/source lineage")
+            for name in required_legs:
+                leg_path = exchange_path.parent / name / "report.json"
+                leg = exchange["legs"][name]
+                check_hash(leg_path, leg["reportSHA256"])
+                if leg.get("exitCode") != 0 or read_json(leg_path).get("inputSHA256") != origin["inputs"][name]:
+                    raise EvidenceError(f"Extended exchange leg differs from its originating inputs: {name}")
         identity = exchange["appIdentity"]
         report_path = exchange_path.parent / "no-edit/report.json"
         edited_report = exchange_path.parent / "edited/report.json"
@@ -191,12 +247,19 @@ def input_legs(artifact, layout, target_identity):
             check_hash(path, exchange["legs"][name]["reportSHA256"])
         no_edit = prior_leg(report_path, identity, original_names)
         edited = prior_leg(edited_report, identity, edited_names)
+        if extended:
+            for name in EXTENDED_LEGS:
+                extra_path = exchange_path.parent / name / "report.json"
+                check_hash(extra_path, exchange["legs"][name]["reportSHA256"])
+                extra[name] = prior_leg(extra_path, identity, [EXTENDED_LEGS[name][-1]])
         lineage.update(priorExchangeSHA256=sha256(read_bytes(exchange_path)))
     if identity["sourceCommit"] != target_identity["sourceCommit"]:
         raise EvidenceError("Both platform apps must come from the same frozen source commit")
+    legs = {"no-edit": no_edit, "edited": edited, **extra}
     lineage.update(sourceIdentity=identity, priorNoEditReportSHA256=sha256(read_bytes(report_path)),
-                   inputs={path.name: sha256(read_bytes(path)) for path in no_edit + edited})
-    return {"no-edit": no_edit, "edited": edited}, lineage
+                   inputs=({name: {path.name: sha256(read_bytes(path)) for path in paths} for name, paths in legs.items()}
+                           if extended else {path.name: sha256(read_bytes(path)) for path in no_edit + edited}))
+    return legs, lineage
 
 
 def main(argv=None):
@@ -204,15 +267,20 @@ def main(argv=None):
     parser.add_argument("--app-artifact", required=True, type=Path)
     parser.add_argument("--input-artifact", type=Path)
     parser.add_argument("--input-layout", choices=("windows", "exchange"), default="windows")
+    parser.add_argument("--extended-exchange", action="store_true",
+                        help="Require opaque metadata, mixed history and envelope-bank final saves in every exchange leg")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
-    report = dict(format="screamseq-retained-run-v1", passed=False, parityComplete=False, legs={},
+    report = dict(format="screamseq-retained-run-v2" if args.extended_exchange else "screamseq-retained-run-v1",
+                  passed=False, parityComplete=False, legs={},
                   mode="exchange" if args.input_artifact else "baseline",
                   artifactOrigin={key: os.environ.get(key) for key in
                                   ("APP_RUN", "APP_ARTIFACT", "INPUT_RUN", "INPUT_ARTIFACT", "GITHUB_RUN_ID")})
     output = None
     code = 2
     try:
+        if args.extended_exchange and not args.input_artifact:
+            raise EvidenceError("Extended exchange requires an explicit preceding artifact")
         destination = args.output.resolve()
         destination.mkdir(parents=True, exist_ok=False)
         output = destination
@@ -223,7 +291,7 @@ def main(argv=None):
         common = ["--executable", str(executable), "--binary-sha256", identity["executableSHA256"],
                   "--binary-source-commit", identity["sourceCommit"], "--build-receipt", str(receipt)]
         if args.input_artifact:
-            legs, report["lineage"] = input_legs(args.input_artifact.resolve(strict=True), args.input_layout, identity)
+            legs, report["lineage"] = input_legs(args.input_artifact.resolve(strict=True), args.input_layout, identity, args.extended_exchange)
         else:
             legs = {"baseline": []}
         for name, sources in legs.items():

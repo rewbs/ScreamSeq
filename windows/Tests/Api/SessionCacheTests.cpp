@@ -111,7 +111,11 @@ void byteEviction() {
     usage(api,expected.size(),retained);
   }
   check(totalBytes>byteBudget && expected.size()<entryBudget,"byte limit, not count limit, constrains large writes");
-  error(api.handle(oldest),-32001,"byte-evicted write must hit stale-revision guard, not replay");
+  const auto rejected=api.handle(oldest);error(rejected,-32001,"byte-evicted write must hit stale-revision guard, not replay");
+  const auto rejectedBytes=charge(oldest,rejected);retained+=rejectedBytes;
+  expected.push_back({oldest,rejected,rejectedBytes});
+  while(retained>byteBudget||expected.size()>entryBudget){retained-=expected.front().bytes;expected.pop_front();}
+  usage(api,expected.size(),retained);
   check(host.calls==80 && host.commits==80,"evicted stale write never reaches host");
   std::cout<<"PASS 80 maximum-cell writes, FIFO byte eviction and replay; submitted="<<totalBytes
     <<", retained="<<retained<<", entries="<<expected.size()<<'\n';
@@ -130,8 +134,11 @@ void entryEviction() {
   const auto next=edit(host,"small-64"), reply=api.handle(next);
   retained+=charge(next,reply); retained-=charge(requests.front(),replies.front());
   usage(api,entryBudget,retained);
-  error(api.handle(requests.front()),-32001,"replay does not rescue oldest entry from FIFO eviction");
-  check(api.handle(requests[1])==replies[1] && host.calls==65,"next-oldest survives count eviction");
+  const auto rejected=api.handle(requests.front());
+  error(rejected,-32001,"replay does not rescue oldest entry from FIFO eviction");
+  retained+=charge(requests.front(),rejected);retained-=charge(requests[1],replies[1]);
+  usage(api,entryBudget,retained);
+  check(api.handle(requests[2])==replies[2] && host.calls==65,"next-oldest survives retention of a stale reply");
   std::cout<<"PASS 64-entry limit independently of bytes; replay does not extend retention\n";
 }
 void boundariesAndOversize() {
@@ -158,30 +165,41 @@ void boundariesAndOversize() {
     "oversize response retention cannot misreport committed success");
   usage(api,1,seedBytes);
   check(api.handle(seed)==seeded,"oversize entry does not evict existing replay window");
-  error(api.handle(huge),-32001,"uncached oversize write still has stale-write protection");
+  const auto rejected=api.handle(huge);error(rejected,-32001,"uncached oversize write still has stale-write protection");
+  const auto rejectionBytes=charge(huge,rejected);
+  usage(api,2,seedBytes+rejectionBytes);
   host.paddingBytes=0;
   auto hugeRequest=edit(host,"huge-request");
   // Direct-adapter stress only: this request intentionally exceeds the pipe's
   // unchanged 1 MiB request limit and is NOT a supported musical parameter.
   hugeRequest["params"]["fixturePadding"]=std::string(byteBudget,'x');
   check(api.handle(hugeRequest).contains("result") && host.commits==3,"oversize request retention preserves success");
-  usage(api,1,seedBytes);
+  usage(api,2,seedBytes+rejectionBytes);
   error(api.handle(hugeRequest),-32001,"oversize request is not retained");
   std::cout<<"PASS inclusive byte boundary, UTF-8/escaping, oversize skip without losing success or old entries\n";
 }
 void failuresAndExactReplay() {
-  CacheHost host; SessionAdapter api(host);
-  auto q=edit(host,"retry-after-failure");
   for(const int code:{-32602,-32002,-32003}) {
-    host.failure=code;
-    error(api.handle(q),code,"host rejection returned");
-    error(api.handle(q),code,"failure must be dispatched again, not replayed");
-    usage(api,0,0);
+    CacheHost host;SessionAdapter api(host);host.failure=code;
+    const auto q=edit(host,"failed"),reply=api.handle(q);
+    error(reply,code,"host failure returned");
+    check(api.handle(q)==reply,"same failed request did not return its exact reply");
+    const bool busy=code==-32002;
+    usage(api,busy?0:1,busy?0:charge(q,reply));
+    check(host.calls==(busy?2u:1u)&&host.commits==0,"terminal reply repeated host entry, or busy stopped retrying");
+    host.failure=0;
+    if(busy)check(api.handle(q).contains("result")&&host.calls==3,"busy request cannot recover with its original ID");
+    else {
+      check(api.handle(q)==reply&&host.calls==1,"terminal reply changed after host recovery");
+      auto revised=q;revised["params"]["cells"][0]["note"]=62;
+      error(api.handle(revised),-32600,"corrected failed request reused a retained ID");
+      check(api.handle(edit(host,"fresh-after-failure")).contains("result")&&host.calls==2,"new request ID cannot recover");
+    }
   }
-  check(host.calls==6 && host.commits==0,"no failures retained or committed");
-  host.failure=0;
+  CacheHost host; SessionAdapter api(host);
+  auto q=edit(host,"successful");
   const auto reply=api.handle(q);
-  check(reply.contains("result") && host.calls==7,"failed id can succeed on a later attempt");
+  check(reply.contains("result") && host.calls==1,"new request did not reach host");
   const auto bytes=charge(q,reply); usage(api,1,bytes);
   auto changed=q; changed["params"]["cells"][0]["note"]=62;
   error(api.handle(changed),-32600,"same id with changed params rejects while retained");
@@ -189,21 +207,25 @@ void failuresAndExactReplay() {
   error(api.handle(changed),-32600,"integer-to-float parameter change is not an exact replay");
   changed=q; changed["method"]="document.patch";
   error(api.handle(changed),-32600,"same id with changed write method rejects while retained");
+  changed=request("document.get",Json::object(),"successful");
+  error(api.handle(changed),-32600,"read reused a retained write ID");
+  changed=request("unknown.method",Json::object(),"successful");
+  error(api.handle(changed),-32600,"unknown method reused a retained write ID");
   changed=q; changed["params"]["expectedRevision"]=host.state.revision;
   error(api.handle(changed),-32600,"rebased params do not reuse a retained successful id");
-  check(api.handle(q)==reply && host.calls==7,"conflicts preserve original response and never enter host");
-  check(api.handle(Json::parse(q.dump(2)))==reply && host.calls==7,"formatting and parsed unsigned integers preserve exact replay");
+  check(api.handle(q)==reply && host.calls==1,"conflicts preserve original response and never enter host");
+  check(api.handle(Json::parse(q.dump(2)))==reply && host.calls==1,"formatting and parsed unsigned integers preserve exact replay");
   auto bad=edit(host,"bad-revision"); bad["params"]["expectedRevision"]=true;
-  error(api.handle(bad),-32602,"strict revision validation remains active on cache miss");
-  bad["params"]["expectedRevision"]="stale";
-  error(api.handle(bad),-32001,"stale validation remains active on cache miss");
-  usage(api,1,bytes);
+  const auto invalid=api.handle(bad);error(invalid,-32602,"strict revision validation remains active on cache miss");
+  auto stale=bad;stale["params"]["expectedRevision"]="stale";stale["id"]="stale-revision";
+  const auto staleReply=api.handle(stale);error(staleReply,-32001,"stale validation remains active on cache miss");
+  usage(api,3,bytes+charge(bad,invalid)+charge(stale,staleReply));
   const auto read=request("document.get",Json::object(),"fresh-read");
   const auto before=api.handle(read);
   const auto next=api.handle(edit(host,"next"));
   check(before["result"]["revision"]!=api.handle(read)["result"]["revision"],"reads remain fresh, never cached by id");
   check(next["result"]["changed"]==true,"next guarded edit commits");
-  std::cout<<"PASS failures uncached, changed id content rejected, original replay preserved, fresh reads and revision guards\n";
+  std::cout<<"PASS terminal failures retained, busy retry, changed id content rejected, exact replay, fresh reads and guards\n";
 }
 void noOpDryRunAndContext() {
   CacheHost host; SessionAdapter api(host);
@@ -271,13 +293,13 @@ void independentServices() {
   check(api.handle(q)==reply&&host.libraryCalls==2,"independent write replay re-entered the host");
   auto conflict=q;conflict["params"]["expectedLibraryRevision"]="stale";error(api.handle(conflict),-32600,"conflicting independent request ID accepted");
   conflict["id"]="stale-library";auto rejected=api.handle(conflict);error(rejected,-32001,"independent stale guard bypassed");
-  check(!rejected["error"].contains("data"),"independent error advertised a song revision");
+  check(rejected["error"]["data"]==Json({{"writeOutcome","unknown"}}),"unclassified independent error advertised a song identity/revision");
   check(host.snapshots==0&&host.calls==0&&host.state.revision==before.revision,"independent service used song snapshot/operation/history");
   std::cout<<"PASS independent revision/envelope, guarded write replay and absence of song ownership\n";
 }
 void completionOutcomes() {
   struct OutcomeHost : CacheHost {
-    enum Stage { None, Before, After, Snapshot } stage=None;
+    enum Stage { None, Before, After, Snapshot, UnclassifiedAfter, UnknownBusy } stage=None;
     bool snapshotFailure=false;
     SessionSnapshot snapshot()override {
       if(snapshotFailure){snapshotFailure=false;throw ApiError(-32003,"Injected completion failure");}
@@ -290,6 +312,9 @@ void completionOutcomes() {
           Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted,state.documentId,state.revision});
       }
       auto result=CacheHost::documentOperation(method,params);
+      if(stage==UnclassifiedAfter)throw ApiError(-32003,"Unclassified host failure after an effect");
+      if(stage==UnknownBusy)throw ApiError(-32002,"Busy completion with uncertain effect",
+        Tracker::WriteOutcome{Tracker::CommitOutcome::Unknown});
       if(stage==After)throw ApiError(-32003,"Injected completion failure",
         Tracker::WriteOutcome{Tracker::CommitOutcome::Committed,state.documentId,state.revision});
       if(stage==Snapshot)snapshotFailure=true;
@@ -297,13 +322,15 @@ void completionOutcomes() {
     }
   }host;
   SessionAdapter api(host);
-  const auto q=edit(host,"outcome");
+  auto q=edit(host,"rejected-outcome");
   host.stage=OutcomeHost::Before;
   auto rejected=api.handle(q);
   check(rejected["error"]["data"]["writeOutcome"]=="notCommitted" && host.commits==0,
     "explicit precommit outcome lost");
-  check(api.handle(q)==rejected && host.calls==2,"proven rejection should remain retryable");
-  usage(api,0,0);
+  check(api.handle(q)==rejected && host.calls==1,"terminal proven rejection must replay without dispatch");
+  usage(api,1,charge(q,rejected));
+  const auto rejectedRequest=q;
+  q["id"]="committed-outcome";
   host.stage=OutcomeHost::After;
   auto committed=api.handle(q);
   check(committed["error"]["code"]==-32003 && committed["error"]["data"]["writeOutcome"]=="committed",
@@ -311,15 +338,15 @@ void completionOutcomes() {
   check(committed["error"]["data"]["revision"]==host.state.revision &&
     committed["error"]["data"]["revision"]!=q["params"]["expectedRevision"] &&
     committed["error"]["data"]["documentId"]==host.state.documentId,"committed error lost authoritative identity/revision");
-  check(api.handle(q)==committed && host.calls==3 && host.commits==1,"retained committed error repeated the write");
+  check(api.handle(q)==committed && host.calls==2 && host.commits==1,"retained committed error repeated the write");
   auto changed=q;changed["params"]["cells"][0]["note"]=62;
   error(api.handle(changed),-32600,"classified error must bind request content as strictly as success");
-  usage(api,1,charge(q,committed));
+  usage(api,2,charge(rejectedRequest,rejected)+charge(q,committed));
   host.stage=OutcomeHost::Snapshot;
   const auto unknownRequest=edit(host,"unknown"),unknown=api.handle(unknownRequest);
   check(unknown["error"]["data"]==Json({{"writeOutcome","unknown"}}),
     "failed post-write snapshot must not advertise a pre-write revision");
-  check(api.handle(unknownRequest)==unknown && host.commits==2 && host.calls==4,"unknown completion replay repeated host call");
+  check(api.handle(unknownRequest)==unknown && host.commits==2 && host.calls==3,"unknown completion replay repeated host call");
   const auto read=api.handle(request("document.get",Json::object(),"reconcile"));
   check(read["result"]["revision"]==host.state.revision,"readback cannot reconcile post-write snapshot failure");
   // No-op/externally revisioned work cannot be inferred from a song token.
@@ -327,8 +354,15 @@ void completionOutcomes() {
   const auto noDelta=edit(host,"unknown-no-delta"),noDeltaReply=api.handle(noDelta);
   check(noDeltaReply["error"]["data"]["writeOutcome"]=="unknown" && host.state.revision==noDelta["params"]["expectedRevision"],
     "unchanged revision must not fabricate noChange after completion failed");
-  check(api.handle(noDelta)==noDeltaReply && host.calls==5,"unchanged-revision unknown result reentered host");
+  check(api.handle(noDelta)==noDeltaReply && host.calls==4,"unchanged-revision unknown result reentered host");
   check(api.handle(q)==committed && host.commits==2,"later read/write displaced retained committed receipt");
+  for(const auto stage:{OutcomeHost::UnclassifiedAfter,OutcomeHost::UnknownBusy}) {
+    host.stage=stage;const auto attempts=host.calls;
+    const auto request=edit(host,"uncertain-"+std::to_string(int(stage))),reply=api.handle(request);
+    check(reply["error"]["data"]==Json({{"writeOutcome","unknown"}}),"uncertain host error advertised a pre-write revision");
+    check(api.handle(request)==reply&&host.calls==attempts+1,"unclassified/uncertain busy error repeated a side effect");
+  }
+  check(api.handle(rejectedRequest)==rejected,"later work replaced the retained proven rejection");
   std::cout<<"PASS typed precommit/committed/unknown results, authoritative revision, readback and exact error replay\n";
 }
 }

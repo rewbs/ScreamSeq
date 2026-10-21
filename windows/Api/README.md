@@ -1,5 +1,16 @@
 # Windows local API subset
 
+`document.exportModule {expectedRevision, path, overwrite?, dryRun?}` exports the
+current MOD/XM/S3M/IT/MPTM format to an absolute path with its matching extension.
+It validates the actual module bytes before atomic publication; `overwrite`
+defaults to false and remains exclusive if another writer creates the target
+after admission. Dry runs create no file. Export preserves native project
+identity, dirty state, recovery protection, playback and Undo/Redo. Native
+annotations, plugins, automation, uncommitted takes and retained unknown fields
+or recovery archives require a native `.screamseq` save instead. Exact terminal
+request replay returns the retained response without repeating file publication.
+The corresponding native command is **File → Export module…**.
+
 `track.get {}` returns the shared note-track projection: stable column identities,
 effective per-column mute, visual group membership, note-column indexes, group
 bus names/colors/outputs, available destinations and the module's column limit.
@@ -326,7 +337,9 @@ project persistence, and reject unavailable or non-instrument destinations.
 
 `workspace.get.sampleDetail` exposes the detailed sample editor's captured
 identity/revision, draft points, selection, viewport, channels, bounded waveform
-cache and latest operation report. Its native controls call the existing
+cache and latest operation report. Completed pointer strokes save through
+`sample.draw`; numeric Stage point edits form an explicit batch saved with
+Save staged points. Its native controls call the existing
 `sample.*` methods with the same guarded document history and PCM semantics.
 The dock's Detail button and command palette open this window. See
 `../SAMPLE_DETAIL_PROGRESS.md`.
@@ -334,12 +347,19 @@ The dock's Detail button and command palette open this window. See
 The retained sample pages add `page`, `loops`, `pastePreview` and `autoSnap` to
 that read-only snapshot. `loops` includes independent raw normal/sustain frame
 strings, enabled/direction flags, `dirty` and `stale`; invalid input remains
-observable without becoming song data. Joint Preview/Apply uses
-`sample.loops.set`. Paste Preview retains its exact options, target revision and
+observable without becoming song data. Loop field edits save automatically;
+joint preview and retry use `sample.loops.set`. The waveform's `loopHandles`
+array exposes enabled, visible normal/sustain start/end handles with `index`,
+`name`, `frame`, DIP `x`/`y` and `selected`. `loopDragging` identifies a captured
+gesture. Dragging stages bounds; release saves once. Escape/capture loss cancels.
+With waveform focus, Tab/Shift+Tab selects handles, arrows move one frame and
+Shift+arrows move 64; F6 returns to native fields. The existing guarded loop API
+remains authoritative, preserves PCM and supports Undo/save/reopen.
+Paste Preview retains its exact options, target revision and
 clipboard ID; Apply uses that reviewed clipboard or rejects a mismatch.
 `pastePreview` describes a locally retained preview, not a guarantee that an
 external clipboard or document change has not occurred. Snap selection and
-either loop use `sample.snap.get`; only explicit Apply changes saved loops.
+either loop use `sample.snap.get`; snapped loop bounds save automatically.
 See `../SAMPLE_WORKFLOWS_PROGRESS.md` for scope and qualification.
 
 The actual application now also registers `graph.*`, `mixer.*` and
@@ -866,7 +886,9 @@ revision as current. `committed` means an effect occurred but completion failed;
 
 The current worker classifies known committed publication failures. The adapter
 classifies completion failures after a returned host write, including invalid
-UTF-8 or a result exceeding the wire bound. The native application preserves a
+UTF-8 or a result exceeding the wire bound. An unclassified non-busy exception
+after entering a host write is also `unknown`; the adapter cannot infer rejection
+or advertise its pre-write revision as current. The native application preserves a
 classified worker exception through best-effort view repair. This is not yet
 exhaustive classification of every host side effect. Absence of outcome data,
 an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
@@ -886,16 +908,18 @@ response JSON nodes, string capacities, ID copies, containers and allocator
 overhead cost additional memory. Temporary snapshots, serialization buffers and
 in-flight responses are outside this retention accounting.
 
-Successful write-method results enter the cache, including successful no-ops
-and `dryRun:true` previews. Classified `committed` and `unknown` write errors
-also enter it. Proven `notCommitted`/`noChange`, unclassified validation/host
-errors and all reads remain uncached. A retained request's ID, method and
+Terminal write-method replies enter the cache, including successful no-ops,
+`dryRun:true` previews, validation/stale errors and classified outcomes. A busy
+`-32002` remains retryable unless the write has a `committed` or `unknown`
+outcome; those outcomes must be reconciled even when the code says busy.
+Reads remain fresh and uncached. A retained request's ID, method and
 parameters must match its canonical parsed JSON exactly; key order/whitespace
 are irrelevant, but an integer changed
 to a floating-point parameter is different. An exact retry returns the original
 complete response without invoking the host or rechecking now-stale tokens.
-Reusing that ID for a different write returns `-32600` and preserves the original
-entry. Applying a dry-run proposal requires a new ID and current revision.
+Reusing that ID for different content, including a read or an unknown method,
+returns `-32600` and preserves the original entry. Correcting a rejected
+submission or applying a dry-run proposal requires a new ID and current revision.
 
 Insertions evict the oldest entries until both limits hold; a replay
 does not refresh an entry's age. An entry whose charge alone exceeds 8 MiB is
@@ -1383,6 +1407,20 @@ operation must finish first. This changes row spacing, not font size.
 
 Custom saved layouts retain a nondefault height in optional local
 `patternRowHeight`; a missing field restores the historical 18-DIP default.
+
+The left context panel follows the active editor and dispatches existing native
+commands; it owns no independent musical target or draft. `workspace.get.contextPanel`
+reports `visible`, `editor` and its current `actions` (command ID, label, native
+visibility and enabled state). The command catalog exposes the toggle as
+`windows.command.635` for shortcut customization; its default is Ctrl+B and the
+View menu always provides Show context panel. Existing explicit shortcut
+assignments take precedence over this newly introduced default.
+Saved layout configurations may include boolean `contextPanelVisible`. Missing
+means `true`, preserving older layouts; this preference never enters song
+metadata or document Undo. Hiding reclaims 164 DIPs in both legacy and region
+layouts, preserves editor drafts and only moves keyboard focus if its current
+control is being hidden. Panel actions use the existing owners' target, revision,
+Undo and completion semantics.
 The height is never written to project files. A malformed height refuses the
 entire restore before preparing or changing editors. Older app versions may
 reject layouts containing the new field; their existing saved layouts still
@@ -1510,3 +1548,40 @@ The window is resizable, constrained to its monitor work area, and retired on
 document replacement. Read-only search does not become an unsaved musical draft.
 `workspace.get.effectPicker` exposes `visible`, `captured`, `search`, `matches`,
 `selected` (catalogue index) and `current` while the owner exists.
+
+### Rack positions and recipe parameter gestures
+
+`plugin.move` accepts exactly one stable `plugin` identity or transient `slot`,
+and exactly one `direction` (-1/+1) or final zero-based `position`. Moving across
+several entries preserves their relative order. Recorded automation follows its
+original processor; stable routing, aliases and opaque plugin bytes are retained.
+Windows `dryRun` validates the whole move without changing history or playback.
+A same-position move or a direction beyond a rack endpoint is a no-op, preserving
+Redo. A changed move is one chronological Undo operation. The Windows rack's
+**Move to…** button and command palette expose final positions with one-based
+labels; the native menu captures and rechecks the song, revision and selection.
+
+`graph.plugin.set` accepts the same optional `gesture` token as Mac. It must be
+nonempty, at most 80 characters, and accompany exactly one parameter and no bus
+changes. Consecutive accepted edits to the same graph/node/parameter/token can
+share one Undo entry. Another edit, different target or token, document replacement,
+or Undo/Redo starts a new entry. Dry runs, no-ops and refused publication do not
+advance gesture ownership. Each accepted value is durable and revision-guarded;
+this API is not a transient preview or cancellation protocol.
+
+For transient recipe sliders use `graph.plugin.preview.get/set/commit/cancel`
+as documented in [Transient recipe parameter gestures](../../mac/AUTOMATION.md#transient-recipe-parameter-gestures).
+Both platform adapters expose the same fields and mutually exclusive rack/recipe
+gesture ownership. The retained Windows parameter inspector uses this protocol
+while tracking, the ordinary graph edit at release, and cancellation on Escape,
+Reload or Close. Its ten-parameter pages, captured identity and completion review
+continue to belong to that retained inspector. A failed/unknown preview never
+falls back to an unguarded durable write.
+
+Reusable graph nodes expose **All parameters…** from their Plugin controls page.
+The retained editor shares the rack's pages of up to ten values, sliders, choices,
+typed-value autosave and failure review. It captures the graph/node identity;
+selecting another node does not retarget a draft. Its edits use `graph.plugin.set`
+and preserve the original rack processor. Sliders still save on release. The
+workspace's parameter-window snapshots now include `graph` and `node` (empty for
+a rack editor); `plugin` is empty for a recipe editor.

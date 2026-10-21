@@ -1,7 +1,16 @@
 // Absolute points share the plugin history and the existing project wrapper.
 // Values are native parameter units; timestamps are canonical 48-kHz frames.
 Json PluginOperations::invokeAutomation(const std::string &method,const Json &p) {
+  requireManualOperation(method);
   const auto &saved=project_.preserved.at("automation");
+  if(method=="automation.recorded.clear") {
+    keys(p,{"dryRun"});const bool dry=flag(p,"dryRun"),changed=!saved.empty();
+    const auto removed=saved.size();
+    // Preserve the complete saved rack, including unavailable vendor state.
+    // The existing recorded-only commit publishes live and owns one Undo.
+    if(changed&&!dry)commit(project_.preserved.at("plugins"),Json::array());
+    return {{"removed",removed},{"wouldChange",changed},{"dryRun",dry}};
+  }
   if(method=="automation.recorded.get"||method=="automation.recorded.edit") {
     const bool read=method=="automation.recorded.get";
     if(read)keys(p,{"plugin","parameter","offset","limit"});

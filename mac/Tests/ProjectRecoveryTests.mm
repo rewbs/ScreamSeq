@@ -1,6 +1,7 @@
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/SongTiming.hpp"
+#include "../Bridge/NativePropertyTree.hpp"
 #include <cmath>
 #include <iostream>
 
@@ -56,7 +57,7 @@ static void clean(TrackerSession *session) {
   check([snapshot[@"loadWarnings"] isKindOfClass:NSArray.class] && [snapshot[@"loadWarnings"] count] == 0, "Current saved project reopens without recovery warnings");
   check(![snapshot[@"requiresSaveAs"] boolValue], "Current saved project does not require Save As");
 }
-static void saveCopy(TrackerSession *session, NSString *source, NSData *original, NSString *copy) {
+static void saveCopy(TrackerSession *session, NSString *source, NSData *original, NSString *copy, bool retainedExtensions=false) {
   NSError *error = nil;
   check(![session savePath:source error:&error], "Recovered source cannot be overwritten by ordinary Save");
   NSString *revision = session.automationRevision;
@@ -68,7 +69,7 @@ static void saveCopy(TrackerSession *session, NSString *source, NSData *original
   check(![[session snapshot:0][@"requiresSaveAs"] boolValue], "Successful Save As clears the overwrite guard");
   TrackerSession *reopened = [TrackerSession new];
   open(reopened, copy);
-  clean(reopened);
+  if(retainedExtensions)warnings(reopened,copy);else clean(reopened);
   for(NSInteger pattern : {0, 1}) check([commands(session, pattern) isEqual:commands(reopened, pattern)], "Recovery copy preserves every accepted command exactly");
 }
 
@@ -154,7 +155,16 @@ static void partialRecovery(NSData *baselineBytes, NSString *directory) {
   warnings(session, source);
   check(commands(session, 0).count == 2 && commands(session, 1).count == 1, "Unknown and malformed commands are skipped individually; all good siblings remain");
   check(std::abs([commands(session, 0)[0][@"durationBeats"] doubleValue] - 1) < 1e-14, "Unknown versions and fields retain known command precision");
-  saveCopy(session, source, original, [directory stringByAppendingPathComponent:@"future-recovered-copy.screamseq"]);
+  NSString *copy=[directory stringByAppendingPathComponent:@"future-recovered-copy.screamseq"];
+  saveCopy(session, source, original, copy, true);
+  NSDictionary *saved=decode([NSData dataWithContentsOfFile:copy]);
+  check([saved[@"futureContainerField"] isEqual:root[@"futureContainerField"]],"Recovery keeps opaque root extension active");
+  NSDictionary *archived=saved[@"screamseqLoadRecovery"][@"sourceSections"];
+  check([archived[@"native"] isEqual:root[@"native"]] && !archived[@"module"],
+    "Recovery retains exact original invalid native sections inactive without a second module");
+  check(saved[@"native"][@"futureNativeField"]==nil &&
+    [saved[@"native"][@"performance"][@"commands"] count]==3,
+    "Recovery archive must not reactivate rejected commands");
 
   NSString *revision = session.automationRevision;
   NSData *before = session.serializedData;
@@ -192,6 +202,131 @@ static void malformedPluginContainers(NSData *baselineBytes, NSString *directory
   }
 }
 
+static void opaqueMetadata(NSData *baselineBytes,NSString *directory) {
+  using namespace ScreamSeq;
+  auto original=NativePropertyTree::decode(baselineBytes);
+  Project::Value sentinel={{"integer",int64_t(9007199254740993LL)},{"real",1.0},{"negativeZero",-0.0},
+    {"data",Project::Value::binary({0,255,1})},{"text","music \xF0\x9F\x8E\xB5"}};
+  sentinel["date"]=Project::Value::binary({0x3f,0xf0,0,0,0,0,0,0},uint64_t(Project::OpaqueType::Date));
+  sentinel["uid"]=Project::Value::binary({0,1,0,0,0,0,0,1},uint64_t(Project::OpaqueType::UID));
+  sentinel["wideInteger"]=Project::Value::binary(std::vector<uint8_t>(16,0xff),uint64_t(Project::OpaqueType::WideInteger));
+  sentinel["nan32"]=Project::Value::binary({0x7f,0xc0,0,7},uint64_t(Project::OpaqueType::Real32NaN));
+  original["futureRoot"]=sentinel;original["native"]["futureNative"]=sentinel;
+  original["native"]["tracks"][0][1]["futureTrack"]=sentinel;
+  NSString *source=[directory stringByAppendingPathComponent:@"opaque-typed.screamseq"];
+  NSData *bytes=NativePropertyTree::encode(original);
+  check([bytes writeToFile:source atomically:YES],"Write typed opaque fixture");
+  TrackerSession *session=[TrackerSession new];open(session,source);warnings(session,source);
+  auto checkExtensions=[&](NSData *data) {
+    auto tree=NativePropertyTree::decode(data);
+    check(Project::sameStoredValue(tree.at("futureRoot"),sentinel) &&
+      Project::sameStoredValue(tree.at("native").at("futureNative"),sentinel) &&
+      Project::sameStoredValue(tree.at("native").at("tracks")[0][1].at("futureTrack"),sentinel),
+      "Native session edit/save/reopen changed exact opaque types or payloads");
+    check(!tree.contains("screamseqLoadRecovery"),"Supported typed extensions must remain active, not be archived as lost");
+    return tree;
+  };
+  const auto before=checkExtensions(session.serializedData);
+  call(session,@"document.patch",@{@"title":@"Opaque metadata survives unrelated edits"},true);
+  const auto edited=checkExtensions(session.serializedData);
+  check(edited.at("module")!=before.at("module"),"Unrelated musical edit must persist in snapshot");
+  NSString *revision=session.automationRevision;
+  NSError *error=nil;
+  NSString *failed=[directory stringByAppendingPathComponent:@"missing-parent/copy.screamseq"];
+  check(![session savePath:failed error:&error],"Missing destination parent must fail Save");
+  check([revision isEqual:session.automationRevision] &&
+    Project::sameStoredValue(checkExtensions(session.serializedData),edited),"Failed Save changed document/preservation state");
+  warnings(session,source);
+  NSString *copy=[directory stringByAppendingPathComponent:@"opaque-copy.screamseq"];
+  check([session savePath:copy error:&error],"Save typed opaque project copy");
+  check(Project::sameStoredValue(checkExtensions([NSData dataWithContentsOfFile:copy]),edited),"Save copy differs from accepted edited tree");
+  call(session,@"history.undo",@{@"domain":@"all"},true);
+  check(Project::sameStoredValue(checkExtensions(session.serializedData),before),"Undo after Save lost original opaque metadata");
+  call(session,@"history.redo",@{@"domain":@"all"},true);
+  check(Project::sameStoredValue(checkExtensions(session.serializedData),edited),"Redo after Save changed opaque metadata");
+  auto broken=original;broken["module"]=Project::Value::binary({1,2,3});
+  NSString *bad=[directory stringByAppendingPathComponent:@"opaque-broken.screamseq"];
+  check([NativePropertyTree::encode(broken) writeToFile:bad atomically:YES],"Write broken snapshot fixture");
+  revision=session.automationRevision;
+  check(![session openPath:bad error:&error] && [revision isEqual:session.automationRevision] &&
+    Project::sameStoredValue(checkExtensions(session.serializedData),edited),"Failed Open replaced captured opaque tree");
+  TrackerSession *reopened=[TrackerSession new];open(reopened,copy);
+  check(Project::sameStoredValue(checkExtensions(reopened.serializedData),edited),"Reopened typed project changed known or opaque fields");
+  check([[NSData dataWithContentsOfFile:source] isEqual:bytes],"All operations must leave original source bytes untouched");
+  [session newSong:NO];
+  check(!NativePropertyTree::decode(session.serializedData).contains("futureRoot"),"New document inherited prior opaque metadata");
+
+  // XML remains admitted; its parsed typed values are promoted to binary once.
+  NSMutableDictionary *xml=decode(baselineBytes);
+  xml[@"futureXML"]=@{@"bytes":[NSData dataWithBytes:"abc" length:3],@"number":@(9007199254740993LL),@"text":@"music \U0001F3B5"};
+  NSData *xmlBytes=[NSPropertyListSerialization dataWithPropertyList:xml format:NSPropertyListXMLFormat_v1_0 options:0 error:&error];
+  NSString *xmlPath=[directory stringByAppendingPathComponent:@"opaque-xml.screamseq"];
+  check(xmlBytes && [xmlBytes writeToFile:xmlPath atomically:YES],"Write XML import fixture");
+  open(session,xmlPath);
+  check([decode(session.serializedData)[@"futureXML"] isEqual:xml[@"futureXML"]],"XML typed extension import changed values");
+  check([[NSData dataWithContentsOfFile:xmlPath] isEqual:xmlBytes],"XML import changed source file");
+
+  auto unavailable=NativePropertyTree::decode(baselineBytes);
+  const Project::Value rackState=Project::Value::binary({0,255,42,0,128});
+  unavailable["plugins"]=Project::Value::array({{{"format","VST3"},{"type",0},{"subtype",0},{"manufacturer",0},
+    {"name","Unavailable preservation fixture"},{"path","/ScreamSeqMissing/Preservation.vst3"},
+    {"classID","00112233445566778899AABBCCDDEEFF"},{"isInstrument",false},{"bypass",false},
+    {"instanceID","preservation-missing-plugin"},{"instrument",0},{"instrumentAssignments",Project::Value::array()},
+    {"audioLayout",""},{"auxiliaryInputs",Project::Value::array()},{"auxiliaryOutputs",Project::Value::array()},
+    {"state",rackState},{"futurePlugin",sentinel}}});
+  NSString *pluginPath=[directory stringByAppendingPathComponent:@"opaque-missing-plugin.screamseq"];
+  NSData *pluginBytes=NativePropertyTree::encode(unavailable);
+  check([pluginBytes writeToFile:pluginPath atomically:YES],"Write unavailable plugin fixture");
+  open(session,pluginPath);
+  call(session,@"document.patch",@{@"title":@"Missing plugin state survives"},true);
+  NSString *pluginCopy=[directory stringByAppendingPathComponent:@"opaque-missing-plugin-copy.screamseq"];
+  check([session savePath:pluginCopy error:&error],"Save copy with unavailable plugin");
+  open(reopened,pluginCopy);
+  const auto pluginTree=NativePropertyTree::decode(reopened.serializedData);
+  const auto &retained=pluginTree.at("plugins").at(0);
+  check(retained.at("state")==rackState && retained.at("instanceID")=="preservation-missing-plugin" &&
+    retained.at("path")==unavailable.at("plugins")[0].at("path") &&
+    Project::sameStoredValue(retained.at("futurePlugin"),sentinel),
+    "Missing provider changed opaque state, stable identity, original location hint or plugin extension");
+  check([[NSData dataWithContentsOfFile:pluginPath] isEqual:pluginBytes],"Missing plugin edit/save changed original source");
+}
+
+static void moduleExportRecovery(NSString *directory) {
+  // Container-version recovery alone has no native musical loss to block
+  // export, but the original source must stay protected afterwards.
+  Document fresh(MOD_TYPE_IT,4);Document imported(fresh.serialize());
+  const auto module=imported.moduleExportData();
+  NSString *input=[directory stringByAppendingPathComponent:@"export-baseline.it"];
+  check([[NSData dataWithBytes:module.data() length:module.size()] writeToFile:input atomically:YES],
+    "Write export recovery baseline");
+  TrackerSession *session=[TrackerSession new];open(session,input);
+  NSMutableDictionary *root=decode(session.serializedData);root[@"version"]=@999;
+  NSString *source=[directory stringByAppendingPathComponent:@"export-protected.screamseq"];
+  NSData *original=writeProject(root,source);open(session,source);warnings(session,source);
+  NSString *output=[directory stringByAppendingPathComponent:@"export-recovered.it"];
+  NSString *revision=session.automationRevision;NSDictionary *before=[session snapshot:0];
+  check([call(session,@"document.exportModule",@{@"path":output},true)[@"written"] boolValue],
+    "Recovered module-compatible project can export a separate file");
+  check([session.automationRevision isEqual:revision]&&[[session snapshot:0] isEqual:before],
+    "Export cleared recovery source protection or changed the song");
+  NSError *error=nil;
+  check(![session savePath:source error:&error]&&[[NSData dataWithContentsOfFile:source] isEqual:original],
+    "Export unlocked the original recovered source");
+  root[@"futureExtension"]=[NSData dataWithBytes:"\0\xff" length:2];
+  NSString *opaque=[directory stringByAppendingPathComponent:@"export-opaque.screamseq"];
+  NSData *opaqueOriginal=writeProject(root,opaque);open(session,opaque);
+  NSData *exportOriginal=[NSData dataWithContentsOfFile:output];
+  for(NSNumber *dry in @[@YES,@NO]) {
+    error=nil;revision=session.automationRevision;
+    check(![session automationMethod:@"document.exportModule" params:@{@"expectedRevision":revision,
+      @"path":output,@"overwrite":@YES,@"dryRun":dry} error:&error],
+      "Opaque retained project fields must block module export");
+    check([session.automationRevision isEqual:revision]&&
+      [[NSData dataWithContentsOfFile:output] isEqual:exportOriginal]&&
+      [[NSData dataWithContentsOfFile:opaque] isEqual:opaqueOriginal],
+      "Rejected opaque export changed a destination, original source or revision");
+  }
+}
 int main(int argc, char **argv) { @autoreleasepool { try {
   if(argc == 3 && std::string(argv[1]) == "--probe") {
     NSString *path = @(argv[2]);
@@ -216,8 +351,10 @@ int main(int argc, char **argv) { @autoreleasepool { try {
   legacyNudges(bytes, directory);
   partialRecovery(bytes, directory);
   malformedPluginContainers(bytes, directory);
+  opaqueMetadata(bytes,directory);
+  moduleExportRecovery(directory);
   [NSFileManager.defaultManager removeItemAtPath:directory error:nil];
-  std::cout << "PASS project recovery: legacy NF/NR signatures, warnings, guarded Save As, byte-identical originals, future versions/fields, per-command recovery, strict API and atomic snapshot rejection\n";
+  std::cout << "PASS project recovery: legacy NF/NR signatures, warnings, guarded Save As, typed extensions/XML, inactive recovery archives, Undo/Redo, failed Save/Open, strict API and byte-identical originals\n";
   return 0;
 } catch(const std::exception &error) {
   std::cerr << "FAIL " << error.what() << '\n'; return 1;

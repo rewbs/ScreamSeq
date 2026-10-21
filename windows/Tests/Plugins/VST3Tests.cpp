@@ -1,5 +1,6 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
+#include "windows/Audio/HostClock.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "editor/hosted/HostedAudio.hpp"
 #include <windows.h>
@@ -45,7 +46,17 @@ int main(int argc,char **argv){try{
  PluginState prog{descriptors[3]};auto programs=factory.create(prog,48000,true);check(programs->programs().size()==6,"program catalog");programs->loadProgram("vst3:0:17:2");programs->loadProgram("vst3:7:18:2");pcm.fill(1);check(programs->process(pcm.data(),17,0,inputs.data(),0,{}),"program processing");expectPCM(pcm[0],.75);
  auto delayed=factory.create(PluginState{descriptors[2]},48000,true);check(delayed->latency()==32./48000,"reported latency");
  std::cout<<"PASS shared precise MIDI/ramp, current transport, programs and latency\n";
- auto gesture=symbol<int(*)(double)>(dll,"ResonanceFixtureGesture");WindowsVST3::pluginMainCall([&]{check(gesture(.375)>0,"handler edit rejected");});uint32_t id=0;float value=0;check(plugin->popEdit(id,value)&&id==7&&value==.375f,"commit-value edit queue");
+ auto gesture=symbol<int(*)(double)>(dll,"ResonanceFixtureGesture");
+ const auto editStart=ScreamSeq::hostTime100ns();
+ WindowsVST3::pluginMainCall([&]{check(gesture(.375)>0,"handler edit rejected");});
+ const auto editEnd=ScreamSeq::hostTime100ns();
+ Sleep(2); // Poll delay must not become the notification's original timestamp.
+ const auto drainStart=ScreamSeq::hostTime100ns();PluginEdit notification;
+ check(plugin->popEdit(notification)&&notification.id==7&&notification.value==.375f,"commit-value edit queue");
+ check(editStart&&notification.hostTime>=editStart&&notification.hostTime<=editEnd&&notification.hostTime<drainStart,"editor timestamp must describe the callback, not the delayed drain");
+ check(plugin->droppedEdits()==0,"ordinary editor gesture unexpectedly lost");
+ WindowsVST3::pluginMainCall([&]{check(gesture(.5)>0,"compatibility gesture rejected");});
+ uint32_t id=0;float value=0;check(plugin->popEdit(id,value)&&id==7&&value==.5f,"legacy edit reader changed");
  auto overflow=factory.create(effect,48000,true);for(int i=0;i<32;++i)check(overflow->parameter(7,.5,i),"parameter queue fills");check(!overflow->parameter(7,.5,32),"parameter overflow accepted");pcm.fill(1);check(!overflow->process(pcm.data(),64,0,inputs.data(),0,{}),"queue overflow failed to fault");for(int i=0;i<128;++i)expectPCM(pcm[i],0);
  check(overflow->failure().reason&&std::string(overflow->failure().reason)=="vst3.input-parameter-capacity"&&overflow->failure().detail==7,"first overflow fault was overwritten by process failure");
  std::cout<<"PASS editor commit queue and overflow fault/silence\n";

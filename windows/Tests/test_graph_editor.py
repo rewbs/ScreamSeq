@@ -3,13 +3,26 @@ import os
 import ctypes
 from ctypes import wintypes
 import unittest
+import time
 import test_graph_mixer_app as support
 import private_desktop
 
 
 class GraphEditorTests(unittest.TestCase):
     doc = support.GraphMixerAppTests.doc
-    read = support.GraphMixerAppTests.read
+    def read(self, method, **fields):
+        # The retained parameter inspector refreshes through the same worker.
+        # Retry only read-only observations, never a write or native gesture.
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                return support.GraphMixerAppTests.read(self, method, **fields)
+            except support.ApiError as error:
+                if (error.code != -32002 or
+                        not (method.endswith('.get') or method == 'plugin.discover') or
+                        time.monotonic() >= deadline):
+                    raise
+                time.sleep(.02)
     write = support.GraphMixerAppTests.write
     rejected = support.GraphMixerAppTests.rejected
     add_gain = support.GraphMixerAppTests.add_gain
@@ -96,9 +109,7 @@ class GraphEditorTests(unittest.TestCase):
         self.mouse(0x201, output, 1)
         self.mouse(0x200, target, 1)
         self.mouse(0x202, target)
-        self.assertTrue(self.state()['dirty'])
-        self.assertEqual(self.read('graph.get')['library'][0], definition)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         changed = self.read('graph.get')['library'][0]
         self.assertEqual(len(changed['modulation']), 1)
         self.assertEqual(changed['modulation'][0]['minimum'], 0)
@@ -112,11 +123,22 @@ class GraphEditorTests(unittest.TestCase):
         self.assertEqual((self.state()['wire'], self.state()['modulation']), (0, False))
         self.field(455, '.5')
         self.command(456)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         updated = self.read('graph.get')['library'][0]
         self.assertEqual(updated['audio'][0]['gain'], .5)
         self.assertEqual(updated['audio'][1:], changed['audio'][1:])
         self.assertEqual(updated['modulation'], changed['modulation'])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('graph.get')['library'][0], changed)
+        self.command(441)
+        wire = next(w for w in self.state()['wires'] if not w['modulation'] and w['index'] == 0)
+        self.mouse(0x201, wire, 1); self.mouse(0x202, wire)
+        self.key(0x08)  # Backspace removes only the selected connection immediately.
+        cut = self.read('graph.get')['library'][0]
+        self.assertEqual(cut['audio'], changed['audio'][1:])
+        self.assertEqual(cut['modulation'], changed['modulation'])
+        self.assertEqual(cut['nodes'], changed['nodes'])
+        self.assertFalse(self.state()['dirty'])
         self.write('history.undo', domain='document')
         self.assertEqual(self.read('graph.get')['library'][0], changed)
 
@@ -131,7 +153,7 @@ class GraphEditorTests(unittest.TestCase):
         self.select(448, 2)  # Plugin.
         self.field(451, '1')
         self.command(456)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         edited = self.read('graph.get')['library'][0]
         self.assertEqual(edited['audio'], original['audio'])
         self.assertEqual(edited['nodes'], original['nodes'])
@@ -157,7 +179,7 @@ class GraphEditorTests(unittest.TestCase):
         self.select(449, 1)  # First saved wire, after New connection.
         self.field(452, '-.25')
         self.command(456)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         edited = self.read('graph.get')['library'][0]
         expected = dict(original['modulation'][0], minimum=-.25)
         self.assertEqual(edited['modulation'], [expected])
@@ -191,8 +213,7 @@ class GraphEditorTests(unittest.TestCase):
             self.mouse(0x201,start,1); self.mouse(0x200,end,1); self.mouse(0x202,end)
         drag(socket(source,True),socket(other,False))
         drag(socket(target,False),socket(other,True))
-        self.assertTrue(self.state()['dirty'])
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         branched = self.read('graph.get',includeState=False)['library'][0]
         self.assertEqual(branched['audio'][:2],definition['audio'])
         self.assertEqual(len(branched['audio']),4)
@@ -223,17 +244,18 @@ class GraphEditorTests(unittest.TestCase):
         self.key(0x1B)
         self.assertFalse(self.state()['dirty'])
         self.assertEqual(self.read('graph.get')['library'][0], original)
-        self.key(0x27)
+        self.mouse(0x201, start, 1)
+        self.mouse(0x200, end, 1)
         self.assertTrue(self.state()['dirty'])
         self.write('document.patch', title='Changed while dragging')
         before = self.doc()
-        self.command(440)
+        self.mouse(0x202, end)
         self.assertEqual(self.doc(), before)
         self.assertTrue(self.state()['dirty'])
         self.assertTrue(self.state()['stale'])
         self.command(441)
         self.key(0x27)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         changed = self.read('graph.get')['library'][0]
         self.assertEqual(next(n['x'] for n in changed['nodes'] if n['id'] == plugin),
                          next(n['x'] for n in original['nodes'] if n['id'] == plugin)+8)
@@ -248,8 +270,36 @@ class GraphEditorTests(unittest.TestCase):
         self.field(459, '-18')
         self.command(461)
         self.assertEqual(next(p['value'] for p in self.read('graph.plugin.get', graph=graph, node=plugin)['parameters'] if p['id'] == 1), -18)
+        # All parameters now opens a retained, polling inspector. This case
+        # continues with the inline bus form; close that separate window before
+        # the API setup mutation. Busy native selectors have their own explicit
+        # regression in WorkspaceRestoreTests, including retained raw fields.
+        inspectors = []
+        @private_desktop.callback
+        def find_inspector(hwnd, unused):
+            pid = wintypes.DWORD()
+            private_desktop.user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            name = ctypes.create_unicode_buffer(128)
+            private_desktop.user.GetClassNameW(hwnd, name, len(name))
+            if pid.value == self.pid and name.value == 'ScreamSeq.PluginParameters':
+                inspectors.append(hwnd)
+            return True
+        self.assertTrue(private_desktop.user.EnumDesktopWindows(self.desktop.desktop, find_inspector, 0))
+        self.assertEqual(len(inspectors), 1)
+        self.desktop.send(inspectors[0], 0x10)
         self.write('mixer.enable')
-        self.desktop.send(self.desktop.hwnd(self.pid), 0x113, 4)
+        # The API publication and graph catalogue timer are distinct owners.
+        # Wait for the captured revision and actual choices, not one timer tick.
+        revision = self.doc()['revision']
+        deadline = time.monotonic() + 5
+        while True:
+            self.desktop.send(self.desktop.hwnd(self.pid), 0x113, 4)
+            state = self.state()
+            if state['expectedRevision'] == revision and self.desktop.send(self.control(465), 0x146) > 0:
+                break
+            if time.monotonic() >= deadline:
+                self.fail(f'Graph assignment catalogue did not adopt mixer revision: {state}')
+            time.sleep(.02)
         self.select(443, 4)
         before = self.doc()
         self.field(468, '2')
@@ -299,7 +349,7 @@ class GraphEditorTests(unittest.TestCase):
         self.assertEqual(self.state()['node'], plugin)
         self.assertEqual(self.desktop.send(self.control(442), 0x147), 2)
         self.command(446)
-        self.command(440)
+        self.assertFalse(self.state()['dirty'])
         definition = self.read('graph.get')['library'][0]
         self.assertEqual(next(n['name'] for n in definition['nodes'] if n['id'] == plugin), 'Retained node name')
         self.select(443, 1)

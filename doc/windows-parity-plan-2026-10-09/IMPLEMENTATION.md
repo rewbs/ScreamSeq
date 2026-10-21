@@ -1,5 +1,11 @@
 # Parity implementation progress
 
+**Current continuation (20 October):** the overarching goal is active. Use the
+[current dependency queue](CONTINUATION-QUEUE-2026-10-20.md), current source and
+linked qualification receipts for present status. The dated entries below retain
+historical pauses, preparation claims and failures; they are not current absence
+claims or permission to skip the remaining A01–A18 gates.
+
 Implementation resumed after the documentation-only review under the active user goal, “Go ahead with the implementation as per the latest plan.” The complete scope is the [reviewed parity plan](README.md); [latest planning review](final-planning-review.md) retains the planning checkpoint. **P0a is merged; P0b–P8, reciprocal saves and final cross-platform qualification remain outstanding.** Earlier receipts below retain their original scope and dates.
 
 ## Automatic Windows edits — 10 October, 12:56 UTC

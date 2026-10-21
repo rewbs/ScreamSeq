@@ -701,7 +701,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.desktop.send(tool, 0x111, 4204 | (1 << 16), parameters)
         self.desktop.send(tool, 0x111, 4212, self.control(tool, 4212))
         self.ready()
-        edit = self.field(tool, 4207, '3.')
+        edit = self.field(tool, 4207, '3e')
         self.focus_control(edit)
         before = self.doc()
         self.bind(545, ['ctrl+alt+p'])
@@ -713,7 +713,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
         self.key(0x1B, hwnd=edit)
         self.pending(False)
         self.assertTrue(self.read('transport.get')['playing'])
-        self.assertEqual(self.text(edit), '3.')
+        self.assertEqual(self.text(edit), '3e')
         for playing in (False, True, False):
             self.key(ord('P'), hwnd=edit, ctrl=True, alt=True)
             transport = self.read('transport.get')
@@ -721,7 +721,7 @@ class WorkspaceShortcutTests(unittest.TestCase):
             if playing:
                 self.assertTrue(transport['audioActive'])
             self.assertEqual(self.desktop.focus(tool), edit)
-            self.assertEqual(self.text(edit), '3.')
+            self.assertEqual(self.text(edit), '3e')
             self.assertEqual(self.doc(), before)
 
 

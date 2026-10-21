@@ -1067,6 +1067,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func exportModule() {
     guard !busy else { return }
+    let revision = session.automationRevision
     let ext = model.format.lowercased()
     guard ["mod", "xm", "s3m", "it", "mptm"].contains(ext) else { return }
     let panel = NSSavePanel()
@@ -1075,9 +1076,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     panel.allowedContentTypes = [UTType(filenameExtension: ext) ?? .data]
     panel.beginSheetModal(for: window) { [weak self] response in
       guard response == .OK, let self, let url = panel.url else { return }
-      self.perform("Exporting module…", refresh: false, { try self.session.savePath(url.path) }, completion: {
-        self.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
-      })
+      self.handleAutomation("document.exportModule", params: [
+        "expectedRevision": revision, "path": url.path, "overwrite": true
+      ]) { [weak self] response in
+        if let error = response["error"] as? [String: Any] {
+          self?.statusLabel.stringValue = error["message"] as? String ?? "Module export failed"
+        } else {
+          self?.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+        }
+      }
     }
   }
   @objc func exportAudio() {

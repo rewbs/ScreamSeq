@@ -24,13 +24,17 @@ on:
         type: choice
         options: [exchange, windows]
         default: exchange
+      extended_exchange:
+        description: 'Also require edited opaque metadata, composing history and envelope-bank saved outputs'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
+  group: screamseq-windows-${{ github.workflow }}-${{ github.ref }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}-${{ inputs.extended_exchange || false }}
   cancel-in-progress: true
 
 jobs:
@@ -122,6 +126,12 @@ jobs:
             python -m unittest -v `
               test_workspace_shortcuts.WorkspaceShortcutTests `
               test_menu_pattern_keys.MenuPatternTests `
+              test_plugin_edit_parity.PluginEditParityTests `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_clear_all_recordings_preserves_stale_and_field_drafts_and_one_undo `
+              test_graph_mixer_app.GraphMixerAppTests.test_linked_envelope_admission_retains_bank_and_history `
+              test_graph_editor.GraphEditorTests `
+              test_context_menus.WorkspaceContextMenuTests.test_graph_node_wire_menu_selection_draft_and_history `
+              test_context_menus.WorkspaceContextMenuTests.test_graph_raw_draft_prevents_retarget_and_modal_generation_change `
               test_mixer_strips_ui.MixerStripsUITests `
               test_note_tracks.NoteTrackAppTests `
               test_pattern_tools.PatternToolsAppTests `
@@ -151,6 +161,19 @@ jobs:
               test_graph_curve_host.GraphCurveHostTests.test_routing_and_curve_keep_independent_raw_drafts_and_targets *>&1 | Tee-Object $integrationLog
             if ($LASTEXITCODE -ne 0) { throw 'Merged command and editor paths failed.' }
           } finally { Pop-Location }
+      - name: Recorded and manual vendor ownership on an owned private desktop
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
+          # The worker notification test already scans the built deterministic
+          # provider. Reuse that exact cache; a missing fixture is a failure.
+          $env:SCREAMSEQ_TEST_PROVIDER_CACHE = (Resolve-Path bin/windows-ci/plugin-edit-cache.json).Path
+          $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-vendor-ownership'
+          New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
+          $ownershipLog = Join-Path $env:GITHUB_WORKSPACE 'screamseq-vendor-ownership.log'
+          python -X utf8 -B windows/Tests/run_isolated.py --log $ownershipLog --test test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard
+          if ($LASTEXITCODE -ne 0) { throw 'Recorded/manual vendor ownership checks failed.' }
       - name: Typed fixtures and actual pipe conformance baseline
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
@@ -162,7 +185,7 @@ jobs:
           $executable = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $binaryHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
           $builtCommit = (git rev-parse HEAD).Trim()
-          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors *>&1 | Tee-Object screamseq-conformance-native.log
+          python -B editor/Tests/Conformance/native_roundtrip.py --executable $executable --binary-sha256 $binaryHash --binary-source-commit $builtCommit --build-receipt bin/windows-ci/BuildInfo.json --output bin/windows-ci/parity-conformance --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history --envelope-bank *>&1 | Tee-Object screamseq-conformance-native.log
           if ($LASTEXITCODE -ne 0) { throw 'Native conformance baseline did not match; inspect retained reports.' }
       - name: Configured test scheduling inventory
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -183,6 +206,7 @@ jobs:
             screamseq-scratch-ui.log
             screamseq-retained-editors.log
             screamseq-integration-ui.log
+            screamseq-vendor-ownership.log
             screamseq-conformance-*.log
             bin/windows-ci/parity-conformance/**
             bin/windows-ci/parity-fixture-output/**
@@ -208,3 +232,4 @@ jobs:
       input-run: ${{ inputs.fixture_run }}
       input-artifact: ${{ inputs.fixture_artifact }}
       input-layout: ${{ inputs.fixture_layout }}
+      extended-exchange: ${{ inputs.extended_exchange || false }}

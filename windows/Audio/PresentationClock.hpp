@@ -1,6 +1,7 @@
 #pragma once
 #include "HostClock.hpp"
 #include "editor/RecordingClock.hpp"
+#include "editor/RecordingFrameClock.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -23,6 +24,7 @@ struct RenderTime {
 struct RecordingTimeline {
   explicit RecordingTimeline(std::shared_ptr<const Tracker::RecordingClock> value):clock(std::move(value)){}
   std::shared_ptr<const Tracker::RecordingClock> clock;
+  Tracker::RecordingFrameTimeline absoluteFrames;
   std::atomic<std::uint64_t> generation{0},firstHostTime{0},endHostTime{0},discontinuities{0};
   // True is published after Stop's final bound; a live unmapped gap must not
   // be mistaken for a stopped stream when closing held notes.
@@ -33,6 +35,14 @@ struct RecordingTimeline {
     const auto first=firstHostTime.load(std::memory_order_acquire),end=endHostTime.load(std::memory_order_acquire);
     if(!first||time<first||time>=end)return {};
     const auto result=clock->locate(time);
+    return generation.load(std::memory_order_acquire)==before?result:std::nullopt;
+  }
+  std::optional<uint64_t> locateFrame(uint64_t time,uint64_t expectedGeneration) const noexcept {
+    const auto before=generation.load(std::memory_order_acquire);
+    if(!expectedGeneration||before!=expectedGeneration)return {};
+    const auto first=firstHostTime.load(std::memory_order_acquire),end=endHostTime.load(std::memory_order_acquire);
+    if(!first||time<first||time>=end)return {};
+    const auto result=absoluteFrames.locate(time,expectedGeneration);
     return generation.load(std::memory_order_acquire)==before?result:std::nullopt;
   }
 };

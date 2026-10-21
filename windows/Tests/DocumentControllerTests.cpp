@@ -7,6 +7,7 @@
 #include "windows/Project/BinaryPlist.hpp"
 #include "windows/Project/ProjectIO.hpp"
 #include "common/mptString.h"
+#include "soundlib/mod_specifications.h"
 #include <iostream>
 
 using namespace ScreamSeq;
@@ -32,7 +33,8 @@ void publicationTests(const std::filesystem::path &directory) {
   old=controller.view();auto beforeStops=stops;
   fail=true;
   bool rejected=false;
-  try {invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});} catch(const std::runtime_error &) {rejected=true;}
+  try {invoke(controller,"document.open",{{"path",(directory/"unicode.screamseq").generic_string()},{"discard",true}});}
+  catch(const Api::ApiError &e){rejected=e.outcome && e.outcome->state==Tracker::CommitOutcome::NotCommitted;}
   need(rejected && controller.view()==old,"open fault must retain the entire old immutable view");
   need(stops==beforeStops && old->dirty && old->path==path,"open fault must not stop or replace the dirty source");
   need(controller.invoke("sample.get",{{"sample",1}}).get()==oldSample,"open fault must retain the worker song");
@@ -170,6 +172,40 @@ void assetTests(const std::filesystem::path &directory) {
   invoke(c,"sample.loops.set",{{"sample",1},{"normal",{{"start",8},{"end",64},{"enabled",true}}}});
   need(c.view()->waves.at(1)==loopWave,"loop-only edit unnecessarily rescanned unchanged PCM");
   need(!c.invoke("sample.clipboard.get",Json::object()).get().at("available").get<bool>(),"new document retained another document's clipboard");
+  const auto instrument=invoke(c,"instrument.create",{{"sample",1}}).at("instrument");
+  invoke(c,"instrument.patch",{{"instrument",instrument},{"values",{{"envelope",0},{"enabled",true},
+    {"points",Json::array({Json::array({0,0}),Json::array({4,64}),Json::array({16,0})})}}}});
+  Json identity;
+  for(const auto &item:c.view()->session.document.at("instruments"))if(item.at("index")==instrument)identity=item.at("id");
+  need(identity.is_string(),"Linked envelope fixture instrument identity missing");
+  const Json target={{"kind","volume"},{"instrument",identity}};
+  const auto bank=invoke(c,"envelope.bank.save",{{"name","Linked admission fixture"},{"target",target}}).at("id");
+  invoke(c,"envelope.bank.apply",{{"template",bank},{"target",target},{"linked",true}});
+  const auto linkedView=c.view();const auto linkedStops=stops;
+  const auto linkedEnvelope=call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}});
+  for(bool dry:{true,false}) {
+    const auto receipt=std::make_shared<NativeCallReceipt>();bool refused=false;
+    try {
+      auto pending=c.invokeCompleted("instrument.envelope.transform",{{"instrument",identity},{"envelope","volume"},
+        {"operation","scale"},{"options",{{"amount",.5}}},{"dryRun",dry},{"expectedRevision",linkedView->session.revision}},receipt);
+      while(pending.wait_for(std::chrono::milliseconds(1))!=std::future_status::ready)c.service();
+      c.service();(void)pending.get();
+    } catch(const Api::ApiError &e) {
+      refused=e.code==-32602&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;
+    }
+    need(refused&&!receipt->read()&&c.view()==linkedView&&stops==linkedStops,
+      "Linked-envelope candidate rejection must be explicitly pre-commit and preserve view/history/playback");
+    need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}})==linkedEnvelope,
+      "Rejected linked-envelope transform changed its accepted shape");
+  }
+  const auto panBefore=call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}});
+  invoke(c,"instrument.envelope.transform",{{"instrument",identity},{"envelope","pan"},{"operation","ramp"},
+    {"end",9},{"options",{{"from",0},{"to",64}}}});
+  need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}})!=panBefore,
+    "Candidate rejection left independent envelope edits unusable");
+  invoke(c,"history.undo");
+  need(call(c,"instrument.envelope.get",{{"instrument",identity},{"envelope","pan"}})==panBefore,
+    "Accepted envelope edit after rejection failed one-step Undo");
   std::cout<<"asset worker cache, guards, clipboard, history and persistence passed\n";
 }
 
@@ -439,6 +475,8 @@ void programDryRunTests(const std::filesystem::path &scanner,const std::filesyst
 
 #include "MixerIntegrationTests.inc"
 #include "LiveGraphPublicationTests.inc"
+#include "LiveParameterPreviewTests.inc"
+#include "LiveRecipePreviewTests.inc"
 void graphRecipeRenderTests(const std::filesystem::path &directory) {
   {
     bool running=false,audition=false;unsigned stops=0;PlaybackHooks hooks;
@@ -682,8 +720,11 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "TrackControllerTests.inc"
 #include "TimelineControllerTests.inc"
 #include "PatternTransformControllerTests.inc"
+#include "ModuleExportControllerTests.inc"
+#include "RecordedGestureCommitTests.inc"
 int main(int argc,char **argv) {
   try {
+    if(argc==3 && std::string(argv[1])=="--module-export") {moduleExportControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-transform") {patternTransformControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--timeline") {timelineControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--tracks") {trackControllerTests(std::filesystem::u8path(argv[2]));return 0;}
@@ -699,7 +740,7 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--sampling") {samplingOperationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-rack-publication") {liveRackPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--live-graph-publication") {liveGraphPublicationTests(std::filesystem::u8path(argv[2]));return 0;}
-    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recorded-publication") {liveRecordedAutomationTests(std::filesystem::u8path(argv[2]));recordedGestureCommitTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--unified-plugin-history") {unifiedPluginHistoryTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==2 && std::string(argv[1])=="--graph-pattern-view") {graphPatternViewTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--graph-recipes") {graphRecipeRenderTests(std::filesystem::u8path(argv[2]));return 0;}
@@ -730,7 +771,8 @@ int main(int argc,char **argv) {
     if(argc==3 && std::string(argv[1])=="--cache") {cacheTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--publication") {publicationTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--assets") {assetTests(std::filesystem::u8path(argv[2]));return 0;}
-    if(argc==3 && std::string(argv[1])=="--live-parameters") {liveParameterTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-parameters") {const auto directory=std::filesystem::u8path(argv[2]);liveParameterTests(directory);liveParameterPreviewTests(directory);return 0;}
+    if(argc==3 && std::string(argv[1])=="--live-recipe-preview") {liveRecipePreviewTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--trigger-instruments") {triggerInstrumentTests(std::filesystem::u8path(argv[2]));return 0;}
     throw std::runtime_error("Use --fixtures or --publication <existing directory>");
   } catch(const std::exception &e) {std::cerr<<e.what()<<'\n';return 1;}

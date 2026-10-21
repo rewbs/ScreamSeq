@@ -103,20 +103,17 @@
         place(instrumentEnvelopeCommand,564,12,126,26);
         place(audioSettingsCommand,698,12,110,26);
         place(midiRecordingCommand,816,12,60,26);
-        place(arrangementCommand,10,50,82,24);place(songTimingCommand,96,50,60,24);
 		place(composeCommand,174,52,80,26);place(patternCommand,258,52,106,26);place(soundCommand,368,52,108,26);
         place(layoutsCommand,480,52,80,26);
         place(mixerCommand,564,52,76,26);
         place(parameterAutomationCommand,644,52,96,26);
         place(liveKeysCommand,744,52,92,26);
-        place(openCommand,10,292,68,25);place(saveCommand,82,292,74,25);place(saveAsCommand,10,322,72,25);
-        place(documentLoadReportCommand,86,322,70,25);updateDocumentLoadReport();
-        place(songPropertiesCommand,86,95,70,23);
-        place(undoCommand,10,354,68,25);place(redoCommand,82,354,74,25);
-        place(patternChooser,10,389,146,250);place(orderChooser,10,420,146,250);
-        place(octaveChooser,10,452,70,230);place(stepChooser,84,452,72,230);
-        place(soundChooser,10,484,146,230);
-        place(playbackLoopCommand,10,516,146,25);
+        // Global file/history/song commands remain in native menus and the
+        // command palette. The left column now belongs to the current task.
+        for(int id:{openCommand,saveCommand,saveAsCommand,documentLoadReportCommand,songPropertiesCommand,
+            undoCommand,redoCommand,arrangementCommand,songTimingCommand,playbackLoopCommand,sampleImportCommand,sampleBrowseCommand})
+            place(id,0,0,1,1,false);
+        updateDocumentLoadReport();
         refreshPlaybackLoopControl();
         EnableWindow(controls.at(playbackLoopCommand),!busy&&!recoveryRestoring);
         RECT client{};GetClientRect(window,&client);
@@ -144,9 +141,6 @@
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
 		place(cursorCommand,g.inspector.x+110,g.inspector.y+34,70,24,show);
 		place(returnCommand,g.inspector.x+184,g.inspector.y+34,70,24,show);
-		place(sampleCommandBase,10,154,146,96);
-        place(sampleImportCommand,84,126,72,22);
-        place(sampleBrowseCommand,10,254,146,24);
         const auto editor=sampleEditorRect();const bool editSample=sampleEditorVisible();
         float actionX=editor.x+150;
         for(auto [id,width]:std::initializer_list<std::pair<int,float>>{{sampleAllCommand,48.0f},{sampleReverseCommand,66.0f},{sampleNormalizeCommand,78.0f},
@@ -185,6 +179,7 @@
             ScreamSeq::NativeControls::active(controls.at(id),controlActive(id));
         rememberCompletedWorkspaceLayout();
         layoutPatternNudgeEditor();
+        refreshContextPanel(true);
 	}
 	void installControls() {
 		auto add=[&](int id,const std::wstring &label) {
@@ -193,6 +188,7 @@
 		};
 		for(auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{
 			{playCommand,L"Play"},{stopCommand,L"Stop"},{followCommand,L"Follow on [F]"},{playbackLoopCommand,L"Playback loop: on"},
+            {contextPanelCommand,L"Hide context panel"},
             {positionRulerCommand,L"Row"},
 			{composeCommand,L"Compose"},{patternCommand,L"Pattern focus"},{soundCommand,L"Sound design"},
 			{notesInspectorCommand,L"Notes"},{samplesCommand,L"Sample & loops"},{pinCommand,L"Follow target"},
@@ -212,6 +208,7 @@
             {sampleFadeInCommand,L"Fade in"},{sampleFadeOutCommand,L"Fade out"},{sampleTrimCommand,L"Trim"},{sampleLoopCommand,L"Set loop"},{sampleRangeCommand,L"Set range"},
             {sampleLoopToggleCommand,L"Loop off"},{sampleLoopModeCommand,L"Forward"},{sampleLoopSelectCommand,L"Use selection"},
             {sampleSustainToggleCommand,L"Sustain off"},{sampleSustainModeCommand,L"Forward"},{sampleSustainSetCommand,L"Use selection"}}) add(id,label);
+        for(int id=contextActionFirst;id<=contextActionLast;++id)add(id,L"Context action");
         for(int id:{sampleStartField,sampleEndField}) {
             controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"0",WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);
             SendMessageW(controls.at(id),EM_SETLIMITTEXT,10,0);
@@ -234,11 +231,21 @@
         registerMainDrafts();
         if(inspection)SetPropW(window,ScreamSeq::NativeControls::inspectionProperty,reinterpret_cast<HANDLE>(1));
         for(auto [id,h]:controls)ScreamSeq::NativeControls::install(h,inspection);
+        // Native Tab order follows the panel's vertical reading order, even
+        // though its selectors and buttons are created by different helpers.
+        HWND previous=HWND_TOP;
+        for(int id:{contextPanelCommand,patternChooser,orderChooser,octaveChooser,stepChooser,soundChooser,sampleCommandBase,
+            contextActionFirst,contextActionFirst+1,contextActionFirst+2,contextActionFirst+3,contextActionFirst+4,contextActionLast}) {
+            SetWindowPos(controls.at(id),previous,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+            previous=controls.at(id);
+        }
 		configureWorkspaceCommands();
 		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
 	}
 	void command(int id) {
 		try {
+            if(id==contextPanelCommand){toggleContextPanel();return;}
+            if(id>=contextActionFirst&&id<=contextActionLast){contextPanelAction(id);return;}
             if(id==exitCommand){PostMessageW(window,WM_CLOSE,0,0);return;}
             if(id==aboutCommand){modalMessage(L"ScreamSeq\nNative tracker and music workstation\n\nBuilt on the OpenMPT playback engine.\nOpenMPT copyright and attribution are retained in the bundled notices.",L"About ScreamSeq",MB_OK|MB_ICONINFORMATION);return;}
             if(id==keyboardHelpCommand){palette->show();return;}
@@ -308,6 +315,7 @@
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
             else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
+            else if(id==exportModuleCommand) exportModuleFile();
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
             else if(id==copyCommand) copyCells();
             else if(id==pasteCommand) pasteCells();
@@ -354,7 +362,7 @@
 			}
             layoutControls();
             // Selection notifications are not commands to leave the native control.
-            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginActivity) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
+            if(!(id>=curvePattern&&id<=curveReference) && id!=openGraphCurveCommand && id!=dockGraphCurveCommand && id!=editorGraphCurveTab && !(id>=graphCommand&&id<=graphReconnect) && !(id>=mixerCommand&&id<=mixerRouteInstrument) && id!=notesCommand && !(id>=noteList&&id<=noteEndVelocity) && id!=octaveChooser && id!=stepChooser && id!=soundChooser && id!=orderChooser && id!=effectColumnChooser && id!=patternChooser && id!=sampleCommandBase && !(id>=pluginList && id<=pluginMove) && id!=effectsCommand && !isEffectControl(id)) SetFocus(window);
             if(GetFocus()==window&&!workspaceFocusedCanvasVisible())focusVisibleWorkspaceCanvas();
 		} catch(const std::exception &e) { status=wide(e.what());refreshChoosers(); }
 	}
@@ -507,6 +515,7 @@
         if(effectInline)layoutControls();
     }
 	bool controlActive(int id) const {
+        if(id==contextPanelCommand)return workspaceState.contextPanelVisible;
         if(id==playbackLoopCommand)return playbackLoop;
         if(id==noteColumnMuteCommand)return noteColumn(channel).at("mute").get<bool>();
         if(id==midiRecordingCommand)return midiArmed||hasRecordingTake();

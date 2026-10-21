@@ -115,7 +115,7 @@
         "channelCount": 1
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "difference": "API-INTEGER-TYPES",
@@ -196,7 +196,7 @@
       "id": "title-utf16-over-limit",
       "method": "document.patch",
       "params": {
-        "title": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
+        "title": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵"
       },
       "expected": {
         "windows": -32602,
@@ -225,12 +225,14 @@
         "destination": 0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-ORDER-MOVE",
-      "phase": "P3a"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     },
     {
       "id": "plugin-move-position",
@@ -240,12 +242,14 @@
         "position": 0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-PLUGIN-POSITION",
-      "phase": "P4b"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     },
     {
       "id": "plugin-slot-real",
@@ -254,7 +258,7 @@
         "slot": 0.0
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "difference": "API-INTEGER-TYPES",
@@ -303,7 +307,7 @@
       },
       "expected": {
         "windows": "success",
-        "macos": -32602
+        "macos": "success"
       },
       "guard": "fresh",
       "difference": "API-PLUGIN-DRY-RUN",
@@ -324,7 +328,7 @@
       },
       "expected": {
         "windows": "success",
-        "macos": -32602
+        "macos": "success"
       },
       "guard": "fresh",
       "difference": "API-PLUGIN-DRY-RUN",
@@ -386,16 +390,18 @@
         "gesture": "parity-one-gesture"
       },
       "expected": {
-        "windows": -32602,
+        "windows": "success",
         "macos": "success"
       },
       "guard": "fresh",
-      "difference": "API-GRAPH-GESTURE",
-      "phase": "P5"
+      "documentUnchanged": {
+        "windows": true,
+        "macos": true
+      }
     }
   ],
   "rejectedRequestIDReuse": {
-    "windows": "success",
+    "windows": -32600,
     "macos": -32600
   }
 }

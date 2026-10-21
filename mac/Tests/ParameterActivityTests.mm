@@ -74,6 +74,159 @@ static void sessionAPI() {
   call(@"history.undo",@{@"domain":@"plugins"},true);check([lane() count]==0,"Recorded Undo failed");call(@"history.redo",@{@"domain":@"plugins"},true);check([lane() count]==1,"Recorded Redo failed");
   auto invalid=[edit mutableCopy];invalid[@"value"]=@999;invalid[@"expectedRevision"]=session.automationRevision;check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error]&&[lane() count]==1,"Invalid value partially replaced recording");
   invalid=[edit mutableCopy];invalid[@"expectedRevision"]=@"stale";check(![session automationMethod:@"automation.recorded.edit" params:invalid error:&error],"Stale recorded write accepted");
+  check([session pluginParameter:0 identifier:1 value:-3 record:NO error:&error],"Manual baseline fixture failed");
+  NSDictionary *savedState=call(@"plugin.state.get",@{@"plugin":plugin})[@"data"];
+  revision=session.automationRevision;
+  auto clearPreview=call(@"automation.recorded.clear",@{@"dryRun":@YES},true);
+  check([clearPreview[@"data"][@"removed"] unsignedIntegerValue]==1&&[revision isEqual:session.automationRevision]&&[lane() count]==1,"Clear dry run changed recording/history");
+  auto cleared=call(@"automation.recorded.clear",@{},true);
+  check([cleared[@"data"][@"removed"] unsignedIntegerValue]==1&&[lane() count]==0&&[savedState isEqual:call(@"plugin.state.get",@{@"plugin":plugin})[@"data"]],"Clear changed the independent saved manual state");
+  revision=session.automationRevision;
+  check([session clearAutomation:&error]&&[revision isEqual:session.automationRevision],"Empty native clear created history");
+  call(@"history.undo",@{},true);check([lane() count]==1,"Clear was not one Undo");
+  call(@"history.redo",@{},true);check([lane() count]==0,"Clear Redo failed");
+  call(@"history.undo",@{},true);check([lane() count]==1,"Clear recording fixture was not restored");
   NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];check([session savePath:path error:&error]&&[session openPath:path error:&error]&&[lane() count]==1,"Recorded edit failed project roundtrip");[[NSFileManager defaultManager]removeItemAtPath:path error:nil];
 }
-int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}
+static void sessionPreview() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{
+    auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:p error:&error];
+    if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return reply[@"data"];
+  };
+  call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  NSString *plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  auto gesture=[&](NSString *method,double value){return call(method,@{@"plugin":plugin,@"parameter":@1,@"gesture":@"native-preview-fixture",@"value":@(value)},true);};
+  auto active=[&]{return [call(@"plugin.parameters.preview.get",@{})[@"active"] boolValue];};
+  auto manual=[&]()->double{for(NSDictionary *p in [session pluginParameters:0])if([p[@"id"] unsignedIntValue]==1)return [p[@"manualValue"] doubleValue];throw std::runtime_error("Missing native manual gain");};
+  auto native=[&](double value){check([session pluginParameter:0 identifier:1 value:value record:NO error:&error],"Native parameter edit failed");};
+  auto propertyTree=[&](NSData *data)->NSDictionary *{check(data!=nil,"Preview recovery serialization failed");auto root=[NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:&error];check([root isKindOfClass:NSDictionary.class],"Invalid preview recovery property tree");return root;};
+  const auto original=manual();
+  [session parameterGesture:YES];native(-6);
+  gesture(@"plugin.parameters.preview.set",-18);gesture(@"plugin.parameters.preview.commit",-9);
+  native(-12);[session parameterGesture:NO];
+  check([session historyUndo:NO error:&error]&&manual()==-9,"Native gesture merged across preview commit");
+  check([session historyUndo:NO error:&error]&&manual()==-6,"Preview commit merged into the preceding native gesture");
+  check([session historyUndo:NO error:&error]&&manual()==original,"Native gesture baseline lost after preview Undo");
+  gesture(@"plugin.parameters.preview.set",-21);
+  check([session addPattern:64 duplicate:NO source:0 error:&error]>=0,"Native document fixture edit failed");
+  (void)[session snapshot:0];check(!active(),"Native document refresh retained a stale preview");
+  gesture(@"plugin.parameters.preview.set",-18);native(-3);
+  check(!active()&&manual()==-3,"Native parameter acceptance retained an API preview");
+  NSDictionary *baseline=propertyTree([session recoveryData:&error]);
+  NSString *revision=session.automationRevision;
+  gesture(@"plugin.parameters.preview.set",-24);
+  NSDictionary *recovery=propertyTree([session recoveryData:&error]);
+  check(active()&&[revision isEqual:session.automationRevision]&&[baseline[@"plugins"] isEqual:recovery[@"plugins"]],"Recovery committed/cancelled the drag or serialized its temporary value");
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([session savePath:path error:&error]&&!active()&&manual()==-3,"Explicit native save did not retire the preview at the accepted baseline");
+  check([session openPath:path error:&error]&&!active()&&manual()==-3,"Native preview save/reopen changed the accepted parameter");
+  check([[session snapshot:0][@"nativePlugins"][0][@"instanceID"] isEqual:plugin],"Native preview roundtrip changed stable plugin identity");
+  [[NSFileManager defaultManager]removeItemAtPath:path error:nil];[session shutdown];
+}
+static void sessionRecipePreview() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{
+    auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:p error:&error];
+    if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return reply[@"data"];
+  };
+  call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  NSString *graph=call(@"graph.create",@{@"name":@"Native recipe preview"},true)[@"graph"];
+  NSString *node=call(@"graph.node.add",@{@"graph":graph,@"kind":@"plugin",@"slot":@0,@"insertEdge":@0},true)[@"node"];
+  auto gesture=[&](NSString *method,double value){return call(method,@{@"graph":graph,@"node":node,@"parameter":@1,@"gesture":@"native-recipe-preview",@"value":@(value)},true);};
+  auto active=[&]{return [call(@"graph.plugin.preview.get",@{})[@"active"] boolValue];};
+  auto state=[&]{return call(@"graph.get",@{});};
+  auto manual=[&]()->double{for(NSDictionary *p in call(@"graph.plugin.get",@{@"graph":graph,@"node":node})[@"parameters"])
+    if([p[@"id"] unsignedIntValue]==1)return [p[@"manualValue"] doubleValue];throw std::runtime_error("Missing native recipe gain");};
+  auto tree=[&](NSData *data)->NSDictionary *{check(data!=nil,"Recipe recovery serialization failed");
+    auto root=[NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:&error];
+    check([root isKindOfClass:NSDictionary.class],"Invalid recipe recovery property tree");return root;};
+  NSDictionary *original=state();
+  gesture(@"graph.plugin.preview.set",-18);gesture(@"graph.plugin.preview.commit",-9);
+  check(!active()&&manual()==-9,"Native recipe release lost its final value");
+  NSDictionary *accepted=state();
+  check([session historyUndo:NO error:&error]&&[state() isEqual:original],"Native recipe Undo lost its original state");
+  check([session historyUndo:YES error:&error]&&[state() isEqual:accepted],"Native recipe Redo lost its accepted state");
+  NSString *revision=session.automationRevision;gesture(@"graph.plugin.preview.set",-21);gesture(@"graph.plugin.preview.commit",-9);
+  check([revision isEqual:session.automationRevision]&&!active(),"Native recipe no-op release changed history");
+  gesture(@"graph.plugin.preview.set",-18);
+  check([session addPattern:64 duplicate:NO source:0 error:&error]>=0,"Native recipe interleaving edit failed");
+  (void)[session snapshot:0];check(!active()&&manual()==-9,"Native document refresh retained a stale recipe preview");
+  NSDictionary *baseline=tree([session recoveryData:&error]);revision=session.automationRevision;
+  gesture(@"graph.plugin.preview.set",-24);
+  NSDictionary *recovery=tree([session recoveryData:&error]);
+  check(active()&&[revision isEqual:session.automationRevision]&&
+    [baseline[@"native"] isEqual:recovery[@"native"]]&&[baseline[@"plugins"] isEqual:recovery[@"plugins"]],
+    "Recovery committed/cancelled a recipe preview or serialized its temporary value");
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([session savePath:path error:&error]&&!active()&&manual()==-9,"Native save did not restore the accepted recipe");
+  check([session openPath:path error:&error]&&!active()&&manual()==-9,"Native recipe save/reopen lost its stable target");
+  [[NSFileManager defaultManager]removeItemAtPath:path error:nil];[session shutdown];
+}
+static void sessionRackDryRuns() {
+  TrackerSession *session=[TrackerSession new];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary *{
+    auto p=[params mutableCopy];if(write)p[@"expectedRevision"]=session.automationRevision;
+    auto reply=[session automationMethod:method params:p error:&error];
+    if(!reply)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return reply[@"data"];
+  };
+  for(int i=0;i<2;++i)
+    call(@"plugin.add",@{@"descriptor":@{@"format":@"Built-in",@"classID":@"resonance.gainer.v1",@"type":@0,@"subtype":@0,@"manufacturer":@0}},true);
+  NSString *plugin=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  auto parameters=[&](double value,bool dry){return call(@"plugin.parameters.set",
+    @{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(value)}],@"dryRun":@(dry)},true);};
+  auto state=[&]{return call(@"plugin.state.get",@{@"slot":@0});};
+  parameters(-6,false);NSDictionary *accepted=state();
+  check([session historyUndo:NO error:&error],"Dry-run fixture Undo failed");
+  NSDictionary *original=state();NSString *revision=session.automationRevision;
+  check([parameters(-12,true)[@"wouldChange"] boolValue],"Changed parameter dry run reported no change");
+  check(![parameters(0,true)[@"wouldChange"] boolValue],"No-op parameter dry run reported a change");
+  check([call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "Changed bypass dry run reported no change");
+  check(![call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@NO,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "No-op bypass dry run reported a change");
+  NSData *beforeMove=session.serializedData;
+  check([call(@"plugin.move",@{@"plugin":plugin,@"position":@1,@"dryRun":@YES},true)[@"wouldChange"] boolValue],
+    "Changed rack move dry run reported no change");
+  for(NSDictionary *fields in @[@{@"position":@0},@{@"direction":@(-1)}]) {
+    NSMutableDictionary *p=[fields mutableCopy];p[@"plugin"]=plugin;p[@"dryRun"]=@YES;
+    check(![call(@"plugin.move",p,true)[@"wouldChange"] boolValue],"Rack edge/current-position dry run reported a change");
+  }
+  check([beforeMove isEqual:session.serializedData],"Rack move dry run changed serialized project state");
+  check([revision isEqual:session.automationRevision]&&[state() isEqual:original],"Dry run changed revision or opaque state");
+  NSDictionary *key=@{@"plugin":plugin,@"parameter":@1,@"gesture":@"native-rack-dry-run"};
+  auto preview=[key mutableCopy];preview[@"value"]=@(-18);call(@"plugin.parameters.preview.set",preview,true);
+  NSDictionary *owner=call(@"plugin.parameters.preview.get",@{});
+  check([owner[@"active"] boolValue],"Dry-run fixture preview missing");
+  parameters(-9,true);call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@YES},true);
+  call(@"plugin.move",@{@"plugin":plugin,@"position":@1,@"dryRun":@YES},true);
+  check(![session automationMethod:@"plugin.move"
+    params:@{@"plugin":plugin,@"position":@2,@"dryRun":@YES,@"expectedRevision":session.automationRevision} error:&error]&&error.code==-32602,
+    "Out-of-range dry-run rack move accepted");
+  NSDictionary *bad=@{@"plugin":plugin,@"values":@[@{@"id":@1,@"value":@(-9)},@{@"id":@1,@"value":@(-3)}],
+    @"dryRun":@YES,@"expectedRevision":session.automationRevision};
+  check(![session automationMethod:@"plugin.parameters.set" params:bad error:&error]&&error.code==-32602,
+    "Duplicate-parameter dry run accepted");
+  check([call(@"plugin.parameters.preview.get",@{}) isEqual:owner]&&[revision isEqual:session.automationRevision]&&
+    [state() isEqual:original],"Dry run changed preview ownership, revision or saved state");
+  call(@"plugin.parameters.preview.cancel",key,true);
+  check([session historyUndo:YES error:&error]&&[state() isEqual:accepted],"Dry run destroyed the existing Redo branch");
+  parameters(-9,false);NSDictionary *changed=state();
+  check([session historyUndo:NO error:&error]&&[state() isEqual:accepted],"Real parameter edit did not undo once");
+  check([session historyUndo:YES error:&error]&&[state() isEqual:changed],"Real parameter edit did not redo");
+  call(@"plugin.bypass",@{@"plugin":plugin,@"bypass":@YES,@"dryRun":@NO},true);
+  check([session historyUndo:NO error:&error]&&[state() isEqual:changed],"Real bypass edit did not undo independently");
+  beforeMove=session.serializedData;
+  call(@"plugin.move",@{@"plugin":plugin,@"position":@1},true);
+  check([[session snapshot:0][@"nativePlugins"][1][@"instanceID"] isEqual:plugin],"Real move lost plugin identity");
+  NSData *afterMove=session.serializedData;
+  check([session historyUndo:NO error:&error]&&[beforeMove isEqual:session.serializedData],"Real move did not Undo exact state once");
+  check([session historyUndo:YES error:&error]&&[afterMove isEqual:session.serializedData],"Real move did not Redo exact state once");
+  [session shutdown];
+}
+int main(int argc,char **argv){@autoreleasepool{try{trustFixtureArguments(argc,argv);check(argc==2,"Fixture path required");auto descriptor=NativePlugin::discoverVST3(argv[1]).front();scheduler(descriptor);musical(descriptor);graphCopies(descriptor);bounded();sessionAPI();sessionPreview();sessionRecipePreview();sessionRackDryRuns();std::cout<<"Parameter activity: audio values, provenance, copies, timing, bounded realtime capture, API, rack/recipe preview history and persistence passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}}

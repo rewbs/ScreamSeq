@@ -1,7 +1,9 @@
 #include "PluginOperations.hpp"
+#include "editor/RackMove.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/RecipeParameterEdits.hpp"
 #include <limits>
 #include "editor/PluginNoteSources.hpp"
 #include "editor/SignalGroupBypass.hpp"
@@ -22,7 +24,7 @@ using namespace Tracker;
 void need(bool ok,const char *why){if(!ok)throw Api::ApiError(-32602,why);}
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected an object");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto k){return i.key()==k;}),"Unknown plugin field");}
 const Json &field(const Json &p,const char *key){need(p.contains(key),"Missing plugin field");return p.at(key);}
-uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){need(v.is_number_integer() && !v.is_boolean() && v>=lo && v<=hi,"Plugin integer outside range");return v.get<uint64_t>();}
+uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){const auto n=Api::boundedInteger(v,lo,hi);need(n.has_value(),"Expected a plugin integer within its allowed range");return *n;}
 double number(const Json &v,double lo,double hi){need(v.is_number()&&!v.is_boolean(),"Expected plugin number");auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Plugin value outside range");return n;}
 bool flag(const Json &p,const char *key,bool fallback=false){if(!p.contains(key))return fallback;need(p.at(key).is_boolean(),"Expected plugin boolean");return p.at(key).get<bool>();}
 std::string text(const Json &v,size_t max=8192){need(v.is_string(),"Expected plugin text");const auto &s=v.get_ref<const std::string &>();need(s.size()<=max*4&&s.find('\0')==std::string::npos,"Invalid plugin text");if(!s.empty()){auto n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(n>0&&size_t(n)<=max,"Invalid plugin UTF-8");}return s;}
@@ -73,8 +75,71 @@ std::vector<PluginAudioBus> PluginOperations::audioBusMetadata(const std::string
 std::vector<PluginParameter> PluginOperations::parameterMetadata(const std::string &identity) {
   return editor(slot({{"plugin",identity}})).parameters();
 }
-std::vector<std::string> PluginOperations::reads(){return {"plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"automation.replaceLane","automation.recorded.edit","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+PluginEditSource PluginOperations::parameterEditSource(const std::string &identity) {
+  return editor(slot({{"plugin",identity}})).editSource();
+}
+#include "RecordedPluginEditors.inc"
+bool PluginOperations::commitRecordedGestures(std::span<RecordedGestureCapture *const> owners,
+    const std::string &revision,uint64_t playbackEpoch,bool acknowledgeLoss) {
+  need(!owners.empty()&&owners.size()<=RecordedGestureCapture::batchTargetCapacity,"Recorded gesture needs 1 to 128 targets");
+  if(recordedEditors_) {
+    const auto current=recordedEditors_->context();
+    need(current.first==revision&&current.second==playbackEpoch,
+      "Recorded publication belongs to an earlier native session context");
+    const auto expected=recordedEditors_->take->preparedOwners(revision,playbackEpoch,acknowledgeLoss);
+    need(expected.size()==owners.size()&&std::equal(expected.begin(),expected.end(),owners.begin()),
+      "Publish the complete owned take, not a retained subset of its parameters");
+  }
+  const auto rack=projectPluginStates(project_);
+  const auto before=projectAbsoluteAutomation(project_);
+  struct Provider {PluginEditSource source;std::vector<PluginParameter> parameters;};
+  std::map<std::string,Provider> providers;
+  std::vector<RecordedGestureCapture::BatchInput> inputs;inputs.reserve(owners.size());
+  for(auto *owner:owners) {
+    need(owner&&owner->key().revision==revision&&owner->matchesBaseline(before),
+      "Recorded gesture belongs to another document revision or point baseline; input retained");
+    const auto &key=owner->key();
+    auto found=providers.find(key.plugin);
+    if(found==providers.end()) {
+      auto &provider=editor(slot({{"plugin",key.plugin}}));
+      auto catalog=provider.parameters();const auto source=provider.editSource();
+      found=providers.emplace(key.plugin,Provider{source,std::move(catalog)}).first;
+    }
+    owner->sourceLoss(found->second.source.dropped,found->second.source.incarnation);
+    inputs.push_back({owner,found->second.source.incarnation,found->second.parameters});
+  }
+  const auto candidate=RecordedGestureCapture::prepareBatch(inputs,revision,playbackEpoch,rack,document_.native(),acknowledgeLoss);
+  const auto documentRevision=document_.revision,pluginRevision=project_.pluginRevision;
+  RecordedGestureCapture::publishBatch(candidate,inputs,[&](const auto &points,bool changed) {
+    need(document_.revision==documentRevision&&project_.pluginRevision==pluginRevision,
+      "Song changed before recorded gesture publication; input retained");
+    if(!changed)return true;
+    // Overlay preserves original order. Keep every untouched typed JSON row
+    // verbatim; rebuilding all rows would normalize unrelated imported values.
+    auto next=project_.preserved.at("automation");
+    need(points.size()>=before.size(),"Recorded capture cannot erase existing points");
+    for(size_t i=0;i<points.size();++i) {
+      const auto &point=points[i];
+      if(i<before.size()) {
+        const auto &old=before[i];
+        need(point.slot==old.slot&&point.id==old.id&&point.frame==old.frame,"Recorded capture changed an existing target or time");
+        if(point.value!=old.value)next[i][2]=point.value;
+      } else next.push_back(Json::array({point.slot,point.id,point.value,point.frame}));
+    }
+    // commit stages the complete history and prepared audio publication before
+    // adoption. Queue refusal throws before any saved state or owner retirement.
+    struct PublicationGuard {
+      bool &active;bool previous;
+      explicit PublicationGuard(bool &value):active(value),previous(value){active=true;}
+      ~PublicationGuard(){active=previous;}
+    } guard(recordedPublicationActive_);
+    commit(project_.preserved.at("plugins"),std::move(next),true);
+    return true;
+  });
+  return candidate.changed();
+}
+std::vector<std::string> PluginOperations::reads(){return {"graph.plugin.preview.get","plugin.parameters.preview.get","plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"graph.plugin.preview.set","graph.plugin.preview.commit","graph.plugin.preview.cancel","plugin.parameters.preview.set","plugin.parameters.preview.commit","plugin.parameters.preview.cancel","automation.replaceLane","automation.recorded.edit","automation.recorded.clear","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 void PluginOperations::prepareRecipe(Tracker::GraphPluginRecipe &recipe) {
   Tracker::PluginState state;state.descriptor={recipe.type,recipe.subtype,recipe.manufacturer,recipe.name,recipe.format,recipe.path,recipe.classID,false};
   state.state=recipe.state;state.audioLayout=recipe.audioLayout;state.auxiliaryInputs=recipe.inputs;state.auxiliaryOutputs=recipe.outputs;
@@ -133,6 +198,7 @@ void PluginOperations::trimHistory() {
   std::erase_if(historyGroups_,[&](const auto &group){return group.second<=historyFloor_;});
 }
 void PluginOperations::commit(Json plugins,Json automation,bool keepEditors,bool parameterOnly,std::span<const ParameterChange> changes,const NativeSong *native) {
+  requireManualEditors();
   auto candidate=project_;candidate.preserved["plugins"]=plugins;candidate.preserved["automation"]=automation;
   auto sourceNative=native?*native:document_.native();reconcilePluginNoteSources(sourceNative,projectPluginStates(project_),projectPluginStates(candidate));native=&sourceNative;
   const bool nativeChange=*native!=document_.native();
@@ -197,6 +263,7 @@ void PluginOperations::restoreHistory(bool redo,bool alreadyStopped) {
 void PluginOperations::history(bool redo,const std::function<void(bool,bool)> &documentHistory,
     const std::function<void(const NativeSong &)> &validateNative,
     const std::function<void(bool,const std::function<void()> &)> &liveDocumentHistory) {
+  requireManualEditors();
   synchronizeHistory();const auto first=historyHead(redo);if(!first)return;
   auto range=std::pair{first,first};for(const auto &group:historyGroups_)if(first>=group.first&&first<=group.second){range=group;break;}
   const bool grouped=range.first!=range.second;
@@ -237,7 +304,9 @@ Tracker::NativePlugin &PluginOperations::editor(size_t index) {
 bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
   bool changed=false;
   for(auto &record:copy.preserved.at("plugins")) {
-    const auto found=editors_.find(record.at("instanceID").get<std::string>());
+    const auto identity=record.at("instanceID").get<std::string>();
+    if(ownsRecordedEditor(identity))continue;
+    const auto found=editors_.find(identity);
     if(found==editors_.end() || !found->second)continue;
     // These retained instances never receive song automation. Do not consume
     // popEdit() or touch gesture bookkeeping while taking a recovery copy.
@@ -249,6 +318,9 @@ bool PluginOperations::overlayRecoveryState(Project::ProjectState &copy) const {
 }
 void PluginOperations::dropEditor(const std::string &instance,const std::string &reason) noexcept {
   try {
+    if(ownsRecordedEditor(instance)){
+      editorWarning_="Recorded plugin failed / take and saved baseline protection retained / "+reason;return;
+    }
     const std::string key=instance; // The caller's reference may point into the erased entry.
     auto found=editors_.find(key);
     if(found!=editors_.end()){try{found->second->closeEditor();}catch(...){}editors_.erase(found);}
@@ -263,13 +335,14 @@ bool PluginOperations::flushEditors(bool force) {
   if(graphEditorWindowOpen_&&graphEditor_)try{graphOpen=graphEditor_->editorOpen();}catch(const WindowsVST3::UiOwnerBusy &){graphOpen=true;}catch(const std::exception &){graphOpen=false;}
   const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphOpen;
   if(graphClosed)graphEditorWindowOpen_=false;
+  (void)pollRecordedEditors();
   if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();
   std::vector<ParameterChange> liveChanges;
   std::vector<std::pair<std::string,std::string>> unusable;
   std::set<std::string> postponed;
-  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key))continue;
+  for(size_t slot=0;slot<rack.size();++slot){const auto &p=rack[slot];const auto &key=p.at("instanceID").get_ref<const std::string &>();auto found=editors_.find(key);if(found==editors_.end()||!openEditors_.contains(key)||ownsRecordedEditor(key))continue;
     std::map<uint32_t,float> edits;
     uint32_t id=0;float value=0;while(found->second->popEdit(id,value)){edits[id]=value;pendingParameters_[key][id]=value;pendingLiveParameters_[key][id]=value;lastTouched_={{"plugin",p.at("instanceID")},{"parameter",id},{"source","editor"}};++touchSequence_;}
     if(const auto pending=pendingLiveParameters_.find(key);pending!=pendingLiveParameters_.end())
@@ -288,6 +361,10 @@ bool PluginOperations::flushEditors(bool force) {
     unusable.clear();
     if(openEditors_.empty()){pendingParameters_.clear();pendingLiveParameters_.clear();return true;}
   }
+  // Defer ordinary opaque history capture while a take owns the full captured
+  // revision. Unowned live gestures remain pending and recoverable; owned
+  // providers can never leak recorded values through forced Save/close flushes.
+  if(recordedEditors_)return graphClosed;
   const auto forget=[&]{std::erase_if(pendingParameters_,[&](const auto &entry){return !postponed.contains(entry.first);});};
   // Fast gesture delivery does not serialize vendor state or copy the rack.
   // Capture after the gesture settles, or immediately for save/close/read.
@@ -327,7 +404,8 @@ bool PluginOperations::flushEditors(bool force) {
 #include "PluginPathOperations.inc"
 #include "AbsoluteAutomation.inc"
 Json PluginOperations::invoke(const std::string &method,const Json &p) {
-  if(method=="automation.get"||method=="automation.replaceLane"||method=="automation.recorded.get"||method=="automation.recorded.edit")return invokeAutomation(method,p);
+  requireManualOperation(method);
+  if(method=="automation.get"||method=="automation.replaceLane"||method=="automation.recorded.get"||method=="automation.recorded.edit"||method=="automation.recorded.clear")return invokeAutomation(method,p);
   if(method.starts_with("plugin.path."))return invokePath(method,p);
   if(method=="plugin.preset.inspect") {keys(p,{"path"});return Plugins::PluginPreset::summary(Plugins::PluginPreset::read(text(field(p,"path"))));}
   if(method=="plugin.discover") {
@@ -453,7 +531,7 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
   if(method=="plugin.state.get"){keys(p,{"slot","plugin"});return {{"descriptor",descriptor(state.descriptor)},{"data",base64(state.state)},{"audioLayout",state.audioLayout},{"kind","saved-baseline"}};}
   if(method=="plugin.buses.get"){keys(p,{"slot","plugin"});const auto catalog=audioBuses(index,true);return {{"plugin",state.instanceID},{"buses",buses(catalog)},{"audioLayout",pluginAudioLayoutSignature(catalog)}};}
   if(method=="plugin.editor.open"||method=="plugin.editor.close") {
-    keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
+    keys(p,{"slot"});auto &plugin=editor(index);if(method=="plugin.editor.open"){plugin.showEditor();openEditors_.insert(state.instanceID);}else {if(!ownsRecordedEditor(state.instanceID))flushEditors(true);plugin.closeEditor();openEditors_.erase(state.instanceID);}return {{"open",plugin.editorOpen()},{"plugin",state.instanceID}};
   }
   if(method=="plugin.instruments.get"||method=="plugin.instruments.set"||method=="plugin.assign") {
     const bool get=method=="plugin.instruments.get",assign=method=="plugin.assign";
@@ -489,7 +567,18 @@ Json PluginOperations::invoke(const std::string &method,const Json &p) {
     Json routing={{"plugin",state.instanceID},{"name",state.descriptor.name},{"isInstrument",state.descriptor.instrument||state.descriptor.type==audioUnitMusicDeviceType},{"assignments",assignments},{"instruments",instruments}};
     if(get)return routing;if(assign)return Json::object();return {{"wouldChange",changed},{"dryRun",dry},{"routing",routing}};
   }
-  if(method=="plugin.move") {keys(p,{"slot","direction","dryRun"});const auto direction=number(field(p,"direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");const auto target=int(index)+int(direction);if(target<0||target>=rack.size())return Json::object();std::swap(rack[index],rack[target]);for(auto &point:automation){if(point[0]==index)point[0]=target;else if(point[0]==target)point[0]=index;}}
+  if(method=="plugin.move") {
+    keys(p,{"slot","plugin","direction","position","dryRun"});
+    need(p.contains("direction")!=p.contains("position"),"Supply direction or position");
+    int target;
+    if(p.contains("position"))target=int(integer(p.at("position"),0,rack.size()-1));
+    else {const auto direction=number(p.at("direction"),-1,1);need(direction==-1||direction==1,"Direction must be -1 or 1");target=int(index)+int(direction);}
+    if(target<0||size_t(target)>=rack.size())return {{"wouldChange",false},{"dryRun",dry}};
+    const Tracker::RackMove move(rack.size(),index,size_t(target));
+    // Prepare both copies before the existing atomic history/publication path.
+    for(auto &point:automation)point[0]=move.remap(point.at(0).get<size_t>());
+    move.apply(rack);
+  }
   else if(method=="plugin.bypass") {keys(p,{"slot","plugin","bypass","dryRun"});need(p.contains("bypass"),"bypass is required");rack[index]["bypass"]=flag(p,"bypass");}
   else if(method=="plugin.state.set"||method=="plugin.parameters.set") {
     auto next=state;

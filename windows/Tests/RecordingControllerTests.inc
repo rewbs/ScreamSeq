@@ -46,6 +46,9 @@ void recordingControllerTests(const std::filesystem::path &directory) {
   const auto timeline=playback->recordingTimeline();
   const auto one=origin+10000,two=origin+20000,offOne=origin+80000,offTwo=origin+90000;
   const auto firstPosition=timeline->locate(one,stream);need(firstPosition.has_value(),"Timed render did not publish input mapping");
+  need(timeline->locateFrame(one,stream)==48&&timeline->locateFrame(two,stream)==96&&
+    !timeline->locateFrame(one,stream+1)&&!timeline->locateFrame(origin-1,stream),
+    "Hosted automation timestamp lost absolute origin or stream identity");
   invoke(c,"recording.capture",{{"take",id},{"events",Json::array({recordingInput(offTwo,0x81,60,0),recordingInput(two,0x91,60,77),recordingInput(offOne,0x80,60,0),recordingInput(one,0x90,60,93)})}});
   const auto recorded=stableRecording(c);
   need(recorded.at("eventCount")==4&&recorded.at("events")[0].at("position")==firstPosition->position&&recorded.at("events")[0].at("velocity")==93&&recorded.at("events")[0].at("track")!=recorded.at("events")[1].at("track"),"Timed capture lost sort, position, velocity or channel identity");
@@ -109,9 +112,14 @@ void recordingControllerTests(const std::filesystem::path &directory) {
     need(playback->render(pcm.data(),128,RenderTime{shortOrigin,91,48000,true,false}),"Short clock fixture render");
     invoke(c,"recording.capture",{{"take",shortID},{"events",Json::array({recordingInput(shortOrigin+1000,0x90,60,99)})}});
     const auto shortEnd=playback->recordingTimeline()->endHostTime.load();
+    need(playback->recordingTimeline()->locateFrame(shortOrigin,91)==0&&
+      !playback->recordingTimeline()->locateFrame(shortEnd,91),
+      "Hosted frame clock did not retain the exact initial and exclusive final bounds");
     const auto shortDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(1);
     while(hostTime100ns()<=shortEnd&&std::chrono::steady_clock::now()<shortDeadline)std::this_thread::yield();
     if(normalStop)need(playback->render(pcm.data(),0,RenderTime{hostTime100ns(),91,48000,false,false,true}),"Normal Stop fixture notification");
+    need(playback->recordingTimeline()->locateFrame(shortOrigin,91)==0,
+      "Delayed automation event lost its frame mapping after Stop");
     const auto beforeStop=stableRecording(c),copy=Project::decodePlist(*recoveryCapture(c)->bytes).at("recoveryTake");
     need(stableRecording(c)==beforeStop,"Expired clock snapshot changed live held state");
     need(copy.at("missingTime")==unsigned(!normalStop)&&copy.value("inputError",std::string()).empty()==normalStop,"Snapshot confused stopped bounds with expired live history");

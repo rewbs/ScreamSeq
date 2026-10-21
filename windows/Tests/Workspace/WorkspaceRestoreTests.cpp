@@ -16,6 +16,13 @@ constexpr UINT_PTR restoreInputDeadline=0xBF21;
 void restoreCheck(bool condition,const char *message) {
     if(!condition)throw std::runtime_error(message);
 }
+template<class Action>void timedRestoreCase(const char *name,Action action) {
+    const auto start=std::chrono::steady_clock::now();
+    std::cout<<"BEGIN "<<name<<'\n';
+    action();
+    const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count();
+    std::cout<<"PASS "<<name<<" ("<<elapsed<<" ms)\n";
+}
 std::wstring restoreText(HWND control) {
     std::wstring text(size_t(GetWindowTextLengthW(control))+1,0);
     GetWindowTextW(control,text.data(),int(text.size()));text.resize(wcslen(text.c_str()));return text;
@@ -80,6 +87,11 @@ struct RestoreApplication final:Application {
         ++sampleLibraryCompletions;if(auto fault=std::exchange(sampleLibraryCompletionFault,{}))fault();
     }
     std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
+    std::function<std::filesystem::path(const std::wstring &)> moduleExportChooser;
+    std::filesystem::path chooseModuleExportFile(const std::wstring &format)override {
+        if(!moduleExportChooser)throw std::runtime_error("Fixture requires an owned module export chooser");
+        return moduleExportChooser(format);
+    }
     std::vector<std::filesystem::path> chooseSampleImportFiles(bool instruments)override {
         if(!sampleImportChooser)throw std::runtime_error("Fixture requires an owned sample chooser");
         return sampleImportChooser(instruments);
@@ -701,6 +713,39 @@ void busyCurveSourcePickerRetainsPreparedTarget() {
             "Busy source picker adopted Curve, changed retained drafts/music/focus, or leaked native windows");
     });
 }
+void busyGraphTargetSelectorsRetainCapturedFields() {
+    withRestoreFixture([](RestoreApplication &app) {
+        app.edit("mixer.enable",RestoreJson::object());
+        addRestoreGain(app);
+        const auto source=createRestoreCurveSource(app);
+        app.graphNode=app.edit("graph.node.add",{{"graph",source.graph},{"kind","plugin"},{"slot",0}}).at("node").get<std::string>();
+        app.refreshGraph();app.graphLoadPluginControls();
+        const auto field=app.controls.at(graphPropertyValue);
+        SetFocus(field);SetWindowTextW(field,L"Retained target draft");
+        SendMessageW(field,EM_SETSEL,2,8);
+        restoreCheck(app.graphFieldDirty,"Busy target fixture did not retain its text");
+        const auto before=restoreState(app),song=songState(app);
+        const auto generation=app.graphGeneration;
+        for(int id:{graphLibrary,graphPage,graphProperty,graphBus,graphWire,graphNodePicker,graphParameter}) {
+            const auto picker=app.controls.at(id);
+            const auto choice=controlState(picker);
+            restoreCheck(SendMessageW(picker,CB_GETCURSEL,0,0)!=CB_ERR,"Busy target fixture has no selected item");
+            for(int gate=0;gate<3;++gate) {
+                SendMessageW(picker,CB_SETCURSEL,WPARAM(-1),0);
+                app.busy=gate==0;app.graphPending=gate==1;app.dragging=gate==2?6:0;
+                bool refused=false;
+                try{(void)app.graphControlCommand(id);}
+                catch(const ScreamSeq::Api::ApiError &error){refused=error.code==-32002;}
+                app.busy=false;app.graphPending=false;app.dragging=0;
+                restoreCheck(refused&&controlState(picker)==choice,
+                    "Busy graph rejection left the displayed target different from its captured owner");
+                restoreCheck(app.graphGeneration==generation&&GetFocus()==field&&restoreState(app)==before,
+                    "Busy graph target rejection changed fields, selection, focus or generation");
+            }
+        }
+        restoreCheck(songState(app)==song,"Busy graph target rejection changed song/history");
+    });
+}
 void pumpedCurvePatternChangeRejectsPreparedTarget() {
     withRestoreFixture([](RestoreApplication &app) {
         const auto source=createRestoreCurveSource(app);const auto song=songState(app);const auto roots=restoreRoots();
@@ -1067,12 +1112,14 @@ static void retainedTakesProtectLeavingDocument() {
 #include "TransportApplicationTests.inc"
 #include "PatternSelectionApplicationTests.inc"
 #include "PatternDisplayApplicationTests.inc"
+#include "ContextPanelApplicationTests.inc"
+#include "ModuleExportApplicationTests.inc"
 #include "PatternToolsApplicationTests.inc"
 #include "EffectPickerApplicationTests.inc"
+#include "MenuBarApplicationTests.inc"
 #include "DocumentLoadReportApplicationTests.inc"
 #include "SongPropertiesApplicationTests.inc"
 #include "KeyboardSettingsApplicationTests.inc"
-#include "MenuBarApplicationTests.inc"
 #include "AutomaticEditsApplicationTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
@@ -1135,6 +1182,7 @@ int wmain(int argc,wchar_t **argv) {
             thirdHiddenCurveFailureIsAtomic();std::cout<<"PASS Curve staging: third hidden read/malformed points leave all candidates unadopted\n";
             successfulCurveAdoptionMatchesApi();std::cout<<"PASS Curve adoption: worker values and normal callbacks retained\n";
             busyCurveSourcePickerRetainsPreparedTarget();std::cout<<"PASS Curve source picker: busy rejection restores native choice and retains drafts\n";
+            busyGraphTargetSelectorsRetainCapturedFields();std::cout<<"PASS graph targets: busy/pending/drag refusal restores all captured selectors and fields\n";
             pumpedCurvePatternChangeRejectsPreparedTarget();std::cout<<"PASS Curve context: permitted pattern navigation rejects original preparation\n";
             guideOnlyRestoreRetainsChildThenInitializes();std::cout<<"PASS Curve Guide: retained empty owner/child, explicit initialize and Return\n";
             fourthHiddenNotesFailureIsAtomic();std::cout<<"PASS Notes staging: fourth hidden read/malformed data preserve all-before-any adoption\n";
@@ -1148,7 +1196,7 @@ int wmain(int argc,wchar_t **argv) {
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
-                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();std::cout<<"PASS native plugin search/value controls: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
+                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();std::cout<<"PASS native plugin search/value controls and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;
@@ -1184,7 +1232,28 @@ int wmain(int argc,wchar_t **argv) {
                     applicationUnknownAssetRecovery();std::cout<<"PASS unknown asset outcomes: render, family, direct render and retained Keep owner\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
-                    applicationAutomaticEdits();applicationGraphParameterInspector();applicationMixingGraphUsability();applicationNativeCommandRecovery();applicationMixerInstrumentRouting();applicationSongRoutingPorts();applicationSongRoutingUnknownResult();applicationSongRoutingCatalogRefusal();std::cout<<"PASS Main command recovery: sample, MIDI, saved file, mixer destination, routing ports and recovery cleanup without replay\n";return;
+                    timedRestoreCase("module export command and captured picker",applicationModuleExport);
+                    timedRestoreCase("automatic field edits",applicationAutomaticEdits);
+                    timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
+                    timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
+                    timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);
+                    timedRestoreCase("song routing ports",applicationSongRoutingPorts);
+                    timedRestoreCase("song routing unknown result",applicationSongRoutingUnknownResult);
+                    timedRestoreCase("song routing catalogue refusal",applicationSongRoutingCatalogRefusal);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
+                    timedRestoreCase("retained rack parameters and preview lifecycle",applicationGraphParameterInspector);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
+                    timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"recipe-edits") {
+                    timedRestoreCase("automatic recipe edits",applicationRecipeAutomaticEdits);
+                    timedRestoreCase("retained recipe parameter inspector",applicationRecipeParameterInspector);
+                    return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"bank-results") {
                     applicationBankClosure();std::cout<<"PASS bank closure: capture drafts, exact/unknown outcomes, staged reads and catalogue effects\n";return;
@@ -1193,7 +1262,7 @@ int wmain(int argc,wchar_t **argv) {
                     applicationSampleReadbackRecovery();std::cout<<"PASS sample readback: staged target, raw drafts, waveform and navigation\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-results") {
-                    applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: receipts, staged refresh, domain readback and no replay\n";return;
+                    applicationSampleLoopHandles();applicationSampleDrawingGestures();applicationSampleMutationRecovery();std::cout<<"PASS sample mutation recovery: loop/drawing gestures, receipts, staged refresh, domain readback and no replay\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"sample-browser-input") {
                     applicationSampleBrowserInputDuringDecode();std::cout<<"PASS sample browser: active focus, arrows during decode and stale-preview cancellation\n";return;

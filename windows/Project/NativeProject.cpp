@@ -1,4 +1,6 @@
 #include "NativeProject.hpp"
+#include "editor/project/ModuleExport.hpp"
+#include "editor/IntegerValidation.hpp"
 #include "NativeMetadata.hpp"
 #include "BinaryPlist.hpp"
 #include "ProjectIO.hpp"
@@ -205,6 +207,27 @@ void validateProjectSaveDestination(const ProjectState &state,const std::filesys
 		throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
 	auto normalized=[](const std::filesystem::path &p){std::error_code ec;auto value=std::filesystem::weakly_canonical(p,ec);if(ec)value=std::filesystem::absolute(p).lexically_normal();auto name=value.wstring();std::transform(name.begin(),name.end(),name.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});return name;};
 	if(normalized(path)==normalized(state.loadSourcePath))throw std::invalid_argument("Recovered project source is protected; save a new copy at a different path");
+}
+void validateModuleExport(const Tracker::Document &document,const ProjectState &state) {
+	const auto current=encodeNativeMetadata(document.native());
+	bool extensions=false;
+	if(state.preserved.is_object()) {
+		for(auto entry=state.preserved.begin();entry!=state.preserved.end();++entry)
+			if(entry.key()!="version" && entry.key()!="module" && entry.key()!="native" &&
+			   entry.key()!="sequence" && entry.key()!="plugins" && entry.key()!="automation" &&
+			   entry.key()!="recoveryTake")extensions=true;
+		if(state.preserved.contains("native")) {
+			// Match native save's current merge, including removal of deleted
+			// entities. A stale import-only extension must not block forever.
+			const auto merged=state.metadataBaseline.empty()?state.preserved.at("native"):
+				mergePreserved(state.preserved.at("native"),state.metadataBaseline,current);
+			extensions|=hasUnknownProperties(merged,current);
+		}
+	}
+	validateModuleExportFeatures({document.native().hasAnnotations(),
+		state.preserved.contains("plugins")&&!state.preserved.at("plugins").empty(),
+		state.preserved.contains("automation")&&!state.preserved.at("automation").empty(),
+		state.preserved.contains("recoveryTake"),extensions});
 }
 void saveNativeProject(Tracker::Document &document,ProjectState &state,const std::filesystem::path &path,bool overwrite) {
 	validateProjectSaveDestination(state,path);

@@ -214,7 +214,14 @@ inline void show(HWND h,bool visible){if(bool(GetWindowLongPtrW(h,GWL_STYLE)&WS_
 inline void place(HWND h,int x,int y,int width,int height,bool visible=true){
   auto *s=state(h);const std::array bounds{x,y,std::max(1,width),std::max(1,height)};
   if(!s||!s->placed||s->bounds!=bounds){
-    if(SetWindowPos(h,nullptr,bounds[0],bounds[1],bounds[2],bounds[3],SWP_NOZORDER|SWP_NOACTIVATE)&&s){s->bounds=bounds;s->placed=true;}
+    // Sequential sibling moves can copy pixels from a control that has already
+    // occupied this one's old rectangle. Never carry those pixels into the new
+    // location; repaint the complete child after the geometry change. Unchanged
+    // layouts still do no native work and do not disturb text selection/focus.
+    if(SetWindowPos(h,nullptr,bounds[0],bounds[1],bounds[2],bounds[3],SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOCOPYBITS)){
+      if(s){s->bounds=bounds;s->placed=true;}
+      InvalidateRect(h,nullptr,FALSE);
+    }
   }
   show(h,visible);
 }

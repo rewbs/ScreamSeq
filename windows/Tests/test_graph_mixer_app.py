@@ -49,6 +49,40 @@ class GraphMixerAppTests(unittest.TestCase):
     def read(self, method, **fields):
         return self.client.call(method, fields)['data']
 
+    def test_linked_envelope_admission_retains_bank_and_history(self):
+        source = ROOT / 'editor/Tests/Fixtures/Parity20261009/fixtures/04-complete-reference.screamseq'
+        source_bytes = source.read_bytes()
+        self.write('document.open', path=str(source), discard=True)
+        pan_target = dict(instrument='n20', envelope='pan')
+        pan_before = self.read('instrument.envelope.get', **pan_target)
+        self.write('instrument.envelope.transform', **pan_target, operation='scale', options=dict(amount=.5))
+        pan_after = self.read('instrument.envelope.get', **pan_target)
+        self.assertNotEqual(pan_before, pan_after)
+        self.write('history.undo')
+        baseline = self.folder / 'linked-before.screamseq'
+        self.write('document.save', path=str(baseline))
+        before = self.doc()
+        self.assertTrue(before['data']['canRedo'])
+        bank = self.read('envelope.bank.list')
+        pcm = self.read('sample.pcm.get', sample=5)
+        for dry in (True, False):
+            with self.subTest(dryRun=dry), self.assertRaises(ApiError) as error:
+                self.write('instrument.envelope.transform', instrument='n20', envelope='volume',
+                           operation='scale', options=dict(amount=.5), dryRun=dry)
+            self.assertEqual(error.exception.code, -32602)
+            self.assertEqual(error.exception.data['writeOutcome'], 'notCommitted')
+            self.assertEqual(self.doc(), before)
+            self.assertEqual(self.read('envelope.bank.list'), bank)
+            self.assertEqual(self.read('sample.pcm.get', sample=5), pcm)
+        after = self.folder / 'linked-after.screamseq'
+        self.write('document.save', path=str(after))
+        self.assertEqual(after.read_bytes(), baseline.read_bytes())
+        self.write('history.redo')
+        self.assertEqual(self.read('instrument.envelope.get', **pan_target), pan_after)
+        self.write('history.undo')
+        self.assertEqual(self.read('instrument.envelope.get', **pan_target), pan_before)
+        self.assertEqual(source.read_bytes(), source_bytes)
+
     def write(self, method, **fields):
         return self.client.call(method, dict(expectedRevision=self.doc()['revision'], **fields))['data']
 
@@ -123,8 +157,7 @@ class GraphMixerAppTests(unittest.TestCase):
         self.assertEqual(self.desktop.focus(self.desktop.hwnd(self.pid)), self.control(401))
         self.command(402)  # Enable.
         track = self.read('workspace.get')['mixerEditor']['bus']
-        self.field(413, '-9')
-        self.command(407)  # Mute draft.
+        self.field(413, '-.')  # Invalid raw text must remain captured despite autosave.
         self.assertTrue(self.read('workspace.get')['mixerEditor']['draft'])
         # Selecting another bus cannot redirect a partially edited value.
         self.desktop.send(self.control(401), 0x186, 1)
@@ -205,6 +238,9 @@ class GraphMixerAppTests(unittest.TestCase):
         for identifier in range(401, 424):
             with self.subTest(control=identifier):
                 control = self.control(identifier)
+                if identifier == 406:
+                    self.assertFalse(user.IsWindowVisible(control), 'Clean auto-saving mixer must not show a retry CTA')
+                    continue
                 self.assertTrue(user.IsWindowVisible(control))
                 rect = wintypes.RECT()
                 self.assertTrue(user.GetWindowRect(control, ctypes.byref(rect)))

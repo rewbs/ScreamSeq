@@ -37,15 +37,17 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
+      @"graph.plugin.preview.get",
       @"sample.recording.devices", @"sample.recording.get",
       @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"scratch.gestures.get", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.trim.get", @"graph.group.boundary", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
       @"recording.get", @"pattern.notes.get", @"pattern.performance.get", @"pattern.effects.get", @"instrument.envelope.get", @"instrument.envelope.copy",
-      @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
+      @"plugin.programs.get", @"plugin.instruments.get", @"document.timing.get", @"track.get", @"plugin.parameters.preview.get", @"api.describe", @"document.get", @"pattern.get", @"pattern.timeline.get", @"pattern.commands", @"sample.get", @"sample.waveform.get", @"sample.snap.get", @"sample.pcm.get", @"sample.clipboard.get", @"instrument.get",
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
-    NSArray *writes = @[
+    NSArray *writes = @[@"plugin.parameters.preview.set", @"plugin.parameters.preview.commit", @"plugin.parameters.preview.cancel",
+      @"graph.plugin.preview.set", @"graph.plugin.preview.commit", @"graph.plugin.preview.cancel",
       @"sample.renderSelection", @"sample.recording.start", @"sample.recording.stop", @"sample.recording.commit", @"sample.recording.discard",
-      @"parameter.activity.watch", @"automation.recorded.edit", @"envelope.bank.save", @"scratch.gestures.set", @"scratch.gestures.remove", @"scratch.gestures.clone", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.trim.set", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.audio.connection.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
+      @"parameter.activity.watch", @"automation.recorded.edit", @"automation.recorded.clear", @"envelope.bank.save", @"scratch.gestures.set", @"scratch.gestures.remove", @"scratch.gestures.clone", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.trim.set", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.audio.connection.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
       @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
@@ -56,6 +58,8 @@
       @"automation.pattern.set", @"automation.pattern.remove", @"automation.pattern.transform", @"mixer.enable", @"mixer.bus.add", @"mixer.bus.set", @"mixer.bus.remove", @"mixer.inserts.move", @"mixer.inserts.detach", @"mixer.sends.set", @"mixer.instrument.route", @"mixer.plugin.route", @"mixer.sidechains.set", @"mixer.plugin.connection.set"
     ];
     const bool mutation = [writes containsObject:method];
+    const bool clearRecorded=[method isEqual:@"automation.recorded.clear"];
+    if(clearRecorded){keys(p,@[@"expectedRevision",@"dryRun"]);if(p[@"dryRun"])(void)boolean(p[@"dryRun"]);}
     // Stop/discard belong to an exact retained take, independent of document
     // revisions. Song edits during input must never prevent stopping capture.
     const bool libraryMutation = [method isEqual:@"plugin.library.set"] || [method isEqual:@"parameter.activity.watch"]
@@ -67,6 +71,7 @@
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
     if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
+    if(mutation&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
     id result = @{};
@@ -127,7 +132,9 @@
       method=@"pattern.effects.set";
     }
 
-    if ([method isEqual:@"automation.formula.reference"]) {allowed(@[]);result=[TrackerSession formulaReference];
+    if ([method hasPrefix:@"plugin.parameters.preview."]) {result=[self parameterPreviewMethod:method params:p];
+    } else if ([method hasPrefix:@"graph.plugin.preview."]) {result=[self recipeParameterPreviewMethod:method params:p];
+    } else if ([method isEqual:@"automation.formula.reference"]) {allowed(@[]);result=[TrackerSession formulaReference];
 #include "EnvelopeBankAPI.inc"
 #include "ScratchGestureAPI.inc"
     } else if ([method isEqual:@"api.describe"]) {
@@ -218,6 +225,7 @@
           @"units":@"Whole ticks 0..65535; values 0..64, rounded to integers. Linear segments only; source-format point limits apply.",
           @"anchors":@"Loop/sustain/release markers follow retained nodes. Replaced nodes select the nearest resulting tick, earlier on ties; previews report reattachments.",
           @"history":@"Preview/no-op preserves transport, revision and Redo. Apply stops playback and makes one document Undo. Optional RSENVS1 snapshot corrections retain envelope losses in native projects."},
+        @"pluginRack": @"plugin.move accepts exactly one stable plugin or slot, and direction (+/-1) or absolute position. dryRun validates without changing rack order, parameter previews or history; wouldChange is false at an outward edge or the current position. Real moves retain plugin identities and remap indexed recorded automation in one Undo.",
         @"pluginInstruments": @{@"channels": @16, @"maxAssignments": @255,
           @"identity": @"Stable plugin instance ID; each tracker instrument has one owner. Assignments share one processor, plugin state, automation and output routing.",
           @"history": @"Replacement uses unified Undo; unsupported active instrument-adapter changes reject without stopping playback. Preview and no-op leave song/transport unchanged. Instrument aliases/non-default MIDI channels require native project v5; ordinary single-channel projects remain v4."},
@@ -226,7 +234,7 @@
           @"snapshot": @"Optional RSONGS2 timing payload preserves source-format losses; old builds reject it. Module export rejects timing loss."},
         @"saving" : @"document.save writes a native .screamseq project (legacy .resonance is also accepted); document.exportModule checks sample preservation before exporting the source module format. Both require an absolute path, expectedRevision, and overwrite:true to replace an existing file; dryRun:true validates without writing.",
         @"maxAutomationPoints" : @100000,
-        @"parameterActivity": @"parameter.activity.targets/parameters enumerate actual prepared processor copies. watch is a transient session selection without expectedRevision. get reports bounded 1ms host-delivered values, extrema, source links and normalized graph contributions; reset after cursor when token changes. sources lists potential controls including disabled envelopes and recorded points. Plugin-internal modulation is not exposed. automation.recorded.get/edit exposes timed recordings by stable identity. Recorded-point changes publish at one render boundary and participate in unified Undo; rejected live edits preserve transport.",
+        @"parameterActivity": @"parameter.activity.targets/parameters enumerate actual prepared processor copies. watch is a transient session selection without expectedRevision. get reports bounded 1ms host-delivered values, extrema, source links and normalized graph contributions; reset after cursor when token changes. sources lists potential controls including disabled envelopes and recorded points. Plugin-internal modulation is not exposed. automation.recorded.get/edit exposes timed recordings by stable identity; automation.recorded.clear removes all recorded points in one Undo without changing manual plugin state. Recorded-point changes publish at one render boundary and participate in unified Undo; rejected live edits preserve transport.",
         @"automationTarget": @"automation.target.get reports the last accepted native/plugin-editor/API parameter edit by stable plugin identity. Session-local, read-only; playback, state restore and Undo do not learn a target. Values describe the current parameter, not the earlier gesture.",
         @"scriptedCurves": @{@"curve":@"scripted", @"field":@"formula", @"maxCharacters":@2048, @"maxOperations":@128,
           @"variables":@[@"start",@"end",@"t",@"beatOffset",@"row",@"beat",@"beats",@"duration",@"startBeat",@"endBeat",@"L"],
@@ -286,10 +294,15 @@
       BOOL directory = NO;
       require([NSFileManager.defaultManager fileExistsAtPath:path.stringByDeletingLastPathComponent isDirectory:&directory] && directory,
               "Save directory does not exist");
+      require(![NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&directory] || !directory,
+              "Save destination must be a file");
+      if(!native) {
+        try{[self validateModuleExport];}
+        catch(const std::invalid_argument &e){throw Error(-32602,e.what());}
+      }
       if (dry) {
         if (native) (void)[self projectData];
         else {
-          require(_plugins.empty() && !_document->native().hasAnnotations(), "Use a .screamseq project to retain native metadata, effects and automation");
           _document->validateModuleSampleExport();
         }
       } else if (overwrite) {
@@ -1212,7 +1225,7 @@
       result = PluginPreset::write(path, descriptorDictionary(plugin.descriptor),
         [NSData dataWithBytes:plugin.state.data() length:plugin.state.size()], name, overwrite, dry, @(plugin.audioLayout.c_str()));
     } else if ([method isEqual:@"plugin.state.get"]) {
-      allowed(@[ @"slot" ]);
+      allowed(@[ @"slot", @"plugin" ]);
       auto slot = pluginSlot();
       [self commitManualParameters];
       // This is the saved baseline, not a capture of automation's transient value.
@@ -1275,15 +1288,25 @@
       succeeded([self removePlugins:ids sources:sources dryRun:dry error:&problem],problem);
       result=@{@"wouldChange":@YES,@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.move"]) {
-      allowed(@[ @"slot", @"direction", @"position" ]);
+      allowed(@[ @"slot", @"plugin", @"direction", @"position", @"dryRun" ]);
       const auto slot = pluginSlot();
       require(bool(p[@"direction"]) != bool(p[@"position"]), "Supply direction or position");
       const auto direction = p[@"position"] ? NSInteger(integer(p[@"position"], 0, _plugins.size()-1)) - NSInteger(slot) : NSInteger(number(p[@"direction"], -1, 1));
       if (!p[@"position"]) require(direction == -1 || direction == 1, "Direction must be -1 or 1");
-      succeeded([self movePlugin:slot direction:direction error:&problem], problem);
+      const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      const auto target=NSInteger(slot)+direction;
+      const bool changed=target>=0 && target<NSInteger(_plugins.size()) && target!=NSInteger(slot);
+      // A dry run validates the requested permutation without flushing manual
+      // parameters, querying vendor state or publishing a rack/history edit.
+      if(!dry && changed)succeeded([self movePlugin:slot direction:direction error:&problem], problem);
+      result=@{@"wouldChange":@(changed),@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.bypass"]) {
-      allowed(@[ @"slot", @"plugin", @"bypass" ]);
-      succeeded([self bypassPlugin:pluginSlot() bypass:boolean(p[@"bypass"]) error:&problem], problem);
+      allowed(@[ @"slot", @"plugin", @"bypass", @"dryRun" ]);
+      const auto slot=pluginSlot();const bool bypass=boolean(p[@"bypass"]);
+      const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      const bool changed=_plugins[slot].bypass!=bypass;
+      if(!dry)succeeded([self bypassPlugin:slot bypass:bypass error:&problem],problem);
+      result=@{@"wouldChange":@(changed),@"dryRun":@(dry)};
     } else if ([method isEqual:@"plugin.assign"]) {
       allowed(@[ @"slot", @"instrument" ]);
       succeeded([self assignPlugin:pluginSlot()
@@ -1293,10 +1316,10 @@
     } else if ([method isEqual:@"plugin.state.set"] || [method isEqual:@"plugin.parameters.set"] || [method isEqual:@"plugin.preset.load"]) {
       const bool preset = [method isEqual:@"plugin.preset.load"];
       const bool state = preset || [method isEqual:@"plugin.state.set"];
-      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"plugin", @"values" ]);
+      allowed(preset ? @[@"plugin", @"path", @"expectedPresetRevision", @"dryRun"] : state ? @[ @"slot", @"data" ] : @[ @"slot", @"plugin", @"values", @"dryRun" ]);
       const auto slot = preset ? instanceSlot() : pluginSlot();
       NSDictionary *loadedPreset = nil;
-      const bool dry = preset && p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
+      const bool dry = (preset || !state) && p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       if (preset) {
         loadedPreset = PluginPreset::read(string(p[@"path"], 8192));
         if (![string(p[@"expectedPresetRevision"], 80) isEqual:loadedPreset[@"presetRevision"]])
@@ -1330,7 +1353,8 @@
           const auto old=std::find_if(manual.begin(),manual.end(),[&](const auto &v){return v.slot==slot&&v.id==id;});
           if(old==manual.end())manual.push_back(changes.back());else old->value=value;
         }
-        if(!changes.empty()) {
+        result=@{@"wouldChange":@(!changes.empty()),@"dryRun":@(dry)};
+        if(!dry&&!changes.empty()) {
           [self synchronizeHistory];
           const bool continued=changes.size()==1 && _parameterGesture && _parameterGestureSequence &&
             _parameterGestureSequence==_document->historySequence() && _parameterGestureSlot==slot && _parameterGestureID==changes.front().id;

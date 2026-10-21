@@ -29,6 +29,20 @@ def write_json(path, value):
         stream.write("\n")
 
 
+def opened_launch_document(document, snapshot, context):
+    """Match a normal file or the exact protected source of Save a copy."""
+    expected = str(document)
+    if context.get("file") == expected:
+        return True
+    # AppController deliberately clears documentURL for recovered/extended
+    # projects. The session still reports the original loaded source. Requiring
+    # both protection and that exact source avoids accepting the startup song,
+    # a different document, or an arbitrary missing context path.
+    return (context.get("file") in (None, "")
+            and snapshot.get("requiresSaveAs") is True
+            and snapshot.get("loadSourcePath") == expected)
+
+
 @contextmanager
 def owned_client(executable, output, identity, document=None):
     if sys.platform == "win32":
@@ -77,12 +91,19 @@ def owned_client(executable, output, identity, document=None):
                                 raise EvidenceError("Private endpoint does not belong to the launched process")
                             client = Client(found[0]["socket"], timeout=20)
                             client.fixture_recovery_directory = recovery
-                            client.call("document.get")
-                            if document is not None and client.call("context.get")["data"].get("file") != str(document):
-                                if time.monotonic() >= deadline:
-                                    raise EvidenceError("Owned app did not open the requested launch document")
-                                time.sleep(.05)
-                                continue
+                            current = client.call("document.get")
+                            if document is not None:
+                                context = client.call("context.get")["data"]
+                                snapshot = current["data"]
+                                identity["launchDocument"] = dict(
+                                    documentId=current.get("documentId"), revision=current.get("revision"),
+                                    file=context.get("file"), requiresSaveAs=snapshot.get("requiresSaveAs"),
+                                    loadSourcePath=snapshot.get("loadSourcePath"))
+                                if not opened_launch_document(document, snapshot, context):
+                                    if time.monotonic() >= deadline:
+                                        raise EvidenceError("Owned app did not open the requested launch document")
+                                    time.sleep(.05)
+                                    continue
                             break
                         if process.poll() is not None:
                             raise EvidenceError(f"Owned app exited during startup: {process.returncode}")
@@ -187,6 +208,16 @@ def main(argv=None):
                         help="Also run the bounded API baseline corpus on an owned copy of F04")
     parser.add_argument("--codec-vectors", action="store_true",
                         help="Observe recovery on owned F04 derivatives, retaining typed differences")
+    parser.add_argument("--duration-defaults", action="store_true",
+                        help="Check omitted zero-duration commands through exact save/reopen comparisons")
+    parser.add_argument("--edited-metadata", action="store_true",
+                        help="Check opaque metadata through paired edits, rack identities and Undo/Redo")
+    parser.add_argument("--composing-history", action="store_true",
+                        help="Check F04 edits across six domains through chronological Undo/Redo and reopen")
+    parser.add_argument("--envelope-bank", action="store_true",
+                        help="Check F04 linked-master propagation, independent copies, unlink and history")
+    parser.add_argument("--editing-contracts", action="store_true",
+                        help="Run six shared editing contracts in fresh native app processes")
     args = parser.parse_args(argv)
     report = dict(format="screamseq-native-roundtrip-v1", passed=False, fixtures=[], parityComplete=False,
                   qualificationScope="Five no-edit fixture legs; optional API evidence baseline is not a parity pass")
@@ -232,6 +263,12 @@ def main(argv=None):
                 (Path(__file__), Path(__file__).with_name("project_tree.py"),
                  ROOT / "windows/Tests/private_desktop.py", ROOT / "windows/Api/client.py",
                  ROOT / "mac/Tools/resonance_api.py", Path(__file__).with_name("fixture_loader.py"))})
+        if args.editing_contracts:
+            from editing_contracts import run
+            contract_report = run(executable, output / "editing-contracts")
+            report["editingContracts"] = dict(passed=contract_report["passed"],
+                report="editing-contracts/report.json",
+                sha256=sha256(read_bytes(output / "editing-contracts/report.json")))
         with owned_client(executable, output, report["process"]) as client:
             for source in sources:
                 row = dict(fixture=source.name, passed=False)
@@ -266,13 +303,42 @@ def main(argv=None):
                     observationComplete=codec_report["observationComplete"], parityComplete=False,
                     baselineMatched=codec_report["baselineMatched"],
                     report="codec/report.json", sha256=sha256(read_bytes(output / "codec/report.json")))
+            if args.duration_defaults:
+                from duration_defaults import run
+                duration_report = run(client, output / "duration-defaults")
+                report["durationDefaults"] = dict(passed=duration_report["passed"],
+                    report="duration-defaults/report.json",
+                    sha256=sha256(read_bytes(output / "duration-defaults/report.json")))
+            if args.edited_metadata:
+                from edited_metadata import run
+                edited_report = run(client, output / "edited-metadata")
+                report["editedMetadata"] = dict(passed=edited_report["passed"],
+                    report="edited-metadata/report.json",
+                    sha256=sha256(read_bytes(output / "edited-metadata/report.json")))
+            if args.composing_history:
+                from composing_history import run
+                history_report = run(client, output / "composing-history")
+                report["composingHistory"] = dict(passed=history_report["passed"],
+                    report="composing-history/report.json",
+                    sha256=sha256(read_bytes(output / "composing-history/report.json")))
+            if args.envelope_bank:
+                from envelope_bank import run
+                bank_report = run(client, output / "envelope-bank")
+                report["envelopeBank"] = dict(passed=bank_report["passed"],
+                    report="envelope-bank/report.json",
+                    sha256=sha256(read_bytes(output / "envelope-bank/report.json")))
         report["inputsUnchanged"] = all(sha256(read_bytes(path)) == inputs[path.name] for path in sources)
         report["binaryUnchanged"] = sha256(read_bytes(executable)) == args.binary_sha256
         report["passed"] = (len(report["fixtures"]) == len(sources) and all(row["passed"] for row in report["fixtures"])
                             and report["inputsUnchanged"] and report["binaryUnchanged"]
                             and report.get("api", {}).get("baselineMatched", True)
                             and report.get("codec", {}).get("safetyPassed", True)
-                            and report.get("codec", {}).get("baselineMatched", True))
+                            and report.get("codec", {}).get("baselineMatched", True)
+                            and report.get("durationDefaults", {}).get("passed", True)
+                            and report.get("editedMetadata", {}).get("passed", True)
+                            and report.get("composingHistory", {}).get("passed", True)
+                            and report.get("envelopeBank", {}).get("passed", True)
+                            and report.get("editingContracts", {}).get("passed", True))
         result_code = 0 if report["passed"] else 1
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

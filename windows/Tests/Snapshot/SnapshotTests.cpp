@@ -1,7 +1,10 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/SampleArchive.hpp"
 #include "editor/SongTiming.hpp"
+#include "editor/ProjectLoadRecovery.hpp"
 #include "windows/Project/NativeProject.hpp"
+#include "windows/Project/BinaryPlist.hpp"
+#include "windows/Project/ProjectIO.hpp"
 #include <windows.h>
 #ifdef small
 #undef small
@@ -10,6 +13,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 using namespace Tracker;
 #define CHECK(x) do { if(!(x)) throw std::runtime_error(std::string(__func__)+": "+#x); } while(false)
@@ -112,7 +116,7 @@ void structureConservation() {
     ScreamSeq::Project::saveNativeProject(*doc,state,file,true);
     auto reopened=ScreamSeq::Project::openNativeProject(file);
     CHECK(core(*reopened.document)==after); CHECK(reopened.document->native()==afterNative);
-    CHECK(reopened.state.preserved.at("version")==4); CHECK(reopened.state.preserved.at("native").at("version")==14);
+    CHECK(reopened.state.preserved.at("version")==6); CHECK(reopened.state.preserved.at("native").at("version")==17);
     std::filesystem::remove(file);
   }
 }
@@ -158,13 +162,32 @@ void titlesAndLegacy() {
       CHECK(copy->song().m_songName==title); CHECK(copy->song().GetCharsetInternal()==doc->song().GetCharsetInternal());
       doc->undo(); doc->redo(); CHECK(doc->song().m_songName==title);
       const auto file=std::filesystem::u8path(std::getenv("TMPDIR"))/std::filesystem::u8path("snapshot-exact-title-音楽.screamseq");
-      for(unsigned version:{4,5}) {
-        auto state=ScreamSeq::Project::newProjectState(*doc); state.preserved["version"]=version;
-        ScreamSeq::Project::saveNativeProject(*doc,state,file,true);
+      for(unsigned version:{4,5,6}) {
+        auto state=ScreamSeq::Project::newProjectState(*doc);
+        auto tree=ScreamSeq::Project::nativeProjectTree(*doc,state);tree["version"]=version;
+        const auto input=file.parent_path()/"snapshot-title-source.screamseq";
+        const auto original=ScreamSeq::Project::encodePlist(tree);
+        ScreamSeq::Project::writeProjectFile(input,original,true);
+        auto recovered=ScreamSeq::Project::openNativeProject(input);
+        CHECK(core(*recovered.document)==core(*doc));CHECK(recovered.document->native()==doc->native());
+        if(version!=6) {
+          CHECK(recovered.state.requiresSaveAs&&!recovered.state.loadWarnings.empty());
+          rejects([&]{ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,input,true);});
+          CHECK(ScreamSeq::Project::readProjectBytes(input)==original);
+          // Writers remain strict; only file-open recovery may normalize a
+          // historical container, and it must retain its protected source.
+          auto invalid=state;invalid.preserved["version"]=version;
+          rejects([&]{(void)ScreamSeq::Project::serializeNativeProject(*doc,invalid);});
+        } else CHECK(!recovered.state.requiresSaveAs);
+        ScreamSeq::Project::saveNativeProject(*recovered.document,recovered.state,file,true);
+        CHECK(ScreamSeq::Project::readProjectBytes(input)==original);
         auto reopened=ScreamSeq::Project::openNativeProject(file);
         CHECK(reopened.document->song().m_songName==title);
         CHECK(reopened.document->song().GetCharsetInternal()==doc->song().GetCharsetInternal());
-        CHECK(reopened.document->native()==doc->native()); CHECK(reopened.state.preserved.at("version")==version);
+        CHECK(core(*reopened.document)==core(*doc));CHECK(reopened.document->native()==doc->native());
+        CHECK(reopened.state.preserved.at("version")==6);CHECK(reopened.state.preserved.at("native").at("version")==17);
+        CHECK(!reopened.state.requiresSaveAs);
+        std::filesystem::remove(input);
       }
       std::filesystem::remove(file);
     }
@@ -172,14 +195,27 @@ void titlesAndLegacy() {
   auto original=std::make_unique<Document>(MOD_TYPE_MPT,4);
   auto module=original->serialize(); auto base=std::make_unique<Document>(module);
   auto samples=encodeSampleArchive(base->song(),base->song());
-  auto legacy=packSongSnapshot(module,samples);
-  CHECK(legacy[6]==std::byte{'1'}); CHECK(splitSongSnapshot(legacy).timing.empty());
+  const auto canonical=packSongSnapshot(module,samples);
+  CHECK(canonical[6]==std::byte{'2'});CHECK(splitSongSnapshot(canonical).timing.empty());
+  // Reconstruct the historical writer's actual 16-byte header independently
+  // (db496a399:editor/SampleArchive.cpp), then exercise file-open migration.
+  std::vector<std::byte> legacy;
+  for(const auto c:std::string("RSONGS1\0",8))legacy.push_back(std::byte(uint8_t(c)));
+  CHECK(module.size()<=UINT32_MAX&&samples.size()<=UINT32_MAX);
+  for(const auto length:{uint32_t(module.size()),uint32_t(samples.size())})
+    for(unsigned shift=0;shift<32;shift+=8)legacy.push_back(std::byte(uint8_t(length>>shift)));
+  legacy.insert(legacy.end(),module.begin(),module.end());legacy.insert(legacy.end(),samples.begin(),samples.end());
+  CHECK(!isSongSnapshot(legacy));rejects([&]{(void)splitSongSnapshot(legacy);});
+  ProjectLoadRecovery recovery;
+  CHECK(recoverLegacySongSnapshot(legacy,recovery)&&recovery.protectSource&&!recovery.lossy&&!recovery.warnings.empty());
+  CHECK(legacy==canonical); // All payload bytes survive; only framing changes.
   auto loaded=std::make_unique<Document>(legacy); CHECK(core(*loaded)==core(*base));
+  recovery={};CHECK(!recoverLegacySongSnapshot(legacy,recovery)&&legacy==canonical&&recovery.warnings.empty());
   base->song().Order().SetDefaultTempo(TEMPO(143.75));
   auto timing=encodeTimingArchive(base->song(),loaded->song()); CHECK(!timing.empty());
   legacy=packSongSnapshot(module,samples,timing); CHECK(legacy[6]==std::byte{'2'});
   loaded=std::make_unique<Document>(legacy); CHECK(core(*loaded)==core(*base));
-  // A representable song needs no new extension; 1/2 framing remains minimal.
+  // Current framing is always version 2, even without a timing override.
   const auto exact=encodeSampleArchive(loaded->song(),loaded->song());
   CHECK(exact==samples);
 }
@@ -212,13 +248,14 @@ void malformedArchives() {
   bad=bytes;bad[8]=std::byte{0xff};rejects([&]{splitSongSnapshot(bad);});
   rejects([&]{auto d=std::make_unique<Document>(packSongSnapshot(bytes,parts.samples));});
 }
-void actualMacFixture() {
-  const auto path=std::getenv("SCREAMSEQ_REFERENCE_PROJECT");
-  if(!path || !*path) {std::cout<<"SKIP actual Mac fixture: set SCREAMSEQ_REFERENCE_PROJECT\n";return;}
+void parityReferenceFixture() {
+  const auto path=std::getenv("SCREAMSEQ_SNAPSHOT_REFERENCE_PROJECT");
+  CHECK(path&&*path); // Missing qualification inputs are failures, not passes.
   auto project=ScreamSeq::Project::openNativeProject(std::filesystem::u8path(path));
   CHECK(project.document->song().GetTitle()=="Midnight Circuit");
-  CHECK(project.document->song().GetNumSamples()==4); CHECK(project.document->song().GetNumInstruments()==7);
-  CHECK(project.document->native().preciseNotes.size()==4); CHECK(project.document->native().envelopeBank.size()==3);
+  // Bundled F04, pinned by Parity20261009/fixtures/manifest.json.
+  CHECK(project.document->song().GetNumSamples()==7); CHECK(project.document->song().GetNumInstruments()==7);
+  CHECK(project.document->native().preciseNotes.size()==8); CHECK(project.document->native().envelopeBank.size()==1);
   const auto expected=core(*project.document); const auto native=project.document->native();
   const auto plugins=project.state.preserved.at("plugins");
   auto copy=std::make_unique<Document>(project.document->snapshotData());
@@ -249,7 +286,15 @@ std::unique_ptr<Document> moduleBaseline(MODTYPE type) {
   auto converted=std::make_unique<Document>(doc->serialize());
   // No title, topology, setting or cell correction may hide the isolated edit.
   CHECK(core(*converted)==core(*doc));
-  doc->validateModuleSampleExport();
+  const auto before=core(*doc);
+  const auto beforeNative=doc->native();
+  const auto revision=doc->revision,history=doc->historySequence();
+  const auto undo=doc->canUndo(),redo=doc->canRedo();
+  const auto exportBytes=doc->moduleExportData();
+  Document exported(exportBytes);
+  CHECK(core(exported)==before);
+  CHECK(core(*doc)==before&&doc->native()==beforeNative);
+  CHECK(doc->revision==revision&&doc->historySequence()==history&&doc->canUndo()==undo&&doc->canRedo()==redo);
   return doc;
 }
 std::unique_ptr<Document> idleCellDocument(MODTYPE type) {
@@ -294,6 +339,7 @@ template<typename F> void rejectsPatternLoss(F &&operation) {
 void idleCellExport(MODTYPE type) {
   auto doc=idleCellDocument(type);
   rejectsPatternLoss([&]{doc->validateModuleSampleExport();});
+  rejectsPatternLoss([&]{(void)doc->moduleExportData();});
 }
 struct ExportDestination {
   std::filesystem::path directory, file;
@@ -378,12 +424,17 @@ void patternNameSave(MODTYPE type, bool preserveSamples) {
   auto doc=patternNameDocument(type);
   checkRejectedSave(*doc,preserveSamples);
 }
+#include "ProjectIntegerRecoveryChecks.inc"
 int main(int argc,char **argv) {
+  if(!std::getenv("TMPDIR")||!*std::getenv("TMPDIR")) {
+    std::cerr<<"TMPDIR must name an owned scratch directory\n";return 1;
+  }
   unsigned failed=0,run=0;
   std::vector<std::pair<std::string,std::function<void()>>> tests{
       {"titleSnapshot",titleSnapshot},{"sparseSnapshot",sparseSnapshot},{"structureConservation",structureConservation},
       {"moduleExportLoss",moduleExportLoss},{"titlesAndLegacy",titlesAndLegacy},{"malformedArchives",malformedArchives},
-      {"actualMacFixture",actualMacFixture},{"exactPatternGroove",exactPatternGroove}};
+      {"parityReferenceFixture",parityReferenceFixture},{"exactPatternGroove",exactPatternGroove},
+      {"projectIntegerRecovery",projectIntegerRecovery}};
   for(const auto &[type,name]:std::vector<std::pair<MODTYPE,std::string>>{
       {MOD_TYPE_MOD,"MOD"},{MOD_TYPE_XM,"XM"},{MOD_TYPE_S3M,"S3M"},{MOD_TYPE_IT,"IT"},{MOD_TYPE_MPT,"MPTM"}}) {
     tests.emplace_back("idleCellSnapshot/"+name,[type]{idleCellSnapshot(type);});

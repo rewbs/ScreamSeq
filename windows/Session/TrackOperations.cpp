@@ -14,11 +14,9 @@ void keys(const Json &p, std::initializer_list<const char *> allowed) {
     need(std::any_of(allowed.begin(), allowed.end(), [&](const auto key) { return it.key() == key; }), "Unknown track parameter");
 }
 unsigned integer(const Json &value, unsigned low, unsigned high) {
-  need(value.is_number() && !value.is_boolean(), "Expected a track integer, not a boolean");
-  const auto number = value.get<double>();
-  need(std::isfinite(number) && number >= low && number <= high && std::floor(number) == number,
-    "Track integer outside its range");
-  return unsigned(number);
+  const auto number=Api::boundedInteger(value,low,high);
+  need(number.has_value(),"Expected a track integer within its allowed range");
+  return unsigned(*number);
 }
 bool boolean(const Json &value) { need(value.is_boolean(), "Expected a track boolean"); return value.get<bool>(); }
 std::string id(uint64_t value) { return "n" + std::to_string(value); }

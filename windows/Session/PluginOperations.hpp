@@ -2,6 +2,8 @@
 #include "HostedProject.hpp"
 #include "GraphOperations.hpp"
 #include "windows/Plugins/PluginLibrary.hpp"
+#include "editor/hosted/RecordedGestureCapture.hpp"
+#include "editor/hosted/RecordedGestureTake.hpp"
 #include <deque>
 #include <functional>
 #include <map>
@@ -40,11 +42,26 @@ class PluginOperations {
   uint64_t graphEditorGraph_=0,graphEditorNode_=0;
   std::string graphEditorID_;
   bool graphEditorWindowOpen_=false;
+  std::string graphParameterGesture_;
+  uint64_t graphParameterGestureSequence_=0,graphParameterGestureRevision_=0,graphParameterGestureGraph_=0,graphParameterGestureNode_=0;
+  uint32_t graphParameterGestureID_=0;
   std::set<std::string> openEditors_;
   std::map<std::string,std::map<uint32_t,float>> pendingParameters_;
   // Vendor notifications are consumed once. Keep their latest values until
   // the complete live batch is admitted, independently of opaque-state capture.
   std::map<std::string,std::map<uint32_t,float>> pendingLiveParameters_;
+  struct RecordedEditors {
+    std::shared_ptr<Tracker::RecordedGestureTake> take;
+    std::function<std::pair<std::string,uint64_t>()> context;
+    std::function<void(std::span<const Tracker::ParameterChange>)> preview;
+    std::map<std::string,std::vector<Tracker::PluginParameter>> catalogs;
+    size_t previewedEvents=0;
+  };
+  std::unique_ptr<RecordedEditors> recordedEditors_;
+  bool recordedPublicationActive_=false;
+  bool ownsRecordedEditor(const std::string &)const noexcept;
+  void requireManualEditors()const;
+  void requireManualOperation(const std::string &)const;
   std::chrono::steady_clock::time_point lastEditorChange_{};
   std::chrono::steady_clock::time_point lastStateCapture_{};
   Json lastTouched_ = nullptr;
@@ -90,6 +107,31 @@ public:
   std::vector<Tracker::PluginAudioBus> audioBuses(size_t,bool required=false);
   std::vector<Tracker::PluginAudioBus> audioBusMetadata(const std::string &identity);
   std::vector<Tracker::PluginParameter> parameterMetadata(const std::string &identity);
+  Tracker::PluginEditSource parameterEditSource(const std::string &identity);
+  // Internal worker adapter; not a public recording API. The session must
+  // flush earlier manual input and hold the native input barrier while arming.
+  // The scope retains the take even after failure/completion until restoration
+  // succeeds. Preview must use transient playback controls, never manual writes.
+  void beginRecordedEditors(std::shared_ptr<Tracker::RecordedGestureTake>,
+    std::function<std::pair<std::string,uint64_t>()> context,
+    std::function<void(std::span<const Tracker::ParameterChange>)> preview);
+  // One bounded poll per provider. true acknowledges empty paired drains only
+  // when the caller already holds its actual release/Stop native input barrier.
+  // Return false if a provider needs another poll. Ordinary flushes pass false.
+  bool pollRecordedEditors(bool releaseBarrier=false);
+  bool hasRecordedEditors()const noexcept{return bool(recordedEditors_);}
+  // Called under the same input barrier after commit or explicit discard.
+  // Restore audible previews before releasing ownership; refusal retains it.
+  // An open vendor must restore its complete state in place. If hidden state
+  // cannot be restored from parameters, close it explicitly and retry so its
+  // accepted baseline can replace the closed provider without a false capture.
+  bool releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview);
+  // Worker-only capture completion. The session supplies its current full
+  // revision/clock epoch and retains the owners through this call. Normal
+  // manual/vendor ingestion, release barriers and recovery belong to that
+  // session; this entry point never flushes or serializes a live vendor.
+  bool commitRecordedGestures(std::span<Tracker::RecordedGestureCapture *const>,
+    const std::string &revision,uint64_t playbackEpoch,bool acknowledgeLoss=false);
   // Both API domain names and all UI Undo entry points share chronological
   // history. The callback applies one document entry; alreadyStopped prevents
   // repeating a fallible transport hook halfway through a grouped operation.

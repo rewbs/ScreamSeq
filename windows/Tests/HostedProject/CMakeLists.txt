@@ -16,7 +16,7 @@ target_compile_options(OpenMPTCore INTERFACE /utf-8 /bigobj /permissive- /Zc:__c
 add_subdirectory("${ROOT}/editor/hosted" "${CMAKE_CURRENT_BINARY_DIR}/hosted")
 add_executable(hosted-project-tests HostedProjectTests.cpp CallbackAudit.cpp
   "${ROOT}/windows/Session/HostedProject.cpp"
-  "${ROOT}/windows/Project/NativeProject.cpp" "${ROOT}/windows/Project/NativeMetadata.cpp" "${ROOT}/windows/Project/BinaryPlist.cpp")
+  "${ROOT}/windows/Project/NativeProject.cpp" "${ROOT}/windows/Project/NativeMetadata.cpp" "${ROOT}/editor/project/BinaryPlist.cpp")
 target_link_libraries(hosted-project-tests PRIVATE TrackerHosted)
 target_compile_definitions(hosted-project-tests PRIVATE SCREAMSEQ_WASAPI_ALLOCATION_AUDIT=1)
 target_link_options(hosted-project-tests PRIVATE /STACK:8388608)

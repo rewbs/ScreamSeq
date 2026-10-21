@@ -35,6 +35,25 @@ int main() {
             throw std::runtime_error(error.localizedDescription.UTF8String);
           return result[@"data"];
         };
+        // Export is a separate file operation, including when Redo is pending.
+        call(@"document.patch", @{@"title":@"Export draft"}, true);
+        call(@"document.patch", @{@"title":@"Later edit"}, true);
+        call(@"history.undo", @{}, true);
+        const auto exportRevision=session.automationRevision;
+        NSDictionary *exportBefore=[session snapshot:0];
+        const BOOL exportRedo=session.canRedo;
+        NSString *exportPath=[folder stringByAppendingPathComponent:
+          [NSString stringWithFormat:@"export-%@.%@",exportBefore[@"format"],[exportBefore[@"format"] lowercaseString]]];
+        auto dryExport=call(@"document.exportModule",@{@"path":exportPath,@"dryRun":@YES},true);
+        check(![dryExport[@"written"] boolValue] && ![NSFileManager.defaultManager fileExistsAtPath:exportPath],
+          "Module dry run wrote a destination");
+        check([call(@"document.exportModule",@{@"path":exportPath},true)[@"written"] boolValue],
+          "Export imported source format");
+        check([session.automationRevision isEqual:exportRevision] && session.canRedo==exportRedo &&
+          [[session snapshot:0] isEqual:exportBefore],"Module export altered the document or Redo");
+        call(@"history.redo",@{},true);
+        check([[session snapshot:0][@"title"] isEqual:@"Later edit"],"Module export consumed Redo");
+        call(@"history.undo",@{},true);
         const int stride = type == MOD_TYPE_MOD ? 1 : 4;
         std::vector<uint8_t> pcm(17 * stride);
         for (size_t i = 0; i < pcm.size(); ++i)

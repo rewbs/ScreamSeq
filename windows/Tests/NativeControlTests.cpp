@@ -75,6 +75,19 @@ void nativeEditSelection(HWND parent) {
       SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
       require(first==2&&last==4,"Native Select All bypassed document-departure input protection");
     }
+    // A moved retained control needs a full repaint, not copied sibling pixels.
+    // Repeated identical layout must remain idle. Neither may change its draft.
+    ScreamSeq::NativeControls::place(edit,10,10,260,60);
+    ValidateRect(edit,nullptr);
+    ScreamSeq::NativeControls::place(edit,20,20,260,60);
+    RECT dirty{},client{};GetClientRect(edit,&client);
+    require(GetUpdateRect(edit,&dirty,FALSE)&&EqualRect(&dirty,&client),
+      "Moved native field did not invalidate its complete client surface");
+    ValidateRect(edit,nullptr);
+    ScreamSeq::NativeControls::place(edit,20,20,260,60);
+    require(!GetUpdateRect(edit,nullptr,FALSE),"Unchanged native field layout requested another repaint");
+    SendMessageW(edit,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    require(first==2&&last==4,"Native field placement changed its retained selection");
     wchar_t text[64]{};GetWindowTextW(edit,text,64);
     require(std::wstring_view(text)==L"Retained draft"&&SendMessageW(edit,EM_CANUNDO,0,0)==undo&&GetFocus()==edit,
       "Native Select All changed text, Undo or focus");

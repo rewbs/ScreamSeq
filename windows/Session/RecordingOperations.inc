@@ -1,12 +1,9 @@
 // Included inside namespace ScreamSeq. Take ownership never leaves the worker.
 namespace {
 uint64_t recordingInteger(const Json &value,uint64_t low,uint64_t high) {
-  if((!value.is_number_unsigned()&&!value.is_number_integer())||value.is_boolean()||
-     (value.is_number_integer()&&!value.is_number_unsigned()&&value.get<int64_t>()<0))
-    throw Api::ApiError(-32602,"Expected a nonnegative recording integer");
-  const auto result=value.get<uint64_t>();
-  if(result<low||result>high)throw Api::ApiError(-32602,"Recording integer is out of range");
-  return result;
+  const auto result=Api::boundedInteger(value,low,high);
+  if(!result)throw Api::ApiError(-32602,"Expected a recording integer within its allowed range");
+  return *result;
 }
 std::string recordingText(const Json &value,size_t maximum) {
   if(!value.is_string())throw Api::ApiError(-32602,"Expected recording text");

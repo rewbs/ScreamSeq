@@ -17,7 +17,7 @@ void need(bool ok,const char *message){if(!ok)throw Api::ApiError(-32602,message
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected sample library parameters");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto k){return i.key()==k;}),"Unknown sample library field");}
 std::string text(const Json &v){need(v.is_string(),"Expected sample library text");const auto &s=v.get_ref<const std::string &>();need(s.size()<=16384&&s.find('\0')==s.npos,"Invalid sample library text");if(!s.empty()){const auto n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),int(s.size()),nullptr,0);need(n>0&&n<=4096,"Invalid or oversized sample library text");}return s;}
 std::vector<std::string> strings(const Json &v){need(v.is_array()&&v.size()<=32,"Use at most 32 sample library paths/tags");std::vector<std::string> out;for(const auto &s:v)out.push_back(text(s));return out;}
-size_t integer(const Json &v,size_t max){need(v.is_number()&&!v.is_boolean(),"Expected a sample library integer");const auto n=v.get<double>();need(std::isfinite(n)&&n>=0&&n<=double(max)&&std::floor(n)==n,"Invalid sample library integer");return size_t(n);}
+size_t integer(const Json &v,size_t max){const auto n=Api::boundedInteger(v,0,max);need(n.has_value(),"Expected a sample library integer within its allowed range");return size_t(*n);}
 bool samePath(const std::string &a,const std::string &b){const auto x=std::filesystem::u8path(a),y=std::filesystem::u8path(b);return CompareStringOrdinal(x.c_str(),-1,y.c_str(),-1,TRUE)==CSTR_EQUAL;}
 std::vector<std::string> roots(const std::vector<std::string> &paths,bool existing){
   need(paths.size()<=32,"Use at most 32 sample folders");std::vector<std::string> result;

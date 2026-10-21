@@ -8,7 +8,7 @@
 
 namespace ScreamSeq {
 // Detailed sample work stays on the document worker. The window retains only
-// a bounded waveform, presentation state, and an unapplied drawing gesture.
+// a bounded waveform, presentation state, and the current drawing gesture.
 class SampleDetailWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
@@ -43,13 +43,13 @@ private:
   std::vector<float> peaks_;std::map<unsigned,double> stroke_,dragBefore_;
   std::vector<double> playbackFrames_;
   unsigned waveStart_=0,waveEnd_=0,anchor_=0,lastFrame_=0;double lastValue_=0;
-  int channel_=0;unsigned bins_=0;uint64_t generation_=0;
+  int channel_=0;unsigned bins_=0;uint64_t generation_=0,strokeGeneration_=0;
   bool setting_=false,pending_=false,fields_=false,drawing_=false,dragging_=false,selecting_=false,priorPoint_=false,contextOpen_=false;
   float layoutWidth_=-1,layoutHeight_=-1;UINT layoutDpi_=0;bool layoutPending_=false;
   Region selectionBefore_;WorkspaceRect canvas_;
   void require(bool condition,const char *why)const{if(!condition)throw std::runtime_error(why);}
   bool current()const{const auto c=context_(false);return c.document==captured_.document&&c.revision==captured_.revision;}
-  bool draft()const{return fields_||loops_.dirty()||!stroke_.empty()||dragging_;}
+  bool draft()const{return fields_||loops_.dirty()||!stroke_.empty()||dragging_||loopDragging_;}
   bool settingsDraft()const{return std::any_of(edited_.begin(),edited_.end(),[](int id){return id>=sampleName&&id<=samplePan;});}
   void clearFields(std::initializer_list<int> ids){for(auto id:ids)edited_.erase(id);fields_=!edited_.empty();}
   void requireCurrent()const{require(current(),"Song changed / captured sample retained; Reload before applying");}
@@ -70,7 +70,7 @@ private:
   void refreshSavedSettings(){setting_=true;for(auto [id,name]:std::initializer_list<std::pair<int,const char *>>{{sampleName,"name"},{sampleRate,"rate"},{sampleVolume,"volume"},{samplePan,"pan"}})if(!edited_.contains(id))set(id,info_.at(name));setting_=false;}
   bool displayControl(int id)const override{return (id!=applySettings&&id!=applyLoops)||automaticEditFailed_;}
   void queueSampleEdit(){queueAutomaticEdit([this]{
-    if(pending_||mutationWorking_||dragging_||selecting_||contextOpen_){queueSampleEdit();return;}
+    if(pending_||mutationWorking_||dragging_||selecting_||loopDragging_||contextOpen_){queueSampleEdit();return;}
     if(mutationFrozen())return;
     if(settingsDraft()){
       const bool retainLoop=loops_.dirty();const auto raw=loops_.raw();saveSettings();
@@ -115,24 +115,51 @@ private:
   }
   void crossfade(bool dry){require(!loops_.dirty(),"Apply or Reload loop drafts before crossfading a saved forward loop");auto p=Json{{"sample",slot_},{"loop",choice(crossLoop)==1?"sustain":"normal"},{"mode",choice(crossMode)==1?"overlap":"preserve"},{"curve",choice(crossCurve)==1?"equal-power":"linear"},{"frames",integerField(crossFrames,1048576)},{"dryRun",dry}};mutate("sample.crossfade",std::move(p),dry);}
 #include "SampleDetailWorkflows.inc"
-  void stage(unsigned frame,double value){requireCurrent();require(!fields_||fieldsRevision_==captured_.revision,"Point fields belong to an earlier revision / discard or Reload them");if(stroke_.empty())strokeRevision_=captured_.revision;require(frame<region_.frames&&std::isfinite(value)&&value>=-1&&value<=1,"Draw inside the sample with values from -1 to 1");require(stroke_.contains(frame)||stroke_.size()<4096,"Drawing is limited to 4096 points per Apply");stroke_[frame]=value;clearFields({pointFrame,pointValue});++generation_;pointFields(frame,value);status(L"Drawing draft / Apply drawing saves one Undo step");}
+#include "SampleLoopHandles.inc"
+  void stage(unsigned frame,double value){requireCurrent();require(!fields_||fieldsRevision_==captured_.revision,"Point fields belong to an earlier revision / discard or Reload them");if(stroke_.empty())strokeRevision_=captured_.revision;require(frame<region_.frames&&std::isfinite(value)&&value>=-1&&value<=1,"Draw inside the sample with values from -1 to 1");require(stroke_.contains(frame)||stroke_.size()<4096,"Drawing is limited to 4096 points per batch");stroke_[frame]=value;clearFields({pointFrame,pointValue});++generation_;pointFields(frame,value);status(L"Points staged / Save staged points saves one Undo step");}
   void applyDrawing(){require(!stroke_.empty(),"Draw or stage a point first");Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});mutate("sample.draw",{{"sample",slot_},{"points",points},{"channels",channelName()},{"interpolation",choice(interpolation)==1?"step":"linear"}},false,true);}
   unsigned frameAt(float x,bool insertion=true)const{const auto span=region_.end-region_.start;return std::min(insertion?region_.end:std::max(region_.start,region_.end-1),region_.start+unsigned(std::clamp(double((x-canvas_.x)/std::max(1.f,canvas_.w)),0.,1.)*span));}
   double valueAt(float y)const{return std::clamp(double((canvas_.y+canvas_.h*.5f-y)/std::max(1.f,canvas_.h*.44f)),-1.,1.);}
   float xAt(double frame)const{return canvas_.x+float((frame-region_.start)/std::max(1u,region_.end-region_.start))*canvas_.w;}
-  void extend(float x,float y){if(stroke_.empty())strokeRevision_=captured_.revision;const auto frame=frameAt(x,false);const auto value=valueAt(y);requireCurrent();size_t extra=0;const auto first=priorPoint_?std::min(frame,lastFrame_):frame,last=priorPoint_?std::max(frame,lastFrame_):frame;for(unsigned i=first;i<=last;++i)extra+=!stroke_.contains(i);require(stroke_.size()+extra<=4096,"Drawing is limited to 4096 points per Apply");if(priorPoint_&&frame!=lastFrame_)for(unsigned i=std::min(frame,lastFrame_);i<=std::max(frame,lastFrame_);++i)stroke_[i]=lastValue_+(value-lastValue_)*(double(i)-lastFrame_)/(double(frame)-lastFrame_);else stroke_[frame]=value;lastFrame_=frame;lastValue_=value;priorPoint_=true;++generation_;pointFields(frame,value);}
-  void cancelGesture(){if(dragging_){stroke_=dragBefore_;dragging_=false;priorPoint_=false;}if(selecting_){region_=selectionBefore_;selecting_=false;syncFields();++selectionVersion_;invalidatePaste();}if(GetCapture()==window_)ReleaseCapture();++generation_;}
+  void extend(float x,float y){if(stroke_.empty())strokeRevision_=captured_.revision;const auto frame=frameAt(x,false);const auto value=valueAt(y);requireCurrent();size_t extra=0;const auto first=priorPoint_?std::min(frame,lastFrame_):frame,last=priorPoint_?std::max(frame,lastFrame_):frame;for(unsigned i=first;i<=last;++i)extra+=!stroke_.contains(i);require(stroke_.size()+extra<=4096,"Drawing is limited to 4096 points per stroke");if(priorPoint_&&frame!=lastFrame_)for(unsigned i=std::min(frame,lastFrame_);i<=std::max(frame,lastFrame_);++i)stroke_[i]=lastValue_+(value-lastValue_)*(double(i)-lastFrame_)/(double(frame)-lastFrame_);else stroke_[frame]=value;lastFrame_=frame;lastValue_=value;priorPoint_=true;strokeGeneration_=++generation_;pointFields(frame,value);}
+  void cancelGesture(){cancelLoopGesture();if(dragging_){stroke_=dragBefore_;dragging_=false;priorPoint_=false;}if(selecting_){region_=selectionBefore_;selecting_=false;syncFields();++selectionVersion_;invalidatePaste();}if(GetCapture()==window_)ReleaseCapture();++generation_;}
   void mouse(UINT message,float x,float y,WPARAM flags)override{
-    if(message==WM_CAPTURECHANGED){if(dragging_||selecting_)cancelGesture();return;}if(pending_||mutationFrozen())return;
-    if(message==WM_LBUTTONDOWN&&canvas_.contains(x,y)){requireCurrent();SetFocus(window_);if(drawing_){require(precise(),"Zoom to one frame per pixel before drawing");dragBefore_=stroke_;priorPoint_=false;dragging_=true;extend(x,y);}else{require(stroke_.empty(),"Apply or discard the drawing before selecting");selectionBefore_=region_;clearFields({rangeStart,rangeEnd});anchor_=(flags&MK_SHIFT)?region_.first:frameAt(x);selecting_=true;++selectionVersion_;invalidatePaste();region_.first=std::min(anchor_,frameAt(x));region_.last=std::max(anchor_,frameAt(x));syncFields();}SetCapture(window_);}
-    else if(message==WM_MOUSEMOVE&&(dragging_||selecting_)){try{requireCurrent();if(dragging_)extend(x,y);else{++selectionVersion_;invalidatePaste();region_.first=std::min(anchor_,frameAt(x));region_.last=std::max(anchor_,frameAt(x));syncFields();}}catch(...){cancelGesture();throw;}}
-    else if(message==WM_LBUTTONUP&&(dragging_||selecting_)){try{requireCurrent();if(dragging_){extend(x,y);dragging_=false;priorPoint_=false;status(L"Drawing draft / Apply drawing saves one Undo step");}const bool selected=selecting_;selecting_=false;ReleaseCapture();if(selected){++selectionVersion_;++generation_;invalidatePaste();if(autoSnap_)snap();}}catch(...){cancelGesture();throw;}}
+    if(message==WM_CAPTURECHANGED){if(dragging_||selecting_||loopDragging_)cancelGesture();return;}if(pending_||mutationFrozen())return;
+    if(loopMouse(message,x,y))return;
+    if(message==WM_LBUTTONDOWN&&canvas_.contains(x,y)){
+      selectedLoopHandle_=-1;
+      requireCurrent();
+      if(drawing_){
+        require(precise(),"Zoom to one frame per pixel before drawing");
+        require(stroke_.empty(),"Save or discard the staged drawing before starting a new stroke");
+        require(!fields_&&!loops_.dirty(),"Finish or discard the sample fields before drawing");
+        dragBefore_=stroke_;priorPoint_=false;dragging_=true;
+        try{extend(x,y);}catch(...){cancelGesture();throw;}
+        status(L"Drawing / release saves one Undo step / Escape cancels");
+      }else{require(stroke_.empty(),"Apply or discard the drawing before selecting");selectionBefore_=region_;clearFields({rangeStart,rangeEnd});anchor_=(flags&MK_SHIFT)?region_.first:frameAt(x);selecting_=true;++selectionVersion_;invalidatePaste();region_.first=std::min(anchor_,frameAt(x));region_.last=std::max(anchor_,frameAt(x));syncFields();}
+      SetFocus(window_);SetCapture(window_);
+    }
+    else if(message==WM_MOUSEMOVE&&(dragging_||selecting_)){try{requireCurrent();if(dragging_){require(generation_==strokeGeneration_,"Fields changed while drawing / stroke cancelled; newer fields retained");extend(x,y);}else{++selectionVersion_;invalidatePaste();region_.first=std::min(anchor_,frameAt(x));region_.last=std::max(anchor_,frameAt(x));syncFields();}}catch(...){cancelGesture();throw;}}
+    else if(message==WM_LBUTTONUP&&(dragging_||selecting_)){
+      try{
+        requireCurrent();const bool drawn=dragging_,selected=selecting_;
+        if(drawn){require(generation_==strokeGeneration_,"Fields changed while drawing / stroke cancelled; newer fields retained");extend(x,y);dragging_=false;priorPoint_=false;}
+        selecting_=false;ReleaseCapture();
+        // Use the existing retained completion owner. A failed/uncertain write
+        // keeps the exact stroke and captured sample for Review; never retry it.
+        if(drawn){applyDrawing();resultStatus(L"Stroke saved / one Undo step when audio changes");}
+        else if(selected){++selectionVersion_;++generation_;invalidatePaste();if(autoSnap_)snap();}
+      }catch(...){cancelGesture();throw;}
+    }
   }
-  bool wheel(UINT message,float x,float y,WPARAM w)override{if(!canvas_.contains(x,y)||pending_||mutationFrozen())return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w);if(GET_KEYSTATE_WPARAM(w)&MK_CONTROL)zoom(std::pow(2.,double(delta)/WHEEL_DELTA),double(frameAt(x)));else if(delta)pan((message==WM_MOUSEHWHEEL?delta:-delta)>0?1:-1);return true;}
+  bool wheel(UINT message,float x,float y,WPARAM w)override{if(!canvas_.contains(x,y)||pending_||mutationFrozen()||loopDragging_)return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w);if(GET_KEYSTATE_WPARAM(w)&MK_CONTROL)zoom(std::pow(2.,double(delta)/WHEEL_DELTA),double(frameAt(x)));else if(delta)pan((message==WM_MOUSEHWHEEL?delta:-delta)>0?1:-1);return true;}
   bool key(WPARAM key,bool ctrl,bool shift)override{
-    if(pending_||mutationWorking_)return false;
-    if(mutationCompletion_.retained()){if(ctrl&&key=='R'){reviewMutation();return true;}return false;}
-    if(key==VK_ESCAPE){cancelGesture();status(L"Gesture cancelled / staged drawing retained");return true;}
+    const bool loopNavigation=GetFocus()==window_&&selectedLoopHandle_>=0&&!ctrl&&(key==VK_TAB||key==VK_LEFT||key==VK_RIGHT);
+    if(pending_||mutationWorking_)return loopNavigation;
+    if(mutationCompletion_.retained()){if(ctrl&&key=='R'){reviewMutation();return true;}return loopNavigation;}
+    if(key==VK_ESCAPE){cancelGesture();selectedLoopHandle_=-1;status(L"Gesture cancelled / other staged fields retained");return true;}
+    if(loopDragging_)return true;
+    if(loopKey(key,ctrl,shift))return true;
     const auto focused=GetDlgCtrlID(GetFocus());if(key==VK_RETURN&&focused>=sampleName&&focused<=samplePan){saveSettings();return true;}
     if(ctrl&&key==VK_RETURN){if(page_==2)editLoops(false);else if(page_==3)pasteAudio(false);else applyDrawing();return true;}if(ctrl&&key=='R'){load(false);return true;}if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(page_==0?pointFrame:page_==1?amount:page_==2?normalStart:page_==3?pasteSourceGain:snapSize):window_);return true;}
     if(GetFocus()!=window_)return false;
@@ -153,7 +180,7 @@ private:
     using Item=NativeContextMenu::Item;
     std::vector<Item> menu{{0,L"Sample "+std::to_wstring(slot_)+L" · "+wide(info_.value("name",std::string{}))},{0,L"Frames "+std::to_wstring(region_.first)+L"–"+std::to_wstring(region_.last)+L" · "+wide(channelName())}};
     menu.push_back({0,L"View and selection",true,false,{item(fit,L"Fit sample\tHome",fresh&&cleanView&&hasAudio),item(zoomSelection,L"Zoom selection",fresh&&cleanView&&hasAudio),item(zoomIn,L"Zoom in\t+",fresh&&cleanView&&hasAudio),item(zoomOut,L"Zoom out\t-",fresh&&cleanView&&hasAudio),item(panLeft,L"Pan left\tCtrl+Left",fresh&&cleanView&&hasAudio),item(panRight,L"Pan right\tCtrl+Right",fresh&&cleanView&&hasAudio),{0,L""},item(setRange,L"Set selection from fields",fresh&&stroke_.empty()),item(all,L"Select all\tCtrl+A",fresh&&cleanView),item(snapRange,L"Snap selection",audio)}});
-    menu.push_back({0,L"Drawing",true,false,{item(drawMode,L"Draw mode",fresh,drawing_),item(stagePoint,L"Stage point from fields",fresh&&!settingsDraft()),item(applyDraw,page_==2||page_==3?L"Apply drawing":L"Apply drawing\tCtrl+Enter",fresh&&!stroke_.empty()&&!settingsDraft()),item(discardDraw,L"Discard drawing",!stroke_.empty()||edited_.contains(pointFrame)||edited_.contains(pointValue)||edited_.contains(interpolation))}});
+    menu.push_back({0,L"Drawing",true,false,{item(drawMode,L"Draw mode",fresh,drawing_),item(stagePoint,L"Stage point from fields",fresh&&!settingsDraft()),item(applyDraw,page_==2||page_==3?L"Save staged points":L"Save staged points\tCtrl+Enter",fresh&&!stroke_.empty()&&!settingsDraft()),item(discardDraw,L"Discard drawing",!stroke_.empty()||edited_.contains(pointFrame)||edited_.contains(pointValue)||edited_.contains(interpolation))}});
     menu.push_back({0,L"Process audio",true,false,{{0,field(operation)},item(previewProcess,L"Preview process",audio&&hasRange),item(applyProcess,L"Process audio",loopAudio&&hasRange)}});
     menu.push_back({0,L"Clipboard",true,false,{item(copy,L"Copy selection\tCtrl+C",audio&&hasRange),item(cut,L"Cut selection\tCtrl+X",loopAudio&&hasRange&&channel_==0),item(erase,L"Delete selection\tDelete",loopAudio&&hasRange&&channel_==0),item(copyNew,L"Copy to new sample",loopAudio&&hasRange),{0,L""},item(previewPaste,L"Preview paste\tCtrl+V",audio),item(paste,page_==3?L"Apply reviewed paste\tCtrl+Enter":L"Apply reviewed paste",loopAudio&&pasteReady())}});
     menu.push_back({0,L"Loops",true,false,{item(normalLoop,L"Use selection for normal loop",fresh&&stroke_.empty()&&hasRange),item(sustainLoop,L"Use selection for sustain loop",fresh&&stroke_.empty()&&hasRange),item(normalEnabled,loops_.raw().normal.enabled?L"Disable normal loop draft":L"Enable normal loop draft",fresh),item(sustainEnabled,loops_.raw().sustain.enabled?L"Disable sustain loop draft":L"Enable sustain loop draft",fresh),{0,L""},item(previewLoops,L"Preview both loops",audio),item(applyLoops,page_==2?L"Apply both loops\tCtrl+Enter":L"Retry loops",audio),item(reloadLoops,L"Reload loop fields")}});
@@ -164,7 +191,7 @@ private:
     const auto before=context_(false);const auto document=captured_.document,revision=captured_.revision,identity=id_;const auto slot=slot_;const auto generation=generation_;const auto region=region_;const auto channel=channel_;const bool drawing=drawing_;
     releaseMusicalInput();contextOpen_=true;struct Guard{bool &value;~Guard(){value=false;}}guard{contextOpen_};
     const int command=NativeContextMenu::show(window_,screen,menu);if(!command)return true;
-    const auto after=context_(false);require(visible()&&!pending_&&!dragging_&&!selecting_&&before.document==after.document&&before.revision==after.revision&&document==captured_.document&&revision==captured_.revision&&identity==id_&&slot==slot_&&generation==generation_&&channel==channel_&&drawing==drawing_&&region.first==region_.first&&region.last==region_.last&&region.start==region_.start&&region.end==region_.end&&region.frames==region_.frames,"Song, sample or draft changed while the menu was open / action cancelled");
+    const auto after=context_(false);require(visible()&&!pending_&&!dragging_&&!selecting_&&!loopDragging_&&before.document==after.document&&before.revision==after.revision&&document==captured_.document&&revision==captured_.revision&&identity==id_&&slot==slot_&&generation==generation_&&channel==channel_&&drawing==drawing_&&region.first==region_.first&&region.last==region_.last&&region.start==region_.start&&region.end==region_.end&&region.frames==region_.frames,"Song, sample or draft changed while the menu was open / action cancelled");
     action(command,BN_CLICKED);layout();requestPaint();return true;
   }
   void action(int id,unsigned notification)override{
@@ -212,7 +239,7 @@ private:
     if(id==previewProcess||id==applyProcess){process(id==previewProcess);return;}if(id==previewCross||id==applyCross){crossfade(id==previewCross);return;}if(id==snapRange){snap();return;}
     if(id==copy||id==cut||id==erase||id==paste||id==copyNew){clipboard(id);return;}
   }
-  void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(visible()&&!pending_&&!mutationFrozen()&&current()&&wantedBins()!=bins_&&!dragging_)refreshWave();}
+  void timer(UINT_PTR id)override{if(id!=3)return;KillTimer(window_,3);if(visible()&&!pending_&&!mutationFrozen()&&current()&&wantedBins()!=bins_&&!dragging_&&!loopDragging_)refreshWave();}
   void layout()override{workflowLayout();}
   void paint(RenderSurface &s)override{
     const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto &r=canvas_;s.fill(r.x,r.y,r.w,r.h,0x0c141c);const auto mid=r.y+r.h*.5f,amplitude=r.h*.44f;
@@ -224,7 +251,8 @@ private:
     if(loops_.dirty())try{const auto values=SampleWorkflow::loopParams(loops_.target(),loops_.raw(),true);for(int sustain=0;sustain<2;++sustain){const auto &loop=values.at(sustain?"sustain":"normal");if(!loop.at("enabled").get<bool>())continue;for(const auto *key:{"start","end"}){const unsigned frame=loop.at(key);if(frame<region_.start||frame>region_.end)continue;for(float y=r.y+24;y<r.y+r.h;y+=8)s.line(xAt(frame),y,xAt(frame),std::min(y+4,r.y+r.h),sustain?0xddc7ff:0xffd38c,2);}}s.uiText(L"Dashed lines: unsaved loop bounds",r.x+8,r.y+r.h-22,r.w-16,0xffd38c);}catch(const std::exception &){s.uiText(L"Loop draft has invalid bounds",r.x+8,r.y+r.h-22,r.w-16,0xffd38c);}
     std::optional<std::pair<float,float>> previous;for(const auto &[frame,value]:stroke_){if(frame<region_.start||frame>=region_.end)continue;const auto x=xAt(frame+.5),y=mid-float(value)*amplitude;if(previous)s.line(previous->first,previous->second,x,y,0xf3c778,2);s.fill(x-2,y-2,4,4,0xffe1a7);previous={{x,y}};}
     for(const auto frame:playbackFrames_)if(frame>=region_.start&&frame<region_.end)s.line(xAt(frame),r.y+24,xAt(frame),r.y+r.h,0xebaeed,1);
-    s.outline(r.x,r.y,r.w,r.h,0x548e87);s.uiText(current()?(precise()?L"Individual frames · draw or enter exact values":L"Peak overview · zoom in to draw"):L"Stale sample · Reload retains the captured target",r.x+8,r.y+6,r.w-16,0x9bacbc);
+    paintLoopHandles(s);
+    s.outline(r.x,r.y,r.w,r.h,0x548e87);s.uiText(current()?(precise()?L"Individual frames · draw or enter exact values":L"Peak overview · zoom in to draw"):L"Stale sample · Reload retains the captured target",r.x+8,r.y+26,r.w-16,0x9bacbc);
     const auto tabWidth=(w-52)/5;s.fill(14+page_*(tabWidth+6),h-264,tabWidth,2,0x79d8c8);
   }
 public:
@@ -232,7 +260,7 @@ public:
     mutationWrite_=std::move(write);
     minimumClientWidth_=900;minimumClientHeight_=720;create(L"ScreamSeq.SampleDetail",L"Sample detail",1060,850);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"SAMPLE DETAIL"},{targetLabel,L""},{rangeLabel,L"Selection"},{viewLabel,L"Visible"},{pointLabel,L"Frame / ±1"},{processLabel,L"Process"},{crossLabel,L"Crossfade"},{snapLabel,L"Snap range"},{loopsLabel,L"Set loop"},{clipboardLabel,L"Clipboard"},{statusLabel,L""},{helpLabel,L"Ctrl+wheel zoom · wheel pan · F6 canvas/fields · Escape cancels gesture"}})label(id,text);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{fromCursor,L"From cursor"},{reload,L"Reload"},{undo,L"Undo"},{redo,L"Redo"},{close,L"Close"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{zoomSelection,L"Zoom selection"},{panLeft,L"← Pan"},{panRight,L"Pan →"},{drawMode,L"Draw off"},{setRange,L"Set range"},{all,L"All"},{setView,L"Set view"},{stagePoint,L"Stage point"},{applyDraw,L"Apply drawing"},{discardDraw,L"Discard drawing"},{previewProcess,L"Preview process"},{applyProcess,L"Process audio"},{previewCross,L"Preview fade"},{applyCross,L"Crossfade loop"},{snapRange,L"Snap selection"},{normalLoop,L"Use selection"},{sustainLoop,L"Use selection"},{copy,L"Copy"},{cut,L"Cut"},{erase,L"Delete"},{paste,L"Paste audio"},{copyNew,L"To new"},{audition,L"Audition…"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{fromCursor,L"From cursor"},{reload,L"Reload"},{undo,L"Undo"},{redo,L"Redo"},{close,L"Close"},{fit,L"Fit"},{zoomIn,L"+"},{zoomOut,L"−"},{zoomSelection,L"Zoom selection"},{panLeft,L"← Pan"},{panRight,L"Pan →"},{drawMode,L"Draw off"},{setRange,L"Set range"},{all,L"All"},{setView,L"Set view"},{stagePoint,L"Stage point"},{applyDraw,L"Save staged points"},{discardDraw,L"Discard drawing"},{previewProcess,L"Preview process"},{applyProcess,L"Process audio"},{previewCross,L"Preview fade"},{applyCross,L"Crossfade loop"},{snapRange,L"Snap selection"},{normalLoop,L"Use selection"},{sustainLoop,L"Use selection"},{copy,L"Copy"},{cut,L"Cut"},{erase,L"Delete"},{paste,L"Paste audio"},{copyNew,L"To new"},{audition,L"Audition…"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{rangeStart,L"0"},{rangeEnd,L"0"},{viewStart,L"0"},{viewEnd,L"0"},{pointFrame,L"0"},{pointValue,L"0"},{amount,L"0"},{exponent,L"3"},{crossFrames,L"64"},{snapSize,L"2048"}})edit(id,text,24);
     label(nameLabel,L"Name");label(rateLabel,L"C-5 Hz");label(volumeLabel,L"Vol");label(panLabel,L"Pan");edit(sampleName,L"",200);edit(sampleRate,L"48000",12);edit(sampleVolume,L"64",12);edit(samplePan,L"128",12);
     button(applySettings,L"Retry settings");button(discardSettings,L"Discard");button(replaceSample,L"Replace…");button(createInstrument,L"Create instrument");
@@ -241,12 +269,13 @@ public:
     options(channels,{L"Both channels",L"Left",L"Right"});options(interpolation,{L"Linear draw",L"Step draw"});options(operation,{L"Reverse",L"Normalize",L"Gain",L"Fade in",L"Fade out",L"Invert",L"Remove DC",L"Smooth",L"Trim",L"Silence",L"Swap channels",L"Copy left",L"Copy right",L"Stereo average"});options(fadeCurve,{L"Linear fade",L"Smooth",L"Exponential",L"Logarithmic"});options(crossLoop,{L"Normal loop",L"Sustain loop"});options(crossMode,{L"Preserve duration",L"Overlap"});options(crossCurve,{L"Linear",L"Equal power"});options(snapMode,{L"Zero crossing",L"Grid"});options(snapDirection,{L"Nearest",L"Before",L"After"});options(pasteMode,{L"Insert",L"Overwrite",L"Mix",L"Replace selection"});createWorkflowControls();finish();
   }
   void openAt(){if(id_.empty()&&!mutationFrozen())load(true);show();}
+  void hide()override{cancelGesture();NativeToolWindow::hide();}
   void replaceAudioFromFile(std::function<std::vector<std::filesystem::path>()> choose){replaceFromFile(std::move(choose));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(captured_.document,captured_.revision,Json::array({id_,mutationFrozen()?mutationTarget_:Json()}).dump(),generation_,draft(),pending_||mutationWorking_,!pending_&&!mutationWorking_&&mutationCompletion_.retained());
   }
   Json musicalTarget()const{return {{"document",captured_.document},{"revision",captured_.revision},{"sample",true},{"slot",slot_},{"id",id_}};}
   void playback(const std::string &document,const Json &samples,const std::vector<Tracker::VoicePosition> &voices){if(!visible())return;std::vector<double> next;if(document==captured_.document&&std::any_of(samples.begin(),samples.end(),[&](const auto &v){return v.at("id")==id_&&v.at("index")==slot_;}))for(const auto &v:voices)if(v.sample==slot_)next.push_back(v.sampleFrame);if(next!=playbackFrames_){playbackFrames_=std::move(next);requestPaint();}}
-  Json snapshot()const{Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});return {{"visible",visible()},{"sample",slot_},{"id",id_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"pending",pending_||mutationWorking_},{"mutationCompletion",mutationCompletion_.snapshot()},{"mutationTarget",mutationTarget_},{"mutationReport",mutationReport_},{"mutationNeedsAcknowledgement",mutationNeedsAcknowledgement_},{"fieldDraft",fields_||loops_.dirty()},{"page",pageName()},{"loops",loopSnapshot()},{"pastePreview",pasteReady()},{"autoSnap",autoSnap_},{"drawing",drawing_},{"dragging",dragging_},{"points",points},{"start",region_.first},{"end",region_.last},{"frames",region_.frames},{"viewStart",region_.start},{"viewEnd",region_.end},{"channels",channelName()},{"precise",precise()},{"waveStart",waveStart_},{"waveEnd",waveEnd_},{"playbackFrames",playbackFrames_},{"waveBins",bins_},{"peaks",peaks_},{"canvas",Json::array({canvas_.x,canvas_.y,canvas_.w,canvas_.h})},{"status",utf8(status_)},{"report",report_}};}
+  Json snapshot()const{Json points=Json::array();for(const auto &[frame,value]:stroke_)points.push_back({{"frame",frame},{"value",value}});return {{"visible",visible()},{"sample",slot_},{"id",id_},{"document",captured_.document},{"expectedRevision",captured_.revision},{"stale",!current()},{"pending",pending_||mutationWorking_},{"mutationCompletion",mutationCompletion_.snapshot()},{"mutationTarget",mutationTarget_},{"mutationReport",mutationReport_},{"mutationNeedsAcknowledgement",mutationNeedsAcknowledgement_},{"fieldDraft",fields_||loops_.dirty()},{"page",pageName()},{"loops",loopSnapshot()},{"loopHandles",loopHandleSnapshot()},{"loopDragging",loopDragging_},{"pastePreview",pasteReady()},{"autoSnap",autoSnap_},{"drawing",drawing_},{"dragging",dragging_},{"points",points},{"start",region_.first},{"end",region_.last},{"frames",region_.frames},{"viewStart",region_.start},{"viewEnd",region_.end},{"channels",channelName()},{"precise",precise()},{"waveStart",waveStart_},{"waveEnd",waveEnd_},{"playbackFrames",playbackFrames_},{"waveBins",bins_},{"peaks",peaks_},{"canvas",Json::array({canvas_.x,canvas_.y,canvas_.w,canvas_.h})},{"status",utf8(status_)},{"report",report_}};}
 };
 }

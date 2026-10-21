@@ -4,6 +4,7 @@
 #include "Module.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "UiOwner.hpp"
+#include "windows/Audio/HostClock.hpp"
 
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/ipluginbase.h"
@@ -349,9 +350,11 @@ struct NativeBackend::Impl {
     float value;
   };
   // Separate SPSC paths keep audible edits independent of UI bookkeeping.
-  std::array<Edit, 8192> edits{}, audioEdits{};
+  std::array<PluginEdit,8192> edits{};
+  std::array<Edit,8192> audioEdits{};
   std::atomic<uint32_t> audioWrite{0}, audioRead{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
+  std::atomic<uint64_t> droppedEdits{0};
   std::atomic<bool> failed{false};
   enum class Failure:uint32_t {None,CallbackThread,EditorQueue,EditorValue,Restart,Resize,EditorException,ControllerParameter,InputParameterCapacity,InputEventCapacity,Process,Block,Transport,AudioEdit,InputOffset,ProcessorException,OutputEventCapacity,OutputParameterCapacity,OutputEventOffset,OutputParameterOffset,OutputParameterValue,ProcessorResult,AuxiliaryNonfinite,MainNonfinite,Latency,ParameterCatalog};
   // A first-failure record is a single lock-free publication. It neither logs
@@ -390,21 +393,23 @@ struct NativeBackend::Impl {
     auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
     auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
     if (w - r >= edits.size() || aw - ar >= audioEdits.size()) {
+      droppedEdits.fetch_add(1,std::memory_order_relaxed);
       fail(Failure::EditorQueue,id);
       return kResultFalse;
     }
     if (!std::isfinite(value)||value<0||value>1) {
+      droppedEdits.fetch_add(1,std::memory_order_relaxed);
       fail(Failure::EditorValue,id);
       return kResultFalse;
     }
     auto p = std::lower_bound(metadata.begin(), metadata.end(), id, [](auto &p, uint32_t key) { return p.id < key; });
-    if(p==metadata.end()||p->id!=id||!p->writable)return kInvalidArgument;
+    if(p==metadata.end()||p->id!=id||!p->writable){droppedEdits.fetch_add(1,std::memory_order_relaxed);return kInvalidArgument;}
     if (values && p != metadata.end() && p->id == id && size_t(p - metadata.begin()) < controllerValues.size()) {
       auto index = p - metadata.begin();
       values[index].store(float(value), std::memory_order_relaxed);
       controllerValues[index] = float(value);
     }
-    edits[w % edits.size()] = {id, float(value)};
+    edits[w % edits.size()] = {id,float(value),ScreamSeq::hostTime100ns()};
     editWrite.store(w + 1, std::memory_order_release);
     audioEdits[aw % audioEdits.size()] = {id, float(value)};
     audioWrite.store(aw + 1, std::memory_order_release);
@@ -797,15 +802,18 @@ bool NativeBackend::parameter(uint32_t id, double value, uint32_t offset) noexce
   return impl_->setParameter(id, value, offset);
 }
 bool NativeBackend::popEdit(uint32_t &id, float &value) noexcept {
+  PluginEdit event;if(!popEdit(event))return false;id=event.id;value=event.value;return true;
+}
+bool NativeBackend::popEdit(PluginEdit &event) noexcept {
   auto &s = *impl_;
   auto r = s.editRead.load(std::memory_order_relaxed);
   if (r == s.editWrite.load(std::memory_order_acquire))return false;
   auto e = s.edits[r % s.edits.size()];
   s.editRead.store(r + 1, std::memory_order_release);
-  id = e.id;
-  value = e.value;
+  event=e;
   return true;
 }
+uint64_t NativeBackend::droppedEdits() const noexcept {return impl_->droppedEdits.load(std::memory_order_relaxed);}
 void NativeBackend::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
 }

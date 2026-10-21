@@ -4,10 +4,22 @@ void applicationSongProperties() {
         RestoreFixture fixture;auto &app=*fixture.app;
         MINMAXINFO mainLimits{};SendMessageW(app.window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&mainLimits));
         SetWindowPos(app.window,nullptr,0,0,mainLimits.ptMinTrackSize.x,mainLimits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
-        app.layoutControls();RECT mainClient{};GetClientRect(app.window,&mainClient);
-        for(int id:{songPropertiesCommand,documentLoadReportCommand,saveAsCommand,playbackLoopCommand}){RECT bounds{};const auto control=app.controls.at(id);GetWindowRect(control,&bounds);MapWindowPoints(nullptr,app.window,reinterpret_cast<POINT *>(&bounds),2);
-            restoreCheck(IsWindowVisible(control)&&bounds.left>=0&&bounds.top>=0&&bounds.right<=mainClient.right&&bounds.bottom<=mainClient.bottom,"Song/file entry point clips at the main-window minimum size");}
-        app.command(songPropertiesCommand);auto *tool=app.songPropertiesWindow.get();
+        app.layoutControls();app.refreshMenuBar();
+        // File/song commands moved from duplicate sidebar buttons into native
+        // menus. Verify their current presentation and dispatch at minimum size.
+        const auto menu=GetMenu(app.window);RECT mainBounds{};GetWindowRect(app.window,&mainBounds);
+        restoreCheck(menu&&app.menuBar&&menu==app.menuBar->handle(),"Main window lost its native command menus");
+        for(int index=0;index<GetMenuItemCount(menu);++index) {
+            RECT bounds{};restoreCheck(GetMenuItemRect(app.window,menu,UINT(index),&bounds)&&
+                bounds.left>=mainBounds.left&&bounds.top>=mainBounds.top&&bounds.right<=mainBounds.right&&bounds.bottom<=mainBounds.bottom,
+                "Native menu entry clips at the main-window minimum size");
+        }
+        for(int id:{songPropertiesCommand,documentLoadReportCommand,saveAsCommand,playbackLoopCommand}) {
+            const auto entry=menuEntry(menu,id);
+            restoreCheck(!entry.text.empty()&&!(entry.state&MFS_DISABLED),"Song/file command is missing or disabled in its native menu");
+        }
+        ScreamSeq::Tests::ownGuiWindow(app.window);SetFocus(app.window);menuBegin(app);menuChoose(app,songPropertiesCommand);
+        auto *tool=app.songPropertiesWindow.get();
         restoreCheck(tool!=nullptr,"Song settings command did not create its native owner");
         const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
         restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,8601))==L"Song title"&&

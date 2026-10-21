@@ -30,7 +30,7 @@ All mixer materialization paths use `NativeSong::ensureMixer`.
 
 Sample-instrument graphs are prepared independently per instrument/raw channel and feed the ordinary mixer through sample-only OpenMPT adapters. Their NNA voices keep their original routing. `NativeSignalGraph` handles both that stage and channel/group graphs with a shared 256-processor/256-MiB host-storage budget. Graph automation sources store per-pattern curves using stable IDs, compiled formulas and the shared evaluator. Both additions require native metadata 13. See `mac/GRAPH_WORKFLOW.md` for the current signal order, activity commands, editing semantics and limits.
 
-The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `windows/Project/` implements the compatible portable codec and preservation-aware atomic saves. Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
+The current native project wrapper is a versioned binary property list containing an exact song snapshot, metadata and plugin state. Metadata and container versions are separate. `editor/project/` owns the portable typed property-list codec and preservation merge policy; `windows/Project/` retains compatible include paths and owns container validation and atomic saves. `mac/Bridge/NativePropertyTree.hpp` adapts NSData and known Foundation property trees to that shared layer. Mac's staged session uses `ProjectMetadata` for the immutable import baseline and `Bridge/ProjectMetadata.inc` for its shared Open/Save encoder; this newer [source batch still awaits qualification](windows-parity-plan-2026-10-09/MAC-PRESERVATION-BATCH-2026-10-20.md). Plugin recipes use stable class identity; local paths are resolution hints. AU remains macOS-only. Missing platform plugins preserve opaque state and reject playback preparation rather than being replaced silently.
 
 ## Typed native pattern commands
 
@@ -70,6 +70,29 @@ all stable IDs, writable catalog entries and native-unit ranges before any host
 publication. The helper returns a bounded candidate and owns no document, plugin,
 history or audio callback. Windows and Mac retain their native publication/state
 and history adapters; extraction does not change the public parameter API.
+
+Transient rack slider ownership lives in `editor/ParameterPreviewOwner.hpp`.
+It binds one gesture token to a stable plugin/parameter, document revision and
+native host generation. Windows `ParameterPreviewOperations.inc` and Mac
+`ParameterPreviewAPI.inc` use the existing bounded `PluginChain` preview queue;
+the native adapters retain publication, transport and UI ownership. Preview
+does not alter manual/opaque state or history. Release uses the ordinary durable
+parameter edit, and cancellation restores the current accepted baseline. Recipe
+copies use a different publication path. See the [preview qualification
+checkpoint](windows-parity-plan-2026-10-09/PARAMETER-PREVIEW-BATCH-2026-10-19.md)
+for execution status and pending gates.
+
+Recipe manual editing is centralized in `editor/hosted/RecipeParameterEdits.hpp`:
+complete candidate validation and provider acceptance precede no-throw adoption;
+representational no-ops preserve exact saved overrides and modulation bases.
+Recipe preview adapters use the same transient owner, mutually exclusive with a
+rack gesture, and `PluginChain::prepareGraphParameterPreview` publishes prepared
+controls to every existing recipe copy. Transient plans preserve accepted monitor
+baselines. Commit stays in ordinary graph history; cancellation restores the
+accepted definition and retains ownership on queue refusal. No format migration
+or callback-side allocation is introduced. This newer source batch has separate
+[recipe qualification gates](windows-parity-plan-2026-10-09/RECIPE-PREVIEW-BATCH-2026-10-20.md);
+the prior rack results do not qualify it.
 
 ## Editing and API invariants
 
@@ -329,3 +352,10 @@ selects an existing instrument plugin and MIDI channel, and links to **Add
 plugin…** and **Plugin rack…**. The menu route is **Tools → Sound → Plugin rack**.
 The assignment uses the captured stable instrument identity/revision and the
 existing `instrument.plugin.set` transaction, preserving history and sample data.
+
+`editor/RackMove.hpp` is the shared control-owner permutation for final rack
+positions and positional recorded automation. Both session adapters prepare
+candidate copies, then retain their native atomic publication/history paths.
+Routing and plugin identities remain stable. Windows rack and reusable-recipe
+parameter windows share one retained native owner; the target determines the
+existing rack or graph API, without adding another musical state representation.

@@ -16,15 +16,23 @@
 			const auto playKeys=workspaceShortcutLabel(togglePlaybackCommand);
 			s.uiText(inspection ? L"Inspection / audio hardware disabled" : silentOutput ? L"Silent hardware qualification / DSP active" : transport+(playKeys.empty()?L"":L"  /  "+playKeys+L": play or stop"),894,25,width-906,playing ? accent : muted);
 		}
-		s.fill(0,44,164,height-44,0x1a202a);
-		s.line(163,44,163,height,0x303b49);
-		s.uiText(wide(view->session.document.at("title").get<std::string>()),12,79,142);
-		s.uiText(std::to_wstring(view->channels)+L" channels",12,99,70,muted);s.uiText(L"SAMPLES",12,130,142,muted);
-		s.line(10,119,154,119,0x303b49);s.line(10,283,154,283,0x303b49);s.line(10,383,154,383,0x303b49);
-        if(height>662)s.uiText(busy ? L"Document worker busy" : workspaceShortcuts->noteKeys()==ScreamSeq::MusicalKeyMap{}?L"Z-M / Q-U: selected sound":L"Custom note keys active",12,551,142,muted);
-        if(inspection&&height>702)s.uiText(L"QA clipboard is private",12,573,142,muted);
-		s.uiText(L"OpenMPT audio engine",12,height-19,142,muted);
-        // The timing form is always reachable in the sidebar. Keep this optional
+        if(workspaceState.contextPanelVisible) {
+            s.fill(0,82,164,height-82,0x1a202a);
+            s.line(163,82,163,height,0x303b49);
+            s.uiText(contextPanelTitle,12,89,142,accent);
+            const auto &editor=contextPanelEditor;
+            const auto node=editor=="graph"?graphSelectedNode():nullptr;
+            const auto target=editor=="graph"?wide(node?node->value("name",graphNode):graphDraft.value("name",std::string("Choose a recipe"))):
+                editor=="mixer"?wide(mixerDraft.value("name",std::string("Choose a bus"))):editor=="plugins"?wide(selectedPlugin):
+                editor=="samples"?L"Selected sample "+std::to_wstring(selectedSample()):
+                editor=="instruments"||editor=="automation"||editor=="graphCurve"?std::wstring(L"Active editor keeps its target"):
+                L"P"+std::to_wstring(patternIndex)+L" / R"+std::to_wstring(row)+L" / CH"+std::to_wstring(channel+1);
+            s.uiText(target,12,109,142,muted);
+            if(editor=="pattern"||editor=="notes"||editor=="preciseNotes"||editor=="effects")
+                s.uiText(L"NOTE ENTRY",12,195,142,muted);
+            s.uiText(L"OpenMPT audio engine",12,height-19,142,muted);
+        }
+        // The timing form remains in Song and the context panel. Keep this optional
         // summary whole at narrow widths instead of drawing a clipped fragment.
         const auto timingWidth=width-854;
         if(timingWidth>=100){
@@ -161,8 +169,9 @@
 		}
 		if(workspaceInspectorVisible()) s.fill(g.verticalDivider.x,g.verticalDivider.y,g.verticalDivider.w,g.verticalDivider.h,0x344151);
         if(hasWorkspaceDock())drawWorkspaceRegionChrome();
-		s.fill(164,height-40,width-164,40,0x202834);s.line(164,height-40,width,height-40,0x344151);
-		s.fill(164,height-38,3,16,liveKeyboard ? gold : 0xb498de);
-		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+(isWorkspaceEditor(displayedFocus)?workspaceRegionTitle(displayedFocus):wide(displayedFocus))+(liveKeyboard?L" / LIVE KEYS":L""),174,height-38,width-184);
-		s.uiText(status,174,height-19,std::max(1.0f,width-362),muted);
+        const auto left=workspaceState.contentLeft()-6;
+		s.fill(left,height-40,width-left,40,0x202834);s.line(left,height-40,width,height-40,0x344151);
+		s.fill(left,height-38,3,16,liveKeyboard ? gold : 0xb498de);
+		s.text(L"EDIT P"+std::to_wstring(patternIndex)+L" R"+std::to_wstring(row)+L" CH"+std::to_wstring(channel+1)+L" / "+(follow ? L"FOLLOW PLAYBACK" : L"DETACHED EDITING")+L" / FOCUS "+(isWorkspaceEditor(displayedFocus)?workspaceRegionTitle(displayedFocus):wide(displayedFocus))+(liveKeyboard?L" / LIVE KEYS":L""),left+10,height-38,width-left-20);
+		s.uiText(status,left+10,height-19,std::max(1.0f,width-left-198),muted);
 	}

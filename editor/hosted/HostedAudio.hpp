@@ -66,7 +66,11 @@ struct RecordedAutomationTimeline {
 struct RecordedAutomationPlan {
   uint64_t sourceRevision=0;
   uint32_t parameterFence=0; // Manual batches published before this timeline.
+  uint32_t preparedParameterFence=0;
   bool active=false;
+  // Explicit accepted manual values when retiring a capture that has changed
+  // the vendor/control catalogue. Adopt together with the recorded timeline.
+  std::vector<ParameterChange> manualBaselines;
   struct Lane {std::shared_ptr<NativePlugin> plugin;RecordedAutomationTimeline timeline;};
   std::vector<Lane> lanes; // Complete snapshot, including fading retired processors.
   std::vector<NativePlugin *> rack; // Producer guard against a changed rack.
@@ -88,6 +92,9 @@ using PluginParameterQueue = std::array<TimedPluginParameter,65536>;
 struct GraphParameterUpdate { NativePlugin *plugin=nullptr;SignalRuntime *runtime=nullptr;uint64_t node=0;uint32_t parameter=0;double value=0;double *appliedBaseline=nullptr;double initialBaseline=0;GraphPluginEndpoint *endpoint=nullptr;bool resetModulation=false; };
 struct GraphControlPlan {
   uint64_t sourceRevision=0;
+  // A numeric recipe audition changes audible controls but keeps the accepted
+  // manual catalogue intact. Session owners still guard/cancel the gesture.
+  bool transientParameters=false;
   // A fixed-boundary group toggle changes only its wrapper's fade target.
   // Keeping the wrapper alive also makes skipped queue generations safe.
   std::shared_ptr<SongGroupRuntime> songGroups;
@@ -155,6 +162,8 @@ struct GraphControlPlan {
 };
 class NativePlugin {
   static constexpr uint32_t maximumFrames = 4096;
+  static uint64_t nextEditIncarnation();
+  const uint64_t editIncarnation_=nextEditIncarnation(); // Allocated off audio at construction.
   std::atomic<double> latency_{0};
   std::atomic<double> tail_{0};
   PluginDescriptor descriptor_;
@@ -326,6 +335,10 @@ public:
     outputDelayPosition_ = 0;
   }
   bool popEdit(uint32_t &, float &) noexcept;
+  bool popEdit(PluginEdit &) noexcept;
+  bool popEdit(PluginEdit &,PluginEditSource &) noexcept;
+  PluginEditSource editSource() const noexcept;
+  uint64_t droppedEdits() const noexcept;
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };
 class PluginChain {
@@ -605,12 +618,14 @@ public:
 
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &) noexcept;
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &);
+  std::unique_ptr<GraphControlPlan> prepareGraphParameterPreview(const NativeSong &accepted,
+      uint64_t graph,uint64_t node,uint32_t parameter,double value,std::span<const PluginParameter> catalog);
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &,bool copyHandoff,std::shared_ptr<const HostedSampleBindings> samples={});
   bool acceptsGraphControls(const GraphControlPlan &) const noexcept;
   void commitGraphControls(GraphControlPlan &) noexcept;
   void adoptGraphControls(const GraphControlPlan &,uint64_t frame) noexcept;
   bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan);
-  std::unique_ptr<RecordedAutomationPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &);
+  std::unique_ptr<RecordedAutomationPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &,std::span<const ParameterChange> manualBaselines={});
   bool publishRecordedAutomation(std::unique_ptr<RecordedAutomationPlan>);
   void attachMusicalAutomation(Renderer &, const NativeSong &);
   void scheduleMusical(uint32_t pattern, double tickPosition, double unitsPerSample,
@@ -632,6 +647,10 @@ public:
   void showEditor(size_t slot);
   std::vector<size_t> openEditors() const;
   bool popEdit(size_t slot, uint32_t &, float &) noexcept;
+  bool popEdit(size_t slot, PluginEdit &) noexcept;
+  bool popEdit(size_t slot,PluginEdit &,PluginEditSource &) noexcept;
+  PluginEditSource editSource(size_t slot) const noexcept;
+  uint64_t droppedEdits(size_t slot) const noexcept;
   bool parameter(uint32_t slot, uint32_t id, float value) noexcept;
   // Single control producer. One release publishes the complete batch, or no
   // values on failure. Caller validates IDs/ranges against its baseline catalog.

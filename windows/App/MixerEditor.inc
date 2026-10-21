@@ -27,6 +27,14 @@
     Json graphPluginParameterSnapshots()const {
         Json result=Json::array();for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())result.push_back(editor->snapshot());return result;
     }
+    void openGraphRecipeParameters(const std::string &graph,const std::string &node,const std::string &name) {
+        const auto key="recipe:"+graph+":"+node;auto &editor=graphPluginParameters[key];
+        if(!editor||editor->retired())editor=std::make_unique<ScreamSeq::PluginParametersWindow>(window,std::string(),name+" / Graph recipe",
+            [this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);},
+            [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},
+            [this]{return !busy&&!recoveryRestoring;},graph,node);
+        editor->show();
+    }
     void openGraphPluginParameters(const std::string &plugin){
         const auto &rack=view->session.document.at("nativePlugins");
         const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;});

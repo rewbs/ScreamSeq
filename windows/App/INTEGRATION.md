@@ -346,12 +346,20 @@ inspection uses private text and never changes the desktop clipboard. Copy and
 parse tasks use immutable inputs off the UI thread. Paste retains its captured
 destination and revision even if the cursor moves while parsing.
 
-Controller file operations: `document.save`, plus explicit Windows extension
+Controller file operations: `document.save`, `document.exportModule`, plus explicit Windows extension
 `document.open`. Save requires absolute UTF-8 paths and `.screamseq`/`.resonance`,
 explicit overwrite for existing files, and validates dry runs without publication
 or baseline changes. Open requires expectedRevision and explicit discard when
 unsaved. Successful-write request-ID deduplication and private PID pipe transport
 remain in the existing adapter/dispatch layers.
+
+File / Export module uses a native Windows chooser with an **Export** action.
+It captures the revision across the chooser and writes the validated source
+format through the existing atomic publisher. It leaves native save identity,
+dirty state, recovery protection and musical history intact. Incompatible
+native/hosted/opaque layers explain why a `.screamseq` Save As is required.
+Uncertain native completions retain a destination hash/readback review and
+never automatically repeat the export.
 
 Open, Recovery Restore, Close and session-end queries consult the native draft
 registry at final admission. Native Review raises retained work; Discard binds

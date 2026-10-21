@@ -1,4 +1,171 @@
 // Real native owners and worker calls, on the existing private fixture desktop.
+void applicationSampleLoopHandles(){
+  RestoreFixture fixture;auto &app=*fixture.app;
+  app.edit("sample.process",{{"sample",1},{"operation","trim"},{"start",0},{"end",128},{"channels","both"}});
+  app.edit("sample.loops.set",{{"sample",1},
+    {"normal",{{"start",0},{"end",128},{"enabled",true},{"reverse",true}}},
+    {"sustain",{{"start",32},{"end",96},{"enabled",true},{"pingpong",true}}}});
+  app.openSampleDetail();auto *tool=app.sampleDetailWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+  const auto press=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
+  const auto mouse=[&](UINT message,double x,double y){
+    const auto scale=GetDpiForWindow(window)/96.;
+    SendMessageW(window,message,message==WM_LBUTTONUP?0:MK_LBUTTON,MAKELPARAM(int(std::round(x*scale)),int(std::round(y*scale))));
+  };
+  const auto handle=[&](int index){
+    const auto handles=tool->snapshot().at("loopHandles");
+    for(const auto &h:handles)if(h.at("index")==index)return RestoreJson(h);
+    throw std::runtime_error("Expected enabled loop handle is missing");
+  };
+  const auto key=[&](WPARAM code,bool shift=false){
+    struct Restore{BYTE state[256]{};Restore(){restoreCheck(GetKeyboardState(state)!=FALSE,"Read private loop key state");}~Restore(){SetKeyboardState(state);}}restore;
+    BYTE state[256]{};std::copy(std::begin(restore.state),std::end(restore.state),std::begin(state));
+    state[VK_CONTROL]=0;state[VK_MENU]=0;state[VK_SHIFT]=shift?0x80:0;
+    restoreCheck(SetKeyboardState(state)!=FALSE,"Set private loop key modifiers");SetFocus(window);SendMessageW(window,WM_KEYDOWN,code,0);
+  };
+  const auto info=[&]{return app.documentOperation("sample.get",{{"sample",1}});};
+  const auto pcm=app.documentOperation("sample.pcm.get",{{"sample",1}}),baseline=info();
+  const auto original=songState(app),position=app.position(),selection=app.selection();
+  restoreCheck(tool->snapshot().at("loopHandles").size()==4,"Enabled normal and sustain loops did not expose four handles");
+  for(const auto index:{0,1}){
+    const auto h=handle(index);mouse(WM_LBUTTONDOWN,h.at("x"),h.at("y"));mouse(WM_LBUTTONUP,h.at("x"),h.at("y"));
+    restoreCheck(songState(app)==original,"Clicking an inset boundary without motion moved the loop");
+  }
+  const double delta=tool->snapshot().at("canvas")[2].get<double>()*16/128;
+  auto begin=[&]{
+    const auto h=handle(0);mouse(WM_LBUTTONDOWN,h.at("x"),h.at("y"));
+    mouse(WM_MOUSEMOVE,h.at("x").get<double>()+delta,h.at("y"));
+    restoreCheck(tool->snapshot().at("loopDragging")==true&&tool->snapshot().at("loops").at("normal").at("start")=="16",
+      "Loop handle did not stage its pointer movement");return h;
+  };
+  auto h=begin();restoreCheck(info()==baseline&&songState(app)==original,"Loop movement wrote before release");
+  key(VK_ESCAPE);restoreCheck(tool->snapshot().at("loops").at("normal").at("start")=="0"&&
+    !tool->snapshot().at("loopDragging").get<bool>()&&songState(app)==original,"Escape did not restore the loop gesture");
+  h=begin();ReleaseCapture();
+  restoreCheck(tool->snapshot().at("loops").at("normal").at("start")=="0"&&songState(app)==original,
+    "Capture loss committed a loop gesture");
+  h=begin();rawDraftText(GetDlgItem(window,5007),L"-.");
+  mouse(WM_LBUTTONUP,h.at("x").get<double>()+delta,h.at("y"));
+  SendMessageW(window,WM_TIMER,0x5345,0);
+  restoreCheck(restoreText(GetDlgItem(window,5007))==L"-."&&songState(app)==original&&
+    !tool->snapshot().at("loopDragging").get<bool>(),"Loop release discarded or saved newer raw fields");
+  press(5018);
+  h=begin();mouse(WM_LBUTTONUP,h.at("x").get<double>()+delta,h.at("y"));
+  const auto accepted=info();
+  restoreCheck(accepted.at("loopStart")==16&&accepted.at("loopEnd")==128&&accepted.at("reverseLoop")==true&&
+    accepted.at("sustainStart")==32&&accepted.at("sustainEnd")==96&&accepted.at("sustainPingpong")==true&&
+    app.documentOperation("sample.pcm.get",{{"sample",1}})==pcm&&!tool->snapshot().at("loops").at("dirty").get<bool>(),
+    "Released loop drag changed PCM, sibling loop, direction or retained an Apply requirement");
+  press(4804);restoreCheck(info()==baseline,"Loop drag did not undo in one step");
+  press(4805);restoreCheck(info()==accepted,"Loop drag did not redo");
+  // Selecting a handle and nudging it stays on the waveform keyboard owner.
+  h=handle(0);mouse(WM_LBUTTONDOWN,h.at("x"),h.at("y"));mouse(WM_LBUTTONUP,h.at("x"),h.at("y"));
+  key(VK_TAB);bool pumped=false;
+  app.sampleMutationCompletion=[&](const auto &method){if(method=="sample.loops.set"&&!pumped){pumped=true;SendMessageW(window,WM_KEYDOWN,VK_LEFT,0);}};
+  key(VK_LEFT);app.sampleMutationCompletion={};
+  restoreCheck(pumped&&info().at("loopEnd")==127,"Arrow did not move once or pumped input repeated the loop write");
+  key(VK_LEFT,true);restoreCheck(info().at("loopEnd")==63,"Shift+arrow did not move 64 frames");
+  key(VK_LEFT,true);restoreCheck(info().at("loopEnd")==17,"Loop handle crossed the opposite boundary");
+  const auto clamped=songState(app);key(VK_LEFT);
+  restoreCheck(songState(app)==clamped,"Clamped loop handle created no-op history");
+  key(VK_TAB);key(VK_RIGHT);
+  restoreCheck(info().at("sustainStart")==33&&info().at("loopEnd")==17,"Sustain nudge retargeted the normal loop");
+  restoreCheck(app.position()==position&&app.selection()==selection&&app.documentOperation("sample.pcm.get",{{"sample",1}})==pcm,
+    "Loop navigation changed pattern context or PCM");
+  // Keep retained completion behavior even when the loop write succeeded but
+  // a subsequent waveform refresh failed.
+  unsigned writes=0;bool failed=false;
+  app.sampleMutationCompletion=[&](const auto &method){
+    if(method=="sample.loops.set")++writes;
+    if(method=="sample.waveform.get"&&!failed){failed=true;rawDraftText(GetDlgItem(window,5011),L"newer");
+      throw std::runtime_error("Owned loop refresh failure");}
+  };
+  h=handle(3);mouse(WM_LBUTTONDOWN,h.at("x"),h.at("y"));mouse(WM_LBUTTONUP,h.at("x").get<double>()-delta,h.at("y"));
+  app.sampleMutationCompletion={};
+  restoreCheck(failed&&writes==1&&tool->snapshot().at("mutationCompletion").at("returned")==true&&
+    restoreText(GetDlgItem(window,5011))==L"newer","Loop refresh failure lost completion or newer text");
+  const auto committed=songState(app);press(4803);
+  restoreCheck(songState(app)==committed&&tool->snapshot().at("mutationCompletion").is_null()&&
+    restoreText(GetDlgItem(window,5011))==L"newer"&&writes==1,"Loop Review repeated the write or erased raw text");
+  std::cout<<"PASS sample loop handles: pointer/key edits, cancellation, bounds, history, PCM and retained failure\n";
+}
+void applicationSampleDrawingGestures(){
+  const auto press=[](HWND window,int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
+  for(const bool loseRefresh:{false,true}){
+    RestoreFixture fixture;auto &app=*fixture.app;app.openSampleDetail();
+    auto *tool=app.sampleDetailWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
+    rawDraftText(GetDlgItem(window,4819),L"0");rawDraftText(GetDlgItem(window,4820),L"32");press(window,4821);press(window,4814);
+    restoreCheck(tool->snapshot().at("precise")==true,"Drawing fixture did not load individual frames");
+    const auto original=app.documentOperation("sample.pcm.get",{{"sample",1}});
+    const auto other=app.documentOperation("sample.pcm.get",{{"sample",2}});
+    const auto initial=songState(app),target=tool->musicalTarget();
+    const auto canvas=tool->snapshot().at("canvas");const float scale=GetDpiForWindow(window)/96.f;
+    const auto mouse=[&](UINT message,float x,float y){
+      const int px=int((canvas[0].get<float>()+x*canvas[2].get<float>())*scale);
+      const int py=int((canvas[1].get<float>()+y*canvas[3].get<float>())*scale);
+      SendMessageW(window,message,message==WM_LBUTTONUP?0:MK_LBUTTON,MAKELPARAM(px,py));
+    };
+    const auto begin=[&]{mouse(WM_LBUTTONDOWN,.125f,.25f);mouse(WM_MOUSEMOVE,.375f,.75f);
+      restoreCheck(tool->snapshot().at("dragging")==true&&tool->snapshot().at("points").size()>=8,
+        "Native waveform gesture did not retain its stroke");};
+    unsigned writes=0;bool injected=false;
+    app.sampleMutationCompletion=[&](const auto &method){
+      if(method=="sample.draw")++writes;
+      if(loseRefresh&&method=="sample.waveform.get"&&!injected){
+        injected=true;rawDraftText(GetDlgItem(window,5007),L"-.");SetFocus(app.window);
+        throw std::runtime_error("Owned waveform read failure after released stroke");
+      }
+    };
+    begin();restoreCheck(songState(app)==initial,"Drawing movement committed before release");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
+    restoreCheck(tool->snapshot().at("points").empty()&&!tool->snapshot().at("dragging").get<bool>()&&writes==0&&songState(app)==initial,
+      "Escape saved a drawing or retained its capture");
+    begin();ReleaseCapture();
+    restoreCheck(tool->snapshot().at("points").empty()&&writes==0&&songState(app)==initial,
+      "Capture loss saved a drawing");
+    // Input pumped during a captured gesture must win over its next move/up.
+    begin();rawDraftText(GetDlgItem(window,4823),L"-.");mouse(WM_LBUTTONUP,.375f,.75f);
+    restoreCheck(tool->snapshot().at("points").empty()&&restoreText(GetDlgItem(window,4823))==L"-."&&
+      writes==0&&songState(app)==initial,"Released stroke erased or committed newer numeric input");
+    press(window,4826);
+    // A deliberate numeric batch is independent of a new pointer stroke.
+    rawDraftText(GetDlgItem(window,4822),L"0");rawDraftText(GetDlgItem(window,4823),L"0.5");press(window,4824);
+    const auto staged=tool->snapshot().at("points");mouse(WM_LBUTTONDOWN,.125f,.25f);
+    restoreCheck(!tool->snapshot().at("dragging").get<bool>()&&tool->snapshot().at("points")==staged&&writes==0,
+      "New pointer gesture absorbed a staged numeric batch");
+    press(window,4826);
+    begin();const auto stroke=tool->snapshot().at("points");mouse(WM_LBUTTONUP,.375f,.75f);
+    app.sampleMutationCompletion={};
+    const auto changed=app.documentOperation("sample.pcm.get",{{"sample",1}});
+    restoreCheck(writes==1&&changed!=original&&app.documentOperation("sample.pcm.get",{{"sample",2}})==other,
+      "Released stroke did not write exactly once to its captured sample");
+    restoreCheck(tool->musicalTarget().at("id")==target.at("id")&&tool->snapshot().at("viewStart")==0&&
+      tool->snapshot().at("viewEnd")==32,"Released stroke changed sample identity or viewport");
+    if(loseRefresh){
+      const auto held=tool->snapshot();
+      restoreCheck(injected&&held.at("mutationCompletion").at("returned")==true&&held.at("points")==stroke&&
+        restoreText(GetDlgItem(window,5007))==L"-."&&GetFocus()==app.window,
+        "Failed drawing refresh erased stroke, raw fields, result or newer focus");
+      const auto committed=songState(app);press(window,4803);mouse(WM_LBUTTONUP,.375f,.75f);
+      restoreCheck(songState(app)==committed&&tool->snapshot().at("mutationCompletion").is_null()&&
+        tool->snapshot().at("points")==stroke&&restoreText(GetDlgItem(window,5007))==L"-."&&writes==1,
+        "Drawing Review repeated the write or erased retained work");
+      app.edit("history.undo",{{"domain","all"}});
+      restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==original,
+        "Uncertain released stroke did not undo in one step");
+    }else{
+      restoreCheck(tool->snapshot().at("points").empty()&&tool->snapshot().at("mutationCompletion").is_null(),
+        "Successful release retained an Apply requirement");
+      press(window,4804);restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==original,
+        "Released stroke required more than one Undo");
+      press(window,4805);restoreCheck(app.documentOperation("sample.pcm.get",{{"sample",1}})==changed,
+        "Released stroke failed Redo");
+      const auto accepted=songState(app);begin();mouse(WM_LBUTTONUP,.375f,.75f);
+      restoreCheck(songState(app)==accepted&&tool->snapshot().at("points").empty(),
+        "Repeated identical stroke created a history entry");
+    }
+    std::cout<<"PASS released sample stroke, cancellation, staged-input isolation and "<<(loseRefresh?"retained refresh failure":"one-step history/no-op")<<"\n";
+  }
+}
 void applicationSampleMutationRecovery(){
   using Json=RestoreJson;
   const auto press=[](HWND window,int id){SendMessageW(window,WM_COMMAND,id,reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};

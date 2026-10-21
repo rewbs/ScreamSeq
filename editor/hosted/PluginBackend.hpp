@@ -42,6 +42,14 @@ public:
   virtual void closeEditor() = 0;
   virtual bool editorOpen() const = 0;
   virtual bool popEdit(uint32_t &, float &) noexcept = 0;
+  virtual bool popEdit(PluginEdit &event) noexcept {
+    event.hostTime=0;return popEdit(event.id,event.value);
+  }
+  // Monotonic for one backend incarnation, including native editor reopen.
+  // A vendor replacement starts a new counter even behind a retained facade;
+  // capture owners must retire its epoch. Read alongside failure() on the
+  // same control owner as popEdit(), never from the audio callback.
+  virtual uint64_t droppedEdits() const noexcept {return 0;}
   virtual PluginFailure failure() const noexcept { return {}; }
 };
 class PluginBackendFactory {

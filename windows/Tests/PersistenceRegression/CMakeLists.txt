@@ -8,7 +8,7 @@ set(SCREAMSEQ_ENGINE_LIB_DIR "${ROOT}/bin/windows-snapshot-fix/Release" CACHE PA
 add_library(persistence-project STATIC
   "${ROOT}/editor/TrackerDocument.cpp" "${ROOT}/editor/SampleArchive.cpp"
   "${ROOT}/windows/Project/NativeProject.cpp" "${ROOT}/windows/Project/NativeMetadata.cpp"
-  "${ROOT}/windows/Project/BinaryPlist.cpp")
+  "${ROOT}/editor/project/BinaryPlist.cpp")
 target_include_directories(persistence-project PUBLIC "${ROOT}/windows/Project" "${ROOT}" "${ROOT}/src" "${ROOT}/common" "${ROOT}/include" "${ROOT}/include/flac/include" "${ROOT}/include/nlohmann-json/include")
 target_compile_definitions(persistence-project PUBLIC NOMINMAX UNICODE _UNICODE _WIN32_WINNT=0x0A00 _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS LIBOPENMPT_BUILD OPENMPT_EDITOR_CORE MPT_WITH_MINIZ MPT_WITH_MINIMP3 MPT_WITH_STBVORBIS MPT_WITH_FLAC FLAC__NO_DLL)
 target_compile_options(persistence-project PUBLIC /utf-8 /bigobj /permissive- /Zc:__cplusplus /Zc:preprocessor)

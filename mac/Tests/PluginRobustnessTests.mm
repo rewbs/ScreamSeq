@@ -14,6 +14,9 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <mach/mach_time.h>
+#include <thread>
+#include <chrono>
 #include "GraphRealtimeAudit.hpp"
 using namespace Tracker;
 using namespace OpenMPT;
@@ -72,6 +75,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
   }
   { // Editor reports: clamp, ignore, coalesce. None stops rendering.
     VST3Plugin p(effect, 48000, false);
+    const auto before=mach_absolute_time();
     check(edit(7, 1.5) == 1 && p.droppedEdits() == 0 && p.parameters().at(0).value == 1.f, "Out-of-range editor value is clamped");
     check(edit(7, -3) == 1 && p.parameters().at(0).value == 0.f, "Negative editor value is clamped");
     check(edit(9999, .5) == 0 && p.droppedEdits() == 1, "Unknown parameter is ignored and counted");
@@ -79,15 +83,24 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
     // A long gesture with the transport stopped: nothing drains meanwhile.
     for (int i = 0; i < 40000; ++i) check(edit(7, double(i % 1000) / 1000) == 1, "Gesture accepted while stopped");
     check(edit(7, .25) == 1, "Final gesture value");
+    const auto after=mach_absolute_time();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    const auto drain=mach_absolute_time();
     std::array<float, 512> audio; audio.fill(.4f);
     tracker_audit_begin(); const bool ok = p.process(audio.data(), 256, 0); tracker_audit_end(&a, &f, &l);
     check(ok && a + f + l == 0, "Rendering survives the gesture without allocation, free or lock");
     check(std::abs(audio[0] - .1f) < 1e-6 && std::abs(audio[511] - .1f) < 1e-6, "Only the newest editor value is audible");
     check(p.droppedEdits() == 2 + 40003 - 8192, "Only surplus UI notifications were dropped");
-    uint32_t id = 0; float value = -1; size_t popped = 0;
-    while (p.popEdit(id, value)) { check(id == 7 && value >= 0 && value <= 1, "UI notification is normalized"); ++popped; }
+    PluginEdit event;size_t popped=0;uint64_t previous=before;
+    while(p.popEdit(event)) {
+      check(event.id==7&&event.value>=0&&event.value<=1,"UI notification is normalized");
+      check(before&&event.hostTime>=previous&&event.hostTime<=after&&event.hostTime<drain,"UI timestamp must retain ordered callback time across delayed drain");
+      previous=event.hostTime;++popped;
+    }
     check(popped == 8192, "UI queue stays bounded");
     check(edit(7, .75) == 1 && !p.state().state.empty() && p.parameters().at(0).value == .75f, "State capture flushes the pending value");
+    uint32_t id=0;float value=0;
+    check(p.popEdit(id,value)&&id==7&&value==.75f,"Legacy edit reader remains compatible");
     audio.fill(.4f); check(p.process(audio.data(), 256, 256) && std::abs(audio[0] - .3f) < 1e-6, "Flushed value reached the processor");
   }
   { // All-notes-off for more held notes than one event list can carry.

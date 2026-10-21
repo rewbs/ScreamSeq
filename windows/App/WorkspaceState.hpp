@@ -23,6 +23,8 @@ public:
 	std::string layout="Compose", active="notes", focus="pattern";
 	float rightWidth=340, lowerHeight=210;
 	bool lowerVisible=true;
+    bool contextPanelVisible=true;
+    float contentLeft() const { return contextPanelVisible?170.f:6.f; }
 
 	static size_t index(const std::string &id) {
 		if(id=="notes") return 0;
@@ -57,7 +59,7 @@ public:
 	}
 	WorkspaceGeometry geometry(float width,float height,float minimumLowerHeight=128,float top=88) const {
 		WorkspaceGeometry g;
-		const float left=170, bottom=std::max(top+180,height-44);
+		const float left=contentLeft(), bottom=std::max(top+180,height-44);
 		const bool compose=layout!="Pattern focus";
 		const float right=visible() ? width-std::clamp(rightWidth,300.0f,std::max(300.0f,width-left-350)) : width-8;
 		const bool lower=compose&&lowerVisible;

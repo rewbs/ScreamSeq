@@ -13,7 +13,7 @@ void need(bool ok,const char *why){if(!ok)throw Api::ApiError(-32602,why);}
 void keys(const Json &p,std::initializer_list<const char *> allowed){need(p.is_object(),"Expected mixer object");for(auto i=p.begin();i!=p.end();++i)need(std::any_of(allowed.begin(),allowed.end(),[&](auto k){return i.key()==k;}),"Unknown mixer field");}
 const Json &field(const Json &p,const char *k){need(p.contains(k),"Missing mixer field");return p.at(k);}
 double number(const Json &v,double lo,double hi){need(v.is_number()&&!v.is_boolean(),"Expected mixer number");auto n=v.get<double>();need(std::isfinite(n)&&n>=lo&&n<=hi,"Mixer number outside range");return n;}
-uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){auto n=number(v,double(lo),double(hi));need(std::floor(n)==n,"Expected mixer integer");return uint64_t(n);}
+uint64_t integer(const Json &v,uint64_t lo,uint64_t hi){const auto n=Api::boundedInteger(v,lo,hi);need(n.has_value(),"Expected a mixer integer within its allowed range");return *n;}
 bool flag(const Json &p,const char *k,bool fallback=false){if(!p.contains(k))return fallback;need(p.at(k).is_boolean(),"Expected mixer boolean");return p.at(k).get<bool>();}
 const Json &array(const Json &v,size_t maximum){need(v.is_array()&&v.size()<=maximum,"Invalid mixer array or capacity");return v;}
 std::string text(const Json &v,size_t maximum){return Project::validatedNativeText(v,maximum);}

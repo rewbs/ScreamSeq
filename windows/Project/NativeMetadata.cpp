@@ -3,6 +3,7 @@
 #include "ScratchGestureJSON.hpp"
 #include "ProjectPreservation.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/IntegerValidation.hpp"
 #include "soundlib/NativeNoteEffects.h"
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,21 @@ const Json &object(const Json &v) { need(v.is_object(), "Expected metadata dicti
 const Json &array(const Json &v, size_t maximum) { need(v.is_array() && v.size() <= maximum, "Invalid metadata array or capacity"); return v; }
 const Json &field(const Json &v, const char *key) { object(v); need(v.contains(key), "Missing required metadata field"); return v.at(key); }
 Json optional(const Json &v, const char *key, Json fallback) { object(v); return v.contains(key) ? v.at(key) : std::move(fallback); }
+// File recovery accepts equivalent numeric representations before producing the
+// canonical integer tree. API edits and strict saves keep their existing rules.
+thread_local bool importingMetadataIntegers=false;
+struct MetadataIntegerImportScope {
+  bool previous=importingMetadataIntegers;
+  MetadataIntegerImportScope(){importingMetadataIntegers=true;}
+  ~MetadataIntegerImportScope(){importingMetadataIntegers=previous;}
+  MetadataIntegerImportScope(const MetadataIntegerImportScope &)=delete;
+  MetadataIntegerImportScope &operator=(const MetadataIntegerImportScope &)=delete;
+};
 uint64_t integer(const Json &v, uint64_t lo, uint64_t hi) {
+  if(importingMetadataIntegers&&v.is_number_float()) {
+    const auto value=Tracker::boundedUnsignedInteger(v.get<double>(),lo,hi);
+    need(value.has_value(),"Metadata integer out of range");return *value;
+  }
   need(v.is_number_integer(), "Expected metadata integer");
   if (v.is_number_unsigned()) { const auto n = v.get<uint64_t>(); need(n >= lo && n <= hi, "Metadata integer out of range"); return n; }
   const auto n = v.get<int64_t>(); need(n >= 0 && uint64_t(n) >= lo && uint64_t(n) <= hi, "Metadata integer out of range"); return uint64_t(n);

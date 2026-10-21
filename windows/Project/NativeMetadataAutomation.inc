@@ -85,7 +85,11 @@ PatternPerformance decodePerformance(const Json &v) {
   for (const auto &b : items(v,"bindings",255)) need(p.bindings.emplace(uint16_t(u32(b,"id",1,255)),ParameterBinding{text(field(b,"plugin"),128),u32(b,"parameter"),text(field(b,"name"),256)}).second,"Duplicate parameter binding");
   for (const auto &c : items(v,"commands",maximumPatternCommands)) {
     const auto kind = u32(c,"kind",0,8);
-    p.commands.push_back({decodeID(field(c,"pattern")),decodeID(field(c,"track")),u32(c,"position"),isNudge(PatternCommandKind(kind))?uint32_t(integer(optional(c,"duration",0),0,UINT32_MAX)):u32(c,"duration"),uint8_t(u32(c,"column",0,maximumEffectColumns-1)),PatternCommandKind(kind),uint16_t(u32(c,"binding",0,255)),real(c,"value",-96,96),uint8_t(integer(optional(c,"pitchRange",2),1,96)),uint8_t(u32(c,"effect",0,255)),uint8_t(u32(c,"parameter",0,255))});
+    // Match the Mac file decoder's zero default. Command validation below and
+    // validateMetadataReferences still reject missing durations for slides and
+    // native operations that require them; no timing units are inferred here.
+    const auto duration=uint32_t(integer(optional(c,"duration",0),0,UINT32_MAX));
+    p.commands.push_back({decodeID(field(c,"pattern")),decodeID(field(c,"track")),u32(c,"position"),duration,uint8_t(u32(c,"column",0,maximumEffectColumns-1)),PatternCommandKind(kind),uint16_t(u32(c,"binding",0,255)),real(c,"value",-96,96),uint8_t(integer(optional(c,"pitchRange",2),1,96)),uint8_t(u32(c,"effect",0,255)),uint8_t(u32(c,"parameter",0,255))});
     PatternJSON::decode(p.commands.back(),c);validateNativePatternCommand(p.commands.back());
   }
   return p;

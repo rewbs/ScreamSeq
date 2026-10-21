@@ -1,11 +1,40 @@
 // File-open recovery only. The writer and all editing APIs use strict validators.
+namespace {
+// Canonicalize only understood file fields, before the existing strict record
+// validators. Unknown extensions and opaque plugin bytes never pass through a
+// numeric conversion. Invalid representations keep the ordinary recovery path.
+uint64_t fileInteger(Json &value,uint64_t maximum) {
+  if(value.is_number_float()) {
+    const auto converted=Tracker::boundedUnsignedInteger(value.get<double>(),0,maximum);
+    need(converted.has_value(),"Project integer outside range or not integral");
+    value=*converted;return *converted;
+  }
+  return integer(value,maximum);
+}
+void filePluginIntegers(Json &plugin) {
+  need(plugin.is_object(),"Invalid plugin record");
+  for(const auto *key:{"type","subtype","manufacturer"})fileInteger(plugin.at(key),UINT32_MAX);
+  if(plugin.contains("instrument"))fileInteger(plugin["instrument"],255);
+  for(const auto *key:{"auxiliaryInputs","auxiliaryOutputs"})if(plugin.contains(key)) {
+    (void)array(plugin[key],63);
+    for(auto &bus:plugin[key])fileInteger(bus,63);
+  }
+  if(plugin.contains("instrumentAssignments")) {
+    (void)array(plugin["instrumentAssignments"],255);
+    for(auto &assignment:plugin["instrumentAssignments"]) {
+      need(assignment.is_object(),"Invalid plugin instrument assignment");
+      fileInteger(assignment.at("instrument"),255);fileInteger(assignment.at("channel"),16);
+    }
+  }
+}
+}
 OpenedProject openNativeProject(const std::filesystem::path &path) {
   auto bytes=readProjectBytes(path);auto root=decodePlist(bytes);
   need(root.is_object(),"Native project root must be a dictionary");
   Tracker::ProjectLoadRecovery report;
   Json originals=Json::object();
   for(const char *key:{"version","native","plugins","automation","sequence","recoveryTake"})if(root.contains(key))originals[key]=root.at(key);
-  if(!root.contains("version")||!root["version"].is_number_integer()||root["version"]!=6)
+  if(!root.contains("version")||root["version"]!=6)
     report.warn("Unsupported project container version; recovered understood fields",false,true);
   root["version"]=6;
   auto snapshot=data(root.at("module"),512u*1024u*1024u);need(!snapshot.empty(),"Empty project snapshot");
@@ -17,7 +46,7 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
   }
   OpenedProject result;result.document=std::make_unique<Tracker::Document>(snapshot);
   if(root.contains("sequence"))try{
-    const auto sequence=integer(root.at("sequence"),255);
+    const auto sequence=fileInteger(root.at("sequence"),255);
     need(sequence<result.document->song().Order.GetNumSequences(),"Selected sequence does not exist");
     result.document->song().Order.SetSequence(static_cast<OpenMPT::SEQUENCEINDEX>(sequence));
   }catch(const std::exception &e){report.warn(std::string("Defaulted invalid selected sequence: ")+e.what(),false,true);}
@@ -34,7 +63,7 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
   else {
     const auto count=std::min<size_t>(savedPlugins.size(),64);
     for(size_t index=0;index<count;++index)try{
-      auto plugin=savedPlugins[index];need(plugin.is_object(),"Invalid plugin record");
+      auto plugin=savedPlugins[index];filePluginIntegers(plugin);
       if(!plugin.contains("instrumentAssignments")){
         auto primary=plugin.contains("instrument")?integer(plugin["instrument"],255):0;
         plugin["instrumentAssignments"]=Json::array();if(primary)plugin["instrumentAssignments"].push_back({{"instrument",primary},{"channel",1}});
@@ -62,8 +91,8 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
     const auto count=std::min<size_t>(savedAutomation.size(),100000);
     for(size_t index=0;index<count;++index)try{
       auto point=savedAutomation[index];need(point.is_array()&&point.size()==4,"Invalid absolute automation record");
-      const auto slot=integer(point[0],63);need(slots.contains(size_t(slot)),"Recorded automation plugin was not recovered");
-      (void)integer(point[1],UINT32_MAX);(void)integer(point[3],uint64_t(48000)*604800);
+      const auto slot=fileInteger(point[0],63);need(slots.contains(size_t(slot)),"Recorded automation plugin was not recovered");
+      (void)fileInteger(point[1],UINT32_MAX);(void)fileInteger(point[3],uint64_t(48000)*604800);
       need(point[2].is_number()&&std::isfinite(point[2].get<float>()),"Non-finite automation value");
       point[0]=slots.at(size_t(slot));root["automation"].push_back(std::move(point));
     }catch(const std::exception &e){report.warn("Skipped recorded automation entry "+std::to_string(index)+": "+e.what(),true);}
@@ -71,18 +100,18 @@ OpenedProject openNativeProject(const std::filesystem::path &path) {
   }
   if(root.contains("recoveryTake"))try{
     auto &take=root["recoveryTake"];need(take.is_object(),"Invalid recovery take");(void)flag(take.at("compatible"));
-    for(const char *key:{"missingTime","exhaustedVoices","overflow"})(void)integer(take.at(key),UINT32_MAX);
+    for(const char *key:{"missingTime","exhaustedVoices","overflow"})(void)fileInteger(take.at(key),UINT32_MAX);
     if(take.contains("inputError"))(void)text(take.at("inputError"),512);
     const auto events=take.at("events");need(events.is_array(),"Invalid recovery events");Json kept=Json::array();
     const auto count=std::min<size_t>(events.size(),Tracker::maximumPreciseNotes);
     for(size_t index=0;index<count;++index)try{
-      const auto &event=events[index];need(event.is_object(),"Invalid recovery event");
+      auto event=events[index];need(event.is_object(),"Invalid recovery event");
       for(const char *key:{"pattern","track"}){
         const auto id=text(event.at(key),32);need(id.size()>1&&id.front()=='n'&&id[1]!='0',"Invalid recovered identity");
         uint64_t value=0;for(size_t i=1;i<id.size();++i){need(id[i]>='0'&&id[i]<='9'&&value<Tracker::NativeSong::maximumID/10,"Invalid recovered identity");value=value*10+id[i]-'0';}need(value>0&&value<Tracker::NativeSong::maximumID,"Invalid recovered identity");
       }
-      (void)integer(event.at("position"),UINT32_MAX);(void)integer(event.at("instrument"),255);
-      const auto note=integer(event.at("note"),255),velocity=integer(event.at("velocity"),127);
+      (void)fileInteger(event.at("position"),UINT32_MAX);(void)fileInteger(event.at("instrument"),255);
+      const auto note=fileInteger(event.at("note"),255),velocity=fileInteger(event.at("velocity"),127);
       need(((note>=1&&note<=120)||note==254||note==255)&&velocity>0,"Invalid recovered note or velocity");kept.push_back(event);
     }catch(const std::exception &e){report.warn("Skipped recovery event "+std::to_string(index)+": "+e.what(),true);}
     if(count<events.size())report.warn("Skipped recovery events beyond supported capacity",true);

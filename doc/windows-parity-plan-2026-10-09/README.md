@@ -1,5 +1,80 @@
 # ScreamSeq Windows parity implementation plan
 
+**Latest executed checkpoint (20 October, `7fb99d0b2`):**
+[recorded take/graph qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md)
+records the successful Windows ARM64 batch, all six selected CTest registrations
+and the affected actual-app graph parameter/assignment case. Windows x64 and
+both Mac architectures are building in the current PR qualification batch.
+The preceding candidate completed the full twenty-return reciprocal fixture
+gate; its exact evidence remains in the [CI review](GESTURE-CI-REVIEW-2026-10-20.md).
+Gesture arming/intake/recovery and final
+shared-main integration remain open. The checkpoints below retain their
+historical scope; consult the [current queue](CONTINUATION-QUEUE-2026-10-20.md)
+before acting on an old failure or source-only label.
+
+**Current implementation checkpoint (19 October):** the planning inventory below
+is historical. Shared main is `07424c0c675c57caf7828ea23b6c7a4a13a5cf4b`; see the
+[main integration record](../MAIN_INTEGRATION_2026-10-19.md) and
+[plugin/graph continuation](PLUGIN-EDIT-BATCH-2026-10-19.md) and
+[rack preview qualification](PARAMETER-PREVIEW-BATCH-2026-10-19.md) for implemented,
+qualified and still-pending work. Do not implement an old absence claim without
+checking those records and current source.
+
+**20 October continuation:** [context-panel qualification](CONTEXT-PANEL-2026-10-19.md)
+and the [combined candidate results](RECIPE-SAMPLE-QUALIFICATION-2026-10-20.md)
+record a successful ARM64 build, 16 of 17 native groups passed, 21 application
+cases passed and two provider skips. The corrected context-panel fixture now
+passes. The new metadata test failed on an NF/NR field assumption; its test-only
+correction awaits a later build. [Recipe parameter
+previews](RECIPE-PREVIEW-BATCH-2026-10-20.md) and [sample strokes on
+release](SAMPLE-STROKE-BATCH-2026-10-20.md), including [direct loop
+handles](SAMPLE-LOOP-HANDLES-2026-10-20.md), have this bounded Windows ARM64
+qualification. They are not yet merged to main; do not count them as completed
+cross-platform parity.
+
+The [zero-duration file-load correction](DURATION-DEFAULTS-2026-10-20.md)
+records a newly reproduced loss of valid commands, distinct from the old invalid
+slide vector. All three actual-app derivatives pass two saves/reopens on the
+candidate; the C++ test correction still needs execution. The existing codec
+baseline has not been relaxed.
+
+**Later B3 checkpoint:** [shared contract qualification](SHARED-CONTRACT-QUALIFICATION-2026-10-20.md)
+records a successful `b3fe23e45` ARM64 build, 21/22 native registrations passed,
+all ten actual-app plugin contracts passed, and exact F01–F05 plus separate
+duration checks passed. The metadata test correction now passes. One API test
+needs fresh request IDs; the codec corpus stopped because a proven protected
+Save refusal lacked an explicit outcome. Both follow-up corrections are source
+only. The next build gate is **06:57:04 UTC**; Mac/x64 and final integration
+remain open.
+
+The same retained B3 executable subsequently passed **18 paired edited-metadata
+stages**, covering opaque extensions through title/graph edits, plugin movement
+and deletion, Undo/Redo and reopen. The shared check is scheduled on both native
+workflows and retains an edited exchange input; Mac and reciprocal execution are
+still pending. This required no new build.
+
+[Mac rack dry runs](RACK-DRY-RUN-2026-10-20.md) are a subsequent source batch,
+outside the frozen `b1581c9c8` build. The shared contract passes on the existing
+Windows app; Mac compilation/execution and API baseline reconciliation remain
+pending.
+
+[Shared API integer validation](INTEGER-API-BATCH-2026-10-20.md) prepares
+consistent integral-number semantics and safe exact bounds on both platforms.
+The original Windows rejection is reproduced; B3's shared and actual-app integer
+checks now pass. Mac execution and baseline reconciliation remain open.
+
+[Terminal request replay](REQUEST-REPLAY-BATCH-2026-10-20.md) prepares Windows
+retention of terminal mutation errors and conservative classification of
+unclassified host failures. B3's cache and actual-app replay checks pass. Its
+test-ID correction, previously unreached real-pipe groups, file-outcome follow-up
+and Mac contract remain unqualified.
+
+[Shared typed project preservation](PROPERTY-TREE-BATCH-2026-10-20.md) moves the
+codec/merge into `editor/` and prepares a native Mac data bridge. The subsequent
+[Mac session ownership batch](MAC-PRESERVATION-BATCH-2026-10-20.md) connects
+staged Open, Save and recovery to that shared layer. It is source only;
+unknown-metadata parity is not qualified or merged to main.
+
 **Planning only.** Reviewed against latest remote main **`16cab100b898f66726cfab6c2386887a9bcf5fd4`**, the supplied Mac baseline **`ffe81aa4bfa83bc89b1e1dd92db06c67819c247a`**, and checkout **`03321c22a525f9fb0e11bda257bde404bdf47213`** with five pre-existing uncommitted retirement source/test changes. Latest source/evidence corrections are in the [final planning review](final-planning-review.md), backed by its [inspection snapshot](final-planning-snapshot.json). The remote main and all reference/peer input hashes were rechecked. No product code was modified, application launched, build/test started, or implementation undertaken for this review. Existing changes were left untouched; local `main` is stale and was not used as the latest source.
 
 **Recommended first remaining batch: P0b retained-work safety.** Reuse the branch's existing typed results, native Review paths and direct-render protection. Finish unknown-outcome reconciliation and the complete owner census, then wire final document-departure admission across Open/API/recovery/Close/session end. P0a build/take/layout repairs are already on main. Follow with P0c typed fixture/API conformance, P1 native Mixer strips and P2 named/grouped tracks; P3–P7 complete composing, asset, graph, persistence and device work; P8 is the cross-platform integration gate.

@@ -1,4 +1,5 @@
 #import "../Bridge/TrackerSession.h"
+#include "../Bridge/NativePropertyTree.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include "soundlib/ModInstrument.h"
@@ -7,6 +8,73 @@
 #include <chrono>
 #include <thread>
 static void check(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+static void exactParameterHistory() {
+  using namespace ScreamSeq;
+  TrackerSession *session=[TrackerSession new];[session newSong:YES];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *values)->NSDictionary * {
+    auto params=[values mutableCopy];params[@"expectedRevision"]=session.automationRevision;
+    auto response=[session automationMethod:method params:params error:&error];
+    if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return response[@"data"];
+  };
+  auto tree=[&](){NSData *data=[session recoveryData:&error];check(data!=nil,"Serialize exact history fixture");return NativePropertyTree::decode(data);};
+  auto same=[&](const Project::Value &expected,const char *message){check(Project::sameStoredValue(tree(),expected),message);};
+  NSDictionary *descriptor=nil;for(NSDictionary *p in session.builtInPlugins)if([p[@"classID"] isEqual:@"resonance.gainer.v1"])descriptor=p;
+  check(descriptor!=nil,"Exact history Gainer fixture exists");
+  check([session addPlugin:descriptor error:&error]&&[session addPlugin:descriptor error:&error],"Add exact history rack");
+  NSString *first=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  auto set=[&](double value){call(@"plugin.parameters.set",@{@"plugin":first,@"values":@[@{@"id":@1,@"value":@(value)}]});};
+  // Like F04, a musical lane keeps Save on the accepted manual baseline rather
+  // than capturing effective vendor output. Give the other processor nonempty
+  // state so full-tree comparison also detects damage outside the edited slot.
+  check([session pluginParameter:1 identifier:1 value:-3 record:NO error:&error],"Set unrelated processor baseline");
+  call(@"automation.pattern.set",@{@"pattern":@0,@"plugin":first,@"parameter":@1,@"points":@[@{@"position":@0,@"value":@0.5}]});
+  auto fixture=tree();fixture["plugins"][0]["state"]=Project::Value::binary({});
+  fixture["futureHistorySentinel"]={{"integer",int64_t(9007199254740993LL)},{"real",1.0},{"bytes",Project::Value::binary({0,255,7})}};
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([NativePropertyTree::encode(fixture) writeToFile:path atomically:YES]&&[session openPath:path error:&error],"Open imported empty-state history fixture");
+  NSData *sourceBytes=[NSData dataWithContentsOfFile:path];
+  check(sourceBytes!=nil&&[[session snapshot:0][@"requiresSaveAs"] boolValue],
+    "Unknown history-fixture extension protects its original file");
+  const auto baseline=tree();
+  check(baseline["plugins"][0]["state"].get_binary().empty()&&!baseline["plugins"][1]["state"].get_binary().empty(),"Empty and nonempty opaque baselines retained");
+  set(-6);const auto firstEdit=tree();
+  check(!firstEdit["plugins"][0]["state"].get_binary().empty(),"Manual edit persists opaque state");
+  check([session editPattern:0 row:1 channel:0 values:@[@52,@1,@0,@0,@0,@0] error:&error],"Interleave note after saved parameter");
+  const auto noteEdit=tree();
+  call(@"history.undo",@{});same(firstEdit,"Note Undo preserves folded parameter state");
+  call(@"history.undo",@{});same(baseline,"Parameter Undo restores exact imported empty state and unrelated data");
+  call(@"history.redo",@{});same(firstEdit,"Parameter Redo restores exact folded state");
+  call(@"history.redo",@{});same(noteEdit,"Note Redo restores entire composing state");
+  // Undo must restore pending values too when a later save folded two separate
+  // edits; restoring only the old opaque blob would lose the earlier edit.
+  set(-9);set(-12);const auto latest=tree();
+  call(@"history.undo",@{});const auto pendingRestored=tree();
+  bool gainRestored=false;for(NSDictionary *p in [session pluginParameters:0])if([p[@"id"] intValue]==1)gainRestored=std::abs([p[@"manualValue"] doubleValue]+9)<1e-5;
+  check(gainRestored&&!Project::sameStoredValue(pendingRestored,latest),"Undo restores pending manual value after later save");
+  call(@"history.undo",@{});same(noteEdit,"Second parameter Undo restores original folded blob");
+  call(@"history.redo",@{});same(pendingRestored,"Redo restores exact earlier pending state");
+  call(@"history.redo",@{});same(latest,"Redo restores exact latest saved state");
+  // The opaque sentinel deliberately makes this an imported compatibility
+  // fixture. Saving must preserve that source, even after a successful Undo.
+  NSString *beforeRefusal=session.automationRevision;error=nil;
+  check(![session savePath:path error:&error]&&error!=nil&&
+    [error.localizedDescription containsString:@"Save a new .screamseq copy"]&&
+    [session.automationRevision isEqual:beforeRefusal]&&
+    [[NSData dataWithContentsOfFile:path] isEqual:sourceBytes],
+    "Protected history fixture refuses overwrite without changing source or revision");
+  same(latest,"Protected-source Save refusal preserves the complete edited tree");
+  NSString *copyPath=[path.stringByDeletingPathExtension stringByAppendingString:@"-copy.screamseq"];
+  error=nil;
+  if(![session savePath:copyPath error:&error])
+    throw std::runtime_error(std::string("Save exact parameter history copy: ")+error.localizedDescription.UTF8String);
+  if(![session openPath:copyPath error:&error])
+    throw std::runtime_error(std::string("Reopen exact parameter history copy: ")+error.localizedDescription.UTF8String);
+  same(latest,"Reopened history result retains complete typed tree");
+  check([[NSData dataWithContentsOfFile:path] isEqual:sourceBytes],"History Save a copy preserves imported source bytes");
+  [NSFileManager.defaultManager removeItemAtPath:copyPath error:nil];
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];[session shutdown];
+}
 static void mixerControlHistory() {
   TrackerSession *session=[TrackerSession new];[session newSong:YES];
   auto call=[&](NSString *method,NSDictionary *values,bool write=false)->NSDictionary * {
@@ -214,6 +282,7 @@ static void liveHistory() {
 }
 int main(int argc,char **argv){@autoreleasepool {try {
   if(argc>1&&std::string(argv[1])=="--device"){liveHistory();return 0;}
+  exactParameterHistory();
   mixerControlHistory();
   Tracker::Document document;auto cell=document.cell(0,1,0);cell.note=49;
   document.edit({{0,1,0,{},cell}});auto first=document.historyHead(false);
@@ -326,7 +395,7 @@ int main(int argc,char **argv){@autoreleasepool {try {
   check(![session addPlugin:descriptor target:@"n9999999" error:&invalid] && [session.automationRevision isEqual:beforeFailure],"Invalid destination leaves plugin, route and history unchanged");
   call(@"plugin.add",@{@"descriptor":descriptor},true);call(@"plugin.add",@{@"descriptor":descriptor},true);
   auto original=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
-  call(@"plugin.move",@{@"slot":@0,@"position":@2},true);
+  call(@"plugin.move",@{@"plugin":original[0],@"position":@2},true);
   auto moved=[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"];
   check([moved[2] isEqual:original[0]]&&[moved[0] isEqual:original[1]]&&[moved[1] isEqual:original[2]],"Rack moves insert in order, rather than swapping endpoints");
   call(@"history.undo",@{},true);check([[[session snapshot:0][@"nativePlugins"] valueForKey:@"instanceID"] isEqual:original],"Rack drag is one undoable edit");

@@ -78,8 +78,22 @@ class SampleDetailUITests(unittest.TestCase):
     def test_mouse_drawing_cancellation_and_stale_gesture_preserve_audio(self):
         self.view(0,32);self.press(4814);x,y,w,h=self.state()['canvas'];before=self.doc()
         self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75);self.key(0x1B);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
-        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75);self.mouse(0x202,x+w*.375,y+h*.75);self.assertGreaterEqual(len(self.state()['points']),8);self.press(4825);self.assertNotEqual(self.pcm(),self.raw)
-        self.press(4804);self.assertEqual(self.pcm(),self.raw);self.mouse(0x201,x+w*.125,y+h*.25);self.write('document.patch',title='Concurrent edit');before=self.doc();self.mouse(0x200,x+w*.375,y+h*.75);self.idle();self.assertFalse(self.state()['dragging']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
+        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75)
+        self.assertGreaterEqual(len(self.state()['points']),8);self.assertEqual(self.doc(),before)
+        self.mouse(0x202,x+w*.375,y+h*.75);self.idle()
+        actual=self.pcm();self.assertNotEqual(actual,self.raw);self.assertEqual(self.state()['points'],[])
+        self.assertEqual((self.state()['viewStart'],self.state()['viewEnd']),(0,32))
+        self.press(4804);self.assertEqual(self.pcm(),self.raw)
+        self.press(4805);self.assertEqual(self.pcm(),actual)
+        before=self.doc()
+        self.mouse(0x201,x+w*.125,y+h*.25);self.mouse(0x200,x+w*.375,y+h*.75)
+        self.mouse(0x202,x+w*.375,y+h*.75);self.idle();self.assertEqual(self.doc(),before)
+        identity=self.state()['id'];path=self.folder/'released-stroke.screamseq'
+        self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.start();self.assertEqual(self.state()['id'],identity);self.assertEqual(self.pcm(),actual)
+        self.view(0,32);x,y,w,h=self.state()['canvas']
+        if not self.state()['drawing']:self.press(4814)
+        self.mouse(0x201,x+w*.125,y+h*.25);self.write('document.patch',title='Concurrent edit');before=self.doc();self.mouse(0x200,x+w*.375,y+h*.75);self.idle();self.assertFalse(self.state()['dragging']);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.doc(),before)
 
     def test_loop_crossfade_preview_modes_curves_history_and_native_storage(self):
         self.page('loops')
@@ -90,6 +104,47 @@ class SampleDetailUITests(unittest.TestCase):
                 self.write('sample.loops.set',sample=2,normal=dict(start=16,end=112,enabled=True));self.write('sample.crossfade',sample=2,loop='normal',mode='overlap' if mode else 'preserve',curve='equal-power' if curve else 'linear',frames=8);self.assertEqual(self.pcm(2),actual);self.press(4803)
         self.region(16,112);self.press(4845);self.press(5017);self.select(4834,1);before=self.doc();self.press(4838);self.assertEqual(self.doc(),before);self.press(4839);self.assertEqual(self.read('sample.get',sample=1)['sustainStart'],24)
         path=self.folder/'sample-crossfade.screamseq';saved=self.pcm();info=self.read('sample.get',sample=1);self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.assertEqual(self.pcm(),saved);self.assertEqual(self.read('sample.get',sample=1),info);self.press(4802);self.field(4837,1);before=self.doc();self.press(4839);self.assertEqual(self.doc(),before)
+
+    def test_loop_handles_release_keyboard_history_and_reopen(self):
+        self.write('sample.loops.set',sample=1,
+                   normal=dict(start=0,end=128,enabled=True,reverse=True),
+                   sustain=dict(start=32,end=96,enabled=True,pingpong=True))
+        self.press(4803)
+        def handle(index):
+            return next(h for h in self.state()['loopHandles'] if h['index']==index)
+        self.assertEqual(len(self.state()['loopHandles']),4)
+        original=self.read('sample.get',sample=1);before=self.doc()
+        for index in (0,1):
+            h=handle(index)
+            self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x'],h['y']);self.idle()
+            self.assertEqual(self.doc(),before,'Clicking a boundary must not move an inset handle')
+        h=handle(0);delta=self.state()['canvas'][2]*16/128
+        self.mouse(0x201,h['x'],h['y']);self.mouse(0x200,h['x']+delta,h['y'])
+        self.assertTrue(self.state()['loopDragging'])
+        self.assertEqual(self.state()['loops']['normal']['start'],'16')
+        self.assertEqual(self.doc(),before)
+        self.key(0x1B)
+        self.assertEqual(self.state()['loops']['normal']['start'],'0');self.assertEqual(self.doc(),before)
+        self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x']+delta,h['y']);self.idle()
+        accepted=self.read('sample.get',sample=1)
+        self.assertEqual(accepted['loopStart'],16);self.assertTrue(accepted['reverseLoop'])
+        self.assertEqual((accepted['sustainStart'],accepted['sustainEnd']),(32,96))
+        self.assertTrue(accepted['sustainPingpong']);self.assertEqual(self.pcm(),self.raw)
+        self.press(4804);self.assertEqual(self.read('sample.get',sample=1),original)
+        self.press(4805);self.assertEqual(self.read('sample.get',sample=1),accepted)
+        h=handle(0);self.mouse(0x201,h['x'],h['y']);self.mouse(0x202,h['x'],h['y'])
+        self.key(0x09);self.key(0x25)
+        self.assertEqual(self.read('sample.get',sample=1)['loopEnd'],127)
+        self.assertEqual(self.pcm(),self.raw)
+        saved=self.read('sample.get',sample=1)
+        path=self.folder/'loop-handles.screamseq'
+        self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.read('sample.get',sample=1),saved);self.assertEqual(self.pcm(),self.raw)
+        self.start();h=handle(0);self.mouse(0x201,h['x'],h['y'])
+        self.write('document.patch',title='External edit during loop drag');before=self.doc()
+        self.mouse(0x202,h['x']+delta,h['y']);self.idle()
+        self.assertFalse(self.state()['loopDragging']);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.read('sample.get',sample=1),saved)
 
     def test_every_processing_operation_matches_shared_api_and_preserves_other_channel(self):
         self.page('process')
@@ -142,14 +197,31 @@ class SampleDetailUITests(unittest.TestCase):
 
     def test_dense_gesture_bounds_and_atomic_point_limit(self):
         self.install(1,[0]*6000);self.press(4803);self.view(0,512);self.assertTrue(self.state()['precise']);self.assertEqual(self.state()['waveBins'],512);self.assertEqual(len(self.state()['peaks']),1024)
-        self.press(4814);x,y,w,h=self.state()['canvas'];self.mouse(0x201,x,y+h*.25);self.mouse(0x200,x+w,y+h*.75);self.mouse(0x202,x+w,y+h*.75);self.assertEqual(len(self.state()['points']),512)
+        self.press(4814);x,y,w,h=self.state()['canvas'];before=self.doc()
+        self.mouse(0x201,x,y+h*.25);self.mouse(0x200,x+w,y+h*.75)
+        self.assertEqual(len(self.state()['points']),512);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.pcm(),(0,)*6000)
+        self.mouse(0x202,x+w,y+h*.75);self.idle()
+        drawn=self.pcm();self.assertNotEqual(drawn[:512],(0,)*512)
+        self.assertEqual(drawn[512:],(0,)*5488);self.assertEqual(self.state()['points'],[])
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
+        self.press(4805);self.assertEqual(self.pcm(),drawn)
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
         # Windows constrains the tool to this desktop's maximum track width.
-        # Fill the remaining exact points through the real numeric controls,
+        # Build a separate explicit batch through the real numeric controls,
         # without assuming a 4096-logical-pixel display or relaxing the cap.
+        self.field(4823,.25);before=self.doc()
         window=self.window();frame_control=self.control(4822);stage_control=self.control(4824)
-        for frame in range(512,4096):
+        for frame in range(4096):
             text=ctypes.create_unicode_buffer(str(frame));self.desktop.send(frame_control,0xC,0,ctypes.addressof(text));self.desktop.send(window,0x111,4824,stage_control)
-        self.idle();points=self.state()['points'];self.assertEqual(len(points),4096);self.stage(5000,.5);self.assertEqual(self.state()['points'],points);self.assertIn('4096',self.state()['status']);self.press(4825);self.assertNotEqual(self.pcm()[:4096],(0,)*4096);self.assertEqual(self.pcm()[4096:],(0,)*1904);self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
+        self.idle();points=self.state()['points'];self.assertEqual(len(points),4096)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.pcm(),(0,)*6000)
+        self.stage(5000,.5);self.assertEqual(self.state()['points'],points)
+        self.assertIn('4096',self.state()['status']);self.assertEqual(self.doc(),before)
+        self.assertEqual(self.pcm(),(0,)*6000)
+        self.press(4825);self.assertEqual(self.pcm()[:4096],(8192,)*4096)
+        self.assertEqual(self.pcm()[4096:],(0,)*1904)
+        self.press(4804);self.assertEqual(self.pcm(),(0,)*6000)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit short silent WASAPI qualification')
     def test_live_waveform_preview_noop_rejection_and_edit_stop(self):

@@ -259,3 +259,79 @@ remains a separate UI gate; these recovery observations cannot qualify it.
 
 These Mac harness changes require execution against the retained Mac apps before
 they are qualified. Local Python tests establish tooling behavior only.
+
+### Edited opaque metadata
+
+`native_roundtrip.py --edited-metadata` adds paired original/opaque F04 legs.
+Each performs title and graph-node label edits, stable-identity plugin movement
+and deletion, Undo/Redo and reopen. Exact typed comparisons inject the expected
+extensions into the clean edited tree; they never strip unknown output fields.
+Root/native/track/node/plugin sentinels include data, large integers, UID, date,
+Unicode and negative zero. The generator verifies its exact input before loading:
+ordinary `plistlib` float interning otherwise aliases positive and negative zero.
+
+Every save is a new file; source and prior output hashes are retained. Intended
+edits, exact Undo/Redo restoration and unrelated-field preservation are asserted.
+The final `edited-metadata/opaque-reopened.screamseq` is an explicit edited
+exchange input for a later `--input-file` leg on the other platform. That later
+leg alone is not proof of edits on both platforms; the reciprocal edited gate
+still needs both native implementations and the return journey.
+
+Both build workflows request this bounded check after the existing corpus.
+Earlier failures stop execution; an absent edited report is not a pass. Mac
+setup uses the private `recovery.restore` path documented above, so this contract
+does not qualify Mac's Open dialog or foreground interaction.
+
+### Cross-domain composing history
+
+`--composing-history` runs the stopped A01 transaction journey on F04: precise
+note velocity, sample 5's normal-loop start, instrument n20's independent pan
+envelope, Gainer's manual parameter, a recipe audio-edge gain and Pulse's send.
+Each dry run preserves the complete document snapshot. Each real edit constrains
+unrelated project fields; PCM stays exact through loop/envelope edits.
+The note replacement expects the shared operation's documented storage order
+(unchanged patterns, then replaced events); comparisons never sort output.
+
+All six edits Undo and Redo chronologically against complete saved trees.
+Interleaved no-ops retain Redo, a stale request rejects without mutation, and a
+real edit forks history. The final copy reopens exactly and is retained as
+`composing-history/reopened.screamseq` for later reciprocal exchange.
+
+`--envelope-bank` adds the stopped F04 linked-master journey. It copies n40 to
+instrument n21 independently, links instrument n22, edits the master and verifies
+both linked uses while retaining the independent copy. After unlinking n22, a
+second master edit changes only n20. Dry runs, a no-op unlink, invalid shape and
+used-master removal retain exact state and Redo. Five chronological Undo/Redo
+steps and reopen compare complete typed saved trees. All instrument fields and
+sample PCM are checked during materialization; the embedded module may change
+only for actual envelope edits. It retains 25 saved checkpoints and
+`envelope-bank/reopened.screamseq` for reciprocal exchange.
+
+Both native workflows request this check. It does not qualify catalogue
+publication/import, sample-family import, foreground bank controls, live audio,
+or the full A08 acceptance recipe. Exact saved-state checks do not independently
+decode every embedded module field; shared snapshot validators remain part of
+the broader gate.
+The fixture's volume envelope remains linked to n40; editing its template is
+the separate A08 bank journey, not bypassed here.
+
+The check is scheduled on both native workflows. It does not establish physical
+input, live admission, foreground interaction, linked-bank editing, reciprocal
+editing or all of A01/A18. Windows' linked-envelope rejection outcome has its own
+native controller and private-PID regression.
+
+### Shared editing contracts on the native socket
+
+`--editing-contracts` runs the existing parameter-preview, recipe-parameter,
+recipe-preview, rack-dry-run, integer-API and request-replay contracts. Each case
+gets a new owned application process, exact endpoint, output directory and RPC
+journal. An uncaught failure closes that instance; later cases start independent
+processes rather than retrying or replacing its uncertain document.
+Existing contract assertions are unchanged. Each accepted final state additionally
+saves/reopens with the exact typed comparator.
+
+Mac CI requests this stage before the baseline corpus so an earlier codec failure
+cannot suppress these independent socket checks. Windows CI retains its existing
+actual-PID cases; the runner is also usable there. Build/executable identities are
+bound by the parent CLI and each contract source hash is retained. Success on one
+host does not qualify the other host, UI interaction or audible playback.

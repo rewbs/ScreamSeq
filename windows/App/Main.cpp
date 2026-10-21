@@ -8,6 +8,7 @@
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
 #include "ApiDispatch.hpp"
+#include "ModuleExportDialog.hpp"
 #include "WorkspaceState.hpp"
 #include "WorkspaceRegions.hpp"
 #include "WorkspaceLayouts.hpp"
@@ -102,7 +103,9 @@ constexpr int songPropertiesCommand=627;
 constexpr int keyboardSettingsCommand=628;
 constexpr int exitCommand=629;
 constexpr int aboutCommand=630,keyboardHelpCommand=631,selectChannelCommand=632,selectPatternCommand=633,selectRowCommand=634;
-static_assert(selectRowCommand<700,"Application commands must not overlap effect field controls");
+constexpr int contextPanelCommand=635,contextActionFirst=636,contextActionLast=641;
+constexpr int exportModuleCommand=642;
+static_assert(contextActionLast<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -133,7 +136,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
-    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,
+    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,pluginMove=334,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
     effectFieldBase=700,effectChoiceBase=720,
@@ -347,6 +350,7 @@ public:
             {"positionMode",positionMode},{"ruler",rulerSnapshot()},
 			{"panels",{"notes","samples","automation","instruments","graphCurve","preciseNotes"}},{"visible",visible},{"right",workspaceState.panel(workspaceState.active).hidden ? "" : workspaceState.active},
 			{"layout",workspaceState.layout},{"focusLayout",workspaceState.layout=="Pattern focus"},{"focus",focus},{"editorDock",workspaceDockSnapshot()},
+            {"contextPanel",contextPanelSnapshot()},
 			{"pins",pins},{"targets",targets},{"inspection",inspectionData},{"returnPoints",origins},
 			{"locations",locations},{"liveKeyboard",liveKeyboard},{"musicalTyping",typingSnapshot()},
 			{"rightWidth",workspaceState.rightWidth},{"lowerHeight",workspaceState.lowerHeight},
@@ -751,6 +755,7 @@ public:
     #include "WorkspaceContextMenus.inc"
     #include "WorkspaceMenuBar.inc"
     #include "WorkspaceAccessibility.inc"
+    #include "WorkspaceContextPanel.inc"
     #include "DeferredViews.inc"
 	#include "PatternGeometry.inc"
 	#include "WorkspaceView.inc"
@@ -959,6 +964,7 @@ public:
 	}
 	void draw() {
         frameRequested=false;
+        refreshContextPanel();
         auditionWasAnimating=auditionOnly&&auditionAnimating();
         if(!busy && device.running() && preparedPlayback && preparedPlayback->chain().latencyChangePending()) {
             try {

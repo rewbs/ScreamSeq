@@ -42,10 +42,23 @@ int main(int argc, const char **argv) { trustFixtureArguments(argc, argv);
         ![session pluginParameter:0 identifier:1 value:std::numeric_limits<double>::quiet_NaN() record:NO error:&error] &&
         [target() isEqual:native], "Rejected native edits cannot replace target");
       call(@"plugin.add", @{@"descriptor": builtin}, true);
+      const auto savedFirst=call(@"plugin.state.get",@{@"plugin":firstID})[@"data"];
+      check([savedFirst isEqual:call(@"plugin.state.get",@{@"slot":@0})[@"data"]],
+        "Stable state read differs from the matching rack slot");
+      for(NSDictionary *invalid in @[@{},@{@"slot":@0,@"plugin":firstID},@{@"plugin":@"missing"},@{@"plugin":@YES}]) {
+        const auto unchanged=call(@"document.get",@{});
+        check(![session automationMethod:@"plugin.state.get" params:invalid error:&error]&&
+          [unchanged isEqual:call(@"document.get",@{})],"Invalid state identity changed document/history");
+      }
       call(@"plugin.move", @{@"slot": @0, @"direction": @1}, true);
+      check([savedFirst isEqual:call(@"plugin.state.get",@{@"plugin":firstID})[@"data"]]&&
+        [savedFirst isEqual:call(@"plugin.state.get",@{@"slot":@1})[@"data"]],
+        "State read by stable identity followed the old rack index");
       check([target()[@"target"][@"slot"] intValue] == 1 && [target()[@"target"][@"plugin"] isEqual:firstID] &&
         [target()[@"token"] isEqual:native[@"token"]], "Reordering retains original plugin and touch token");
       call(@"plugin.remove", @{@"slot": @1}, true);
+      check(![session automationMethod:@"plugin.state.get" params:@{@"plugin":firstID} error:&error],
+        "Removed state identity resolved another rack instance");
       check(![target()[@"target"][@"available"] boolValue] && target()[@"target"][@"slot"] == NSNull.null,
         "Removal reports unresolved identity instead of targeting another instance");
       call(@"history.undo", @{@"domain": @"plugins"}, true);

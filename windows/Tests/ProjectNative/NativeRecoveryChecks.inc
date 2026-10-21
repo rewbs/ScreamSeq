@@ -11,6 +11,34 @@ static void nativeRecoveryChecks() {
   auto tiny=good;tiny["performance"]["commands"][0].erase("durationBeats");tiny["performance"]["commands"][0]["duration"]=1;
   report={};auto minimum=recoverNativeMetadata(tiny,*doc,report);check(minimum.performance.commands[0].durationBeats==1.0/65536&&report.warnings.size()==2&&report.lossy&&report.protectSource,"tiny legacy duration is bounded and separately reported");
   auto rich=richDocument();auto encoded=encodeNativeMetadata(rich->native());const auto intact=rich->native();auto richSnapshot=std::make_unique<Document>(rich->snapshotData());
+  auto realIdentities=encoded;
+  for(const char *path:{"/nextID","/patterns/0/0","/tracks/0/1/color"}) {
+    auto &value=realIdentities[Json::json_pointer(path)];value=double(value.get<uint64_t>());
+  }
+  const auto originalReals=realIdentities;
+  rejects([&]{decodeNativeMetadata(originalReals);},"Strict metadata decoder accepted noncanonical integer storage");
+  report={};const auto recoveredReals=recoverNativeMetadata(realIdentities,*richSnapshot,report);
+  check(recoveredReals==intact&&realIdentities==encoded&&!report.lossy&&!report.protectSource&&report.warnings.empty(),
+    "Equivalent file integer representations deactivated music or changed stable identities");
+  check(decodeNativeMetadata(realIdentities)==intact,
+    "Recovered integer representations were not immediately canonical for resave");
+  rejects([&]{decodeNativeMetadata(originalReals);},"File recovery leaked permissive integer scope into strict decoding");
+  for(Json value:{Json(true),Json(-1),Json(1.5),Json(9007199254740992.0),
+      Json(std::numeric_limits<double>::infinity()),Json(std::numeric_limits<double>::quiet_NaN())}) {
+    auto malformed=encoded;malformed["nextID"]=value;report={};
+    const auto rejected=recoverNativeMetadata(malformed,*richSnapshot,report);
+    check(report.lossy&&report.protectSource&&rejected!=intact,
+      "Malformed file integer bypassed bounds or failed to protect its source");
+    rejects([&]{decodeNativeMetadata(originalReals);},"Failed recovery leaked permissive integer scope");
+  }
+  auto omitted=encoded;
+  for(size_t index=0;index<intact.performance.commands.size();++index)
+    if(intact.performance.commands[index].duration==0)omitted["performance"]["commands"][index].erase("duration");
+  report={};auto zeroDefaults=recoverNativeMetadata(omitted,*richSnapshot,report);
+  check(zeroDefaults==intact&&!report.lossy&&!report.protectSource&&report.warnings.empty(),
+    "Missing zero durations must retain commands without recovery loss or warnings");
+  auto recoveredSnapshot=std::make_unique<Document>(rich->snapshotData());recoveredSnapshot->restoreNative(zeroDefaults);
+  check(encodeNativeMetadata(recoveredSnapshot->native())==encoded,"Recovered zero defaults changed canonical metadata");
   auto mixed=encoded;auto unknown=mixed["performance"]["commands"][0];unknown["kind"]=99;mixed["performance"]["commands"].insert(mixed["performance"]["commands"].begin()+1,unknown);
   report={};const auto partial=recoverNativeMetadata(mixed,*richSnapshot,report);
   check(partial==intact,"one unknown command must preserve all valid commands and mutually dependent mixer/graph/note tracks");

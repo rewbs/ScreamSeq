@@ -86,6 +86,19 @@ through the platform factory. There is intentionally no separate graph factory.
   and the existing two-second host limit before returning. Preserve existing tail
   conventions and program IDs. Program load/state/editor/discovery/destruction
   are control-thread operations; provider-specific UI/COM ownership stays private.
+- `popEdit(PluginEdit&)` retains a vendor notification's original host timestamp:
+  QPC-derived 100 ns units on Windows, Mach host ticks on Mac. VST3 stamps its
+  accepted callback; AU preserves the event listener's supplied time. Zero
+  explicitly means unavailable, including the compatibility implementation for
+  providers exposing only the old `(id,value)` overload. Never record at poll
+  time to fill missing coverage. Values keep the catalogue's native domain.
+  `droppedEdits()` is monotonic for one backend incarnation, including editor
+  close/reopen; AU counts notifications discarded when retiring its listener.
+  Replacing a vendor starts another counter and requires a new capture epoch.
+  Read both on the existing control owner, alongside `failure()`; the counter
+  is not an exhaustive count after a backend has already failed. These methods
+  do not change the separate audible path, queue capacities or provider failure
+  policy. Consumers still using `(id,value)` retain their existing behavior.
 
 ### Render-facing methods
 

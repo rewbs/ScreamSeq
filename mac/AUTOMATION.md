@@ -169,6 +169,13 @@ Filter/EQ Channels choices are 0 Stereo, 1 Left, 2 Right, 3 Mid, 4 Side. Output 
 
 For example, after adding EQ10, `plugin.parameters.set` with `values: [{id: 10, value: 120}, {id: 11, value: -3}, {id: 12, value: 0.8}, {id: 13, value: 1}]` makes its first band a −3 dB low shelf at 120 Hz. Include the returned slot and `expectedRevision`. Add an `automation.pattern.set` lane targeting parameter 11 to automate that band’s gain.
 
+`plugin.parameters.set` and `plugin.bypass` also accept `dryRun:true`. They validate
+the target and complete requested change, returning `data.wouldChange` and
+`data.dryRun` without publishing parameters/bypass, consuming history, changing
+saved opaque state or cancelling an active parameter preview. A dry run still
+requires the current `expectedRevision`; it does not reserve a queue or guarantee
+that a later real write will be admitted. Invalid batches fail as a whole.
+
 Filter/EQ tail estimates derive from pole decay, with a −160 dB rendering floor and additional resonance/gain margin. They prepare bounds for all known absolute and pattern automation before export, and can grow during live playback. Filter control changes while draining allow a fresh decay interval from the edit; offline rendering still caps the total tail at 60 seconds. Within one render run the budget never shrinks; reopening or starting playback builds a fresh estimate from state and automation. Cascaded section estimates are added conservatively, so extreme low-frequency/high-Q settings can append several seconds. WAV export retains its existing maximum 60-second tail. IIR tails are mathematically infinite; this is a tested rendering threshold, not exact extinction or a guarantee for every adversarial modulated signal.
 
 Comb tuning is `440 × 2^((Note + Transpose − 69)/12)` Hz; the corresponding delay is clamped to at least four samples. Thus the highest effective tuning is one quarter of the current sample rate; the requested note remains saved. MIDI numbering is explicit: C4 = 60 and A4 = 69. The native Note field accepts numeric MIDI values or names such as `C4`, `C#4`, `B♭3`. The API uses numbers; Note is rounded to the nearest semitone, while Transpose provides fine tuning. `step: 1` tells an agent which controls quantize.
@@ -291,11 +298,26 @@ Every mutation requires the opaque `expectedRevision` returned by a previous rea
 
 Recent small mutation replies are deduplicated by request ID and exact content. Reusing an ID with different content is rejected. The cache retains at most 64 replies with an 8 MiB conservative memory budget; large replies are not cached. Always retain the original revision when retrying: even after cache eviction it prevents reapplying a successful mutation. On connection loss or timeout the outcome can be unknown; reread the document rather than automatically retrying with a fresh revision. The supplied client retries busy responses only.
 
+The retained replies include terminal validation and stale-request errors.
+Correcting a rejected submission requires a new request ID; retrying its
+unchanged ID/content returns the original error while retained. Reads remain
+fresh, but must not reuse an ID belonging to a retained mutation reply.
+
+Integer parameters accept JSON numbers with an integral value: `1`, `1.0` and
+`1e0` select the same coordinate or numeric parameter ID. Booleans, strings,
+null, fractional values and values outside the field's range are rejected before
+conversion. Exact integer storage is preserved without converting through
+floating point; real values must be finite and safely convertible. Stable
+document/entity/plugin identities remain strings. This value equivalence does
+not relax request replay: retries must retain the original ID and content,
+including numeric representation. Native file and preference decoders keep
+their separate compatibility rules.
+
 ## Data conventions
 
-`document.save {path, overwrite?, dryRun?, expectedRevision}` saves the open song as a native `.resonance` project. The absolute path must end in `.resonance`, its parent must exist, and replacing an existing file requires `overwrite:true`. `dryRun:true` validates serialization and the destination without writing. Success returns `{path, format, written, projectVersion}`, with the actual version (4 or 5), including for previews. An actual save updates the application's save destination and clears its unsaved indicator; preview does neither. The song revision and history remain unchanged, and saving does not stop playback. This command performs an atomic file replacement, not an undoable song edit. As with other commands, keep the same request ID/content when retrying an uncertain response; a file can have been written even if the reply was lost.
+`document.save {path, overwrite?, dryRun?, expectedRevision}` saves the open song as a native `.screamseq` project; the legacy `.resonance` extension is also accepted. The path must be absolute, its parent must exist, and replacing an existing file requires `overwrite:true`. `dryRun:true` validates serialization and the destination without writing. Success returns `{path, format, written, projectVersion}`, with container version 6, including for previews. An actual save updates the application's save destination and clears its unsaved indicator; preview does neither. The song revision and history remain unchanged, and saving does not stop playback. Recovered source files remain protected: save a separate copy even when `overwrite:true`. This command performs an atomic file replacement, not an undoable song edit. As with other commands, keep the same request ID/content when retrying an uncertain response; a file can have been written even if the reply was lost.
 
-`document.exportModule` accepts the same fields and exports the current MOD/XM/S3M/IT/MPTM format, with its matching extension. It leaves the native save destination and unsaved indicator unchanged. Native metadata/plugins/automation and sample data/settings/key-map losses cause an error before file replacement. It does not promise preservation of every other legacy-format field. Use `document.save` for exact native sample persistence. Both methods require the current `expectedRevision`; neither opens files, changes the song or starts playback.
+`document.exportModule` accepts the same fields on both platforms and exports the current MOD/XM/S3M/IT/MPTM format, with its matching extension. It leaves the native save destination, unsaved indicator, recovery source protection and Undo/Redo unchanged. Native annotations, hosted plugins, recorded automation, uncommitted takes, retained unknown fields and recovery archives block export with an explanation. Structure, sample data/settings/key-map and timing losses also cause an error before file replacement; the published bytes are the validated candidate. It does not promise preservation of every other legacy-format field. Use `document.save` for exact native sample persistence. Both methods require the current `expectedRevision`; neither opens a song, changes the song or starts playback.
 
 Native projects use project envelope version 4, or version 5 when aliases/non-default plugin MIDI channels are present, retaining exact sample frames, loop boundaries, properties and sample mappings independently of legacy module encoding. Existing versions 1–4 still open. Older readers reject version 5. This also applies to structural Undo/Redo, recovery and native WAV rendering. For the internal format and limits, see [sample snapshots](SAMPLE_SNAPSHOTS.md).
 
@@ -319,7 +341,7 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 | Samples | `sample.get`, `sample.waveform.get`, `sample.snap.get`, `sample.loops.set`, `sample.patch`, `sample.process`, `sample.draw`, `sample.crossfade`, `sample.copyToNew`, `sample.import`, `sample.pcm.get`, `sample.pcm.set` |
 | Sample clipboard | `sample.clipboard.get`, `sample.clipboard.copy`, `sample.clipboard.set`, `sample.cut`, `sample.delete`, `sample.paste` |
 | Instruments | `instrument.get`, `instrument.create`, `instrument.import`, `instrument.patch`, `instrument.envelope.get`, `instrument.envelope.copy`, `instrument.envelope.transform`; metadata, keymaps, volume/pan/pitch envelopes, shared tools and note behavior |
-| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
+| Plugins | `plugin.discover`, `plugin.locations.get`, `plugin.locations.trust`, `plugin.add`, `plugin.remove`, `plugin.move`, `plugin.bypass`, `plugin.assign`, `plugin.instruments.get`, `plugin.instruments.set`, `plugin.parameters.get`, `plugin.parameters.set`, `plugin.parameters.preview.get/set/commit/cancel`, `plugin.state.get`, `plugin.state.set`, `plugin.buses.get`, `plugin.buses.set` |
 | Plugin preset files | `plugin.preset.inspect`, `plugin.preset.save`, `plugin.preset.load`; native preset files with stable target identity and separate file/song revision checks |
 | Automation | `automation.target.get`, `automation.get`, `automation.replaceLane`, `automation.pattern.get/set/remove/copy/transform`; stable target learning, absolute lanes and pattern-relative envelopes |
 | History | `history.undo`, `history.redo` use one chronological history; optional legacy domain names are aliases |
@@ -327,6 +349,59 @@ The complete machine-readable request definitions are in [resonance-api.schema.j
 `plugin.discover` uses the same persistent inventory as the plugin picker. Pass `{"rescan": true}` to refresh it after installing, removing or updating plugins. A first scan or explicit rescan may take several seconds; cached reads do not launch scanner processes. Discovery does not change the song revision.
 
 `pattern.get` returns at most 4,096 cells per request and supports row/channel pagination. `pattern.apply` accepts up to 4,096 distinct cell patches, validates the entire batch before changing anything, and supports `dryRun`. A parameter batch or lane replacement likewise forms one plugin-history step. There are no cross-domain transactions or general dry runs yet.
+
+### Transient recipe parameter gestures
+
+`graph.plugin.preview.get/set/commit/cancel` uses the rack gesture contract below,
+with canonical stable `graph` and `node` identities replacing `plugin`.
+`set` and `commit` require `expectedRevision`, `parameter`, `gesture` and `value`;
+`cancel` omits `value`, and `get` accepts only `{}`. Values use native catalog
+units. Recipe and rack gestures are mutually exclusive within a session.
+Cancelling an inactive family never cancels the other family's retained gesture.
+
+During playback, a recipe preview publishes one prepared graph-control plan to
+every existing copy of the recipe, including ordinary, Row, persistent and
+sample-instrument copies. Tracking does not edit the recipe, opaque state,
+manual parameter catalog or document history. An inactive host returns
+`audible:false` without starting audio. Release commits through `graph.plugin.set`
+as one Undo step; an unchanged final value restores the accepted graph without
+history. Cancellation queue refusal retains ownership for retry after the
+renderer consumes pending plans.
+
+A representational no-op preserves the exact saved parameter map and normalized
+modulation bases, including disabled contributions. Ordinary changed manual edits
+update all contributions to that parameter together. These operations introduce
+no native-project format or identity migration.
+
+### Transient rack parameter gestures
+
+`plugin.parameters.preview.set` takes `expectedRevision`, stable `plugin`, integer
+`parameter`, a nonempty `gesture` token (at most 80 UTF-8 bytes, without NUL), and `value` in the
+catalog's native units. It validates the entire request before publishing one
+bounded audio update. The reply includes `active`, `gesture`, `plugin`,
+`parameter`, captured `revision`, `value` and `audible`. It does not start a device:
+an inactive host retains the gesture with `audible:false`. Saved manual values,
+opaque state, document revision and Undo history remain unchanged while dragging.
+
+Only one preview is retained per session. Updates must keep its token, stable
+target, document revision and audio-host generation. A competing gesture rejects;
+it cannot take over another editor's preview. `plugin.parameters.preview.get {}`
+reads ownership and reconciles a retired document/host. `cancel` takes the same
+identity fields and a current `expectedRevision`, without `value`. It restores
+the **current accepted baseline**, not a stale value captured at drag start.
+Cancellation is idempotent after retirement. A full live queue reports busy and
+retains ownership so the client can inspect and explicitly retry cancellation.
+
+`plugin.parameters.preview.commit` takes the same fields as `set`, including the
+final `value`. It uses the ordinary parameter-edit path and creates one Undo step
+only if the accepted value changes. A no-op release restores the baseline and
+preserves history. A stale release rejects rather than overwriting an intervening
+edit. Ordinary accepted edits and explicit Save cancel the preview; recovery
+serialization uses accepted state. A read or preview does not commit the value.
+Unknown write outcomes require inspecting both preview ownership and the current
+parameter before retrying. These transient operations do not accept `dryRun`.
+They address rack processors; graph recipe controls have a separate publication
+path and are not supported by these four operations.
 
 ### Sample processing and waveform queries
 
@@ -596,7 +671,7 @@ Both commands accept up to 262,144 selected/input cells and validate the whole o
 
 `sample.pcm.get` reads at most 65,536 frames per call. `sample.pcm.set` replaces the complete waveform (up to 1,048,576 frames) and resets its settings/loops, or appends a sample with `sample: 0`. Use `sample.patch` afterward to set loops and other settings. File import supports larger existing audio assets within the engine's import limits.
 
-Plugin state is an opaque base64 blob, limited to 16 MiB decoded. `plugin.state.get` returns the saved baseline, including manual parameter edits, rather than baking the transient value of playing automation into it. Restore it only to the same plugin. `plugin.parameters.get` exposes IDs, names, ranges and current values for musical edits. Discovery validates candidates in separate processes; active plugins still run in the host process, with its existing third-party compatibility limits.
+Plugin state is an opaque base64 blob, limited to 16 MiB decoded. `plugin.state.get` accepts exactly one stable `plugin` instance ID or legacy `slot` and returns the saved baseline, including manual parameter edits, rather than baking the transient value of playing automation into it. Stable identity continues to resolve the same instance after reordering; a removed identity rejects. Restore state only to the same plugin. `plugin.parameters.get` exposes IDs, names, ranges and current values for musical edits. Discovery validates candidates in separate processes; active plugins still run in the host process, with its existing third-party compatibility limits.
 
 `automation.replaceLane` accepts a plugin slot, parameter ID, and `{frame,value}` points. It sorts timestamps, rejects duplicates and out-of-range values, and replaces that lane atomically. An empty list deletes the lane. The whole project remains bounded at 100,000 points. `automation.get` supports offset/limit pagination.
 
@@ -1812,6 +1887,7 @@ Those point edits stop playback and use the unified chronological Undo history.
 | `parameter.activity.get` | Optional `after` sequence (0…9007199254740991) and `limit` (1…8192, default 2048). Nondestructive retained history, token, cursor/oldest/latest, dropped count and current target. Restart cursor at zero when the token changes. Capture is restored on playback restart where the same stable target exists; a new engine starts a new token. |
 | `automation.recorded.get` | Stable `plugin`, `parameter`, optional `offset` (0…100000), `limit` (1…4096, default 512). Returns selected lane points, total and 48000 Hz timestamp rate. |
 | `automation.recorded.edit` | `plugin`, `parameter`, `frame`, `expectedRevision`; either `value` (native units, upsert) with optional `newFrame`, or `remove:true`. Optional `dryRun`. Preserves every other parameter and timestamp. Moves reject occupied destination timestamps. Validates before mutation; no-op creates no Undo. |
+| `automation.recorded.clear` | `expectedRevision`, optional boolean `dryRun`. Clears every recorded parameter lane in one Undo, preserving plugin identities, opaque manual state, pattern curves and unrelated music. Returns `removed`, `wouldChange`, `dryRun`; an empty collection is a no-op. Live publication restores accepted manual values and refuses a full/stale queue without discarding the recording or stopping transport. |
 
 Recorded-point edits and Undo/Redo prepare a bounded immutable timeline off the
 audio callback, then adopt it at one render boundary. Catch-up uses device-rate
@@ -1874,7 +1950,7 @@ Document, plugin, recorded automation and routing edits share chronological Undo
 
 `plugin.add` accepts optional `target` (stable mixer bus ID) for an effect: adding the processor and routing it to the bus is one Undo action. Optional `before` inserts before that stable plugin instance on the target bus; optional `position:{x,y}` saves its graph position in the same transaction. For blank-canvas placement, use `detached:true` and optional `position`; this is exclusive with `target`, `before` and `parent`. The saved `mixer.detached` list holds these effect identities, distinct from unassigned legacy rack effects that retain their Master fallback. `mixer.inserts.move` accepts one detached effect, assigns it to the specified bus and clears its detached marker in the same Undo transaction. Removal also clears the marker. Returning to implicit routing with `mixer.enable {enabled:false}` preserves it. Omit `target` and `detached` for instruments.
 
-`graph.node.add` accepts `insertEdge` (exact index in definition.audio, mutually exclusive with `insertAfter`) and preserves the original source tap, destination port and gain while inserting the new effect. `plugin.move` accepts exactly one of `direction` (±1) or `position` (final zero-based slot); arbitrary moves preserve other processors’ relative order.
+`graph.node.add` accepts `insertEdge` (exact index in definition.audio, mutually exclusive with `insertAfter`) and preserves the original source tap, destination port and gain while inserting the new effect. `plugin.move` accepts exactly one of `direction` (±1) or `position` (final zero-based slot); arbitrary moves preserve other processors’ relative order. Supply exactly one `plugin` stable instance identity or `slot`. Recorded automation follows the same shared rack permutation; stable routes and opaque plugin state are retained. With `dryRun:true`, it validates and reports `wouldChange` without changing rack order, active parameter previews, saved state or Undo/Redo. Moving to the current position, or moving outward at a rack edge, reports no change. A dry run does not reserve playback publication capacity; a later real move can still fail admission.
 
 `mixer.get {includeImplicit:true}` and `graph.get {includeImplicitMixer:true}` expose default channel → Master routing without modifying the document. The first routing edit creates that topology in the same Undo step. There is no UI enable prerequisite; explicit `mixer.enable` remains available to agents.
 
@@ -2213,7 +2289,8 @@ Undo/Redo follows the same preparation and publication rules.
 Use a fresh token for each drag, exactly one stable parameter, and no bus changes.
 Consecutive accepted edits with the same graph/node/parameter/token coalesce into
 one chronological Undo. Any intervening edit, Undo branch, document replacement,
-or different target starts a new entry; every accepted value still advances the
+or different target starts a new entry; reusing a token after Undo/Redo cannot
+merge back into its earlier entry. Every accepted value still advances the
 revision. Failed publication preserves the original history entry. Omitting the
 token retains independent transactions. The shared-plugin sidebar uses this path.
 

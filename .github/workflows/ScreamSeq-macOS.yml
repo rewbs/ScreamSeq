@@ -44,13 +44,17 @@ on:
         type: choice
         options: [windows, exchange]
         default: windows
+      extended_exchange:
+        description: 'Also require edited opaque metadata, composing history and envelope-bank saved outputs'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.qualification || 'full' }}-${{ inputs.build_runner || 'both' }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}
+  group: screamseq-macos-${{ github.workflow }}-${{ github.ref }}-${{ inputs.qualification || 'full' }}-${{ inputs.build_runner || 'both' }}-${{ inputs.retained_app_run || 'build' }}-${{ inputs.retained_runner || 'both' }}-${{ inputs.fixture_run || 'baseline' }}-${{ inputs.fixture_artifact }}-${{ inputs.extended_exchange || false }}
   cancel-in-progress: true
 
 jobs:
@@ -147,7 +151,7 @@ jobs:
             --executable "$executable" --binary-sha256 "$binary_hash" \
             --binary-source-commit "$(git rev-parse HEAD)" \
             --build-receipt "$SCREAMSEQ_BUILD_DIR/ScreamSeq.app/Contents/Resources/BuildInfo.json" \
-            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --api-vectors --codec-vectors \
+            --output "$SCREAMSEQ_BUILD_DIR/parity-conformance" --editing-contracts --api-vectors --codec-vectors --duration-defaults --edited-metadata --composing-history --envelope-bank \
             2>&1 | tee screamseq-macos-conformance-native.log
       - name: Configured test scheduling inventory
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -189,6 +193,7 @@ jobs:
       input-run: ${{ inputs.fixture_run }}
       input-artifact: ${{ inputs.fixture_artifact }}
       input-layout: ${{ inputs.fixture_layout }}
+      extended-exchange: ${{ inputs.extended_exchange || false }}
   interface-only:
     if: github.event_name == 'workflow_dispatch' && inputs.qualification == 'interface' && inputs.retained_app_run == ''
     name: Native interface only (${{ matrix.runner }})

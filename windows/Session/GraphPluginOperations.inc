@@ -1,6 +1,7 @@
 // Graph recipes have document history and isolated native editor drafts. Rack
 // baselines and prepared playback copies never share these plugin instances.
 Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsigned rate,bool audioActive) {
+  requireManualOperation(method);
   if(method.starts_with("graph.plugin.path."))return invokePath(method,p);
   using namespace Tracker;
   try {
@@ -15,8 +16,8 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     auto make=[&](const GraphPluginRecipe &r){PluginState state;state.descriptor={r.type,r.subtype,r.manufacturer,r.name,r.format,r.path,r.classID,false};state.state=r.state;state.audioLayout=r.audioLayout;state.auxiliaryInputs=r.inputs;state.auxiliaryOutputs=r.outputs;
       auto plugin=std::make_unique<NativePlugin>(state,rate);need(!plugin->isInstrument(),"Graph nodes require effect plugins");
       const auto catalog=plugin->parameters();for(const auto &[id,value]:r.parameters){const auto p=std::find_if(catalog.begin(),catalog.end(),[&](const auto &p){return p.id==id;});need(p!=catalog.end()&&p->writable&&value>=p->min&&value<=p->max&&plugin->parameter(id,float(value)),"Graph parameter baseline is unavailable or outside its range");}return plugin;};
-    auto metadata=[&](const NativePlugin &plugin){auto values=parameters(plugin);for(auto &v:values){v.erase("unit");const auto base=signalManualParameterValue(*definition,nodeID,v.at("id").get<uint32_t>(),v.at("min").get<double>(),v.at("max").get<double>(),v.at("value").get<double>());v["value"]=base;v["manualValue"]=base;v["effectiveValue"]=nullptr;v["valueRole"]="manual-template";}return Json{{"parameters",values},{"buses",buses(plugin)},{"latency",plugin.latency()},{"tail",plugin.tail()},{"bypass",node->plugin.bypass},{"audioLayout",pluginAudioLayoutSignature(plugin.buses())}};};
-    bool commit=false;const bool dry=flag(p,"dryRun");Json result;
+    auto metadata=[&](const NativePlugin &plugin){auto values=parameters(plugin);for(auto &v:values){const auto base=signalManualParameterValue(*definition,nodeID,v.at("id").get<uint32_t>(),v.at("min").get<double>(),v.at("max").get<double>(),v.at("value").get<double>());v["value"]=base;v["manualValue"]=base;v["effectiveValue"]=nullptr;v["valueRole"]="manual-template";}return Json{{"parameters",values},{"buses",buses(plugin)},{"latency",plugin.latency()},{"tail",plugin.tail()},{"bypass",node->plugin.bypass},{"audioLayout",pluginAudioLayoutSignature(plugin.buses())}};};
+    bool commit=false;const bool dry=flag(p,"dryRun");Json result;std::string gesture;uint32_t gestureParameter=0;
     if(method=="graph.plugin.get") {keys(p,{"graph","node"});auto plugin=make(node->plugin);return metadata(*plugin);}
     if(method=="graph.plugin.preset.save") {
       keys(p,{"graph","node","path","name","overwrite","dryRun"});auto plugin=make(node->plugin);
@@ -37,13 +38,19 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
       result={{"bypass",node->plugin.bypass}};commit=true;
     } else if(method=="graph.plugin.set") {
       need(document_.editable(),"This document is read-only");
-      keys(p,{"graph","node","parameters","inputs","outputs","dryRun"});auto catalog=make(node->plugin);const auto availableBuses=catalog->buses();
+      keys(p,{"graph","node","parameters","inputs","outputs","dryRun","gesture"});
+      if(p.contains("gesture")) {
+        gesture=text(p.at("gesture"),80);
+        need(!gesture.empty()&&!p.contains("inputs")&&!p.contains("outputs")&&p.contains("parameters")&&p.at("parameters").is_array()&&p.at("parameters").size()==1,"A parameter gesture requires exactly one parameter and no bus changes");
+        gestureParameter=uint32_t(integer(field(p.at("parameters")[0],"id"),0,UINT32_MAX));
+      }
+      auto catalog=make(node->plugin);const auto availableBuses=catalog->buses();
       auto ports=[&](const Json &raw,bool input){need(raw.is_array()&&raw.size()<=63,"Invalid graph plugin ports");std::vector<uint32_t> list;for(const auto &v:raw){const auto port=uint32_t(integer(v,1,63));need(std::none_of(list.begin(),list.end(),[&](auto p){return p==port;}),"Duplicate graph plugin port");need(std::any_of(availableBuses.begin(),availableBuses.end(),[&](const auto &b){return b.input==input&&b.index==port&&b.supported;}),"Plugin port unavailable or unsupported");list.push_back(port);}std::sort(list.begin(),list.end());return list;};
       if(p.contains("inputs"))node->plugin.inputs=ports(p.at("inputs"),true);if(p.contains("outputs"))node->plugin.outputs=ports(p.at("outputs"),false);
       auto plugin=make(node->plugin);const auto available=plugin->parameters();const auto values=p.value("parameters",Json::array());need(values.is_array()&&values.size()<=1024,"Invalid graph plugin parameter batch");
-      std::set<uint32_t> seen;std::vector<std::pair<uint32_t,float>> edits;
-      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));const auto found=std::find_if(available.begin(),available.end(),[&](const auto &a){return a.id==id;});need(found!=available.end()&&found->writable&&seen.insert(id).second,"Parameter unavailable, read-only or repeated");edits.emplace_back(id,float(number(field(v,"value"),found->min,found->max)));}
-      for(auto [id,value]:edits){need(plugin->parameter(id,value),"Plugin rejected parameter value");const auto found=std::find_if(available.begin(),available.end(),[&](const auto &v){return v.id==id;});const auto before=signalManualParameterValue(*definition,nodeID,id,found->min,found->max,found->value);if(value!=before)node->plugin.parameters[id]=value;if(found->max>found->min)for(auto &edge:definition->modulation)if(edge.target==nodeID&&edge.parameter==id)edge.base=(value-found->min)/(found->max-found->min);}result=metadata(*plugin);commit=true;
+      std::vector<std::pair<uint32_t,double>> edits;edits.reserve(values.size());
+      for(const auto &v:values){keys(v,{"id","value"});const auto id=uint32_t(integer(field(v,"id"),0,UINT32_MAX));edits.emplace_back(id,number(field(v,"value"),-double(std::numeric_limits<float>::max()),double(std::numeric_limits<float>::max())));}
+      editSignalParameters(*definition,nodeID,available,edits,[&](uint32_t id,float value){return plugin->parameter(id,value);});result=metadata(*plugin);commit=true;
     } else if(method=="graph.plugin.editor.open") {
       keys(p,{"graph","node"});auto plugin=make(node->plugin);for(const auto &parameter:plugin->parameters()){const auto value=signalManualParameterValue(*definition,nodeID,parameter.id,parameter.min,parameter.max,parameter.value);if(value!=parameter.value)need(parameter.writable&&plugin->parameter(parameter.id,float(value)),"Plugin rejected the configured manual baseline");}plugin->showEditor();const auto token=identity();auto recipe=node->plugin;
       result={{"editor",token},{"message","Edit this library recipe, then Apply plugin settings."}};
@@ -56,7 +63,12 @@ Json PluginOperations::invokeGraph(const std::string &method,const Json &p,unsig
     if(commit){next.validate(document_.song());auto committedRecipe=node->plugin;
       if(!dry&&next!=document_.native()){
         auto publish=prepareNativeUpdate_?prepareNativeUpdate_(document_.native(),next):prepareNativePublication_?prepareNativePublication_(next):stop_;
-        document_.annotate([&](NativeSong &n){n=std::move(next);},publish);
+        const bool merge=!gesture.empty()&&gesture==graphParameterGesture_&&graph==graphParameterGestureGraph_&&nodeID==graphParameterGestureNode_&&gestureParameter==graphParameterGestureID_&&document_.revision==graphParameterGestureRevision_;
+        document_.annotate([&](NativeSong &n){n=std::move(next);},publish,merge?graphParameterGestureSequence_:0);
+        // Only an accepted durable edit owns the next coalescing opportunity.
+        // annotate itself refuses merging across any intervening history edit.
+        graphParameterGesture_=std::move(gesture);graphParameterGestureGraph_=graph;graphParameterGestureNode_=nodeID;
+        graphParameterGestureID_=gestureParameter;graphParameterGestureSequence_=document_.historySequence();graphParameterGestureRevision_=document_.revision;
       }
       if(!dry&&method=="graph.plugin.editor.commit")graphEditorRecipe_=std::move(committedRecipe);
     }

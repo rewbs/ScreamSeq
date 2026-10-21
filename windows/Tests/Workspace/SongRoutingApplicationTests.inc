@@ -142,6 +142,98 @@ void applicationMixingGraphUsability(){
   fixture.close();
 }
 
+void applicationRecipeAutomaticEdits(){
+  RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,852);addRestoreGain(app);
+  app.graphControlCommand(graphCommand);app.graphControlCommand(graphNew);app.graphControlCommand(graphAddEffect);
+  const auto read=[&]{return app.documentOperation("graph.get",RestoreJson::object()).at("library");};
+  const auto original=read();const auto node=app.graphNode;
+  rawDraftText(app.controls.at(graphPropertyValue),L"Saved node name");app.graphFieldChanged();app.graphControlCommand(graphSetProperty);
+  const auto renamed=read();restoreCheck(renamed!=original&&!app.graphDirty&&!app.graphFieldDirty,"Completed graph property still requires Apply");
+  app.layoutControls();restoreCheck(!IsWindowEnabled(app.controls.at(graphApply)),"Clean graph advertises a required Save edit action");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(read()==original,"Graph property needed more than one Undo");
+  app.edit("history.redo",RestoreJson::object());app.refreshGraph();
+  const auto item=std::find_if(app.graphCanvas.nodes.begin(),app.graphCanvas.nodes.end(),[&](const auto &v){return v.id==node;});
+  restoreCheck(item!=app.graphCanvas.nodes.end(),"Recipe canvas fixture node absent");
+  const auto x=item->rect.x+20,y=item->rect.y+10;app.graphMouseDown(x,y);app.graphMouseMove(x+40,y+20);app.graphMouseMove(x+60,y+30);
+  restoreCheck(read()==renamed&&app.graphDirty,"Node movement committed before release");app.graphMouseUp(x+60,y+30);
+  const auto moved=read();restoreCheck(moved!=renamed&&!app.graphDirty,"Node release did not save its position");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(read()==renamed,"One node drag created multiple Undo entries");app.refreshGraph();
+  // A rejected definition has a known non-commit outcome. Reload must discard
+  // that draft directly, without an uncertain-result acknowledgement dialog.
+  app.graphDraft["audio"].push_back({{"source",node},{"target",node},{"output",0},{"input",0},{"gain",1}});app.graphDirty=true;++app.graphGeneration;
+  restoreRejected([&]{app.graphSaveCompletedEdit();});
+  restoreCheck(!app.nativeCommandCompletion.retained()&&app.graphDirty&&read()==renamed,"Invalid recipe acquired uncertain-result ownership or changed the song");
+  app.graphControlCommand(graphReload);restoreCheck(!app.graphDirty&&read()==renamed,"Reload failed to discard a rejected recipe directly");
+  rawDraftText(app.controls.at(graphPropertyValue),L"Before lost completion");app.graphFieldChanged();unsigned writes=0;
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="graph.update"){++writes;rawDraftText(app.controls.at(graphPropertyValue),L"Later raw name");app.graphFieldChanged();throw std::runtime_error("Owned graph completion failure");}};
+  restoreRejected([&]{app.graphControlCommand(graphSetProperty);});
+  restoreCheck(writes==1&&app.nativeCommandCompletion.returned()&&app.graphDirty&&app.graphFieldDirty,"Graph failure lost its receipt or newer draft");
+  const auto committed=read();restoreRejected([&]{app.graphControlCommand(graphApply);});app.graphControlCommand(graphReload);
+  restoreCheck(writes==1&&!app.nativeCommandCompletion.retained()&&read()==committed&&app.graphFieldDirty&&restoreText(app.controls.at(graphPropertyValue))==L"Later raw name","Review repeated a graph edit or discarded newer text");
+  app.sampleMutationCompletion={};app.graphControlCommand(graphReload);app.edit("history.undo",RestoreJson::object());
+  restoreCheck(read()==renamed,"Graph result recovery added an extra history entry");
+}
+
+void applicationRecipeParameterInspector(){
+  RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
+  const auto plugin=addRestoreGain(app);
+  const auto graph=app.edit("graph.create",{{"name","Recipe controls"}}).at("graph").get<std::string>();
+  const auto node=app.edit("graph.node.add",{{"graph",graph},{"kind","plugin"},{"slot",0},{"insertEdge",0}}).at("node").get<std::string>();
+  app.graphID=graph;app.restoreLayoutConfiguration(layoutFor(app,"graph"));app.refreshGraph();app.graphNode=node;app.graphPageIndex=3;app.loadGraphFields();app.layoutControls();
+  app.graphControlCommand(graphLoadPlugin);
+  const auto key="recipe:"+graph+":"+node;auto *editor=app.graphPluginParameters.at(key).get();const auto pane=editor->window();ScreamSeq::Tests::ownGuiWindow(pane);
+  auto snapshot=editor->snapshot();
+  restoreCheck(editor->visible()&&app.graphEditorVisible()&&snapshot.at("graph")==graph&&snapshot.at("node")==node&&snapshot.at("plugin")=="","Recipe parameter action lost its captured target or hid the graph");
+  const auto before=app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}}),rack=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
+  const auto &rows=snapshot.at("rows");const auto row=std::find_if(rows.begin(),rows.end(),[](const auto &r){return r.at("id")==1;});restoreCheck(row!=rows.end(),"Recipe gain parameter is missing");
+  const auto track=GetDlgItem(pane,row->at("sliderControl").get<int>());
+  const auto readRecipe=[&]{return app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}});};
+  const auto readOwner=[&]{return app.documentOperation("graph.plugin.preview.get",RestoreJson::object());};
+  const auto reloadRecipe=[&]{SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));};
+  const auto revision=app.view->session.revision;
+  SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  const auto owner=readOwner();
+  restoreCheck(owner.at("active")==true&&owner.at("graph")==graph&&owner.at("node")==node&&
+    readRecipe()==before&&app.view->session.revision==revision,"Recipe slider lost ownership or committed while tracking");
+  SendMessageW(pane,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));const auto slid=readRecipe();
+  restoreCheck(slid!=before&&!readOwner().at("active").get<bool>()&&!editor->snapshot().at("dirty").get<bool>(),
+    "Recipe slider release did not save its final value");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(readRecipe()==before,"Recipe slider needed more than one Undo");reloadRecipe();
+  SendMessageW(track,TBM_SETPOS,TRUE,9000);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(pane,WM_KEYDOWN,VK_ESCAPE,1);
+  restoreCheck(readRecipe()==before&&!readOwner().at("active").get<bool>()&&!editor->snapshot().at("dirty").get<bool>(),
+    "Escape committed or retained a recipe preview");
+  bool pumped=false;
+  app.sampleReadResult=[&](const std::string &method,RestoreJson &){
+    if(method=="graph.plugin.preview.set"&&!pumped){
+      pumped=true;SendMessageW(track,TBM_SETPOS,TRUE,7000);
+      SendMessageW(pane,WM_HSCROLL,TB_THUMBPOSITION,LPARAM(track));
+      SendMessageW(pane,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+      SendMessageW(pane,WM_TIMER,8,0);
+      restoreCheck(readRecipe()==before,"Recipe release committed reentrantly during its preview request");
+    }
+  };
+  SendMessageW(track,TBM_SETPOS,TRUE,8000);SendMessageW(pane,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  app.sampleReadResult={};SendMessageW(pane,WM_TIMER,8,0);
+  restoreCheck(pumped&&readRecipe()!=before&&!readOwner().at("active").get<bool>(),"Deferred recipe release was lost");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(readRecipe()==before,"Deferred recipe release split its history");reloadRecipe();
+  const auto value=GetDlgItem(pane,row->at("valueControl").get<int>());SetWindowTextW(value,L"-9");
+  // Complete the same guarded submission used by the idle autosave timer.
+  SendMessageW(pane,WM_COMMAND,3964,LPARAM(GetDlgItem(pane,3964)));
+  const auto after=app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}});
+  bool changed=false;for(const auto &p:after.at("parameters"))if(p.at("id")==1)changed=p.at("manualValue")==-9;
+  restoreCheck(changed&&!editor->snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.state.get",{{"plugin",plugin}})==rack,"Recipe field failed to save or changed the rack instance");
+  app.edit("history.undo",RestoreJson::object());restoreCheck(app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}})==before,"Recipe parameter did not restore in one Undo");
+  app.edit("history.redo",RestoreJson::object());SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));
+  SetWindowTextW(value,L"1e");const auto dirty=editor->snapshot();app.graphNode.clear();
+  app.openGraphRecipeParameters(graph,node,"Recipe controls");restoreCheck(editor->window()==pane&&editor->snapshot()==dirty,"Reopening a recipe editor discarded or retargeted its draft");
+  app.edit("document.patch",{{"title","External edit"}});SendMessageW(pane,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("revision")==dirty.at("revision")&&restoreText(value)==L"1e","Recipe refresh rebased an incomplete captured draft");
+  SendMessageW(pane,WM_COMMAND,3955,LPARAM(GetDlgItem(pane,3955)));
+  const auto path=saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));
+  restoreCheck(editor->retired()&&app.documentOperation("graph.plugin.get",{{"graph",graph},{"node",node}})==after,"Recipe parameters failed persistence or document replacement retirement");
+  fixture.close();
+}
+
 void applicationGraphParameterInspector(){
   RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());const auto plugin=addRestoreGain(app),other=addRestoreGain(app);
   app.openSongRouting();auto *graph=app.songRoutingWindow.get();ScreamSeq::Tests::ownGuiWindow(graph->window());
@@ -171,15 +263,75 @@ void applicationGraphParameterInspector(){
   const auto track=GetDlgItem(window,4001+int(index)*10);
   SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
   restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider tracking committed before gesture completion");
+  const auto preview=app.documentOperation("plugin.parameters.preview.get",RestoreJson::object());
+  restoreCheck(preview.at("active")==true&&preview.at("plugin")==plugin&&preview.at("parameter")==found->at("id"),"Slider tracking did not retain its stable preview owner");
   SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Slider release retained its transient owner");
   const auto slid=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
   restoreCheck(slid[index].at("value")!=after[index].at("value")&&!editor->snapshot().at("dirty").get<bool>(),"Slider release failed to modify the plugin");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider gesture needed more than one Undo");click(3955);
   SendMessageW(track,TBM_SETPOS,TRUE,9000);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,1);
   restoreCheck(!editor->snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Escape committed a cancelled slider");
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Escape retained an audible preview owner");
   SetFocus(track);SendMessageW(track,WM_KEYDOWN,VK_RIGHT,1);SendMessageW(track,WM_KEYUP,VK_RIGHT,1);
   restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[index].at("value")!=after[index].at("value"),"Native slider arrow key did not modify the parameter");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider keyboard step failed Undo");click(3955);
+  SendMessageW(track,TBM_SETPOS,TRUE,6500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));
+  app.sampleMutationCompletion=[&](const std::string &method){if(method=="plugin.parameters.preview.commit"){SetWindowTextW(GetDlgItem(window,rawControl),L"Newer slider text");throw std::runtime_error("Drop slider completion after commit");}};
+  SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));app.sampleMutationCompletion={};
+  restoreCheck(!editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Slider completion failure lost the newer draft or its result");
+  restoreCheck(app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Committed slider retained a transient preview after completion loss");
+  const auto acceptedSlider=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+  SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,1);
+  restoreCheck(!editor->visible()&&!editor->snapshot().at("completion").is_null()&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Escape erased an uncertain slider completion or newer text");editor->show();
+  click(3955);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==acceptedSlider&&restoreText(GetDlgItem(window,rawControl))==L"Newer slider text","Review replayed the slider or overwrote a newer draft");
+  click(3955);app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Slider completion recovery created extra history");click(3955);
+  app.edit("plugin.parameters.preview.set",{{"plugin",other},{"parameter",found->at("id")},{"gesture","competing-inspector"},{"value",candidate}});
+  SendMessageW(track,TBM_SETPOS,TRUE,7500);SendMessageW(window,WM_HSCROLL,TB_THUMBTRACK,LPARAM(track));SendMessageW(window,WM_HSCROLL,TB_ENDTRACK,LPARAM(track));
+  const auto competing=app.documentOperation("plugin.parameters.preview.get",RestoreJson::object());
+  restoreCheck(editor->snapshot().at("needsReload")==true&&competing.at("active")==true&&competing.at("gesture")=="competing-inspector"&&app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==after,"Refused preview fell through to a durable slider edit or took another owner");
+  click(3955);
+  {
+    bool loseOwnershipRead=true;
+    ScreamSeq::PluginParametersWindow recovering(app.window,plugin,"Preview recovery fixture",
+      [&](const auto &method,const auto &params){if(method=="plugin.parameters.preview.get"&&loseOwnershipRead){loseOwnershipRead=false;throw std::runtime_error("Drop ownership read after rejected preview");}return app.documentOperation(method,params);},
+      [&]{return std::pair(app.documentId,app.view->session.revision);},
+      [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+    recovering.show();ScreamSeq::Tests::ownGuiWindow(recovering.window());const auto recoveredTrack=GetDlgItem(recovering.window(),4001+int(index)*10);
+    SendMessageW(recoveredTrack,TBM_SETPOS,TRUE,7500);SendMessageW(recovering.window(),WM_HSCROLL,TB_THUMBTRACK,LPARAM(recoveredTrack));
+    restoreCheck(recovering.snapshot().at("needsReload")==true&&!loseOwnershipRead,"Unknown preview recovery fixture did not reject tracking and lose its ownership read");
+    SendMessageW(recovering.window(),WM_COMMAND,3955,LPARAM(GetDlgItem(recovering.window(),3955)));
+    restoreCheck(recovering.snapshot().at("needsReload")==false&&recovering.snapshot().at("dirty")==false&&app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("gesture")=="competing-inspector","Reload could not reconcile an unknown preview without cancelling another owner");
+    recovering.hide();
+  }
+  app.edit("plugin.parameters.preview.cancel",{{"plugin",other},{"parameter",found->at("id")},{"gesture","competing-inspector"}});
+  for(int mode=0;mode<3;++mode){
+    HWND pumpingWindow=nullptr;bool pumped=false;
+    const auto beforePump=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto pumpRevision=app.view->session.revision;
+    ScreamSeq::PluginParametersWindow pumping(app.window,plugin,"Deferred slider fixture",
+      [&](const auto &method,const auto &params){auto result=app.documentOperation(method,params);
+        if(method=="plugin.parameters.preview.set"&&!pumped){
+          pumped=true;const auto heldTrack=GetDlgItem(pumpingWindow,4001+int(index)*10);SendMessageW(heldTrack,TBM_SETPOS,TRUE,8500);
+          SendMessageW(pumpingWindow,WM_HSCROLL,TB_THUMBPOSITION,LPARAM(heldTrack));
+          if(mode==1)SendMessageW(pumpingWindow,WM_KEYDOWN,VK_ESCAPE,1);
+          if(mode==2)SendMessageW(heldTrack,WM_CAPTURECHANGED,0,0);else SendMessageW(pumpingWindow,WM_HSCROLL,TB_ENDTRACK,LPARAM(heldTrack));
+          SendMessageW(pumpingWindow,WM_TIMER,8,0);
+          restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==beforePump,"Pumped slider event committed recursively inside its preview request");
+        }return result;},
+      [&]{return std::pair(app.documentId,app.view->session.revision);},
+      [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+    pumpingWindow=pumping.window();pumping.show();ScreamSeq::Tests::ownGuiWindow(pumpingWindow);const auto pumpingTrack=GetDlgItem(pumpingWindow,4001+int(index)*10);
+    SendMessageW(pumpingTrack,TBM_SETPOS,TRUE,4500);SendMessageW(pumpingWindow,WM_HSCROLL,TB_THUMBTRACK,LPARAM(pumpingTrack));SendMessageW(pumpingWindow,WM_TIMER,8,0);
+    restoreCheck(pumped&&!pumping.snapshot().at("dirty").get<bool>()&&app.documentOperation("plugin.parameters.preview.get",RestoreJson::object()).at("active")==false,"Deferred release/cancel did not finish its retained preview");
+    const auto afterPump=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+    if(mode==1)restoreCheck(afterPump==beforePump&&app.view->session.revision==pumpRevision,"Escape during preview wait committed a value or created history");
+    else{
+      double final=field.minimum+(field.maximum-field.minimum)*.85;if(field.step>0)final=std::clamp(field.minimum+std::round((final-field.minimum)/field.step)*field.step,field.minimum,field.maximum);
+      restoreCheck(std::abs(afterPump[index].at("value").get<double>()-final)<1e-5&&afterPump!=beforePump,"Deferred release did not commit the final trackbar position");
+      app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==beforePump,"Deferred slider gesture required more than one Undo");
+    }
+    pumping.hide();
+  }
   // Unrelated graph edits must not silently rebase a typed parameter draft.
   SetWindowTextW(GetDlgItem(window,rawControl),L"-.");const auto rev=editor->snapshot().at("revision");app.edit("document.patch",{{"title","Parameter draft survives graph work"}});SendMessageW(window,WM_TIMER,7,0);
   restoreCheck(editor->snapshot().at("revision")==rev&&restoreText(GetDlgItem(window,rawControl))==L"-.","Parameter timer rebased or overwrote raw text");SetWindowTextW(GetDlgItem(window,rawControl),std::to_wstring(field.value).c_str());click(applyControl);

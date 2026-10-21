@@ -1484,11 +1484,23 @@
             {
               "if": {
                 "properties": {
-                  "operation": { "const": "move" }
+                  "operation": {
+                    "const": "move"
+                  }
                 }
               },
-              "then": { "required": ["destination"] },
-              "else": { "not": { "required": ["destination"] } }
+              "then": {
+                "required": [
+                  "destination"
+                ]
+              },
+              "else": {
+                "not": {
+                  "required": [
+                    "destination"
+                  ]
+                }
+              }
             }
           ],
           "required": [
@@ -2595,10 +2607,20 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 63
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
             }
           },
-          "required": [
-            "slot"
+          "oneOf": [
+            {
+              "required": ["slot"]
+            },
+            {
+              "required": ["plugin"]
+            }
           ],
           "additionalProperties": false
         }
@@ -2896,33 +2918,70 @@
               "minimum": 0,
               "maximum": 63,
               "description": "Final zero-based rack slot. Intervening items retain relative order."
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate the move without changing rack order, parameter previews or history."
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Stable instance identity; supply exactly one of plugin or slot."
             }
           },
           "required": [
-            "slot",
             "expectedRevision"
           ],
           "additionalProperties": false,
-          "oneOf": [
+          "allOf": [
             {
-              "required": [
-                "direction"
-              ],
-              "not": {
-                "required": [
-                  "position"
-                ]
-              }
+              "oneOf": [
+                {
+                  "required": [
+                    "direction"
+                  ],
+                  "not": {
+                    "required": [
+                      "position"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "position"
+                  ],
+                  "not": {
+                    "required": [
+                      "direction"
+                    ]
+                  }
+                }
+              ]
             },
             {
-              "required": [
-                "position"
-              ],
-              "not": {
-                "required": [
-                  "direction"
-                ]
-              }
+              "oneOf": [
+                {
+                  "required": [
+                    "slot"
+                  ],
+                  "not": {
+                    "required": [
+                      "plugin"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "plugin"
+                  ],
+                  "not": {
+                    "required": [
+                      "slot"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         }
@@ -2969,6 +3028,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate without changing accepted state, history, transport or an active preview. Returns wouldChange."
             }
           },
           "required": [
@@ -3058,6 +3121,212 @@
       "additionalProperties": false
     },
     {
+      "description": "Read the retained transient rack parameter preview. Does not change document history. Retired ownership is reconciled against the current document and audio host.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.parameters.preview.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Audition one rack parameter in native catalog units without changing saved state or history. Requires a stable plugin identity and a gesture token. Returns audible:false without starting audio when the host is inactive.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.parameters.preview.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugin",
+            "parameter",
+            "gesture",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Commit the final value of the matching retained preview through the normal parameter edit path, with one Undo step. Stale or different ownership rejects. A no-op restores the accepted baseline without adding history.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.parameters.preview.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugin",
+            "parameter",
+            "gesture",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Cancel the matching preview and restore the current accepted baseline without history. Idempotent after retirement. Queue refusal preserves ownership for explicit retry.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "plugin.parameters.preview.cancel"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "plugin": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugin",
+            "parameter",
+            "gesture"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "description": "Set a validated parameter batch as one Undo step. Uses native units from plugin.parameters.get; VST3 uses normalized values. A stable plugin identity is preferred to a mutable slot.",
       "type": "object",
       "properties": {
@@ -3111,6 +3380,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128
+            },
+            "dryRun": {
+              "type": "boolean",
+              "description": "Validate without changing accepted state, history, transport or an active preview. Returns wouldChange."
             }
           },
           "required": [
@@ -9484,7 +9757,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Export the current module format after checking sample preservation and rejecting native metadata, plugins or automation that cannot be represented. Does not change the native save destination or dirty flag.",
+      "description": "Export the current MOD/XM/S3M/IT/MPTM format after validating structure, samples and timing. Rejects native annotations, hosted plugins, recorded automation, uncommitted takes and retained unknown project data or recovery archives. Dry run writes nothing; actual export leaves native save destination, source protection, dirty state and history unchanged. Both native platforms implement this method.",
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -18843,6 +19116,47 @@
       "additionalProperties": false
     },
     {
+      "description": "Clear all recorded parameter lanes in one reversible edit without capturing automated values into saved manual state. Live publication preserves playback; dryRun and empty no-op preserve history.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recorded.clear"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
       "type": "object",
       "properties": {
         "jsonrpc": {
@@ -22344,6 +22658,230 @@
       ],
       "additionalProperties": false,
       "description": "Atomically edit one audio port trim in dB, inverse compensation link or replacement modulation source list. Link edits preserve the sum of both manual gains. One Undo, revision checked; dryRun validates without changing audio or history."
+    },
+    {
+      "description": "Read the retained transient recipe parameter preview. Does not change document history. Retired ownership is reconciled against the current document and audio host. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Audition one recipe parameter in native catalog units without changing saved state or history. Requires stable graph and node identities and a gesture token. Returns audible:false without starting audio when the host is inactive. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "value",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Commit the final value of the matching retained preview through the normal parameter edit path, with one Undo step. Stale or different ownership rejects. A no-op restores the accepted baseline without adding history. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "value": {
+              "type": "number"
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "value",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Cancel the matching preview and restore the current accepted baseline without history. Idempotent after retirement. Queue refusal preserves ownership for explicit retry. Recipe and rack previews are mutually exclusive within a session.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "graph.plugin.preview.cancel"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parameter": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "gesture": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "graph": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            },
+            "node": {
+              "type": "string",
+              "pattern": "^n[1-9][0-9]*$",
+              "maxLength": 32
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "parameter",
+            "gesture",
+            "graph",
+            "node"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ],
   "$defs": {

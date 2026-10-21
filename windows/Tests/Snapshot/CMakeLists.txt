@@ -8,7 +8,7 @@ set(SCREAMSEQ_ENGINE_LIB_DIR "${ROOT}/bin/windows-workspace/Release" CACHE PATH 
 add_executable(snapshot-tests SnapshotTests.cpp
   "${ROOT}/editor/TrackerDocument.cpp" "${ROOT}/editor/SampleArchive.cpp"
   "${ROOT}/windows/Project/NativeProject.cpp" "${ROOT}/windows/Project/NativeMetadata.cpp"
-  "${ROOT}/windows/Project/BinaryPlist.cpp")
+  "${ROOT}/editor/project/BinaryPlist.cpp")
 add_executable(snapshot-editing-tests "${ROOT}/windows/Tests/Editing/DocumentOperationsTests.cpp"
   "${ROOT}/windows/Session/DocumentOperations.cpp"
   "${ROOT}/editor/TrackerDocument.cpp" "${ROOT}/editor/SampleArchive.cpp")
@@ -21,5 +21,11 @@ target_link_libraries(${test} PRIVATE "${SCREAMSEQ_ENGINE_LIB_DIR}/TrackerEditor
 endforeach()
 enable_testing()
 add_test(NAME snapshot-tests COMMAND snapshot-tests)
+set(snapshot_scratch "${CMAKE_CURRENT_BINARY_DIR}/test-scratch/snapshot")
+add_test(NAME snapshot-scratch COMMAND "${CMAKE_COMMAND}" "-DDIRECTORY=${snapshot_scratch}"
+  -P "${ROOT}/windows/cmake/FreshDirectory.cmake")
+set_tests_properties(snapshot-scratch PROPERTIES FIXTURES_SETUP snapshot-scratch)
+set_tests_properties(snapshot-tests PROPERTIES FIXTURES_REQUIRED snapshot-scratch
+  ENVIRONMENT "TMPDIR=${snapshot_scratch};SCREAMSEQ_SNAPSHOT_REFERENCE_PROJECT=${ROOT}/editor/Tests/Fixtures/Parity20261009/fixtures/04-complete-reference.screamseq")
 add_test(NAME snapshot-editing-tests COMMAND snapshot-editing-tests)
 add_test(NAME snapshot-probe COMMAND snapshot-editing-tests --snapshot-probe)

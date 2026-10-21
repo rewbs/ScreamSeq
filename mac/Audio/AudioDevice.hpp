@@ -1,6 +1,7 @@
 #pragma once
 #include "AudioUnitHost.hpp"
 #include "editor/TrackerDocument.hpp"
+#include "editor/RecordingFrameClock.hpp"
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreAudio/CoreAudio.h>
 #include <atomic>
@@ -12,7 +13,11 @@ struct DeviceInfo {
 class AudioDevice {
   AudioUnit unit_ = nullptr;
   std::unique_ptr<Renderer> renderer_;
+  std::shared_ptr<RecordingFrameTimeline> frameTimeline_;
+  uint64_t captureGeneration_=0;
+  bool captureFrames_=false;
   std::unique_ptr<PluginChain> plugins_;
+  uint64_t pluginEpoch_=0;
   std::vector<PluginState> pluginStates_;
   std::vector<size_t> pendingEditors_;
   std::vector<ParameterChange> automation_;
@@ -60,7 +65,7 @@ public:
     std::unique_ptr<RecordedAutomationPlan> hosted;
     std::vector<ParameterChange> points;
   };
-  std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &);
+  std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &,std::span<const ParameterChange> manualBaselines={});
   bool publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan>);
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }
@@ -77,6 +82,13 @@ public:
   bool pluginParameterBatch(std::span<const ParameterChange> changes) {
     return plugins_ && plugins_->enqueueParameters(changes);
   }
+  uint64_t pluginEpoch()const noexcept{return pluginEpoch_;}
+  bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
+  bool cancelPluginParameterPreview(size_t slot,uint32_t id){
+    if(!plugins_||!plugins_->hasParameterPreview(slot,id))return true;
+    if(!active())plugins_->applyPending();
+    const std::array<uint32_t,1> ids{id};return plugins_->cancelParameterPreviews(slot,ids);
+  }
   bool pluginBypass(size_t slot,bool value) {
     if(slot>=pluginStates_.size()||(plugins_&&!plugins_->bypass(slot,value)))return false;
     pluginStates_[slot].bypass=value;return true;
@@ -86,6 +98,12 @@ public:
       plugins_->showEditor(slot);
   }
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
+  bool popPluginEdit(size_t slot,PluginEdit &event) {return plugins_&&plugins_->popEdit(slot,event);}
+  bool popPluginEdit(size_t slot,PluginEdit &event,PluginEditSource &source) {
+    source={};return plugins_&&plugins_->popEdit(slot,event,source);
+  }
+  PluginEditSource pluginEditSource(size_t slot) const noexcept {return plugins_?plugins_->editSource(slot):PluginEditSource{};}
+  uint64_t droppedPluginEdits(size_t slot) const noexcept {return plugins_?plugins_->droppedEdits(slot):0;}
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
   NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}
@@ -113,6 +131,16 @@ public:
   MixerTransition::Reading mixerRoutingReading() const noexcept {return plugins_?plugins_->mixerRoutingReading():MixerTransition::Reading{};}
   std::unique_ptr<MixerTransition::Plan> prepareMixerRouting(const NativeSong &native);
   std::unique_ptr<GraphControlPlan> prepareGraphControls(const NativeSong &native) {return active()&&plugins_?plugins_->prepareGraphControls(native):nullptr;}
+  std::unique_ptr<GraphControlPlan> prepareGraphParameterPreview(const NativeSong &native,
+      uint64_t graph,uint64_t node,uint32_t parameter,double value,std::span<const PluginParameter> catalog) {
+    return active()&&plugins_?plugins_->prepareGraphParameterPreview(native,graph,node,parameter,value,catalog):nullptr;
+  }
+  bool restoreGraphParameterPreview(const NativeSong &native) {
+    if(!plugins_)return true;
+    if(!active())plugins_->applyPending(); // Only a quiescent callback may be drained here.
+    auto plan=plugins_->prepareGraphControls(native);
+    return plan&&plugins_->publishGraphControls(std::move(plan));
+  }
   bool publishGraphControls(std::unique_ptr<GraphControlPlan> plan) {return plugins_&&plugins_->publishGraphControls(std::move(plan));}
   bool publishMixerRouting(std::unique_ptr<MixerTransition::Plan> &plan) noexcept {return plugins_ && plugins_->publishMixerRouting(plan);}
   std::vector<MixerMeter> mixerMeters() const { return active() && plugins_ ? plugins_->mixerMeters() : std::vector<MixerMeter>{}; }
@@ -125,6 +153,7 @@ public:
   bool playing() const { return playing_.load() && !previewing_; }
   bool active() const { return playing_.load(); }
   Renderer *renderer() { return renderer_.get(); }
+  std::shared_ptr<const RecordingFrameTimeline> recordingFrameTimeline() const {return frameTimeline_;}
   Telemetry telemetry() const;
   double sampleRate() const { return sampleRate_; }
   uint32_t bufferSize() const { return bufferSize_; }

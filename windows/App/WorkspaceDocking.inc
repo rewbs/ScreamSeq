@@ -105,7 +105,8 @@
     Regions::Geometry workspaceRegionGeometry()const {
         RECT client{};GetClientRect(window,&client);const auto scale=96.f/GetDpiForWindow(window);
         Regions::Minimums minimums;minimums.patternWidth=workspaceState.visible()?656.f:350.f;
-        return Regions::solve({170,88,std::max(0.f,client.right*scale-178),std::max(0.f,client.bottom*scale-132)},
+        const auto left=workspaceState.contentLeft();
+        return Regions::solve({left,88,std::max(0.f,client.right*scale-left-8),std::max(0.f,client.bottom*scale-132)},
             currentWorkspaceRegions(),minimums,workspaceState.layout=="Pattern focus",workspaceState.lowerVisible);
     }
     bool sideWorkspaceDock()const {return hasWorkspaceDock()&&workspaceRegionGeometry().mode==Regions::Mode::regions;}

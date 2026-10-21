@@ -268,13 +268,13 @@ void Document::validateSamples() const
 }
 void Document::validateModuleSampleExport()
 {
-	validateSamples();
-	auto converted = load(serialize());
-	validateSongStructureExport(*song_, *converted);
-	validateSampleExport(*song_, *converted);
-	validateTimingExport(*song_, *converted);
+	(void)moduleExportData();
 }
-void Document::save(const std::string &path, bool preserveSamples)
+std::vector<std::byte> Document::moduleExportData()
+{
+	return prepareModuleBytes(true);
+}
+std::vector<std::byte> Document::prepareModuleBytes(bool preserveSamples)
 {
 	validateSamples();
 	auto bytes = serialize();
@@ -284,6 +284,11 @@ void Document::save(const std::string &path, bool preserveSamples)
 		validateSampleExport(*song_, *converted);
 		validateTimingExport(*song_, *converted);
 	}
+	return bytes;
+}
+void Document::save(const std::string &path, bool preserveSamples)
+{
+	auto bytes = prepareModuleBytes(preserveSamples);
 #if defined(_WIN32)
 	// Same-directory exclusive creation and replacement preserve the original on
 	// failure. UTF-8 document paths must not pass through the Windows ANSI codepage.

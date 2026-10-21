@@ -16,11 +16,13 @@
         // Keep the historical default shape; the optional field is local
         // workspace presentation and never enters project metadata.
         if(rowHeight!=18)result["patternRowHeight"]=unsigned(rowHeight);
+        if(!workspaceState.contextPanelVisible)result["contextPanelVisible"]=false;
         return result;
     }
     void restoreLayoutConfiguration(const Json &v) {
         auto need=[](bool ok){if(!ok)throw ScreamSeq::Api::ApiError(-32602,"Invalid saved workspace layout");};
-        need(v.is_object()&&v.size()==7+size_t(v.contains("editors"))+size_t(v.contains("patternRowHeight")));
+        need(v.is_object()&&v.size()==7+size_t(v.contains("editors"))+size_t(v.contains("patternRowHeight"))+size_t(v.contains("contextPanelVisible")));
+        need(!v.contains("contextPanelVisible")||v.at("contextPanelVisible").is_boolean());
         float nextRowHeight=18;
         if(v.contains("patternRowHeight")) {
             const auto &height=v.at("patternRowHeight");
@@ -90,6 +92,7 @@
         workspaceState.layout=base;workspaceState.active=active;
         workspaceState.rightWidth=right;workspaceState.lowerHeight=lower;
         rowHeight=nextRowHeight;
+        workspaceState.contextPanelVisible=v.value("contextPanelVisible",true);
         workspaceState.lowerVisible=v.at("lowerVisible").get<bool>();
         // These remain the two legacy Notes/Samples inspector flags, unrelated
         // to the four independent native editor placements in editors V4.
