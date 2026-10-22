@@ -21,6 +21,12 @@ No build before **16:09:04UTC**; inspect receipts, never repeat this build.
 No QA process remains. Newer Mac intake/restore source is backed up separately
 at100fca5f0 and remains unbuilt; do not conflate it with the package.
 
+The following source adds grouped native restoration leases and fixed Stop
+rechecks to the Mac take owner, with mixed AU/VST3 failure/retry and visible
+slider protection assertions. It remains unbuilt and outside077e. See
+[native intake/restoration obligations](MAC-GESTURE-INTAKE-2026-10-22.md).
+Session/API/history/recovery wiring and real opaque verification remain open.
+
 Retained96b fixture exchange passed Windows→Mac ARM/Intel (run39800910382),
 then Mac ARM→Windows (39801329971) and Mac Intel→Windows (39802052452).
 Both return artifacts were downloaded with matching GitHub SHA256, safely

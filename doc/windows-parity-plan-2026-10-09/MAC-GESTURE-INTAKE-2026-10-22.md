@@ -460,3 +460,40 @@ release: the caller must hold input leases, recheck fixed cuts and verify vendor
 state before dropping ownership. In particular, Mac's rendering vendor is also
 its editor vendor; copying Windows' isolated-vendor state replacement would be
 incorrect. This source must not be described as completed recording parity.
+
+## Following source batch: guarded native restoration — unbuilt
+
+`NativeParameterTake::restoreRetained` now acquires the full group's native
+input leases before restoring audible previews or invoking the session's saved
+state verification callback. It checks the immutable Stop queue positions,
+provider incarnations, loss counters and empty pending prefixes before leases,
+after acquiring them, after verification and after releasing them. A later
+native edit refuses restoration without consuming it. Even explicitly consuming
+that later edit elsewhere cannot silently rebase the original Stop position.
+
+Partial lease acquisition cleans up acquired tokens; a failed cleanup retains
+its token in the take for retry. Opaque verification failure retains the take
+and releases ordinary input where possible. The owner is never reset by this
+method: session history/recovery publication and explicit ownership release
+still follow successful native verification. It rejects reentrant intake while
+restoration runs and never replaces Mac's shared editor/render vendor. The
+low-level `restorePreview` remains separately documented for a caller already
+holding verified native leases; it is not a release operation.
+
+Prepared `native-plugins` assertions cover mixed AU/VST3 partial group lease
+refusal without prefix restoration, successful retry, live-take refusal,
+verification failure/retry, provider/value/input retention and a post-Stop suffix
+that remains protected even after an explicit fixture-only consume. The `--ui`
+fixture additionally covers a successful retained VST3 window with its slider
+disabled during verification and enabled after failure and success. Existing
+original-time, queue-capacity, fixed-Stop and shared rendered assertions remain.
+No build/test has run for this source. Both Mac architectures and the visible
+native fixture must pass at a future coordinated checkpoint, no earlier than
+16:09:04UTC on22October. The077e Windows package deliberately excludes it.
+
+Remaining session work: supply real opaque saved-state/manual-baseline
+verification (not just the test callback), exclude manual consumers and state
+mutations while the take owns a provider, coordinate unified Keep history and
+recovery publication, and connect all seven lifecycle API methods/native controls.
+Closed-editor explicit abandonment needs its own retained-evidence policy; this
+strict helper does not implement it or silently drop queued vendor callbacks.

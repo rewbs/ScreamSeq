@@ -3,6 +3,7 @@
 #include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "editor/hosted/RecordedGestureDrain.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include <exception>
 #include <functional>
 #include <mach/mach_time.h>
 
@@ -10,8 +11,8 @@ namespace Tracker {
 // Mac session control-owner adapter. The session must exclude legacy/manual
 // intake for owned providers and retain this object until native restoration
 // and history/recovery publication finish. It is not an audio callback owner.
-// Native input leases and opaque vendor restoration remain the session's duty;
-// cancelling an audible preview does not relinquish this take's ownership.
+// Opaque vendor verification and history publication remain the session's duty;
+// restoring an audible preview does not relinquish this take's ownership.
 class NativeParameterTake {
 public:
   using Context=std::pair<std::string,uint64_t>;
@@ -23,6 +24,7 @@ private:
   ContextReader context_;
   RecordedGestureDrain::Catalogs catalogs_;
   RecordedGestureBoundary::Cuts stoppedCuts_;
+  std::map<std::string,PluginEditorInputBarrier> inputBarriers_;
   size_t previewedEvents_=0;
   bool entering_=false;
   struct Entry {
@@ -76,6 +78,39 @@ private:
       previewedEvents_=take_->eventCount();
     }
     return result==RecordedGestureDrain::Result::Complete;
+  }
+  void releaseInputBarriers() {
+    for(auto i=inputBarriers_.begin();i!=inputBarriers_.end();) {
+      if(i->second.incarnation) {
+        require(audio_.pluginEpoch()==hostEpoch_,"Native input lease belongs to a replaced audio host; take retained");
+        const auto index=slot(i->first);
+        require(audio_.pluginEditSource(index).incarnation==i->second.incarnation&&
+          audio_.endPluginInputBarrier(index,i->second),"Native input lease could not be released; retry with the retained take");
+      }
+      i=inputBarriers_.erase(i);
+    }
+  }
+  void requireRestorationCut()const {
+    require(audio_.pluginEpoch()==hostEpoch_&&!stoppedCuts_.empty(),"Restoration needs the retained host and native Stop boundary");
+    const auto now=cuts();
+    require(audio_.pluginEpoch()==hostEpoch_,"Audio host changed during restoration observation; take retained");
+    for(const auto &[identity,cut]:stoppedCuts_) {
+      const auto &next=now.at(identity);
+      require(next.source==cut.source&&next.fence.position==cut.fence.position&&next.fence.pending==0,
+        "Plugin input changed or remains undrained after Stop; input and take retained");
+    }
+  }
+  bool restorePreviewImpl(bool discard) {
+    require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
+    std::vector<AudioDevice::ParameterPreviewOwner> targets;targets.reserve(take_->targetCount());
+    const auto providers=take_->providers();
+    for(size_t i=0;i<take_->targetCount();++i) {
+      const auto &key=take_->target(i).key();
+      const auto provider=std::find_if(providers.begin(),providers.end(),[&](const auto &p){return p.plugin==key.plugin;});
+      require(provider!=providers.end(),"Parameter target lost its native provider");
+      targets.push_back({key.plugin,key.parameter,provider->source.incarnation});
+    }
+    return audio_.cancelPluginParameterPreviews(hostEpoch_,targets);
   }
 public:
   NativeParameterTake(const NativeParameterTake &)=delete;
@@ -140,17 +175,36 @@ public:
   // Call only inside the native release lease after checking the fixed Stop
   // cuts again. The session owns vendor-state verification and explicit release.
   bool restorePreview(bool discard) {
+    Entry entry(entering_);return restorePreviewImpl(discard);
+  }
+  // Retain the owner on every false return/exception, including failed native
+  // lease cleanup. The session must verify opaque state/manual baselines in
+  // verifyNativeState, then publish/release ownership only after success. Mac's
+  // editor and render vendor are the same object: never replace an isolated
+  // editor copy as the Windows adapter does. This method never drops input.
+  bool restoreRetained(bool discard,const std::function<void()> &verifyNativeState) {
     Entry entry(entering_);
+    require(bool(verifyNativeState),"Native take restoration needs saved-state verification");
     require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
-    std::vector<AudioDevice::ParameterPreviewOwner> targets;targets.reserve(take_->targetCount());
-    const auto providers=take_->providers();
-    for(size_t i=0;i<take_->targetCount();++i) {
-      const auto &key=take_->target(i).key();
-      const auto provider=std::find_if(providers.begin(),providers.end(),[&](const auto &p){return p.plugin==key.plugin;});
-      require(provider!=providers.end(),"Parameter target lost its native provider");
-      targets.push_back({key.plugin,key.parameter,provider->source.incarnation});
+    releaseInputBarriers(); // Finish any earlier failed cleanup before reacquiring.
+    requireRestorationCut();
+    // Allocate the complete token map before freezing any native editor.
+    for(const auto &[identity,catalog]:catalogs_)inputBarriers_.emplace(identity,PluginEditorInputBarrier{});
+    try {
+      for(auto &[identity,barrier]:inputBarriers_) {
+        const auto acquired=audio_.beginPluginInputBarrier(slot(identity));
+        require(acquired.has_value(),"Plugin cannot protect native input during take restoration");barrier=*acquired;
+      }
+      requireRestorationCut(); // Vendor calls may pump input while acquiring leases.
+      if(!restorePreviewImpl(discard)){releaseInputBarriers();return false;}
+      verifyNativeState(); // Fallible session work; the take remains recoverable.
+      requireRestorationCut();
+      releaseInputBarriers();
+      requireRestorationCut(); // Re-enabling native input can execute vendor code.
+      return true;
+    } catch(...) {
+      const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
     }
-    return audio_.cancelPluginParameterPreviews(hostEpoch_,targets);
   }
 };
 }
