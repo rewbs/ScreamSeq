@@ -11,9 +11,10 @@ namespace Tracker {
 // validation, timestamp substitution or overflow policy belongs in this queue.
 // Capture a fence on the actual native input owner for an admission boundary;
 // a fence alone is NOT a native input barrier or a provider identity.
-class PluginEditQueue {
+template<size_t Capacity> class BoundedPluginEditQueue {
 public:
-  static constexpr size_t capacity=8192;
+  static_assert(Capacity>0);
+  static constexpr size_t capacity=Capacity;
   struct Fence {uint64_t position=0,pending=0;};
   using Read=PluginEditRead;
 private:
@@ -52,4 +53,7 @@ public:
   }
   bool pop(PluginEdit &event)noexcept{return popBefore(fence(),event)==Read::Event;}
 };
+// Preserve the VST3 notification budget and all existing users. Native adapters
+// with a different existing budget share the same cursor/fence implementation.
+using PluginEditQueue=BoundedPluginEditQueue<8192>;
 }

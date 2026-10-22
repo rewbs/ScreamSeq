@@ -1,4 +1,5 @@
 #include "AudioUnitHost.hpp"
+#include "AudioUnitEditIntake.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "NativeSignalGraph.hpp"
 #include "PluginMainThread.hpp"
@@ -13,6 +14,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <set>
+#include <mach/mach_time.h>
 @implementation RSPluginWindowDelegate
 - (void)windowWillClose:(NSNotification *)notification {
   if (self.onClose)
@@ -89,11 +91,11 @@ class MacPluginBackend final : public PluginBackend {
   double rate_ = 48000;
   uint64_t renderPosition_ = 0;
   std::unique_ptr<VST3Plugin> vst_;
+  std::unique_ptr<AudioUnitEditIntake> auEdits_;
   std::vector<PluginAudioBus> buses_;
   std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
   std::unique_ptr<PluginAudioBufferPlan> audio_;
   void *editorWindow_ = nullptr, *editorDelegate_ = nullptr, *parameterListener_ = nullptr;
-  uint64_t retiredEditorDrops_ = 0; // Main-run-loop owner, retained across editor reopen.
 public:
   MacPluginBackend(const PluginState &, double rate, bool offline);
   ~MacPluginBackend() override;
@@ -105,7 +107,7 @@ public:
   const std::vector<PluginAudioBus> &buses() const override { return buses_; }
   uint64_t preparedAuxiliaryInputs() const override {return vst_?vst_->preparedAuxiliaryInputs():audio_->preparedInputs();}
   uint64_t preparedAuxiliaryOutputs() const override {return vst_?vst_->preparedAuxiliaryOutputs():audio_->preparedOutputs();}
-  size_t preparedStorageBytes()const noexcept override{return sizeof(*this)+(vst_?vst_->preparedStorageBytes():audio_->storageBytes());}
+  size_t preparedStorageBytes()const noexcept override{return sizeof(*this)+(vst_?vst_->preparedStorageBytes():audio_->storageBytes()+sizeof(AudioUnitEditIntake));}
   const float *auxiliaryOutput(uint32_t bus) const noexcept override {return vst_?vst_->auxiliaryOutput(bus):audio_->output(bus);}
   std::vector<PluginParameter> parameters() const override;
   std::vector<PluginProgram> programs() const override;
@@ -127,23 +129,21 @@ public:
   bool popEdit(uint32_t &, float &) noexcept override;
   bool popEdit(PluginEdit &) noexcept override;
   uint64_t droppedEdits() const noexcept override;
-  std::optional<PluginEditFence> editFence() override {return vst_?std::optional<PluginEditFence>(vst_->editFence()):std::nullopt;}
+  std::optional<PluginEditFence> editFence() override;
   PluginEditRead popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept override {
-    return vst_?vst_->popEditBefore(fence,event):PluginEditRead::Unsupported;
+    return vst_?vst_->popEditBefore(fence,event):auEdits_->popBefore(fence,event);
   }
   static std::vector<PluginDescriptor> discover();
 };
 namespace {
 struct AUEditObserver {
   AUEventListenerRef listener = nullptr;
-  std::array<PluginEdit,1024> events{};
-  uint32_t read = 0, write = 0;
-  uint64_t dropped=0; // Listener and consumer both belong to the main run loop.
+  AudioUnitEditIntake &intake;
+  explicit AUEditObserver(AudioUnitEditIntake &owner):intake(owner){}
   static void callback(void *ref, void *, const AudioUnitEvent *event, UInt64 hostTime, Float32 value) {
     auto &s = *static_cast<AUEditObserver *>(ref);
     if(event->mEventType!=kAudioUnitEvent_ParameterValueChange)return;
-    if(s.write-s.read>=s.events.size()){++s.dropped;return;}
-    s.events[s.write++ % s.events.size()]={event->mArgument.mParameter.mParameterID,value,hostTime};
+    s.intake.push({event->mArgument.mParameter.mParameterID,value,hostTime});
   }
   ~AUEditObserver() {
     if (listener)
@@ -199,6 +199,7 @@ MacPluginBackend::MacPluginBackend(const PluginState &state, double rate, bool o
     buses_ = vst_->buses();
     return;
   }
+  auEdits_=std::make_unique<AudioUnitEditIntake>();
   pluginMainCall([&] {
     AudioComponentDescription description{descriptor_.type, descriptor_.subtype, descriptor_.manufacturer, 0, 0};
     if (description.componentType != kAudioUnitType_Effect && description.componentType != kAudioUnitType_MusicDevice)
@@ -525,7 +526,7 @@ void MacPluginBackend::showEditor() {
   RSPluginEditorContainer *container=[[RSPluginEditorContainer alloc] initWithPluginView:view];
   window.contentView=container;
   [container synchronizePluginFrame];
-  auto observer = std::make_unique<AUEditObserver>();
+  auto observer = std::make_unique<AUEditObserver>(*auEdits_);
   checkAU(AUEventListenerCreate(AUEditObserver::callback, observer.get(), CFRunLoopGetMain(), kCFRunLoopCommonModes,
                                 0.01, 0.01, &observer->listener),
           "Cannot observe Audio Unit edits");
@@ -533,7 +534,7 @@ void MacPluginBackend::showEditor() {
     AudioUnitEvent event{};
     event.mEventType = kAudioUnitEvent_ParameterValueChange;
     event.mArgument.mParameter = {unit_, p.id, kAudioUnitScope_Global, 0};
-    AUEventListenerAddEventType(observer->listener, nullptr, &event);
+    checkAU(AUEventListenerAddEventType(observer->listener, nullptr, &event),"Cannot observe Audio Unit parameter");
   }
   RSPluginWindowDelegate *delegate = [RSPluginWindowDelegate new];
   delegate.onClose = ^{
@@ -567,9 +568,8 @@ void MacPluginBackend::closeEditor() {
   auto close = ^{
     if (parameterListener_) {
       auto *observer=static_cast<AUEditObserver *>(parameterListener_);
-      // Closing the native view retires this listener. Report queued events
-      // discarded here as well as overflow; reopening must not reset evidence.
-      retiredEditorDrops_+=observer->dropped+uint32_t(observer->write-observer->read);
+      // Retire delivery from this view, retaining already delivered events on
+      // the backend. Reopening must not reset queue position or loss evidence.
       delete observer;
       parameterListener_ = nullptr;
     }
@@ -597,16 +597,17 @@ bool MacPluginBackend::popEdit(uint32_t &id, float &value) noexcept {
 bool MacPluginBackend::popEdit(PluginEdit &event) noexcept {
   if (vst_)
     return vst_->popEdit(event);
-  auto *observer = static_cast<AUEditObserver *>(parameterListener_);
-  if (!observer || observer->read == observer->write)
-    return false;
-  event=observer->events[observer->read++ % observer->events.size()];
-  return true;
+  return auEdits_->pop(event);
 }
 uint64_t MacPluginBackend::droppedEdits() const noexcept {
   if(vst_)return vst_->droppedEdits();
-  const auto *observer=static_cast<const AUEditObserver *>(parameterListener_);
-  return retiredEditorDrops_+(observer?observer->dropped:0);
+  return auEdits_->dropped();
+}
+std::optional<PluginEditFence> MacPluginBackend::editFence() {
+  if(vst_)return vst_->editFence();
+  PluginEditFence fence;
+  pluginMainCall([&]{fence=auEdits_->fence(mach_absolute_time());});
+  return fence;
 }
 namespace {
 class MacBackendFactory final : public PluginBackendFactory {

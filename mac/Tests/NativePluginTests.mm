@@ -15,6 +15,9 @@
 #include <mach/mach_time.h>
 using namespace Tracker;
 using namespace OpenMPT;
+std::vector<Tracker::PluginDescriptor> registerFixtureAUs();
+void setFixtureAUHasEditor(bool);
+OSStatus fixtureAULastEditResult();
 #ifdef TRACKER_SANITIZER
 static void tracker_audit_begin() {}
 static void tracker_audit_end(uint64_t *a, uint64_t *f, uint64_t *l) {
@@ -59,6 +62,60 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
     @"classID" : @(d.classID.c_str()),
     @"isInstrument" : @(d.instrument)
   };
+}
+static void auNotificationLifetime() {
+  setFixtureAUHasEditor(true);
+  struct ResetEditorMode{~ResetEditorMode(){setFixtureAUHasEditor(false);}}reset;
+  PluginState state{registerFixtureAUs().at(0)};state.instanceID="au-notification-lifetime";
+  NativePlugin plugin(state,48000);PluginEdit event;PluginEditSource source;
+  const auto initial=plugin.editBoundary();
+  check(initial&&initial->fence.hostTime&&!initial->fence.pending&&!initial->source.dropped&&
+    plugin.popEditBefore(*initial,event,source)==PluginEditRead::Complete,"Closed AU has no valid empty notification boundary");
+  const auto sliderForWindow=[&]() -> NSSlider * {
+    for(NSWindow *window in NSApp.windows)if(window.visible&&[window.title isEqualToString:@(state.descriptor.name.c_str())])
+      for(NSView *view in window.contentView.subviews)for(NSView *child in view.subviews)
+        if([child isKindOfClass:NSSlider.class]&&[child.identifier isEqualToString:@"fixture-au-gain"])return (NSSlider *)child;
+    return nil;
+  };
+  plugin.showEditor();NSSlider *slider=sliderForWindow();check(slider!=nil,"Owned AU parameter view was not attached");
+  // Settle any listener-registration baseline before the explicit gesture.
+  NSDate *settled=[NSDate dateWithTimeIntervalSinceNow:.03];
+  while(settled.timeIntervalSinceNow>0)[[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:settled];
+  while(plugin.popEdit(event,source))check(event.id==7&&event.value==.5f,"AU registration delivered an unexpected baseline");
+  const auto observe=[&](float value,uint64_t pending) {
+    slider.floatValue=value;[slider sendAction:slider.action to:slider.target];
+    check(fixtureAULastEditResult()==noErr,"Owned AUParameterSet failed");
+    NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:2];
+    for(;;) {
+      const auto cut=plugin.editBoundary();
+      check(cut&&cut->source.incarnation==initial->source.incarnation&&!cut->source.dropped,"AU delivery changed provider or lost input");
+      if(cut->fence.pending==pending)return *cut;
+      check(cut->fence.pending<pending&&deadline.timeIntervalSinceNow>0,"Bounded AU listener delivery did not produce exactly the expected notifications");
+      [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:.005]];
+    }
+  };
+  const auto beforeFirst=mach_absolute_time();const auto first=observe(.25f,1);
+  const auto second=observe(.75f,2);
+  plugin.closeEditor();const auto closed=plugin.editBoundary();
+  check(closed&&closed->source==second.source&&closed->fence.position==second.fence.position&&closed->fence.pending==2,
+    "Closing the AU editor discarded delivered notifications or reset their boundary");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&
+    event.hostTime>=beforeFirst&&event.hostTime<=first.fence.hostTime&&source==first.source,
+    "Closed AU lost its first original-time notification");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::Complete,"Closed AU consumed input beyond its cut");
+  plugin.showEditor();slider=sliderForWindow();
+  check(slider&&std::abs(slider.floatValue-.75f)<1e-6,"Reopened AU view lost its actual parameter value");
+  const auto reopened=plugin.editBoundary();
+  check(reopened&&reopened->source==second.source&&reopened->fence.position==second.fence.position&&reopened->fence.pending==1,
+    "Reopening the AU editor reset or consumed unread notifications");
+  check(plugin.popEditBefore(second,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.75f&&
+    event.hostTime>=first.fence.hostTime&&event.hostTime<=second.fence.hostTime,
+    "Reopened AU lost the later original-time notification");
+  check(plugin.popEditBefore(second,event,source)==PluginEditRead::Complete&&!plugin.popEdit(event,source),"AU notification delivered more than once");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::InvalidFence,"AU accepted a previously passed boundary");
+  plugin.closeEditor();NativePlugin replacement(state,48000);
+  check(replacement.popEditBefore(second,event,source)==PluginEditRead::InvalidFence,"Replacement AU accepted another provider's boundary");
+  std::cout<<"PASS AUParameterSet/listener original-time delivery, fixed cuts, close/reopen retention and provider replacement\n";
 }
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
@@ -356,6 +413,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         apple.closeEditor();
         apple.showEditor();
         apple.closeEditor();
+        auNotificationLifetime();
         std::cout << "PASS native AU/VST3 editor attachment, close/reopen, and VST3 custom control-to-audio callback\n";
         if (argc > 3 && std::string(argv[3]) == "--loopback-record") {
           uint32_t virtualDevice = 0;

@@ -130,6 +130,18 @@ jobs:
         run: |
           "$SCREAMSEQ_BUILD_DIR/recovery-tests"
           "$SCREAMSEQ_BUILD_DIR/plugin-picker-tests"
+      - name: Owned AU and VST3 editor notification lifecycle
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee screamseq-macos-plugin-editors.log
+          import os, pathlib, subprocess
+          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
+          subprocess.run([str(build / 'native-plugin-tests'),
+              str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui'],
+              check=True, timeout=120)
+          PY
       - name: Sample library tests from the existing build
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash

@@ -1,5 +1,5 @@
-static void pluginEditQueueTests(){
-  using Queue=PluginEditQueue;
+template<size_t Capacity> static void boundedPluginEditQueueTests(){
+  using Queue=BoundedPluginEditQueue<Capacity>;
   auto queue=std::make_unique<Queue>();PluginEdit event{99,17,81};
   const auto empty=queue->fence();
   check(empty.pending==0,"Empty native queue reports pending manual input");
@@ -60,4 +60,9 @@ static void pluginEditQueueTests(){
     }else std::this_thread::yield();
   }
   producer.join();check(ordered&&received==50000,"Concurrent original-time input was lost/reordered");
+}
+static void pluginEditQueueTests(){
+  static_assert(PluginEditQueue::capacity==8192);
+  boundedPluginEditQueueTests<PluginEditQueue::capacity>();
+  boundedPluginEditQueueTests<1024>(); // Existing AU notification budget.
 }
