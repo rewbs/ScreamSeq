@@ -552,3 +552,64 @@ empty drain, rejected vendor positions and no-editor lease identity. A worker
 fixture exercises built-in control capture, Stop, live commit, preserved manual
 state, one Undo/Redo and save/reopen in `document-controller-recording`. This work
 remains internal along with the vendor lifecycle and awaits a later checkpoint.
+
+## Follow-up results and next corrections (22 October, after 03:00 UTC)
+
+The frozen `fb228cb3e` ARM64 build succeeded, ending at 02:58:23.067 UTC.
+Its SHA-256 is `34f25ccbebbbfc08c54d58674ab94fa1c19920d2eb502ef2a633cccb00d634d3`.
+The bounded run selected **17 native registrations** (earlier counts of 16 were
+incorrect) and eight actual-app checks. **16/17 native and 7/8 app checks passed**.
+This is a failed qualification, not a production candidate. Do not package or
+merge it. Receipts and the exact logs remain in the `followup` directory above.
+
+- `workspace-pattern-accessibility-tests` failed: external UIA focus resolves to
+  Main after setting focus on the native Song title field. The existing assertion
+  remains mandatory. Additional diagnostics now distinguish native HWND focus,
+  active/foreground HWND, and UIA focus/property results.
+- `test_manual_vendor_editor_overlay_and_late_protection_guard` passed its manual
+  editor and recorded-ownership portions, then failed with `Expected an object`
+  in the new worker lifecycle fixture. Its `automation.get` and
+  `automation.recording.get` calls used JSON null (`{}`), not an empty object.
+  Corrected these to `Json::object()`, including the later built-in fixture. No
+  lifecycle assertions were removed; the previously unreached assertions still
+  require execution on the next build.
+
+Fresh Computer Use inspected this exact executable in disposable PID 444 with
+`--inspection --automation --seconds 1800`. No audio device was opened. Observed:
+Song Settings opens with the title caret visible; rack Add creates a built-in
+Gainer; parameter search retains typed `gain`; Backspace produces `gai`; Tab
+focuses the parameter selector, Down selects Gain by its filtered identity, and
+Shift+Tab returns the caret to search. UIA reports Main throughout these native
+focus changes even when typing reaches the correct field. This confirms a focus
+reporting defect; it does not demonstrate lost keyboard input. Floating-window
+typing continuity and temporal flicker were not qualified by this check.
+
+The candidate accessibility correction delegates focused native controls to
+Windows' MSAA-to-UIA bridge from the custom pattern fragment root, restricted to
+this UI thread and Main's owned HWND tree. It preserves the standard text/value
+provider. A direct fragment check now requires the exact Song title HWND, in
+addition to the existing external-client assertion. This is **unbuilt and not yet
+confirmed**. Microsoft documents the bridge's purpose in
+[UiaProviderFromIAccessible](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiaproviderfromiaccessible);
+the host-only provider is explicitly unsuitable for returning arbitrary control
+properties ([UiaHostProviderFromHwnd](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiahostproviderfromhwnd)).
+
+The primary checkout also adds native host admission for the still-internal
+parameter lifecycle. `Application::ParameterRecordingInputLease` holds the existing
+`NativeInputGate` across Start/Stop/Commit/Discard worker calls, completion and error
+readback. It refuses active capture, another state transition and (on Start) raw
+rack/parameter-window drafts. It releases musical keys before filtering queued
+input, protects docked and floating HWNDs without disabling their fields, and
+rejects nested API writes/workspace changes. RAII releases the lease on failure.
+The existing `workspace-plugin-search-tests` registration now additionally checks
+raw text/selection/focus, synchronous and queued input, nested writes, drag/draft
+refusal and a real rejected worker Start. These additions are **unbuilt**.
+
+The full original-time UI capture queue, parameter recording review window and
+public schema/catalogue remain next work; this admission change alone does not
+expose or complete recording parity. Both platform CI runs for `fb228cb3e` were
+still building at 03:12 UTC. Re-read their terminal results without restarting.
+No additional build may start before **03:54:48 UTC**. Reuse passing evidence only
+for unchanged inputs; rerun the now-corrected lifecycle and accessibility checks,
+the expanded native admission fixture, and existing shared built-in/gesture gates
+on the next frozen source.

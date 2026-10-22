@@ -25,6 +25,14 @@ void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
         ScreamSeq::ComPtr<IUIAutomationElement> focused;ScreamSeq::check(client->GetFocusedElement(&focused),"Read actual UIA keyboard focus");
         UIA_HWND focusedHandle{};restoreCheck(bool(focused),"UIA lost focused native field");
         ScreamSeq::check(focused->get_CurrentNativeWindowHandle(&focusedHandle),"Read focused native HWND");
+        if(reinterpret_cast<HWND>(focusedHandle)!=namedField) {
+            GUITHREADINFO input{sizeof(input)};const auto thread=GetWindowThreadProcessId(namedField,nullptr);
+            const bool native=GetGUIThreadInfo(thread,&input)!=FALSE;
+            BOOL fieldFocused=FALSE;const auto property=field->get_CurrentHasKeyboardFocus(&fieldFocused);
+            std::cout<<"UIA focus mismatch: requested="<<namedField<<" returned="<<reinterpret_cast<HWND>(focusedHandle)
+                <<" Main="<<root<<" nativeRead="<<native<<" nativeFocus="<<input.hwndFocus<<" active="<<input.hwndActive
+                <<" foreground="<<GetForegroundWindow()<<" fieldHasFocusResult="<<property<<" fieldHasFocus="<<fieldFocused<<std::endl;
+        }
         restoreCheck(reinterpret_cast<HWND>(focusedHandle)==namedField,"UIA reported Main instead of the focused native field");
         ScreamSeq::ComPtr<IUIAutomationGridPattern> pattern;ScreamSeq::check(grid->GetCurrentPatternAs(UIA_GridPatternId,IID_PPV_ARGS(&pattern)),"Read UIA Grid pattern");
         ScreamSeq::ComPtr<IUIAutomationElement> cell;ScreamSeq::check(pattern->GetItem(2,0,&cell),"Read actual UIA pattern cell");
@@ -91,7 +99,19 @@ void applicationPatternAccessibility() {
     const auto changed=songState(app),changedCursor=app.position();
     restoreCheck(fragment->SetFocus()==UIA_E_ELEMENTNOTAVAILABLE&&scroll->ScrollIntoView()==UIA_E_ELEMENTNOTAVAILABLE&&app.position()==changedCursor&&songState(app)==changed,"Old UIA cell acted against a newer song revision");
     app.command(songPropertiesCommand);ScreamSeq::Tests::ownGuiWindow(app.songPropertiesWindow->window());
-    patternAccessibilityClient(app.window,app.controls.at(patternChooser),GetDlgItem(app.songPropertiesWindow->window(),8601));
+    const auto songTitle=GetDlgItem(app.songPropertiesWindow->window(),8601);
+    restoreCheck(GetFocus()==songTitle,"Song settings did not focus its native title field");
+    ScreamSeq::ComPtr<IRawElementProviderFragment> nativeFocus;
+    ScreamSeq::check(rootFragment->GetFocus(&nativeFocus),"Delegate native field focus from the pattern root");
+    restoreCheck(bool(nativeFocus),"Pattern root omitted its focused native inspector");
+    auto nativeProvider=accessibleInterface<IRawElementProviderSimple>(nativeFocus.Get());VARIANT nativeChild{};
+    ScreamSeq::ComPtr<IAccessible> nativeAccessible;
+    ScreamSeq::check(UiaIAccessibleFromProvider(nativeProvider.Get(),UIA_IAFP_UNWRAP_BRIDGE,&nativeAccessible,&nativeChild),"Unwrap delegated native focus");
+    HWND nativeHandle{};const auto nativeResult=WindowFromAccessibleObject(nativeAccessible.Get(),&nativeHandle);
+    const bool self=nativeChild.vt==VT_I4&&nativeChild.lVal==CHILDID_SELF;VariantClear(&nativeChild);
+    ScreamSeq::check(nativeResult,"Read bridged native focus HWND");
+    restoreCheck(self&&nativeHandle==songTitle,"Pattern focus bridge returned a different native HWND");
+    patternAccessibilityClient(app.window,app.controls.at(patternChooser),songTitle);
     restoreCheck(app.row==2&&app.channel==0&&GetFocus()==app.window&&songState(app)==changed,"Marshaled UIA navigation failed or changed song/history");
     restoreCheck(tool->snapshot().at("draft")==draft&&tool->snapshot().at("captured")==captured&&restoreText(field)==L"-","UIA navigation overwrote or rebased a retained invalid inspector draft");
     ShowWindow(app.window,SW_HIDE);restoreCheck(grid->GetItem(0,0,&invalid)==UIA_E_ELEMENTNOTAVAILABLE,"Hidden pattern accepted a new virtual item");ShowWindow(app.window,SW_SHOWNOACTIVATE);

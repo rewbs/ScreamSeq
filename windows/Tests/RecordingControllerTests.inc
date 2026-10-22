@@ -27,16 +27,16 @@ void builtinParameterRecordingTests(const std::filesystem::path &directory) {
   result=invoke(c,"automation.recording.commit",{{"take",take}});
   need(result.at("completed")==true&&result.at("retained")==false&&!result.contains("restorationError")&&active,
     "Built-in no-editor recording could not commit and release");
-  const auto points=call(c,"automation.get",{});
+  const auto points=call(c,"automation.get",Json::object());
   need(points.at("total")==1&&points.at("points")[0].at("value")==-6.25&&
     call(c,"plugin.state.get",{{"plugin",plugin}})==baseline,"Built-in capture changed its opaque manual baseline");
   active=false;playback->chain().applyPending();invoke(c,"history.undo",{{"domain","plugins"}});
-  need(call(c,"automation.get",{}).at("total")==0,"Built-in recording needed more than one Undo");
+  need(call(c,"automation.get",Json::object()).at("total")==0,"Built-in recording needed more than one Undo");
   invoke(c,"history.redo",{{"domain","plugins"}});
   const auto path=directory/"builtin-parameter-recording.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
-  need(call(c,"automation.get",{})==points&&call(c,"plugin.state.get",{{"plugin",plugin}})==baseline,
+  need(call(c,"automation.get",Json::object())==points&&call(c,"plugin.state.get",{{"plugin",plugin}})==baseline,
     "Built-in recorded control failed save/reopen");
 }
 void recordingControllerTests(const std::filesystem::path &directory) {

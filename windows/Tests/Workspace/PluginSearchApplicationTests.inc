@@ -1,3 +1,40 @@
+void applicationParameterRecordingAdmission() {
+    RestoreFixture fixture;auto &app=*fixture.app;addRestoreGain(app);
+    app.openSongProperties();const auto tool=app.songPropertiesWindow->window();ScreamSeq::Tests::ownGuiWindow(tool);
+    const auto title=GetDlgItem(tool,8601);SetFocus(title);SendMessageW(title,EM_SETSEL,2,5);
+    const auto before=controlState(title),music=songState(app);
+    for(const auto *method:{"automation.recording.start","automation.recording.stop","automation.recording.commit","automation.recording.discard"}) {
+        bool threw=false;
+        try {
+            Application::ParameterRecordingInputLease lease(app,method);
+            restoreCheck(ScreamSeq::NativeInputGate::protectedWindow(title),"Recording boundary missed floating native fields");
+            SetWindowTextW(title,L"Must not replace the retained field");SendMessageW(title,WM_CHAR,'X',0);
+            SendMessageW(tool,WM_COMMAND,MAKEWPARAM(8605,BN_CLICKED),0);
+            restoreCheck(controlState(title)==before&&GetFocus()==title,"Recording boundary changed raw native text, selection or focus");
+            MSG key{};key.hwnd=title;key.message=WM_KEYDOWN;key.wParam=VK_BACK;
+            restoreCheck(app.filterDepartureMessage(key),"Recording boundary leaked queued keyboard input");
+            bool rejected=false;try{app.documentOperation("document.patch",{{"expectedRevision",app.view->session.revision},{"title","Nested write"}});}
+            catch(const ScreamSeq::Api::ApiError &error){rejected=error.code==-32002;}
+            restoreCheck(rejected,"Recording boundary admitted a reentrant API write");
+            restoreRejected([&]{app.workspace("workspace.layout",{{"name","Pattern focus"}});});
+            restoreRejected([&]{Application::ParameterRecordingInputLease nested(app,method);});
+            throw std::runtime_error("Owned recording boundary failure");
+        }catch(const std::runtime_error &error){threw=std::string_view(error.what())=="Owned recording boundary failure";if(!threw)throw;}
+        restoreCheck(threw&&!app.parameterRecordingInput&&!ScreamSeq::NativeInputGate::protectedWindow(title)&&
+            controlState(title)==before&&songState(app)==music,"Recording boundary failure leaked input protection or changed music");
+    }
+    SetCapture(title);
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(GetCapture()==title&&!app.parameterRecordingInput,"Recording admission stole an active drag");ReleaseCapture();
+    app.pluginDraft=true;
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(app.pluginDraft&&!app.parameterRecordingInput,"Recording admission discarded a retained rack edit");app.pluginDraft=false;
+    // Exercise the actual failing worker call too: admission is released even
+    // when no valid take can start in this device-free application fixture.
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(!app.parameterRecordingInput&&controlState(title)==before&&songState(app)==music,"Rejected worker start left native fields locked");
+    SetWindowTextW(title,L"Editable after failure");restoreCheck(restoreText(title)==L"Editable after failure","Recording boundary never resumed native editing");
+}
 void applicationPluginRackPosition() {
     RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
     const auto first=addRestoreGain(app),second=addRestoreGain(app),third=addRestoreGain(app);

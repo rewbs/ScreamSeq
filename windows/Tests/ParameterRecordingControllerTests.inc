@@ -13,7 +13,7 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   call(c,"flushPluginEditors",{{"force",true}});
   const auto id=c.view()->session.document.at("nativePlugins")[0].at("instanceID");
   const auto baseline=call(c,"plugin.state.get",{{"plugin",id}});
-  const auto baselineAutomation=call(c,"automation.get",{});
+  const auto baselineAutomation=call(c,"automation.get",Json::object());
   const auto module=GetModuleHandleW(std::filesystem::u8path(descriptor.at("path").get<std::string>()).c_str());
   const auto gesture=reinterpret_cast<int(*)(double)>(GetProcAddress(module,"ResonanceFixtureGesture"));
   need(gesture!=nullptr,"Parameter recording gesture export missing");
@@ -44,7 +44,7 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   rejected([&]{invoke(c,"automation.recording.capture",invalid);});
   take=invoke(c,"automation.recording.capture",control);
   need(take.at("accepted")==true&&!take.contains("intakeError"),"Original-time native control was not retained after invalid-input refusal");
-  renderAhead();take=call(c,"automation.recording.get",{});
+  renderAhead();take=call(c,"automation.recording.get",Json::object());
   need(take.at("eventCount")==2&&!take.contains("intakeError")&&c.view()->session.revision==beforeRevision,
     "Worker capture failed or wrote history before commit");
   const auto first=call(c,"automation.recording.events",{{"take",token},{"plugin",id},{"parameter",7},{"offset",0},{"limit",1}});
@@ -62,7 +62,7 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   take=invoke(c,"automation.recording.commit",{{"take",token},{"acknowledgeLoss",false}});
   need(take.at("completed")==true&&take.at("retained")==false&&take.at("changed")==true&&
     !take.contains("restorationError")&&stops==stopped&&active,"Worker parameter commit failed or stopped playback");
-  const auto recorded=call(c,"automation.get",{});
+  const auto recorded=call(c,"automation.get",Json::object());
   need(recorded!=baselineAutomation&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter commit lost points or changed opaque manual state");
   rejected([&]{invoke(c,"automation.recording.commit",{{"take",token}});});
@@ -71,28 +71,28 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.75)>0,"Discard parameter input failed");});
   renderAhead();invoke(c,"automation.recording.stop",{{"take",discardedToken}});
   take=invoke(c,"automation.recording.discard",{{"take",discardedToken}});
-  need(take.at("retained")==false&&c.view()->session.revision==discardRevision&&call(c,"automation.get",{})==recorded&&
+  need(take.at("retained")==false&&c.view()->session.revision==discardRevision&&call(c,"automation.get",Json::object())==recorded&&
     call(c,"plugin.state.get",{{"plugin",id}})==baseline,"Parameter discard changed saved points or manual history");
   renderAhead();take=invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});
   const auto failedToken=take.at("take");
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.375)>0,"Failed take input failed");});
   need(playback->render(pcm.data(),4096,RenderTime{origin,42,48000,true,true,false}),"Discontinuous test render failed");
-  take=call(c,"automation.recording.get",{});
+  take=call(c,"automation.recording.get",Json::object());
   need(take.at("retained")==true&&take.at("compatible")==false&&take.contains("intakeError"),
     "A changed playback clock lost the retained take or prevented review");
   active=false;playback->chain().applyPending();
   invoke(c,"plugin.editor.close",{{"slot",0}});
   take=invoke(c,"automation.recording.discard",{{"take",failedToken}});
-  need(take.at("retained")==false&&c.view()->session.revision==discardRevision&&call(c,"automation.get",{})==recorded,
+  need(take.at("retained")==false&&c.view()->session.revision==discardRevision&&call(c,"automation.get",Json::object())==recorded,
     "A failed clock could not explicitly discard its closed-editor take");
   invoke(c,"history.undo",{{"domain","plugins"}});
-  need(call(c,"automation.get",{})==baselineAutomation,"Worker parameter take needed more than one Undo");
+  need(call(c,"automation.get",Json::object())==baselineAutomation,"Worker parameter take needed more than one Undo");
   invoke(c,"history.redo",{{"domain","plugins"}});
-  need(call(c,"automation.get",{})==recorded,"Worker parameter take did not survive Redo");
+  need(call(c,"automation.get",Json::object())==recorded,"Worker parameter take did not survive Redo");
   const auto path=directory/"parameter-recording-controller.screamseq";
   invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
-  need(call(c,"automation.get",{})==recorded&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+  need(call(c,"automation.get",Json::object())==recorded&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter take failed native save/reopen");
   std::cout<<"PASS internal parameter recording lifecycle, native preview, recovery, guards, one Undo and save/reopen\n";
 }

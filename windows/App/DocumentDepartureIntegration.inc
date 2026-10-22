@@ -118,7 +118,9 @@
             if(message.message==WM_KEYUP)departureRetryKeyHeld=false;
             return true;
         }
-        if(!departureInput||!ScreamSeq::NativeInputGate::queuedInput(message))return false;
+        if(!departureInput&&!parameterRecordingInput)return false;
+        if(!ScreamSeq::NativeInputGate::queuedInput(message))return false;
+        if(parameterRecordingInput)return true;
         if(departureAdopted&&!busy&&!departureRefreshing&&message.message==WM_KEYDOWN&&message.wParam==VK_F5) {
             departureRetryKeyHeld=true;
             try{completeNativeDeparture();}catch(...){}

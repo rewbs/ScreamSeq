@@ -419,6 +419,8 @@ public:
             {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
+        if(parameterRecordingInput&&method!="workspace.get"&&method!="workspace.commands.get")
+            throw ScreamSeq::Api::ApiError(-32002,"Parameter recording is changing state; workspace input was not queued");
         if(method!="workspace.get"&&method!="workspace.commands.get")rejectDepartureInput();
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
@@ -578,11 +580,43 @@ public:
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
+    std::unique_ptr<ScreamSeq::NativeInputGate> parameterRecordingInput;
+    static bool parameterRecordingBoundary(const std::string &method) {
+        return method=="automation.recording.start"||method=="automation.recording.stop"||
+            method=="automation.recording.commit"||method=="automation.recording.discard";
+    }
+    void guardParameterRecordingInput(const std::string &method)const {
+        if(!parameterRecordingInput)return;
+        const auto reads=additionalDocumentReads();
+        if(method=="synchronizeView"||std::find(reads.begin(),reads.end(),method)!=reads.end())return;
+        throw ScreamSeq::Api::ApiError(-32002,"Parameter recording is changing state; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    }
+    struct ParameterRecordingInputLease {
+        Application &app;bool held=false;
+        ParameterRecordingInputLease(Application &owner,const std::string &method):app(owner) {
+            if(!parameterRecordingBoundary(method))return;
+            if(app.parameterRecordingInput||app.departureInput||GetCapture())
+                throw ScreamSeq::Api::ApiError(-32002,"Finish the current drag or state change before changing parameter recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            if(method=="automation.recording.start") {
+                if(app.pluginDraft)throw ScreamSeq::Api::ApiError(-32002,"Finish the retained rack parameter or program edit before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+                for(const auto &[id,editor]:app.graphPluginParameters)if(editor&&!editor->retired()&&editor->retainedDraft())
+                    throw ScreamSeq::Api::ApiError(-32002,"Finish the retained parameter controls before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            }
+            // Freeze raw native fields through worker admission, baseline
+            // restoration and readback. Release musical keys before filtering
+            // their queued key-ups; do not disable/recreate the focused field.
+            app.releaseTypedNotes();const auto roots=app.departureRoots();
+            app.parameterRecordingInput=std::make_unique<ScreamSeq::NativeInputGate>(roots);held=true;
+        }
+        ParameterRecordingInputLease(const ParameterRecordingInputLease &)=delete;
+        ~ParameterRecordingInputLease(){if(held)app.parameterRecordingInput.reset();}
+    };
     std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::TrackOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"document.new","transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::TrackOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         guardDepartureOperation(method);
+        guardParameterRecordingInput(method);
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy||(recoveryRestoring&&!departureRefreshing)) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
@@ -590,7 +624,9 @@ public:
     }
     ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
         guardDepartureOperation(method);
+        guardParameterRecordingInput(method);
         if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        ParameterRecordingInputLease recordingInput(*this,method);
         struct ClearConsent {Application &app;bool replacing;~ClearConsent(){if(replacing)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"||method=="document.new"};
         ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
