@@ -90,6 +90,16 @@ void applicationPluginSearch() {
 void applicationPluginValueControls() {
     using Field=ScreamSeq::PluginParameterField;
     restoreCheck(Field::text(double(-13.656f))=="-13.656","Generated parameter exposed float promotion noise");
+    restoreCheck(Field::editableText(double(-13.656f),-96,24)=="-13.656","Interior parameter lost readable formatting");
+    for(const float endpoint:{.1f,-.1f,std::numeric_limits<float>::max()}) {
+        const auto bound=double(endpoint);
+        for(const auto range:{std::pair<double,double>{bound,bound},std::pair<double,double>{bound,double(std::numeric_limits<float>::max())},std::pair<double,double>{-double(std::numeric_limits<float>::max()),bound}}) {
+            const auto text=Field::editableText(bound,range.first,range.second);double parsed=0;
+            const auto result=std::from_chars(text.data(),text.data()+text.size(),parsed);
+            restoreCheck(result.ec==std::errc{}&&result.ptr==text.data()+text.size()&&parsed>=range.first&&parsed<=range.second&&static_cast<float>(parsed)==endpoint,
+                "Generated endpoint text failed strict API range or changed stored scalar");
+        }
+    }
     for(const float value:{-96.f,-13.656f,0.f,.00000001f,24.f,1234567.f}) {
         const auto text=Field::text(double(value));float parsed=0;
         const auto result=std::from_chars(text.data(),text.data()+text.size(),parsed);

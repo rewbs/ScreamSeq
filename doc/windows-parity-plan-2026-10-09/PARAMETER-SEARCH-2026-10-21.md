@@ -68,3 +68,6 @@ These Windows-only presentation changes need no project/API migration. The
 coordinated batch still contains shared host changes and therefore requires its
 Mac checks and reciprocal fixture/state gates before integration. This document
 does not claim the remaining recording workflow or overall parity complete.
+
+Pre-build review found that a shortest float decimal can parse outside a promoted float endpoint (for example 0.1f). Generated editable values now fall back to exact double text only when necessary to satisfy the existing strict range. Interior values stay concise; retained drafts and API validation are unchanged. Native regression cases cover positive/negative endpoints, a fixed range and float maximum. These additions await the same combined correction build.
+

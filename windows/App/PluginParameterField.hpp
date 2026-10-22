@@ -31,6 +31,16 @@ struct PluginParameterField {
     if(result.ec!=std::errc{})throw std::runtime_error("Cannot format plugin parameter");
     return {buffer,result.ptr};
   }
+  static std::string editableText(double value,double minimum,double maximum) {
+    auto formatted=text(value);double parsed=0;
+    const auto read=std::from_chars(formatted.data(),formatted.data()+formatted.size(),parsed);
+    if(read.ec==std::errc{}&&read.ptr==formatted.data()+formatted.size()&&parsed>=minimum&&parsed<=maximum)return formatted;
+    // A shortest float decimal can fall just outside a promoted float bound
+    // when parsed by the double-valued API. Preserve strict range validation.
+    char buffer[64];const auto result=std::to_chars(buffer,buffer+sizeof(buffer),value);
+    if(result.ec!=std::errc{})throw std::runtime_error("Cannot format plugin parameter");
+    return {buffer,result.ptr};
+  }
   static PluginParameterField read(const nlohmann::json &p) {
     PluginParameterField field;
     try {

@@ -102,7 +102,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     setting_=true;
     for(int i=0;i<pageSize;++i){auto &r=rows_[i];r={};const auto filteredPosition=size_t(page_*pageSize+i);if(filteredPosition>=filtered_.size())continue;const auto index=int(filtered_[filteredPosition]);
       r.index=index;r.field=PluginParameterField::read(parameters_[size_t(index)]);const auto &f=r.field;
-      set(control(i,nameLabel),wide(f.name));set(control(i,value),f.valid?wide(PluginParameterField::text(f.value)):L"");
+      set(control(i,nameLabel),wide(f.name));set(control(i,value),f.valid?wide(PluginParameterField::editableText(f.value,f.minimum,f.maximum)):L"");
       const auto picker=controls_.at(control(i,choices));NativeInputGate::present(picker,CB_RESETCONTENT,0,0);
       for(const auto &name:f.choices){const auto label=wide(name);NativeInputGate::present(picker,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
       if(f.valid&&f.kind!=PluginParameterField::Kind::Number)NativeInputGate::present(picker,CB_SETCURSEL,WPARAM(f.value),0);

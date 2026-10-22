@@ -156,7 +156,7 @@
         for(const auto &p:pluginParameters)if(p.at("id")==selectedParameter) {
             pluginParameterField=ScreamSeq::PluginParameterField::read(p);
             const auto current=p.contains("manualValue")?p.at("manualValue"):p.at("value");
-            if(current.is_number())value=wide(ScreamSeq::PluginParameterField::text(current.get<double>()));
+            if(current.is_number())value=wide(ScreamSeq::PluginParameterField::editableText(current.get<double>(),pluginParameterField.minimum,pluginParameterField.maximum));
             break;
         }
         settingPluginFields=true;
