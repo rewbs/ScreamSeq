@@ -657,3 +657,41 @@ process-liveness assertions). Keep these failures visible; do not weaken or skip
 their required assertions. The owned vendor/lifecycle step also failed and needs
 the corrected-fixture checkpoint. Mac ARM in run `39713958110` passed; Intel was
 still executing the interface harness when last inspected around 03:28 UTC.
+
+## Native delivery recovery (next source batch; not built)
+
+`editor/hosted/ControlInputRecovery.hpp` adds a shared, bounded review-only archive
+for native inputs whose completion is pending, refused or unknown. It preserves
+original double values and decimal 64-bit host times/counters, distinguishes known
+accepted count from delivery loss, and refuses unsupported versions/types/fields.
+It has no replay or live-take constructor. A pending event may also be present in
+the worker's accepted-gesture archive: these are two observations of an uncertain
+delivery, not two musical events to insert. Diagnostic text is capped independently
+of original values and identities.
+
+Windows `ParameterControlDelivery::recovery` makes an immutable snapshot without
+consuming input. `RecoveryIntegration.inc` captures it before its pumped worker wait;
+the worker FIFO includes all already-submitted controls. `captureRecovery` validates
+the original document/take/revision and overlays only the protective project copy.
+The new top-level `screamseqPluginControlRecovery` array retains prior takes and
+replaces only compatible matching evidence. It is an optional opaque preservation
+extension, with no container/native musical metadata version change. Explicit song
+replacement remains blocked by the live take; this does not bypass that admission.
+Autosave now considers an internally armed built-in-only take even when the song is
+otherwise clean and no vendor window is open.
+
+Prepared checks in `editor/Tests/ControlInputRecoveryTests.inc` run through the shared
+recorded-automation registration on both platforms. They cover exact roundtrip,
+independence, repeated events, bounded pages/types, future-version refusal and
+preservation of earlier/unrelated evidence. The native delivery fixture checks that
+later completion cannot mutate an earlier recovery snapshot. The existing worker
+vendor/lifecycle fixture additionally checks exact native project reopen, fingerprint
+changes, foreign take/document refusal and unchanged accepted automation/manual state.
+All these new assertions remain **unexecuted** until the next checkpoint. Reciprocal
+Mac save/reopen of this new extension is also required before calling it qualified.
+
+This supersedes the process-memory-only limitation of the preceding source entry,
+but imported-archive review UI and end-to-end native capture/review are still pending.
+No public recording entry point has been enabled. The latest completed Mac CI for
+the older frozen `fb228cb3e` passed on both Intel and ARM; it does not qualify these
+new shared/native changes. The hourly gate remains **03:54:48 UTC**.

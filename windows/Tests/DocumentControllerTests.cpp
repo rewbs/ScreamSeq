@@ -1,5 +1,6 @@
 #include "windows/Session/DocumentController.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
 #include "windows/Session/LiveParameterPublication.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"

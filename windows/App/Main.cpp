@@ -585,6 +585,16 @@ public:
     Json parameterTakeState={{"retained",false},{"capturing",false}};
     std::string parameterTakeDocument;
     bool servicingParameterControls=false;
+    Json parameterControlRecovery() {
+        parameterControlDelivery.collect();
+        if(!parameterTakeState.value("retained",false)) {
+            if(parameterControlDelivery.retained()||parameterControlDelivery.lost())
+                throw std::runtime_error("Original parameter input has no known take; recovery evidence retained in memory");
+            return Json();
+        }
+        return parameterControlDelivery.recovery(parameterTakeDocument,parameterTakeState.at("baseRevision").get<std::string>(),
+            parameterTakeState.at("take").get<std::string>());
+    }
     bool capturesParameterControl(const std::string &document,const std::string &plugin)const {
         if(!parameterTakeState.value("retained",false))return false;
         if(parameterTakeDocument!=document||documentId!=document||!parameterTakeState.value("capturing",false)||

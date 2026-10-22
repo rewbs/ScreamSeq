@@ -55,6 +55,24 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
     "Paginated take review lost original event time, value or mapped frame");
   const auto recovery=recoveryCapture(c);
   need(recovery->hasRecording&&recovery->needsProtection,"Worker parameter take was omitted from recovery");
+  const Json delivery={{"version",1},{"reviewOnly",true},{"document",c.view()->session.documentId},{"revision",beforeRevision},
+    {"take",token},{"accepted","1"},{"lost","2"},{"previewError",""},{"events",Json::array({
+      {{"plugin",id},{"parameter",7},{"value",.75},{"hostTime",std::to_string(controlTime)},
+       {"state","pending"},{"error","Original completion not observed"}}})}};
+  auto protectedInput=recoveryWait(c,c.captureRecovery(beforeRevision,delivery));
+  auto repeatedInput=recoveryWait(c,c.captureRecovery(beforeRevision,delivery));
+  need(protectedInput->hasRecording&&protectedInput->needsProtection&&protectedInput->fingerprint==repeatedInput->fingerprint&&
+    protectedInput->fingerprint!=recovery->fingerprint&&c.view()->session.revision==beforeRevision,
+    "Native input recovery did not protect exact queued evidence independently of history");
+  auto reopenedInput=Project::openNativeProjectBytes(*protectedInput->bytes);
+  need(Tracker::readControlInputRecovery(reopenedInput.state.preserved.at(Tracker::controlInputRecoveryKey)[0])==delivery&&
+    projectAbsoluteAutomation(reopenedInput.state)==projectAbsoluteAutomation(Project::openNativeProjectBytes(*recovery->bytes).state),
+    "Recovery replayed pending input or lost exact native value/time/loss evidence on reopen");
+  auto foreignInput=delivery;foreignInput["take"]="other-take";
+  rejected([&]{recoveryWait(c,c.captureRecovery(beforeRevision,foreignInput));});
+  foreignInput=delivery;foreignInput["document"]="other-song";
+  rejected([&]{recoveryWait(c,c.captureRecovery(beforeRevision,foreignInput));});
+  need(recoveryCapture(c)->fingerprint==recovery->fingerprint,"Native recovery input mutated the live project or consumed the worker take");
   need(call(c,"plugin.state.get",{{"plugin",id}})==baseline,"Worker capture changed the manual baseline");
   take=invoke(c,"automation.recording.stop",{{"take",token}});
   need(take.at("capturing")==false&&!take.contains("intakeError"),"Worker Stop failed its fixed native drain");

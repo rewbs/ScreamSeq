@@ -1,6 +1,12 @@
 // Included inside namespace ScreamSeq; all work executes on the document owner.
-std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
+std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot(const Json &controlInput) {
       const auto capturedRevision=revision();
+      if(!controlInput.is_null()) {
+        (void)Tracker::readControlInputRecovery(controlInput);
+        if(!parameterRecording_||controlInput.at("document")!=identity_+":"+std::to_string(generation_)||
+            controlInput.at("take")!=parameterRecording_->take->token()||controlInput.at("revision")!=parameterRecording_->take->revision())
+          throw Api::ApiError(-32001,"Original native input belongs to another parameter recording; evidence retained");
+      }
       // Do not publish a pending view or flush editors here. Capturing must not
       // alter the document, saved baselines, Undo, manual gestures or playback.
       // Retain a fixed queued recording prefix first; preview publication stays
@@ -9,6 +15,7 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       auto copiedProject=project_;
       if(recording_)overlayRecording(copiedProject,*recording_);
       const bool gestureRecording=plugins_->overlayRecordedRecovery(copiedProject);
+      if(!controlInput.is_null())Tracker::overlayControlInputRecovery(copiedProject.preserved,controlInput);
       const bool editorChanged=plugins_->overlayRecoveryState(copiedProject);
       auto bytes=std::make_shared<const std::vector<std::byte>>(Project::serializeNativeProject(*document_,copiedProject));
       if(bytes->size()>Project::maximumProjectBytes)throw Api::ApiError(-32602,"Recovery project exceeds the 600 MiB limit");
@@ -35,18 +42,18 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       result->title=::OpenMPT::mpt::ToCharset(::OpenMPT::mpt::Charset::UTF8,song.GetCharsetInternal(),song.GetTitle());
       if(!project_.path.empty())result->source=project_.path;
       result->hasRecording=copiedProject.preserved.contains("recoveryTake")||
-        copiedProject.preserved.contains("screamseqPluginGestureRecovery");
+        copiedProject.preserved.contains("screamseqPluginGestureRecovery")||copiedProject.preserved.contains(Tracker::controlInputRecoveryKey);
       result->hasOpenEditors=plugins_->openEditorCount()!=0;
       result->needsProtection=editorChanged || gestureRecording || bool(recording_) || result->hasRecording || project_.recoveredUnsaved ||
         document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision;
       return std::shared_ptr<const RecoverySnapshot>(std::move(result));
 }
-std::future<std::shared_ptr<const RecoverySnapshot>> DocumentController::captureRecovery(std::string expectedRevision) {
+std::future<std::shared_ptr<const RecoverySnapshot>> DocumentController::captureRecovery(std::string expectedRevision,Json controlInput) {
   auto task=std::make_shared<std::packaged_task<std::shared_ptr<const RecoverySnapshot>()>>(
-    [this,expectedRevision=std::move(expectedRevision)] {
+    [this,expectedRevision=std::move(expectedRevision),controlInput=std::move(controlInput)] {
       if(expectedRevision.empty())throw Api::ApiError(-32602,"expectedRevision is required");
       if(expectedRevision!=revision())throw Api::ApiError(-32001,"Song changed before recovery capture; read and rebase");
-      return recoverySnapshot();
+      return recoverySnapshot(controlInput);
     });
   auto done=task->get_future();
   {std::lock_guard lock(mutex_);jobs_.push_back([task]{(*task)();});}wake_.notify_one();return done;
@@ -76,6 +83,7 @@ std::future<std::shared_ptr<const DocumentView>> DocumentController::recover(
           if(recording_ || plugins_->hasRecordedEditors() || project_.recoveredUnsaved || document_->revision!=project_.savedRevision ||
             project_.pluginRevision!=project_.savedPluginRevision || project_.preserved.contains("recoveryTake") ||
             project_.preserved.contains("screamseqPluginGestureRecovery") ||
+            project_.preserved.contains(Tracker::controlInputRecoveryKey) ||
             plugins_->overlayRecoveryState(copiedProject))
             throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before recovering");
         }

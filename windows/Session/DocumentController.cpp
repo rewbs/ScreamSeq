@@ -4,6 +4,7 @@
 #include "editor/hosted/SelectionRender.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"

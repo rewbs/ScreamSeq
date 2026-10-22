@@ -3,6 +3,7 @@
 #include "editor/hosted/RecordedGestureCapture.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
 #include "editor/hosted/LatestParameterEdits.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/TrackerDocument.hpp"
@@ -51,6 +52,7 @@ static void settled(PluginChain &chain,float decibels) {
 #include "RecordedGestureCaptureTests.inc"
 #include "RecordedGestureTakeTests.inc"
 #include "RecordedGestureRecoveryTests.inc"
+#include "ControlInputRecoveryTests.inc"
 static void capturePreparation() {
   for(const uint32_t rate:{44100u,48000u,96000u}) {
     for(const uint64_t frame:std::array<uint64_t,7>{0,1,127,511,uint64_t(rate)-1,uint64_t(rate),uint64_t(rate)*604800})
@@ -141,6 +143,7 @@ int main() {
     recordedGestureCapture();
     recordedGestureTake();
     recordedGestureRecoveryTests();
+    controlInputRecoveryTests();
     latestParameterEditTests();
     pluginEditQueueTests();
     captureBaselineRestoration();

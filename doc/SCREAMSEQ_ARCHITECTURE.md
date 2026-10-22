@@ -16,6 +16,16 @@ ScreamSeq is an independent tracker DAW built on the OpenMPT playback engine, de
 
 The renderer and document are separate. Edits occur on the document worker; playback owns its prepared copy. AppKit controls belong to the main thread. Plugins and graph recipes must be prepared outside audio processing, and unsafe structural mutations must not race a live renderer. Do not move Foundation/AppKit into portable `editor/` code.
 
+The internal Windows parameter-take path retains original native control values and
+host timestamps in `App/ParameterControlDelivery.hpp`, submitting asynchronously to
+the serial worker with per-call receipts. Shared `editor/hosted/ControlInputRecovery.hpp`
+defines detached recovery evidence for pending/refused/unknown delivery in the optional
+`screamseqPluginControlRecovery` preservation array. This is never replayable input:
+an uncertain native event may already be present in the worker's gesture archive.
+Native UI queues and worker snapshots remain control-owner work. This source batch
+still awaits qualification and a public capture/review UI; see the
+[plugin recording report](windows-parity-plan-2026-10-09/PLUGIN-GESTURE-RECOVERY-2026-10-21.md).
+
 Native voice positions are published by `Renderer` through bounded atomic snapshots. UI/API readers consume sample frames and volume/pan/pitch envelope ticks without reading live engine channels or blocking audio. `pattern.timeline.get` uses the editor-only `GetLengthTarget.onRow` observer on the document worker to collect first-visit times in one engine walk; never calculate row timing in drawing or from a fixed BPM assumption. The ruler's order occurrence matters when a pattern repeats.
 
 A non-master mixer bus may have output zero to disconnect its main route while retaining sends and processors. Such projects require native metadata 15; ordinary connected projects retain their existing metadata requirements. Deleting a disconnected group moves its retained inserts/plugin outputs to master and leaves formerly connected child main outputs disconnected.

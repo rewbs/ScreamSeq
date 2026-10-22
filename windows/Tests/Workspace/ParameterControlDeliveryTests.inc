@@ -19,6 +19,11 @@ void parameterControlDeliveryCases() {
         submitted[i].params.at("value")==.25+i*.1&&submitted[i].params.at("parameter")==17&&
         !submitted[i].params.contains("documentId"),"Native input timestamp/value/identity changed before worker submission");
     restoreRejected([&]{delivery.release();});
+    const auto recovery=delivery.recovery(original.document,original.revision,original.take);
+    restoreCheck(recovery.at("events").size()==3&&recovery.at("events")[0].at("hostTime")==std::to_string(original.timestamp)&&
+        recovery.at("events")[0].at("state")=="pending"&&delivery.retained()==3,
+        "Native recovery capture consumed or retimed pending input");
+    restoreRejected([&]{delivery.recovery("other document",original.revision,original.take);});
     // A later ready input must be collected without waiting on an earlier one.
     submitted[1].completion.set_value(result(true));delivery.collect();
     restoreCheck(delivery.pending()&&delivery.accepted()==1&&delivery.retained()==2&&submitted.size()==3,
@@ -28,6 +33,10 @@ void parameterControlDeliveryCases() {
     submitted[0].completion.set_exception(std::make_exception_ptr(std::runtime_error("Owned lost callback")));
     submitted[2].completion.set_value(result(false));delivery.collect();
     auto review=delivery.snapshot();
+    const auto failedRecovery=delivery.recovery(original.document,original.revision,original.take);
+    restoreCheck(failedRecovery.at("events").size()==1&&failedRecovery.at("events")[0].at("state")=="refused"&&
+        failedRecovery.at("accepted")=="2"&&recovery.at("events").size()==3,
+        "Completed delivery mutated an earlier immutable recovery snapshot");
     restoreCheck(!delivery.pending()&&delivery.accepted()==2&&delivery.needsReview()&&delivery.retained()==1&&
         review.at("events")[0].at("state")=="refused"&&review.at("events")[0].at("timestamp")==std::to_string(original.timestamp+2),
         "Lost completion was resent or worker refusal discarded its original input");
