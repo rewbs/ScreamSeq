@@ -58,6 +58,8 @@ class EditorInputBarrier final {
     if(GetCurrentThreadId()!=thread_)std::terminate();
     DWORD_PTR rootOwner=0;
     const bool ownedRoot=root_&&GetWindowSubclass(root_,procedure,subclassID,&rootOwner)&&rootOwner==reinterpret_cast<DWORD_PTR>(this);
+    DWORD_PTR focusOwner=0;
+    const bool ownedFocus=focus_&&GetWindowSubclass(focus_,procedure,subclassID,&focusOwner)&&focusOwner==reinterpret_cast<DWORD_PTR>(this);
     for(auto h:windows_) {
       DWORD_PTR owner=0;
       if(GetWindowSubclass(h,procedure,subclassID,&owner)&&owner==reinterpret_cast<DWORD_PTR>(this))
@@ -66,7 +68,7 @@ class EditorInputBarrier final {
     windows_.clear();
     if(ownedRoot&&IsWindow(root_)) {
       EnableWindow(root_,enabled_);
-      if(focus_&&(focus_==root_||IsChild(root_,focus_))&&IsWindowEnabled(focus_)&&IsWindowVisible(focus_)&&GetActiveWindow()==root_)SetFocus(focus_);
+      if(ownedFocus&&(focus_==root_||IsChild(root_,focus_))&&IsWindowEnabled(focus_)&&IsWindowVisible(focus_)&&GetActiveWindow()==root_)SetFocus(focus_);
     }
   }
 public:
