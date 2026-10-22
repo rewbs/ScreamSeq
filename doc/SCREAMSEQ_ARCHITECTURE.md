@@ -60,6 +60,15 @@ The native Mac scratch editor shares `AutomationCanvas` and the formula workbenc
 
 ## Build and qualification
 
+Imported plugin input evidence is reviewed through the pure shared
+`editor/hosted/PluginInputRecoveryReview.hpp` catalogue/page helpers. They validate
+one selected archive, preserve original event order/timestamps and never restore a
+live take or publish music. Native owners must guard document/revision before
+resolving an archive's collection index. Unsupported collections and versions stay
+opaque in the project. Windows has an internal worker adapter; public/native review
+integration and execution evidence remain tracked in
+`doc/windows-parity-plan-2026-10-09/PLUGIN-GESTURE-RECOVERY-2026-10-21.md`.
+
 Windows: `./windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-dev -Test`.
 Use `-Fresh` after a failed initial compiler configuration. The app and VST3 scanner
 are in the selected build's `Release/` directory. Native sample editing, offline

@@ -5,6 +5,7 @@
 #include "editor/hosted/ParameterEdits.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
+#include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"
@@ -562,6 +563,12 @@ std::function<void()> DocumentController::prepareNativePublication(const Tracker
 #include "ParameterPreviewOperations.inc"
 #include "RecipeParameterPreviewOperations.inc"
 Json DocumentController::operation(const std::string &method,Json params) {
+  if(method.starts_with("automation.recovery.")) {
+    try{return pluginRecoveryReviewOperation(method,params);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
+    catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
+  }
   if(method.starts_with("automation.recording.")) {
     try{return parameterRecordingOperation(method,params);}
     catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
@@ -960,6 +967,7 @@ std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string 
 #include "RecoveryOperations.inc"
 #include "RecordingOperations.inc"
 #include "ParameterRecordingOperations.inc"
+#include "PluginRecoveryReviewOperations.inc"
 #include "ParameterActivityOperations.inc"
 std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline,bool audition) {
   auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline,audition]{

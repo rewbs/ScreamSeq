@@ -112,5 +112,24 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
   need(call(c,"automation.get",Json::object())==recorded&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter take failed native save/reopen");
+  recoveryWait(c,c.recover(protectedInput->bytes,c.view()->session.revision,true));
+  const auto imported=c.view();const auto importedMusic=call(c,"automation.get",Json::object());
+  const auto catalogue=call(c,"automation.recovery.list",{{"offset",0},{"limit",2}});
+  need(catalogue.at("total")==2&&catalogue.at("entries").size()==2&&catalogue.at("revision")==imported->session.revision,
+    "Imported recording evidence was not catalogued with its current document revision");
+  const auto nativeInput=invoke(c,"automation.recovery.get",{{"kind","nativeControls"},{"index",0},{"limit",1}});
+  need(nativeInput.at("events").size()==1&&nativeInput.at("events")[0].at("hostTime")==std::to_string(controlTime)&&
+    nativeInput.at("events")[0].at("value")==.75&&nativeInput.at("summary").at("document")==delivery.at("document")&&
+    nativeInput.at("summary").at("lost")=="2"&&nativeInput.at("summary").at("take")==token,
+    "Imported native input review remapped the old document, clock, value or loss evidence");
+  const auto gestures=invoke(c,"automation.recovery.get",{{"kind","gestures"},{"index",0}});
+  need(gestures.at("total")==2&&call(c,"automation.recording.get",Json::object()).at("retained")==false,
+    "Detached gesture review rearmed a live take or lost captured input");
+  rejected([&]{call(c,"automation.recovery.get",{{"expectedRevision",beforeRevision},{"kind","gestures"},{"index",0}});});
+  rejected([&]{invoke(c,"automation.recovery.get",{{"kind","nativeControls"},{"index",true}});});
+  rejected([&]{invoke(c,"automation.recovery.get",{{"kind","nativeControls"},{"index",0},{"limit",513}});});
+  rejected([&]{call(c,"automation.recovery.list",{{"unexpected",true}});});
+  need(c.view()->session.revision==imported->session.revision&&call(c,"automation.get",Json::object())==importedMusic,
+    "Detached recovery review or refusal mutated accepted music/history");
   std::cout<<"PASS internal parameter recording lifecycle, native preview, recovery, guards, one Undo and save/reopen\n";
 }

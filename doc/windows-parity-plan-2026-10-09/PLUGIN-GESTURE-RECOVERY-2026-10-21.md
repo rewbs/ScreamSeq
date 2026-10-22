@@ -783,3 +783,29 @@ errors survive the following status read. Clean parameter readback begins throug
 the existing focus-preserving load path, rather than pre-emptively disabling the
 focused HWND at the take-finished notification. These assertions are prepared,
 not executed; they belong to the next hourly native checkpoint.
+
+## Detached input review preparation (source, not yet qualified)
+
+`editor/hosted/PluginInputRecoveryReview.hpp` provides a shared read-only catalogue
+and paginated review of imported gesture and native-control archives. Catalogue
+headers are explicitly unverified; selecting an entry validates that whole archive
+with the existing strict shared decoder. An unsupported collection/future archive
+remains visible and preserved without hiding independent valid entries. Pages keep
+target/event order, repeated original timestamps, exact native doubles, unmapped
+events and decimal 64-bit counters. They never consult the current rack or clock,
+rearm a take, coalesce input or publish automation.
+
+Windows `PluginRecoveryReviewOperations.inc` has internal
+`automation.recovery.list` and `automation.recovery.get` read boundaries. Get
+requires the current document revision before resolving collection kind/index;
+the original recorded document/revision remain separate evidence in the summary.
+These operations are not yet in the public catalogue. A native recovered-input
+window, corresponding Mac adapter and public schema/documentation are outstanding.
+
+`PluginInputRecoveryReviewTests.inc` runs in the shared recorded-automation target
+on both platforms. It covers cross-target pagination, equal timestamps, precision,
+source loss, opaque/future archive preservation, malformed independent collections,
+invalid bounds and immutable input. The existing native worker lifecycle fixture
+now reopens an actual protective copy and checks both archive kinds, original
+identity, stale/invalid request refusal, no live take and unchanged music/history.
+Those new checks have not run; keep them in the next coordinated checkpoint.

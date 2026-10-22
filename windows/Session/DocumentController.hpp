@@ -139,6 +139,7 @@ class DocumentController {
   };
   std::unique_ptr<ParameterRecordingSession> parameterRecording_;
   Json parameterRecordingOperation(const std::string &,const Json &);
+  Json pluginRecoveryReviewOperation(const std::string &,const Json &);
   Json parameterRecordingSummary()const;
   void pollParameterRecording(bool stop=false);
   bool restoreParameterRecordingPreview();
