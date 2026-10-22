@@ -40,7 +40,7 @@ private:
   }
   size_t slot(const std::string &identity)const {
     const auto found=audio_.pluginSlot(identity);
-    require(found.has_value(),"Recorded plugin identity is missing; input retained");return *found;
+    require(found.has_value()&&*found<=UINT32_MAX,"Recorded plugin identity is missing or outside the native slot range; input retained");return *found;
   }
   RecordedGestureBoundary::Cuts cuts()const {
     RecordedGestureBoundary::Cuts result;

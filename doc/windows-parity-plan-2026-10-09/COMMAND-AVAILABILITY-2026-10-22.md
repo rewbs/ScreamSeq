@@ -86,3 +86,9 @@ preparation is superseded and must not be executed separately. The qualification
 checkout remains on96b until its retained-binary checks are finished; advance it
 only to the frozen candidate before the single next build. Backup source is
 pushed on `codex/mac-gesture-intake`; PR #6 remains96b until that checkpoint.
+
+At15:01UTC, after the96b retained x64 replay finished, the clean qualification
+checkout was fast-forwarded to077e. Build/check receipts are still absent in the
+new folder: preparation and source alignment do not mean a build has started.
+Later Mac-only intake/restore source on the backup branch is intentionally
+outside this freeze and needs its own coherent qualification checkpoint.

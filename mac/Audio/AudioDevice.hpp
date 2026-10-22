@@ -109,7 +109,7 @@ public:
       targets.clear();
       for(const auto &owner:owners) {
         const auto slot=pluginSlot(owner.plugin);
-        if(!slot||!owner.provider||plugins_->editSource(*slot).incarnation!=owner.provider)return false;
+        if(!slot||*slot>UINT32_MAX||!owner.provider||plugins_->editSource(*slot).incarnation!=owner.provider)return false;
         targets.push_back({uint32_t(*slot),owner.parameter});
       }
       return true;

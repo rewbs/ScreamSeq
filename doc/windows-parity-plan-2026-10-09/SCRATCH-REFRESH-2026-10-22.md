@@ -29,11 +29,21 @@ the new candidate under Windows ARM64 x64 emulation, not proof of native x64
 hardware, foreground input, sustained audio timing or absence of all races.
 The earlier failures remain retained; no additional build was performed.
 
-Mac ARM job119873630766 has successful model/interface/socket/vendor/library
-and conformance steps in the fetched log; its top-level status still reported
-in_progress at14:42UTC. Intel job119873630187 was still building. Do not mark
-either job terminal without a later status. Final reciprocal edited-file checks
-and the unbuilt scratch feedback/command palette fixes remain open.
+Mac ARM job119873630766 and Intel job119873630187 were both terminal success
+when rechecked through GitHub's API before15:01:30UTC. Their logs retain model,
+interface, socket, vendor, library and conformance results. Both have134 native
+model/host registrations and the full interface harness. This qualifies the96b
+Mac inputs, not the subsequent unbuilt Mac take-adapter changes on the backup
+branch. No Mac/shared/engine input differs between96b and the Windows077e freeze.
+
+Retained-only workflow39800910382 was accepted at15:01:31UTC for both Mac
+architectures. It reuses app run39793062128 and the actual Windows fixture output
+from run39793062072, including edited opaque metadata, composing history and
+envelope-bank outputs. Its nonempty retained-app selector skips build jobs.
+The request and run identity are in `retained-exchange-96b/dispatch.json` under
+the existing evidence root. It was queued at the latest observation; this is not
+a passing reciprocal result. The return Mac-to-Windows leg remains required.
+No recurring work was created and no build was triggered by this dispatch.
 
 ## Foreground diagnosis and status correction, 22 October 14:16–14:22 UTC
 
