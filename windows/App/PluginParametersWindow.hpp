@@ -52,6 +52,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;bool sliderEndPending_=false,sliderCancelPending_=false;uint64_t generation_=0;
+  uint64_t refreshTicks_=0,refreshReads_=0,refreshBusyDeferrals_=0;
   std::string previewToken_;uint32_t previewParameter_=0;
   bool setting_=false,pending_=false,backgroundRead_=false,needsReload_=false,takeRefreshPending_=false;HWND pendingFocus_{},navigationFocus_{};
   NativeWriteCompletion completion_;
@@ -304,7 +305,10 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void timer(UINT_PTR id)override{
     if(id==8){if(pending_)return;KillTimer(window_,8);if(sliderCancelPending_)cancelSlider();else if(sliderRow_>=0&&(sliderEndPending_||!GetCapture()))finishSlider();return;}
-    if(id!=7||(!visible()&&!takeRefreshPending_)||pending_||dirty()||completion_.retained()||needsReload_||NativeInputGate::protectedWindow(window_)||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
+    if(id==7)++refreshTicks_;
+    if(id!=7||(!visible()&&!takeRefreshPending_)||pending_||dirty()||completion_.retained()||needsReload_||NativeInputGate::protectedWindow(window_)||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
+    if(available_&&!available_()){++refreshBusyDeferrals_;return;}
+    ++refreshReads_;
     try{load(false,true);}catch(const Api::ApiError &e){if(e.code!=-32002){needsReload_=true;throw;}}catch(...){needsReload_=true;throw;}
     if(!visible()&&!takeRefreshPending_)KillTimer(window_,7);
   }
@@ -368,6 +372,6 @@ public:
     KillTimer(window_,7);KillTimer(window_,8);NativeToolWindow::hide();
     if(takeRefreshPending_&&!dirty()&&!pending_&&!completion_.retained()&&!needsReload_)SetTimer(window_,7,250,nullptr);}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
-    return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",filtered_.empty()?-1:int(filtered_.at(size_t(page_*pageSize)))},{"page",page_},{"pages",pages()},{"rows",rows},{"search",utf8(field(search))},{"appliedSearch",utf8(appliedSearch_)},{"matches",filtered_.size()},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
+    return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",filtered_.empty()?-1:int(filtered_.at(size_t(page_*pageSize)))},{"page",page_},{"pages",pages()},{"rows",rows},{"search",utf8(field(search))},{"appliedSearch",utf8(appliedSearch_)},{"matches",filtered_.size()},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"refresh",{{"ticks",refreshTicks_},{"reads",refreshReads_},{"busyDeferrals",refreshBusyDeferrals_},{"takePending",takeRefreshPending_}}},{"status",utf8(status_)}};}
 };
 }
