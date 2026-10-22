@@ -721,3 +721,48 @@ native-input loss acknowledgement at admission, API catalogue/schema/guide and
 actual-app recording checks. Do not expose Record simply by adding a button before
 those ownership paths are connected. Imported detached recovery review is also still
 separate work; the new live-review component does not rearm old-process timestamps.
+
+## Control review checkpoint and Application ownership (2026-10-22)
+
+The frozen `ffe4a330c34147ea9ea907e3783901a2b8d792a7` ARM64 build started
+03:54:48 UTC and failed at 03:56:22 before producing an executable. Main's new
+recording admission called `PluginParametersWindow::retainedDraft`, which had not
+been exposed. The failed build receipt/log are in
+`bin/plugin-control-review-20261022/`; no native/app/foreground qualification or
+production package is claimed for this candidate. The source correction exposes
+the complete draft/preview/pending predicate; it does not remove the admission check.
+
+Windows CI run `39719480632` and Mac run `39719480594` qualify that same frozen
+head. Their results must be recorded separately. The observed Windows build step
+began at **03:55:42 UTC**, so the next coordinated build must not start before
+**04:55:42 UTC**. Do not rerun the failed local build or push another CI candidate
+before that gate. Backup branch pushes remain build-free.
+
+The subsequent source batch connects `ParameterRecordingIntegration.inc` as an
+Application-owned retained review window. Song close/save/departure checks inspect
+the parameter take as well as MIDI/sample takes under native input protection.
+Receipt-based completion repair reads the current worker state, rejects another
+document or a later take, and repairs presentation without resending a write.
+Explicit boolean loss consent admits only already-completed native deliveries;
+pending submissions still block Keep/Discard. Pre-admission refusals now carry
+NotCommitted outcomes instead of appearing as uncertain writes.
+
+Keep/Discard invalidates native parameter catalogues even when Discard leaves the
+document revision unchanged. Clean parameter windows re-read the accepted baseline
+on their timer; partial numeric text remains retained until explicit Reload.
+This is source, not yet qualified behavior. Native assertions were added to the
+existing plugin-search registration for Application ownership, close inspection,
+receipt repair, loss admission and same-revision refresh/focus.
+
+The paired edited-metadata fixture now includes `screamseqPluginControlRecovery`
+alongside the gesture archive. Its exact typed oracle requires preservation across
+edits, rack reorder/removal and Undo/Redo, including repeated original timestamps,
+pending/unknown/refused status and values beyond JavaScript integer precision.
+Use those opaque saved outputs for the reciprocal Windows→Mac→Windows and
+Mac→Windows→Mac retained-app legs. Python syntax was checked; these native save/reopen
+legs have not been executed for the new archive.
+
+The public menu/API recording entry point remains disabled pending the native/app
+checkpoint, complete catalogue/schema/guide and actual-app workflow checks.
+Imported detached-archive review is still outstanding. Never treat this internal
+owner or its unexecuted fixtures as completed recording parity.

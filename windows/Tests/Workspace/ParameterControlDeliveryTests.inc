@@ -114,6 +114,16 @@ void applicationRecordedParameterControls() {
     restoreCheck(songState(app)==music&&app.documentOperation("plugin.state.get",{{"plugin",plugin}})==state,
         "Native recording controls wrote manual opaque state or per-event Undo history");
     editor.recording({},{});
+    restoreCheck(editor.retainedDraft(),"Partial recorded text was not protected at take admission");
+    const auto retained=controlState(value);editor.takeFinished();SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(controlState(value)==retained&&editor.retainedDraft(),"Take completion erased a partial recorded value");
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(3955,BN_CLICKED),0);
+    restoreCheck(!editor.retainedDraft()&&restoreText(value)==L"0","Explicit post-take reload failed to restore accepted manual gain");
+    editor.recording([]{return true;},[&](uint32_t,double,uint64_t){});
+    SetFocus(value);rawDraftText(value,L"-3.00");const auto revision=app.view->session.revision;
+    editor.recording({},{});editor.takeFinished();SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!editor.retainedDraft()&&restoreText(value)==L"0"&&GetFocus()==value&&app.view->session.revision==revision,
+        "Discard at the same revision left transient recorded gain visible or lost native field focus");
 }
 
 void applicationRecordedRackControls() {
@@ -156,4 +166,16 @@ void applicationRecordedRackControls() {
     restoreCheck(songState(app)==music&&app.documentOperation("plugin.state.get",{{"plugin",plugin}})==opaque,
         "Recorded rack input changed manual plugin state or chronological history");
     app.parameterControlSubmit={};app.parameterControlDelivery.release();app.parameterTakeState={{"retained",false}};app.pluginDraft=false;
+    const auto source=ScreamSeq::ParameterControlDelivery::Input{app.documentId,app.view->session.revision,"review-loss",plugin,1,-6,ScreamSeq::hostTime100ns()};
+    restoreRejected([&]{app.parameterControlDelivery.enqueue(source,[](const auto &,const auto &)->std::future<Call>{
+        throw ScreamSeq::Api::ApiError(-32002,"Owned refused input",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});});});
+    const auto evidence=app.parameterControlDelivery.snapshot();
+    for(const auto &acknowledgement:{RestoreJson(),RestoreJson(false),RestoreJson(1),RestoreJson("true")}) {
+        bool rejected=false;try{Application::ParameterRecordingInputLease lease(app,"automation.recording.commit",{{"acknowledgeLoss",acknowledgement}});}
+        catch(const ScreamSeq::Api::ApiError &error){rejected=error.outcome&&!error.outcome->needsReconciliation();}
+        restoreCheck(rejected,"Unacknowledged native loss was admitted or classified as an uncertain write");
+    }
+    {Application::ParameterRecordingInputLease lease(app,"automation.recording.commit",{{"acknowledgeLoss",true}});
+        restoreCheck(app.parameterControlDelivery.snapshot()==evidence,"Loss consent replayed or discarded original input before worker commit");}
+    app.parameterControlDelivery.release();
 }

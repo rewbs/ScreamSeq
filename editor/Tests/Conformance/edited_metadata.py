@@ -56,6 +56,19 @@ def run(client, output):
                 dict(hostTime="1500", value=-9.0, frame="240"),
                 dict(hostTime="1500", value=-6.0, frame="240"),
                 dict(hostTime="0", value=-3.0)])])
+    # Native delivery can be uncertain even when the worker already accepted
+    # the same gesture. Preserve both observations exactly; never replay either
+    # detached archive or remove it when the current rack provider is deleted.
+    control_archive = dict(version=1, reviewOnly=True,
+        document="original-process:document", revision="original-process:revision",
+        take="parity-gesture-take", accepted="9007199254740993", lost="2",
+        previewError="Owned preview refusal", events=[
+            dict(plugin=plugin_id, parameter=1, value=-9.0,
+                 hostTime="9007199254740995", state="pending", error=""),
+            dict(plugin=plugin_id, parameter=1, value=-6.0,
+                 hostTime="9007199254740995", state="unknown", error="Completion unavailable"),
+            dict(plugin=plugin_id, parameter=1, value=-3.0,
+                 hostTime="18446744073709551615", state="refused", error="Not queued")])
     report = dict(format="screamseq-edited-metadata-v1", passed=False, parityComplete=False,
                   qualificationScope="Paired native edits and exact typed persistence; no reciprocal or foreground claim",
                   sourceSHA256=sha256(original_bytes), toolSHA256=sha256(read_bytes(Path(__file__))),
@@ -67,6 +80,9 @@ def run(client, output):
         if "screamseqPluginGestureRecovery" in tree:
             raise EvidenceError("Plugin gesture probe collides with existing recovered input")
         tree["screamseqPluginGestureRecovery"] = [copy.deepcopy(gesture_archive)]
+        if "screamseqPluginControlRecovery" in tree:
+            raise EvidenceError("Native control probe collides with existing recovered input")
+        tree["screamseqPluginControlRecovery"] = [copy.deepcopy(control_archive)]
         # Inject only into identities that survive in the clean expected tree.
         # This checks deletion without resurrecting data and Undo restoration.
         targets = [("root", tree), ("native", tree["native"])]

@@ -633,27 +633,28 @@ public:
     void guardParameterRecordingInput(const std::string &method)const {
         if(!parameterRecordingInput)return;
         const auto reads=additionalDocumentReads();
-        if(method=="synchronizeView"||std::find(reads.begin(),reads.end(),method)!=reads.end())return;
+        if(method=="synchronizeView"||method=="automation.recording.get"||method=="automation.recording.events"||std::find(reads.begin(),reads.end(),method)!=reads.end())return;
         throw ScreamSeq::Api::ApiError(-32002,"Parameter recording is changing state; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
     }
     struct ParameterRecordingInputLease {
         Application &app;bool held=false;
-        ParameterRecordingInputLease(Application &owner,const std::string &method):app(owner) {
+        ParameterRecordingInputLease(Application &owner,const std::string &method,const Json &params=Json::object()):app(owner) {
             if(!parameterRecordingBoundary(method))return;
             if(app.parameterRecordingInput||app.departureInput||GetCapture())
                 throw ScreamSeq::Api::ApiError(-32002,"Finish the current drag or state change before changing parameter recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             if(method=="automation.recording.start") {
                 if(app.parameterControlDelivery.retained()||app.parameterControlDelivery.lost())
-                    throw std::runtime_error("Review the retained original parameter input before starting another take");
+                    throw ScreamSeq::Api::ApiError(-32002,"Review the retained original parameter input before starting another take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
                 if(app.pluginDraft)throw ScreamSeq::Api::ApiError(-32002,"Finish the retained rack parameter or program edit before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
                 for(const auto &[id,editor]:app.graphPluginParameters)if(editor&&!editor->retired()&&editor->retainedDraft())
                     throw ScreamSeq::Api::ApiError(-32002,"Finish the retained parameter controls before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             }
             app.parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&app.parameterControlDelivery.pending())
-                throw std::runtime_error("Wait for original parameter input delivery before finishing the take");
-            if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview())
-                throw std::runtime_error("Original parameter input was refused or uncertain; review it before committing the take");
+                throw ScreamSeq::Api::ApiError(-32002,"Wait for original parameter input delivery before finishing the take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview()&&
+                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>()))
+                throw ScreamSeq::Api::ApiError(-32002,"Review original refused or uncertain input and explicitly acknowledge loss before keeping accepted points",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             // Freeze raw native fields through worker admission, baseline
             // restoration and readback. Release musical keys before filtering
             // their queued key-ups; do not disable/recreate the focused field.
@@ -678,7 +679,7 @@ public:
         guardDepartureOperation(method);
         guardParameterRecordingInput(method);
         if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
-        ParameterRecordingInputLease recordingInput(*this,method);
+        ParameterRecordingInputLease recordingInput(*this,method,params);
         struct ClearConsent {Application &app;bool replacing;~ClearConsent(){if(replacing)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"||method=="document.new"};
         ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
@@ -716,7 +717,10 @@ public:
     virtual void finishDocumentOperation(const std::string &method,const Json &result) {
         if(method.starts_with("automation.recording.")&&result.is_object()&&result.contains("retained")) {
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
-            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>())parameterControlDelivery.release();
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
+                parameterControlDelivery.release();pluginDetailsRevision.clear();
+                for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
+            }
         }
         refreshDocument();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
@@ -878,6 +882,7 @@ public:
     #include "GraphWorkflowIntegration.inc"
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
+    #include "ParameterRecordingIntegration.inc"
     #include "SampleCaptureIntegration.inc"
     #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;

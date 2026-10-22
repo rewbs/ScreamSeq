@@ -35,6 +35,10 @@ private:
   NativeWriteCompletion completion_;
   size_t offset_=0,total_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,lossAcknowledged_=false;
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {
+    return describeDraft(document_,state_.value("baseRevision",callbacks_.context().second),take(),generation_,
+      retained(),pending_,completion_.retained()&&!pending_);
+  }
   static constexpr size_t pageSize=128;
   bool retained()const{return state_.value("retained",false);}
   bool capturing()const{return state_.value("capturing",false);}
@@ -206,6 +210,7 @@ private:
     return DefSubclassProc(window,message,w,l);
   }
 public:
+  bool protectsClose()const{return retained()||pending_||completion_.retained();}
   ParameterRecordingWindow(HWND owner,Callbacks callbacks):NativeToolWindow(owner),callbacks_(std::move(callbacks)) {
     document_=callbacks_.context().first;minimumClientWidth_=650;minimumClientHeight_=500;
     INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};check(InitCommonControlsEx(&common),"Initialize parameter recording review");

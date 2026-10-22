@@ -48,14 +48,14 @@ class PluginParametersWindow final : public NativeToolWindow {
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;bool sliderEndPending_=false,sliderCancelPending_=false;uint64_t generation_=0;
   std::string previewToken_;uint32_t previewParameter_=0;
-  bool setting_=false,pending_=false,needsReload_=false;HWND pendingFocus_{},navigationFocus_{};
+  bool setting_=false,pending_=false,needsReload_=false,takeRefreshPending_=false;HWND pendingFocus_{},navigationFocus_{};
   NativeWriteCompletion completion_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,revision_,graph_.empty()?plugin_:target().dump(),generation_,dirty(),pending_,completion_.retained()&&!pending_);
   }
   void status(const std::wstring &text){status_=text;set(statusLabel,text);}
   void error(const std::exception &e)override{status(wide(e.what())+(completion_.retained()?L" / Review result before another edit":L""));layout();}
-  void requireReady()const{if(pending_||completion_.retained()||needsReload_)throw std::runtime_error("Review or reload the previous parameter result before editing");}
+  void requireReady()const{if(pending_||completion_.retained()||needsReload_||takeRefreshPending_)throw std::runtime_error("Review or reload the previous parameter result before editing");}
   std::string previewMethod(const char *operation)const{return std::string(graph_.empty()?"plugin.parameters.preview.":"graph.plugin.preview.")+operation;}
   Json previewIdentity(const std::string &revision)const{
     auto p=target();p["expectedRevision"]=revision;p["parameter"]=previewParameter_;p["gesture"]=previewToken_;return p;
@@ -168,7 +168,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     const auto generation=generation_;pending_=true;layout();
     try{
       auto data=readParameters();if(context_()!=context||generation_!=generation)throw std::runtime_error("Song or parameter draft changed during read / fields retained");
-      parameters_=std::move(data);revision_=context.second;needsReload_=false;sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;++generation_;
+      parameters_=std::move(data);revision_=context.second;needsReload_=takeRefreshPending_=false;sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;++generation_;
       filterParameters(false);status(L"Changes save automatically; sliders save on release. Ctrl+F finds a parameter.");
     }catch(...){setting_=pending_=false;layout();throw;}pending_=false;layout();
   }
@@ -285,13 +285,13 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void timer(UINT_PTR id)override{
     if(id==8){if(pending_)return;KillTimer(window_,8);if(sliderCancelPending_)cancelSlider();else if(sliderRow_>=0&&(sliderEndPending_||!GetCapture()))finishSlider();return;}
-    if(id!=7||!visible()||pending_||dirty()||completion_.retained()||needsReload_||(available_&&!available_())||context_()==std::pair(document_,revision_))return;
+    if(id!=7||!visible()||pending_||dirty()||completion_.retained()||needsReload_||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
     try{load();}catch(const Api::ApiError &e){if(e.code!=-32002){needsReload_=true;throw;}}catch(...){needsReload_=true;throw;}
   }
   void layout()override{
     if(!ready_)return;const auto focus=GetFocus();if(pending_&&!pendingFocus_&&owns(focus))pendingFocus_=focus;
     const auto [w,h]=size();place(heading,12,10,w/2-24,24);place(search,w/2,8,w/2-12,26);place(previous,12,42,64,26);place(parameter,84,42,w-244,260);place(next,w-152,42,64,26);place(close,w-80,42,68,26);
-    const bool ready=!pending_&&!completion_.retained()&&!needsReload_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
+    const bool ready=!pending_&&!completion_.retained()&&!needsReload_&&!takeRefreshPending_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
     EnableWindow(controls_.at(search),ready);
     for(int i=0;i<pageSize;++i){const auto &r=rows_[i];const auto &f=r.field;const bool visible=r.index>=0;const bool numeric=f.kind==PluginParameterField::Kind::Number;const float y=82+i*rowHeight;
       place(control(i,nameLabel),12,y,178,19,visible);place(control(i,rangeLabel),12,y+20,178,20,visible);
@@ -305,6 +305,15 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
 public:
+  bool retainedDraft()const{return dirty()||pending_||completion_.retained()||needsReload_||takeRefreshPending_||sliderRow_>=0||!previewToken_.empty();}
+  void takeFinished(){
+    if(!graph_.empty())return;
+    // Discard can preserve the song revision. Still re-read the accepted
+    // baseline before allowing another edit, without losing a partial number.
+    takeRefreshPending_=true;cancelAutomaticEdit();
+    status(dirty()?L"Take finished / unsaved text retained. Reload values to discard that text.":L"Take finished / refreshing accepted parameter values");
+    if(!dirty())layout();
+  }
   void recording(std::function<bool()> active,std::function<void(uint32_t,double,uint64_t)> capture) {
     recording_=std::move(active);capture_=std::move(capture);
   }

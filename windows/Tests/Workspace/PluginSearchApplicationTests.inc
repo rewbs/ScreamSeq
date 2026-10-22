@@ -34,6 +34,19 @@ void applicationParameterRecordingAdmission() {
     restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
     restoreCheck(!app.parameterRecordingInput&&controlState(title)==before&&songState(app)==music,"Rejected worker start left native fields locked");
     SetWindowTextW(title,L"Editable after failure");restoreCheck(restoreText(title)==L"Editable after failure","Recording boundary never resumed native editing");
+    app.openParameterRecording();const auto recording=app.parameterRecordingWindow->window();ScreamSeq::Tests::ownGuiWindow(recording);
+    restoreCheck(app.parameterRecordingWindow->visible()&&!app.parameterRecordingWindow->protectsClose()&&
+        app.parameterRecordingWindow->snapshot().at("document")==app.documentId,"Application failed to own the current song's parameter review window");
+    restoreCheck(app.protectRecordingTake()&&!app.parameterRecordingInput,"Empty take inspection blocked departure or leaked its native input lease");
+    app.parameterRecordingWindow->hide();
+    const auto owner=app.parameterRecordingWindow.get();app.openParameterRecording();
+    restoreCheck(app.parameterRecordingWindow.get()==owner&&app.parameterRecordingWindow->visible(),"Reopening parameter review replaced its retained owner");
+    const auto musicBeforeReview=songState(app);
+    ScreamSeq::Api::CompletedCall proof{"automation.recording.discard",app.documentId,app.view->session.revision,{{"retained",false},{"capturing",false},{"take","already-finished"}}};
+    app.reconcileParameterRecording(proof);
+    restoreCheck(songState(app)==musicBeforeReview&&!app.parameterRecordingInput,"Completion review resent a write or left native input locked");
+    proof.document="other song";restoreRejected([&]{app.reconcileParameterRecording(proof);});
+    restoreCheck(songState(app)==musicBeforeReview,"Foreign completion review changed this song");
 }
 void applicationPluginRackPosition() {
     RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
