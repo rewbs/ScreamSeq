@@ -20,7 +20,7 @@ This correction is **unbuilt**, and the candidate remains failed until it passes
 
 Windows-to-Mac ARM retained exchange run 39779951063 passed all ten fixture
 legs using this candidate, with native build jobs skipped. The Windows return
-leg was dispatched separately without building. Full Mac retained-take API/UI
+leg 39780723571 also passed all ten without building. Full Mac retained-take API/UI
 integration is still open; passing prerequisites do not supply those operations.
 
 ## Retained stopped publication, 22 October 11:34 UTC — unbuilt

@@ -8,6 +8,22 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:48 UTC:** the prepared `focus-followup` checkpoint now contains
+scratch focus plus deep recovery storage and the Mac trust test correction.
+It is still unexecuted. Its freeze records the superseded e986-only preparation;
+build/check scripts now select three targets, six native registrations and 23
+actual-app cases, including the full recovery class and explicit deep live-take
+restore. The hourly gate is unchanged. Resolve the exact current source from
+`focus-followup/freeze.json` before fast-forwarding the qualification checkout.
+Do not use the older five/seven counts below for this expanded checkpoint.
+
+Both ab5 retained ARM exchange legs passed all ten fixtures: Windows→Mac ARM
+run 39779951063 and Mac ARM→Windows run 39780723571. Logs are
+`admission-followup/arm-exchange.log` and `arm-return.log`; both workflows skipped
+their build jobs. Intel exchange still awaits that architecture's app artifact.
+Recovery changes do not alter the exchanged project encoder/decoder, but final
+integrated-source provenance and the failed gates remain outstanding.
+
 **22 October 12:45 UTC:** the next checkpoint also includes the
 [deep recovery-path correction](RECOVERY-PATHS-2026-10-22.md) and the Mac
 plugin-trust contract regression repair. Both are unbuilt. Mac ARM ab5 completed
