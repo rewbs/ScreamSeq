@@ -4,18 +4,18 @@ from ctypes import wintypes
 import os
 from pathlib import Path
 import sys
-import tempfile
 import time
 import unittest
 
 import private_desktop
+from fixture_paths import temporary_directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Api'))
 from client import Client, ApiError, TransportError
 
 
 class RecordingTests(unittest.TestCase):
     def setUp(self):
-        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='recording-app-', dir=os.environ['TMPDIR'])))
+        self.folder = self.enterContext(temporary_directory(prefix='recording-app-', root=os.environ['TMPDIR']))
         self.desktop = self.enterContext(private_desktop.PrivateDesktop())
         self.pid, self.client = self.launch()
 

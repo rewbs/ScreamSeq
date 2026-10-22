@@ -13,6 +13,7 @@ import time
 import unittest
 
 import private_desktop
+from fixture_paths import native_path, temporary_directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Api'))
 from client import Client, ApiError, TransportError
 private_desktop.user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
@@ -20,7 +21,7 @@ private_desktop.user.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wint
 
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
-        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='recovery-app-', dir=os.environ['TMPDIR'])))
+        self.folder = self.enterContext(temporary_directory(prefix='recovery-app-', root=os.environ['TMPDIR']))
         self.directory = self.folder / 'Recovery'
         self.desktop = self.enterContext(private_desktop.PrivateDesktop())
         self.pid, self.client = self.launch()
@@ -307,7 +308,7 @@ class RecoveryTests(unittest.TestCase):
             state = self.read('workspace.get')['recovery']
             self.assertTrue(state['visible']); self.assertTrue(state['error'])
             self.assertEqual(state['selected'], chosen)
-            self.assertEqual((moved / chosen).read_bytes(), chosen_bytes)
+            self.assertEqual(native_path(moved / chosen).read_bytes(), chosen_bytes)
         finally:
             self.directory.unlink()
             moved.rename(self.directory)
