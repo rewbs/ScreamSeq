@@ -985,3 +985,27 @@ focus. Worker-only passing results are bounded reusable evidence if their inputs
 remain unchanged; they do not substitute for the unexecuted public workflow.
 Packaging and main integration remain gated on qualification. Backup-only branch
 pushes do not trigger the coordinated build workflows.
+
+## Pending completion review correction (22 October 05:30 UTC)
+
+Source review found that the new recording window's Refresh action called
+`NativeWriteCompletion::finish()` even without a returned completion. It reported
+an unverified outcome but dropped the original receipt. If a Keep had made the
+current take empty before its completion arrived, this also enabled Record and
+released the window's close barrier. Present state alone does not establish the
+outcome of the earlier request.
+
+Refresh now retains an unresolved receipt and its protection. A matching late
+completion must pass application reconciliation and successful readback before
+the receipt is released. A foreign receipt or a failed reconciliation cannot
+release it; nothing resends the earlier write. Proven rejection still follows
+the existing `NativeWriteCompletion` admission behavior.
+
+The existing `applicationParameterRecordingReview` native fixture now injects
+a missing completion after Keep, reads the empty current take, attempts a new
+write, supplies a foreign completion, fails one readback, and finally supplies
+the matching successful completion. It asserts retained close protection,
+disabled repeat/new-write controls, exact submission count, and Refresh focus
+through recovery. These assertions are **source-only**, included in the existing
+`workspace-plugin-search-tests` gate at the next hourly build. No build or
+native pass is claimed for this correction.

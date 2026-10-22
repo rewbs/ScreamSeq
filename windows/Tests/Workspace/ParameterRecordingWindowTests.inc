@@ -5,13 +5,17 @@ void applicationParameterRecordingReview() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);const auto music=songState(app);
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
+    bool deferKeepReceipt=false,failReconcile=false;
+    std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
+    std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
     callbacks.context=[&]{return std::pair(app.documentId,app.view->session.revision);};
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
     callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
     callbacks.available=[]{return true;};callbacks.saveRecovery=[&]{++saves;};
     callbacks.reconcile=[&](const Call &call){restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
-      "Native review reconciled the wrong completion");++reconciled;};
+      "Native review reconciled the wrong completion");
+      if(std::exchange(failReconcile,false))throw std::runtime_error("Owned readback failure");++reconciled;};
     callbacks.delivery=[&](size_t offset,size_t limit){auto page=delivery;page["events"]=Json::array();
       for(size_t i=offset;i<std::min(delivery.at("events").size(),offset+limit);++i)page["events"].push_back(delivery.at("events")[i]);return page;};
     callbacks.read=[&](const std::string &method,const Json &params)->Json {
@@ -37,7 +41,12 @@ void applicationParameterRecordingReview() {
         }else if(method=="automation.recording.discard")take={{"retained",false},{"capturing",false},{"take",""}};
         else throw std::runtime_error("Unexpected review write");
       }
-      const Call result{method,app.documentId,app.view->session.revision,take};receipt->publish(std::make_shared<const Call>(result));
+      const Call result{method,app.documentId,app.view->session.revision,take};
+      if(method=="automation.recording.commit"&&std::exchange(deferKeepReceipt,false)){
+        lateReceipt=receipt;lateCompletion=std::make_shared<const Call>(result);
+        throw std::runtime_error("Owned missing native completion");
+      }
+      receipt->publish(std::make_shared<const Call>(result));
       if(method=="automation.recording.commit"&&std::exchange(failAfterKeep,false))throw std::runtime_error("Owned post-commit presentation failure");return result;
     };
     ScreamSeq::ParameterRecordingWindow tool(app.window,std::move(callbacks));tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
@@ -82,5 +91,26 @@ void applicationParameterRecordingReview() {
     click(9724);restoreCheck(writes.size()==4&&writes.back().first=="automation.recording.discard"&&
       writes.back().second.at("take")=="failed-clock-take"&&!tool.protectsClose(),
       "Discard of a stopped failed-context take lost its identity or retained a false close barrier");
+    // A read of the present take is not a receipt for an earlier write. Even
+    // when Keep made it empty, retain the original callback and block repeats.
+    click(9721);click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
+    deferKeepReceipt=true;click(9723);const auto submitted=writes.size();
+    restoreCheck(lateReceipt&&lateCompletion&&!tool.snapshot().at("completion").at("returned").get<bool>(),
+      "Unclassified completion failure failed to retain its unresolved receipt");
+    SetFocus(control(9725));click(9725);
+    restoreCheck(!tool.snapshot().at("take").at("retained").get<bool>()&&tool.protectsClose()&&
+      !tool.snapshot().at("completion").is_null()&&!IsWindowEnabled(control(9721))&&GetFocus()==control(9725),
+      "Empty readback discarded unresolved Keep or re-enabled Record/stole review focus");
+    click(9721);click(9723);restoreCheck(writes.size()==submitted,"Unresolved review allowed a second write");
+    auto foreign=*lateCompletion;foreign.document="another song";lateReceipt->publish(std::make_shared<const Call>(foreign));click(9725);
+    restoreCheck(tool.protectsClose()&&!tool.snapshot().at("completion").at("returned").get<bool>()&&reconciled==1,
+      "Foreign receipt released the retained take completion");
+    lateReceipt->publish(lateCompletion);failReconcile=true;click(9725);
+    restoreCheck(tool.protectsClose()&&!tool.snapshot().at("completion").is_null()&&reconciled==1,
+      "Failed receipt reconciliation discarded the original operation");
+    click(9725);
+    restoreCheck(!tool.protectsClose()&&tool.snapshot().at("completion").is_null()&&IsWindowEnabled(control(9721))&&
+      writes.size()==submitted&&reconciled==2&&GetFocus()==control(9725),
+      "Late matching receipt did not release review exactly once without a repeated write");
     restoreCheck(songState(app)==music,"Native review controls changed unrelated musical state");
 }

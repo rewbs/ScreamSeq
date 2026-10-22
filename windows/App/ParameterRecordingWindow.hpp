@@ -171,7 +171,10 @@ private:
       const auto returned=completion_.returned();if(returned&&callbacks_.reconcile){requireContext();callbacks_.reconcile(*returned);}
       refresh();if(completion_.retained()){
         error_=returned?"Completed action re-read; no request was resent":"Current take re-read; earlier action outcome remains unverified";
-        completion_.finish();set(statusLabel,wide(error_));layout();}return;
+        // An empty current take does not prove whether Keep/Discard/Start
+        // completed. Retain the original receipt and close protection until
+        // its matching completion can be reconciled; never enable a repeat.
+        if(returned)completion_.finish();set(statusLabel,wide(error_));layout();}return;
     }
     if(id==previous||id==next){offset_=id==previous?(offset_>=pageSize?offset_-pageSize:0):std::min(total_,offset_+pageSize);refresh();return;}
     if(id==saveCopy){pending_=true;try{callbacks_.saveRecovery();pending_=false;error_="Recovery copy saved";refresh();}catch(...){pending_=false;throw;}return;}
