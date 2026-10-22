@@ -8,6 +8,15 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 14:37 UTC:** Source work now also closes the confirmed command
+palette availability gap from reference row 02/A16. It shares the native menu
+policy, shows unavailable reasons, retains query/focus during updates and routes
+text Undo to the opening field. A new private-app regression fails on the
+unchanged96b executable because a missing plugin target leaves Run enabled.
+See [implementation and bounded gates](COMMAND-AVAILABILITY-2026-10-22.md).
+This joins the next hourly checkpoint; the earlier `scratch-status` preparation
+is superseded without execution. No additional build or CI restart occurred.
+
 **22 October 14:25 UTC:** The 14:07 checkpoint built frozen source
 `96b6971e56f0c3f297a713ac7254afad87c46099` once. All 20 independently selected
 app cases passed, including the original ordered recording regression. Native
@@ -902,7 +911,7 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Candidate 1fb passed its bounded Windows ARM64 suite and both Mac architectures. Foreground scratch Undo found stale clean curves; the exact x64 CI binary has one intermittent recording Redo/inspector wait failure. Scratch and parameter focus/refresh corrections are frozen at 9251ab88f and unbuilt. | Follow the current integration boundary and `scratch-refresh` freeze/check scripts at or after 14:07:23 UTC. Reuse unchanged shared/audio/recovery evidence; retain original failures. Run three native groups, nine app cases and fresh isolated foreground checks. Package and merge only a qualified checkpoint. |
+| 1 / M | Candidate96b passed20 bounded app cases and native parameter/departure checks; its crowded command group timed out. Foreground scratch/plugin Undo refresh and dock keyboard checks passed. Scratch status and command availability corrections plus the native group split remain unbuilt. | Follow the current integration boundary and the new combined frozen scripts after15:07:58UTC. Run five affected native groups, eight app cases and fresh isolated foreground checks; reuse unchanged inputs with receipts. Keep the failed baseline/timeout and unresolved prior x64 ordering failure. Package and merge only a qualified checkpoint. |
 | 2 / L | Shared original-time capture, provider ownership, Windows native controls/delivery/recovery and a public retained-take window exist. Windows recording has actual-app and bounded97bd foreground Keep/Discard evidence; the fresh ab5 diagnostic did not requalify the full flow. Mac's existing recording adapter and seven Windows-only live APIs remain separate contracts. | Recheck the changed input-lease boundary on the next Windows candidate, then integrate the Mac take owner, native baseline restoration and API/UI with shared capture. Do not infer complete parity from the prepared Mac prerequisites or superseded Windows absence reports. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | Typed preservation and both native ownership adapters exist and have preceding paired corpus execution; this is no longer an uncompiled Mac port. New exact-history behavior and final current-candidate exchange remain open. | Qualify current Mac history and perform reciprocal edited F01–F05/output checks on retained same-candidate binaries. Keep source protection, opaque state, exact typed comparisons and merged-tree validation. Large-file memory and unsupported encodings remain explicit risks. |

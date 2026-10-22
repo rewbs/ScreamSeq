@@ -239,7 +239,7 @@
             previous=controls.at(id);
         }
 		configureWorkspaceCommands();
-		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runWorkspaceShortcut(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
+		palette=std::make_unique<ScreamSeq::CommandPalette>(window,workspaceCommands,[this](int id){runPaletteCommand(id);});connectPaletteShortcuts();installMenuBar();layoutControls();installPatternAccessibility();
 	}
 	void command(int id) {
 		try {

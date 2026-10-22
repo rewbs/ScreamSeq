@@ -14,6 +14,32 @@ void menuBegin(RestoreApplication &app){SendMessageW(app.window,WM_ENTERMENULOOP
 void menuChoose(RestoreApplication &app,int id){SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);SendMessageW(app.window,WM_COMMAND,ScreamSeq::NativeMenuBar::commandBase+id,0);}
 void applicationMenuBar(){
     {
+        RestoreFixture fixture;auto &app=*fixture.app;const auto before=songState(app);
+        app.openSongProperties();const auto title=GetDlgItem(app.songPropertiesWindow->window(),8601);
+        const auto original=restoreText(title);rawDraftText(title,L"Palette local text");
+        app.palette->show();const auto popup=app.palette->window();ScreamSeq::Tests::ownGuiWindow(popup);
+        const auto search=GetDlgItem(popup,101),list=GetDlgItem(popup,102),run=GetDlgItem(popup,103);
+        SetWindowTextW(search,L"edit undo");
+        restoreCheck(SendMessageW(list,LB_GETCOUNT,0,0)==1&&IsWindowEnabled(run),"Palette Undo did not use the originating text history");
+        SendMessageW(search,WM_KEYDOWN,VK_RETURN,0);
+        restoreCheck(!IsWindowVisible(popup)&&restoreText(title)==original&&GetFocus()==title&&songState(app)==before,
+            "Palette text Undo edited the song, query or wrong field");
+        app.songPropertiesWindow->hide();SetFocus(app.window);app.palette->show();SetWindowTextW(search,L"edit undo");
+        restoreCheck(!IsWindowEnabled(run),"Palette song Undo ignored empty shared history");
+        SetWindowTextW(search,L"selected plugin parameter controls");
+        restoreCheck(SendMessageW(list,LB_GETCOUNT,0,0)==1&&!IsWindowEnabled(run),"Palette plugin action ignored its missing rack target");
+        SetWindowTextW(search,L"new song");
+        SetCapture(run);SendMessageW(popup,WM_TIMER,1,0);
+        const bool buttonAvailable=IsWindowEnabled(run);ReleaseCapture();
+        restoreCheck(buttonAvailable,"Palette Run button capture was mistaken for an editor drag");
+        app.busy=true;SendMessageW(popup,WM_TIMER,1,0);
+        restoreCheck(!IsWindowEnabled(run)&&GetFocus()==search&&restoreText(search)==L"new song","Palette busy refresh lost query focus or enabled New");
+        SendMessageW(search,WM_KEYDOWN,VK_RETURN,0);app.busy=false;
+        restoreCheck(IsWindowVisible(popup)&&songState(app)==before,"Unavailable palette command changed the document or dismissed search");
+        SendMessageW(popup,WM_TIMER,1,0);restoreCheck(IsWindowEnabled(run),"Palette did not recover availability when the worker became free");
+        SendMessageW(search,WM_KEYDOWN,VK_ESCAPE,0);
+    }
+    {
         RestoreFixture fixture;auto &app=*fixture.app;const auto menu=GetMenu(app.window);
         restoreCheck(menu&&GetMenuItemCount(menu)==6,"Six native application menu categories are missing");
         const auto before=songState(app);menuBegin(app);

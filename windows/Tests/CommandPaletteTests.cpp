@@ -183,6 +183,27 @@ void runTests() {
     key(clear,VK_TAB);require(GetFocus()==reset,"Keyboard navigation did not reach Reset action");
     key(reset,VK_TAB);require(GetFocus()==search,"Keyboard navigation did not return from shortcut actions to search");
 
+    bool unavailable=true;int availabilityReads=0;
+    palette.configureAvailability([&](int id,HWND target){
+      require(target==origin,"Command availability inspected the palette query instead of its opening editor");
+      ++availabilityReads;return id==6&&unavailable?std::wstring(L"Select a graph source first"):std::wstring();
+    });
+    SetWindowTextW(search,L"open reusable");
+    require(!IsWindowEnabled(run)&&IsWindowEnabled(set)&&hasText(popup,L"Select a graph source first"),"Unavailable command lacks guidance or prevents shortcut configuration");
+    require(item(results,0).find(L"Unavailable: Select a graph source first")!=std::wstring::npos,"Native accessibility row omits unavailable reason");
+    SetFocus(search);SendMessageW(search,EM_SETSEL,2,7);
+    key(search,VK_RETURN);SendMessageW(popup,WM_COMMAND,MAKEWPARAM(102,LBN_DBLCLK),LPARAM(results));
+    require(executions==3&&IsWindowVisible(popup)&&GetFocus()==search,"Unavailable Enter/double-click ran or dismissed the command");
+    unavailable=false;SendMessageW(popup,WM_TIMER,1,0);
+    SendMessageW(search,EM_GETSEL,WPARAM(&begin),LPARAM(&end));
+    require(IsWindowEnabled(run)&&text(search)==L"open reusable"&&GetFocus()==search&&begin==2&&end==7,"Availability refresh lost query/caret/focus or failed to enable Run");
+    require(item(results,0).find(L"Unavailable")==std::wstring::npos,"Availability refresh retained stale native row text");
+    unavailable=true;key(search,VK_RETURN);
+    require(executions==3&&IsWindowVisible(popup)&&!IsWindowEnabled(run),"Execution trusted availability cached before a context change");
+    unavailable=false;SendMessageW(popup,WM_TIMER,1,0);key(search,VK_RETURN);
+    require(executions==4&&executed==6&&GetFocus()==origin&&!IsWindowVisible(popup)&&availabilityReads>0,"Newly available command failed to restore focus and run once");
+    palette.show();
+
     SendMessageW(popup,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));
     SetWindowPos(popup,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);checkBounds(popup);
     key(search,VK_ESCAPE);SendMessageW(search,WM_CHAR,VK_ESCAPE,0);

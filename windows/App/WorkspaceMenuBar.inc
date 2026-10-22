@@ -21,7 +21,7 @@
         }
         return result;
     }
-    ScreamSeq::NativeMenuBar::State menuCommandState(int id)const {
+    ScreamSeq::NativeMenuBar::State menuCommandState(int id,HWND commandFocus=nullptr,HWND commandSurface=nullptr)const {
         using State=ScreamSeq::NativeMenuBar::State;
         const auto found=std::find_if(workspaceCommands.begin(),workspaceCommands.end(),[&](const auto &entry){return entry.id==id;});
         if(found==workspaceCommands.end())throw std::runtime_error("Application menu references an unknown command");
@@ -29,9 +29,11 @@
         result.label=slash==std::wstring::npos?found->label:found->label.substr(slash+3);result.shortcut=workspaceShortcutLabel(id);
         if(id==exitCommand&&result.shortcut.empty())result.shortcut=L"Alt+F4";
         const auto refuse=[&](const wchar_t *reason){result.enabled=false;result.reason=reason;};
-        const auto focus=menuArmed?menuFocus:GetFocus();
+        const auto focus=commandFocus?commandFocus:menuArmed?menuFocus:GetFocus();
         const bool text=menuTextControl(focus),focusedEdit=id>=copyFocusedCommand&&id<=selectAllFocusedCommand;
-        const bool localText=text&&(focusedEdit||id==undoCommand||id==redoCommand);
+        const bool localUndo=id==undoCommand,localRedo=id==redoCommand||id==redoAlternateCommand;
+        const bool localText=text&&(focusedEdit||localUndo||localRedo);
+        if(ScreamSeq::NativeInputGate::protectedWindow(focus))refuse(L"Wait for the opening editor's current operation");
         if(preparingWorkspaceLayout||documentDrafts.departing()||(!localText&&(busy||recoveryRestoring)))refuse(L"Finish the current document operation first");
         if((id==pluginAutomate||id==pluginActivity)&&!hasPluginParameterTarget())refuse(L"Select an available plugin parameter in the rack first");
         if((id==pluginParametersCommand||id==pluginEditor)&&selectedPluginSlot()<0)refuse(L"Select a plugin in the rack first");
@@ -41,20 +43,21 @@
         const auto capture=GetCapture();GUITHREADINFO gui{sizeof(gui)};
         const bool nativeMenuCapture=capture==window&&GetGUIThreadInfo(GetCurrentThreadId(),&gui)&&
             (gui.flags&GUI_INMENUMODE)&&gui.hwndMenuOwner==window;
-        if(dragging||(capture&&!nativeMenuCapture))refuse(L"Finish the current mouse gesture first");
-        if(text&&(focusedEdit||id==undoCommand||id==redoCommand)){
+        const bool paletteCapture=commandSurface&&capture&&(capture==commandSurface||IsChild(commandSurface,capture));
+        if(dragging||(capture&&!nativeMenuCapture&&!paletteCapture))refuse(L"Finish the current mouse gesture first");
+        if(localText){
             const bool writable=IsWindowEnabled(focus)&&!(GetWindowLongPtrW(focus,GWL_STYLE)&ES_READONLY);
             DWORD first=0,last=0;SendMessageW(focus,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
             wchar_t type[64]{};GetClassNameW(focus,type,64);const bool rich=!_wcsnicmp(type,L"RichEdit",8);
-            if(id==undoCommand&&(!writable||!SendMessageW(focus,EM_CANUNDO,0,0)))refuse(L"No text edit to undo");
-            if(id==redoCommand&&(!writable||!rich||!SendMessageW(focus,EM_CANREDO,0,0)))refuse(L"No text edit to redo");
+            if(localUndo&&(!writable||!SendMessageW(focus,EM_CANUNDO,0,0)))refuse(L"No text edit to undo");
+            if(localRedo&&(!writable||!rich||!SendMessageW(focus,EM_CANREDO,0,0)))refuse(L"No text edit to redo");
             if((id==copyFocusedCommand||id==cutFocusedCommand||id==deleteFocusedCommand)&&first==last)refuse(L"Select text first");
             if((id==cutFocusedCommand||id==deleteFocusedCommand||id==pasteFocusedCommand)&&!writable)refuse(L"This text field is read-only");
             if(id==pasteFocusedCommand&&!IsClipboardFormatAvailable(CF_UNICODETEXT)&&!IsClipboardFormatAvailable(CF_TEXT))refuse(L"The clipboard has no text");
         }else{
             if(focusedEdit&&!(focus==window&&(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()||workspaceMainCanvasFocused("samples"))))refuse(L"Focus a text field, pattern or sample selection first");
-            if(id==undoCommand&&!view->session.document.value("canUndo",false))refuse(L"No song edit to undo");
-            if(id==redoCommand&&!view->session.document.value("canRedo",false))refuse(L"No song edit to redo");
+            if((localUndo||id==pluginUndo)&&!view->session.document.value("canUndo",false))refuse(L"No song edit to undo");
+            if((localRedo||id==pluginRedo)&&!view->session.document.value("canRedo",false))refuse(L"No song edit to redo");
         }
         if(id>=selectChannelCommand&&id<=selectRowCommand&&!(focus==window&&workspaceState.focus=="pattern"&&trackerWorkspaceVisible()))refuse(L"Focus the pattern first");
         if(id==patternRowsLargerCommand&&rowHeight>=34)refuse(L"Pattern rows are already at their largest size");
@@ -122,11 +125,20 @@
         if(!captured||!IsWindow(menuFocus)||GetFocus()!=menuFocus||!menuTargetCurrent(id)){status=L"Menu target changed / reopen the menu before editing";return true;}
         if(!state.enabled){status=state.reason;return true;}
         rejectDepartureInput();
-        if(menuTextControl(menuFocus)){
-            UINT message=0;switch(id){case undoCommand:message=WM_UNDO;break;case redoCommand:message=EM_REDO;break;case copyFocusedCommand:message=WM_COPY;break;
-                case pasteFocusedCommand:message=WM_PASTE;break;case cutFocusedCommand:message=WM_CUT;break;case deleteFocusedCommand:message=WM_CLEAR;break;
-                case selectAllFocusedCommand:SendMessageW(menuFocus,EM_SETSEL,0,-1);return true;default:break;}
-            if(message){SendMessageW(menuFocus,message,0,0);return true;}
-        }
+        if(dispatchTextCommand(id,menuFocus))return true;
         runWorkspaceShortcut(id);return true;
+    }
+    bool dispatchTextCommand(int id,HWND focus){
+        if(!menuTextControl(focus))return false;
+        UINT message=0;switch(id){case undoCommand:message=WM_UNDO;break;case redoCommand:case redoAlternateCommand:message=EM_REDO;break;case copyFocusedCommand:message=WM_COPY;break;
+            case pasteFocusedCommand:message=WM_PASTE;break;case cutFocusedCommand:message=WM_CUT;break;case deleteFocusedCommand:message=WM_CLEAR;break;
+            case selectAllFocusedCommand:SendMessageW(focus,EM_SETSEL,0,-1);return true;default:break;}
+        if(!message)return false;SendMessageW(focus,message,0,0);return true;
+    }
+    void runPaletteCommand(int id){
+        // The palette has restored its opening control, never its query edit.
+        // Use the same local text/history and command policy as the menu bar.
+        const auto focus=GetFocus();const auto state=menuCommandState(id,focus);
+        if(!state.enabled){status=state.reason;return;}
+        rejectDepartureInput();if(!dispatchTextCommand(id,focus))runWorkspaceShortcut(id);
     }
