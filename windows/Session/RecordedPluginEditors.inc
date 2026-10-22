@@ -122,9 +122,17 @@ bool PluginOperations::captureRecordedControl(const std::string &identity,uint32
   need(recordedEditors_&&recordedEditors_->take->owns(identity),"Parameter control is not armed in the retained take");
   auto &capture=*recordedEditors_;auto &take=*capture.take;
   const std::array<std::pair<uint32_t,double>,1> requested{{{parameter,value}}};
-  const auto prepared=prepareParameterEdits(capture.catalogs.at(identity),requested);
-  const PluginEdit event{parameter,prepared.at(0).second,hostTime};
-  take.validateControlInput(identity,event,document_.native(),capture.catalogs.at(identity));
+  PluginEdit event{};
+  try {
+    const auto prepared=prepareParameterEdits(capture.catalogs.at(identity),requested);
+    event={parameter,prepared.at(0).second,hostTime};
+    take.validateControlInput(identity,event,document_.native(),capture.catalogs.at(identity));
+  } catch(const std::invalid_argument &e) {
+    // These pure checks precede intake and audible preview. A refused range,
+    // time or envelope conflict is known not to have accepted this input.
+    // Do not extend this classification across append or later publication.
+    throw Api::ApiError(-32602,e.what(),WriteOutcome{CommitOutcome::NotCommitted});
+  }
   const auto [revision,epoch]=capture.context();
   need(revision==take.revision()&&epoch==take.playbackEpoch(),"Parameter control belongs to a retired recording context");
   const auto source=editors_.at(identity)->editSource();

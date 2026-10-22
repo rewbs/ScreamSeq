@@ -41,7 +41,17 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   auto invalid=control;invalid["value"]=true;
   rejected([&]{invoke(c,"automation.recording.capture",invalid);});
   invalid=control;invalid["value"]=2;
-  rejected([&]{invoke(c,"automation.recording.capture",invalid);});
+  const auto refusedBeforeIntake=[&](const Json &input){
+    bool classified=false;
+    try{invoke(c,"automation.recording.capture",input);}
+    catch(const Api::ApiError &e){classified=e.code==-32602&&e.outcome&&
+      e.outcome->state==Tracker::CommitOutcome::NotCommitted&&!e.completed;}
+    need(classified&&c.view()->session.revision==beforeRevision,
+      "Pure control validation was not classified as refused before intake");
+  };
+  refusedBeforeIntake(invalid);
+  invalid=control;invalid["timestamp"]="1";
+  refusedBeforeIntake(invalid);
   take=invoke(c,"automation.recording.capture",control);
   need(take.at("accepted")==true&&!take.contains("intakeError"),"Original-time native control was not retained after invalid-input refusal");
   renderAhead();take=call(c,"automation.recording.get",Json::object());

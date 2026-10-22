@@ -74,6 +74,33 @@ argument to `PluginTrust::canonical`, which requires an absolute path. The
 workflow now resolves its build directory before invoking the existing test.
 Trust rules and assertions are unchanged; provider behavior remains unqualified.
 
+Mac Intel job 119708484219 also completed with the same fixture-path failure;
+its 134 native registrations, recovery/picker, interface and conformance steps
+passed. Windows job 119708483477 passed compilation, 158 portable/worker and
+49 native UI/preferences/recovery registrations, vendor ownership, scratch and
+conformance. Its 91-case application run retained 14 failure records and two
+skips: the runner exposes no audio devices, so transport/recording/audition
+cases could not obtain the required endpoint/clock. Assertions remain intact;
+these are failed checks, not a Windows application-suite pass. Verified artifact
+ZIPs and extracted evidence are retained under `bin/mac-gesture-20261022/ci/`.
+
+An additional same-binary, 30.2035-second diagnostic used a never-switched
+private desktop and another disposable F04 copy (PID 25360, exited normally).
+Its measured ten-second interval drew 38 occluded frames within the existing
+44-frame bound while advancing 1,000 audio callbacks. The full report contained
+3,018 callbacks, one deadline overrun and no device/starvation/processor fault.
+This establishes bounded occlusion pacing only. It neither explains the
+interactive overruns nor qualifies realtime performance or visible flicker.
+The original fixture and executable hashes remained unchanged.
+
+The next correction also classifies pure native-control validation failures
+as `notCommitted` before intake. This covers parameter range, original-time
+and envelope-conflict refusal. The typed classification deliberately ends
+before append or audible preview; uncertainty after acceptance is preserved.
+The real-provider worker fixture now requires typed refusal for invalid range
+and pre-take timestamps, then retains its existing successful capture, exact
+event count, history, recovery and reopen assertions. This source is unbuilt.
+
 ## Next checkpoint
 
 No new build or build-triggering PR push/merge before **09:00 UTC, 22 October**.
