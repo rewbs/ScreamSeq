@@ -196,7 +196,7 @@
       "id": "title-utf16-over-limit",
       "method": "document.patch",
       "params": {
-        "title": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵"
+        "title": "\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5\u00f0\u0178\u017d\u00b5"
       },
       "expected": {
         "windows": -32602,
@@ -398,6 +398,159 @@
         "windows": true,
         "macos": true
       }
+    },
+    {
+      "id": "recovery-list",
+      "method": "automation.recovery.list",
+      "params": {},
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      }
+    },
+    {
+      "id": "recovery-list-integral-real",
+      "method": "automation.recovery.list",
+      "params": {
+        "offset": 0.0,
+        "limit": 1.0
+      },
+      "expected": {
+        "windows": "success",
+        "macos": "success"
+      }
+    },
+    {
+      "id": "recovery-list-boolean-offset",
+      "method": "automation.recovery.list",
+      "params": {
+        "offset": false
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-list-fractional-offset",
+      "method": "automation.recovery.list",
+      "params": {
+        "offset": 0.5
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-list-zero-limit",
+      "method": "automation.recovery.list",
+      "params": {
+        "limit": 0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-list-large-limit",
+      "method": "automation.recovery.list",
+      "params": {
+        "limit": 129
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-list-unknown-field",
+      "method": "automation.recovery.list",
+      "params": {
+        "unexpected": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-get-stale",
+      "method": "automation.recovery.get",
+      "params": {
+        "kind": "gesture",
+        "index": 0
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "guard": "stale"
+    },
+    {
+      "id": "recovery-get-empty-revision",
+      "method": "automation.recovery.get",
+      "params": {
+        "expectedRevision": "",
+        "kind": "gesture",
+        "index": 0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-get-wrong-revision-type",
+      "method": "automation.recovery.get",
+      "params": {
+        "expectedRevision": false,
+        "kind": "gesture",
+        "index": 0
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      }
+    },
+    {
+      "id": "recovery-get-unknown-field",
+      "method": "automation.recovery.get",
+      "params": {
+        "kind": "gesture",
+        "index": 0,
+        "unexpected": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-read",
+      "method": "automation.recording.get",
+      "params": {},
+      "expected": {
+        "windows": "success",
+        "macos": -32601
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a"
+    },
+    {
+      "id": "parameter-take-read-unknown-field",
+      "method": "automation.recording.get",
+      "params": {
+        "unexpected": true
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32601
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a"
     }
   ],
   "rejectedRequestIDReuse": {

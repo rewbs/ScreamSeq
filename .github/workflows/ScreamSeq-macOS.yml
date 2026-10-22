@@ -75,16 +75,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Check reviewed API inventory before compilation
+        shell: bash
+        run: |
+          set -o pipefail
+          python -B -m unittest discover -s editor/Tests/Conformance -p test_api_vectors.py -v 2>&1 | tee screamseq-macos-api-preflight.log
       - name: Build C++ targets and Swift application from a clean tree
         id: build
         shell: bash
         run: |
           set -o pipefail
           bash mac/build.sh 2>&1 | tee screamseq-macos-build.log
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        with:
-          python-version: '3.12'
       - name: Retain the built app for reciprocal checks without rebuilding
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash

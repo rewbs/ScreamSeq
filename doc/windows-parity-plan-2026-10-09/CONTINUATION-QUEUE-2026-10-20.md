@@ -17,9 +17,13 @@ input recovery. The candidate `bcd10d8a8` compiled but failed startup qualificat
 [current recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) before touching
 its checkpoint. The next hourly gate is **2026-10-22 05:56:14 UTC**. The local
 build and check receipts under `bin/plugin-control-review-20261022/correction`
-are terminal and must not be repeated. Its Windows/macOS CI jobs remain separate
-live observations until terminal; do not restart them. The menu source correction
-is unbuilt. Prior Mac passes do not qualify the newly changed recovery adapter.
+are terminal and must not be repeated. Mac ARM job 119647128083 passed all 134
+native/35 interface groups but failed the stale API inventory baseline after
+the five original fixture roundtrips. The [reviewed inventory correction and
+additional vectors](PLUGIN-API-INVENTORY-2026-10-22.md) join the next checkpoint.
+Windows x64 and Mac Intel jobs remain live observations until terminal; do not
+restart them. The menu source correction is unbuilt. The bounded Mac passes
+do not establish completed conformance or reciprocal qualification.
 
 The same pending batch also fixes [MIDI sound navigation with a hidden context
 panel](MIDI-SOUND-NAVIGATION-2026-10-22.md), discovered through Computer Use on

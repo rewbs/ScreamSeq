@@ -47,6 +47,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Check reviewed API inventory before compilation
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s editor/Tests/Conformance -p test_api_vectors.py -v *>&1 | Tee-Object screamseq-windows-api-preflight.log
+          if ($LASTEXITCODE -ne 0) { throw 'API inventory preflight failed; no build started.' }
       - name: Build native application and all test targets once
         id: build
         shell: pwsh
@@ -58,10 +66,6 @@ jobs:
         run: |
           ctest --test-dir bin/windows-ci -C Release --output-on-failure --no-tests=error -L '^(portable|worker|api)$' *>&1 | Tee-Object screamseq-windows-model.log
           if ($LASTEXITCODE -ne 0) { throw 'Portable or worker checks failed.' }
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        with:
-          python-version: '3.12'
       - name: Retain the built app for reciprocal checks without rebuilding
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
