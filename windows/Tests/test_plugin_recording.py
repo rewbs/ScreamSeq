@@ -124,6 +124,8 @@ class PluginRecordingTests(unittest.TestCase):
         points_before = self.read('automation.get')
         revision = self.doc()['revision']
         self.main_command(661)
+        self.wait_for(lambda: self.read('workspace.get'),
+                      lambda s: s['parameterRecording']['visible'] and not s['pendingViewCommands'])
         self.recording_button(9721)
         take = self.wait_for(self.take, lambda s: s['retained'] and s['capturing'])
         self.assertEqual(take['clock'], 'windows-qpc-100ns')

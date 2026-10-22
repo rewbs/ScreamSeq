@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 18:38 UTC source checkpoint:** backup branch
+`codex/mac-gesture-next-checkpoint` contains `3c159554e` (Windows recording
+intent across polling reads, diagnostic evidence) and `a0e022ca8` (Mac mixer
+bounded admission retries and fresh-state reconciliation). Both source batches
+remain unbuilt. New Mac interface cases preserve unknown writes, exact retry
+payloads, newer raw fields and successful commits during readback. See the intake
+report. No new build/CI run, production package or main merge has occurred;
+19:12:11 UTC remains the earliest next coordinated checkpoint. The fixed API
+inventory's six portable preflight passes remain valid because its inputs have
+not changed. No extra preflight/test cycle was run just to repeat that evidence.
+
 **22 October 18:25 UTC diagnostic follow-up (supersedes earlier gates):** PR#7
 is frozen at `0198032752f8a55f2a5e003a382a78e131803aef`; main remains
 `0fe8f3400`. The single local checkpoint linked the product but failed compiling
@@ -1037,8 +1048,8 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | PR#6 is merged as main0fe8f3400, exactly the qualified077e tree. Both preceding Mac jobs passed. Windows CI remains red, with all12 affected cases passed locally on the exact downloaded x64 executable. ARM64 package and bounded foreground checks passed. | Inspect main push runs39811540714/39811541170 and retain their exact artifacts. Computer Use the newly built Windows candidate without rebuilding. No next checkpoint before17:09:52UTC; refresh the exact-run receipt first. |
-| 2 / L | Windows native retained recording is integrated. New Mac source now has internal session ownership, original-time capture, one-step Keep history, typed recovery, native edit admission, stopped baseline verification and explicit failed-context discard. It remains unbuilt and internal; the seven live APIs are still Windows-only. | Finish safe live/opaque native restoration, then connect the shared lifecycle to native controls/API together. Run both Mac architectures, real session/socket Undo/save/reopen and visible AU/VST3 gates. Parameter-only stopped restoration is a prerequisite, not final parity. |
+| 1 / M | PR#6 is merged as main0fe8f3400. PR#7 is frozen at019803275; its Windows product linked but the native workspace target failed, and both Mac CI jobs stopped at preflight. Subsequent inventory/Windows macro/recording refresh/Mac mixer corrections are backed up but unbuilt. | Use the next coordinated checkpoint no earlier than19:12:11UTC. Preserve failed019 receipts; require all selected native/app cases, fresh Computer Use and both Mac gates before integration. Main remains unchanged. |
+| 2 / L | Windows retained recording is integrated, with a polling-click correction now pending. Mac has shared summary/paging and all seven retained-take API methods, original-time capture, one-step Keep/history, recovery, stopped baseline verification and whole-group opaque Discard with retained cleanup. Native Mac UI/control wiring and live release remain unfinished. | Qualify the implemented APIs, then finish live restoration and new-provider cleanup review before full native control/lifecycle exposure. Run both Mac architectures, real device/session/socket Undo/save/reopen and visible AU/VST3 gates. Matching method names and stopped restoration alone do not establish recording parity. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | Typed preservation, native ownership, exact-history and bounded reciprocal exchange passed on retained96b binaries for Mac ARM/Intel and Windows x64. Both directions include F01–F05, render/import, opaque metadata, history and envelope bank. Inputs/binaries and report hashes were verified. | Reuse those reports only while relevant inputs are unchanged (96b→077e has no Mac/shared/model changes). Final integrated source still needs its reciprocal gate, especially after Mac recording/history changes. Retain source protection, exact typed comparisons and merged-tree validation; large-file memory/unsupported encodings remain risks. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
