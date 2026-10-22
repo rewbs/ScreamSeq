@@ -8,6 +8,43 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 10:54 UTC:** the `3cefb9ab9` Mac CI run `39760505711`
+is terminal success on ARM (`119763197802`) and Intel (`119763198384`):
+134 native registrations each, owned AU/VST3 lifecycle, interface, recovery,
+picker, sample library and requested conformance. Windows job `119763198584`
+passed build, 158 portable/worker, 49 native UI, vendor ownership and conformance;
+its 91-case app stage retained 14 failures, one error and two skips. Its audio
+inventory is empty. The additional graph error was a classified pre-write busy
+refusal at `history.undo`, not a failed graph/history assertion.
+
+The exact retained x64 artifact was downloaded and hash-verified. It was built
+from synthetic merge `6299dc2847da8607d9d193ac4fd9130a05b116b3`, whose Git tree
+is identical to `3cefb9ab9ff0a892586c21442e5c8d78746fbd03`. App SHA-256:
+`4c0f0aea27d69f3f4ec1666f013bd1b8bae9513c375b2cbee560f827b752a0b2`.
+Without rebuilding, ten previously failed endpoint-dependent cases passed on
+Windows ARM64 under x64 emulation, using silent WASAPI and never-switched
+private desktops. These cover shortcut/loop/playback commands, four MIDI take
+journeys and three keyboard audition journeys. The graph case also passed;
+its 31 exchanges observed no contention. This does not overwrite CI's failures,
+qualify native x64 hardware/performance, or close the pending plugin review bug.
+Evidence is in `bin/mac-gesture-20261022/clock-followup/ci/windows-x64/`.
+
+Both Python API clients now have matching bounded retry policy for complete
+`-32002` replies explicitly classified `notCommitted`: at most six attempts,
+identical serialized ID/revision/original timestamp/payload. Malformed replies,
+unknown/committed/no-change outcomes, unclassified busy, stale revisions and
+transport loss are not resent. Five portable tests pass against both transport
+doubles, including payload mutation between attempts, bounded exhaustion and
+malformed busy envelopes. No graph/history assertion was weakened. The native
+graph/device runs used the new client against the retained old executable;
+ordinary response validation is unchanged by the final malformed-envelope guard.
+Mac actual-socket execution of the changed client remains for the next shared gate.
+
+The source-only shared arm/stop boundary extraction is backed up at `c2d061c8a`.
+The frozen **97bd596a4** review correction and **11:06 UTC** build gate remain
+unchanged. Do not replace its freeze or repeat old receipts. Package/merge still
+requires its changed native/app gates and fresh isolated foreground observation.
+
 **22 October 10:25 UTC:** source `3cefb9ab9ff0a892586c21442e5c8d78746fbd03`
 is backed up and on PR #6. The coordinated local checkpoint started 10:05:33
 and built all five targets once. Seven native registrations passed; five of six

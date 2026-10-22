@@ -952,6 +952,14 @@ an ordinary `-32003`, or an unchanged song revision does **not** prove rejection
 Filesystem, library, take and device effects require their own domain readback.
 Transport loss after sending can also leave the outcome unknown to the client.
 
+Both supplied Python clients make at most six attempts for a complete `-32002`
+reply explicitly classified `writeOutcome:"notCommitted"`, using bounded
+backoff and the same serialized ID, revision, timestamp and payload. Transport
+errors, malformed/mismatched replies, stale revisions, unclassified busy and all
+other outcomes return immediately for inspection; they are never automatically
+resent. Each exchange retains the configured transport timeout. This handles
+temporary inspector/worker contention without repeating an accepted edit.
+
 ### Bounded write replay
 
 `api.describe.result.data.writeReplayCache` reports the policy and aggregate

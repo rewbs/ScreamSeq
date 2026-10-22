@@ -73,12 +73,22 @@ class Client:
                     if len(received) > MAX_BYTES:
                         raise RuntimeError("Response exceeds 32 MiB")
             response = json.loads(received)
-            if response.get("jsonrpc") != "2.0" or response.get("id") != request["id"]:
-                raise RuntimeError("Mismatched API response")
+            if (not isinstance(response, dict) or response.get("jsonrpc") != "2.0"
+                    or response.get("id") != request["id"]
+                    or ("result" in response) == ("error" in response)):
+                raise RuntimeError("Invalid API response; outcome unknown")
+            if "error" in response and (not isinstance(response["error"], dict)
+                    or type(response["error"].get("code")) is not int
+                    or not isinstance(response["error"].get("message"), str)):
+                raise RuntimeError("Invalid API error; outcome unknown")
             if "error" not in response:
                 return response["result"]
             error = APIError(response["error"])
-            if error.code != -32002 or attempt == 5:
+            # Busy alone is insufficient after a host has accepted work. Keep
+            # the same serialized request, and retry only explicit rejection
+            # before mutation; ambiguous/committed outcomes need readback.
+            if (error.code != -32002 or not isinstance(error.data, dict)
+                    or error.data.get("writeOutcome") != "notCommitted" or attempt == 5):
                 raise error
             time.sleep(min(0.05 * 2**attempt, 0.5))
         raise AssertionError("unreachable")
