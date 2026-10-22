@@ -128,6 +128,13 @@ window; arbitrary resize remains unqualified in this visible run. Screenshots
 do not establish absence of transient flashes or intermediate drag-frame pacing.
 Closing correctly warned about the intentionally incomplete routing draft;
 Cancel retained it. No musician process or audio defaults were touched.
+The owned 900-second diagnostic then exited normally at its configured limit;
+the original F04 and executable hashes were unchanged. Its silent-audio report
+had no processor fault, starvation indicator or device error, but counted
+**55 deadline overruns**, maximum callback 13.6314 ms at a 10 ms period, and
+`realtimeAuditPassed:false`. This UI diagnostic is not clean realtime or
+physical-audio qualification. Preserve the report and investigate timing with
+an appropriately isolated target-only measurement before a performance claim.
 
 The visible check also found two unbuilt corrections: compact Add group/return
 labels truncate, and fixed socket hit regions swallow tiny overview bodies.
