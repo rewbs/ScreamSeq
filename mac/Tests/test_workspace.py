@@ -6,6 +6,7 @@ ROOT=Path(__file__).resolve().parents[2]
 BUILD=Path(os.environ.get('RESONANCE_BUILD_DIR',str(ROOT/'bin/mac-background'))).resolve()
 sys.path.insert(0,str(ROOT/'mac/Tools'))
 from resonance_api import Client,endpoints,APIError
+from test_automation import parameter_recording_admission
 with tempfile.TemporaryDirectory(prefix='resonance-workspace-') as temporary:
     root=Path(temporary)
     with (root/'app.log').open('w+') as log:
@@ -20,6 +21,9 @@ with tempfile.TemporaryDirectory(prefix='resonance-workspace-') as temporary:
             assert found
             client=Client(found[0]['socket'])
             before=client.call('document.get')
+            # Exercise AppController admission too: the windowless socket host
+            # does not own native control queues or retained lifecycle intent.
+            parameter_recording_admission(client)
             read=lambda:client.call('workspace.get')['data']
             state=read();assert {'notes','samples','instruments','plugins','automation','mixer'}<=set(state['panels'])
             client.call('workspace.panel',{'panel':'notes','pinned':True})

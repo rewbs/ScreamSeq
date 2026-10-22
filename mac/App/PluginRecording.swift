@@ -8,17 +8,22 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   var onRequest: ((String, [String: Any], @escaping Reply) -> Void)?
   var onDocument: (() -> String?)?
   var onPlugins: (() -> [(id: String, name: String)])?
+  var onDelivery: (() -> [String: Any])?
+  var onDeliveryLoss: (() -> NSDictionary)?
+  var onInputProtected: (() -> Bool)?
   let scope = NSPopUpButton()
   let table = NSTableView()
   let heading = Theme.label("Plugin automation take", size: 18, weight: .semibold)
   let status = Theme.label("Start song playback, then Record gestures from plugin windows.", size: 12)
   let detail = Theme.label("Stop ends this take without stopping song playback. Keep adds one Undo step.", size: 11, color: Theme.muted)
+  let inputDetail = Theme.label("", size: 11, color: Theme.muted)
   let acknowledge = NSButton(checkboxWithTitle: "Keep the captured input despite the reported loss", target: nil, action: nil)
   lazy var record = ActionButton("Record", symbol: "record.circle", prominent: true) { [weak self] in self?.act(.start) }
   lazy var stop = ActionButton("Stop recording", symbol: "stop.fill") { [weak self] in self?.act(.stop) }
   lazy var keep = ActionButton("Keep take", prominent: true) { [weak self] in self?.act(.keep) }
   lazy var discard = ActionButton("Discard take") { [weak self] in self?.act(.discard) }
   lazy var refresh = ActionButton("Check take", symbol: "arrow.clockwise") { [weak self] in self?.poll(explicit: true) }
+  lazy var recovery = ActionButton("Save recovery copy", symbol: "square.and.arrow.down") { [weak self] in self?.saveRecovery() }
   enum Action { case start, stop, keep, discard }
   private struct Intent {
     let action: Action, document: String, revision: String, take: String
@@ -29,6 +34,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   private(set) var polling = false, pending = false, needsReadback = false
   private(set) var targets = [[String: Any]]()
   private var state = [String: Any](), queued: Intent?, timer: Timer?
+  private var displayedDeliveryLoss = NSDictionary()
   private var generation: UInt64 = 0
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -49,10 +55,10 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     acknowledge.setAccessibilityLabel("Acknowledge reported plugin recording loss")
     scope.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
     let content = stack(.vertical, [stack(.horizontal, [heading, NSView(), scope], spacing: 12),
-      stack(.horizontal, [record, stop, NSView(), refresh], spacing: 8), detail, scroll, acknowledge,
-      stack(.horizontal, [discard, NSView(), keep], spacing: 8), status], spacing: 10)
+      stack(.horizontal, [record, stop, NSView(), refresh], spacing: 8), detail, inputDetail, scroll, acknowledge,
+      stack(.horizontal, [discard, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 16)
-    for label in [status, detail] {
+    for label in [status, detail, inputDetail] {
       label.lineBreakMode = .byWordWrapping; label.maximumNumberOfLines = 3
       label.preferredMaxLayoutWidth = 620
       label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -82,10 +88,11 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     ["rejected": state["rejected"] ?? 0, "failure": state["failure"] ?? 0,
      "targets": targets.map { ["plugin": $0["plugin"] ?? "", "parameter": $0["parameter"] ?? 0,
        "unmapped": $0["unmapped"] ?? 0, "overflow": $0["overflow"] ?? 0] },
-     "sources": state["sources"] ?? []] as NSDictionary
+     "sources": state["sources"] ?? [], "nativeInput": onDeliveryLoss?() ?? [:]] as NSDictionary
   }
   private var hasLoss: Bool {
-    ((state["rejected"] as? NSNumber)?.uint64Value ?? 0) > 0 ||
+    onDelivery?()["needsReview"] as? Bool == true ||
+      ((state["rejected"] as? NSNumber)?.uint64Value ?? 0) > 0 ||
       ((state["failure"] as? NSNumber)?.uint64Value ?? 0) > 0 ||
       targets.contains { (($0["unmapped"] as? NSNumber)?.uint64Value ?? 0) > 0 || (($0["overflow"] as? NSNumber)?.uint64Value ?? 0) > 0 } ||
       (state["sources"] as? [[String: Any]] ?? []).contains { (($0["lost"] as? NSNumber)?.uint64Value ?? 0) > 0 }
@@ -100,8 +107,13 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     return (revision, data)
   }
   private func updateControls() {
+    let currentLoss = onDeliveryLoss?() ?? [:]
+    if !displayedDeliveryLoss.isEqual(currentLoss) { acknowledge.state = .off; displayedDeliveryLoss = currentLoss }
+    let input = onDelivery?() ?? [:]
+    inputDetail.isHidden = input.isEmpty || (!(onInputProtected?() ?? false) && !retained)
+    inputDetail.stringValue = "Native controls: \(input["accepted"] ?? "0") accepted · \(input["waiting"] ?? 0) waiting · \(input["submitted"] ?? 0) in flight · \(input["refused"] ?? 0) refused · \(input["unknown"] ?? 0) uncertain · \(input["lost"] ?? "0") overflow. Refused and uncertain input is retained in recovery copies and is never replayed automatically."
     let ready = !pending && !needsReadback && !revision.isEmpty && onDocument?() == document
-    record.isEnabled = ready && !retained && !(onPlugins?().isEmpty ?? true)
+    record.isEnabled = ready && !retained && !(onInputProtected?() ?? false) && !(onPlugins?().isEmpty ?? true)
     stop.isEnabled = ready && retained && capturing
     keep.isEnabled = ready && retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on)
@@ -111,7 +123,18 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     acknowledge.isEnabled = ready && !capturing
     keep.title = completed ? "Finish restoration" : "Keep take"
     refresh.isEnabled = !pending && !polling
+    recovery.isEnabled = !pending && !polling && (retained || (onInputProtected?() ?? false))
     // Polling does not disable action buttons or invalidate native field focus.
+  }
+  func saveRecovery() {
+    guard recovery.isEnabled, let onRequest else { return }
+    pending = true; updateControls()
+    onRequest("recovery.save", [:]) { [weak self] response in
+      guard let self else { return }; self.pending = false
+      if response["result"] != nil { self.status.stringValue = "Recovery copy saved with retained original input." }
+      else { self.status.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "The recovery copy could not be saved." }
+      self.updateControls()
+    }
   }
   private func accept(_ data: [String: Any], revision: String, document: String) {
     let oldLoss = loss, oldTake = take
@@ -175,7 +198,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   func act(_ action: Action) {
     guard !pending, !needsReadback, !revision.isEmpty, let currentDocument = onDocument?(), currentDocument == document else { return }
     switch action {
-    case .start: guard !retained else { return }
+    case .start: guard !retained, !(onInputProtected?() ?? false) else { return }
     case .stop: guard retained && capturing else { return }
     case .keep: guard retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on) else { return }

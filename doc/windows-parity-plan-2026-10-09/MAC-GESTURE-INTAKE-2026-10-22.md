@@ -1256,3 +1256,68 @@ The new source needs the next bounded context-panel/mixer-hosted native groups,
 affected actual-app routing/recording checks and fresh compact-header Computer
 Use. Mac autosave/window/input-journal source after frozen69fe8 still needs its
 own compile/interface/session gates and the remaining AppController wiring above.
+
+### 22 October 19:52 UTC — native control integration, unbuilt source
+
+The next source batch now wires `PluginRecordingInput.swift` into AppController.
+The adapter owns native lifecycle admission and the existing bounded
+`PluginControlDelivery` journal on the main thread; musical capture still uses
+the shared `automation.recording.capture` operation on the serial session worker.
+Generic rack controls retain each original stable plugin/parameter/value/host
+timestamp while busy. Stop waits for earlier input completions and prevents
+new controls from extending the queue. Refused/uncertain completions are retained
+without replay. Keep captures the exact native-loss census and refuses a changed
+census before dispatch. A release must identify the same take/document before
+retiring evidence. Known validation/conflict/pre-dispatch refusals preserve
+ownership; unknown lifecycle completion requires explicit readback.
+
+`PluginEditor` restores a refused row's prior value. Manual gestures outside a
+take synchronize their begin/end state only when the worker and inspector reads
+are idle. Start refuses an active/deferred manual gesture instead of letting old
+manual input enter a new take. AppController processes pending original input
+at worker/read completion and on its normal tick. Collected take-input counts
+do not mark the song dirty; Keep's actual revision change still does.
+
+The native review displays accepted/waiting/in-flight/refused/uncertain/overflow
+counts and provides **Save recovery copy**. Native loss participates in the
+existing explicit acknowledgement and captured intent. Recovery captures an
+immutable journal on main, then uses the existing guarded native-input recovery
+bridge on the worker. Save, close, replace and recovery-restore paths protect an
+unresolved journal even when a malformed/uncertain reply leaves its shared take
+unverified. No new musical format or live replay of recovered input is introduced.
+
+Added coordinator cases join `plugin-control-delivery`: FIFO original timestamps,
+Stop behind input, stopped-control refusal, matching release, unknown outcome,
+no-take/wrong-take readback, new loss during Keep, and shared validation ownership.
+`plugin-recording` gains native-loss acknowledgement/recovery/compact-layout
+checks; the actual-app workspace socket test also invokes the existing strict
+recording admission contract (the windowless host alone cannot cover this).
+`mac/test-interface.sh` explicitly includes the new source and tests.
+
+Existing checkpoint CI was inspected, not restarted:
+
+- Windows run39838064564/job120031512710 compiled successfully. The merged
+  private-desktop suite ran93 tests, with15 failures and2 skips. Its audio probe
+  reports `devices: []`; failures include fixture startup/playback-clock admission,
+  recording, loop/shortcut/audition checks and failed cleanup of exited fixtures.
+  Preserve this failure; no-device results are not native device qualification.
+- Mac run39838064576 ARM job120031513056 compiled successfully, then its graph
+  interface group failed “Port reads retry busy rejection…”. Source inspection
+  found `requestGraph` applying the write-only explicit-receipt rule to catalogue
+  reads. The correction permits bounded busy retries for an explicit read-only
+  method list, while writes/preset saves retain the strict no-uncertain-replay rule.
+  The existing assertion is preserved; its offscreen wait now uses the established
+  short-turn run-loop pump with the same150ms deadline.
+- Intel job120031513179 was still building at19:44 UTC. Latest actual build start
+  remains19:13:13 UTC; **no next build before20:13:13 UTC**. Inspect its final state
+  before starting a coordinated checkpoint.
+
+Only source review, `git diff --check` and Python syntax inspection are appropriate
+before that gate. This new Mac source is **not compiled or qualified** yet.
+Next checkpoint must include the existing13 Windows registrations (especially
+context-panel and mixer-hosted), affected actual-app classes, fresh compact-header
+Computer Use, Mac plugin-recording/plugin-control-delivery/signal-graph interface
+groups and parameter-take/recovery session gates. Actual Mac generic-control
+worker contention, manual Undo grouping, recovery timer, native playback and
+reciprocal typed save/reopen remain required before a parity-completion claim.
+No production package or main merge follows from this source checkpoint.

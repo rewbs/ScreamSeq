@@ -165,7 +165,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   // A retained take owns every original input before the ordinary manual-edit
   // busy/coalescing path. true means that owner retained/handled the input;
   // it is not a claim that the worker already accepted or committed it.
-  var onOriginalParameter: ((String, UInt32, Double, UInt64) -> Bool)?
+  var onOriginalParameter: ((String, UInt32, Double, UInt64) throws -> Bool)?
   var parameterInputClock: () -> UInt64 = { mach_absolute_time() }
   var parameterRetryDelay = 0.1, parameterRetryLimit = 30
   private var parameterGeneration: UInt64 = 0
@@ -298,6 +298,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   }
   required init?(coder: NSCoder) { fatalError() }
   private var deferredEdits = [Int: Int](), editTicket = 0
+  var hasDeferredParameterEdits: Bool { !deferredEdits.isEmpty }
   private func deferEdit(_ id: Int, slot: Int, generation: UInt64, value: Double, attempt: Int,
     accept: @escaping (Double) -> Void, revert: @escaping () -> Void) {
     editTicket += 1; let ticket = editTicket; deferredEdits[id] = ticket
@@ -486,10 +487,12 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       }
       self.deferredEdits[id] = nil
       guard value != currentValue else { return }
-      if let identity, let parameterID = UInt32(exactly: id), let original = self.onOriginalParameter,
-        original(identity, parameterID, value, self.parameterInputClock()) {
-        currentValue = value
-        return
+      if let identity, let parameterID = UInt32(exactly: id), let original = self.onOriginalParameter {
+        do {
+          if try original(identity, parameterID, value, self.parameterInputClock()) { currentValue = value; return }
+        } catch {
+          revert(); self.note.stringValue = error.localizedDescription; return
+        }
       }
       // currentValue advances only when the edit is really sent. While the
       // document is busy the edit waits, so it is neither lost nor mistaken

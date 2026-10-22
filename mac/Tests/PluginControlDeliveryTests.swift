@@ -3,6 +3,7 @@ import AppKit
 extension InterfaceTests {
   static func pluginControlDeliveryChecks() throws {
     try pluginOriginalControlChecks()
+    try pluginRecordingInputChecks()
     typealias Delivery = PluginControlDelivery
     let owner = Delivery.Owner(document: "document-a", revision: "document-a:4:2", take: "take-a")
     let another = Delivery.Owner(document: "document-b", revision: "document-b:0:0", take: "take-b")
@@ -126,5 +127,10 @@ extension InterfaceTests {
     let ordinary = editor.tableView(editor.parameters, viewFor: nil, row: 0) as! PluginParameterRow
     ordinary.slider.changed?(0.4)
     try require(manual == [0.4], "Without a retained input owner, the ordinary manual control path remains available")
+    editor.onOriginalParameter = { _, _, _, _ in throw PluginRecordingInput.Refusal.unavailable("Take stopped; review input") }
+    ordinary.slider.changed?(0.9)
+    try require(manual == [0.4] && editor.note.stringValue == "Take stopped; review input" &&
+      abs((Double(ordinary.reading.stringValue) ?? -1) - 0.4) < 1e-12,
+      "A retained-owner refusal restores the displayed value and never falls back to an ordinary musical edit")
   }
 }

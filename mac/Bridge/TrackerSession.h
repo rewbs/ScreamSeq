@@ -33,7 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSData *)recoveryData:(NSError **)error;
 // Detached original native-control evidence; document/take/base-revision guarded.
 // Never imports these pending/unknown events into the live recording owner.
-- (nullable NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error;
+- (nullable NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error NS_SWIFT_NAME(recoveryData(nativeInput:));
 - (BOOL)playOrder:(NSInteger)order error:(NSError **)error;
 - (BOOL)playRegion:(NSDictionary *)region error:(NSError **)error;
 - (void)setPlaybackLoop:(BOOL)enabled;

@@ -54,7 +54,8 @@ extension AppController {
       reply?(AutomationServer.error(-32003, error.localizedDescription)); return
     }
     let midiTake = session.recordingTakeID
-    let take = session.parameterRecordingTakeID ?? midiTake
+    let take = session.parameterRecordingTakeID ?? pluginRecordingInput.delivery.owner?.take ?? midiTake
+    let nativeInput = pluginRecordingInput.delivery.recovery
     guard model.editable else { reply?(AutomationServer.error(-32003, "This document cannot be autosaved")); return }
     let revision = session.automationRevision
     guard RecoverySnapshotPolicy.needsCopy(force: force, dirty: dirty, revision: revision,
@@ -77,7 +78,9 @@ extension AppController {
     }
     worker.async {
       do {
-        let snapshot = try self.session.recoveryData()
+        let snapshot: Data
+        if let nativeInput { snapshot = try self.session.recoveryData(nativeInput: nativeInput) }
+        else { snapshot = try self.session.recoveryData() }
         DispatchQueue.main.async {
           // Capture is serialized with edits; filesystem work uses immutable data
           // on a separate queue so a slow disk does not hold the editor busy.
@@ -105,7 +108,7 @@ extension AppController {
     // recoveryData owns bounded best-effort take intake and preserves previously
     // captured evidence when a provider refuses further input. A preliminary
     // strict drain would defeat that recovery path precisely when it is needed.
-    if session.parameterRecordingTakeID != nil { return nil }
+    if pluginRecordingInput.protectsDocument || session.parameterRecordingTakeID != nil { return nil }
     var error: NSError?
     if session.collectPluginEdits(pluginEditor.record.state == .on, error: &error) > 0 {
       dirty = true; window.isDocumentEdited = true
@@ -162,7 +165,7 @@ extension AppController {
     guard !busy, !recoverySaving, window.attachedSheet == nil, NSApp.modalWindow == nil else {
       reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return
     }
-    guard session.recordingTakeID == nil && session.parameterRecordingTakeID == nil else {
+    guard !pluginRecordingInput.protectsDocument && session.recordingTakeID == nil && session.parameterRecordingTakeID == nil else {
       reply(AutomationServer.error(-32003, "Finish or discard the current recording take before recovering another song")); return
     }
     if let error = collectRecoveryEdits() { reply(AutomationServer.error(-32003, error.localizedDescription)); return }

@@ -95,6 +95,13 @@ final class PluginControlDelivery {
      "unknown": entries.filter { $0.state == .unknown }.count,
      "pending": pending, "needsReview": needsReview, "previewError": previewError]
   }
+  // Accepted/waiting progress cannot invalidate acknowledgement by itself.
+  // Every newly refused/unknown original input and overflow must do so.
+  var lossCensus: NSDictionary {
+    ["lost": String(lost), "events": entries.filter { $0.state == .refused || $0.state == .unknown }.map {
+      ["id": $0.id.uuidString, "state": $0.state == .refused ? "refused" : "unknown"]
+    }] as NSDictionary
+  }
   var recovery: [String: Any]? {
     guard let owner else { return nil }
     return ["version": 1, "reviewOnly": true, "document": owner.document,

@@ -8,6 +8,20 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 19:52 UTC source continuation:** Mac generic rack input is now wired
+to the retained take through a main-owner original-input queue, serial-worker
+capture, captured lifecycle/loss acknowledgement and guarded recovery snapshots.
+The native review includes delivery counts and Save recovery copy. New interface
+cases cover Stop ordering, uncertain outcomes, changed loss and refused row values;
+the actual workspace socket test also checks shared recording admission.
+This source is unbuilt. Windows CI compiled but failed its required live-audio
+app suite with no enumerated endpoint; preserve that failure. Mac ARM compiled
+but failed a graph catalogue retry assertion; source now distinguishes read-only
+busy retries from uncertain writes without weakening the assertion. See the
+newest [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) section. Next coordinated
+build remains **20:13:13 UTC or later**, with final Intel build state inspected
+first. Back up source to `codex/mac-gesture-next-checkpoint` without triggering CI.
+
 **22 October 19:34 UTC checkpoint (supersedes the prepared/earlier gates below):**
 frozen `69fe8bf206049c163742ad10105a1de87afde24b` built successfully once.
 Its 13 native registrations produced 12 passes and one stale instrument-assignment

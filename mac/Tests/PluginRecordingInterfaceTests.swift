@@ -111,7 +111,32 @@ extension InterfaceTests {
       try require(!v.needsReadback && v.keep.title == "Finish restoration" && uncertain.writes.count == 1,
         "Explicit readback reconciles already-kept music without creating another transaction")
     }
+    let native = PluginTakeReplies(), nativeView = native.view
+    var nativeLoss: NSDictionary = ["lost": "0", "events": [["id": "original-1", "state": "unknown"]]]
+    nativeView.onDelivery = { ["accepted": "2", "unknown": 1, "waiting": 0, "submitted": 0, "refused": 0, "lost": "0", "needsReview": true] }
+    nativeView.onDeliveryLoss = { nativeLoss }; nativeView.onInputProtected = { true }
+    native.load(native.state(capturing: false))
+    try require(!nativeView.keep.isEnabled && !nativeView.acknowledge.isHidden && nativeView.recovery.isEnabled &&
+      nativeView.inputDetail.stringValue.contains("1 uncertain"),
+      "Original input uncertainty is visible, recoverable and included in Keep acknowledgement")
+    nativeView.acknowledge.state = .on; nativeView.poll(); nativeView.act(.keep)
+    nativeLoss = ["lost": "1", "events": [["id": "original-1", "state": "unknown"]]]
+    native.answer(native.state(capturing: false))
+    try require(native.writes.isEmpty && nativeView.acknowledge.state == .off,
+      "Native queue loss changing during a read invalidates queued Keep independently of shared target counts")
+    nativeView.saveRecovery()
+    try require(native.writes.last?.0 == "recovery.save" && nativeView.pending,
+      "Save recovery copy explicitly archives the stopped take and original input")
+    native.answer(["lastCopy": "owned-copy.screamseq"])
+    try require(!nativeView.pending && nativeView.status.stringValue.contains("Recovery copy saved"),
+      "A confirmed recovery save reports completion without releasing the take")
+    native.load(native.state("")); let beforeStart = native.writes.count; nativeView.act(.start)
+    try require(!nativeView.record.isEnabled && native.writes.count == beforeStart,
+      "An unresolved native journal cannot start a replacement take even if a read reports no shared take")
+
     let focusCase = PluginTakeReplies(), focused = focusCase.view
+    focused.onDelivery = { ["accepted": "2", "unknown": 1, "needsReview": true] }
+    focused.onInputProtected = { true }
     focusCase.load(focusCase.state())
     let window = NSWindow(contentRect: focused.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false; window.contentView = focused
@@ -122,7 +147,7 @@ extension InterfaceTests {
     window.setContentSize(NSSize(width: 700, height: 500)); focused.layoutSubtreeIfNeeded()
     try require(focused.scope.frame.width > 0 && focused.keep.frame.width > 0 && focused.status.frame.width <= focused.bounds.width,
       "Compact retained take review keeps scope, actions and wrapped status inside its content")
-    for control in [focused.scope, focused.keep, focused.stop, focused.status] as [NSView] {
+    for control in [focused.scope, focused.keep, focused.stop, focused.recovery, focused.inputDetail, focused.status] as [NSView] {
       try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
         "Compact take review cannot clip a native action, scope or status outside the window")
     }

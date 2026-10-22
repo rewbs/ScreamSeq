@@ -411,7 +411,7 @@ extension InterfaceTests {
       if catalogAttempts==1{reply(["error":["code":-32002,"message":"Busy"]])}
       else{reply(["error":["code":-32003,"message":"Plugin unavailable"]])}
     }
-    catalogs.loadPortCatalogs();RunLoop.current.run(until:Date().addingTimeInterval(0.15))
+    catalogs.loadPortCatalogs();pumpMainRunLoop(0.15)
     try require(catalogAttempts==2 && catalogs.portCatalogs["n102"]==nil && !catalogs.catalogLoading && catalogs.status.stringValue.contains("Reload graph"),"Port reads retry busy rejection, expose failure and never cache an empty success or loop indefinitely")
     catalogs.catalogFailures=[:]
     catalogs.onRequest={_,_,reply in catalogAttempts+=1;reply(["result":["data":["audioBuses":[["index":1,"direction":"input","name":"Detector"]]]]])}
