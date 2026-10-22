@@ -213,9 +213,11 @@ void liveEditorAdmissionTests(const std::filesystem::path &scanner,const std::fi
 }
 
 #include "RecordedEditorOwnershipTests.inc"
+#include "ParameterRecordingControllerTests.inc"
 void recoveryManualEditorTests(const std::filesystem::path &scanner,const std::filesystem::path &cache,const std::filesystem::path &directory) {
   liveEditorAdmissionTests(scanner,cache);
   recordedEditorOwnershipTests(scanner,cache,directory);
+  parameterRecordingControllerTests(scanner,cache,directory);
   const char *stage="initial plugin setup";
   try {
   Tracker::WindowsVST3::configure(scanner.generic_string(),cache.generic_string());

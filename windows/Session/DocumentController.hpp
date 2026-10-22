@@ -131,6 +131,17 @@ class DocumentController {
   void retireRecipeParameterPreview();
   Project::ProjectState project_;
   std::unique_ptr<RecordingTake> recording_;
+  struct ParameterRecordingSession {
+    std::shared_ptr<Tracker::RecordedGestureTake> take;
+    HostedProjectPlayback *host=nullptr;
+    uint64_t hostGeneration=0;
+    std::shared_ptr<const RecordingTimeline> timeline;
+  };
+  std::unique_ptr<ParameterRecordingSession> parameterRecording_;
+  Json parameterRecordingOperation(const std::string &,const Json &);
+  Json parameterRecordingSummary()const;
+  void pollParameterRecording(bool stop=false);
+  bool restoreParameterRecordingPreview();
   std::string identity_;
   uint64_t generation_=0;
   std::shared_ptr<const DocumentView> view_;

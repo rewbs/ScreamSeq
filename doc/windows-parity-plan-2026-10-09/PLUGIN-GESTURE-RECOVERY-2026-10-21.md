@@ -478,3 +478,30 @@ preview refusal, one Undo, opaque-state and save/reopen assertions remain intact
 They are included in the prepared notification and private-desktop recovery-manual
 gates; no additional build is needed. All additions are unbuilt until the combined
 checkpoint no earlier than 22 October 02:54:09 UTC.
+
+## Worker recording session wiring (source only, not publicly advertised)
+
+`DocumentController` now owns a parameter-recording session tied to its retained
+playback host, presentation-frame timeline, musical revision and native providers.
+`ParameterRecordingOperations.inc` implements internal start/get/stop/commit/discard
+operations. Native callback intake uses the existing fixed queue cuts and transient
+preview publisher. Start refuses pending manual changes, other takes/previews,
+missing timing and invalid provider selections. Musical writes/save, replacement
+(including recovery) and playback restart refuse while the take is retained.
+Unselected vendor callbacks are deferred during capture instead of background
+inspector reads advancing the take's captured musical revision.
+
+Commit publishes one shared recorded-automation transaction, then restores its
+transient controls/vendor baselines. A committed take with refused restoration
+remains completed and retryable; retry cannot publish the music twice. Failed
+context/clock takes remain readable. Explicit discard after stopped playback and
+closing affected editors can release their retained input without committing it.
+
+The new private-desktop real-provider controller fixture covers timed intake,
+preview, protective recovery, mutation/restart rejection, Stop, commit without
+stopping playback, discard, failed-clock review/discard, one Undo/Redo and native
+save/reopen. It is registered inside the existing recovery-manual gate and is
+unexecuted. This worker path is intentionally absent from the application's API
+catalog and UI until native admission, original-time standard-control intake,
+paginated take review, schema/documentation and UI controls are connected. Those
+are required next steps, as are Mac session adoption and AU/builtin capture.

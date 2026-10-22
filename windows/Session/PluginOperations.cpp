@@ -339,6 +339,11 @@ bool PluginOperations::flushEditors(bool force) {
   const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphOpen;
   if(graphClosed)graphEditorWindowOpen_=false;
   (void)pollRecordedEditors();
+  // Other native windows may still send manual input while a selected set is
+  // recording. Defer that intake as well: advancing the musical revision from
+  // a background inspector read would invalidate the owned take. Their queues
+  // remain intact and ordinary capture resumes after explicit release.
+  if(recordedEditors_)return graphClosed;
   if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();
