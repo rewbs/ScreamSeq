@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 private func midiNoteNumber(_ text: String) -> Double? {
   let normalized = text.uppercased().replacingOccurrences(of: "♯", with: "#").replacingOccurrences(of: "♭", with: "B")
@@ -161,6 +162,11 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   /// Asked before a parameter edit is sent. While the document is busy the
   /// edit is retried instead of being recorded as applied.
   var canEdit: (() -> Bool)?
+  // A retained take owns every original input before the ordinary manual-edit
+  // busy/coalescing path. true means that owner retained/handled the input;
+  // it is not a claim that the worker already accepted or committed it.
+  var onOriginalParameter: ((String, UInt32, Double, UInt64) -> Bool)?
+  var parameterInputClock: () -> UInt64 = { mach_absolute_time() }
   var parameterRetryDelay = 0.1, parameterRetryLimit = 30
   private var parameterGeneration: UInt64 = 0
   var parameterValues = [[AnyHashable: Any]](), filteredValues = [[AnyHashable: Any]]()
@@ -480,6 +486,11 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       }
       self.deferredEdits[id] = nil
       guard value != currentValue else { return }
+      if let identity, let parameterID = UInt32(exactly: id), let original = self.onOriginalParameter,
+        original(identity, parameterID, value, self.parameterInputClock()) {
+        currentValue = value
+        return
+      }
       // currentValue advances only when the edit is really sent. While the
       // document is busy the edit waits, so it is neither lost nor mistaken
       // for one that was applied.

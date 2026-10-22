@@ -1115,3 +1115,51 @@ complete Mac recording workflow yet. Windows's equivalent retained native input
 delivery already exists in `App/ParameterControlDelivery.hpp`. Live Mac release
 without stopped transport, native device evidence and reciprocal project gates
 also remain open.
+
+### Following source batch — original native-control delivery journal
+
+`mac/App/PluginControlDelivery.swift` prepares the missing main-owner handoff.
+Each input retains stable plugin/parameter, native value and original UInt64
+host timestamp under a fixed document/base-revision/take owner. It holds up to
+1024 entries, counts overflow without replacing older inputs, submits one event
+at a time when the caller makes the session available, and never retries a
+refused/unknown event. Completion must match the original callback, revision,
+take and a strict Boolean accepted result. Duplicate or late callbacks cannot
+count twice or retire a different event. Accepted entries leave the pending
+queue; loss, refused/unknown original inputs and preview warnings remain owned
+until explicit completion/discard and a guarded release. Recovery uses the
+shared `ControlInputRecovery.hpp` version-1 detached format with exact decimal
+times/counters and bounded UTF-8 diagnostics. This is native request scheduling,
+not a second musical recording implementation; capture, timing, validation and
+commit still use the existing shared engine/API.
+
+The session's new internal `recoveryDataWithNativeInput:error:` validates that
+archive through the shared decoder, matches the native document ID, take token
+and original take revision, and overlays it on the existing typed recovery copy.
+It does not mutate imported preservation state or replay the evidence. The
+virtual-device session case now verifies all three owner guards, unchanged music
+and event count, and detached archive/plugin-state preservation across reopening.
+The new `plugin-control-delivery` interface group covers waiting and serial
+submission, timestamps beyond 2^53, exact payloads, duplicate/late completion,
+receipt variants, numeric-Boolean rejection, bounded overflow, owner isolation,
+plist serialization and UTF-8 diagnostic bounds. **Not built or run.**
+
+`PluginEditor.onOriginalParameter` now offers each snapped slider/text value,
+stable identity and `mach_absolute_time()` to an optional retained-input owner
+before the existing busy/coalescing path. Handling it prevents a duplicate legacy
+manual write. The new interface case exercises three distinct busy-time inputs,
+exact timestamps beyond 2^53, stale-row rejection and ordinary manual fallback.
+This hook is not connected to AppController yet.
+
+Still to wire before qualification/package: use a main-owned cached
+take context rather than reading session internals while its worker is busy;
+submit through the existing serialized application API; wait for pending native
+input before Stop/Keep/Discard; bind loss acknowledgement to the delivery review;
+include an immutable delivery archive in `RecoveryIntegration` snapshots; release
+only after the matching session take is resolved. The existing `onGesture`
+manual-history callback must yield to retained take ownership rather than
+touching worker-owned session flags during delivery. The journal's document must
+be `_automationDocumentID` (the first component of the API revision), not the
+separate AppController recovery-file grouping UUID. Existing generic controls
+must keep their ordinary non-recording behavior. Frozen69fe8 and its hourly gate
+are unchanged; this later source belongs to a following coordinated checkpoint.

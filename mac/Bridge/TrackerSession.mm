@@ -12,6 +12,7 @@
 #include "AutomationValidation.hpp"
 #include "NativeParameterTake.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
 #include "SignalTelemetry.hpp"
 #include "editor/PatternTools.hpp"
 #include "editor/ProjectLoadRecovery.hpp"
@@ -827,6 +828,15 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return [self projectDataForRecovery:NO];
 }
 - (NSData *)projectDataForRecovery:(BOOL)recovery {
+  return [self projectDataForRecovery:recovery nativeInput:nil];
+}
+- (NSData *)projectDataForRecovery:(BOOL)recovery nativeInput:(NSDictionary *)input {
+  const auto controlInput=input?Tracker::readControlInputRecovery(ScreamSeq::NativePropertyTree::fromFoundation(input)):nlohmann::json();
+  if(!controlInput.is_null()&&(!recovery||!_parameterTake||
+      controlInput.at("document")!=std::string(_automationDocumentID.UTF8String)||
+      controlInput.at("take")!=_parameterTake->take().token()||
+      controlInput.at("revision")!=_parameterTake->take().revision()))
+    throw std::runtime_error("Original native input belongs to another parameter take; evidence retained");
   if(!recovery)[self requireNoParameterTake];
   if(recovery&&_parameterTake) {
     try{_parameterTake->captureRecovery(_document->native());}
@@ -858,6 +868,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   auto current=ScreamSeq::NativePropertyTree::fromFoundation(root);
   auto merged=_projectMetadata.merge(std::move(current));
   if(recovery&&_parameterTake)overlayRecordedGestureRecovery(merged,recordedGestureRecovery(_parameterTake->take().review()));
+  if(!controlInput.is_null())Tracker::overlayControlInputRecovery(merged,controlInput);
   NSData *data=ScreamSeq::NativePropertyTree::encode(merged);
   // Validate the actual merged musical fields before atomic file publication.
   // Unknown extensions are retained data, never relaxed API/mutation fields.
@@ -887,6 +898,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (NSData *)recoveryData:(NSError **)error {
   try { return [self projectDataForRecovery:YES]; }
   catch (const std::exception &e) { failure(error, e); return nil; }
+}
+- (NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error {
+  try {
+    if(!input)throw std::invalid_argument("Original native input evidence is required");
+    return [self projectDataForRecovery:YES nativeInput:input];
+  } catch (const std::exception &e) { failure(error, e); return nil; }
 }
 - (void)validateRecoveredSavePath:(NSString *)path {
   if(!_loadRecovery.protectSource || !_loadSourcePath.length)return;

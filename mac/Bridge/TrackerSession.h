@@ -31,6 +31,9 @@ NS_ASSUME_NONNULL_BEGIN
 // A recovery snapshot also preserves an unfinished take, without stopping it.
 - (BOOL)saveRecoveryPath:(NSString *)path error:(NSError **)error;
 - (nullable NSData *)recoveryData:(NSError **)error;
+// Detached original native-control evidence; document/take/base-revision guarded.
+// Never imports these pending/unknown events into the live recording owner.
+- (nullable NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error;
 - (BOOL)playOrder:(NSInteger)order error:(NSError **)error;
 - (BOOL)playRegion:(NSDictionary *)region error:(NSError **)error;
 - (void)setPlaybackLoop:(BOOL)enabled;

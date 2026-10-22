@@ -90,14 +90,32 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     ![recovering[@"screamseqPluginGestureRecovery"] isEqual:emptyRecovery[@"screamseqPluginGestureRecovery"]],
     "Consecutive recovery snapshots must retain new input without requiring a musical revision");
   NSString *recoveryPath=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@"-retained-recovery.screamseq"]];
-  NSData *recoveryBytes=[NSPropertyListSerialization dataWithPropertyList:recovering format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error];
+  NSDictionary *controlInput=@{@"version":@1,@"reviewOnly":@YES,
+    @"document":[revision componentsSeparatedByString:@":"].firstObject,@"revision":revision,@"take":retainedID,
+    @"accepted":@"0",@"lost":@"0",@"previewError":@"",
+    @"events":@[@{@"plugin":identities[0],@"parameter":@7,@"value":@(0.4),@"hostTime":@(std::to_string(firstTime).c_str()),
+      @"state":@"unknown",@"error":@"Completion unavailable"}]};
+  NSData *recoveryBytes=[session recoveryDataWithNativeInput:controlInput error:&error];
+  check(recoveryBytes!=nil,"Snapshot original native control delivery evidence with the matching session take");
+  NSDictionary *withInput=[NSPropertyListSerialization propertyListWithData:recoveryBytes options:0 format:nil error:&error];
+  check([withInput[@"screamseqPluginControlRecovery"] isEqual:@[controlInput]]&&
+    [session.automationRevision isEqual:revision]&&[session parameterTakeReview].targets[0].events.size()==1,
+    "Pending/unknown control evidence was lost, replayed into the take, or published as music");
+  for(NSString *key in @[@"document",@"revision",@"take"]) {
+    NSMutableDictionary *wrong=[controlInput mutableCopy];wrong[key]=@"different-owner";error=nil;
+    check(![session recoveryDataWithNativeInput:wrong error:&error]&&error&&
+      [error.localizedDescription containsString:@"another parameter take"]&&[session.automationRevision isEqual:revision]&&
+      [session.parameterRecordingTakeID isEqual:retainedID],"Stale native input evidence bypassed its document/take/revision guard");
+  }
+  error=nil;
   check([recoveryBytes writeToFile:recoveryPath options:NSDataWritingAtomic error:&error],
     "Write retained-input recovery fixture");
   TrackerSession *recovered=[TrackerSession new];
   check([recovered openPath:recoveryPath error:&error]&&recovered.parameterRecordingTakeID==nil&&recovered.recordingTakeID==nil,
     "Recovery must not recreate live plugin ownership or a resumable MIDI take");
   NSDictionary *detached=[NSPropertyListSerialization propertyListWithData:[recovered recoveryData:&error] options:0 format:nil error:&error];
-  check([detached[@"screamseqPluginGestureRecovery"] isEqual:recovering[@"screamseqPluginGestureRecovery"]]&&
+  check([detached[@"screamseqPluginGestureRecovery"] isEqual:withInput[@"screamseqPluginGestureRecovery"]]&&
+    [detached[@"screamseqPluginControlRecovery"] isEqual:@[controlInput]]&&
     [detached[@"plugins"] isEqual:baseline[@"plugins"]],"Reopened recovery changed detached input evidence or accepted plugin baselines");
   [recovered shutdown];[[NSFileManager defaultManager] removeItemAtPath:recoveryPath error:nil];
   [session pollParameterTake:YES];const auto stopped=[session parameterTakeReview];
