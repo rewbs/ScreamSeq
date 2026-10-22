@@ -75,6 +75,37 @@ private:
     if(!selected&&recapture&&target_)selected=target_->gesture();if(!selected&&!recapture)selected=state_.id();if(std::none_of(bank_.begin(),bank_.end(),[&](const auto &p){return p.at("id")==selected;})){selected=target_?target_->gesture():0;if(std::none_of(bank_.begin(),bank_.end(),[&](const auto &p){return p.at("id")==selected;}))selected=bank_.empty()?0:bank_[0].at("id").get<unsigned>();}select(selected);
     status(L"Shared phrase edits save immediately · drag then release · Enter sets fields · Ctrl+Z restores an edit");
   }
+  void refreshCleanPhrase(){
+    if(current()||!sameDocument())return;
+    // External history/API edits must not leave a clean canvas showing old
+    // music. An unfinished edit or formula still owns its captured revision.
+    if(retainedDraft()||dragging_||saveNeeded_){
+      if(!writeUncertain_)status(L"Song changed · retained scratch work was not replaced · Finish or Reload to review");
+      return;
+    }
+    const auto focus=GetFocus();
+    if(owns(focus)){
+      const auto id=GetDlgCtrlID(focus);
+      if(id==name||id==pointPosition||id==pointValue||id==pointFormula){SetTimer(window_,5,250,nullptr);return;}
+    }
+    const auto selected=state_.id();const auto old=state_.draft;const auto selection=state_.selected;
+    load(false,selected);
+    const bool removed=selected&&state_.id()!=selected;
+    if(removed||!selected)select(0); // Do not silently redirect the retained editor.
+    // Points have no persistent identity. Preserve selection only at a cycle
+    // position that still exists; never select a different point by old index.
+    if(state_.id()==selected)for(unsigned lane=0;lane<2;++lane){
+      const auto key=lane?"fader":"motion";const auto index=selection[lane];
+      if(index<0||!old.contains(key)||size_t(index)>=old.at(key).size())continue;
+      const auto position=old.at(key).at(size_t(index)).at("position");
+      for(size_t i=0;i<state_.points(lane).size();++i)if(state_.points(lane)[i].at("position")==position){state_.selected[lane]=int(i);break;}
+    }
+    // Keep the captured cell, not today's cursor. Revalidate an unchanged
+    // command before allowing another guarded operation on that destination.
+    if(target_){const auto resolved=resolve_(*target_);if(resolved&&resolved->sameCell(*target_)&&resolved->command==target_->command)target_=*resolved;}
+    showPoint();layout();requestPaint();
+    status(removed?L"Selected phrase was removed · choose a phrase to continue":target_&&target_->revision!=revision_?L"Phrase refreshed · captured pattern cell changed; Current cursor captures a new destination":L"Phrase refreshed from the song · Undo/Redo changes are visible");
+  }
   void save(){
     require(!fieldsDirty_,"Press Enter to set the point fields first");if(!state_.dirty())return;state_.validate();
     const auto sent=state_.draft;const auto generation=state_.generation;
@@ -161,7 +192,7 @@ private:
   }
   bool key(WPARAM code,bool ctrl,bool shift)override{
     const int focus=GetFocus()==window_?0:GetDlgCtrlID(GetFocus());
-    if(code==VK_ESCAPE){if(dragging_)cancelDrag();else if(fieldsDirty_){showPoint();layout();}else hide();return true;}
+    if(code==VK_ESCAPE){if(dragging_)cancelDrag();else if(fieldsDirty_){showPoint();layout();documentChanged();}else hide();return true;}
     if(code==VK_F6){SetFocus(GetFocus()==window_?controls_.at(pointsList):window_);return true;}
     if(ctrl&&(code=='Z'||code=='Y')&&(focus==name||focus==pointPosition||focus==pointValue||focus==pointFormula))return false;
     if(ctrl&&(code=='Z'||code=='Y')){action(code=='Y'||shift?redo:undo,BN_CLICKED);return true;}
@@ -194,7 +225,9 @@ private:
     const auto delta=double(GET_WHEEL_DELTA_WPARAM(flags))/WHEEL_DELTA;if(GET_KEYSTATE_WPARAM(flags)&MK_CONTROL)canvases_[0].zoom(std::pow(2.,delta),256);else canvases_[0].pan((message==WM_MOUSEHWHEEL?1:-1)*delta*(canvases_[0].end-canvases_[0].start)*.125,256);
     canvases_[1].start=canvases_[0].start;canvases_[1].end=canvases_[0].end;previewNeeded_=true;SetTimer(window_,3,100,nullptr);return true;
   }
-  void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
+  void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}
+    if(id==5){try{refreshCleanPhrase();}catch(const Api::ApiError &e){if(e.code==-32002)SetTimer(window_,5,250,nullptr);throw;}return;}
+    if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
   void layout()override{
     // Requests hold a native input lease. Keep the existing controls and focus
     // while their worker pumps messages; disabling the focused edit loses its
@@ -243,12 +276,13 @@ public:
   }
   ~ScratchGestureWindow()override{ready_=false;for(int id:{pointPosition,pointValue,pointFormula})RemoveWindowSubclass(controls_.at(id),pointFieldProc,2);}
   void openAt(){if(visible()||retainedDraft()){show();return;}load(true,0,true);show();}
+  void documentChanged(){if(visible()&&!current())SetTimer(window_,5,250,nullptr);}
   bool retainedDraft()const{return draft()||pending_||writeUncertain_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_||writeUncertain_,pending_);
   }
-  void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);hiding_=true;NativeToolWindow::hide();hiding_=false;}
-  void show(){NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}
+  void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);KillTimer(window_,5);hiding_=true;NativeToolWindow::hide();hiding_=false;}
+  void show(){NativeToolWindow::show();documentChanged();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}
   Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"writeNeedsReview",writeUncertain_},{"saveQueued",saveNeeded_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
 };
 }

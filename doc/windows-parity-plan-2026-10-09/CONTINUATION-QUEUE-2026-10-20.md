@@ -8,6 +8,19 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 13:31 UTC:** the coordinated 1fbfebd73 checkpoint built once and
+passed six native groups plus all 23 app/controller cases with bounded combined
+evidence (21 original passes and two Python-only long-path fixture repairs).
+Fresh foreground QA completed and the private process exited normally. It found
+a clean scratch inspector still displaying the prior curve after Main Undo.
+The new actual-app regression reproduces this on the frozen executable; a native
+refresh correction and regression tests are prepared, **unbuilt**. See
+[scratch refresh evidence and next gates](SCRATCH-REFRESH-2026-10-22.md).
+No package/merge is approved yet. Mac run39784093814 and Windows run39784093856
+remain in progress at this observation. Do not repeat current build/check
+receipts. Next coordinated build must be at or after **14:07:23 UTC**. The
+qualification checkout and PR head remain 1fb; newer work is on the backup branch.
+
 **22 October 12:57 UTC:** both preceding Mac jobs are now terminal, each with
 133/134 native passes and the same plugin-trust failure. All 35 interface groups
 and the other scheduled Mac stages passed. Both retained ARM and Intel round

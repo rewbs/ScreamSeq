@@ -597,6 +597,7 @@ public:
         resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
         if(sampleRecordingWindow)sampleRecordingWindow->documentChanged();
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
+        if(scratchGestureWindow)scratchGestureWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
     ScreamSeq::ParameterControlDelivery parameterControlDelivery;

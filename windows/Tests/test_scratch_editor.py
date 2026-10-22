@@ -230,6 +230,40 @@ class ScratchEditorTests(unittest.TestCase):
         self.assertNotEqual(self.state()['document'], captured)
         self.assertEqual(self.state()['draft']['motion'], reopened[0]['motion'])
 
+    def test_main_history_refreshes_clean_curve_without_retargeting_or_losing_draft(self):
+        phrase = self.setup_phrase(0)
+        self.select_point(0)
+        original = self.state()
+        changed = [dict(point) for point in original['draft']['motion']]
+        changed[0]['value'] = .375
+        self.write('scratch.gestures.set', id=phrase, motion=changed)
+
+        def refreshed(points):
+            deadline = time.monotonic()+5
+            while time.monotonic() < deadline:
+                state = self.state()
+                if not state['stale'] and state['draft']['motion'] == points:
+                    return state
+                time.sleep(.03)
+            self.fail(json.dumps(self.state()))
+
+        state = refreshed(changed)
+        self.assertEqual(state['selected'], phrase)
+        self.assertEqual(state['target']['row'], original['target']['row'])
+        self.assertEqual(state['lanes'][0]['selected'], 0)
+        self.write('history.undo', domain='all')
+        refreshed(original['draft']['motion'])
+        self.write('history.redo', domain='all')
+        refreshed(changed)
+        self.field(3112, '-.')
+        retained = self.state()
+        self.write('document.patch', title='Do not replace unfinished text')
+        self.desktop.send(self.hwnd(), 0x113, 5)
+        state = self.state()
+        self.assertTrue(state['stale'])
+        self.assertEqual(state['fields'], retained['fields'])
+        self.assertEqual(state['expectedRevision'], retained['expectedRevision'])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

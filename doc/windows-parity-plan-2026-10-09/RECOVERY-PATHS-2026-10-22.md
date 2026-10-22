@@ -26,7 +26,23 @@ These runs used owned private desktops and silent output, with no simultaneous
 foreground Computer Use. They establish neither native x64 hardware behavior
 nor sustained presentation/realtime performance.
 
-## Source correction — unbuilt
+## Execution update, 22 October 13:31 UTC
+
+The correction is built in 1fbfebd73. The native recovery gate passed, including
+deep path publication, metadata/bytes, rollback, cleanup, retention and reparse
+checks. Actual recovery/lifecycle assertions passed after two fixture-only
+Python long-path fixes in 653b2697a. The original run's 21 passes and two corrected
+passes are combined in `focus-followup/qualification.json`; original errors and
+the narrow same-executable rerun remain intact. No assertion or app path was
+shortened. The helper prefixes only Python's own file access/cleanup paths;
+the application still receives ordinary long absolute paths.
+
+Fresh UI found a separate scratch stale-view issue, so packaging/merge remain
+pending. See [checkpoint and follow-up](SCRATCH-REFRESH-2026-10-22.md).
+General project-file/UNC storage and sustained realtime behavior remain outside
+this recovery qualification.
+
+## Source correction
 
 `windows/Project/RecoveryStore.cpp` converts already validated absolute paths
 to extended-length native paths at the filesystem boundary. Directory leases,

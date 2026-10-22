@@ -1284,6 +1284,7 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("module export command and captured picker",applicationModuleExport);
                     timedRestoreCase("automatic field edits",applicationAutomaticEdits);
                     timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
+                    timedRestoreCase("scratch external refresh",applicationScratchExternalRefresh);
                     timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
                     timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);

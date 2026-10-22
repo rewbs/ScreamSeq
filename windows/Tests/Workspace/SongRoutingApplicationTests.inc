@@ -249,7 +249,9 @@ void applicationGraphParameterInspector(){
   const auto click=[&](int id){SendMessageW(window,WM_COMMAND,id,LPARAM(GetDlgItem(window,id)));};
   const auto original=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto untouched=app.documentOperation("plugin.parameters.get",{{"plugin",other}});
   click(4004);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[0].at("value")!=original[0].at("value"),"Native parameter toggle did not apply");
-  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");click(3955);
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");
+  SendMessageW(window,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("parameters")==original,"Clean parameter inspector did not refresh after external Undo");
   const auto found=std::find_if(original.begin(),original.end(),[](const auto &p){const auto f=ScreamSeq::PluginParameterField::read(p);return f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum;});
   restoreCheck(found!=original.end(),"Gain fixture has no numeric parameter");const auto index=size_t(found-original.begin());const auto field=ScreamSeq::PluginParameterField::read(*found);
   const int rawControl=4002+int(index)*10,applyControl=4005+int(index)*10,moreControl=4008+int(index)*10;

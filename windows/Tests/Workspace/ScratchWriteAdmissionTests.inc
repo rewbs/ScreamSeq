@@ -62,3 +62,35 @@ void applicationScratchWriteAdmission(){
   }
   std::cout<<"PASS scratch busy admission: only classified pre-write retry, retained uncertainty, one Undo, text/focus, reopen and explicit readback\n";
 }
+
+void applicationScratchExternalRefresh(){
+  using Json=RestoreJson;RestoreFixture fixture;auto &app=*fixture.app;
+  app.edit("scratch.gestures.set",{{"preset","baby"}});app.openScratchGestures();
+  auto &tool=*app.scratchGestureWindow;const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
+  const auto before=tool.snapshot();const auto id=before.at("selected");
+  const auto list=GetDlgItem(window,3110);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(list);
+  SendMessageW(list,LB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(3110,LBN_SELCHANGE),LPARAM(list));
+  app.edit("scratch.gestures.set",{{"id",id},{"name","Changed elsewhere"}});
+  const auto revision=app.view->session.revision;
+  SendMessageW(window,WM_TIMER,5,0);
+  restoreCheck(tool.snapshot().at("draft").at("name")=="Changed elsewhere"&&!tool.snapshot().at("stale").get<bool>(),"Clean scratch editor did not follow an external edit");
+  restoreCheck(tool.snapshot().at("lanes")[0].at("selected")==0&&GetFocus()==list,"Scratch refresh moved selection or keyboard focus");
+  restoreCheck(app.view->session.revision==revision,"Scratch refresh wrote to song history");
+  app.edit("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,5,0);
+  restoreCheck(tool.snapshot().at("draft")==before.at("draft"),"Main-window Undo left the clean scratch canvas stale");
+  restoreCheck(tool.snapshot().at("target").at("row")==before.at("target").at("row"),"External refresh recaptured the cursor");
+
+  const auto field=GetDlgItem(window,3112);SetFocus(field);SetWindowTextW(field,L"-.");SendMessageW(field,EM_SETSEL,0,2);
+  const auto draft=tool.snapshot();app.edit("document.patch",{{"title","Keep my incomplete point"}});SendMessageW(window,WM_TIMER,5,0);
+  DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+  restoreCheck(tool.snapshot().at("fields")==draft.at("fields")&&tool.snapshot().at("expectedRevision")==draft.at("expectedRevision"),"External refresh replaced or rebased an unfinished scratch edit");
+  restoreCheck(GetFocus()==field&&first==0&&last==2,"Retained scratch refresh lost focus or caret");
+  SendMessageW(window,WM_COMMAND,MAKEWPARAM(3108,BN_CLICKED),LPARAM(GetDlgItem(window,3108)));SetFocus(list);
+  app.edit("scratch.gestures.set",{{"preset","chirp"}});SendMessageW(window,WM_TIMER,5,0);
+  app.edit("scratch.gestures.remove",{{"id",id}});SendMessageW(window,WM_TIMER,5,0);
+  restoreCheck(tool.snapshot().at("selected")==0&&tool.snapshot().at("draft").empty(),"Removing the selected phrase silently retargeted another phrase");
+  app.edit("document.patch",{{"title","Keep empty selection"}});SendMessageW(window,WM_TIMER,5,0);
+  restoreCheck(tool.snapshot().at("selected")==0,"Later refresh redirected a removed phrase to another entry");
+  fixture.close();
+  std::cout<<"PASS scratch external refresh: Undo, stable selection, unchanged history, retained raw fields/caret and removed target\n";
+}
