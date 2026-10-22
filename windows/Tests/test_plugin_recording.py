@@ -54,9 +54,11 @@ class PluginRecordingTests(unittest.TestCase):
         for verb in ('start', 'capture', 'stop', 'commit', 'discard'):
             self.assertIn('automation.recording.' + verb, description['writes'])
         self.main_command(661)
-        self.assertTrue(self.read('workspace.get')['parameterRecording']['visible'])
+        self.wait_for(lambda: self.read('workspace.get'),
+                      lambda s: s['parameterRecording']['visible'] and not s['pendingViewCommands'])
         self.main_command(662)
-        review = self.read('workspace.get')['pluginRecoveryReview']
+        review = self.wait_for(lambda: self.read('workspace.get'),
+                              lambda s: s['pluginRecoveryReview']['visible'] and not s['pendingViewCommands'])['pluginRecoveryReview']
         self.assertTrue(review['visible'])
         self.assertEqual(review['archiveTotal'], 0)
         self.assertEqual(self.read('workspace.get')['editorDock']['configuration'], layout)

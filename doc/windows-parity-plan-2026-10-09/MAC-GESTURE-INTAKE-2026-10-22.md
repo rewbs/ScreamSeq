@@ -963,3 +963,48 @@ link, but cannot substitute for the failed native test gate or permit packaging.
 All three CI jobs stopped on the API inventory preflight; their build steps are
 skipped. Conservative next checkpoint is **19:12:11 UTC / 12:12:11 Pacific**
 from the recorded CI timeline; no early rerun or PR-head push is permitted.
+
+### 18:25 UTC bounded diagnosis and recording action correction
+
+The completed product link (SHA256
+`86fedb64c50422a29aac6de732a86b79abd3884ebf48997f2fb87577068bd816`)
+was used **only for diagnosis**. `take-api/diagnostic-app.json` preserves the
+failed build and exit1. Eight of ten selected app cases passed: both dense graph
+cases, all four scratch cases, detached recovery review, and retained editor
+keyboard/focus. Two failures remain recorded: immediate recording-window
+visibility after its opening command, and native Stop leaving a one-event take
+capturing. No broad suite or second build was run.
+
+Foreground Computer Use on private silent F04 copy/PID36764 confirmed the
+Windows menu entry, one-click opening, empty-take Record/Stop/Keep with playback
+continuing, default readable graph nodes, complete compact Group/Return labels,
+and readable/overview menu framing. The process exited normally with original
+fixture and executable hashes unchanged. Detailed limits are recorded in
+`take-api/foreground-diagnostic/observations.json`: this did not establish a
+captured-parameter lifecycle or field typing continuity. Ctrl+A after the gain
+click selected Pattern; the helper exposes Main rather than child edit focus,
+so neither a field-focus pass nor an application defect is inferred from it.
+Screenshots cannot qualify temporal flicker. The 354.84-second silent run at
+48 kHz/480 frames reported 22 deadline overruns, max callback 12.289 ms, no
+processor/device faults, and `realtimeAuditPassed:false`; not a performance pass.
+
+Current-source corrections (unbuilt):
+
+- The discoverability fixture waits for the actual view-opening queue and
+  visible window, without resending the command or relaxing the result.
+- `ParameterRecordingWindow.hpp` previously dropped every action while its
+  polling read pumped messages. It now retains one lifecycle intent during
+  that read, including original document/revision/take, scope and explicit loss
+  acknowledgement. It submits once after a successful refresh. A changed take,
+  capture state, revision or loss evidence refuses that intent; failed reads
+  never authorize it. Existing completion receipts still block uncertain
+  resubmission. No audio callback, musical model, or persistence format changes.
+- `Workspace/ParameterRecordingWindowTests.inc` deterministically injects Stop
+  during a read, duplicate clicks, replacement take, changed revision, failed
+  refresh and new loss before Keep. It requires exact write counts, unchanged
+  targets and visible refusal. These native regressions and the failed actual
+  app lifecycle must run on the next hourly build; foreground empty-take success
+  does not replace them.
+
+No package or merge from this candidate. Preserve the 19:12:11 UTC gate. Required
+Mac native/interface/socket/device and reciprocal project gates remain open.

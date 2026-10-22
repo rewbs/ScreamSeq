@@ -8,6 +8,31 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 18:25 UTC diagnostic follow-up (supersedes earlier gates):** PR#7
+is frozen at `0198032752f8a55f2a5e003a382a78e131803aef`; main remains
+`0fe8f3400`. The single local checkpoint linked the product but failed compiling
+the workspace regression (`small` conflicts with the Windows RPC macro).
+All three CI jobs stopped at the reviewed API-inventory preflight. Both causes
+are corrected in source after the freeze; neither correction is built. Preserve
+the failed receipts in `bin/mac-gesture-20261022/take-api/` and do not rerun them.
+Next coordinated checkpoint is **no earlier than 19:12:11 UTC / 12:12:11 Pacific**.
+
+The explicitly diagnostic product passed 8/10 selected app cases. Recording
+window opening and a recording Stop failed; the opening assertion must await
+the existing view queue, and source inspection found that the recording
+window drops commands during a background read. A guarded one-action queue
+and native reentrant-read regressions are being added. Fresh Computer Use on
+owned PID36764 confirmed the Windows menu entry, Record/Stop/Keep of an empty
+take with playback continuing, readable graph framing and complete compact
+Group/Return labels. It did **not** qualify a captured-parameter take, field
+typing continuity, or temporal flicker. The process exited normally; original
+F04 and executable hashes are unchanged. Its 354.84-second silent run reported
+22 audio deadline overruns; it is not a realtime performance pass. No package
+or merge is permitted from this partial checkpoint. Continue code on the local
+branch, back up to `codex/mac-gesture-next-checkpoint`, and reserve the PR-head
+push and coordinated native builds for the hourly gate. See the current intake
+report for exact failures, remaining device/reciprocal gates and unbuilt work.
+
 **22 October 18:00 UTC source follow-up:** shared take summary/event paging and
 seven Mac retained-recording API methods are staged after ac9d672e6. Native
 controls, live release and new-provider cleanup review are still unfinished.

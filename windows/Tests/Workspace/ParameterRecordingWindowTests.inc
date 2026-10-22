@@ -6,20 +6,26 @@ void applicationParameterRecordingReview() {
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
     bool deferKeepReceipt=false,failReconcile=false,refuseStart=false;
+    std::function<void()> duringRead;
+    std::string contextRevision;
+    bool available=true;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
     std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
-    callbacks.context=[&]{return std::pair(app.documentId,app.view->session.revision);};
+    callbacks.context=[&]{return std::pair(app.documentId,contextRevision.empty()?app.view->session.revision:contextRevision);};
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
     callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
-    callbacks.available=[]{return true;};callbacks.saveRecovery=[&]{++saves;};
+    callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
     callbacks.reconcile=[&](const Call &call){restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
       "Native review reconciled the wrong completion");
       if(std::exchange(failReconcile,false))throw std::runtime_error("Owned readback failure");++reconciled;};
     callbacks.delivery=[&](size_t offset,size_t limit){auto page=delivery;page["events"]=Json::array();
       for(size_t i=offset;i<std::min(delivery.at("events").size(),offset+limit);++i)page["events"].push_back(delivery.at("events")[i]);return page;};
     callbacks.read=[&](const std::string &method,const Json &params)->Json {
-      if(method=="automation.recording.get")return take;
+      if(method=="automation.recording.get"){
+        if(auto hook=std::exchange(duringRead,{}))hook();
+        return take;
+      }
       restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&params.at("parameter")==1,
         "Review read a different recording take or target");
       Json rows=Json::array();const auto offset=params.at("offset").get<size_t>(),limit=params.at("limit").get<size_t>();
@@ -154,6 +160,44 @@ void applicationParameterRecordingReview() {
       "Explicit Record after a pure refusal could not start a fresh take");
     click(9722);click(9724);
     restoreCheck(!tool.protectsClose()&&songState(app)==music,"Refusal/retry left native protection or changed music");
+    // Background reads pump native messages. A real Stop click during that
+    // read must survive exactly once, and never target a changed take/revision.
+    click(9721);const auto beforeQueuedStop=writes.size();
+    duringRead=[&]{click(9722);click(9722);restoreCheck(writes.size()==beforeQueuedStop,
+      "Recording Stop reentered the worker during a background read");};
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(tool.snapshot().at("queuedAction")=="automation.recording.stop"&&tool.protectsClose(),
+      "Background refresh lost the original Stop intent");
+    available=false;SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeQueuedStop&&!tool.snapshot().at("queuedAction").is_null(),
+      "Another editor's worker read dropped or prematurely submitted the retained Stop");available=true;
+    SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeQueuedStop+1&&!take.at("capturing").get<bool>()&&tool.snapshot().at("queuedAction").is_null(),
+      "Queued Stop was lost or submitted more than once");click(9724);
+    click(9721);const auto beforeChangedTake=writes.size();
+    duringRead=[&]{click(9722);take["take"]="replacement-during-read";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeChangedTake&&take.at("capturing").get<bool>()&&
+      tool.snapshot().at("error").get<std::string>().find("changed during refresh")!=std::string::npos,
+      "Deferred Stop retargeted a different recording");click(9722);click(9724);
+    click(9721);const auto beforeChangedRevision=writes.size();
+    duringRead=[&]{click(9722);contextRevision="newer-song-revision";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeChangedRevision&&take.at("capturing").get<bool>(),
+      "Deferred recording action silently rebased to a later song revision");
+    contextRevision.clear();click(9722);click(9724);
+    click(9721);const auto beforeFailedRefresh=writes.size();
+    duringRead=[&]{click(9722);throw std::runtime_error("Owned interrupted recording refresh");};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeFailedRefresh&&tool.snapshot().at("queuedAction").is_null()&&take.at("capturing").get<bool>(),
+      "Failed read authorized a deferred recording write");click(9722);click(9724);
+    click(9721);click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
+    const auto beforeNewLoss=writes.size();
+    duringRead=[&]{click(9723);take["targets"][0]["unmapped"]=3;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeNewLoss&&!tool.snapshot().at("acknowledgeLoss").get<bool>()&&
+      tool.snapshot().at("error").get<std::string>().find("input loss changed")!=std::string::npos,
+      "Queued Keep reused an acknowledgement after new input loss");click(9724);
     // API completion must update hidden departure protection without relying
     // on the disabled poll timer, fetching data or stealing another editor's focus.
     tool.hide();SetFocus(app.window);const auto hiddenFocus=GetFocus();const auto boundaryWrites=writes.size();

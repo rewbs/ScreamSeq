@@ -34,11 +34,14 @@ private:
   std::map<std::pair<std::string,uint32_t>,std::wstring> parameterNames_;
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
+  struct QueuedAction {std::string document,revision,take,method;Json params,lossEvidence;bool capturing;};
+  std::optional<QueuedAction> queuedAction_;
+  bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,lossAcknowledged_=false,targetChosen_=false;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,state_.value("baseRevision",callbacks_.context().second),take(),generation_,
-      retained(),pending_,completion_.retained()&&!pending_);
+      retained(),pending_||queuedAction_.has_value(),completion_.retained()&&!pending_);
   }
   static constexpr size_t pageSize=128;
   bool retained()const{return state_.value("retained",false);}
@@ -155,8 +158,15 @@ private:
     set(page,total_?std::to_wstring(offset_+1)+L"–"+std::to_wstring(offset_+rows_.size())+L" of "+std::to_wstring(total_):L"No inputs on this page");
   }
   void refresh() {
-    if(pending_)return;requireContext();pending_=true;
-    struct Reset{ParameterRecordingWindow &self;~Reset(){self.pending_=false;self.layout();}}reset{*this};
+    if(pending_)return;requireContext();pending_=refreshing_=true;
+    bool succeeded=false;
+    struct Reset{ParameterRecordingWindow &self;bool &succeeded;~Reset(){
+      self.pending_=self.refreshing_=false;
+      // An incomplete refresh cannot authorize a later write. The normal
+      // error path presents the read failure; no command has been submitted.
+      if(!succeeded)self.queuedAction_.reset();
+      if(self.queuedAction_)SetTimer(self.window_,8,1,nullptr);
+      self.layout();}}reset{*this,succeeded};
     const auto old=take();auto state=callbacks_.read("automation.recording.get",Json::object());requireContext();
     state_=std::move(state);delivery_=callbacks_.delivery(0,1);
     if(take()!=old){offset_=0;targetKey_.clear();targetChosen_=false;lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
@@ -173,6 +183,40 @@ private:
     set(help,counts+(loss()?L" · Review loss before keeping accepted points.":L" · Keep take creates one Undo step."));
     if(state_.contains("intakeError"))error_=state_.at("intakeError").get<std::string>();
     set(statusLabel,wide(error_));
+    succeeded=true;
+  }
+  void queueAction(int id) {
+    if(queuedAction_||completion_.retained())return;
+    Json params=Json::object();std::string method;
+    if(id==start){
+      if(retained())throw std::runtime_error("Finish the retained take before recording again");
+      const auto selected=SendMessageW(controls_.at(scope),CB_GETCURSEL,0,0);
+      if(selected<0||size_t(selected)>rack_.size())throw std::runtime_error("Choose available rack plugins");
+      auto plugins=Json::array();
+      if(selected)plugins.push_back(rack_[size_t(selected-1)].at("instanceID"));
+      else for(const auto &entry:rack_)plugins.push_back(entry.at("instanceID"));
+      params["plugins"]=std::move(plugins);method="automation.recording.start";
+    }else{
+      if(!retained())throw std::runtime_error("No retained recording take");
+      params["take"]=take();
+      if(id==keep)params["acknowledgeLoss"]=lossAcknowledged_;
+      method=id==stop?"automation.recording.stop":id==keep?"automation.recording.commit":"automation.recording.discard";
+    }
+    queuedAction_=QueuedAction{document_,callbacks_.context().second,take(),std::move(method),std::move(params),lossEvidence(),capturing()};
+  }
+  void drainAction() {
+    if(pending_||!queuedAction_)return;
+    auto action=std::move(*queuedAction_);queuedAction_.reset();
+    requireContext();
+    if(callbacks_.context()!=std::pair(action.document,action.revision)||take()!=action.take||capturing()!=action.capturing)
+      throw std::runtime_error("Song or recording changed during refresh; review it before choosing the action again");
+    if(action.method=="automation.recording.discard"&&state_.value("completed",false))
+      throw std::runtime_error("This take is already kept. Finish restoring the controls; use Undo to restore the earlier music.");
+    if(action.method=="automation.recording.commit"&&action.lossEvidence!=lossEvidence())
+      throw std::runtime_error("Recording input loss changed during refresh; review it before keeping the take");
+    // Submit once, with the original scope/acknowledgement. Neither uncertain
+    // completion nor worker admission failure automatically retries the write.
+    submit(action.method,std::move(action.params));
   }
   void submit(const std::string &method,Json params) {
     requireContext();if(pending_||completion_.retained())throw std::runtime_error("Review the previous recording result first");
@@ -183,7 +227,12 @@ private:
     }catch(...){pending_=false;layout();throw;}
   }
   void action(int id,unsigned notification)override {
-    if(setting_||pending_)return;if(id==close){hide();return;}
+    if(setting_)return;
+    if(pending_){
+      if(refreshing_&&notification==BN_CLICKED&&(id==start||id==stop||id==keep||id==discard))queueAction(id);
+      return;
+    }
+    if(queuedAction_)return;if(id==close){hide();return;}
     if(id==acknowledge&&notification==BN_CLICKED){lossAcknowledged_=SendMessageW(controls_.at(id),BM_GETCHECK,0,0)==BST_CHECKED;layout();return;}
     if(id==target&&notification==CBN_SELCHANGE){const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
       if(selected<0||size_t(selected)>targets_.size())return;targetChosen_=true;targetKey_=selected?targets_[size_t(selected-1)].dump():std::string();offset_=0;refresh();return;}
@@ -200,23 +249,20 @@ private:
     }
     if(id==previous||id==next){offset_=id==previous?(offset_>=pageSize?offset_-pageSize:0):std::min(total_,offset_+pageSize);refresh();return;}
     if(id==saveCopy){pending_=true;try{callbacks_.saveRecovery();pending_=false;error_="Recovery copy saved";refresh();}catch(...){pending_=false;throw;}return;}
-    if(id==start){if(retained())throw std::runtime_error("Finish the retained take before recording again");
-      const auto selected=SendMessageW(controls_.at(scope),CB_GETCURSEL,0,0);Json plugins=Json::array();
-      if(selected<0||size_t(selected)>rack_.size())throw std::runtime_error("Choose available rack plugins");
-      if(selected)plugins.push_back(rack_[size_t(selected-1)].at("instanceID"));else for(const auto &entry:rack_)plugins.push_back(entry.at("instanceID"));
-      submit("automation.recording.start",{{"plugins",std::move(plugins)}});return;
-    }
-    if(id==stop||id==keep||id==discard){if(!retained())throw std::runtime_error("No retained recording take");
-      if(id==discard&&state_.value("completed",false))throw std::runtime_error("This take is already kept. Finish restoring the controls; use Undo to restore the earlier music.");
-      Json params={{"take",take()}};if(id==keep)params["acknowledgeLoss"]=lossAcknowledged_;
-      submit(id==stop?"automation.recording.stop":id==keep?"automation.recording.commit":"automation.recording.discard",std::move(params));}
+    if(id==start||id==stop||id==keep||id==discard){queueAction(id);drainAction();}
   }
   bool key(WPARAM key,bool ctrl,bool)override {
     if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(review,BN_CLICKED);return true;}
     if(ctrl&&key=='A'&&GetFocus()==controls_.at(inputDetails)){NativeInputGate::present(controls_.at(inputDetails),EM_SETSEL,0,-1);return true;}
     if(key==VK_RETURN){wchar_t kind[20]{};GetClassNameW(GetFocus(),kind,20);if(!_wcsicmp(kind,L"Button")){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}return false;
   }
-  void timer(UINT_PTR id)override{if(id==7&&visible()&&!pending_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();}
+  void timer(UINT_PTR id)override{
+    if(id==8){
+      if(queuedAction_&&(pending_||(callbacks_.available&&!callbacks_.available()))){SetTimer(window_,8,20,nullptr);return;}
+      KillTimer(window_,8);drainAction();return;
+    }
+    if(id==7&&visible()&&!pending_&&!queuedAction_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();
+  }
   void error(const std::exception &error)override{error_=error.what();set(statusLabel,wide(error_));layout();}
   void layout()override {
     if(!ready_)return;const auto [w,h]=size();place(heading,12,10,w-(callbacks_.recoveredInputs?218:24),24);place(recovered,w-198,8,186,26,bool(callbacks_.recoveredInputs));place(summary,12,40,w-24,40);
@@ -225,7 +271,7 @@ private:
     place(events,12,204,w-24,std::max(80.f,h-416));place(inputDetails,12,h-204,w-24,62);place(page,12,h-134,w-24,22);
     place(acknowledge,12,h-108,w-24,24);place(keep,12,h-76,132,28);place(discard,152,h-76,112,28);
     place(saveCopy,272,h-76,150,28);place(review,w-190,h-76,178,28);place(statusLabel,12,h-40,w-24,32);
-    const bool ready=!pending_&&!completion_.retained();
+    const bool ready=!pending_&&!queuedAction_&&!completion_.retained();
     EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!rack_.empty());
     EnableWindow(controls_.at(stop),ready&&retained()&&capturing());
     EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&state_.value("compatible",false)&&!delivery_.value("pending",false)&&(!loss()||lossAcknowledged_));
@@ -255,7 +301,7 @@ private:
     return DefSubclassProc(window,message,w,l);
   }
 public:
-  bool protectsClose()const{return retained()||pending_||completion_.retained();}
+  bool protectsClose()const{return retained()||pending_||queuedAction_.has_value()||completion_.retained();}
   // The API can finish a take while this review is hidden (its poll timer is
   // stopped). Adopt confirmed worker boundaries immediately for departure
   // admission. Do not pump reads or acknowledge this window's own unresolved
@@ -299,7 +345,7 @@ public:
   ~ParameterRecordingWindow()override{if(window_)RemoveWindowSubclass(window_,notifications,notificationSubclass);if(controls_.contains(events))RemoveWindowSubclass(controls_.at(events),listNotifications,listSubclass);}
   void show(){const auto focused=GetFocus();NativeToolWindow::show();SetTimer(window_,7,250,nullptr);if(!owns(focused))SetFocus(controls_.at(retained()?target:scope));}
   void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
-  Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"take",state_},{"delivery",delivery_},
+  Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"queuedAction",queuedAction_?Json(queuedAction_->method):Json()},{"take",state_},{"delivery",delivery_},
     {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"inputDetails",utf8(field(inputDetails))},
     {"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
 };
