@@ -563,6 +563,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       auto repairInstrument=synth;repairInstrument.instanceID="stopped-instrument-repair";
       stoppedNativeRepair(repairInstrument);
       stoppedNativeGroupRepair(saved,closedAU);
+      stoppedNativeDeviceRepair(saved,closedAU);
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
       nativeTakeGroupedRestoration(saved,closedAU);

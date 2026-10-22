@@ -309,6 +309,49 @@ void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span
       throw std::runtime_error("Native hidden state differs from the saved baseline; take retained for explicit restoration");
   }
 }
+std::unique_ptr<AudioDevice::StoppedPluginRepair> AudioDevice::prepareStoppedPluginRepair(
+    uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,std::span<const PluginState> saved) {
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid opaque repair group");
+  const auto validate=[&] {
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Stopped opaque repair belongs to a replaced or active host");
+    const auto open=plugins_->openEditors();
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Native host changed during closed-editor observation");
+    for(const auto &owner:owners) {
+      const auto slot=pluginSlot(owner.plugin);
+      if(!slot||!owner.source.incarnation||plugins_->editSource(*slot)!=owner.source||
+          std::find(open.begin(),open.end(),*slot)!=open.end())
+        throw std::runtime_error("Close the original native editors before opaque repair");
+    }
+  };
+  validate();if(!joinStoppedProcessing())throw std::runtime_error("Native rendering has not stopped");validate();
+  auto result=std::make_unique<StoppedPluginRepair>();result->owner=this;result->epoch=expectedEpoch;
+  result->providers.assign(owners.begin(),owners.end());
+  std::vector<PluginState> group;group.reserve(owners.size());std::set<std::string> seen;
+  for(const auto &owner:owners) {
+    if(!seen.insert(owner.plugin).second)throw std::invalid_argument("Duplicate opaque repair provider");
+    const auto state=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(state==saved.end())throw std::runtime_error("Opaque repair has no accepted plugin baseline");
+    group.push_back(*state);
+  }
+  result->hosted=plugins_->prepareStoppedRepair(group);validate();
+  return result;
+}
+bool AudioDevice::adoptStoppedPluginRepair(StoppedPluginRepair &plan) {
+  if(plan.owner!=this||!plan.hosted||plan.adopted()||plan.providers.empty()||
+      active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+  if(!joinStoppedProcessing())return false;
+  // Editor observation can execute native code. Repeat host and provider checks
+  // afterwards, then adopt the complete shared group without native callbacks.
+  const auto open=plugins_->openEditors();
+  if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+  for(const auto &owner:plan.providers) {
+    const auto slot=pluginSlot(owner.plugin);
+    if(!slot||plugins_->editSource(*slot)!=owner.source||std::find(open.begin(),open.end(),*slot)!=open.end())return false;
+  }
+  return plugins_->adoptStoppedRepair(*plan.hosted);
+}
 void AudioDevice::stop() {
   playing_ = false;
   if (unit_)

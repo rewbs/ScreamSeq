@@ -104,6 +104,20 @@ public:
   // cuts before and after. Never stops an active device or rewrites saved blobs.
   // Refusal/exception retains the take, including after partial vendor restore.
   void restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner>,std::span<const PluginState>);
+  struct StoppedPluginRepair {
+    const AudioDevice *owner=nullptr;
+    uint64_t epoch=0;
+    std::vector<PluginStateOwner> providers;
+    std::unique_ptr<PluginChain::StoppedRepair> hosted;
+    bool adopted()const noexcept{return hosted&&hosted->adopted;}
+  };
+  // Closed-editor opaque repair. The native take owns this receipt (including
+  // retired providers after adoption) until old input-cut/lease cleanup succeeds.
+  // Never reuse the old take's incarnation on a repaired provider. The next
+  // play() prepares a fresh chain; no old renderer resumes after this adoption.
+  std::unique_ptr<StoppedPluginRepair> prepareStoppedPluginRepair(uint64_t expectedEpoch,
+    std::span<const PluginStateOwner>,std::span<const PluginState>);
+  bool adoptStoppedPluginRepair(StoppedPluginRepair &);
   // Control owner only. Resolve stable identities again: live rack publication
   // can reorder slots without replacing the whole chain. Guard the native
   // incarnation as well as the epoch before taking over stopped processing.

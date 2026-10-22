@@ -763,3 +763,21 @@ These have not run. Session integration still needs a retained repair/cleanup
 receipt so cleanup failure after adoption cannot cause duplicate replacement or
 lose the take; input-cut checks remain the native owner's responsibility. No
 public lifecycle/API changes or live-release claim follow from this layer.
+
+## Next source batch after frozen da8c89f07 — unbuilt
+
+`AudioDevice::StoppedPluginRepair` now carries the shared group preparation,
+audio-owner identity, host epoch and original native provider identities. Its
+prepare/adopt methods require stopped processing and closed original editors,
+join the output callback, validate complete saved membership, and reject a
+replacement audio host or repeated adoption. Old native backends remain in the
+receipt for lease cleanup. `play()` always prepares a fresh renderer/chain,
+which meets the primitive's prohibition on resuming old scheduling state.
+
+The device-free Mac native fixture prepares AU/VST3 repairs without configuring
+an output device, checks stale epoch/missing baseline refusal without a prefix,
+complete restoration, retired lease cleanup, no audio activation, repeated
+adoption refusal and a host replacement. It has not run and is not part of the
+da8c89f07 checkpoint currently building. The retained take still needs its
+retryable post-adoption cleanup state before this wrapper can be wired to
+explicit opaque Discard; do not release ownership based on preparation alone.

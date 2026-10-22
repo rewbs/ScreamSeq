@@ -84,3 +84,29 @@ static void stoppedNativeGroupRepair(const PluginState &vst,const PluginState &a
   check(rendered&&!allocations&&!frees&&!locks,"Reprepared mixed native group failed render or host audit");
   for(size_t i=0;i<actualPCM.size();++i)check(std::abs(actualPCM[i]-expectedPCM[i])<1e-6f,"Reopened mixed native repair changed PCM");
 }
+
+static void stoppedNativeDeviceRepair(const PluginState &vst,const PluginState &au) {
+  AudioDevice audio;audio.setPlugins({vst,au});const auto saved=audio.pluginStates();
+  const auto parameter=audio.pluginParameters(0).at(0);check(audio.pluginParameter(0,parameter.id,.8f),"Stage stopped device divergence");
+  (void)audio.pluginParameters(0);const auto before=audio.pluginStates();
+  check(before[0].state!=saved[0].state,"Stopped device repair fixture did not diverge");
+  const auto epoch=audio.pluginEpoch();const std::array<AudioDevice::PluginStateOwner,2> owners{{{vst.instanceID,audio.pluginEditSource(0)},{au.instanceID,audio.pluginEditSource(1)}}};
+  const auto first=audio.beginPluginInputBarrier(0),second=audio.beginPluginInputBarrier(1);
+  check(first&&second,"Protect stopped device group");
+  bool refused=false;try{(void)audio.prepareStoppedPluginRepair(epoch+1,owners,saved);}catch(const std::exception &){refused=true;}
+  check(refused&&audio.pluginStates()==before,"Wrong host epoch changed a stopped device");
+  refused=false;try{(void)audio.prepareStoppedPluginRepair(epoch,owners,std::span(saved).first(1));}catch(const std::exception &){refused=true;}
+  check(refused&&audio.pluginStates()==before,"Missing later saved baseline repaired a prefix");
+  auto plan=audio.prepareStoppedPluginRepair(epoch,owners,saved);
+  check(!plan->adopted()&&audio.pluginStates()==before&&audio.pluginEpoch()==epoch,"Device preparation mutated native ownership");
+  check(audio.adoptStoppedPluginRepair(*plan)&&plan->adopted(),"Device did not adopt its complete stopped group");
+  const auto restored=audio.pluginStates();
+  check(restored==saved&&audio.pluginEpoch()==epoch&&!audio.active(),"Stopped device repair changed saved state or activated audio");
+  check(!audio.endPluginInputBarrier(0,*first)&&!audio.endPluginInputBarrier(1,*second),"Old device input leases reached new providers");
+  check(plan->hosted->items[0].replacement->prepared->endEditorInputBarrier(*first)&&
+    plan->hosted->items[1].replacement->prepared->endEditorInputBarrier(*second),"Device receipt lost retired input lease ownership");
+  check(!audio.adoptStoppedPluginRepair(*plan)&&audio.pluginStates()==restored,"Stopped device replayed an adopted repair");
+  const std::array<AudioDevice::PluginStateOwner,2> next{{{vst.instanceID,audio.pluginEditSource(0)},{au.instanceID,audio.pluginEditSource(1)}}};
+  auto stale=audio.prepareStoppedPluginRepair(epoch,next,saved);audio.setPlugins(saved);
+  check(!audio.adoptStoppedPluginRepair(*stale)&&audio.pluginStates()==saved,"Stopped repair adopted against a replacement host");
+}
