@@ -16,7 +16,9 @@ class APIInventoryTests(unittest.TestCase):
         schema_path = api_vectors.ROOT / baseline['schema']['path']
         methods = api_vectors.schema_methods(schema_path)
         self.assertEqual(methods, baseline['schema']['methods'])
-        self.assertEqual(sha256(read_bytes(schema_path)), baseline['schema']['sha256'])
+        # The reviewed schema hash names its Git LF text. Windows checkout may
+        # expand CRLF; native evidence still records the exact on-disk hash.
+        self.assertEqual(sha256(read_bytes(schema_path).replace(b'\r\n', b'\n')), baseline['schema']['sha256'])
         for platform, inventory in baseline['platforms'].items():
             with self.subTest(platform=platform):
                 reads, writes = inventory['reads'], inventory['writes']
