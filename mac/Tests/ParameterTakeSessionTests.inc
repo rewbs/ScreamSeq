@@ -134,6 +134,56 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   check([session discardStoppedParameterTake]&&[session.automationRevision isEqual:beforeExplicit]&&
     [tree()[@"automation"] isEqual:baseline[@"automation"]]&&[tree()[@"plugins"] isEqual:baseline[@"plugins"]],
     "Explicit Discard changed the session baseline or music");
+  // Exercise the published API adapter against the real device/session clock.
+  // Musical success plus deferred restoration is a successful retained result,
+  // not an error that encourages replaying original input or creating history twice.
+  const auto api=[&](NSString *method,NSDictionary *params,bool write=false)->NSDictionary * {
+    NSMutableDictionary *request=[params mutableCopy];if(write)request[@"expectedRevision"]=session.automationRevision;
+    error=nil;NSDictionary *reply=[session automationMethod:method params:request error:&error];
+    check(reply!=nil,error.localizedDescription.UTF8String?:"Native parameter API request failed");return reply;
+  };
+  check([session playOrder:0 error:&error],"Start API take playback");NSDictionary *armedAPI=nil;
+  for(unsigned attempt=0;;++attempt) {
+    error=nil;armedAPI=[session automationMethod:@"automation.recording.start"
+      params:@{@"expectedRevision":session.automationRevision,@"plugins":identities} error:&error];
+    if(armedAPI)break;
+    check(attempt<200&&[error.localizedDescription isEqual:@"Start timed song playback before recording plugin parameters"],
+      "API take admission failed for a reason other than the initial real clock");[NSThread sleepForTimeInterval:.005];
+  }
+  NSString *token=armedAPI[@"data"][@"take"],*apiRevision=session.automationRevision;
+  NSMutableArray *timestamps=[NSMutableArray array];
+  for(NSUInteger index=0;index<identities.count;++index) {
+    NSString *stamp=api(@"automation.recording.get",@{})[@"data"][@"hostTime"];[timestamps addObject:stamp];
+    NSDictionary *capturedAPI=api(@"automation.recording.capture",@{@"take":token,@"plugin":identities[index],
+      @"parameter":@7,@"value":@(index ? .65 : .45),@"timestamp":stamp},true);
+    check([capturedAPI[@"data"][@"accepted"] boolValue],"API original-time native control was not accepted");
+    [NSThread sleepForTimeInterval:.03];
+  }
+  NSDictionary *stopAPI=api(@"automation.recording.stop",@{@"take":token},true);
+  check([stopAPI[@"data"][@"retained"] boolValue]&&![stopAPI[@"data"][@"capturing"] boolValue]&&session.playing,
+    "API Stop dropped the take or stopped playback");
+  for(NSUInteger index=0;index<identities.count;++index) {
+    NSDictionary *page=api(@"automation.recording.events",@{@"take":token,@"plugin":identities[index],@"parameter":@7,@"limit":@1})[@"data"];
+    check([page[@"total"] unsignedIntegerValue]==1&&[page[@"events"][0][@"timestamp"] isEqual:timestamps[index]]&&
+      [page[@"events"][0][@"frame"] isKindOfClass:NSString.class],"API event paging lost original timestamps or frame mapping");
+  }
+  NSDictionary *keepAPI=api(@"automation.recording.commit",@{@"take":token,@"acknowledgeLoss":@NO},true);
+  NSString *keptAPIRevision=session.automationRevision;
+  check([keepAPI[@"changed"] boolValue]&&[keepAPI[@"data"][@"completed"] boolValue]&&
+    [keepAPI[@"data"][@"retained"] boolValue]&&keepAPI[@"data"][@"restorationError"]&&session.playing&&
+    ![keptAPIRevision isEqual:apiRevision],"Live API Keep lost committed-but-retained outcome");
+  api(@"transport.stop",@{},true);
+  NSDictionary *releasedAPI=api(@"automation.recording.commit",@{@"take":token},true);
+  check(![releasedAPI[@"changed"] boolValue]&&![releasedAPI[@"data"][@"retained"] boolValue]&&
+    [session.automationRevision isEqual:keptAPIRevision],"API restoration retry published duplicate history or lost completion");
+  NSDictionary *apiSaved=tree();
+  check([apiSaved[@"automation"] count]==2&&[apiSaved[@"plugins"] isEqual:baseline[@"plugins"]],"API Keep changed accepted plugin state");
+  check([session historyUndo:NO error:&error]&&[tree()[@"automation"] isEqual:baseline[@"automation"]],"API take was not one Undo edit");
+  check([session historyUndo:YES error:&error]&&[tree()[@"automation"] isEqual:apiSaved[@"automation"]],"API take Redo changed input");
+  check([session savePath:path error:&error]&&[reopened openPath:path error:&error],"Save/reopen API-created native take");
+  NSDictionary *apiReopened=[NSPropertyListSerialization propertyListWithData:reopened.serializedData options:0 format:nil error:nil];
+  check([apiReopened[@"automation"] isEqual:apiSaved[@"automation"]]&&[apiReopened[@"plugins"] isEqual:baseline[@"plugins"]],
+    "API take persistence changed frames, plugin state or stable identities");
   [reopened shutdown];[session shutdown];
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   std::cout<<"PASS real-session multi-target parameter take, direct admission, recovery, one-step Keep/Undo/Redo, stopped verification, save/reopen, empty and Discard\n";

@@ -1,6 +1,6 @@
-// Internal session integration. Deliberately not advertised by api.describe or
-// connected to Record until native opaque-state verification/release and the
-// complete UI/API lifecycle are ready. All methods run on the session owner.
+// Session-owner integration used by the retained-take API. Native Record UI
+// still needs explicit lifecycle wiring; release currently requires stopped
+// playback, and opaque Discard requires closed owned plugin editors.
 - (void)requireNoParameterTake {
   if(_parameterTake)throw Automation::Error(-32002,"Finish or discard the retained parameter take before changing song or plugin state");
 }
@@ -12,7 +12,7 @@
   struct StartingGuard {BOOL &value;~StartingGuard(){value=NO;}} starting{_parameterTakeStarting};
   require(_document->editable()&&!_recording&&!_sampleRecorder&&!_parameterPreview.active()&&!_recipePreview.active(),
     "Finish the current recording or parameter gesture before recording plugin parameters");
-  require([revision isEqual:self.automationRevision],"Song changed before arming the parameter take");
+  if(![revision isEqual:self.automationRevision])throw Error(-32001,"Song changed before arming the parameter take");
   require([identities isKindOfClass:NSArray.class]&&identities.count&&identities.count<=maximumNativePlugins,
     "Choose a bounded nonempty set of rack plugins");
   std::set<std::string> requested;
@@ -26,11 +26,11 @@
   if([self collectPluginEdits:NO error:&error]<0)throw Error(int(error.code),error.localizedDescription.UTF8String);
   // A preceding manual gesture belongs to its original revision, never to the
   // new take. The caller must reread after a successful manual flush.
-  require([revision isEqual:self.automationRevision],"Earlier plugin edits were saved; read the new revision before arming");
+  if(![revision isEqual:self.automationRevision])throw Error(-32001,"Earlier plugin edits were saved; read the new revision before arming");
   [self commitManualParameters];
-  require([revision isEqual:self.automationRevision],"Song changed while preparing the manual baseline");
+  if(![revision isEqual:self.automationRevision])throw Error(-32001,"Song changed while preparing the manual baseline");
   const auto timeline=_audio->recordingFrameTimeline();
-  require(_audio->playing()&&timeline&&timeline->generation(),"Start timed song playback before recording plugin parameters");
+  if(!_audio->playing()||!timeline||!timeline->generation())throw Error(-32002,"Start timed song playback before recording plugin parameters");
   std::vector<RecordedGestureTake::Provider> providers;providers.reserve(requested.size());
   for(const auto &identity:requested) {
     const auto slot=_audio->pluginSlot(identity);require(slot.has_value(),"Recorded plugin is not prepared");

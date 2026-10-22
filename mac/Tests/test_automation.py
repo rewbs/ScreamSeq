@@ -35,6 +35,25 @@ def expect_error(code, action):
         raise AssertionError(f"Expected API error {code}")
 
 
+def parameter_recording_admission(client):
+    before=client.call('document.get')
+    reply=client.call('automation.recording.get')
+    state=reply['data']
+    assert not reply['changed'] and reply['revision']==before['revision']
+    assert state['retained'] is False and state['capturing'] is False and state['take']==''
+    assert state['clock']=='mach-absolute-time' and isinstance(state['hostTime'],str) and int(state['hostTime'])>0
+    assert state['timebaseNumerator']>0 and state['timebaseDenominator']>0 and state['releaseRequiresStoppedTransport'] is True
+    expect_error(-32602,lambda:client.call('automation.recording.get',{'unknown':1}))
+    expect_error(-32001,lambda:client.call('automation.recording.start',{'expectedRevision':'stale','plugins':[]}))
+    for plugins in ([],True,['missing'],['missing','missing']):
+        expect_error(-32602,lambda:client.call('automation.recording.start',{'expectedRevision':before['revision'],'plugins':plugins}))
+    for operation in ('stop','commit','discard'):
+        expect_error(-32001,lambda:client.call('automation.recording.'+operation,{'expectedRevision':before['revision'],'take':'missing'}))
+    expect_error(-32001,lambda:client.call('automation.recording.events',{'take':'missing','plugin':'missing','parameter':0}))
+    assert client.call('document.get')==before
+    print('PASS retained parameter recording socket: original Mac clock, strict empty/stale/unknown admission and unchanged document; live device lifecycle is a separate gate')
+
+
 def busy_receipts(client):
     """Real socket admission retries and duplicate IDs around a held request."""
     before = client.call("document.get")
@@ -2357,6 +2376,7 @@ def main():
                 assert client.call("document.get")==before_preview
                 print("PASS preview destination socket: explicit channels, independent default, strict range/type validation, no audio start on release, unchanged document")
                 plugin_bypass(client)
+                parameter_recording_admission(client)
                 detach_insert(client)
                 parameter_activity(client)
                 audio_port_trims(client)

@@ -38,6 +38,7 @@
     object(p);
     NSArray *reads = @[
       @"automation.recovery.list", @"automation.recovery.get",
+      @"automation.recording.get", @"automation.recording.events",
       @"graph.plugin.preview.get",
       @"sample.recording.devices", @"sample.recording.get",
       @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"scratch.gestures.get", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.trim.get", @"graph.group.boundary", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
@@ -46,6 +47,7 @@
       @"plugin.preset.inspect", @"plugin.library.get", @"plugin.locations.get", @"plugin.discover", @"plugin.parameters.get", @"plugin.meters", @"plugin.state.get", @"plugin.buses.get", @"automation.get", @"automation.target.get", @"arrangement.get", @"arrangement.matrix", @"automation.pattern.get", @"automation.pattern.copy", @"mixer.get", @"mixer.meters"
     ];
     NSArray *writes = @[@"plugin.parameters.preview.set", @"plugin.parameters.preview.commit", @"plugin.parameters.preview.cancel",
+      @"automation.recording.start", @"automation.recording.capture", @"automation.recording.stop", @"automation.recording.commit", @"automation.recording.discard",
       @"graph.plugin.preview.set", @"graph.plugin.preview.commit", @"graph.plugin.preview.cancel",
       @"sample.renderSelection", @"sample.recording.start", @"sample.recording.stop", @"sample.recording.commit", @"sample.recording.discard",
       @"parameter.activity.watch", @"automation.recorded.edit", @"automation.recorded.clear", @"envelope.bank.save", @"scratch.gestures.set", @"scratch.gestures.remove", @"scratch.gestures.clone", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.trim.set", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.audio.connection.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
@@ -59,6 +61,7 @@
       @"automation.pattern.set", @"automation.pattern.remove", @"automation.pattern.transform", @"mixer.enable", @"mixer.bus.add", @"mixer.bus.set", @"mixer.bus.remove", @"mixer.inserts.move", @"mixer.inserts.detach", @"mixer.sends.set", @"mixer.instrument.route", @"mixer.plugin.route", @"mixer.sidechains.set", @"mixer.plugin.connection.set"
     ];
     const bool mutation = [writes containsObject:method];
+    const bool parameterRecording=[method hasPrefix:@"automation.recording."];
     const bool clearRecorded=[method isEqual:@"automation.recorded.clear"];
     if(clearRecorded){keys(p,@[@"expectedRevision",@"dryRun"]);if(p[@"dryRun"])(void)boolean(p[@"dryRun"]);}
     // Stop/discard belong to an exact retained take, independent of document
@@ -67,14 +70,15 @@
       || [method isEqual:@"sample.recording.stop"] || [method isEqual:@"sample.recording.discard"];
     if (!mutation && ![reads containsObject:method])
       throw Error(-32601, "Unknown method; call api.describe");
-    if(mutation&&![method isEqual:@"transport.stop"]&&![method isEqual:@"transport.panic"]&&
+    if(mutation&&!parameterRecording&&![method isEqual:@"transport.stop"]&&![method isEqual:@"transport.panic"]&&
        ![method isEqual:@"graph.plugin.editor.close"])[self requireNoParameterTake];
     NSString *before = self.automationRevision;
+    if(parameterRecording&&mutation)require(string(p[@"expectedRevision"],200).length>0,"expectedRevision must not be empty");
     if (mutation && !libraryMutation && ![string(p[@"expectedRevision"], 200) isEqual:before])
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
     if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
-    if(mutation&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
+    if(mutation&&!parameterRecording&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
     id result = @{};
@@ -141,11 +145,15 @@
 #include "EnvelopeBankAPI.inc"
 #include "ScratchGestureAPI.inc"
 #include "PluginRecoveryReviewAPI.inc"
+#include "ParameterRecordingAPI.inc"
     } else if ([method isEqual:@"api.describe"]) {
       allowed(@[]);
       result = @{
         @"protocol" : @"ScreamSeq local API",
         @"version" : @1,
+        @"pluginParameterRecording" : @{@"methods":@[@"automation.recording.get",@"automation.recording.events",@"automation.recording.start",@"automation.recording.capture",@"automation.recording.stop",@"automation.recording.commit",@"automation.recording.discard"],
+          @"clock":@"mach-absolute-time",@"sampleRate":@48000,@"releaseRequiresStoppedTransport":@YES,
+          @"semantics":@"Original-time multi-plugin takes use one chronological Keep edit. Stop seals capture without stopping playback. completed:true with retained:true means music was committed but native restoration still needs retry; do not replay input or create a new take. Mac release currently requires stopped transport, and explicit opaque Discard requires every owned native editor closed. Recovery evidence remains detached and never replays."},
         @"pluginInputRecovery" : @{@"methods":@[@"automation.recovery.list",@"automation.recovery.get"],
           @"expectedRevision":@"Get requires the current song revision before selecting a detached archive by kind/index",
           @"semantics":@"Read-only shared original-input archives; no clock remapping, take rearming, playback or history change. Header support does not imply complete archive validation."},

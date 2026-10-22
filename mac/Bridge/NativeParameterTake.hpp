@@ -175,6 +175,12 @@ public:
   }
   const RecordedGestureTake &take()const noexcept{return *take_;}
   bool awaitingDiscardCleanup()const noexcept{return stoppedRepair_&&stoppedRepair_->adopted();}
+  bool compatible()const {
+    if(take_->completed())return true;
+    try{(void)current();}catch(const std::exception &){return false;}
+    const auto failure=take_->failure();
+    return failure!=RecordedGestureTake::Failure::Context&&failure!=RecordedGestureTake::Failure::Provider&&failure!=RecordedGestureTake::Failure::Target;
+  }
   bool owns(const std::string &identity)const noexcept{return take_->owns(identity);}
   const RecordedGestureBoundary::Cuts &stopCuts()const noexcept{return stoppedCuts_;}
   struct CommitResult {bool accepted=false,changed=false;};

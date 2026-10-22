@@ -1,26 +1,13 @@
 // Windows lifecycle adapter for the shared gesture take. Application admission
 // owns pending native controls; this worker owns timing, musical edits and Undo.
 Json DocumentController::parameterRecordingSummary()const {
-  if(!parameterRecording_)return {{"take",""},{"capturing",false},{"retained",false}};
-  const auto &take=*parameterRecording_->take;Json targets=Json::array();
-  for(size_t i=0;i<take.targetCount();++i) {
-    const auto &target=take.target(i);const auto loss=target.loss();
-    targets.push_back({{"plugin",target.key().plugin},{"parameter",target.key().parameter},
-      {"eventCount",target.events().size()},{"unmapped",loss.unmapped},{"overflow",loss.overflow}});
-  }
-  Json sources=Json::array();for(const auto &provider:take.providers())
-    sources.push_back({{"plugin",provider.plugin},{"lost",take.sourceLoss(provider.plugin)}});
+  if(!parameterRecording_)return Tracker::recordedGestureSummary(nullptr);
+  const auto &take=*parameterRecording_->take;
   const bool compatible=take.completed()||(take.revision()==revision()&&playback_.get()==parameterRecording_->host&&
     parameterRecording_->timeline->absoluteFrames.generation()==take.playbackEpoch()&&
     take.failure()!=Tracker::RecordedGestureTake::Failure::Context&&take.failure()!=Tracker::RecordedGestureTake::Failure::Provider&&
     take.failure()!=Tracker::RecordedGestureTake::Failure::Target);
-  return {{"take",take.token()},{"baseRevision",take.revision()},
-    {"startTime",std::to_string(take.startTime())},{"endTime",take.endTime()?Json(std::to_string(*take.endTime())):Json()},
-    {"playbackEpoch",std::to_string(take.playbackEpoch())},
-    {"capturing",!take.endTime()&&!take.completed()},{"completed",take.completed()},{"retained",true},
-    {"compatible",compatible},{"eventCount",take.eventCount()},
-    {"rejected",take.rejectedEvents()},{"failure",unsigned(take.failure())},
-    {"targets",std::move(targets)},{"sources",std::move(sources)}};
+  return Tracker::recordedGestureSummary(&take,compatible);
 }
 void DocumentController::pollParameterRecording(bool stop) {
   if(!parameterRecording_||parameterRecording_->take->completed())return;
@@ -58,22 +45,10 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
       throw Api::ApiError(-32001,"Parameter take changed; read automation.recording.get");
     const auto plugin=recordingText(params.at("plugin"),128);
     const auto parameter=uint32_t(recordingInteger(params.at("parameter"),0,UINT32_MAX));
-    const Tracker::RecordedGestureCapture *target=nullptr;
-    for(size_t i=0;i<parameterRecording_->take->targetCount();++i) {
-      const auto &candidate=parameterRecording_->take->target(i);
-      if(candidate.key().plugin==plugin&&candidate.key().parameter==parameter){target=&candidate;break;}
-    }
-    if(!target)throw Api::ApiError(-32602,"Parameter take has no captured input for this target");
-    const auto offset=recordingInteger(params.value("offset",Json(0)),0,target->events().size());
-    const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);Json events=Json::array();
-    const auto stopped=parameterRecording_->timeline->absoluteFrames.stoppedEndTime(parameterRecording_->take->playbackEpoch());
-    for(size_t i=size_t(offset);i<std::min<uint64_t>(target->events().size(),offset+limit);++i) {
-      const auto &event=target->events()[i];
-      events.push_back({{"timestamp",std::to_string(event.hostTime)},{"value",event.value},
-        {"frame",event.frame&&(!stopped||event.hostTime<*stopped)?Json(std::to_string(*event.frame)):Json()}});
-    }
-    return {{"take",parameterRecording_->take->token()},{"plugin",plugin},{"parameter",parameter},
-      {"offset",offset},{"total",target->events().size()},{"events",std::move(events)},{"sampleRate",48000}};
+    const auto offset=recordingInteger(params.value("offset",Json(0)),0,SIZE_MAX);
+    const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);
+    try{return Tracker::recordedGestureEvents(*parameterRecording_->take,plugin,parameter,size_t(offset),size_t(limit));}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   }
   if(method=="automation.recording.get") {
     keys(params,{});std::string warning;

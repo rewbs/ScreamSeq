@@ -841,3 +841,51 @@ the session-owned resolution of **new** input arriving during an adopted
 repair's failed cleanup. This path preserves/refuses such input; it does not
 yet present a new recovery/review choice for it. Do not claim complete recording
 parity or expose an unconditional successful Discard UI from these changes.
+
+## Shared take reads and Mac API lifecycle after ac9d672e6 — unbuilt
+
+`editor/hosted/RecordedGestureRead.hpp` owns the summary and bounded event-page
+projections used by both native API adapters. Original host times and mapped
+48 kHz frames remain decimal strings. Events at/after the playback Stop cut
+remain visible with null projected frames; reads never rewrite retained input.
+Pagination validates the target and uses subtraction before adding a bounded
+page length. `RecordedGestureReadTests.inc` covers times above 2^53, exact Stop
+boundaries, empty/end pages, invalid limits/targets and unchanged raw evidence.
+
+`mac/Bridge/ParameterRecordingAPI.inc` exposes get/events/start/capture/stop/
+commit/discard with strict fields, original mach timestamps, stable plugin and
+parameter identities, take tokens and current revision guards. Get returns the
+mach timebase and bounded intake warnings. Stop seals capture without stopping
+music. Keep publishes one musical/history transaction; a successful publication
+with failed native restoration returns completed/retained plus restorationError.
+Retry cannot publish the points twice. Release remains stopped-only and explicit
+opaque Discard requires closed owned editors. These limits are advertised in
+api.describe and the guide; they are not completed live-release parity.
+
+The AppKit request dispatcher bypasses its preliminary manual drain for these
+lifecycle requests. Otherwise a refused intake could prevent Get or Discard from
+ever reaching the retained owner. The API handler remains responsible for its
+own intake, errors and retry status. Native Record controls still use the legacy
+flow; they have not been connected to this API or advertised as qualified.
+
+Required checks: shared recorded-automation on Windows and both Mac architectures;
+native session strict/stale/empty admission; actual private socket admission and
+schema inventory; explicit BlackHole real-session two-target capture, exact event
+timestamps/frames, live Keep with deferred release, stopped retry, one Undo/Redo
+and native save/reopen. The latter is in `ParameterTakeSessionTests.inc` and only
+runs through the explicit virtual-device gate, not ordinary native-editor `--ui`.
+Socket live success, native controls, live release and new-provider cleanup input
+review remain outstanding. No API presence count closes those requirements.
+
+Cheap source checks parsed both changed Python fixtures and the JSON schema,
+confirmed all seven methods agree with the dispatcher, and passed git diff
+whitespace validation. The local Python runtime lacks jsonschema, so full schema
+validation was not claimed. None of the new C++/Objective-C++ assertions has run.
+
+Read-only CI inspection at 17:57 UTC found Windows job119969865402 terminal
+failure after a successful build: its recorded audio catalogue has zero devices,
+and 12 unique live playback tests account for 15 failure entries (three teardown
+failures repeat failed launches). Preserve these failures; no skips or weaker
+assertions were added. Both Mac jobs failed the same already-corrected private
+helper call. No CI rerun was dispatched. Next coordinated build remains no
+earlier than 18:11:23 UTC, subject to rechecking actual build starts.

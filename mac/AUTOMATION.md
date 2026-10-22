@@ -19,8 +19,44 @@ current-clock mapping, history or playback changes occur. Decimal timestamp/loss
 strings and native values remain exact; removed plugins are still reviewable.
 Native saves preserve the typed originals, including unsupported independent
 archives. These methods read detached imported evidence, not the current live
-take. The separate `automation.recording.*` lifecycle is currently exposed only
-by the [Windows adapter](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review).
+take. The separate `automation.recording.*` lifecycle addresses the live retained
+take on each platform; see the [Windows guide](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review)
+and the Mac release limits below. The newly added Mac adapter is awaiting native
+session/socket qualification; its presence is not a claim of complete UI parity.
+
+## Plugin parameter recording
+
+`automation.recording.get {}` returns the take token, original times, target/loss
+counts and current lifecycle state. `start {expectedRevision, plugins}` arms
+distinct stable rack IDs during timed playback. `capture {expectedRevision,
+take, plugin, parameter, value, timestamp}` accepts one original native control
+event; `value` uses the parameter catalogue's native units. Mac `timestamp` is
+an unsigned decimal **mach-absolute-time** string, never wall time or polling
+time. Get reports `hostTime`, `timebaseNumerator` and `timebaseDenominator` for
+clock conversion. Windows uses its own explicitly named QPC clock. The musical
+recording timeline is 48 kHz on both platforms.
+
+`events {take, plugin, parameter, offset?, limit?}` pages original input in
+capture order (default 128, maximum 512). Exact timestamp/frame values are
+decimal strings; `frame:null` preserves unmapped or post-playback-Stop evidence.
+Reading does not retime or replay events. `stop {expectedRevision, take}` seals
+capture without stopping song playback. `commit {expectedRevision, take,
+acknowledgeLoss?}` makes one chronological Undo edit for the whole take;
+acknowledging loss requires an explicit boolean. Empty takes add no history.
+`discard {expectedRevision, take}` abandons input without changing accepted music.
+All writes reject unknown keys, stale revisions and wrong take identities.
+
+**Mac release currently requires stopped transport.** A live Keep can succeed
+musically while returning `completed:true`, `retained:true` and a
+`restorationError`. Preserve that take; stop transport explicitly, reread its
+revision and retry Commit. Completed takes never publish history twice.
+Explicit opaque Discard additionally requires all owned native editors closed.
+Neither operation silently stops playback or drops ownership after a failed
+cleanup. `discardCleanupPending` identifies an adopted opaque repair whose
+original queues/backends remain retained. New input on a repaired provider is
+preserved and refuses release; a dedicated review flow for that case and live
+native restoration remain unfinished. Native Record controls still use their
+preceding flow until the new retained-take UI is connected and qualified.
 
 ## Scratch phrases
 

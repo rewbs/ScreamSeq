@@ -6,6 +6,7 @@
 #include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "editor/hosted/ManualParameterState.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
+#include "editor/hosted/RecordedGestureRead.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include "editor/hosted/LatestParameterEdits.hpp"
@@ -59,6 +60,7 @@ static void settled(PluginChain &chain,float decibels) {
 #include "RecordedGestureDrainTests.inc"
 #include "RecordedGestureBoundaryTests.inc"
 #include "RecordedGestureRecoveryTests.inc"
+#include "RecordedGestureReadTests.inc"
 #include "ControlInputRecoveryTests.inc"
 #include "PluginInputRecoveryReviewTests.inc"
 static void capturePreparation() {
@@ -155,6 +157,7 @@ int main() {
     recordedGestureDrainTests();
     recordedGestureBoundaryTests();
     recordedGestureRecoveryTests();
+    recordedGestureReadTests();
     controlInputRecoveryTests();
     pluginInputRecoveryReviewTests();
     latestParameterEditTests();

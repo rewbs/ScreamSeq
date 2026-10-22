@@ -47,7 +47,10 @@ extension AppController {
     var error: NSError?
     // Export rejects hosted/native layers. Its admission and dry run must not
     // commit pending vendor gestures while explaining that refusal.
-    let edits = method == "document.exportModule" ? 0 :
+    // Take lifecycle owns its bounded intake and reports retained failures.
+    // A preliminary manual drain could block Get/Discard precisely when the
+    // musician needs to inspect or resolve a refused native input boundary.
+    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 {
       dirty = true

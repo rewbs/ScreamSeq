@@ -8,6 +8,15 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 18:00 UTC source follow-up:** shared take summary/event paging and
+seven Mac retained-recording API methods are staged after ac9d672e6. Native
+controls, live release and new-provider cleanup review are still unfinished.
+See the latest `MAC-GESTURE-INTAKE-2026-10-22.md` section for concrete files,
+required native/socket/device gates and honest source-only status. Windows
+da8c CI finished with live-device failures and an empty audio catalogue; both
+Mac builds failed the corrected private-helper test call. No reruns or assertion
+weakening. Preserve the 18:11:23 UTC gate and the separate backup branch.
+
 **22 October 17:34 UTC follow-up (supersedes the build gate below):** main is
 still 0fe8f3400. PR#7 `codex/mac-gesture-intake` is frozen at da8c89f07.
 Local ARM64 build passed 13 native registrations; bounded same-binary app

@@ -6,6 +6,7 @@
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
+#include "editor/hosted/RecordedGestureRead.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"
