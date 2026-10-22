@@ -25,6 +25,7 @@ private:
   RecordedGestureDrain::Catalogs catalogs_;
   RecordedGestureBoundary::Cuts stoppedCuts_;
   std::map<std::string,PluginEditorInputBarrier> inputBarriers_;
+  std::unique_ptr<AudioDevice::StoppedPluginRepair> stoppedRepair_;
   size_t previewedEvents_=0;
   bool entering_=false;
   struct Entry {
@@ -34,6 +35,7 @@ private:
   };
   static void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
   Context current()const {
+    require(!awaitingDiscardCleanup(),"Opaque Discard was adopted; finish retained native cleanup before another take action");
     require(audio_.pluginEpoch()==hostEpoch_,"Parameter take belongs to a replaced audio host; input retained");
     const auto result=context_();
     require(audio_.pluginEpoch()==hostEpoch_&&result.first==take_->revision()&&result.second==take_->playbackEpoch(),
@@ -93,6 +95,11 @@ private:
   void releaseInputBarriers() {
     for(auto i=inputBarriers_.begin();i!=inputBarriers_.end();) {
       if(i->second.incarnation) {
+        if(awaitingDiscardCleanup()) {
+          require(stoppedRepair_->releaseRetiredInputBarrier(i->first,i->second),
+            "Retired native input lease could not be released; retry explicit Discard");
+          i=inputBarriers_.erase(i);continue;
+        }
         require(audio_.pluginEpoch()==hostEpoch_,"Native input lease belongs to a replaced audio host; take retained");
         const auto index=slot(i->first);
         require(audio_.pluginEditSource(index).incarnation==i->second.incarnation&&
@@ -123,6 +130,31 @@ private:
     }
     return audio_.cancelPluginParameterPreviews(hostEpoch_,targets);
   }
+  bool finishStoppedDiscard(std::span<const PluginState> saved) {
+    require(awaitingDiscardCleanup(),"No adopted opaque Discard to finish");
+    // Never send an old input token to the replacement slot. Successful prefix
+    // cleanup is erased; a later failure retains every remaining old backend.
+    releaseInputBarriers();
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Opaque Discard belongs to a replaced or active host; take retained");
+    const auto open=audio_.openPluginEditors();
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed during Discard cleanup; take retained");
+    const auto &items=stoppedRepair_->hosted->items;
+    require(items.size()==stoppedRepair_->replacementCuts.size(),"Incomplete native repair receipt");
+    for(size_t n=0;n<items.size();++n) {
+      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed during repaired-provider observation; take retained");
+      const auto &expected=items[n].requested;
+      const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==expected.instanceID;});
+      require(baseline!=saved.end()&&*baseline==expected,"Accepted plugin state changed after opaque Discard; take retained");
+      const auto index=slot(expected.instanceID);
+      require(std::find(open.begin(),open.end(),index)==open.end(),"Close repaired plugin editors before finishing Discard");
+      const auto now=audio_.pluginInputBoundary(index,mach_absolute_time());
+      const auto &cut=stoppedRepair_->replacementCuts[n];
+      require(now&&now->source==cut.source&&now->fence.position==cut.fence.position&&!now->fence.pending,
+        "Repaired provider received new input; original take retained without consuming it");
+    }
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed while finishing Discard; take retained");
+    return true;
+  }
 public:
   NativeParameterTake(const NativeParameterTake &)=delete;
   NativeParameterTake &operator=(const NativeParameterTake &)=delete;
@@ -142,6 +174,7 @@ public:
     require(current()==before,"Parameter context changed during native arming");
   }
   const RecordedGestureTake &take()const noexcept{return *take_;}
+  bool awaitingDiscardCleanup()const noexcept{return stoppedRepair_&&stoppedRepair_->adopted();}
   bool owns(const std::string &identity)const noexcept{return take_->owns(identity);}
   const RecordedGestureBoundary::Cuts &stopCuts()const noexcept{return stoppedCuts_;}
   struct CommitResult {bool accepted=false,changed=false;};
@@ -215,7 +248,7 @@ public:
   // Autosave may capture a bounded prefix without sealing the live take or
   // applying an audible preview. The session serializes take().review().
   void captureRecovery(const NativeSong &native) {
-    Entry entry(entering_);if(take_->completed())return;
+    Entry entry(entering_);if(take_->completed()||awaitingDiscardCleanup())return;
     const auto failure=take_->failure();
     if(failure==RecordedGestureTake::Failure::Context||failure==RecordedGestureTake::Failure::Provider||
       failure==RecordedGestureTake::Failure::Target||(take_->endTime()&&stoppedCuts_.empty()))return;
@@ -237,6 +270,7 @@ public:
   // editor copy as the Windows adapter does. This method never drops input.
   bool restoreRetained(bool discard,const std::function<void()> &verifyNativeState) {
     Entry entry(entering_);
+    require(!awaitingDiscardCleanup(),"Finish adopted opaque Discard cleanup before ordinary restoration");
     require(bool(verifyNativeState),"Native take restoration needs saved-state verification");
     require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
     releaseInputBarriers(); // Finish any earlier failed cleanup before reacquiring.
@@ -273,13 +307,15 @@ public:
   // pending native input as well as the take; ordinary Keep/restoration never
   // rebases its Stop cut or invokes this escape. It can recover a failed clock
   // or document context, but may not touch a replacement native provider.
-  // A refusal after the bounded discard can leave a consumed prefix: that
-  // input was explicitly abandoned, not accepted or replayed as manual edits.
-  // The caller still retains this owner on every failure, including cleanup.
+  // Prepare the whole group's accepted opaque state before adoption. Retain
+  // the old backends/queues after adoption until native lease cleanup finishes.
+  // The caller retains this owner on every failure, including cleanup retries.
   bool abandonStopped(std::span<const PluginState> saved) {
     Entry entry(entering_);
+    if(awaitingDiscardCleanup())return finishStoppedDiscard(saved);
     require(!audio_.active(),"Stop playback before explicitly discarding native input");
     releaseInputBarriers();
+    stoppedRepair_.reset(); // A refused preparation never became audible.
     const auto providers=take_->providers();
     const auto requireClosed=[&] {
       require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Discard belongs to a replaced or active audio host; take retained");
@@ -313,34 +349,23 @@ public:
       requireClosed();
       std::vector<AudioDevice::PluginStateOwner> owners;owners.reserve(abandoned.size());
       for(const auto &[identity,cut]:abandoned)owners.push_back({identity,cut.source});
-      const auto requireUnchanged=[&](bool drained) {
+      const auto requireUnchanged=[&] {
         requireClosed();const auto currentCuts=cuts();
         for(const auto &[identity,before]:abandoned) {
           const auto &after=currentCuts.at(identity);
           require(before.source==after.source&&before.fence.position==after.fence.position&&
-            after.fence.pending==(drained?uint64_t(0):before.fence.pending),
+            after.fence.pending==before.fence.pending,
             "Native input changed during explicit Discard; take retained for retry");
         }
       };
       if(!restorePreviewImpl(true)){releaseInputBarriers();return false;}
-      audio_.restoreStoppedPluginBaselines(hostEpoch_,owners,saved);
-      requireUnchanged(false);
-      // Restore and verify the complete group's saved state before abandoning
-      // its notifications. The raw consumer is bounded and never calls a vendor
-      // state serializer, publishes music, or feeds the ordinary manual path.
-      for(const auto &[identity,cut]:abandoned) {
-        bool complete=false;
-        for(size_t n=0;n<=PluginEditQueue::capacity;++n) {
-          PluginEdit event;PluginEditSource source;
-          const auto result=audio_.popPluginInputBefore(slot(identity),cut,event,source);
-          require(source==cut.source,"Discard provider changed during its bounded drain");
-          if(result==PluginEditRead::Complete){complete=true;break;}
-          require(result==PluginEditRead::Event,"Discard input boundary is no longer valid");
-        }
-        require(complete,"Explicit Discard exceeded its fixed native input bound");
-      }
-      requireUnchanged(true);releaseInputBarriers();requireUnchanged(true);
-      return true;
+      stoppedRepair_=audio_.prepareStoppedPluginRepair(hostEpoch_,owners,saved);
+      requireUnchanged();
+      // Whole-group adoption moves the original notification queues into this
+      // retained receipt. They are explicitly abandoned, never replayed or
+      // consumed through a replacement provider. No musical history is added.
+      require(audio_.adoptStoppedPluginRepair(*stoppedRepair_),"Native opaque Discard became stale before adoption; take retained");
+      return finishStoppedDiscard(saved);
     } catch(...) {
       const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
     }

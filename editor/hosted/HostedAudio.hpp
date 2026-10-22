@@ -720,7 +720,7 @@ public:
   struct StoppedRepair {
     struct Item {
       std::shared_ptr<RackEntry> entry;
-      PluginState before,accepted;
+      PluginState before,accepted,requested;
       std::unique_ptr<NativePlugin::StoppedReplacement> replacement;
       std::vector<PluginParameter> parameters;
       std::vector<bool> previewed;

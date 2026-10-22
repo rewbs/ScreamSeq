@@ -296,13 +296,30 @@ static void nativeTakeExplicitDiscard(const PluginState &state,bool visible=fals
     before->fence.pending==after->fence.pending&&owner.owns(state.instanceID),"Failed baseline verification discarded native input");
   check(owner.abandonStopped(rack),"Explicit closed-editor Discard could not recover the failed context");
   const auto empty=audio.pluginInputBoundary(0,mach_absolute_time());
-  check(empty&&empty->fence.pending==0&&empty->source.incarnation==source&&audio.pluginEpoch()==epoch&&!audio.active()&&
+  check(empty&&empty->fence.pending==0&&empty->source.incarnation!=source&&audio.pluginEpoch()==epoch&&!audio.active()&&
     owner.owns(state.instanceID)&&!take->completed()&&take->eventCount()==captured&&take->endTime()&&
-    (!originalEnd||take->endTime()==originalEnd),"Explicit Discard accepted music, rewrote its Stop cut or replaced a native owner");
+    (!originalEnd||take->endTime()==originalEnd),"Explicit Discard accepted music, rewrote its Stop cut or failed to replace the abandoned provider");
   check(std::abs(audio.pluginParameters(0).at(0).value-parameter.value)<1e-6&&
     std::abs(*audio.pluginParameters(0).at(0).manualValue-parameter.value)<1e-6,
     "Explicit Discard left an audible gesture or changed the saved manual baseline");
   check(owner.abandonStopped(rack),"Explicit Discard could not retry after successful native restoration");
+  check(audio.pluginEditSource(0)==empty->source&&owner.awaitingDiscardCleanup(),"Discard retry replaced the vendor a second time or lost its receipt");
+  refused=false;try{owner.abandonStopped({});}catch(const std::exception &){refused=true;}
+  check(refused&&audio.pluginEditSource(0)==empty->source&&owner.owns(state.instanceID),"Discard retry accepted a different saved baseline");
+  if(visible) {
+    audio.showPluginEditor(0);window=nil;slider=nil;
+    for(NSWindow *candidate in NSApp.windows)if(candidate.visible&&[candidate.title isEqualToString:@(state.descriptor.name.c_str())])
+      for(NSView *view in candidate.contentView.subviews)for(NSView *child in view.subviews)
+        if([child isKindOfClass:NSSlider.class]){check(slider==nil,"Repaired native editor is ambiguous");window=candidate;slider=(NSSlider *)child;}
+    check(window&&slider,"Repaired editor did not open");
+    slider.doubleValue=.7;check([slider sendAction:slider.action to:slider.target],"Send new input on repaired provider");[window close];
+    const auto pending=audio.pluginInputBoundary(0,mach_absolute_time());
+    refused=false;try{owner.abandonStopped(rack);}catch(const std::exception &){refused=true;}
+    const auto retained=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(refused&&pending&&retained&&pending->fence.pending==1&&retained->source==pending->source&&
+      retained->fence.position==pending->fence.position&&retained->fence.pending==pending->fence.pending&&take->eventCount()==captured,
+      "Cleanup retry consumed a new provider's input or folded it into the old take");
+  }
   audio.setPlugins({state});
   refused=false;try{owner.abandonStopped(rack);}catch(const std::exception &){refused=true;}
   check(refused,"Explicit Discard touched a replacement audio host");
@@ -569,6 +586,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       stoppedNativeRepair(repairInstrument);
       stoppedNativeGroupRepair(saved,closedAU);
       stoppedNativeDeviceRepair(saved,closedAU);
+      nativeTakeOpaqueDiscard(saved,closedAU);
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
       nativeTakeGroupedRestoration(saved,closedAU);

@@ -335,21 +335,52 @@ std::unique_ptr<AudioDevice::StoppedPluginRepair> AudioDevice::prepareStoppedPlu
     if(state==saved.end())throw std::runtime_error("Opaque repair has no accepted plugin baseline");
     group.push_back(*state);
   }
-  result->hosted=plugins_->prepareStoppedRepair(group);validate();
+  result->hosted=plugins_->prepareStoppedRepair(group);
+  validate();
+  result->originalCuts.reserve(owners.size());
+  for(const auto &owner:owners) {
+    const auto slot=pluginSlot(owner.plugin);
+    if(!slot||active()||pluginEpoch_!=expectedEpoch)throw std::runtime_error("Original repair host changed");
+    const auto cut=pluginInputBoundary(*slot,mach_absolute_time());
+    if(!cut||cut->source!=owner.source)throw std::runtime_error("Original repair input provider changed");
+    result->originalCuts.push_back(*cut);
+  }
+  result->replacementCuts.reserve(result->hosted->items.size());
+  for(const auto &item:result->hosted->items) {
+    const auto cut=item.replacement->prepared->editBoundary(mach_absolute_time());
+    if(!cut||cut->fence.pending||cut->source.dropped)
+      throw std::runtime_error("Replacement native provider has unreviewed input");
+    result->replacementCuts.push_back(*cut);
+  }
+  validate();
   return result;
 }
+bool AudioDevice::StoppedPluginRepair::releaseRetiredInputBarrier(const std::string &identity,PluginEditorInputBarrier barrier) {
+  if(!adopted()||!barrier.incarnation)return false;
+  for(auto &item:hosted->items)if(item.requested.instanceID==identity) {
+    auto &retired=item.replacement->prepared;
+    return retired&&item.replacement->source.incarnation==barrier.incarnation&&
+      retired->editSource().incarnation==barrier.incarnation&&retired->endEditorInputBarrier(barrier);
+  }
+  return false;
+}
 bool AudioDevice::adoptStoppedPluginRepair(StoppedPluginRepair &plan) {
-  if(plan.owner!=this||!plan.hosted||plan.adopted()||plan.providers.empty()||
+  if(plan.owner!=this||!plan.hosted||plan.adopted()||plan.providers.empty()||plan.originalCuts.size()!=plan.providers.size()||
       active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
   if(!joinStoppedProcessing())return false;
   // Editor observation can execute native code. Repeat host and provider checks
   // afterwards, then adopt the complete shared group without native callbacks.
   const auto open=plugins_->openEditors();
   if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
-  for(const auto &owner:plan.providers) {
+  for(size_t n=0;n<plan.providers.size();++n) {
+    if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+    const auto &owner=plan.providers[n];
     const auto slot=pluginSlot(owner.plugin);
     if(!slot||plugins_->editSource(*slot)!=owner.source||std::find(open.begin(),open.end(),*slot)!=open.end())return false;
+    const auto cut=pluginInputBoundary(*slot,mach_absolute_time());const auto &before=plan.originalCuts[n];
+    if(!cut||cut->source!=before.source||cut->fence.position!=before.fence.position||cut->fence.pending!=before.fence.pending)return false;
   }
+  if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
   return plugins_->adoptStoppedRepair(*plan.hosted);
 }
 void AudioDevice::stop() {

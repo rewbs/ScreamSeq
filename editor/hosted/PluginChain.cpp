@@ -620,11 +620,11 @@ std::unique_ptr<PluginChain::StoppedRepair> PluginChain::prepareStoppedRepair(st
     auto entry=*found;
     if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool v){return v;}))
       throw std::runtime_error("Restore transient previews before stopped opaque repair");
-    StoppedRepair::Item item;item.entry=entry;item.before=entry->baseline;
+    StoppedRepair::Item item;item.entry=entry;item.before=entry->baseline;item.requested=state;
     item.replacement=entry->plugin->prepareStoppedReplacement(state,offline_);item.accepted=item.replacement->canonical;
     item.parameters=item.replacement->prepared->parameters();item.previewed.resize(item.parameters.size());
     budget(item.replacement->prepared->preparedStorageBytes());budget(sizeof(NativePlugin::StoppedReplacement));
-    budget(item.before.state.capacity());budget(item.accepted.state.capacity());budget(item.replacement->canonical.state.capacity());
+    budget(item.before.state.capacity());budget(item.accepted.state.capacity());budget(item.requested.state.capacity());budget(item.replacement->canonical.state.capacity());
     budget(item.parameters.capacity()*sizeof(PluginParameter));budget(item.previewed.capacity());
     for(const auto &p:item.parameters){budget(p.name.capacity());budget(p.unitLabel.capacity());budget(p.choices.capacity()*sizeof(std::string));for(const auto &v:p.choices)budget(v.capacity());}
     plan->items.push_back(std::move(item));

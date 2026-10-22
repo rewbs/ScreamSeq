@@ -781,3 +781,63 @@ adoption refusal and a host replacement. It has not run and is not part of the
 da8c89f07 checkpoint currently building. The retained take still needs its
 retryable post-adoption cleanup state before this wrapper can be wired to
 explicit opaque Discard; do not release ownership based on preparation alone.
+
+## Explicit opaque Discard integration after 93cec81c3 — unbuilt
+
+`NativeParameterTake::abandonStopped` now uses the complete stopped repair
+receipt. This is the explicit **stopped, closed-editor Discard** path already
+owned by `discardStoppedParameterTake`; normal Keep/verification does not
+silently choose replacement. It cancels owned parameter previews, prepares the
+entire accepted AU/VST3 group, checks every original input cut again, and adopts
+only the fully prepared group. Stable project identities, accepted blobs,
+unrelated processors, routing and history remain unchanged. Notification
+incarnations intentionally change; old cuts must never be used on the new ones.
+
+The take retains `StoppedPluginRepair` after adoption. Its old vendor backends
+still own the abandoned queues and input leases. Cleanup resolves each lease
+by stable identity **in the retained receipt**, never by a current rack slot.
+Successful cleanup entries are erased individually; a later refusal leaves the
+remaining entries and old backends available for retry. A repeat Discard finishes
+cleanup and validates the adopted receipt instead of rebuilding a second group.
+Changing the accepted saved state, replacing/activating the host, reopening an
+editor, or delivering new input on a repaired provider refuses release and
+retains the original take. No new-provider input is consumed as old take input.
+The internal session stops polling the original providers after adoption;
+autosave serializes the original detached review without attempting intake.
+The existing session admission guard prevents playback/replacement/model edits
+until ownership is released.
+
+`AudioDevice` now captures both original and prepared-provider input fences.
+Adoption checks the original queues again after native editor observation;
+completion checks the prepared provider's original empty fence. The shared
+`PluginChain::StoppedRepair::Item` retains the exact requested state for retry
+validation separately from canonical native state and the swapped baseline.
+Its extra blob capacity is included in the existing combined 256 MB bound.
+This changes no project format, public API or callback work. Reopening playback
+still constructs a fresh chain; the old scheduler is not resumed.
+
+New source checks cover a genuinely divergent hidden AU setting alongside VST3
+and an unrelated vendor; invalid later state rejects the group without changing
+an earlier provider; successful Discard restores opaque/manual state, leaves
+take evidence and original Stop time intact, and changes only owned native
+incarnations. Retry keeps those new incarnations. An owned native editor check
+delivers an event on the repaired provider and confirms cleanup retry preserves
+it instead of discarding or attributing it to the old take. Device-receipt tests
+exercise a successful first lease release, a wrong later token, successful
+retry and unknown identity refusal. Reopened mixed-vendor PCM is compared with
+the accepted baseline under the existing allocation/free/lock audit.
+
+These are **source assertions, not passing evidence**. Run shared Windows
+parameter-preview, both Mac `native-plugins` and owned native-editor `--ui`
+gates in the next coordinated checkpoint, no earlier than 18:11:23 UTC. The
+real-session BlackHole lifecycle test must still run separately; it exercises
+the unchanged no-history/save-state contract through the updated session path.
+Both prior Mac jobs failed the same private-helper test call at da8c89f07; the
+2f89631d3 correction has not been compiled. Windows x64 job119969865402 finished
+building at 17:39:38 UTC and is still qualifying; do not restart it.
+
+Remaining work includes live native release, full UI/API/socket contracts and
+the session-owned resolution of **new** input arriving during an adopted
+repair's failed cleanup. This path preserves/refuses such input; it does not
+yet present a new recovery/review choice for it. Do not claim complete recording
+parity or expose an unconditional successful Discard UI from these changes.

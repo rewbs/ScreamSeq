@@ -51,7 +51,7 @@
   _parameterTake=std::move(next);
 }
 - (void)pollParameterTake:(BOOL)stop {
-  if(!_parameterTake||_parameterTake->take().completed())return;
+  if(!_parameterTake||_parameterTake->take().completed()||_parameterTake->awaitingDiscardCleanup())return;
   if((stop||!_audio->playing())&&!_parameterTake->take().endTime())_parameterTake->stop();
   const auto rounds=_parameterTake->take().endTime()?PluginEditQueue::capacity/RecordedGestureDrain::eventsPerProvider+1:1;
   for(size_t n=0;n<rounds;++n)if(_parameterTake->poll(_document->native()))return;

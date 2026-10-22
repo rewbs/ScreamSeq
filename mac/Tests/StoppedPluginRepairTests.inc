@@ -103,10 +103,57 @@ static void stoppedNativeDeviceRepair(const PluginState &vst,const PluginState &
   const auto restored=audio.pluginStates();
   check(restored==saved&&audio.pluginEpoch()==epoch&&!audio.active(),"Stopped device repair changed saved state or activated audio");
   check(!audio.endPluginInputBarrier(0,*first)&&!audio.endPluginInputBarrier(1,*second),"Old device input leases reached new providers");
-  check(plan->hosted->items[0].replacement->prepared->endEditorInputBarrier(*first)&&
-    plan->hosted->items[1].replacement->prepared->endEditorInputBarrier(*second),"Device receipt lost retired input lease ownership");
+  auto wrong=*second;++wrong.token;
+  check(plan->releaseRetiredInputBarrier(vst.instanceID,*first)&&!plan->releaseRetiredInputBarrier(au.instanceID,wrong),
+    "Retired cleanup did not reject a later wrong token");
+  check(plan->releaseRetiredInputBarrier(vst.instanceID,*first)&&plan->releaseRetiredInputBarrier(au.instanceID,*second)&&
+    !plan->releaseRetiredInputBarrier("unknown-retired-owner",*second),"Device receipt could not retry partial retired lease cleanup");
   check(!audio.adoptStoppedPluginRepair(*plan)&&audio.pluginStates()==restored,"Stopped device replayed an adopted repair");
   const std::array<AudioDevice::PluginStateOwner,2> next{{{vst.instanceID,audio.pluginEditSource(0)},{au.instanceID,audio.pluginEditSource(1)}}};
   auto stale=audio.prepareStoppedPluginRepair(epoch,next,saved);audio.setPlugins(saved);
   check(!audio.adoptStoppedPluginRepair(*stale)&&audio.pluginStates()==saved,"Stopped repair adopted against a replacement host");
+}
+
+static void nativeTakeOpaqueDiscard(const PluginState &vst,const PluginState &au) {
+  NativePlugin acceptedAU(au,48000,true);auto hidden=acceptedAU.state();
+  NSData *blob=[NSPropertyListSerialization dataWithPropertyList:@{@"gain":@(acceptedAU.parameters().at(0).value),@"hidden":@(.375f)}
+    format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+  check(blob.length>0,"Prepare real opaque take divergence");
+  const auto bytes=static_cast<const std::byte *>(blob.bytes);hidden.state.assign(bytes,bytes+blob.length);
+  auto unrelated=vst;unrelated.instanceID="opaque-discard-unrelated";
+  AudioDevice audio;audio.setPlugins({vst,hidden,unrelated});
+  const std::vector<PluginState> saved{vst,acceptedAU.state(),unrelated};
+  const auto parameter=audio.pluginParameters(0).at(0);
+  check(audio.pluginParameter(0,parameter.id,.8f),"Diverge first vendor before opaque Discard");
+  const auto before=audio.pluginStates();const auto epoch=audio.pluginEpoch();
+  const std::array<PluginEditSource,3> sources{audio.pluginEditSource(0),audio.pluginEditSource(1),audio.pluginEditSource(2)};
+  const std::array<RecordedGestureTake::Provider,2> providers{{{vst.instanceID,sources[0]},{au.instanceID,sources[1]}}};
+  const auto arm=mach_absolute_time();auto timeline=std::make_shared<RecordingFrameTimeline>();
+  check(timeline->publish(arm,arm+1,0,1,48000,43),"Opaque take clock starts");
+  auto take=std::make_shared<RecordedGestureTake>("opaque-discard-take","revision",arm,timeline,saved,std::span<const ParameterChange>{},providers);
+  NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{"revision",timeline->generation()};},saved,{});
+  NativeSong native;check(owner.capture(native,vst.instanceID,parameter.id,.4,mach_absolute_time()),"Capture opaque take evidence");
+  const auto end=owner.stop();
+  auto invalid=saved;invalid[1].state={std::byte{0xff}};bool refused=false;
+  try{owner.abandonStopped(invalid);}catch(const std::exception &){refused=true;}
+  check(refused&&!owner.awaitingDiscardCleanup()&&audio.pluginStates()==before&&
+    audio.pluginEditSource(0)==sources[0]&&audio.pluginEditSource(1)==sources[1]&&take->eventCount()==1,
+    "Bad later opaque baseline published a first-provider prefix or discarded take evidence");
+  check(owner.abandonStopped(saved)&&owner.awaitingDiscardCleanup(),"Closed-editor Discard could not restore hidden AU state");
+  const auto restored=audio.pluginStates();const auto new0=audio.pluginEditSource(0),new1=audio.pluginEditSource(1);
+  check(restored[0]==saved[0]&&restored[1]==saved[1]&&restored[2]==before[2]&&
+    new0.incarnation!=sources[0].incarnation&&new1.incarnation!=sources[1].incarnation&&audio.pluginEditSource(2)==sources[2]&&
+    !audio.active()&&audio.pluginEpoch()==epoch&&take->endTime()==end&&take->eventCount()==1&&!take->completed(),
+    "Opaque Discard changed unrelated state, accepted music, lost evidence or reused a provider");
+  check(owner.abandonStopped(saved)&&audio.pluginEditSource(0)==new0&&audio.pluginEditSource(1)==new1,
+    "Opaque Discard retry rebuilt its already repaired group");
+  refused=false;try{owner.capture(native,vst.instanceID,parameter.id,.2,mach_absolute_time());}catch(const std::exception &){refused=true;}
+  check(refused&&take->eventCount()==1,"Old take accepted input from its replacement provider");
+  PluginChain reopened(restored,48000,true),expected(saved,48000,true);
+  std::array<float,256> actualPCM,expectedPCM;actualPCM.fill(.2f);expectedPCM.fill(.2f);
+  uint64_t allocations=0,frees=0,locks=0;tracker_audit_begin();
+  const bool rendered=reopened.process(actualPCM.data(),128)&&expected.process(expectedPCM.data(),128);
+  tracker_audit_end(&allocations,&frees,&locks);
+  check(rendered&&!allocations&&!frees&&!locks,"Reopened opaque Discard failed render or host realtime audit");
+  for(size_t i=0;i<actualPCM.size();++i)check(std::abs(actualPCM[i]-expectedPCM[i])<1e-6f,"Opaque Discard changed reopened fixture PCM");
 }

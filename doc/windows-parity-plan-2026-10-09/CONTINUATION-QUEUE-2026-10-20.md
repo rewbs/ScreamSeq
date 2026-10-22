@@ -24,9 +24,13 @@ earlier than **18:11:23 UTC / 11:11:23 Pacific**; inspect
 `stopped-repair-framing/ci-checkpoint.json` before dispatch. Do not repeat the
 recorded da8c build or restart its CI. Back up ongoing commits on
 `codex/mac-gesture-next-checkpoint`, not the frozen PR branch, between gates.
-The unbuilt device-level opaque repair wrapper still needs retained cleanup
-integration before enabling replacement in the native take/session. Real Mac
-device-session, both architecture and reciprocal preservation gates remain.
+The following source batch now wires whole-group opaque repair into explicit
+stopped/closed-editor Discard, retaining old queues/leases and retry ownership.
+It is unbuilt; see the latest section of `MAC-GESTURE-INTAKE-2026-10-22.md`.
+Ordinary Keep still does not replace vendors. Real Mac device-session, both
+architecture and reciprocal preservation gates remain. New-provider input
+arriving during failed cleanup is preserved/refused and still needs its
+session review path before complete public recording lifecycle exposure.
 
 **22 October 16:12UTC integration checkpoint:** PR#6 was merged at
 `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, with exactly the qualified077e tree.

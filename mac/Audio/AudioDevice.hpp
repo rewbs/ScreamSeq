@@ -108,8 +108,12 @@ public:
     const AudioDevice *owner=nullptr;
     uint64_t epoch=0;
     std::vector<PluginStateOwner> providers;
+    std::vector<PluginEditBoundary> originalCuts,replacementCuts;
     std::unique_ptr<PluginChain::StoppedRepair> hosted;
     bool adopted()const noexcept{return hosted&&hosted->adopted;}
+    // This addresses the retained old backend, never a current slot. Cleanup
+    // stays retryable even if a later operation replaced the AudioDevice host.
+    bool releaseRetiredInputBarrier(const std::string &,PluginEditorInputBarrier);
   };
   // Closed-editor opaque repair. The native take owns this receipt (including
   // retired providers after adoption) until old input-cut/lease cleanup succeeds.
