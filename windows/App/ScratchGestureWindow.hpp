@@ -116,10 +116,15 @@ private:
     // establish that the worker rejected the edit before making changes.
     saveNeeded_=false;KillTimer(window_,4);
     try{call("scratch.gestures.set",sent,true);}catch(const Api::ApiError &e){
-      if(!writeUncertain_&&e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted){saveNeeded_=true;SetTimer(window_,4,120,nullptr);}throw;
+      if(!writeUncertain_&&e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted){saveNeeded_=true;SetTimer(window_,4,120,nullptr);status(L"Waiting for the document worker · your phrase edit will retry automatically");return;}throw;
     }
     state_.accept(sent,generation);if(generation==state_.generation)saveNeeded_=false;
-    auto result=call("scratch.gestures.get",Json::object());bank_=result.at("gestures");fillPhrases();status(state_.dirty()?L"Earlier edit saved; newer draft retained":L"Phrase saved · every linked SK use updated · Ctrl+Z to undo");
+    // This complete, validated phrase was accepted by the revision-guarded
+    // write. Updating its catalogue entry needs no second worker request:
+    // a refused readback must not describe an accepted edit as an unsaved draft.
+    // Point/name edits cannot change linked uses; retain that read-only metadata.
+    for(auto &entry:bank_)if(entry.at("id")==sent.at("id")){entry.update(sent);break;}
+    fillPhrases();status(state_.dirty()?L"Earlier edit saved; newer draft retained":L"Phrase saved · every linked SK use updated · Ctrl+Z to undo");
   }
   void changed(bool commit=true){++state_.generation;if(commit)saveNeeded_=true;values_={Json::array(),Json::array()};previewNeeded_=true;for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);SetTimer(window_,3,100,nullptr);if(commit)save();requestPaint();}
   void pointFields(){
@@ -129,7 +134,7 @@ private:
   }
   void preview(){
     if(state_.empty()||pending_)return;const auto generation=state_.generation;previewNeeded_=false;
-    for(unsigned i=0;i<2;++i){Json result;try{result=call("automation.formula.preview",previewParams(i));}catch(const Api::ApiError &e){if(e.code==-32002){previewNeeded_=true;SetTimer(window_,3,120,nullptr);}throw;}if(generation!=state_.generation)return;values_[i]=result.at("values");canvases_[i].rebuild(state_.points(i),values_[i]);}requestPaint();
+    for(unsigned i=0;i<2;++i){Json result;try{result=call("automation.formula.preview",previewParams(i));}catch(const Api::ApiError &e){if(e.code==-32002){previewNeeded_=true;SetTimer(window_,3,120,nullptr);return;}throw;}if(generation!=state_.generation)return;values_[i]=result.at("values");canvases_[i].rebuild(state_.points(i),values_[i]);}requestPaint();
   }
   Json formulaRequest(const std::string &method,const Json &params){auto result=request_(method,params);return method=="automation.formula.reference"?scratchFormulaReference(std::move(result)):result;}
   void openFormula(bool referenceOnly){
@@ -229,7 +234,7 @@ private:
     canvases_[1].start=canvases_[0].start;canvases_[1].end=canvases_[0].end;previewNeeded_=true;SetTimer(window_,3,100,nullptr);return true;
   }
   void timer(UINT_PTR id)override{KillTimer(window_,id);if(id==5)refreshScheduled_=false;if(!visible())return;if(pending_||dragging_){if(id==5)scheduleRefresh();else SetTimer(window_,id,100,nullptr);return;}
-    if(id==5){try{refreshCleanPhrase();}catch(const Api::ApiError &e){if(e.code==-32002)scheduleRefresh();throw;}return;}
+    if(id==5){try{refreshCleanPhrase();}catch(const Api::ApiError &e){if(e.code==-32002){scheduleRefresh();return;}throw;}return;}
     if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
   void layout()override{
     // Requests hold a native input lease. Keep the existing controls and focus

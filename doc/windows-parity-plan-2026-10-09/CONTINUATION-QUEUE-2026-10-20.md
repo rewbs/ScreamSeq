@@ -8,6 +8,28 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 14:28 UTC:** The 14:07 checkpoint built frozen source
+`96b6971e56f0c3f297a713ac7254afad87c46099` once. All 20 independently selected
+app cases passed, including the original ordered recording regression. Native
+departure and parameter-preview groups passed; command-results reached its
+90-second child bound during its final case, after both scratch cases passed.
+Source commit `ebc036d1a` splits scratch into its own registration with every
+assertion and timeout retained. A further unbuilt correction prevents busy
+read-only curve previews from overwriting successful phrase-save feedback and
+removes a redundant catalogue read. Its native tests retain unknown-write and
+validation-error assertions. See [details](SCRATCH-REFRESH-2026-10-22.md).
+
+Fresh Computer Use on the unchanged 96b executable confirmed scratch and plugin
+Undo refresh, dock typing/Backspace/Tab focus, Pattern focus and resize. It found
+the misleading scratch busy status above; it does not qualify temporal flicker.
+PID 44228 saved only its private copy and exited normally. No QA process remains.
+The foreground receipt is diagnostic, not production approval. PR #6 remains
+96b; Windows run 39793062072 and Mac run 39793062128 were still building at the
+14:20 observation. Inspect their results, do not restart them. Next coordinated
+build is **no earlier than 15:07:58 UTC**. The qualification checkout remains
+clean 96b; backup source is newer. Do not repeat scratch-refresh receipts or
+package/merge the candidate with the failed native aggregate.
+
 **22 October 13:55 UTC:** Both Mac architectures passed the 1fb checkpoint,
 including all 134 native tests and the scheduled interface/socket/fixture gates.
 Windows x64 CI passed 158 portable/worker and 49 native groups; its audio runner

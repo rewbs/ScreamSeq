@@ -5,9 +5,14 @@ void applicationScratchWriteAdmission(){
   for(const auto outcome:std::vector<std::optional<Outcome>>{Outcome::NotCommitted,Outcome::NoChange,Outcome::Committed,Outcome::Unknown,std::nullopt}){
     RestoreFixture fixture;auto &app=*fixture.app;app.edit("scratch.gestures.set",{{"preset","baby"}});
     const auto before=app.documentOperation("scratch.gestures.get",Json::object());
-    unsigned attempts=0;bool refuse=true;HWND nameField=nullptr;
+    unsigned attempts=0,catalogueReads=0;bool refuse=true,refusePreview=false,invalidPreview=false;HWND nameField=nullptr;
     {
       ScreamSeq::ScratchGestureWindow tool(app.window,[&](const std::string &method,const Json &params){
+        if(method=="scratch.gestures.get")++catalogueReads;
+        if(method=="automation.formula.preview"){
+          if(invalidPreview)throw ScreamSeq::Api::ApiError(-32602,"Injected invalid curve preview");
+          if(refusePreview)throw ScreamSeq::Api::ApiError(-32002,"Injected preview read busy");
+        }
         if(method=="scratch.gestures.set"){
           ++attempts;
           restoreCheck(IsWindowEnabled(nameField),"Pending scratch write disabled its focused field");
@@ -41,6 +46,19 @@ void applicationScratchWriteAdmission(){
       restoreCheck(attempts==(safe?2u:1u),"Scratch automatically replayed a non-retryable busy write");
       if(safe){
         restoreCheck(!tool.snapshot().at("dirty").get<bool>(),"Admitted retry did not accept its original draft");
+        restoreCheck(catalogueReads==1,"Accepted scratch edit redundantly reread its unchanged catalogue");
+        const auto savedStatus=tool.snapshot().at("status");
+        restoreCheck(savedStatus.get<std::string>().find("Phrase saved")!=std::string::npos,"Successful retry still claims its draft is waiting");
+        refusePreview=true;SendMessageW(window,WM_TIMER,3,0);
+        restoreCheck(tool.snapshot().at("status")==savedStatus&&!tool.snapshot().at("dirty").get<bool>(),"A busy preview read misreported an accepted phrase write");
+        refusePreview=false;SendMessageW(window,WM_TIMER,3,0);
+        restoreCheck(tool.snapshot().at("lanes")[0].at("previewSamples").get<size_t>()>0&&tool.snapshot().at("lanes")[1].at("previewSamples").get<size_t>()>0,"Busy preview did not retry both lanes");
+        restoreCheck(tool.snapshot().at("status")==savedStatus&&attempts==2,"Preview retry changed write status or repeated a mutation");
+        // Real validation errors remain visible; only retryable read contention
+        // is quiet. Fit invalidates the preview without editing the song.
+        SendMessageW(window,WM_COMMAND,MAKEWPARAM(3122,BN_CLICKED),LPARAM(GetDlgItem(window,3122)));
+        invalidPreview=true;SendMessageW(window,WM_TIMER,3,0);invalidPreview=false;
+        restoreCheck(tool.snapshot().at("status").get<std::string>().find("Injected invalid curve preview")!=std::string::npos,"Preview validation failure was hidden");
         SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
         restoreCheck(GetFocus()==field&&first==2&&last==7&&restoreText(field)==L"Retained busy phrase","Successful scratch retry/readback lost text/caret/focus");
         MSG queued{};queued.hwnd=field;queued.message=WM_KEYUP;queued.wParam=VK_SPACE;
