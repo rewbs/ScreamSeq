@@ -916,3 +916,13 @@ requires unchanged cables and a persistent, readable reason. The interface
 compile command explicitly includes the new helper. These checks are unbuilt;
 run the signal-graph, scratch, and automation-tools groups with the next normal
 Mac interface checkpoint. No standalone compiler invocation was made early.
+
+### Following frozen 019803275 — sample-loop retry source only
+
+The next source batch applies the same explicit pre-dispatch receipt to Mac
+sample-loop writes and bounds each automatic chain at five retries. Unknown
+outcomes cancel queued automatic loop saves, preserve raw fields and captured
+revision, and show the original error. New interface cases require no replay
+after an unknown outcome and bounded exhaustion with an editable draft. This is
+not part of frozen 019803275 or its upcoming build. Mixer request/reconciliation
+still needs its own retained-draft audit; a plain code check is not sufficient.

@@ -77,7 +77,7 @@ extension SampleEditor {
     loopPreviewSignature = nil; loopPreviewRevision = nil
     syncLoopMarkers();loopsStatus.stringValue = "Loaded saved loop settings."
   }
-  func setLoops(dryRun: Bool) {
+  func setLoops(dryRun: Bool, attempt: Int = 0) {
     guard !loopsBusy, !drawingBusy, let onRequest, let revision = loopDraftRevision else { return }
     var values: [String: Any] = [:]
     for (key, first, last, enabled, ping, reverse) in [("normal", loopStart, loopEnd, looping, pingpong, loopReverse),
@@ -105,9 +105,16 @@ extension SampleEditor {
         let updatedRevision = result["revision"] as? String else {
         self.loopPreviewSignature = nil; self.loopPreviewRevision = nil
         let error=response["error"] as? [String:Any]
-        if error?["code"] as? Int == -32002 && !dryRun {
-          self.loopsStatus.stringValue="Waiting to save loop changes…";self.saveLoopsSoon()
+        if NativeRequestOutcome.canRetryWrite(response) && !dryRun && attempt < 5 {
+          self.loopsStatus.stringValue="Waiting to save loop changes…"
+          self.loopSaveWork?.cancel()
+          let work=DispatchWorkItem{[weak self] in
+            guard let self,self.index==sample,self.sampleGeneration==generation else{return}
+            self.loopSaveWork=nil;self.setLoops(dryRun:false,attempt:attempt+1)
+          }
+          self.loopSaveWork=work;DispatchQueue.main.asyncAfter(deadline:.now()+0.035,execute:work)
         } else {
+          self.loopSaveWork?.cancel();self.loopSaveWork=nil
           self.loopsStatus.stringValue = (error?["message"] as? String ?? "Loop edit failed.") + " Reload loops to use the latest settings."
         }
         return
