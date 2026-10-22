@@ -17,9 +17,12 @@ diagnostic runs; retain the original failure as unresolved. See
 [scratch/parameter follow-up](SCRATCH-REFRESH-2026-10-22.md).
 The next source batch also removes control disabling from automatic parameter
 reads, preserves caret/focus and retries changed-context reads. It adds a native
-read-boundary regression and richer app timeout diagnostics. Update the still
-unexecuted scratch-refresh freeze to the final commit before qualification; its
-gate stays **14:07:23 UTC**. Run three native groups and nine app cases. No further
+read-boundary regression and richer app timeout diagnostics. Frozen source is
+`9251ab88fbc3111c4ec384f4f9534d4bd3218342`, backed up on
+`codex/mac-gesture-intake`. The still-unexecuted scratch-refresh scripts are
+updated and parsed; their gate stays **14:07:23 UTC**. Fast-forward the clean
+qualification checkout specifically to this frozen commit before building.
+Run three native groups and nine app cases. No further
 build, package, PR update or main merge has occurred in this continuation.
 
 **22 October 13:37 UTC:** Mac ARM 1fb job119842551604 passed all134 native tests
@@ -867,7 +870,7 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Candidate ab5f677c1 built; six of seven targeted native groups passed. The new scratch admission regression found focus loss. Source correction e98697fb8 is backed up but unbuilt. Nine app selections have bounded passes, with original failures and narrow rerun limits retained. | Follow the current integration boundary and `focus-followup` freeze/check scripts at or after 13:06:48 UTC. Reuse unchanged ab5 worker/API evidence, retain the failed native assertion, and inspect its ongoing Mac/x64 CI. Package and merge only a qualified checkpoint. |
+| 1 / M | Candidate 1fb passed its bounded Windows ARM64 suite and both Mac architectures. Foreground scratch Undo found stale clean curves; the exact x64 CI binary has one intermittent recording Redo/inspector wait failure. Scratch and parameter focus/refresh corrections are frozen at 9251ab88f and unbuilt. | Follow the current integration boundary and `scratch-refresh` freeze/check scripts at or after 14:07:23 UTC. Reuse unchanged shared/audio/recovery evidence; retain original failures. Run three native groups, nine app cases and fresh isolated foreground checks. Package and merge only a qualified checkpoint. |
 | 2 / L | Shared original-time capture, provider ownership, Windows native controls/delivery/recovery and a public retained-take window exist. Windows recording has actual-app and bounded97bd foreground Keep/Discard evidence; the fresh ab5 diagnostic did not requalify the full flow. Mac's existing recording adapter and seven Windows-only live APIs remain separate contracts. | Recheck the changed input-lease boundary on the next Windows candidate, then integrate the Mac take owner, native baseline restoration and API/UI with shared capture. Do not infer complete parity from the prepared Mac prerequisites or superseded Windows absence reports. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | Typed preservation and both native ownership adapters exist and have preceding paired corpus execution; this is no longer an uncompiled Mac port. New exact-history behavior and final current-candidate exchange remain open. | Qualify current Mac history and perform reciprocal edited F01–F05/output checks on retained same-candidate binaries. Keep source protection, opaque state, exact typed comparisons and merged-tree validation. Large-file memory and unsupported encodings remain explicit risks. |
