@@ -1,4 +1,5 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/LatestParameterEdits.hpp"
 #include "VST3Host.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
@@ -77,7 +78,6 @@ template<size_t N> std::string bounded(const char (&value)[N]) {
   return std::string(value, strnlen(value, N));
 }
 // Sentinel for "no editor value waiting"; compared by bit pattern.
-constexpr float noPendingEdit = std::numeric_limits<float>::quiet_NaN();
 template<size_t N> std::string utf8(const TChar (&value)[N]) {
   return [[NSString alloc] initWithCharacters:reinterpret_cast<const unichar *>(value)
                                        length:std::find(value,value+N,TChar{})-value]
@@ -423,10 +423,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // thread stores, rendering takes the value with a single exchange. A long
   // gesture while the transport is stopped therefore cannot overflow.
   std::array<PluginEdit,8192> edits{};
-  std::unique_ptr<std::atomic<float>[]> pendingEdits;
-  std::atomic<uint32_t> pendingGeneration{0};
-  uint32_t appliedGeneration = 0; // Render owner only.
-  bool pendingCarry = false;      // Render owner only: deferred by a full change list.
+  std::unique_ptr<LatestParameterEdits> pendingEdits;
   // Invalid or unknown editor values and UI-queue overflow; never a failure.
   std::atomic<uint64_t> droppedEdits{0};
   std::atomic<uint32_t> editWrite{0}, editRead{0};
@@ -456,8 +453,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     const float normalized = float(std::clamp(value, 0., 1.));
     values[index].store(normalized, std::memory_order_relaxed);
     controllerValues[index] = normalized;
-    pendingEdits[index].store(normalized, std::memory_order_release);
-    pendingGeneration.fetch_add(1, std::memory_order_release);
+    (void)pendingEdits->publish(size_t(index),normalized);
     auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
     if (w - r >= edits.size()) {
       // Only the UI notification is lost; parameters() still reports the value.
@@ -685,10 +681,9 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
     std::sort(metadata.begin(), metadata.end(), [](auto &a, auto &b) { return a.id < b.id; });
     values = std::make_unique<std::atomic<float>[]>(metadata.size());
-    auto pending = std::make_unique<std::atomic<float>[]>(metadata.size());
+    auto pending = std::make_unique<LatestParameterEdits>(metadata.size());
     for (size_t i = 0; i < metadata.size(); ++i) {
       values[i] = metadata[i].value;
-      pending[i] = noPendingEdit;
       controllerValues.push_back(metadata[i].value);
     }
     pendingEdits = std::move(pending);
@@ -717,21 +712,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // Render owner. Editor values never fail rendering; a full change list defers
   // the remainder to the next block unless a newer value arrives first.
   void applyPendingEdits() noexcept {
-    const auto generation = pendingGeneration.load(std::memory_order_acquire);
-    if (!pendingCarry && generation == appliedGeneration) return;
-    pendingCarry = false;
-    for (size_t i = 0; i < metadata.size(); ++i) {
-      if (std::isnan(pendingEdits[i].load(std::memory_order_relaxed))) continue;
-      const float value = pendingEdits[i].exchange(noPendingEdit, std::memory_order_acq_rel);
-      if (std::isnan(value) || setParameter(metadata[i].id, value, 0)) continue;
-      float expected = noPendingEdit;
-      pendingEdits[i].compare_exchange_strong(expected, value, std::memory_order_acq_rel);
-      pendingCarry = true;
-    }
-    appliedGeneration = generation;
+    pendingEdits->consume([&](size_t index,float value){return setParameter(metadata[index].id,value,0);});
   }
   bool editsPending() const noexcept {
-    return pendingCarry || pendingGeneration.load(std::memory_order_acquire) != appliedGeneration;
+    return pendingEdits&&pendingEdits->pending();
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (!std::isfinite(value) || value < 0 || value > 1)

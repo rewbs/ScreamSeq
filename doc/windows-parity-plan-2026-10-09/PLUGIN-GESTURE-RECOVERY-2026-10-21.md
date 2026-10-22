@@ -179,3 +179,54 @@ Windows candidate is not a complete recording-lifecycle or cross-platform pass.
 Only static diff/whitespace review and the retained-binary preservation check
 have run so far. None of the navigation candidate's 36 passes establishes that
 this new recording/UI source compiles or passes.
+
+## Audible editor delivery: subsequent source batch for the same build checkpoint
+
+Current source inspection found a concrete backend difference. Windows retained
+two 8192-entry FIFOs: original UI notifications and audible scalar updates. Even
+when the document worker consumed every notification, stopped audio accumulated
+obsolete audible updates until the second FIFO faulted the provider. Mac already
+coalesced audible values independently while retaining ordered notification input.
+
+`editor/hosted/LatestParameterEdits.hpp` now extracts that Mac algorithm into a
+shared prepared mailbox. Both VST3 adapters use it. One atomic float per prepared
+parameter retains the latest audible value; a separate ordered notification FIFO
+still preserves original timestamps. Generation/carry state belongs to the single
+render consumer, or a quiescent control-owner flush. Refused native-list delivery
+retains the value, unless a newer producer value has arrived. Construction is
+bounded to 4096 catalog entries; callback publication/consumption allocates,
+frees and locks nothing in the host. These are source properties, still awaiting
+the runtime audit, not a performance qualification.
+
+Windows preflights its native parameter-change list before consuming editor input.
+A full list defers that editor value until the next block instead of faulting
+scheduled automation. Ordinary scheduled-value capacity failures remain strict.
+State capture has a 64-turn flush bound and refuses continuing vendor input rather
+than waiting indefinitely. Mac's native device/UI integration stays unchanged;
+only its existing audible mailbox implementation moves to shared code.
+
+**Retained platform distinction:** Windows still faults when the original-time
+notification FIFO itself fills, and rejects invalid nonfinite/out-of-range vendor
+values. Those assertions are unchanged. Relaxing raw-notification loss requires
+the manual and recording owners to reconcile missing input explicitly; applying
+Mac's tolerant policy alone could publish an obsolete manual value to the live
+rack. This batch removes the independent audible backlog failure without silently
+changing that loss contract. It does not complete native recording intake barriers.
+
+Prepared checks add maximum catalog, 20,000 stopped updates, refusal with newer
+publication, producer/consumer overlap, signed zero and allocation/lock audit in
+`LatestParameterEditsTests.inc`. The real Windows VST3 notification fixture adds
+20,000 separately drained notifications without rendering, final PCM/state reopen,
+and deferred editor delivery beside 32 scheduled offsets. Existing exact FIFO
+capacity/loss and invalid-value failure tests remain. Mac's existing
+`plugin-robustness` fixture already checks 40,000 stopped editor events, timestamp
+order, exact loss, state flush and actual PCM; it is required for this extraction.
+
+To avoid another build cycle, validate these two source batches together at the
+00:53:09 UTC gate after freezing the combined commit. Add Windows `vst3-tests` and
+CTest `vst3-native` to the earlier bounded selection. Mac qualification must include
+`plugin-robustness`, native-plugins, musical-automation, recorded-automation and
+parameter-preview. Main CI triggered by the prior navigation merge is not evidence
+for this new backend. At 00:26 UTC its Mac ARM64 job had passed; Mac Intel and
+Windows x64 were still running. Keep new source on the feature branch until the
+new candidate's required checks pass.

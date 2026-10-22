@@ -1,4 +1,5 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/LatestParameterEdits.hpp"
 // Adapted from mac/Audio/VST3Host.mm; shared scheduling/DSP remain in editor/hosted.
 #include "NativeBackend.hpp"
 #include "Module.hpp"
@@ -345,14 +346,10 @@ struct NativeBackend::Impl {
   std::unique_ptr<std::atomic<float>[]> values;
   std::array<std::array<ParamID, 130>, 16> midiMap{};
   std::array<std::array<uint16_t, 128>, 16> notes{};
-  struct Edit {
-    uint32_t id;
-    float value;
-  };
-  // Separate SPSC paths keep audible edits independent of UI bookkeeping.
+  // Original notifications remain ordered for recording/history. Audible
+  // delivery keeps the latest value per prepared parameter, as on macOS.
   std::array<PluginEdit,8192> edits{};
-  std::array<Edit,8192> audioEdits{};
-  std::atomic<uint32_t> audioWrite{0}, audioRead{0};
+  std::unique_ptr<LatestParameterEdits> pendingEdits;
   std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<uint64_t> droppedEdits{0};
   std::atomic<bool> failed{false};
@@ -390,12 +387,12 @@ struct NativeBackend::Impl {
   tresult performEdit(ParamID id, ParamValue value) {
     // A failed instance is about to be dropped: discard, never queue.
     if (failed.load(std::memory_order_acquire)) return kResultFalse;
-    auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
-    auto aw = audioWrite.load(std::memory_order_relaxed), ar = audioRead.load(std::memory_order_acquire);
-    if (w - r >= edits.size() || aw - ar >= audioEdits.size()) {
-      droppedEdits.fetch_add(1,std::memory_order_relaxed);
-      fail(Failure::EditorQueue,id);
-      return kResultFalse;
+    const auto w=editWrite.load(std::memory_order_relaxed),r=editRead.load(std::memory_order_acquire);
+    if(w-r>=edits.size()){
+      // Keep Windows' original-time input-loss policy until both native manual
+      // and recorded owners can reconcile a missing notification explicitly.
+      // Audible delivery itself no longer has a second overflowing FIFO.
+      droppedEdits.fetch_add(1,std::memory_order_relaxed);fail(Failure::EditorQueue,id);return kResultFalse;
     }
     if (!std::isfinite(value)||value<0||value>1) {
       droppedEdits.fetch_add(1,std::memory_order_relaxed);
@@ -404,15 +401,13 @@ struct NativeBackend::Impl {
     }
     auto p = std::lower_bound(metadata.begin(), metadata.end(), id, [](auto &p, uint32_t key) { return p.id < key; });
     if(p==metadata.end()||p->id!=id||!p->writable){droppedEdits.fetch_add(1,std::memory_order_relaxed);return kInvalidArgument;}
-    if (values && p != metadata.end() && p->id == id && size_t(p - metadata.begin()) < controllerValues.size()) {
-      auto index = p - metadata.begin();
-      values[index].store(float(value), std::memory_order_relaxed);
-      controllerValues[index] = float(value);
-    }
-    edits[w % edits.size()] = {id,float(value),ScreamSeq::hostTime100ns()};
+    const auto index=size_t(p-metadata.begin());
+    if(!values||!pendingEdits||index>=controllerValues.size())return kResultFalse;
+    const auto time=ScreamSeq::hostTime100ns();
+    values[index].store(float(value),std::memory_order_relaxed);controllerValues[index]=float(value);
+    (void)pendingEdits->publish(index,float(value));
+    edits[w % edits.size()] = {id,float(value),time};
     editWrite.store(w + 1, std::memory_order_release);
-    audioEdits[aw % audioEdits.size()] = {id, float(value)};
-    audioWrite.store(aw + 1, std::memory_order_release);
     return kResultOk;
   }
   bool refreshParameterPresentation() {
@@ -573,7 +568,7 @@ struct NativeBackend::Impl {
   void drainEditorEdits() noexcept {
     if(!window||failed.load(std::memory_order_acquire)||drainingEdits)return;
     drainingEdits=true;
-    for(int n=0;n<64&&(changes->count||audioRead.load()!=audioWrite.load());++n){
+    for(int n=0;n<64&&(changes->count||editsPending());++n){
       std::array<float,2> empty{};
       if(!process(empty.data(),0,0,nullptr,0,transport))break;
     }
@@ -724,6 +719,7 @@ struct NativeBackend::Impl {
     std::sort(parameterInfos.begin(),parameterInfos.end(),[](auto &a,auto &b){return a.id<b.id;});
     if(std::adjacent_find(metadata.begin(),metadata.end(),[](auto &a,auto &b){return a.id==b.id;})!=metadata.end())throw std::runtime_error("Duplicate VST3 parameter ID");
     values = std::make_unique<std::atomic<float>[]>(metadata.size());
+    pendingEdits=std::make_unique<LatestParameterEdits>(metadata.size());
     for (size_t i = 0; i < metadata.size(); ++i) {
       values[i] = metadata[i].value;
       controllerValues.push_back(metadata[i].value);
@@ -751,6 +747,20 @@ struct NativeBackend::Impl {
     acknowledgedLatency.store(latencySerial.load(std::memory_order_acquire),std::memory_order_release);
     preparing=false;
     if(parameterTitlesPending&&!refreshParameterPresentation())throw std::runtime_error("VST3 changed its prepared parameter contract during activation");
+  }
+  bool editsPending()const noexcept{return pendingEdits&&pendingEdits->pending();}
+  void applyPendingEdits()noexcept {
+    pendingEdits->consume([&](size_t index,float value){
+      const auto id=metadata[index].id;
+      // Defer editor-only input when the current musical change list is full.
+      // Preflight avoids setting its overflow/failure flags. Ordinary scheduled
+      // parameter capacity violations keep their strict rejection semantics.
+      ParamQueue *queue=nullptr;
+      for(int32 i=0;i<changes->count;++i)if(changes->items[i]->id==id){queue=changes->items[i].get();break;}
+      if(queue){if(queue->count==queue->points.size()&&queue->points[0].offset!=0)return false;}
+      else if(changes->count==changes->items.size())return false;
+      return setParameter(id,value,0);
+    });
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (failed || offset >= 4096 || !std::isfinite(value) || value < 0 || value > 1)
@@ -878,14 +888,8 @@ bool NativeBackend::Impl::process(float *buffer, uint32_t frames, uint64_t posit
   if(s.failed)return false;
   if ((!buffer && frames)||frames > 4096 || offset>4096 || frames>4096-offset || position>INT64_MAX)return s.fail(Impl::Failure::Block,frames);
   if(!std::isfinite(time.tempo)||time.tempo<=0||!std::isfinite(time.beat)||!std::isfinite(time.bar)||time.numerator<1)return s.fail(Impl::Failure::Transport,uint32_t(time.numerator));
-  auto ar = s.audioRead.load(std::memory_order_relaxed), aw = s.audioWrite.load(std::memory_order_acquire);
-  for (int n = 0; ar != aw && n < 128; ++n, ++ar) {
-    auto edit = s.audioEdits[ar % s.audioEdits.size()];
-    if (!s.setParameter(edit.id, edit.value, 0)) {
-      return s.fail(Impl::Failure::AudioEdit,edit.id);
-    }
-  }
-  s.audioRead.store(ar, std::memory_order_release);
+  s.applyPendingEdits();
+  if(s.failed)return false;
   for(int32 i=0;i<s.changes->count;++i)for(int32 j=0;j<s.changes->items[i]->count;++j)if(uint32_t(s.changes->items[i]->points[j].offset)>=std::max(1u,frames))return s.fail(Impl::Failure::InputOffset,s.changes->items[i]->id);
   s.audio->gather(buffer,inputs,offset,frames);
   ProcessContext context{};
@@ -969,7 +973,8 @@ PluginState NativeBackend::state() const {
   pluginMainCall([&] {
     auto &s = *impl_;
     Stream component, controller;
-    while (s.changes->count || s.audioRead.load() != s.audioWrite.load()) {
+    for(unsigned turn=0;s.changes->count||s.editsPending();++turn) {
+      if(turn==64)throw std::runtime_error("VST3 editor state is still changing; retry after the gesture");
       std::array<float, 2> empty{};
       if (!const_cast<NativeBackend *>(this)->process(empty.data(), 0, 0,nullptr,0,s.transport))
         throw std::runtime_error("Cannot flush VST3 parameter state");

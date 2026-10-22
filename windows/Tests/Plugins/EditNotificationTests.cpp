@@ -26,7 +26,7 @@ int main(int argc,char **argv){try{
   check(!descriptors.empty(),"Native VST3 fixture discovered");
   PluginState state{descriptors[0]};state.instanceID="timestamped-editor";
   // Keep only the module loaded between scopes, so each broadcast reaches
-  // exactly one native instance and overflow does not poison later checks.
+  // exactly one native instance; each scope owns independent queue/loss state.
   auto dll=LoadLibraryW(std::filesystem::u8path(state.descriptor.path).c_str());
   check(dll,"Native fixture loaded");
   struct Module {HMODULE handle;~Module(){FreeLibrary(handle);}} module{dll};
@@ -124,8 +124,8 @@ int main(int argc,char **argv){try{
   {
     auto plugin=platformPluginBackendFactory().create(state,48000,true);
     const auto before=ScreamSeq::hostTime100ns();
-    // Existing Windows policy faults when either notification/audio queue fills.
-    // Count loss without changing capacity or pretending post-fault edits apply.
+    // Preserve Windows' strict original-time input-loss policy. Only the
+    // redundant audible FIFO is removed; notification capacity is unchanged.
     WindowsVST3::pluginMainCall([&]{
       for(size_t n=0;n<8192;++n)check(gesture(n%2?.75:.25)==1,"Bounded queue admission changed");
       check(gesture(.5)==0,"Overflow must keep the existing Windows rejection");
@@ -148,10 +148,38 @@ int main(int argc,char **argv){try{
   }
   {
     auto plugin=platformPluginBackendFactory().create(state,48000,true);
+    // Drain history notifications while audio is stopped: no second fixed FIFO
+    // may accumulate 8192 obsolete values and make an ordinary gesture fatal.
+    WindowsVST3::pluginMainCall([&]{
+      for(unsigned i=0;i<20000;++i){check(gesture(i%2?.75:.25)==1,"Long editor gesture faulted");
+        PluginEdit event;check(plugin->popEdit(event)&&event.value==(i%2?.75f:.25f),"Original editor events were coalesced");}
+    });
+    std::array<float,256> pcm;pcm.fill(1);
+    beginAudit();const auto okay=plugin->process(pcm.data(),128,0,nullptr,0,{});endAudit(okay);
+    for(auto value:pcm)check(value==.75f,"Long gesture replayed old audible values");
+    check(!plugin->droppedEdits()&&!plugin->failure().reason,"Ordinary stopped gesture created artificial loss or failure");
+    const auto saved=plugin->state();auto reopened=platformPluginBackendFactory().create(saved,48000,true);
+    pcm.fill(1);check(reopened->process(pcm.data(),128,0,nullptr,0,{}),"Long gesture state did not reopen");
+    for(auto value:pcm)check(value==.75f,"Latest editor state did not persist exactly");
+  }
+  {
+    auto plugin=platformPluginBackendFactory().create(state,48000,true);
+    // Fill this parameter's 32 nonzero sample-offset points. The editor value
+    // waits for space without masking a musical scheduling capacity violation.
+    for(unsigned frame=1;frame<=32;++frame)check(plugin->parameter(7,.5,frame),"Full musical queue fixture failed");
+    check(send(.375)==1,"Editor value beside musical automation refused");
+    std::array<float,128> pcm;pcm.fill(1);
+    beginAudit();const auto first=plugin->process(pcm.data(),64,0,nullptr,0,{});endAudit(first);
+    check(!plugin->failure().reason&&pcm.back()==.5f,"Deferred editor input displaced the scheduled points or faulted processing");
+    pcm.fill(1);beginAudit();const auto second=plugin->process(pcm.data(),64,64,nullptr,0,{});endAudit(second);
+    for(auto value:pcm)check(value==.375f,"Deferred editor value never reached the next block");
+  }
+  {
+    auto plugin=platformPluginBackendFactory().create(state,48000,true);
     check(send(std::numeric_limits<double>::quiet_NaN())==0&&plugin->droppedEdits()==1,"Invalid editor value is rejected and counted");
     PluginEdit event;check(!plugin->popEdit(event),"Invalid value never enters capture queue");
     check(plugin->failure().reason&&std::string(plugin->failure().reason)=="vst3.editor-value","Invalid value retains fault evidence");
   }
-  std::cout<<"PASS native VST3 callback timestamps through rack, delayed polling, legacy overload, exact 8192-entry capacity/order/loss, invalid value, audible/fault PCM and host C++ allocation/free audit\n";
+  std::cout<<"PASS native VST3 original timestamps/order, exact bounded loss, long stopped gestures, latest audible delivery, scheduled-capacity deferral, persistence, invalid-value failure and host C++ allocation/free audit\n";
   return 0;
 }catch(const std::exception &error){ScreamSeq::AudioAudit::active=false;std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}}
