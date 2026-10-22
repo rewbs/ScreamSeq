@@ -1110,3 +1110,24 @@ conformance step passed (including the extended editing workloads). Windows x64
 has compiled and is running worker checks; Mac Intel is still building. These
 results belong to `7154b9f323`/identical-tree CI merge `4c40b3e0`; they do not
 qualify the subsequently prepared Windows focus changes. No jobs were restarted.
+
+The ARM evidence archive `12405562778` was downloaded and its SHA-256 verified as
+`327da4f71826893c3cfd4c60fbe88a98cbc4f0dd23a51b9597cd74daee9901c2`.
+Exact reports and saved exchange inputs are retained under
+`bin/plugin-control-review-20261022/ci/mac-arm-7154/extracted/`;
+`inspection.json` records individual report hashes. The Mac executable SHA-256 is
+`88b9ed81070e0b432f6ab15257ef26b5222385e0db551bfe8bd269ce01e8c234`.
+The reports confirm five fixture roundtrips, 8 editing contracts, 41 API and 21
+codec cases, 3 duration-default cases, 18 paired metadata stages, 21 composing
+history saves and 25 envelope-bank saves. All required scope-specific pass flags
+are true; API/codec known differences remain explicit and `parityComplete` is
+false. This is one Mac leg, not a reciprocal Windows→Mac→Windows pass.
+
+Prepared next-checkpoint scripts are in `focus-correction/`, with an exact source
+pin and the 06:56:56 UTC gate. Only `ScreamSeq` and `workspace-restore-tests` need
+rebuilding for these Windows UI changes. Selected native UI checks and the 13
+actual-app cases cover the changed focus owner; the unchanged shared/worker
+targets retain their 7154 evidence. No prepared script has been executed.
+The qualification checkout remains on 7154 while its diagnostic QA process is
+alive. At 06:30 UTC, x64 was running merged actual-app checks and Intel Mac was
+running its native interface harness; await their terminal results, never restart.
