@@ -505,3 +505,19 @@ unexecuted. This worker path is intentionally absent from the application's API
 catalog and UI until native admission, original-time standard-control intake,
 paginated take review, schema/documentation and UI controls are connected. Those
 are required next steps, as are Mac session adoption and AU/builtin capture.
+
+The internal worker also accepts one original-time standard-control event and
+returns whether that event was retained independently of preview delivery.
+Invalid values/identities/timestamps fail before changing take counters. A shared
+validation helper keeps target/envelope/pattern-command rules aligned. Mixed
+vendor/control preview selects the newest original timestamp, rather than the
+last worker arrival. Take review pages contain at most 512 raw events for one
+stable target, retaining decimal host-time/frame identities and unmapped values.
+Regressions now cover delayed older vendor input after a newer control, invalid
+input without poisoning the take, exact paginated timestamps and frame mapping.
+These methods remain internal until native event handlers and the public contract
+are connected; no running application exposes this unfinished workflow.
+
+Both Mac architectures passed the preceding `d1c8fddff` run `39708338698`.
+That result protects the earlier shared inputs only; the subsequent queue,
+restoration and session changes still need the next combined checkpoint.

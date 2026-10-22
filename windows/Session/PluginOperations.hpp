@@ -133,6 +133,9 @@ public:
   // Without cuts, true acknowledges empty paired drains only when the caller
   // holds an actual native release barrier. False means another poll is needed.
   bool pollRecordedEditors(bool releaseBarrier=false);
+  // Validate a standard-control event before changing take ownership/counters.
+  // Its timestamp is captured by the native event handler, never worker delivery.
+  bool captureRecordedControl(const std::string &,uint32_t,double,uint64_t hostTime);
   // Capture all VST3 queue cuts on their one native owner, then seal once.
   // Later polls stop at these cuts even when new input continues to arrive.
   // This is an input boundary; release obtains native vendor HWND leases.

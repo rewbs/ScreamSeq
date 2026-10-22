@@ -50,15 +50,39 @@ bool DocumentController::restoreParameterRecordingPreview() {
 }
 Json DocumentController::parameterRecordingOperation(const std::string &method,const Json &params) {
   if(!params.is_object())throw Api::ApiError(-32602,"Parameter recording expects an object");
+  if(method=="automation.recording.events") {
+    keys(params,{"take","plugin","parameter","offset","limit"});
+    if(!parameterRecording_||recordingText(params.at("take"),80)!=parameterRecording_->take->token())
+      throw Api::ApiError(-32001,"Parameter take changed; read automation.recording.get");
+    const auto plugin=recordingText(params.at("plugin"),128);
+    const auto parameter=uint32_t(recordingInteger(params.at("parameter"),0,UINT32_MAX));
+    const Tracker::RecordedGestureCapture *target=nullptr;
+    for(size_t i=0;i<parameterRecording_->take->targetCount();++i) {
+      const auto &candidate=parameterRecording_->take->target(i);
+      if(candidate.key().plugin==plugin&&candidate.key().parameter==parameter){target=&candidate;break;}
+    }
+    if(!target)throw Api::ApiError(-32602,"Parameter take has no captured input for this target");
+    const auto offset=recordingInteger(params.value("offset",Json(0)),0,target->events().size());
+    const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);Json events=Json::array();
+    const auto stopped=parameterRecording_->timeline->absoluteFrames.stoppedEndTime(parameterRecording_->take->playbackEpoch());
+    for(size_t i=size_t(offset);i<std::min<uint64_t>(target->events().size(),offset+limit);++i) {
+      const auto &event=target->events()[i];
+      events.push_back({{"timestamp",std::to_string(event.hostTime)},{"value",event.value},
+        {"frame",event.frame&&(!stopped||event.hostTime<*stopped)?Json(std::to_string(*event.frame)):Json()}});
+    }
+    return {{"take",parameterRecording_->take->token()},{"plugin",plugin},{"parameter",parameter},
+      {"offset",offset},{"total",target->events().size()},{"events",std::move(events)},{"sampleRate",48000}};
+  }
   if(method=="automation.recording.get") {
     keys(params,{});std::string warning;
     try{pollParameterRecording();}catch(const std::exception &e){warning=e.what();}
     auto result=parameterRecordingSummary();if(!warning.empty())result["intakeError"]=std::move(warning);return result;
   }
   const bool start=method=="automation.recording.start",stop=method=="automation.recording.stop",
-    commit=method=="automation.recording.commit",discard=method=="automation.recording.discard";
-  if(!start&&!stop&&!commit&&!discard)throw Api::ApiError(-32601,"Unknown parameter recording method");
+    commit=method=="automation.recording.commit",discard=method=="automation.recording.discard",capture=method=="automation.recording.capture";
+  if(!start&&!stop&&!commit&&!discard&&!capture)throw Api::ApiError(-32601,"Unknown parameter recording method");
   keys(params,start?std::initializer_list<const char *>{"expectedRevision","plugins"}:
+    capture?std::initializer_list<const char *>{"expectedRevision","take","plugin","parameter","value","timestamp"}:
     commit?std::initializer_list<const char *>{"expectedRevision","take","acknowledgeLoss"}:
       std::initializer_list<const char *>{"expectedRevision","take"});
   if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())
@@ -114,6 +138,19 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   }
   if(!parameterRecording_||recordingText(params.at("take"),80)!=parameterRecording_->take->token())
     throw Api::ApiError(-32001,"Parameter take changed; read automation.recording.get");
+  if(capture) {
+    const auto plugin=recordingText(params.at("plugin"),128);
+    const auto parameter=uint32_t(recordingInteger(params.at("parameter"),0,UINT32_MAX));
+    const auto timestamp=recordingDecimal(recordingText(params.at("timestamp"),20));
+    if(!timestamp||timestamp>hostTime100ns())throw Api::ApiError(-32602,"Control timestamp must be an original past host time");
+    const auto &value=params.at("value");if(!value.is_number()||!std::isfinite(value.get<double>()))
+      throw Api::ApiError(-32602,"Control value must be finite and numeric");
+    const bool accepted=plugins_->captureRecordedControl(plugin,parameter,value.get<double>(),timestamp);
+    std::string warning;try{pollParameterRecording();}catch(const std::exception &e){warning=e.what();}
+    auto result=parameterRecordingSummary();result["accepted"]=accepted;
+    if(!warning.empty())result["intakeError"]=std::move(warning);
+    return result; // Accepted input must not be sent again after preview refusal.
+  }
   if(stop){
     std::string warning;try{pollParameterRecording(true);}catch(const std::exception &e){warning=e.what();}
     auto result=parameterRecordingSummary();if(!warning.empty())result["intakeError"]=std::move(warning);return result;

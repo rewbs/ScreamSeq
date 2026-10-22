@@ -351,5 +351,20 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   operations.invoke("plugin.editor.close",{{"slot",0}});
   need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==protectedBaseline,
     "Protected restoration failure prevented explicit closed-editor discard");
-  std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native input leases/close/restore, one Undo and persistence\n";
+  operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto beforeMixed=encoded();clock=std::make_shared<RecordingFrameTimeline>();const auto arm8=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm8,arm8+1,0,1,48000,41),"Mixed control clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers8{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("mixed-controls",revision(),arm8,clock,rack,projectAbsoluteAutomation(project),providers8);
+  float mixedPreview=0;
+  operations.beginRecordedEditors(take,context,[&](auto values){need(values.size()==1,"Mixed preview target duplicated");mixedPreview=values[0].value;});
+  send(.25);const auto newer=ScreamSeq::hostTime100ns();
+  refuses([&]{operations.captureRecordedControl(id,7,2.,newer);});
+  need(take->eventCount()==0&&take->failure()==RecordedGestureTake::Failure::None,"Invalid standard control poisoned the retained take");
+  need(operations.captureRecordedControl(id,7,.75,newer),"Standard control did not retain its original time");
+  operations.pollRecordedEditors();
+  need(take->eventCount()==2&&mixedPreview==.75f,"Late vendor delivery overwrote a newer original-time control preview");
+  operations.sealRecordedEditors();operations.pollRecordedEditors();
+  need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==beforeMixed,"Mixed input discard changed the baseline");
+  std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, mixed controls, preview retry, native input leases/close/restore, one Undo and persistence\n";
 }

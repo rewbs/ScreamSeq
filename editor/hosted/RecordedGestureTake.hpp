@@ -197,6 +197,17 @@ public:
   // Call for every original notification before coalescing. A failed or full
   // take still owns its providers: native adapters must not divert its edits
   // into opaque/manual state. Native pending buffers retain publication retry.
+  void validateControlInput(const std::string &plugin,const PluginEdit &edit,
+      const NativeSong &native,std::span<const PluginParameter> catalog)const {
+    if(completed_||failure_!=Failure::None||!owns(plugin)||!edit.hostTime||edit.hostTime<start_||
+       (end_&&edit.hostTime>=*end_))
+      throw std::invalid_argument("Control input belongs to another or stopped parameter take");
+    RecordedGestureCapture::Key key;key.plugin=plugin;key.parameter=edit.id;
+    RecordedGestureCapture::conflict(native,key);
+    const auto &p=RecordedGestureCapture::parameter(catalog,edit.id);
+    if(!std::isfinite(edit.value)||edit.value<p.min||edit.value>p.max)
+      throw std::invalid_argument("Recorded control value is outside the parameter range");
+  }
   Intake append(const std::string &plugin,const PluginEdit &edit,PluginEditSource provider,
       const std::string &revision,uint64_t epoch,const NativeSong &native,std::span<const PluginParameter> catalog) noexcept {
     auto *owner=source(plugin);

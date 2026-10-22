@@ -36,9 +36,23 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   rejected([&]{invoke(c,"document.patch",{{"title","Must not change"}});});
   rejected([&]{c.prepare(48000,Json::object(),true,true).get();});
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.25)>0,"Parameter recording input failed");});
+  const auto controlTime=hostTime100ns();
+  const Json control={{"take",token},{"plugin",id},{"parameter",7},{"value",.75},{"timestamp",std::to_string(controlTime)}};
+  auto invalid=control;invalid["value"]=true;
+  rejected([&]{invoke(c,"automation.recording.capture",invalid);});
+  invalid=control;invalid["value"]=2;
+  rejected([&]{invoke(c,"automation.recording.capture",invalid);});
+  take=invoke(c,"automation.recording.capture",control);
+  need(take.at("accepted")==true&&!take.contains("intakeError"),"Original-time native control was not retained after invalid-input refusal");
   renderAhead();take=call(c,"automation.recording.get",{});
-  need(take.at("eventCount")==1&&!take.contains("intakeError")&&c.view()->session.revision==beforeRevision,
+  need(take.at("eventCount")==2&&!take.contains("intakeError")&&c.view()->session.revision==beforeRevision,
     "Worker capture failed or wrote history before commit");
+  const auto first=call(c,"automation.recording.events",{{"take",token},{"plugin",id},{"parameter",7},{"offset",0},{"limit",1}});
+  const auto second=call(c,"automation.recording.events",{{"take",token},{"plugin",id},{"parameter",7},{"offset",1},{"limit",1}});
+  need(first.at("total")==2&&first.at("events").size()==1&&second.at("events").size()==1&&
+    first.at("events")[0].at("timestamp")==std::to_string(controlTime)&&first.at("events")[0].at("value")==.75&&
+    second.at("events")[0].at("value")==.25&&!first.at("events")[0].at("frame").is_null(),
+    "Paginated take review lost original event time, value or mapped frame");
   const auto recovery=recoveryCapture(c);
   need(recovery->hasRecording&&recovery->needsProtection,"Worker parameter take was omitted from recovery");
   need(call(c,"plugin.state.get",{{"plugin",id}})==baseline,"Worker capture changed the manual baseline");

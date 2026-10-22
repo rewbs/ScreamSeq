@@ -118,6 +118,23 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
   need(!releaseBarrier||recordedEditors_->take->endTime().has_value(),"Seal the take before acknowledging a native release barrier");
   return drainRecordedEditors(recordedEditors_->releaseCuts,releaseBarrier||!recordedEditors_->releaseCuts.empty(),true);
 }
+bool PluginOperations::captureRecordedControl(const std::string &identity,uint32_t parameter,double value,uint64_t hostTime) {
+  need(recordedEditors_&&recordedEditors_->take->owns(identity),"Parameter control is not armed in the retained take");
+  auto &capture=*recordedEditors_;auto &take=*capture.take;
+  const std::array<std::pair<uint32_t,double>,1> requested{{{parameter,value}}};
+  const auto prepared=prepareParameterEdits(capture.catalogs.at(identity),requested);
+  const PluginEdit event{parameter,prepared.at(0).second,hostTime};
+  take.validateControlInput(identity,event,document_.native(),capture.catalogs.at(identity));
+  const auto [revision,epoch]=capture.context();
+  need(revision==take.revision()&&epoch==take.playbackEpoch(),"Parameter control belongs to a retired recording context");
+  const auto source=editors_.at(identity)->editSource();
+  const auto result=take.append(identity,event,source,revision,epoch,document_.native(),capture.catalogs.at(identity));
+  if(result==RecordedGestureTake::Intake::Captured) {
+    lastTouched_={{"plugin",identity},{"parameter",event.id},{"source","native-control"}};++touchSequence_;
+    return true;
+  }
+  return false; // Capacity/provider failure stays visible in retained take review.
+}
 bool PluginOperations::drainRecordedEditors(const RecordedCuts &cuts,bool acknowledgeStop,bool preview) {
   auto &capture=*recordedEditors_;auto &take=*capture.take;
   if(take.completed())return true; // Keep exclusion until restoration succeeds.
@@ -167,8 +184,13 @@ bool PluginOperations::drainRecordedEditors(const RecordedCuts &cuts,bool acknow
     std::vector<ParameterChange> changes;changes.reserve(take.targetCount());
     for(size_t i=0;i<take.targetCount();++i) {
       const auto &target=take.target(i);const auto events=target.events();
-      if(!events.empty())changes.push_back({uint32_t(slot({{"plugin",target.key().plugin}})),
-        target.key().parameter,events.back().value,0});
+      if(!events.empty()) {
+        // Standard-control and vendor callbacks can reach the worker in a
+        // different order. Preview the latest original time, preserving the
+        // last delivered event for equal timestamps, rather than a late old edit.
+        const auto *latest=&events.front();for(const auto &event:events)if(event.hostTime>=latest->hostTime)latest=&event;
+        changes.push_back({uint32_t(slot({{"plugin",target.key().plugin}})),target.key().parameter,latest->value,0});
+      }
     }
     capture.preview(changes); // Must throw on transient queue refusal.
     capture.previewedEvents=take.eventCount();
