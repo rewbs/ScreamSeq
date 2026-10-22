@@ -19,6 +19,13 @@ void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
         ScreamSeq::ComPtr<IUIAutomationElement> field;ScreamSeq::check(client->ElementFromHandle(namedField,&field),"Read named native field through UIA bridge");
         BSTR fieldName=nullptr;const auto nameResult=field->get_CurrentName(&fieldName);const bool named=fieldName&&std::wstring_view(fieldName,SysStringLen(fieldName))==L"Song title";
         SysFreeString(fieldName);ScreamSeq::check(nameResult,"Read explicit native UIA Name");restoreCheck(named,"UIA bridge lost the annotated native edit name");
+        // Query through the external UIA client, not only GetFocus in the app.
+        // A custom grid root must not conceal ordinary native field focus.
+        ScreamSeq::check(field->SetFocus(),"Focus named native field through UIA");
+        ScreamSeq::ComPtr<IUIAutomationElement> focused;ScreamSeq::check(client->GetFocusedElement(&focused),"Read actual UIA keyboard focus");
+        UIA_HWND focusedHandle{};restoreCheck(bool(focused),"UIA lost focused native field");
+        ScreamSeq::check(focused->get_CurrentNativeWindowHandle(&focusedHandle),"Read focused native HWND");
+        restoreCheck(reinterpret_cast<HWND>(focusedHandle)==namedField,"UIA reported Main instead of the focused native field");
         ScreamSeq::ComPtr<IUIAutomationGridPattern> pattern;ScreamSeq::check(grid->GetCurrentPatternAs(UIA_GridPatternId,IID_PPV_ARGS(&pattern)),"Read UIA Grid pattern");
         ScreamSeq::ComPtr<IUIAutomationElement> cell;ScreamSeq::check(pattern->GetItem(2,0,&cell),"Read actual UIA pattern cell");
         ScreamSeq::ComPtr<IUIAutomationValuePattern> value;ScreamSeq::check(cell->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)),"Read cell Value pattern");
@@ -68,6 +75,11 @@ void applicationPatternAccessibility() {
     auto fragment=accessibleInterface<IRawElementProviderFragment>(cell.Get());UiaRect bounds{};ScreamSeq::check(fragment->get_BoundingRectangle(&bounds),"Read clipped cell bounds");
     restoreCheck(bounds.width>0&&bounds.height>0,"Revealed cell has no screen bounds");
     auto rootFragment=accessibleInterface<IRawElementProviderFragmentRoot>(app.patternAccessibility->provider());ScreamSeq::ComPtr<IRawElementProviderFragment> hit;
+    const auto windowBounds=app.accessiblePatternInfo().windowBounds;
+    ScreamSeq::check(rootFragment->ElementProviderFromPoint(windowBounds.left-1,windowBounds.top-1,&hit),"Hit test outside the fragment");
+    restoreCheck(!hit,"Pattern provider claimed another window's screen point");
+    ScreamSeq::check(rootFragment->ElementProviderFromPoint(std::numeric_limits<double>::quiet_NaN(),windowBounds.top,&hit),"Hit test invalid screen point");
+    restoreCheck(!hit,"Pattern provider claimed a non-finite screen point");
     ScreamSeq::check(rootFragment->ElementProviderFromPoint(bounds.left+bounds.width/2,bounds.top+bounds.height/2,&hit),"Hit test accessible grid geometry");
     auto hitItem=accessibleInterface<IGridItemProvider>(hit.Get());ScreamSeq::check(hitItem->get_Row(&r),"Read hit row");ScreamSeq::check(hitItem->get_Column(&c),"Read hit column");restoreCheck(r==rows-1&&c==columns-1,"UIA hit test disagrees with rendered row/channel geometry");
     ScreamSeq::check(fragment->SetFocus(),"Focus virtual cell through native cursor navigation");

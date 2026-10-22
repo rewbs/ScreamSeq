@@ -3,6 +3,7 @@
 #include <UIAutomation.h>
 #include <atomic>
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <new>
@@ -153,7 +154,12 @@ public:
   }
   HRESULT STDMETHODCALLTYPE ElementProviderFromPoint(double x,double y,IRawElementProviderFragment **value)override {
     if(!value)return E_POINTER;*value=nullptr;return safe([&]()->HRESULT{
-      const auto info=context_->read();const auto hit=context_->callbacks.hit(x,y);
+      const auto info=context_->read();
+      // The fragment owns only this HWND. Returning Main for a point outside
+      // it prevents UIA clients from correctly resolving another window.
+      if(!std::isfinite(x)||!std::isfinite(y)||x<info.windowBounds.left||y<info.windowBounds.top||
+          x>=info.windowBounds.left+info.windowBounds.width||y>=info.windowBounds.top+info.windowBounds.height)return S_OK;
+      const auto hit=context_->callbacks.hit(x,y);
       if(info.visible&&hit.first>=0&&hit.first<info.rows&&hit.second>=0&&hit.second<info.columns)*value=make(Kind::cell,info,hit.first,hit.second);
       else if(info.visible&&x>=info.bounds.left&&x<info.bounds.left+info.bounds.width&&y>=info.bounds.top&&y<info.bounds.top+info.bounds.height&&hit.first!=-2)*value=make(Kind::grid,info);
       else {*value=static_cast<IRawElementProviderFragment *>(this);AddRef();}return S_OK;});

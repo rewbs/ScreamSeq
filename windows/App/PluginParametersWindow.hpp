@@ -11,13 +11,15 @@ class PluginParametersWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
-  enum:int {parameter=3950,reload=3955,close=3958,heading=3959,statusLabel=3961,previous,next,applyAll,rowBase=4000,stride=10,pageSize=10};
+  enum:int {parameter=3950,reload=3955,close=3958,heading=3959,statusLabel=3961,previous,next,applyAll,search,rowBase=4000,stride=10,pageSize=10};
   enum Part:int {nameLabel,slider,value,choices,toggle,apply,rangeLabel,less,more};
   struct Row {int index=-1;PluginParameterField field;bool dirty=false;};
   std::array<Row,pageSize> rows_;
   static int control(int row,Part part){return rowBase+row*stride+part;}
   bool dirty()const{return std::any_of(rows_.begin(),rows_.end(),[](const auto &r){return r.dirty;});}
-  int pages()const{return std::max(1,int((parameters_.size()+pageSize-1)/pageSize));}
+  std::vector<size_t> filtered_;
+  std::wstring appliedSearch_;
+  int pages()const{return std::max(1,int((filtered_.size()+pageSize-1)/pageSize));}
   Request request_;Context context_;NativeWriteCompletion::Write write_;std::function<bool()> available_;
   std::string plugin_,graph_,node_,document_,revision_;Json parameters_=Json::array(),report_,submitted_;
   Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
@@ -98,7 +100,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void presentPage(){
     setting_=true;
-    for(int i=0;i<pageSize;++i){auto &r=rows_[i];r={};const auto index=page_*pageSize+i;if(size_t(index)>=parameters_.size())continue;
+    for(int i=0;i<pageSize;++i){auto &r=rows_[i];r={};const auto filteredPosition=size_t(page_*pageSize+i);if(filteredPosition>=filtered_.size())continue;const auto index=int(filtered_[filteredPosition]);
       r.index=index;r.field=PluginParameterField::read(parameters_[size_t(index)]);const auto &f=r.field;
       set(control(i,nameLabel),wide(f.name));set(control(i,value),f.valid?wide(PluginParameterField::text(f.value)):L"");
       const auto picker=controls_.at(control(i,choices));NativeInputGate::present(picker,CB_RESETCONTENT,0,0);
@@ -109,8 +111,25 @@ class PluginParametersWindow final : public NativeToolWindow {
       const auto position=f.valid&&f.maximum>f.minimum?int(std::round((f.value-f.minimum)/(f.maximum-f.minimum)*10000)):0;
       NativeInputGate::present(controls_.at(control(i,slider)),TBM_SETPOS,TRUE,position);
       for(auto part:{slider,value,choices,toggle}){const auto label=wide(f.name+(part==slider?" slider":" manual value"));NativeAccessibility::name(controls_.at(control(i,part)),label.c_str());}
+      for(auto part:{less,more}){const auto label=wide(std::string(part==less?"Decrease ":"Increase ")+f.name);accessibleName(control(i,part),label.c_str());}
     }
     NativeInputGate::present(controls_.at(parameter),CB_SETCURSEL,page_,0);setting_=false;layout();
+  }
+  void filterParameters(bool resetPage){
+    const auto query=field(search);std::vector<size_t> next;next.reserve(parameters_.size());
+    for(size_t i=0;i<parameters_.size();++i){const auto name=wide(parameters_[i].at("name").get<std::string>());
+      if(query.empty()||FindNLSStringEx(LOCALE_NAME_USER_DEFAULT,FIND_FROMSTART|NORM_IGNORECASE|NORM_IGNORENONSPACE,
+          name.data(),int(name.size()),query.data(),int(query.size()),nullptr,nullptr,nullptr,0)>=0)next.push_back(i);
+    }
+    // Typing another character often leaves the same ten visible matches.
+    // Keep their native controls intact instead of resetting sliders/pickers.
+    if(resetPage&&page_==0&&next==filtered_){appliedSearch_=query;return;}
+    filtered_=std::move(next);appliedSearch_=query;page_=resetPage?0:std::min(page_,pages()-1);
+    setting_=true;NativeInputGate::present(controls_.at(parameter),CB_RESETCONTENT,0,0);
+    for(int i=0;i<pages();++i){const auto text=filtered_.empty()?L"No matching parameters":
+      L"Page "+std::to_wstring(i+1)+L" / "+std::to_wstring(pages())+L"  ·  "+std::to_wstring(i*pageSize+1)+L"–"+std::to_wstring(std::min(filtered_.size(),size_t((i+1)*pageSize)));
+      NativeInputGate::present(controls_.at(parameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
+    setting_=false;presentPage();
   }
   Json readParameters(){
     auto data=request_(graph_.empty()?"plugin.parameters.get":"graph.plugin.get",target());
@@ -127,10 +146,8 @@ class PluginParametersWindow final : public NativeToolWindow {
     const auto generation=generation_;pending_=true;layout();
     try{
       auto data=readParameters();if(context_()!=context||generation_!=generation)throw std::runtime_error("Song or parameter draft changed during read / fields retained");
-      parameters_=std::move(data);page_=std::min(page_,pages()-1);revision_=context.second;needsReload_=false;sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;++generation_;
-      setting_=true;NativeInputGate::present(controls_.at(parameter),CB_RESETCONTENT,0,0);
-      for(int i=0;i<pages();++i){const auto text=L"Page "+std::to_wstring(i+1)+L" / "+std::to_wstring(pages())+L"  ·  "+std::to_wstring(parameters_.empty()?0:i*pageSize+1)+L"–"+std::to_wstring(std::min(parameters_.size(),size_t((i+1)*pageSize)));NativeInputGate::present(controls_.at(parameter),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-      setting_=false;presentPage();status(L"Changes save automatically; sliders save on release. Up to 10 parameters per page.");
+      parameters_=std::move(data);revision_=context.second;needsReload_=false;sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;++generation_;
+      filterParameters(false);status(L"Changes save automatically; sliders save on release. Ctrl+F finds a parameter.");
     }catch(...){setting_=pending_=false;layout();throw;}pending_=false;layout();
   }
   void finishResult(){
@@ -185,6 +202,10 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(rowControl&&part==value&&notification==EN_CHANGE){rows_[row].dirty=true;++generation_;queueTypedEdit();return;}
     if(pending_)return;
     if(id==reload&&notification==BN_CLICKED){if(completion_.retained())review();else load();return;}requireReady();
+    if(id==search&&notification==EN_CHANGE){
+      if(dirty()){flushAutomaticEdit();if(dirty())throw std::runtime_error("Correct or reload unsaved values before searching / current page retained");}
+      ++generation_;filterParameters(true);status(std::to_wstring(filtered_.size())+L" of "+std::to_wstring(parameters_.size())+L" parameters / Ctrl+Page Up or Down changes page");return;
+    }
     if(id==parameter&&notification==CBN_SELCHANGE){changePage(int(SendMessageW(controls_.at(parameter),CB_GETCURSEL,0,0)));return;}
     if(notification==BN_CLICKED&&(id==previous||id==next)){changePage(page_+(id==next?1:-1));return;}
     if(notification==BN_CLICKED&&(id==applyAll||(rowControl&&part==apply))){commit();return;}
@@ -219,6 +240,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   bool key(WPARAM key,bool ctrl,bool)override{
     if(key==VK_ESCAPE){if(pending_&&sliderRow_>=0){sliderCancelPending_=true;SetTimer(window_,8,1,nullptr);return true;}if(completion_.retained()){hide();return true;}if(sliderRow_>=0||!previewToken_.empty())cancelSlider();else hide();return true;}
     if(ctrl&&key=='R'){action(reload,BN_CLICKED);return true;}
+    if(ctrl&&key=='F'){if(IsWindowEnabled(controls_.at(search))){SetFocus(controls_.at(search));NativeInputGate::present(controls_.at(search),EM_SETSEL,0,-1);}return true;}
     if(ctrl&&(key==VK_NEXT||key==VK_PRIOR)){requireReady();changePage(page_+(key==VK_NEXT?1:-1));return true;}
     if(key==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id>=rowBase&&(id-rowBase)%stride==value){commit();return true;}wchar_t type[24]{};GetClassNameW(GetFocus(),type,24);if(!_wcsicmp(type,L"Button")){action(id,BN_CLICKED);return true;}}return false;
   }
@@ -229,8 +251,9 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void layout()override{
     if(!ready_)return;const auto focus=GetFocus();if(pending_&&!pendingFocus_&&owns(focus))pendingFocus_=focus;
-    const auto [w,h]=size();place(heading,12,10,w-24,24);place(previous,12,42,64,26);place(parameter,84,42,w-244,260);place(next,w-152,42,64,26);place(close,w-80,42,68,26);
+    const auto [w,h]=size();place(heading,12,10,w/2-24,24);place(search,w/2,8,w/2-12,26);place(previous,12,42,64,26);place(parameter,84,42,w-244,260);place(next,w-152,42,64,26);place(close,w-80,42,68,26);
     const bool ready=!pending_&&!completion_.retained()&&!needsReload_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
+    EnableWindow(controls_.at(search),ready);
     for(int i=0;i<pageSize;++i){const auto &r=rows_[i];const auto &f=r.field;const bool visible=r.index>=0;const bool numeric=f.kind==PluginParameterField::Kind::Number;const float y=82+i*rowHeight;
       place(control(i,nameLabel),12,y,178,19,visible);place(control(i,rangeLabel),12,y+20,178,20,visible);
       place(control(i,slider),196,y+4,w-418,30,visible&&numeric);
@@ -246,7 +269,9 @@ public:
   PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available,std::string graph={},std::string node={}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)),graph_(std::move(graph)),node_(std::move(node)){
     if(graph_.empty()!=node_.empty()||plugin_.empty()==graph_.empty())throw std::invalid_argument("Parameter editor requires one rack identity or graph/node pair");
     const auto captured=context_();document_=captured.first;revision_=captured.second;minimumClientWidth_=620;minimumClientHeight_=650;
-    const auto title=wide(name)+L" — Parameters";create(L"ScreamSeq.PluginParameters",title.c_str(),720,740);combo(parameter);
+    const auto title=wide(name)+L" — Parameters";create(L"ScreamSeq.PluginParameters",title.c_str(),720,740);combo(parameter);edit(search,L"",256);
+    SendMessageW(controls_.at(search),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(L"Find a parameter (Ctrl+F)"));
+    accessibleName(search,L"Find plugin parameter");accessibleName(parameter,L"Parameter page");
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Retry values"}})button(id,text);
     label(heading,wide(name).c_str());label(statusLabel,L"");
     for(int i=0;i<pageSize;++i){label(control(i,nameLabel),L"");label(control(i,rangeLabel),L"");edit(control(i,value),L"",64);combo(control(i,choices));button(control(i,toggle),L"Off");button(control(i,apply),L"Set");button(control(i,less),L"−");button(control(i,more),L"+");
@@ -255,7 +280,7 @@ public:
     // variants are skipped by USER32; never rebuild controls while typing.
     const auto order=[&](int id){check(SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,
       SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order plugin parameter controls");};
-    for(int id:{previous,parameter,next,close})order(id);
+    for(int id:{search,previous,parameter,next,close})order(id);
     for(int row=0;row<pageSize;++row)for(auto part:{slider,value,choices,toggle,less,more})order(control(row,part));
     order(reload);order(applyAll);
     focusPresentationChanged([this]{const auto focus=GetFocus();if(focus!=window_&&owns(focus))navigationFocus_=focus;});
@@ -265,6 +290,6 @@ public:
     SetFocus(focus&&owns(focus)&&IsWindowVisible(focus)&&IsWindowEnabled(focus)?focus:controls_.at(parameter));}
   void hide()override{if(sliderRow_>=0||!previewToken_.empty()){cancelPreview();sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;if(!completion_.retained()&&!needsReload_){++generation_;presentPage();}}KillTimer(window_,7);KillTimer(window_,8);NativeToolWindow::hide();}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
-    return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",parameters_.empty()?-1:page_*pageSize},{"page",page_},{"pages",pages()},{"rows",rows},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
+    return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",filtered_.empty()?-1:int(filtered_.at(size_t(page_*pageSize)))},{"page",page_},{"pages",pages()},{"rows",rows},{"search",utf8(field(search))},{"appliedSearch",utf8(appliedSearch_)},{"matches",filtered_.size()},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
 };
 }
