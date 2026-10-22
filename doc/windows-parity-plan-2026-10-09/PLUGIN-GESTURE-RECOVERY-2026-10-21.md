@@ -1222,3 +1222,57 @@ The new foreground wrapper and all prepared PowerShell scripts passed syntax
 parsing. The prepared checkpoint builds only two targets and runs 12 selected
 native registrations plus the 13 actual-app cases; foreground global focus and
 Computer Use remain required separately. No correction build has started.
+
+### Executed focus correction, 22 October 07:08 UTC
+
+The frozen `313893b9fc94a871e34a5ed719fc7fb053e11682` build started at
+06:57:08.3548203 UTC and finished 06:58:56 UTC, configure/build exit 0. Executable:
+`bin/windows-parity-p1/Plugin-Control-Focus-Correction-Release/ScreamSeq.exe`
+in the qualification checkout, SHA-256
+`baa974de225b7580430d757f2ab57988dc2f590ac006ce60ca32eb14fa7c4022`.
+Build session 9747 is terminal; never repeat it. The next build or build-triggering
+push/merge must be at or after **2026-10-22 07:57:09 UTC**.
+
+All 12 native registrations passed, including default take/restore protection,
+owned native accessibility handoff and native Value/Text/selection, immediate
+post-scan MIDI focus, and real Main presentation scheduling. The actual-app run
+passed 12 cases; its only error was an absent `document-controller-tests.exe` in
+the new two-target output directory. This selected case runs a worker helper,
+not ScreamSeq. Nine retained compiler dependency traces for that helper and its
+libraries showed no intersection with changed sources; the build configuration
+and test/scanner/cache inputs are unchanged. The retained 7154 helper
+(`49c3baefa00138cafef4c381453c8c5b00b9541781aff735d5e2d73f36ecc778`)
+was copied with matching hash and only the failed case rerun; it passed.
+
+The original `checks.json`/`app.log` remain failed and intact. `retained-controller.json`,
+`controller-followup.log` and mechanically checked `checks-qualified.json` retain
+the exact evidence relationship: 12 passing native registrations, 12 fresh app
+cases and one passing reused-controller case. No assertion changed, no full
+suite reran, and no second build occurred. Check session 94723 is terminal.
+
+The subsequent owned never-switched-desktop silent F04 run (PID 38036) ended
+normally after 30.136 seconds; fixture and executable hashes stayed unchanged.
+Its measured 10-second interval contained 37 occluded draws against a 44-frame
+bounded budget, 1,000 advancing callbacks and a valid recording clock, with no
+new overrun during that interval. Full-run totals: 114 occluded draws, 118 idle
+waits, 3,014 callbacks at 48 kHz/480 frames, one early deadline overrun, maximum
+callback 10,332.4 microseconds, no device errors/starvation/processor fault.
+`occluded-observation/observation.json` retains both transport snapshots and the
+report. This establishes bounded hidden-window retry with continued playback on
+this fixture. It does not establish visible presentation, general zero-overrun
+performance or the cause of the earlier longer-run overruns. Do not reuse PID 38036.
+
+No current foreground QA process was launched: Computer Use input remains stopped
+after the preceding access denials and the unlock reply is still pending. A
+read-only window inventory did not supply foreground-focus evidence. The prepared
+`launch-foreground.py` now accepts only successful combined automated evidence,
+creates a fresh disposable F04/recovery directory, and runs silent playback for
+600 seconds. Once desktop access is restored, launch in a persistent terminal,
+use fresh Computer Use window objects, check parameter search/sliders and
+Record/Stop/Keep/Discard plus navigation/resize/keyboard retention, then run the
+read-only `qualify_foreground_focus.ps1` against the observed Song title field
+(or another native edit) to create `foreground-focus.json`. Audio-test and
+inspection flags are mutually exclusive; the wrapper explicitly accepts the
+owned silent-audio mode as well as inspection and records its own script hash.
+Packaging requires both that exact global-focus receipt and the broader current
+foreground receipt. Neither packaging nor merge is qualified yet.

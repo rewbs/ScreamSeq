@@ -13,14 +13,30 @@ must not override current source or the active goal.
 is merged and its production navigation package is available; see
 [navigation evidence](NAVIGATION-IMPLEMENTATION-2026-10-21.md). The next working
 batch is native plugin parameter controls, retained gesture recording and detached
-input recovery. The candidate `7154b9f323` compiled, passed 22/24 selected native
+input recovery. **Current correction `313893b9f` built once at 06:57:08 UTC and
+passed all 12 selected native registrations and 12 actual-app cases.** The
+thirteenth selected case is a worker-helper wrapper: the initial run could not
+find its unchanged helper in the new two-target output directory. Nine compiler
+dependency traces showed no changed input; the retained 7154 helper was copied
+with exact hash verification, and that single case passed. Preserve the initial
+failed receipt; `focus-correction/checks-qualified.json` links the passing roll-up
+to both logs and the reuse proof. The 30-second private silent playback observation
+passed occlusion pacing (37 frames over 10 seconds, with 1,000 advancing callbacks),
+but recorded one startup audio deadline overrun. This does not qualify visible
+flicker or general audio performance. No foreground process has been launched for
+this correction: input remains stopped pending the unlock reply. Next build or
+build-triggering PR push/main merge **not before 2026-10-22 07:57:09 UTC**.
+Current scripts/receipts are under `bin/plugin-control-review-20261022/focus-correction`.
+
+**Previous candidate:** `7154b9f323` compiled, passed 22/24 selected native
 registrations and all 13 actual-app cases, but failed native accessibility focus
 and the immediate post-scan MIDI sound-choice focus check. Read the
 [current recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) before touching
-its checkpoint. The next hourly gate is **2026-10-22 06:56:56 UTC**. The local
+its checkpoint. Its historical next gate was **2026-10-22 06:56:56 UTC**. The local
 build and check receipts under `bin/plugin-control-review-20261022/startup-correction`
-are terminal and must not be repeated. Source corrections to completed-scan UI
-publication and explicit floating-window ownership are prepared but unbuilt.
+are terminal and must not be repeated. The current correction qualifies the
+completed-scan focus and private-desktop accessibility/ownership checks; the exact
+global foreground focus check remains required separately.
 Current Windows x64 job `119665472145` is terminal failure: 158/158 worker/model
 checks passed, 46/49 native registrations passed, and actual-app failures include
 missing endpoint/clock startup. The third native failure is the original take
@@ -36,7 +52,7 @@ Computer Use on the current executable stopped after two desktop input-access
 denials; no fresh visual or keyboard pass or production package is claimed.
 QA PID 20700 has exited normally. Its 30-minute diagnostic recorded 79,216
 occluded frames and 246 audio deadline overruns; causality is not established.
-Bounded occlusion redraw backoff is prepared, unbuilt. A private-desktop UIA
+Bounded occlusion redraw backoff is now built and privately measured. A private-desktop UIA
 control probe showed that global focus cannot be measured there: the exact global
 HWND/Value/Text/selection assertion is now a separate mandatory, read-only
 foreground gate after Computer Use focuses the fresh QA field. Native private
@@ -48,9 +64,7 @@ panel](MIDI-SOUND-NAVIGATION-2026-10-22.md), discovered through Computer Use on
 the qualified navigation package and reproduced by a new actual-app regression.
 Its native menu/keyboard/focus checks join this checkpoint, without another build.
 
-The immediate queue is: finish source review, freeze the focus correction, then
-build once after the gate; inspect bounded
-native and actual-app results; perform Computer Use on that executable, including
+The immediate queue is: perform Computer Use on the current executable, including
 keyboard focus and silent recording; qualify current x64/Mac adapters and fresh
 reciprocal edited fixtures; package and merge only the qualifying result. Continue
 the larger reference inventory afterward. Native graph recipe copies are not
@@ -75,7 +89,8 @@ Do not broaden the retained-binary allowlist to all of `windows/App`: shared
 and Mac CMake also builds several Windows session/project adapter tests. Exact
 unchanged-input evidence is reusable, but a cross-platform directory name alone
 does not prove unchanged build inputs. The prepared local correction remains
-frozen at `2f8d5b4a1`; this audit is documentation only and does not change it.
+was frozen at `2f8d5b4a1` during that audit; the final compiled checkpoint is
+`313893b9f` after the read-only observer accepted isolated silent-audio mode.
 
 **Historical executed boundary: `55d11e131`.** One six-target Windows ARM64 build
 completed at 23:09:35 UTC. Eleven selected CTest registrations and the
