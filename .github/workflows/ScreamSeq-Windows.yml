@@ -102,6 +102,9 @@ jobs:
         run: |
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
+          # The full composing journey uses the mandatory scanned VST3 synth,
+          # not an optional installed vendor. Reuse the worker gate's cache.
+          $env:SCREAMSEQ_TEST_PROVIDER_CACHE = (Resolve-Path bin/windows-ci/plugin-edit-cache.json).Path
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
           # The hosted Server image may leave both native audio services stopped.

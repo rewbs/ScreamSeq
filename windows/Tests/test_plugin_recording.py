@@ -228,15 +228,21 @@ class PluginRecordingTests(unittest.TestCase):
         comparison = differences(dict(before, automation=after['automation']), after)
         self.assertTrue(comparison['equal'], comparison)
         self.assertNotEqual(before['automation'], after['automation'])
+        from recording_render import run as render_recording
+        replay = render_recording(self.client, project, saved, evidence / 'audio-replay')
+        self.assertTrue(replay['passed'], replay)
         write_json(evidence / 'recording-journey.json', dict(
             passed=True, parityComplete=False, silentNativePlayback=True,
             foregroundVisualQualified=False, layeredPCMQualified=False,
+            recordedReplayPCM=replay,
             plugin=plugin, classID=descriptor['classID'], instrument=1, midiChannel=3,
             source=project.name, saved=saved.name, beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
             onlyRecordedAutomationChanged=comparison,
             checks=['six-domain composing history', 'sample-preserving VST3 assignment', 'group output route history',
                     'native VST3 parameter capture', 'Stop preserves playback', 'Keep is one Undo',
-                    'Redo', 'Discard', 'opaque state and aliases retained', 'exact save/reopen preservation']))
+                    'Redo', 'Discard', 'opaque state and aliases retained', 'exact save/reopen preservation',
+                    'recorded automation changes unsaturated PCM', 'reopened playback PCM exact',
+                    'resample Undo preserves complete source project']))
 
     def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,
                                               values=(-6.5, -3.25, -12.25)):

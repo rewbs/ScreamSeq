@@ -19,12 +19,13 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   need(gesture!=nullptr,"Parameter recording gesture export missing");
   const auto rejected=[&](auto work){bool refused=false;try{work();}catch(const std::exception &){refused=true;}need(refused,"Parameter recording allowed an unsafe lifecycle operation");};
   const auto refusedStart=[&](const char *message) {
-    const auto revision=c.view()->session.revision;bool classified=false;
+    const auto revision=c.view()->session.revision;bool classified=false;std::string diagnostic="No refusal returned";
     try{invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});}
-    catch(const Api::ApiError &error){classified=error.code==-32002&&error.outcome&&
+    catch(const Api::ApiError &error){diagnostic=error.what();classified=error.code==-32002&&error.outcome&&
       error.outcome->state==Tracker::CommitOutcome::NotCommitted&&!error.completed&&
       std::string(error.what()).find(message)!=std::string::npos;}
-    need(classified&&c.view()->session.revision==revision&&
+    if(!classified)throw std::runtime_error(std::string("Recording start refusal must be classified before intake; expected ")+message+", received "+diagnostic);
+    need(c.view()->session.revision==revision&&
       call(c,"automation.recording.get",Json::object()).at("retained")==false&&
       call(c,"plugin.state.get",{{"plugin",id}})==baseline,
       "Refused recording start retained an uncertain write, take, or changed baseline/history");
@@ -33,13 +34,24 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   auto *playback=c.prepare(48000,Json::object(),true,true).get();active=true;
   uint64_t origin=hostTime100ns();std::array<float,8192> pcm{};
   refusedStart("first timed buffer");
-  // A native device may still report a valid correlation after the musical
-  // frame timeline has rejected a boundary. Do not offer an endless startup
-  // retry, or leave native close/Record protected by a nonexistent take.
+  // An unstable native presentation estimate is an unmapped interval, not a
+  // proven device discontinuity. Keep those two admission contracts distinct.
   need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false})&&
     playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false}),
-    "Rejected-clock fixture failed to render");
-  refusedStart("host-end-regression");
+    "Presentation-estimate fixture failed to render");
+  const auto timeline=playback->recordingTimeline();
+  need(timeline->unmappedCorrelations.load()==1&&timeline->absoluteFrames.generation()==41&&
+    timeline->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::None,
+    "Unmapped presentation estimate invalidated otherwise valid recording coverage");
+  // A real device discontinuity remains terminal even if the next native
+  // notification carries a syntactically valid timestamp. Start must reject
+  // before publishing any take/provider owner or changing musical history.
+  need(playback->render(pcm.data(),4096,RenderTime{origin,42,48000,true,true,false}),
+    "Discontinuous-clock fixture failed to render");
+  need(timeline->absoluteFrames.generation()==0&&
+    timeline->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::Invalidated,
+    "True device discontinuity did not invalidate recording admission");
+  refusedStart("playback-invalidated");
   active=false;playback=c.prepare(48000,Json::object(),true,true).get();active=true;origin=hostTime100ns();
   const auto renderAhead=[&]{
     const auto limit=hostTime100ns()+1000000;

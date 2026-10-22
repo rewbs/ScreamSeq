@@ -1697,3 +1697,50 @@ native/app selections and the full Mac interface gates, then inspect the fresh
 binary with Computer Use. No build before00:15:10UTC on October23, and no overlap
 with the preceding CI. Do not rerun recorded attempts or merge from partial
 diagnostic evidence.
+
+### Recording playback oracle added before the same hourly checkpoint
+
+`editor/Tests/Conformance/recording_render.py` extends the mandatory layered
+VST3 journey beyond parameter counts and metadata. On the isolated actual-app
+socket, it compares saved projects differing only in the committed automation,
+renders all channels of pattern0 through `sample.renderSelection`, and reads
+the complete canonical 48kHz stereo PCM in bounded pages. At least64
+unsaturated sample values must change by more than2 signed16 units. A second
+fresh reopen/render of the recorded project must be byte-exact. Clipping is
+retained in each render's `clippedValues` report, not silently normalized.
+
+Each render is capped to the F04 evidence window of20seconds; it checks dry-run
+purity and uses one Undo followed by an exact saved typed-tree comparison to
+prove the appended sample did not damage the source project. Original saved
+inputs are hash-checked, PCM files and failures are retained, and the test
+restores the recorded song after success. The reusable helper contains no
+Windows UI logic, but only the Windows journey currently invokes it. This is
+unexecuted acceptance code, not new qualification. It measures pattern-local
+recording replay; independent sample/plugin stems, native callback timing,
+vendor-private behavior and device performance remain separate gates.
+
+### Separate x64 vendor-gate failure identified from retained artifact
+
+The exact cc6da0bd3 artifact12466454878 was downloaded without rerunning CI.
+Its `screamseq-vendor-ownership.log` shows that native vendor notification and
+recorded-editor ownership checks passed, then the worker start-refusal assertion
+failed. This is **not** the missing-WASAPI failure. The fixture rendered two
+identical native timestamps and still expected `host-end-regression`, although
+cc6da0bd3 intentionally turns that unstable presentation estimate into an unmapped
+interval while preserving earlier valid coverage.
+
+`windows/Tests/ParameterRecordingControllerTests.inc` now requires the repeated
+estimate to preserve generation41 with exactly one unmapped interval and no
+shared-clock failure. It then injects an explicit hardware discontinuity and
+requires a terminal invalidated timeline. Start must still return a classified
+NotCommitted refusal, preserve revision and opaque baseline, and retain no take.
+The previous compound failure now reports admission diagnostics separately.
+No product assertion or genuine clock failure is relaxed. Rebuilt execution is
+required; add `document-controller-tests` to the same next build and the owned
+`test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard`
+case to its actual-app selection.
+
+The CI composing selection also now receives the already-scanned deterministic
+provider cache before invoking its mandatory layered journey. Missing cache is
+still a failure. The old x64 receipts remain failed and immutable; the changed
+test/setup has no passing execution evidence yet.
