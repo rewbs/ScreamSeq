@@ -105,10 +105,13 @@ static PluginEditorInputBarrier protectOpenEditor(NativePlugin &plugin,NSSlider 
     slider.doubleValue==value&&NSEqualRects(window.frame,frame),"Protection closed, raised or mutated the retained editor");
   return *lease;
 }
-static void auNotificationLifetime() {
+static void auNotificationLifetime(const PluginDescriptor &descriptor) {
   setFixtureAUHasEditor(true);
   struct ResetEditorMode{~ResetEditorMode(){setFixtureAUHasEditor(false);}}reset;
-  PluginState state{registerFixtureAUs().at(0)};state.instanceID="au-notification-lifetime";
+  // main already registered the process-local component for the closed-editor
+  // lease checks. Editor availability is captured by each new fixture instance,
+  // not by component registration; registering the same identity again fails.
+  PluginState state{descriptor};state.instanceID="au-notification-lifetime";
   NativePlugin plugin(state,48000);PluginEdit event;PluginEditSource source;
   const auto initial=plugin.editBoundary();
   check(initial&&initial->fence.hostTime&&!initial->fence.pending&&!initial->source.dropped&&
@@ -465,7 +468,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         apple.closeEditor();
         apple.showEditor();
         apple.closeEditor();
-        auNotificationLifetime();
+        auNotificationLifetime(closedAU.descriptor);
         std::cout << "PASS native AU/VST3 editor attachment, close/reopen, and VST3 custom control-to-audio callback\n";
         if (argc > 3 && std::string(argv[3]) == "--loopback-record") {
           uint32_t virtualDevice = 0;

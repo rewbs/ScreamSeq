@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 09:31 UTC:** d699 Mac ARM job `119734779069` is terminal. Build,
+134 native tests, recovery/picker, interface and conformance passed. Its new
+provider UI gate failed on duplicate process-local AU registration. The test now
+passes its already-registered descriptor into the notification case, preserving
+all lifecycle assertions. This source correction is unbuilt; it joins the next
+10:05-or-later checkpoint with `a16b92001`'s recording refusal/clock diagnostics.
+Intel and Windows jobs were still running; do not restart. The stale navigation
+one-shot was paused after its old failed build receipt was checked. No build,
+push, merge or package was performed by that stale follow-up.
+
 **22 October 09:26 UTC:** the user unlocked the desktop and d699's current
 Computer Use check completed with a **recording failure**, not an access block.
 Typing/Backspace/Tab/Shift+Tab and two exact native focus probes passed. Record

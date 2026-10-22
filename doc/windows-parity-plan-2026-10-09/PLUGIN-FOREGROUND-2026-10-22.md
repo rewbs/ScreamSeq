@@ -172,6 +172,30 @@ and repeat affected focus interactions on the new executable. Mac shared clock
 and native-provider gates remain required; d699 ARM's provider UI step has
 failed, with its job log not yet downloadable at 09:23. Do not merge/package.
 
+### Current Mac CI diagnosis, 22 October 09:31 UTC
+
+d699 Mac ARM job `119734779069` is terminal failure. Compilation, 134 native
+registrations, recovery/picker, sample library, full interface and typed fixture/
+conformance steps passed. The added owned-editor step reached its UI path and
+failed with `Cannot register process-local AU fixture`. Source confirms that
+`main` registered the component for closed-editor lease checks, then
+`auNotificationLifetime` tried to register the same identity again. Its new
+fixture instance captures the editor-mode flag at construction, so another
+component registration is unnecessary.
+
+`mac/Tests/NativePluginTests.mm` now passes the already-registered descriptor to
+the notification lifecycle case. AU registration still must succeed initially;
+all notification, original-time, lease, close/reopen and provider-identity
+assertions remain. This is a test setup correction, **not a provider pass**, and
+is unbuilt. Re-run the affected native executable once with `--ui` on each Mac
+architecture at the next coordinated checkpoint. No old CI run was restarted.
+Intel and Windows d699 jobs were still running at this observation.
+
+The obsolete `finish-navigation-validation` one-shot also fired with d1c8's
+01:53 checkpoint. Its existing receipt records a failed build; it was not
+repeated. The stale reminder is now paused, alongside the already-paused mixer
+reminder. Active source and the 10:05 build gate remain current.
+
 ## Previous checkpoint instructions (superseded by the update above)
 
 No new build or build-triggering PR push/merge before **09:00 UTC, 22 October**.
