@@ -312,7 +312,8 @@ public:
     // baseline before allowing another edit, without losing a partial number.
     takeRefreshPending_=true;cancelAutomaticEdit();
     status(dirty()?L"Take finished / unsaved text retained. Reload values to discard that text.":L"Take finished / refreshing accepted parameter values");
-    if(!dirty())layout();
+    // Keep the focused HWND enabled until the guarded reload begins. Its
+    // normal pending/readback path already preserves and restores field focus.
   }
   void recording(std::function<bool()> active,std::function<void(uint32_t,double,uint64_t)> capture) {
     recording_=std::move(active);capture_=std::move(capture);

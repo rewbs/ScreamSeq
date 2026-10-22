@@ -766,3 +766,20 @@ The public menu/API recording entry point remains disabled pending the native/ap
 checkpoint, complete catalogue/schema/guide and actual-app workflow checks.
 Imported detached-archive review is still outstanding. Never treat this internal
 owner or its unexecuted fixtures as completed recording parity.
+
+Additional source review found a completion-ownership edge case: after every
+original input had been accepted, no queued entry remained to bind accepted/loss
+counters to their original take. `ParameterControlDelivery` now retains a separate
+document/revision/take owner through entry removal. New input, recovery snapshots
+and completion release must match it; a later take cannot inherit an earlier
+take's counters, and an earlier receipt cannot clear later evidence. Tests cover
+accepted-only and loss-only states, foreign release, foreign recovery and attempted
+cross-take submission. Completion repair checks this owner before updating the UI.
+
+The review UI also revokes loss consent when the reported evidence changes. A take
+whose music has already committed but whose native preview restoration is pending
+offers **Finish keeping**, disables Discard and explains the state. Restoration
+errors survive the following status read. Clean parameter readback begins through
+the existing focus-preserving load path, rather than pre-emptively disabling the
+focused HWND at the take-finished notification. These assertions are prepared,
+not executed; they belong to the next hourly native checkpoint.

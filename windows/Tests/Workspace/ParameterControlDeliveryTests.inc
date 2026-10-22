@@ -71,7 +71,19 @@ void parameterControlDeliveryCases() {
     restoreRejected([&]{delivery.snapshot(0,513);});restoreRejected([&]{delivery.release();});
     for(size_t i=count-Delivery::capacity;i<count;++i)submitted[i].completion.set_value(result(true));
     delivery.collect();restoreCheck(!delivery.pending()&&delivery.retained()==0&&delivery.lost()==1&&delivery.needsReview(),
-        "Successful later completion concealed overflow");delivery.release();
+        "Successful later completion concealed overflow");
+    const auto lossOnly=delivery.snapshot();
+    restoreCheck(delivery.hasOwner()&&!delivery.belongsTo(original.document,"later take"),"Accepted-entry removal lost native take identity");
+    restoreRejected([&]{delivery.release(original.document,"earlier take");});
+    restoreRejected([&]{delivery.recovery(original.document,original.revision,"different take");});
+    auto later=original;later.take="later take";restoreRejected([&]{delivery.enqueue(later,submit);});
+    restoreCheck(delivery.snapshot()==lossOnly&&submitted.size()==count,"Foreign completion or new input consumed an earlier take's loss counters");
+    delivery.release(original.document,original.take);
+    restoreCheck(!delivery.hasOwner(),"Explicit matching take completion retained the native owner");
+    delivery.enqueue(original,submit);submitted.back().completion.set_value(result(true));delivery.collect();
+    restoreCheck(delivery.retained()==0&&delivery.accepted()==1&&delivery.hasOwner(),"Accepted-only delivery no longer protects original ownership");
+    restoreRejected([&]{delivery.recovery("foreign document",original.revision,original.take);});
+    delivery.release(original.document,original.take);
 }
 
 void applicationRecordedParameterControls() {

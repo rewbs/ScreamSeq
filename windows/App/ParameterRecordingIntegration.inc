@@ -5,6 +5,8 @@
         if(call.document!=documentId||!parameterRecordingBoundary(call.method)||
             !call.result.is_object()||!call.result.contains("retained"))
             throw std::runtime_error("Recording completion belongs to another song or operation");
+        if(!parameterControlDelivery.belongsTo(call.document,call.result.value("take",std::string())))
+            throw std::runtime_error("Earlier completion cannot release a later take's native input");
         // Admission is not being repeated: the receipt proves the earlier
         // worker operation. Protect native input during readback only.
         ParameterRecordingInputLease input(*this,"automation.recording.stop");
@@ -49,7 +51,7 @@
             if(parameterRecordingWindow)parameterRecordingWindow->show();
             throw;
         }
-        if(!parameterTakeState.value("retained",false)&&!parameterControlDelivery.retained()&&!parameterControlDelivery.lost()&&
+        if(!parameterTakeState.value("retained",false)&&!parameterControlDelivery.hasOwner()&&!parameterControlDelivery.retained()&&!parameterControlDelivery.lost()&&
             (!parameterRecordingWindow||!parameterRecordingWindow->protectsClose()))return true;
         ensureParameterRecordingWindow();parameterRecordingWindow->show();
         status=L"Keep or Discard the plugin automation take before leaving this song";frameRequested=true;return false;

@@ -31,7 +31,7 @@ private:
   Callbacks callbacks_;
   std::string document_,targetKey_,error_;
   std::map<std::pair<std::string,uint32_t>,std::wstring> parameterNames_;
-  Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array();
+  Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
   size_t offset_=0,total_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,lossAcknowledged_=false;
@@ -49,6 +49,13 @@ private:
     for(const auto &source:state_.value("sources",Json::array()))if(source.value("lost",uint64_t(0)))return true;
     for(const auto &entry:state_.value("targets",Json::array()))if(entry.value("unmapped",uint64_t(0))||entry.value("overflow",uint64_t(0)))return true;
     return false;
+  }
+  Json lossEvidence()const {
+    Json sources=Json::array(),targets=Json::array();
+    for(const auto &source:state_.value("sources",Json::array()))sources.push_back({source.at("plugin"),source.value("lost",uint64_t(0))});
+    for(const auto &entry:state_.value("targets",Json::array()))targets.push_back({entry.at("plugin"),entry.at("parameter"),entry.value("unmapped",uint64_t(0)),entry.value("overflow",uint64_t(0))});
+    return Json::array({take(),state_.value("failure",0u),state_.value("rejected",uint64_t(0)),sources,targets,
+      delivery_.value("needsReview",false),delivery_.value("lost",uint64_t(0)),delivery_.value("retained",size_t(0)),delivery_.value("pending",false)});
   }
   void requireContext()const{if(callbacks_.context().first!=document_)throw std::runtime_error("This recording window belongs to the previous song");}
   std::wstring pluginName(const std::string &plugin)const {
@@ -126,10 +133,12 @@ private:
     const auto old=take();auto state=callbacks_.read("automation.recording.get",Json::object());requireContext();
     state_=std::move(state);delivery_=callbacks_.delivery(0,1);
     if(take()!=old){offset_=0;targetKey_.clear();lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
+    const auto evidence=lossEvidence();if(evidence!=lossEvidence_){lossEvidence_=evidence;lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
     updateRack();updateTargets();
     if(deliveryView()&&offset_&&offset_>=delivery_.at("retained").get<size_t>())offset_=0;
     loadPage();
-    set(summary,retained()?(capturing()?L"Recording · playback continues":L"Stopped take · review before keeping or discarding"):
+    set(summary,retained()?(state_.value("completed",false)?L"Take kept · finish restoring the native controls":capturing()?L"Recording · playback continues":
+      state_.value("compatible",false)?L"Stopped take · review before keeping or discarding":L"Take no longer matches the song · save a recovery copy or discard"):
       L"Start playback, then record native controls or plugin editor gestures.");
     const auto counts=L"Captured "+std::to_wstring(state_.value("eventCount",size_t(0)))+L" inputs · "+
       std::to_wstring(delivery_.value("retained",size_t(0)))+L" delivery results retained · "+std::to_wstring(delivery_.value("lost",uint64_t(0)))+L" native inputs lost";
@@ -142,7 +151,7 @@ private:
     params["expectedRevision"]=callbacks_.context().second;pending_=true;
     try{completion_.submit(callbacks_.write,method,params,document_,++generation_,params);pending_=false;
       if(!completion_.returned())throw std::runtime_error("Recording result is uncertain; use Refresh / review");
-      error_.clear();refresh();completion_.finish();layout();
+      error_=completion_.returned()->result.value("restorationError",std::string());refresh();completion_.finish();layout();
     }catch(...){pending_=false;layout();throw;}
   }
   void action(int id,unsigned notification)override {
@@ -166,6 +175,7 @@ private:
       submit("automation.recording.start",{{"plugins",std::move(plugins)}});return;
     }
     if(id==stop||id==keep||id==discard){if(!retained())throw std::runtime_error("No retained recording take");
+      if(id==discard&&state_.value("completed",false))throw std::runtime_error("This take is already kept. Finish restoring the controls; use Undo to restore the earlier music.");
       Json params={{"take",take()}};if(id==keep)params["acknowledgeLoss"]=lossAcknowledged_;
       submit(id==stop?"automation.recording.stop":id==keep?"automation.recording.commit":"automation.recording.discard",std::move(params));}
   }
@@ -186,7 +196,8 @@ private:
     EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!rack_.empty());
     EnableWindow(controls_.at(stop),ready&&retained()&&capturing());
     EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&state_.value("compatible",false)&&!delivery_.value("pending",false)&&(!loss()||lossAcknowledged_));
-    EnableWindow(controls_.at(discard),ready&&retained()&&!capturing()&&!delivery_.value("pending",false));
+    EnableWindow(controls_.at(discard),ready&&retained()&&!capturing()&&!state_.value("completed",false)&&!delivery_.value("pending",false));
+    set(keep,state_.value("completed",false)?L"Finish keeping":L"Keep take");
     EnableWindow(controls_.at(acknowledge),ready&&retained()&&!capturing()&&loss());
     EnableWindow(controls_.at(saveCopy),!pending_&&retained());EnableWindow(controls_.at(review),!pending_);
     EnableWindow(controls_.at(previous),!pending_&&offset_>0);EnableWindow(controls_.at(next),!pending_&&offset_+rows_.size()<total_);

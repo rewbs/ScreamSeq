@@ -589,7 +589,7 @@ public:
     Json parameterControlRecovery() {
         parameterControlDelivery.collect();
         if(!parameterTakeState.value("retained",false)) {
-            if(parameterControlDelivery.retained()||parameterControlDelivery.lost())
+            if(parameterControlDelivery.hasOwner()||parameterControlDelivery.retained()||parameterControlDelivery.lost())
                 throw std::runtime_error("Original parameter input has no known take; recovery evidence retained in memory");
             return Json();
         }
@@ -643,7 +643,7 @@ public:
             if(app.parameterRecordingInput||app.departureInput||GetCapture())
                 throw ScreamSeq::Api::ApiError(-32002,"Finish the current drag or state change before changing parameter recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             if(method=="automation.recording.start") {
-                if(app.parameterControlDelivery.retained()||app.parameterControlDelivery.lost())
+                if(app.parameterControlDelivery.hasOwner()||app.parameterControlDelivery.retained()||app.parameterControlDelivery.lost())
                     throw ScreamSeq::Api::ApiError(-32002,"Review the retained original parameter input before starting another take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
                 if(app.pluginDraft)throw ScreamSeq::Api::ApiError(-32002,"Finish the retained rack parameter or program edit before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
                 for(const auto &[id,editor]:app.graphPluginParameters)if(editor&&!editor->retired()&&editor->retainedDraft())
@@ -716,9 +716,12 @@ public:
     // owned native fixture injects faults here after the real worker has run.
     virtual void finishDocumentOperation(const std::string &method,const Json &result) {
         if(method.starts_with("automation.recording.")&&result.is_object()&&result.contains("retained")) {
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()&&
+                !parameterControlDelivery.belongsTo(documentId,result.at("take").get<std::string>()))
+                throw std::runtime_error("Recording completion does not own the retained native input");
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
-                parameterControlDelivery.release();pluginDetailsRevision.clear();
+                parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
                 for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
             }
         }

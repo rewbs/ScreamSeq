@@ -57,6 +57,13 @@ void applicationParameterRecordingReview() {
     restoreCheck(writes.size()==2&&!IsWindowEnabled(control(9723))&&IsWindowEnabled(control(9731)),"Stopped lossy take did not require explicit review");
     click(9726);restoreCheck(saves==1&&writes.size()==2,"Save recovery copy changed the recording take");
     SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);restoreCheck(IsWindowEnabled(control(9723)),"Explicit loss acknowledgement did not enable Keep");
+    take["targets"][0]["unmapped"]=2;SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!tool.snapshot().at("acknowledgeLoss").get<bool>()&&!IsWindowEnabled(control(9723)),"New loss reused acknowledgement of an earlier review");
+    SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
+    take["completed"]=true;SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!IsWindowEnabled(control(9724))&&restoreText(control(9723))==L"Finish keeping",
+        "Already committed take offered Discard as if it could undo accepted music");
+    take["completed"]=false;SendMessageW(window,WM_TIMER,7,0);
     failAfterKeep=true;click(9723);restoreCheck(writes.size()==3&&!tool.snapshot().at("completion").is_null(),"Post-commit error lost its original receipt");
     click(9723);restoreCheck(writes.size()==3,"Retry duplicated an uncertain recording commit");click(9725);
     restoreCheck(writes.size()==3&&reconciled==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("take").at("retained")==false,

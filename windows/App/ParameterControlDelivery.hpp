@@ -6,6 +6,8 @@
 #include <functional>
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#include <tuple>
 
 namespace ScreamSeq {
 // Native UI owner only. Submit every original control event to the serial
@@ -26,6 +28,8 @@ private:
     std::future<Api::CompletedCall> future;State state=State::Pending;std::string error;
   };
   std::deque<Entry> entries_;
+  using Owner=std::tuple<std::string,std::string,std::string>;
+  std::optional<Owner> owner_; // Survives accepted-entry removal and loss-only review.
   uint64_t accepted_=0,lost_=0;
   std::string previewError_;
   void lostInput()noexcept{if(lost_!=UINT64_MAX)++lost_;}
@@ -51,7 +55,12 @@ public:
   size_t retained()const{return entries_.size();}
   uint64_t accepted()const{return accepted_;}
   uint64_t lost()const{return lost_;}
+  bool hasOwner()const{return owner_.has_value();}
+  bool belongsTo(const std::string &document,const std::string &take)const {
+    return !owner_||(std::get<0>(*owner_)==document&&std::get<2>(*owner_)==take);
+  }
   Api::Json recovery(const std::string &document,const std::string &revision,const std::string &take)const {
+    if(owner_&&*owner_!=Owner(document,revision,take))throw std::runtime_error("Parameter delivery counters belong to another recovery take");
     Api::Json events=Api::Json::array();
     for(const auto &entry:entries_) {
       const auto &input=entry.input;
@@ -69,6 +78,12 @@ public:
     if(input.document.empty()||input.revision.empty()||input.take.empty()||input.plugin.empty()||
         input.document.size()>128||input.revision.size()>128||input.take.size()>80||input.plugin.size()>128||
         !input.timestamp||!std::isfinite(input.value))throw std::invalid_argument("Invalid original parameter input identity or value");
+    if(owner_&&(std::get<0>(*owner_)!=input.document||std::get<1>(*owner_)!=input.revision||std::get<2>(*owner_)!=input.take))
+      throw std::runtime_error("Finish the original native input owner before recording a different take");
+    if(!owner_){
+      if(accepted_||lost_)throw std::runtime_error("Review unbound native input loss before accepting another take");
+      try{owner_.emplace(input.document,input.revision,input.take);}catch(...){lostInput();throw;}
+    }
     if(entries_.size()==capacity){lostInput();throw std::runtime_error("Parameter input delivery is full; input lost, take review required");}
     Api::Json params;
     try {
@@ -113,7 +128,11 @@ public:
   // submissions joined. Never use this as an error-retry or song-change reset.
   void release() {
     collect();if(pending())throw std::runtime_error("Wait for parameter input completion before releasing its take");
-    entries_.clear();accepted_=lost_=0;previewError_.clear();
+    entries_.clear();accepted_=lost_=0;previewError_.clear();owner_.reset();
+  }
+  void release(const std::string &document,const std::string &take) {
+    if(!belongsTo(document,take))throw std::runtime_error("An earlier completion cannot release another take's native input");
+    release();
   }
   Api::Json snapshot(size_t offset=0,size_t limit=128)const {
     if(offset>entries_.size()||!limit||limit>512)throw std::invalid_argument("Invalid parameter input review page");
