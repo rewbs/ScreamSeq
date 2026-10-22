@@ -256,6 +256,24 @@ journey and native review registration, then the hidden API completion/foregroun
 focus paths. Reuse unchanged seven-native evidence by dependency. Keep current
 Mac shared/provider CI gates and final reciprocal project checks required.
 
+### Recording review clarity follow-up
+
+The same live run exposed a usability gap: the delivery table clipped F04's
+actionable modulation refusal, leaving `refused / Disable this parameter's ...`.
+The prepared review now includes a native multiline read-only detail field below
+the table. Selection and arrow-key navigation show the complete target, value,
+song time (when mapped) and status/error. Tab reaches the selectable text directly
+from the table; Ctrl+A/C support copying. Ordinary polling keeps selection/focus
+and selected text when the displayed input is unchanged. Changing target/page
+selects its first input rather than retaining an unrelated row index.
+
+The existing native recording-review registration adds long-refusal and uncertain
+delivery details, arrow navigation, read-only text, Tab order and retained text
+selection checks. This is presentation only: no input replay, history, file format
+or API write change. Source/diff checks pass; compilation and live compact-layout/
+keyboard verification remain for the 11:06-or-later checkpoint. Include the new
+detail field in that check without repeating unaffected audio/provider suites.
+
 ## Previous checkpoint instructions (superseded by the update above)
 
 No new build or build-triggering PR push/merge before **09:00 UTC, 22 October**.

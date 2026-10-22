@@ -26,15 +26,15 @@ public:
   };
 private:
   enum:int {scope=9720,start,stop,keep,discard,review,saveCopy,close,target,previous,next,acknowledge,
-    events,heading,summary,help,page,statusLabel,recovered};
+    events,heading,summary,help,page,statusLabel,recovered,inputDetails};
   static constexpr UINT_PTR notificationSubclass=0x50525731;
   static constexpr UINT_PTR listSubclass=0x50525732;
   Callbacks callbacks_;
-  std::string document_,targetKey_,error_;
+  std::string document_,targetKey_,error_,displayedTarget_;
   std::map<std::pair<std::string,uint32_t>,std::wstring> parameterNames_;
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
-  size_t offset_=0,total_=0;uint64_t generation_=0;
+  size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,lossAcknowledged_=false,targetChosen_=false;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,state_.value("baseRevision",callbacks_.context().second),take(),generation_,
@@ -118,6 +118,19 @@ private:
     return native?wide(value.value("state",std::string())+" / "+value.value("error",std::string())):
       value.at("frame").is_null()?L"Original input retained; timing unavailable":L"Captured";
   }
+  void selectionDetails() {
+    const auto row=ListView_GetNextItem(controls_.at(events),-1,LVNI_SELECTED);
+    if(row<0||size_t(row)>=rows_.size()){
+      set(inputDetails,L"Select an input to read its complete status. Tab enters these read-only details; Ctrl+C copies selected text.");return;
+    }
+    const auto &event=rows_[size_t(row)];std::wstring name;
+    if(event.contains("plugin"))name=targetName(event);
+    else for(const auto &entry:targets_)if(entry.dump()==targetKey_){name=targetName(entry);break;}
+    auto text=name+L" · Value: "+cell(size_t(row),1);
+    if(!event.contains("plugin"))text+=L" · Song time: "+cell(size_t(row),0);
+    text+=L"\r\n"+cell(size_t(row),3);
+    set(inputDetails,text);
+  }
   void loadPage() {
     Json data;
     if(deliveryView())data=callbacks_.delivery(offset_,pageSize);
@@ -129,7 +142,16 @@ private:
     }
     total_=data.at(deliveryView()?"retained":"total").get<size_t>();
     auto rows=data.at("events");if(deliveryView())for(const auto &entry:rows)rememberTarget(entry);
-    if(rows!=rows_){rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);InvalidateRect(controls_.at(events),nullptr,FALSE);}
+    const bool pageChanged=displayedTarget_!=targetKey_||displayedOffset_!=offset_;
+    displayedTarget_=targetKey_;displayedOffset_=offset_;
+    if(rows!=rows_||pageChanged){
+      rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);
+      if(pageChanged)NativeReportList::setItemState(controls_.at(events),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+      if(!rows_.empty()&&ListView_GetNextItem(controls_.at(events),-1,LVNI_SELECTED)<0)
+        NativeReportList::setItemState(controls_.at(events),0,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      InvalidateRect(controls_.at(events),nullptr,FALSE);
+    }
+    selectionDetails();
     set(page,total_?std::to_wstring(offset_+1)+L"–"+std::to_wstring(offset_+rows_.size())+L" of "+std::to_wstring(total_):L"No inputs on this page");
   }
   void refresh() {
@@ -191,6 +213,7 @@ private:
   }
   bool key(WPARAM key,bool ctrl,bool)override {
     if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(review,BN_CLICKED);return true;}
+    if(ctrl&&key=='A'&&GetFocus()==controls_.at(inputDetails)){NativeInputGate::present(controls_.at(inputDetails),EM_SETSEL,0,-1);return true;}
     if(key==VK_RETURN){wchar_t kind[20]{};GetClassNameW(GetFocus(),kind,20);if(!_wcsicmp(kind,L"Button")){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{if(id==7&&visible()&&!pending_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();}
@@ -199,7 +222,7 @@ private:
     if(!ready_)return;const auto [w,h]=size();place(heading,12,10,w-(callbacks_.recoveredInputs?218:24),24);place(recovered,w-198,8,186,26,bool(callbacks_.recoveredInputs));place(summary,12,40,w-24,40);
     place(scope,12,84,w-246,240);place(start,w-226,84,100,26);place(stop,w-118,84,106,26);
     place(help,12,118,w-24,42);place(target,12,168,w-252,240);place(previous,w-232,168,68,26);place(next,w-156,168,68,26);place(close,w-80,168,68,26);
-    place(events,12,204,w-24,std::max(80.f,h-346));place(page,12,h-134,w-24,22);
+    place(events,12,204,w-24,std::max(80.f,h-416));place(inputDetails,12,h-204,w-24,62);place(page,12,h-134,w-24,22);
     place(acknowledge,12,h-108,w-24,24);place(keep,12,h-76,132,28);place(discard,152,h-76,112,28);
     place(saveCopy,272,h-76,150,28);place(review,w-190,h-76,178,28);place(statusLabel,12,h-40,w-24,32);
     const bool ready=!pending_&&!completion_.retained();
@@ -215,6 +238,7 @@ private:
   LRESULT notify(NMHDR *header) {
     if(header->hwndFrom!=controls_.at(events))return 0;
     if(header->code==LVN_GETDISPINFOW){auto &info=*reinterpret_cast<NMLVDISPINFOW *>(header);if((info.item.mask&LVIF_TEXT)&&info.item.pszText&&info.item.cchTextMax>0){const auto value=info.item.iItem>=0?cell(size_t(info.item.iItem),unsigned(info.item.iSubItem)):std::wstring();lstrcpynW(info.item.pszText,value.c_str(),info.item.cchTextMax);}return 0;}
+    if(header->code==LVN_ITEMCHANGED||header->code==NM_CLICK){selectionDetails();return 0;}
     if(header->code==NM_CUSTOMDRAW)return NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(header),[this](size_t row,unsigned column){return cell(row,column);});return 0;
   }
   static LRESULT CALLBACK notifications(HWND window,UINT message,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data) {
@@ -258,6 +282,9 @@ public:
     add(acknowledge,L"BUTTON",L"Keep accepted points despite reported input loss",BS_AUTOCHECKBOX);
     for(int id:{heading,summary,help,page,statusLabel})label(id,id==heading?L"PLUGIN AUTOMATION RECORDING":L"");
     accessibleName(scope,L"Plugins to record");accessibleName(target,L"Recording input target");accessibleName(acknowledge,L"Keep accepted points despite reported input loss");
+    add(inputDetails,L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL);
+    SendMessageW(controls_.at(inputDetails),EM_SETLIMITTEXT,262144,0);
+    accessibleName(inputDetails,L"Selected recording input details, read only");
     const auto list=add(events,WC_LISTVIEWW,L"Original recorded inputs",LVS_REPORT|LVS_OWNERDATA|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER);
     ListView_SetExtendedListViewStyle(list,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);NativeReportList::install(list);
     if(const auto theme=LoadLibraryW(L"uxtheme.dll")){using Theme=HRESULT(WINAPI *)(HWND,LPCWSTR,LPCWSTR);if(const auto setTheme=reinterpret_cast<Theme>(GetProcAddress(theme,"SetWindowTheme")))setTheme(list,L"",L"");FreeLibrary(theme);}
@@ -265,7 +292,7 @@ public:
     for(int i=0;i<4;++i){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(names[i]);column.cx=MulDiv(i==0?190:i==1?100:220,GetDpiForWindow(list),96);ListView_InsertColumn(list,i,&column);}
     check(SetWindowSubclass(window_,notifications,notificationSubclass,reinterpret_cast<DWORD_PTR>(this))&&
       SetWindowSubclass(list,listNotifications,listSubclass,reinterpret_cast<DWORD_PTR>(this)),"Install parameter recording notifications");
-    for(int id:{scope,start,stop,recovered,target,previous,next,close,events,acknowledge,keep,discard,saveCopy,review})
+    for(int id:{scope,start,stop,recovered,target,previous,next,close,events,inputDetails,acknowledge,keep,discard,saveCopy,review})
       check(SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order recording controls for keyboard navigation");
     finish();refresh();
   }
@@ -273,6 +300,7 @@ public:
   void show(){const auto focused=GetFocus();NativeToolWindow::show();SetTimer(window_,7,250,nullptr);if(!owns(focused))SetFocus(controls_.at(retained()?target:scope));}
   void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
   Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"take",state_},{"delivery",delivery_},
-    {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
+    {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"inputDetails",utf8(field(inputDetails))},
+    {"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
 };
 }

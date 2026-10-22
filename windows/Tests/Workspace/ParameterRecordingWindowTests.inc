@@ -59,9 +59,32 @@ void applicationParameterRecordingReview() {
         "Record did not enter the retained capture state or allowed Keep while capturing");
     restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
         "New captured music stayed hidden behind an empty native delivery page");
+    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find("Gain")!=std::string::npos&&
+      (GetWindowLongPtrW(control(9739),GWL_STYLE)&ES_READONLY)&&
+      GetNextDlgTabItem(window,control(9732),FALSE)==control(9739),
+      "Recording details are not readable, read-only or adjacent to the list in Tab order");
+    const std::string refusal="Disable this parameter's pattern automation before recording absolute automation. The original input remains available for review.";
+    delivery["events"]=Json::array({{{"plugin",plugin},{"parameter",1},{"value",-6.5},{"hostTime","9007199254740993"},
+      {"state","refused"},{"error",refusal}},{{"plugin",plugin},{"parameter",1},{"value",-12.5},{"hostTime","9007199254740994"},
+      {"state","unknown"},{"error","Original delivery is uncertain; inspect current state before retrying."}}});
+    delivery["retained"]=2;delivery["needsReview"]=true;
     SendMessageW(control(9728),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
+    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos,
+      "Recording review truncated the actionable refusal reason");
+    SetFocus(control(9732));SendMessageW(control(9732),WM_KEYDOWN,VK_DOWN,0);
+    restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos,
+      "Arrow-key selection did not update the complete recording input details");
+    SendMessageW(control(9732),WM_KEYDOWN,VK_UP,0);
+    SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
     SendMessageW(window,WM_TIMER,7,0);restoreCheck(tool.snapshot().at("target")=="",
         "Recording poll redirected an explicit native delivery review choice");
+    DWORD first=0,last=0;SendMessageW(control(9739),EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    restoreCheck(GetFocus()==control(9739)&&first==2&&last==9,
+      "Recording poll stole details focus or reset text selected for copying");
+    SendMessageW(control(9739),WM_CHAR,L'x',0);
+    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos,
+      "Typing changed the read-only recording evidence");
+    delivery["events"]=Json::array();delivery["retained"]=0;delivery["needsReview"]=false;
     SendMessageW(control(9728),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
     restoreCheck(tool.snapshot().at("events").size()==128&&tool.snapshot().at("events")[0].at("timestamp")=="9007199254740993",
         "Native review changed exact timestamps or failed bounded pagination");click(9730);
