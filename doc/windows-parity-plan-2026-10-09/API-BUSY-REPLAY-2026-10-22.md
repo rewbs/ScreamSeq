@@ -66,3 +66,19 @@ AppController admission guards or native presentation.
 Only Python AST parsing and `git diff --check` have run for this source. Reuse
 the existing five portable client tests' evidence while those client files are
 unchanged. No new native pass, package or merge is claimed.
+# Scratch autosave continuation — prepared, unbuilt
+
+The native scratch window retried every `-32002` failure and retained its
+debounce flag after unclassified errors. This could resubmit a write whose
+effects were unknown. It now cancels the old timer before submission and retries
+only explicit `NotCommitted` busy failures. Committed, unknown and unclassified
+failures retain the draft and require explicit Reload before another write;
+hide/show or later typing cannot release that protection. Reads and formula
+previews retain their separate retry behavior. No musical representation changes.
+
+`ScratchWriteAdmissionTests.inc`, in `workspace-command-result-tests`, drives
+the real retained window/worker with all four write outcomes plus an unclassified
+error. It requires original text/caret/focus retention, exactly one Undo after a
+safe retry or lost committed completion, no replay on reopen/typing, and explicit
+Reload reconciliation. This is source-only until the next coordinated gate.
+

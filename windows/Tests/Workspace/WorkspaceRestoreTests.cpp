@@ -1160,6 +1160,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SongPropertiesApplicationTests.inc"
 #include "KeyboardSettingsApplicationTests.inc"
 #include "AutomaticEditsApplicationTests.inc"
+#include "ScratchWriteAdmissionTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
 #include "ParameterControlDeliveryTests.inc"
@@ -1282,6 +1283,7 @@ int wmain(int argc,wchar_t **argv) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
                     timedRestoreCase("module export command and captured picker",applicationModuleExport);
                     timedRestoreCase("automatic field edits",applicationAutomaticEdits);
+                    timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
                     timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
                     timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);

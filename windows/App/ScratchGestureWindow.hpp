@@ -23,6 +23,7 @@ private:
   ScratchEditorState state_;Json bank_=Json::array(),presets_=Json::array();
   std::array<AutomationCanvas,2> canvases_;std::array<Json,2> values_{Json::array(),Json::array()};
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
+  bool writeUncertain_=false;
   bool pending_=false,setting_=false,fieldsDirty_=false,dragging_=false,previewNeeded_=false,saveNeeded_=false,hiding_=false,transportSpace_=false;
   Json dragBefore_;std::array<int,2> dragSelection_{};unsigned snapUnits_=4096;
   void require(bool value,const char *why)const{if(!value)throw std::runtime_error(why);}
@@ -30,16 +31,18 @@ private:
   bool sameDocument()const{return context_().first==document_;}
   bool current()const{return context_()==std::pair(document_,revision_);}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
-  void error(const std::exception &e)override{status(wide(e.what())+L" · Your draft is retained");}
+  void error(const std::exception &e)override{status(wide(e.what())+(writeUncertain_?L" · Write outcome needs review; Reload reads the current phrase · Your draft is retained":L" · Your draft is retained"));}
   double cycleBeats()const{if(target_&&target_->gesture()){const auto &p=target_->command.at("parameters");return p.value("beats",1.0)/std::max(1.0,p.value("repeats",1.0));}return 1;}
   Json previewParams(unsigned which)const{return {{"rows",257},{"rowsPerBeat",256},{"span",65537},{"start",canvases_[0].start},{"end",canvases_[0].end},{"samples",1024},{"scratchBeats",cycleBeats()},{"points",state_.points(which)}};}
   Json call(const std::string &method,Json params,bool write=false){
     require(!pending_,"Scratch editor is busy");require(current(),"Song changed; Reload the retained scratch editor before editing");
-    const auto sent=revision_;if(write)params["expectedRevision"]=sent;pending_=true;layout();
-    try{auto result=request_(method,params);const auto now=context_();require(now.first==document_,"The captured song is no longer open");
+    if(write)require(!writeUncertain_,"Previous write outcome needs review; Reload the current phrase before submitting another edit");
+    const auto sent=revision_;if(write)params["expectedRevision"]=sent;pending_=true;layout();bool returned=false;
+    try{auto result=request_(method,params);returned=true;const auto now=context_();require(now.first==document_,"The captured song is no longer open");
       if(write){revision_=now.second;if(target_&&target_->revision==sent)target_->revision=revision_;}else require(now.second==sent,"Song changed during the read; Reload before editing");
       pending_=false;layout();return result;
-    }catch(...){pending_=false;layout();throw;}
+    }catch(const Api::ApiError &e){if(write&&(returned||!e.outcome||e.outcome->needsReconciliation()))writeUncertain_=true;pending_=false;layout();throw;}
+    catch(...){if(write)writeUncertain_=true;pending_=false;layout();throw;}
   }
   void showPoint(){
     setting_=true;const auto &points=state_.points(state_.lane);const int selected=state_.selected[state_.lane];
@@ -63,13 +66,20 @@ private:
     Json result;try{result=request_("scratch.gestures.get",Json::object());require(context_()==captured,"Song changed while loading; retained draft was not replaced");}
     catch(...){pending_=false;layout();throw;}
     // A failed/busy read must never attach an old draft to a new document.
-    pending_=false;document_=captured.first;revision_=captured.second;target_=candidateTarget;bank_=result.at("gestures");presets_=result.at("presets");saveNeeded_=false;
+    pending_=false;document_=captured.first;revision_=captured.second;target_=candidateTarget;bank_=result.at("gestures");presets_=result.at("presets");saveNeeded_=false;writeUncertain_=false;
     if(!selected&&recapture&&target_)selected=target_->gesture();if(!selected&&!recapture)selected=state_.id();if(std::none_of(bank_.begin(),bank_.end(),[&](const auto &p){return p.at("id")==selected;})){selected=target_?target_->gesture():0;if(std::none_of(bank_.begin(),bank_.end(),[&](const auto &p){return p.at("id")==selected;}))selected=bank_.empty()?0:bank_[0].at("id").get<unsigned>();}select(selected);
     status(L"Shared phrase edits save immediately · drag then release · Enter sets fields · Ctrl+Z restores an edit");
   }
   void save(){
     require(!fieldsDirty_,"Press Enter to set the point fields first");if(!state_.dirty())return;state_.validate();
-    const auto sent=state_.draft;const auto generation=state_.generation;try{call("scratch.gestures.set",sent,true);}catch(const Api::ApiError &e){if(e.code==-32002){saveNeeded_=true;SetTimer(window_,4,120,nullptr);}throw;}state_.accept(sent,generation);if(generation==state_.generation)saveNeeded_=false;
+    const auto sent=state_.draft;const auto generation=state_.generation;
+    // Cancel any older debounce before submission. A busy code alone does not
+    // establish that the worker rejected the edit before making changes.
+    saveNeeded_=false;KillTimer(window_,4);
+    try{call("scratch.gestures.set",sent,true);}catch(const Api::ApiError &e){
+      if(!writeUncertain_&&e.code==-32002&&e.outcome&&e.outcome->state==Tracker::CommitOutcome::NotCommitted){saveNeeded_=true;SetTimer(window_,4,120,nullptr);}throw;
+    }
+    state_.accept(sent,generation);if(generation==state_.generation)saveNeeded_=false;
     auto result=call("scratch.gestures.get",Json::object());bank_=result.at("gestures");fillPhrases();status(state_.dirty()?L"Earlier edit saved; newer draft retained":L"Phrase saved · every linked SK use updated · Ctrl+Z to undo");
   }
   void changed(bool commit=true){++state_.generation;if(commit)saveNeeded_=true;values_={Json::array(),Json::array()};previewNeeded_=true;for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);SetTimer(window_,3,100,nullptr);if(commit)save();requestPaint();}
@@ -179,7 +189,7 @@ private:
     const auto delta=double(GET_WHEEL_DELTA_WPARAM(flags))/WHEEL_DELTA;if(GET_KEYSTATE_WPARAM(flags)&MK_CONTROL)canvases_[0].zoom(std::pow(2.,delta),256);else canvases_[0].pan((message==WM_MOUSEHWHEEL?1:-1)*delta*(canvases_[0].end-canvases_[0].start)*.125,256);
     canvases_[1].start=canvases_[0].start;canvases_[1].end=canvases_[0].end;previewNeeded_=true;SetTimer(window_,3,100,nullptr);return true;
   }
-  void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&state_.dirty()&&!fieldsDirty_)save();}
+  void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
   void layout()override{
     if(!ready_)return;const auto [w,h]=size();const float plotWidth=w-286,plotHeight=(h-359)/2;
     place(intro,14,10,w-28,24);place(phrase,14,40,230,250);place(name,252,40,std::max(140.f,w-514),26);place(newPhrase,w-254,40,128,26);place(reload,w-118,40,104,26);
@@ -225,12 +235,12 @@ public:
   }
   ~ScratchGestureWindow()override{ready_=false;for(int id:{pointPosition,pointValue,pointFormula})RemoveWindowSubclass(controls_.at(id),pointFieldProc,2);}
   void openAt(){if(visible()||retainedDraft()){show();return;}load(true,0,true);show();}
-  bool retainedDraft()const{return draft()||pending_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
+  bool retainedDraft()const{return draft()||pending_||writeUncertain_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
-    return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_,pending_);
+    return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_||writeUncertain_,pending_);
   }
   void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);hiding_=true;NativeToolWindow::hide();hiding_=false;}
-  void show(){NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&current())SetTimer(window_,4,350,nullptr);}
-  Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
+  void show(){NativeToolWindow::show();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}
+  Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"writeNeedsReview",writeUncertain_},{"saveQueued",saveNeeded_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
 };
 }
