@@ -107,11 +107,11 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   WindowsVST3::pluginMainCall([&]{for(unsigned i=0;i<130;++i)need(gesture(i%2?.8:.2)==1,"Dense owned gesture failed");});
   need(!operations.pollRecordedEditors()&&take->eventCount()==131,"First native drain did not enforce its 128-event work bound");
   need(operations.pollRecordedEditors()&&take->eventCount()==133,"Bounded continuation lost or repeated native notifications");
-  uint64_t end=0;WindowsVST3::pluginMainCall([&]{end=ScreamSeq::hostTime100ns();});
-  take->seal(end);
+  uint64_t end=operations.sealRecordedEditors();
+  need(operations.sealRecordedEditors()==end,"Repeated Stop moved the original native boundary");
   need(clock->publish(arm+1,end,1,959,48000,41),"Owned take coverage failed");clock->close(41,end);
   refuses([&]{(void)take->preparedOwners(revision(),41);});
-  need(operations.pollRecordedEditors(true),"Native empty drain after release was not acknowledged");
+  need(operations.pollRecordedEditors(),"Fixed native release cut was not acknowledged");
   need(take->target(0).loss().unmapped==0,"Native provider polls did not resolve original timestamps");
   refuses([&]{operations.invoke("plugin.parameters.set",{{"plugin",id},{"values",Json::array({{{"id",7},{"value",.1}}})}});});
   refuses([&]{operations.invoke("plugin.remove",{{"plugins",Json::array({id})}});});
@@ -194,5 +194,32 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   need(operations.releaseRecordedEditors(true,[]{return true;})&&!operations.hasRecordedEditors()&&
     operations.parameterEditSource(id).incarnation!=source2.incarnation&&encoded()==baselineBytes&&operations.canRedo(),
     "Explicit stopped discard lost the baseline/Redo or kept the closed transient vendor");
-  std::cout<<"PASS recovery recorded editor exclusion, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
+  // A fixed Stop cut must finish in bounded polls without consuming a later
+  // gesture. Refused restoration must not even call the audible restore hook.
+  stale=false;operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto fencedBaseline=encoded();const auto fencedSequence=document->historySequence();
+  clock=std::make_shared<RecordingFrameTimeline>();const auto arm3=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm3,arm3+1,0,1,48000,41),"Fixed cut clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers3{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("fixed-cut",revision(),arm3,clock,rack,projectAbsoluteAutomation(project),providers3);
+  operations.beginRecordedEditors(take,context,[&](std::span<const ParameterChange> points){audible.assign(points.begin(),points.end());});
+  WindowsVST3::pluginMainCall([&]{for(unsigned i=0;i<130;++i)need(gesture(i%2?.8:.2)==1,"Fixed cut gesture failed");});
+  end=operations.sealRecordedEditors();
+  need(clock->publish(arm3+1,end,1,959,48000,41),"Fixed cut coverage failed");clock->close(41,end);
+  Sleep(2);send(.7);
+  need(!operations.pollRecordedEditors()&&take->eventCount()==128,"Fixed cut bypassed bounded polling");
+  need(operations.pollRecordedEditors()&&take->eventCount()==130&&audible.size()==1&&audible[0].value==.8f,
+    "Stop consumed or previewed a later gesture");
+  need(operations.pollRecordedEditors()&&take->eventCount()==130&&operations.sealRecordedEditors()==end,
+    "Repeated stopped polling consumed later input or changed the boundary");
+  need(take->preparedOwners(revision(),41).size()==1,"Fixed cut did not complete its captured input drain");
+  unsigned restores=0;
+  refuses([&]{operations.releaseRecordedEditors(true,[&]{++restores;return true;});});
+  need(!restores&&operations.hasRecordedEditors()&&encoded()==fencedBaseline&&document->historySequence()==fencedSequence,
+    "Post-stop input was discarded or restoration changed state before refusing");
+  operations.invoke("plugin.editor.close",{{"slot",0}});
+  need(operations.releaseRecordedEditors(true,[&]{++restores;return true;})&&restores==1&&!operations.hasRecordedEditors()&&
+    encoded()==fencedBaseline&&document->historySequence()==fencedSequence,
+    "Explicit closed-provider discard failed to retain the accepted baseline");
+  std::cout<<"PASS recovery recorded editor exclusion, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
 }

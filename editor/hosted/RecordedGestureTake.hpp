@@ -240,8 +240,9 @@ public:
     end_=end;
   }
   // Native adapter calls this only after its original-time release/Stop input
-  // barrier AND an empty paired pop from this provider. An ordinary empty poll
-  // while capturing is not a completed drain. Late input invalidates it again.
+  // barrier AND an empty paired pop, or completed provider-qualified fixed cut.
+  // An ordinary empty poll while capturing is not a completed drain. Appending
+  // further input invalidates it again; adapters must retain post-cut input.
   bool drained(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);
     if(!owner||!end_||completed_)return false;

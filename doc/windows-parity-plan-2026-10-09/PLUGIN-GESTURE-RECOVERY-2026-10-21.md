@@ -346,3 +346,34 @@ Do not expose recording controls until those admission paths are complete.
 Batch this with the first-candidate corrections at the next hourly build gate.
 No C++ compilation or execution has run for this new source. Main Mac Intel CI
 eventually reported cancelled; ARM64 passed. Neither result validates this batch.
+
+## Worker Stop boundary (source only, next checkpoint)
+
+`PluginOperations::sealRecordedEditors` now captures all owned VST3 input cuts
+in one private-STA call, without vendor catalog/state calls that could pump input
+between cuts. Allocation and context checks precede sealing. The exclusive time
+end is the last cut clock quantum plus one; queue positions exclude later input,
+including input with indistinguishable timestamps. Repeated Stop retains the
+original boundary. A provider/context/preparation failure leaves ownership intact.
+
+`pollRecordedEditors` drains at most 128 original notifications per provider per
+call and acknowledges the fixed cut only when reached. Later gestures stay in
+their native queue, rather than extending Stop or entering the audible preview.
+Restoration refuses a changed post-cut position/loss before calling its audible
+restore hook. Explicit stopped discard with the vendor closed can abandon that
+transient input; normal completion cannot. The documented native restoration
+barrier remains required: a cut alone does not prevent vendor reentrant input
+during state restoration, and this primitive is not exposed as a finished UI/API.
+
+The real-provider ownership test now uses the fixed boundary for successful
+one-Undo/save/reopen recording, then adds 130 queued gestures, Stop, and a later
+gesture before draining. It checks the 128-event work bound, exact 130-event
+retention, original preview, idempotent polling/Stop, refusal before audible
+restoration, and explicit closed-provider discard retaining state/history.
+These added assertions have not been compiled or run yet.
+
+PR #6 source `2ff11b8ae` CI update at 01:24 UTC: Mac ARM64 completed all configured
+steps successfully; Intel remained in its build. Windows x64 failed compilation
+on the same missing recovery-decoder include as local ARM64 (plus its cascading
+comparison error). The direct include correction is already in `ddefc311c` and
+will be validated with this combined source. Do not rerun the old CI candidate.

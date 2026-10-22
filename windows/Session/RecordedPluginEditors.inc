@@ -58,6 +58,43 @@ void PluginOperations::beginRecordedEditors(std::shared_ptr<RecordedGestureTake>
     need(editors_.at(provider.plugin)->editSource()==provider.source,"Recording provider changed while preparing catalogs");
   recordedEditors_=std::move(next);
 }
+uint64_t PluginOperations::sealRecordedEditors() {
+  need(recordedEditors_&&!recordedEditors_->take->completed(),"No active parameter take to stop");
+  auto &capture=*recordedEditors_;auto &take=*capture.take;
+  if(!capture.releaseCuts.empty())return *take.endTime();
+  need(!take.endTime(),"Take already has an externally owned release barrier");
+  const auto context=capture.context();
+  need(context.first==take.revision()&&context.second==take.playbackEpoch(),
+    "Recording context changed; input and baseline protection retained");
+  // Allocate before visiting the native owner. No vendor state/catalog call is
+  // made inside this group cut, so no vendor can pump input between its cuts.
+  std::map<std::string,PluginEditBoundary> cuts;
+  for(const auto &[identity,catalog]:capture.catalogs)cuts.emplace(identity,PluginEditBoundary{});
+  uint64_t end=0;
+  WindowsVST3::pluginMainCall([&]{
+    for(auto &[identity,cut]:cuts) {
+      const auto found=editors_.find(identity);
+      need(found!=editors_.end()&&found->second,"Recorded provider is unavailable; input retained");
+      const auto current=found->second->editBoundary();
+      need(current.has_value(),"Recorded provider cannot establish an original-input boundary");
+      cut=*current;end=std::max(end,cut.fence.hostTime);
+    }
+  });
+  need(end&&end<UINT64_MAX&&capture.context()==context,
+    "Recording clock or context changed while stopping; input retained");
+  // The timestamp range is half-open; include every event produced in the
+  // clock quantum containing the last cut. Queue positions exclude later ones.
+  ++end;
+  for(const auto &provider:take.providers()) {
+    const auto &cut=cuts.at(provider.plugin);
+    need(cut.source.incarnation==provider.source.incarnation&&
+      cut.source.dropped>=provider.source.dropped,
+      "Recorded notification provider changed while stopping; input retained");
+  }
+  take.seal(end); // Fallible preflight; no queue has been consumed or owner released.
+  capture.releaseCuts.swap(cuts);
+  return end;
+}
 bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
   if(!recordedEditors_)return true;
   auto &capture=*recordedEditors_;auto &take=*capture.take;
@@ -71,15 +108,23 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
       throw Api::ApiError(-32002,"Recorded plugin provider is unavailable; take and baseline protection retained");
     auto &provider=*found->second;bool drained=false;
     PluginEdit event;PluginEditSource source;
+    const auto cut=capture.releaseCuts.find(identity);
     for(unsigned n=0;n<128;++n) {
-      if(!provider.popEdit(event,source)){drained=true;break;}
+      if(cut==capture.releaseCuts.end()) {
+        if(!provider.popEdit(event,source)){drained=true;break;}
+      } else {
+        const auto result=provider.popEditBefore(cut->second,event,source);
+        need(result==PluginEditRead::Event||result==PluginEditRead::Complete,
+          "Recorded input boundary is no longer valid; input and protection retained");
+        if(result==PluginEditRead::Complete){drained=true;break;}
+      }
       (void)take.append(identity,event,source,revision,epoch,document_.native(),catalog);
     }
     // Exactly 128 notifications means another bounded poll is needed; never
     // manufacture the empty paired pop needed for a completed native drain.
     empty=empty&&drained;
     if(drained) {
-      if(releaseBarrier)(void)take.drained(identity,source,revision,epoch);
+      if(releaseBarrier||cut!=capture.releaseCuts.end())(void)take.drained(identity,source,revision,epoch);
       else (void)take.observeProvider(identity,source,revision,epoch);
     } else (void)take.observeProvider(identity,source,revision,epoch);
   }
@@ -106,6 +151,17 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
   auto &capture=*recordedEditors_;
   need(restorePreview&&(capture.take->completed()||(discard&&capture.take->endTime())),
     "Commit the take, or stop and explicitly discard it, before releasing plugin ownership");
+  // A stop cut is not permission to discard later vendor input. Until the
+  // session owns a native restoration barrier, new gestures must retain this
+  // owner and their queue, rather than disappear in the restoration drain.
+  for(const auto &[identity,cut]:capture.releaseCuts) {
+    // Explicit stopped discard with a closed editor abandons its transient
+    // input as well as the take. Normal completion never takes this escape.
+    if(discard&&!editors_.at(identity)->editorOpen())continue;
+    const auto current=editors_.at(identity)->editBoundary();
+    need(current&&current->source==cut.source&&current->fence.position==cut.fence.position,
+      "Plugin received input after Stop; later input and recording protection retained");
+  }
   struct Restore {
     std::string identity;
     std::unique_ptr<NativePlugin> baseline;
