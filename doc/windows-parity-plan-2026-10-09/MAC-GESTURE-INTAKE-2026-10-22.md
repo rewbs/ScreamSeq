@@ -531,3 +531,61 @@ epoch; resolving only the stable ID after a pumped catalogue call could pair
 another plugin's range metadata with the original target. Arming and Keep now
 reject that changed observation before using its catalogue. This guard remains
 part of the unbuilt Mac batch and does not change the frozen077e candidate.
+
+## Following source batch: session ownership, Keep and recovery — unbuilt
+
+`TrackerSession` now owns a `NativeParameterTake` through the internal
+`ParameterTakeSession.inc`. The internal start path validates distinct stable
+plugins, rejects a concurrent arm, drains preceding manual input, rechecks the
+captured revision, folds accepted manual values, requires an actual playing
+Core Audio frame timeline, and installs the owner only after native catalogue
+and fresh-cut checks. Its context reader uses a weak session reference and
+the exact retained timeline; it does not keep the session alive in a cycle.
+
+When this owner exists, `collectPluginEdits` uses its bounded raw-input path
+instead of the legacy manual consumer. Transport Stop captures the fixed native
+cut before stopping audio. Internal Keep requires an already stopped take,
+prepares a complete recorded timeline plus `EffectSnapshot`, reserves Undo
+capacity before native publication, and adopts points/revision/history only
+after that publication succeeds. One complete take creates one history step;
+a completed retry retains ownership and cannot publish it again. It does not
+release ownership or claim native state restoration is finished.
+
+Recovery captures available original input without sealing a live take. A
+refused further drain records the warning while preserving already retained
+evidence. The typed archive overlay runs **after** `ProjectMetadata::merge`,
+so imported opaque recovery arrays are not replaced by a Foundation projection.
+Ordinary save/export is refused while a take is retained. Saved-baseline reads
+and recovery no longer capture live `pluginStates()` for that owner. New/open,
+device/playback restart, rack changes, manual parameter writes, history and
+preview/audition entry points have native guards; API mutations are admitted
+conservatively until the lifecycle methods are installed. Shutdown drops the
+owner before its audio reference, after the application's recovery phase.
+
+The recovery-array overlay is now shared with Windows in
+`editor/hosted/RecordedGestureRecovery.hpp`. It stages the complete array,
+replaces only the same take/revision, preserves independent/future archives and
+binary payloads, refuses incompatible collections, and enforces the existing
+64-archive bound. Windows retains its existing API error code. Prepared shared
+tests cover replacement, separate revisions, typed preservation, full-capacity
+update/refusal and unchanged incompatible input. `SessionTests.mm` adds real
+session admission refusal checks (empty/duplicate/missing/stopped/stale), with
+unchanged revision and serialized baseline. Neither set has run yet.
+
+**Not exposed or complete:** no public API or native Record control calls the
+new internal start yet. The old poll-time recording flow remains in place for
+existing users. Native opaque-state verification/restoration and explicit
+post-Stop suffix abandonment remain prerequisites for exposing the seven API
+operations and replacing that UI flow. The direct session edit paths still
+need the final admission audit when capture/review controls are connected.
+Do not treat internal ownership and a prepared history callback as successful
+session lifecycle qualification.
+
+Next required tests at a coordinated build: both Mac architectures' existing
+native-plugin, session and recorded-automation gates; Windows recorded-automation
+and actual-app recovery tests for the shared overlay; then new real session and
+socket cases covering multi-target Keep, no-op, queue refusal, original-time
+input, single Undo/Redo, recovery while live, save/reopen and protected vendor
+restoration. Those end-to-end successful session cases await the release/API
+integration. No new build was started for this source; the next eligible start
+remains 2026-10-22 16:09:04UTC, with no obligation to build an incomplete batch.

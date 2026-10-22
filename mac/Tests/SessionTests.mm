@@ -5,6 +5,11 @@
 #include <iostream>
 #include <stdexcept>
 #include <thread>
+// Internal admission checks, before the complete lifecycle is published to the
+// API/UI. No alternate clock, fake vendor or test-only production entry point.
+@interface TrackerSession (ParameterTakeAdmissionChecks)
+- (void)startParameterTake:(NSArray<NSString *> *)identities expectedRevision:(NSString *)revision;
+@end
 static void require(bool value, const char *context) {
   if (!value)
     throw std::runtime_error(context);
@@ -45,6 +50,22 @@ int main(int argc, char **argv) {
       if (liveSave)
         require(session.playing, "saving effect state does not stop playback");
       [session stop];
+      {
+        const auto baseline=session.serializedData;NSString *revision=session.automationRevision;
+        NSString *identity=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+        for(NSArray *requested in @[@[],@[identity,identity],@[@"missing"],@[identity]]) {
+          bool refused=false;
+          try{[session startParameterTake:requested expectedRevision:revision];}
+          catch(const std::exception &){refused=true;}
+          require(refused&&[session.automationRevision isEqual:revision]&&[session.serializedData isEqual:baseline],
+            "Invalid or stopped parameter arming changed music, history, saved state or retained ownership");
+        }
+        bool refused=false;
+        try{[session startParameterTake:@[identity] expectedRevision:@"stale"];}
+        catch(const std::exception &){refused=true;}
+        require(refused&&[session.automationRevision isEqual:revision]&&[session.serializedData isEqual:baseline],
+          "Stale parameter arming changed the session");
+      }
       TrackerSession *reopened = [TrackerSession new];
       require([reopened openPath:path error:&error], "reopen native project");
       auto after = [reopened snapshot:0];

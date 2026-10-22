@@ -3,21 +3,11 @@
 // Vendor HWND restoration leases belong to the native plugin provider.
 bool PluginOperations::overlayRecordedRecovery(Project::ProjectState &copy)const {
   if(!recordedEditors_)return false;
-  auto archive=recordedGestureRecovery(recordedEditors_->take->review());
   // Repeated snapshots replace only this live take's archive, preserving any
   // earlier recovered take awaiting review. Preparing the value is fallible;
   // the caller owns an independent project copy throughout.
-  auto &archives=copy.preserved["screamseqPluginGestureRecovery"];
-  if(archives.is_null())archives=Json::array();
-  need(archives.is_array(),"Existing plugin gesture recovery archive is incompatible; retained");
-  auto found=std::find_if(archives.begin(),archives.end(),[&](const auto &old){
-    return old.is_object()&&old.value("take",Json())==archive.at("take")&&
-      old.value("revision",Json())==archive.at("revision");
-  });
-  if(found==archives.end()) {
-    need(archives.size()<64,"Plugin gesture recovery archive capacity reached; retained input needs review");
-    archives.push_back(std::move(archive));
-  } else *found=std::move(archive);
+  try {Tracker::overlayRecordedGestureRecovery(copy.preserved,recordedGestureRecovery(recordedEditors_->take->review()));}
+  catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   return true;
 }
 bool PluginOperations::ownsRecordedEditor(const std::string &identity)const noexcept {

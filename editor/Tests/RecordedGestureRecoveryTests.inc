@@ -17,6 +17,32 @@ static void recordedGestureRecoveryTests() {
   check(take.observeProvider(rack[1].instanceID,{10,8},"revision",7),"Recovery review provider-only loss refused");
   clock->close(7,1600); // The first event retains its time, but loses its frame.
   const auto archived=recordedGestureRecovery(take.review());
+  {
+    // The two native autosave adapters use this same bounded merge. Unknown
+    // evidence and typed payloads survive, including at the capacity boundary.
+    const Json foreign={{"take","other"},{"revision","old"},{"version",9},
+      {"opaque",Json::binary({0,255,17})}};
+    Json project={{"unrelated",Json::binary({4,0,8})},{"screamseqPluginGestureRecovery",Json::array({foreign})}};
+    overlayRecordedGestureRecovery(project,archived);
+    check(project.at("screamseqPluginGestureRecovery").size()==2&&
+      project.at("screamseqPluginGestureRecovery")[0]==foreign&&project.at("unrelated")==Json::binary({4,0,8}),
+      "Take recovery overlay changed foreign evidence or project data");
+    auto updated=archived;updated["rejected"]="3";
+    overlayRecordedGestureRecovery(project,updated);
+    check(project.at("screamseqPluginGestureRecovery").size()==2&&project.at("screamseqPluginGestureRecovery")[1]==updated,
+      "Repeated recovery duplicated its take instead of updating the captured revision");
+    auto otherRevision=archived;otherRevision["revision"]="different";
+    overlayRecordedGestureRecovery(project,otherRevision);
+    check(project.at("screamseqPluginGestureRecovery").size()==3,"Recovery merged distinct captured revisions");
+    while(project.at("screamseqPluginGestureRecovery").size()<64)project["screamseqPluginGestureRecovery"].push_back(foreign);
+    overlayRecordedGestureRecovery(project,archived); // An existing entry remains replaceable at the limit.
+    auto extra=archived;extra["take"]="65th";auto beforeOverlay=project;bool refused=false;
+    try{overlayRecordedGestureRecovery(project,extra);}catch(const std::invalid_argument &){refused=true;}
+    check(refused&&project==beforeOverlay,"Full recovery overlay partially changed the project");
+    project["screamseqPluginGestureRecovery"]=foreign;beforeOverlay=project;refused=false;
+    try{overlayRecordedGestureRecovery(project,archived);}catch(const std::invalid_argument &){refused=true;}
+    check(refused&&project==beforeOverlay,"Incompatible recovery collection was overwritten");
+  }
   const auto original=archived.dump();
   auto decoded=readRecordedGestureRecovery(archived);
   check(recordedGestureRecovery(decoded)==archived&&archived.dump()==original&&

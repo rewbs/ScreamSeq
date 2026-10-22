@@ -67,6 +67,8 @@
       || [method isEqual:@"sample.recording.stop"] || [method isEqual:@"sample.recording.discard"];
     if (!mutation && ![reads containsObject:method])
       throw Error(-32601, "Unknown method; call api.describe");
+    if(mutation&&![method isEqual:@"transport.stop"]&&![method isEqual:@"transport.panic"]&&
+       ![method isEqual:@"graph.plugin.editor.close"])[self requireNoParameterTake];
     NSString *before = self.automationRevision;
     if (mutation && !libraryMutation && ![string(p[@"expectedRevision"], 200) isEqual:before])
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
@@ -1224,7 +1226,7 @@
       const bool overwrite = p[@"overwrite"] ? boolean(p[@"overwrite"]) : false;
       const bool dry = p[@"dryRun"] ? boolean(p[@"dryRun"]) : false;
       [self commitManualParameters];
-      if (!_audio->active() && _automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()) && _pluginError.empty())
+      if (!_parameterTake && !_audio->active() && _automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()) && _pluginError.empty())
         _plugins = _audio->pluginStates();
       const auto &plugin = _plugins[slot];
       result = PluginPreset::write(path, descriptorDictionary(plugin.descriptor),
@@ -1234,7 +1236,7 @@
       auto slot = pluginSlot();
       [self commitManualParameters];
       // This is the saved baseline, not a capture of automation's transient value.
-      if (!_audio->active() && _automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()) && _pluginError.empty())
+      if (!_parameterTake && !_audio->active() && _automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState()) && _pluginError.empty())
         _plugins = _audio->pluginStates();
       NSData *data = [NSData dataWithBytes:_plugins[slot].state.data() length:_plugins[slot].state.size()];
       result = @{
