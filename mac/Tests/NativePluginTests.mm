@@ -281,6 +281,63 @@ static void nativeTakeGroupedRestoration(const PluginState &first,const PluginSt
   check(audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1&&!audio.active()&&take->eventCount()==2,
     "Grouped restoration replaced native ownership or discarded retained evidence");
 }
+static void nativeTakeAtomicPublication(const PluginState &first,const PluginState &second) {
+  AudioDevice audio;audio.setPlugins({first,second});
+  const auto parameter0=audio.pluginParameters(0).at(0),parameter1=audio.pluginParameters(1).at(0);
+  const auto source0=audio.pluginEditSource(0),source1=audio.pluginEditSource(1);
+  const std::array<PluginState,2> rack{first,second};
+  const std::array<RecordedGestureTake::Provider,2> providers{{{first.instanceID,source0},{second.instanceID,source1}}};
+  std::vector<ParameterChange> points{{0,parameter0.id,.25f,96000}};
+  const auto original=points;
+  const auto arm=mach_absolute_time();auto timeline=std::make_shared<RecordingFrameTimeline>();
+  check(timeline->publish(arm,arm+1,0,1,48000,33),"Atomic take clock starts");
+  auto take=std::make_shared<RecordedGestureTake>("atomic-native-mac-take","revision",arm,timeline,rack,points,providers);
+  std::string revision="revision";NativeSong native;
+  NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,points);
+  check(owner.capture(native,first.instanceID,parameter0.id,.4,mach_absolute_time())&&
+    owner.capture(native,second.instanceID,parameter1.id,.6,mach_absolute_time()),"Capture atomic take targets");
+  const auto end=owner.stop();check(timeline->publish(arm+1,end,1,479,48000,33),"Publish atomic take timing");
+  check(owner.poll(native),"Drain atomic take targets");
+  unsigned calls=0,publications=0;bool refused=false;
+  auto wrong=points;wrong[0].value=.3f;
+  try{owner.commit(native,rack,wrong,false,[&](const auto &,bool){++calls;return true;});}catch(const std::exception &){refused=true;}
+  check(refused&&!calls&&!take->completed(),"Changed point baseline entered the publication callback");
+  revision="changed";refused=false;
+  try{owner.commit(native,rack,points,false,[&](const auto &,bool){++calls;return true;});}catch(const std::exception &){refused=true;}
+  check(refused&&!calls&&!take->completed(),"Changed session revision entered the publication callback");revision="revision";
+  auto attempt=owner.commit(native,rack,points,false,[&](const auto &candidate,bool changed){
+    ++calls;check(changed&&candidate.size()==3,"Atomic candidate omitted captured targets or the original point");return false;
+  });
+  check(!attempt.accepted&&!attempt.changed&&calls==1&&!take->completed()&&
+    !take->target(0).retired()&&!take->target(1).retired()&&RecordedGestureCapture::sameBaseline(points,original),
+    "Refused atomic publication retired a prefix or changed saved points");
+  attempt=owner.commit(native,rack,points,false,[&](const auto &candidate,bool changed){
+    ++calls;check(changed&&candidate.front().slot==original.front().slot&&candidate.front().id==original.front().id&&
+      candidate.front().frame==original.front().frame&&candidate.front().value==original.front().value,
+      "Atomic take normalized or replaced an unrelated saved point");
+    bool reentryRefused=false;try{owner.poll(native);}catch(const std::exception &){reentryRefused=true;}
+    check(reentryRefused&&take->eventCount()==2,"Publication admitted reentrant native intake");
+    auto next=candidate;auto prepared=audio.prepareRecordedAutomation(next);
+    if(!audio.publishRecordedAutomation(std::move(prepared)))return false;
+    points.swap(next);++publications;return true;
+  });
+  check(attempt.accepted&&attempt.changed&&publications==1&&calls==2&&points.size()==3&&take->completed()&&
+    take->target(0).retired()&&take->target(1).retired()&&audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1,
+    "Atomic native publication did not retire the complete take exactly once");
+  revision="after-keep";
+  attempt=owner.commit(native,rack,points,false,[&](const auto &,bool){++calls;return false;});
+  check(attempt.accepted&&!attempt.changed&&calls==2,"Retry after Keep published the same take twice");
+  check(owner.restoreRetained(false,[&]{
+    check(audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1,"Keep restoration replaced a native provider");
+  }),"Completed take could not restore after its session revision advanced");
+  const auto emptyStart=mach_absolute_time();
+  auto emptyTake=std::make_shared<RecordedGestureTake>("empty-native-mac-take",revision,emptyStart,timeline,rack,points,providers);
+  NativeParameterTake empty(audio,emptyTake,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,points);
+  empty.stop();check(empty.poll(native),"Empty take failed to drain its native Stop boundary");
+  attempt=empty.commit(native,rack,points,false,[&](const auto &,bool){++calls;return true;});
+  check(attempt.accepted&&!attempt.changed&&emptyTake->completed()&&calls==2,
+    "Empty take created a publication instead of completing as a no-op");
+}
 static void chainInputProtection(const PluginState &state){
   PluginChain chain({state},48000,true);chain.showEditor(0);
   NSSlider *slider=nil;NSWindow *owned=nil;
@@ -433,6 +490,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
       nativeTakeGroupedRestoration(saved,closedAU);
+      nativeTakeAtomicPublication(saved,closedAU);
       nativeTakeIntake(saved);
       nativeTakeIntake(closedAU);
       NativePlugin recalled(saved, 48000);

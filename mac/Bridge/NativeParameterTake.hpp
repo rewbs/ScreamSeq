@@ -133,6 +133,49 @@ public:
   const RecordedGestureTake &take()const noexcept{return *take_;}
   bool owns(const std::string &identity)const noexcept{return take_->owns(identity);}
   const RecordedGestureBoundary::Cuts &stopCuts()const noexcept{return stoppedCuts_;}
+  struct CommitResult {bool accepted=false,changed=false;};
+  // The session stages one native history/persistence/audio transaction in
+  // publish. It must not pump messages or reenter intake during that callback;
+  // returning false leaves every target unretired for a fresh retry.
+  template<class Publish> CommitResult commit(const NativeSong &native,std::span<const PluginState> rack,
+      std::span<const ParameterChange> baseline,bool acknowledgeLoss,Publish &&publish) {
+    Entry entry(entering_);
+    if(take_->completed())return {true,false}; // A successful Keep must not publish twice.
+    const auto before=current();
+    require(take_->matchesBaseline(rack,baseline),"Parameter recording baseline changed before Keep; input retained");
+    // Native parameter queries can pump the UI owner; prepare all catalogues
+    // before selecting the final take membership and recheck every provider.
+    struct Provider {PluginEditSource source;std::vector<PluginParameter> parameters;};
+    std::map<std::string,Provider> providers;
+    for(const auto &provider:take_->providers()) {
+      const auto index=slot(provider.plugin);auto parameters=audio_.pluginParameters(index);
+      providers.emplace(provider.plugin,Provider{audio_.pluginEditSource(slot(provider.plugin)),std::move(parameters)});
+    }
+    require(current()==before,"Parameter context changed during Keep preparation; input retained");
+    for(const auto &[identity,provider]:providers)
+      require(audio_.pluginEditSource(slot(identity))==provider.source,
+        "Parameter provider changed during Keep preparation; input retained");
+    for(const auto &[identity,provider]:providers)
+      require(take_->observeProvider(identity,provider.source,before.first,before.second),
+        "Parameter provider is incompatible with the retained take");
+    CommitResult result;
+    result.accepted=take_->commit(before.first,before.second,acknowledgeLoss,[&](auto owners,bool acknowledged) {
+      std::vector<RecordedGestureCapture::BatchInput> inputs;inputs.reserve(owners.size());
+      for(auto *owner:owners) {
+        const auto &provider=providers.at(owner->key().plugin);
+        owner->sourceLoss(provider.source.dropped,provider.source.incarnation);
+        inputs.push_back({owner,provider.source.incarnation,provider.parameters});
+      }
+      const auto candidate=RecordedGestureCapture::prepareBatch(inputs,before.first,before.second,rack,native,acknowledged);
+      require(current()==before,"Parameter context changed before Keep publication; input retained");
+      return RecordedGestureCapture::publishBatch(candidate,inputs,[&](const auto &points,bool changed) {
+        const bool accepted=publish(points,changed);
+        if(accepted)result.changed=changed;
+        return accepted;
+      });
+    });
+    return result;
+  }
   bool poll(const NativeSong &native) {
     Entry entry(entering_);
     if(take_->completed())return true;

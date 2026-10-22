@@ -497,3 +497,30 @@ mutations while the take owns a provider, coordinate unified Keep history and
 recovery publication, and connect all seven lifecycle API methods/native controls.
 Closed-editor explicit abandonment needs its own retained-evidence policy; this
 strict helper does not implement it or silently drop queued vendor callbacks.
+
+## Following source batch: atomic Keep adapter — unbuilt
+
+`NativeParameterTake::commit` now performs the native orchestration around
+`RecordedGestureTake::commit` and `RecordedGestureCapture::prepareBatch` /
+`publishBatch`. It validates the captured rack identities and point baseline,
+refreshes native catalogues and provider loss observations, rechecks context
+after vendor calls, and submits the complete membership to one synchronous
+session publication callback. The callback owns staged history, persistence
+and Core Audio publication; false/exception retires no target. A completed
+retry returns accepted without invoking publication again. An empty take
+completes without creating a history callback. No UI/device model is shared.
+
+The mixed native AU/VST3 fixture now prepares assertions for stale point and
+revision rejection, whole-take refusal/retry, unrelated point preservation,
+reentrant intake refusal, actual stopped `AudioDevice` timeline publication,
+all-target retirement, completed retry after revision advancement, retained
+restoration, and empty no-op. These are source assertions, not executed proof;
+the test callback does not establish real session Undo or persistence.
+
+Next integration step is to call this adapter from TrackerSession's unified
+EffectSnapshot history owner, reserving history and point storage before
+`publishRecordedAutomation`, then no-throw swapping accepted model state.
+Session admission must exclude legacy `collectPluginEdits` and manual state
+capture for owned providers before exposing any lifecycle API. The existing
+legacy recording path still timestamps at polling time and remains a confirmed
+gap until that migration is complete. No public lifecycle claim is added yet.
