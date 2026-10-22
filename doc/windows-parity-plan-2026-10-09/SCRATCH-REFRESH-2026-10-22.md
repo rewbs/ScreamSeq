@@ -1,5 +1,37 @@
 # Scratch inspector refresh after external history
 
+## 14:07 checkpoint and bounded group correction
+
+Frozen source `96b6971e56f0c3f297a713ac7254afad87c46099` built successfully once
+from 14:07:38 to 14:09:29 UTC. ARM64 Release executable SHA256 is
+`945bb24bcf3b6596eac146284a77d3053f64b7951b5743d2aef7aa045e2bd554`.
+PR #6 now has that exact head; Windows run39793062072 and Mac run39793062128
+were dispatched alongside the local build. Next coordinated build must start
+no earlier than **15:07:58 UTC**; inspect `scratch-refresh/checkpoint.json`.
+
+Departure and parameter-preview native groups passed. Within command-results,
+both scratch write-admission and external-refresh cases passed, as did each
+logged case before the final song-routing catalogue refusal. The outer child
+hit its unchanged90-second bound during that last case. The preceding 1fb group
+took87.77 seconds and the new scratch case took2.845 seconds; the aggregate
+no longer has adequate room. Original native.xml/log/checks.json retain failure.
+
+Source now moves both scratch cases to `workspace-scratch-editor-tests`, retaining
+every assertion and the90-second child/120-second CTest bounds. This scheduling
+change is unbuilt; do not call the timed-out group a pass. Independent app
+diagnosis runs the original12-case order plus eight affected scratch/rack/review
+cases, with all original assertions. Its separate `app-diagnostic.json` does not
+replace the failed native receipt or authorize packaging. Foreground diagnosis
+may use this built binary after app tests finish; production packaging remains
+gated on complete qualification.
+
+The second ordered run of the prior x64 binary reproduced the recording Redo
+timeout. Its document revision matched the expected revision, while a visible,
+clean, non-pending parameter inspector stayed one revision behind. No Reload
+error or unknown write was present. New workspace-only refresh counters in96b
+distinguish delivered timers, attempted reads and busy deferrals on recurrence;
+they add no audio-thread work or song data. Preserve both old failure logs.
+
 ## Parameter refresh follow-up, 22 October — source only
 
 The same batch now protects automatic plugin-parameter reads with a short native

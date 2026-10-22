@@ -1283,14 +1283,17 @@ int wmain(int argc,wchar_t **argv) {
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
                     timedRestoreCase("module export command and captured picker",applicationModuleExport);
                     timedRestoreCase("automatic field edits",applicationAutomaticEdits);
-                    timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
-                    timedRestoreCase("scratch external refresh",applicationScratchExternalRefresh);
                     timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
                     timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);
                     timedRestoreCase("song routing ports",applicationSongRoutingPorts);
                     timedRestoreCase("song routing unknown result",applicationSongRoutingUnknownResult);
                     timedRestoreCase("song routing catalogue refusal",applicationSongRoutingCatalogRefusal);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"scratch-editor") {
+                    timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
+                    timedRestoreCase("scratch external refresh",applicationScratchExternalRefresh);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
