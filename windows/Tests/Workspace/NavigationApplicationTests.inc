@@ -118,8 +118,8 @@ void applicationDenseRoutingFraming(){
     for(unsigned step=0;step<10;++step)SendMessageW(handle,WM_COMMAND,MAKEWPARAM(3817,BN_CLICKED),0);
     SendMessageW(picker,CB_SETCURSEL,0,0);SendMessageW(handle,WM_COMMAND,MAKEWPARAM(3802,CBN_SELCHANGE),LPARAM(picker));
     restoreCheck(owner->snapshot().at("selected")!=target,"Overview click fixture already selected its target");
-    const auto small=canvas();RestoreJson rect;
-    for(const auto &n:small.at("nodes"))if(n.at("id")==target)rect=n.at("rect");
+    const auto overviewSnapshot=canvas();RestoreJson rect;
+    for(const auto &n:overviewSnapshot.at("nodes"))if(n.at("id")==target)rect=n.at("rect");
     restoreCheck(!rect.is_null()&&rect[2].get<float>()<20,"Overview socket-overlap fixture is not small enough");
     const auto dpi=GetDpiForWindow(handle)/96.f;
     const auto point=MAKELPARAM(int(std::lround((rect[0].get<float>()+rect[2].get<float>()/2)*dpi)),
@@ -128,7 +128,7 @@ void applicationDenseRoutingFraming(){
     SendMessageW(handle,WM_MOUSEMOVE,MK_LBUTTON,MAKELPARAM(GET_X_LPARAM(point)+20,GET_Y_LPARAM(point)+20));
     SendMessageW(handle,WM_LBUTTONUP,0,point);
     restoreCheck(owner->snapshot().at("selected")==target&&!owner->snapshot().at("draft").get<bool>()&&
-        !owner->snapshot().at("layoutDraft").get<bool>()&&canvas()==small,"Overview body drag created a cable/layout edit or missed selection");
+        !owner->snapshot().at("layoutDraft").get<bool>()&&canvas()==overviewSnapshot,"Overview body drag created a cable/layout edit or missed selection");
     SendMessageW(handle,WM_LBUTTONDBLCLK,MK_LBUTTON,point);SendMessageW(handle,WM_LBUTTONUP,0,point);
     restoreCheck(canvas().at("zoom")==1&&owner->snapshot().at("selected")==target,"Overview double-click did not focus readable stage");
     restoreCheck(songState(app)==song&&app.documentOperation("graph.get",{{"includeState",false}})==graph,"View framing changed saved music, layout or history");

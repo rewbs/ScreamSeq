@@ -951,3 +951,15 @@ All six portable inventory tests passed on the corrected source in 3.144 s,
 including refusal of unreviewed methods before any document access. Runtime
 vectors and both native Mac builds still need the next hourly checkpoint.
 This correction is subsequent to 019803275 and is not included in its binary.
+
+Local 019803275 compiled and linked `ScreamSeq.exe` and its scanner, then failed
+building `workspace-restore-tests` at NavigationApplicationTests.inc:121.
+The new local name `small` collided with a Windows RPC header macro expanding
+to `char`. The following source correction names it `overviewSnapshot` and
+preserves every selection/no-edit/readable-focus assertion. No second compile
+was run. Build receipt remains exit1 with no qualifying executable hash.
+Separate diagnostic app/foreground receipts may inspect the completed product
+link, but cannot substitute for the failed native test gate or permit packaging.
+All three CI jobs stopped on the API inventory preflight; their build steps are
+skipped. Conservative next checkpoint is **19:12:11 UTC / 12:12:11 Pacific**
+from the recorded CI timeline; no early rerun or PR-head push is permitted.
