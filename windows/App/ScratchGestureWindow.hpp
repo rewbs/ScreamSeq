@@ -1,6 +1,7 @@
 #pragma once
 #include "FormulaWorkbenchWindow.hpp"
 #include "ScratchEditorState.hpp"
+#include "NativeInputGate.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -37,7 +38,9 @@ private:
   Json call(const std::string &method,Json params,bool write=false){
     require(!pending_,"Scratch editor is busy");require(current(),"Song changed; Reload the retained scratch editor before editing");
     if(write)require(!writeUncertain_,"Previous write outcome needs review; Reload the current phrase before submitting another edit");
-    const auto sent=revision_;if(write)params["expectedRevision"]=sent;pending_=true;layout();bool returned=false;
+    const auto sent=revision_;if(write)params["expectedRevision"]=sent;
+    const std::array<HWND,1> roots{window_};NativeInputGate input(roots);
+    pending_=true;layout();bool returned=false;
     try{auto result=request_(method,params);returned=true;const auto now=context_();require(now.first==document_,"The captured song is no longer open");
       if(write){revision_=now.second;if(target_&&target_->revision==sent)target_->revision=revision_;}else require(now.second==sent,"Song changed during the read; Reload before editing");
       pending_=false;layout();return result;
@@ -62,7 +65,9 @@ private:
   void load(bool discard=false,unsigned selected=0,bool recapture=false){
     require(!pending_&&!dragging_,"Scratch editor is busy");require(discard||!draft(),"Finish or Reload the retained phrase draft first");
     const auto captured=context_();require(recapture||captured.first==document_,"The captured song is no longer open; Reload explicitly to discard its retained draft");
-    const auto candidateTarget=recapture?capture_():target_;pending_=true;layout();
+    const auto candidateTarget=recapture?capture_():target_;
+    const std::array<HWND,1> roots{window_};NativeInputGate input(roots);
+    pending_=true;layout();
     Json result;try{result=request_("scratch.gestures.get",Json::object());require(context_()==captured,"Song changed while loading; retained draft was not replaced");}
     catch(...){pending_=false;layout();throw;}
     // A failed/busy read must never attach an old draft to a new document.
@@ -191,7 +196,10 @@ private:
   }
   void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
   void layout()override{
-    if(!ready_)return;const auto [w,h]=size();const float plotWidth=w-286,plotHeight=(h-359)/2;
+    // Requests hold a native input lease. Keep the existing controls and focus
+    // while their worker pumps messages; disabling the focused edit loses its
+    // caret even if the request is refused before making any change.
+    if(!ready_||pending_)return;const auto [w,h]=size();const float plotWidth=w-286,plotHeight=(h-359)/2;
     place(intro,14,10,w-28,24);place(phrase,14,40,230,250);place(name,252,40,std::max(140.f,w-514),26);place(newPhrase,w-254,40,128,26);place(reload,w-118,40,104,26);
     place(linkLabel,14,75,w-156,22);place(more,w-126,75,112,25);for(int id:{clone,unique,removePhrase,undo,redo})ShowWindow(controls_.at(id),SW_HIDE);
     canvases_[0].viewport={48,136,plotWidth,plotHeight};canvases_[1].viewport={48,171+plotHeight,plotWidth,plotHeight};

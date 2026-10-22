@@ -1,5 +1,49 @@
 # Busy admission and replay consistency
 
+## 22 October 12:23 UTC checkpoint result
+
+Frozen candidate `ab5f677c172a7a286281dec159061b6d88dd3257` built once on
+Windows ARM64 (12:06:43–12:09:47 UTC). Executable SHA-256:
+`d5d34b884d0a258509bf6e6f3485fe05dcfe96d9d4f62a4ae9acf88b1075d796`.
+Six of seven native registrations passed, including API/session-cache,
+recorded automation and plugin notification checks. The new scratch admission
+case in `workspace-command-result-tests` failed its text/caret/focus assertion.
+This candidate is **not qualified for packaging or merging**.
+
+Nine actual-app selections have passing bounded evidence: seven passed the
+first diagnostic run; the scratch fields/formula case and graph cable/Backspace
+case passed a separate two-case run after the foreground QA process closed.
+Retain both original failures. The first scratch failure was its clipboard
+isolation guard: Computer Use typing overlapped that run. The first graph
+failure retained the selected cable after Backspace; its cause is not proven
+by the clean rerun. Never overlap foreground input with private-desktop tests.
+Receipts and logs are in `bin/mac-gesture-20261022/admission-followup/`:
+`build.json`, `checks.json`, `targeted-app-after-native-failure.json`, and
+`isolated-repeat.json`. The repeat preserved the source/executable hashes and
+did not rebuild or rerun the passing seven cases.
+
+Fresh diagnostic Computer Use on owned PID 20192 observed scratch point drag
+save and Undo, parameter search typing/Backspace and Tab/Shift+Tab. The helper
+does not establish floating scratch-field typing continuity. Saving/closing
+the disposable copy exited normally; original F04 bytes were unchanged.
+592.875 seconds of silent 48 kHz/480-frame playback reported 71 deadline
+overruns; presentation and realtime qualification are false. Screenshots and
+these observations are not temporal flicker evidence.
+
+Source correction, **not yet built**: `ScratchGestureWindow.hpp` holds a
+`NativeInputGate` around synchronous calls/load and retains controls during
+pending layout, rather than disabling the focused edit. The application queue
+filter now honors local leases before global key-up/shortcut dispatch, as well
+as document/recording leases. The regression distinguishes raw text, caret and
+focus failures, rejects injected input during the call, and checks successful
+retry/readback and lease release. Existing outcome/Undo assertions remain.
+Next checkpoint must rerun command-result, document-departure and recording
+lease gates plus the three scratch actual-app cases and the graph case. Reuse
+unchanged API/shared test evidence; broader failure triggers remain unchanged.
+Next coordinated build/CI gate: **13:06:48 UTC**. Current Mac/Windows CI runs
+`39775712080` / `39775712016` were still building at 12:22; inspect them rather
+than restarting them. The entries below describe the earlier source preparation.
+
 Source prepared on 22 October after `a8b6fbfe0`. **Unbuilt and not runtime
 qualified.** This belongs in the next coordinated checkpoint, no earlier than
 12:06:17 UTC. The qualified 97bd596a4 package is unchanged.

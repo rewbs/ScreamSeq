@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:23 UTC:** ab5f677c1 ARM64 build succeeded; six of seven native
+registrations passed. Scratch busy admission found genuine focus loss during
+synchronous requests, so this candidate is not package/merge qualified. All
+nine targeted app cases have bounded passing evidence, with two original
+failures retained and two narrow reruns after foreground input stopped. See
+[busy/replay checkpoint](API-BUSY-REPLAY-2026-10-22.md) for the input-interference
+limits and receipts. Diagnostic QA PID 20192 exited normally after saving its
+private copy; never reuse its handles. The original fixture is unchanged.
+
+The pending source correction replaces scratch control disabling with a local
+input lease and filters leased queued input before global shortcuts. It adds
+strict failure/success focus/caret and input-lease assertions. **Unbuilt**;
+next coordinated gate remains **13:06:48 UTC**, including CI. Mac jobs
+119813994178 (Intel) / 119813994591 (ARM) and Windows job119813994498 were still
+building at 12:22. Do not restart. Downloads remains at qualified97bd596a4;
+main remains unchanged. Do not package ab5 or claim temporal/realtime success.
+Finish this narrow regression batch before exposing the unfinished Mac take
+session/API/UI lifecycle.
+
 **22 October 12:07 UTC:** grouped candidate `ab5f677c172a7a286281dec159061b6d88dd3257`
 is pushed to PR #6. The local ARM64 build started at **12:06:43.844 UTC**;
 paired CI runs `39775712080` (Mac) and `39775712016` (Windows) were created at
