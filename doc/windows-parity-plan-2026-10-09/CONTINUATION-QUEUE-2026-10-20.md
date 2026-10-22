@@ -8,6 +8,23 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 20:51 UTC continuation (supersedes gates below):** frozen337fcfda
+built once;12/13 native registrations passed, with compact Pattern-header bounds
+failing at200% DPI. The separate actual-app diagnostic passed28 with one optional
+plugin skip. A new full F04 composing→recording journey passed exact six-domain
+history/save checks, native occupied-Gain refusal, successful Balance recording,
+Keep/Undo/Redo/Discard and unrelated-data preservation. Computer Use reproduced
+the Gain refusal and exposed a misleading parameter-editor status; fixes add
+the refusal reason and direct Recording action. Mac original-input pages and
+stable-selection review are also coded. These later changes are **unbuilt**.
+Read the newest [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) for failed and
+passing receipts, source ownership, remaining focus/audio limits and next checks.
+PR#7 is337fcfda; CI runs39849557952/39849557976 were building at20:45 UTC.
+**No next build before21:31:35 UTC /14:31:35 Pacific**, and inspect actual later
+CI starts first. Backup-only pushes between checkpoints; no package/main merge
+from the failed native gate. Priority remains plugin recording and complete
+composing journeys, with Mac live restoration/device and reciprocal gates open.
+
 **22 October 19:52 UTC source continuation:** Mac generic rack input is now wired
 to the retained take through a main-owner original-input queue, serial-worker
 capture, captured lifecycle/loss acknowledgement and guarded recovery snapshots.

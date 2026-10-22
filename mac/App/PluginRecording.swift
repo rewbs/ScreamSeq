@@ -9,10 +9,14 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   var onDocument: (() -> String?)?
   var onPlugins: (() -> [(id: String, name: String)])?
   var onDelivery: (() -> [String: Any])?
+  var onDeliveryPage: ((Int) -> [String: Any])?
   var onDeliveryLoss: (() -> NSDictionary)?
   var onInputProtected: (() -> Bool)?
   let scope = NSPopUpButton()
   let table = NSTableView()
+  let reviewMode = NSPopUpButton()
+  lazy var previousInputs = ActionButton("Previous") { [weak self] in self?.changeInputPage(-1) }
+  lazy var nextInputs = ActionButton("Next") { [weak self] in self?.changeInputPage(1) }
   let heading = Theme.label("Plugin automation take", size: 18, weight: .semibold)
   let status = Theme.label("Start song playback, then Record gestures from plugin windows.", size: 12)
   let detail = Theme.label("Stop ends this take without stopping song playback. Keep adds one Undo step.", size: 11, color: Theme.muted)
@@ -36,6 +40,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   private var state = [String: Any](), queued: Intent?, timer: Timer?
   private var displayedDeliveryLoss = NSDictionary()
   private var generation: UInt64 = 0
+  private(set) var inputRows = [[String: Any]](), inputOffset = 0, inputTotal = 0
+  private var inputDocument = "", inputTake = ""
+  var reviewingInputs: Bool { reviewMode.indexOfSelectedItem == 1 }
   override init(frame: NSRect) {
     super.init(frame: frame)
     wantsLayer = true; layer?.backgroundColor = Theme.panel.cgColor
@@ -44,18 +51,25 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     table.dataSource = self; table.delegate = self; table.rowHeight = 25
     table.usesAlternatingRowBackgroundColors = true; table.backgroundColor = Theme.bg
     table.setAccessibilityLabel("Recorded plugin parameters and lost input")
+    reviewMode.addItems(withTitles: ["Recorded parameters", "Original native input"])
+    reviewMode.setAccessibilityLabel("Plugin take review content")
+    reviewMode.target = self; reviewMode.action = #selector(changeReviewMode)
+    inputDetail.isSelectable = true
     for (id, title, width) in [("plugin", "Plugin", 210.0), ("parameter", "Parameter ID", 100.0),
                                ("events", "Captured", 75.0), ("loss", "Unmapped / overflow", 145.0), ("sourceLoss", "Source lost", 85.0)] {
       let column = NSTableColumn(identifier: .init(id)); column.title = title; column.width = width
       table.addTableColumn(column)
     }
     let scroll = verticalScrollView(); scroll.documentView = table
-    scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 140).isActive = true
+    // Compact windows retain four visible rows and native scrolling; paging
+    // bounds original input to ten rows without widening the take window.
+    scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 104).isActive = true
     acknowledge.target = self; acknowledge.action = #selector(acknowledgementChanged)
     acknowledge.setAccessibilityLabel("Acknowledge reported plugin recording loss")
     scope.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
     let content = stack(.vertical, [stack(.horizontal, [heading, NSView(), scope], spacing: 12),
-      stack(.horizontal, [record, stop, NSView(), refresh], spacing: 8), detail, inputDetail, scroll, acknowledge,
+      stack(.horizontal, [record, stop, NSView(), refresh], spacing: 8), detail,
+      stack(.horizontal, [reviewMode, NSView(), previousInputs, nextInputs], spacing: 8), inputDetail, scroll, acknowledge,
       stack(.horizontal, [discard, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 16)
     for label in [status, detail, inputDetail] {
@@ -67,6 +81,53 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     updateControls()
   }
   required init?(coder: NSCoder) { fatalError() }
+  @objc func changeReviewMode() {
+    let titles = reviewingInputs ? ["Plugin", "Parameter ID", "Value", "Delivery", "Original host time"] :
+      ["Plugin", "Parameter ID", "Captured", "Unmapped / overflow", "Source lost"]
+    for (column, title) in zip(table.tableColumns, titles) { column.title = title }
+    table.setAccessibilityLabel(reviewingInputs ? "Original native input; read only, never replayed" : "Recorded plugin parameters and lost input")
+    table.deselectAll(nil); table.reloadData(); updateControls()
+  }
+  func changeInputPage(_ delta: Int) {
+    guard reviewingInputs else { return }
+    inputOffset = max(0, min(max(0, (inputTotal - 1) / 10 * 10), inputOffset + delta * 10))
+    refreshInputPage(); table.deselectAll(nil); showInputDetail()
+  }
+  private func refreshInputPage() {
+    guard reviewingInputs else { previousInputs.isHidden = true; nextInputs.isHidden = true; return }
+    previousInputs.isHidden = false; nextInputs.isHidden = false
+    let selected = inputRows.indices.contains(table.selectedRow) ? inputRows[table.selectedRow]["id"] as? String : nil
+    var page = onDeliveryPage?(inputOffset) ?? [:]
+    let nextDocument = page["document"] as? String ?? "", nextTake = page["take"] as? String ?? ""
+    let sameOwner = nextDocument == inputDocument && nextTake == inputTake
+    inputTotal = max(0, page["total"] as? Int ?? 0)
+    let offset = !sameOwner ? 0 : min(inputOffset, max(0, (inputTotal - 1) / 10 * 10))
+    if offset != inputOffset { inputOffset = offset; page = onDeliveryPage?(inputOffset) ?? [:] }
+    let next = Array((page["events"] as? [[String: Any]] ?? []).prefix(10))
+    if !sameOwner || !(next as NSArray).isEqual(to: inputRows) {
+      inputDocument = nextDocument; inputTake = nextTake; inputRows = next; table.reloadData()
+      if sameOwner, let selected, let row = inputRows.firstIndex(where: { $0["id"] as? String == selected }) {
+        table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+      } else { table.deselectAll(nil) }
+    }
+    previousInputs.isEnabled = inputOffset > 0; nextInputs.isEnabled = inputOffset + inputRows.count < inputTotal
+    showInputDetail()
+  }
+  private func showInputDetail() {
+    guard reviewingInputs else { return }
+    inputDetail.isHidden = false
+    let text: String
+    if inputRows.indices.contains(table.selectedRow) {
+      let row = inputRows[table.selectedRow], plugin = row["plugin"] as? String ?? ""
+      let name = onPlugins?().first(where: { $0.id == plugin })?.name ?? plugin
+      text = "\(name) / Parameter \(row["parameter"] ?? "") · \(row["value"] ?? "")\n\(row["state"] ?? ""): \(row["error"] ?? "")\nOriginal host time: \(row["hostTime"] ?? "") · Read only; never replayed."
+    } else {
+      text = inputTotal == 0 ? "No original native input remains to review." :
+        "\(inputOffset + 1)–\(inputOffset + inputRows.count) of \(inputTotal) original inputs. Select one to read its exact value, timestamp and delivery result."
+    }
+    if inputDetail.stringValue != text { inputDetail.stringValue = text; inputDetail.toolTip = text }
+  }
+  func tableViewSelectionDidChange(_ notification: Notification) { showInputDetail() }
   deinit { timer?.invalidate() }
   func activate() {
     if !retained && !pending { loadScopes() }
@@ -110,8 +171,10 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     let currentLoss = onDeliveryLoss?() ?? [:]
     if !displayedDeliveryLoss.isEqual(currentLoss) { acknowledge.state = .off; displayedDeliveryLoss = currentLoss }
     let input = onDelivery?() ?? [:]
-    inputDetail.isHidden = input.isEmpty || (!(onInputProtected?() ?? false) && !retained)
-    inputDetail.stringValue = "Native controls: \(input["accepted"] ?? "0") accepted · \(input["waiting"] ?? 0) waiting · \(input["submitted"] ?? 0) in flight · \(input["refused"] ?? 0) refused · \(input["unknown"] ?? 0) uncertain · \(input["lost"] ?? "0") overflow. Refused and uncertain input is retained in recovery copies and is never replayed automatically."
+    if !reviewingInputs {
+      inputDetail.isHidden = input.isEmpty || (!(onInputProtected?() ?? false) && !retained)
+      inputDetail.stringValue = "Native controls: \(input["accepted"] ?? "0") accepted · \(input["waiting"] ?? 0) waiting · \(input["submitted"] ?? 0) in flight · \(input["refused"] ?? 0) refused · \(input["unknown"] ?? 0) uncertain · \(input["lost"] ?? "0") overflow. Refused and uncertain input is retained in recovery copies and is never replayed automatically."
+    }
     let ready = !pending && !needsReadback && !revision.isEmpty && onDocument?() == document
     record.isEnabled = ready && !retained && !(onInputProtected?() ?? false) && !(onPlugins?().isEmpty ?? true)
     stop.isEnabled = ready && retained && capturing
@@ -124,6 +187,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     keep.title = completed ? "Finish restoration" : "Keep take"
     refresh.isEnabled = !pending && !polling
     recovery.isEnabled = !pending && !polling && (retained || (onInputProtected?() ?? false))
+    refreshInputPage()
     // Polling does not disable action buttons or invalidate native field focus.
   }
   func saveRecovery() {
@@ -146,8 +210,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     completed = retained && data["completed"] as? Bool == true
     let updated = retained ? data["targets"] as? [[String: Any]] ?? [] : []
     if !(updated as NSArray).isEqual(to: targets) {
-      targets = updated; table.reloadData()
-      if let selected, let row = targets.firstIndex(where: {
+      targets = updated; if !reviewingInputs { table.reloadData() }
+      if !reviewingInputs, let selected, let row = targets.firstIndex(where: {
         $0["plugin"] as? String == selected["plugin"] as? String && $0["parameter"] as? Int == selected["parameter"] as? Int
       }) { table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
     }
@@ -241,8 +305,21 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       self.updateControls()
     }
   }
-  func numberOfRows(in tableView: NSTableView) -> Int { targets.count }
+  func numberOfRows(in tableView: NSTableView) -> Int { reviewingInputs ? inputRows.count : targets.count }
   func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
+    if reviewingInputs {
+      guard inputRows.indices.contains(row) else { return nil }; let input = inputRows[row]
+      let text: String
+      switch column?.identifier.rawValue {
+      case "plugin":
+        let id = input["plugin"] as? String ?? ""; text = onPlugins?().first(where: { $0.id == id })?.name ?? id
+      case "parameter": text = "\(input["parameter"] ?? "")"
+      case "events": text = "\(input["value"] ?? "")"
+      case "sourceLoss": text = input["hostTime"] as? String ?? ""
+      default: text = input["state"] as? String ?? ""
+      }
+      let label = Theme.label(text, size: 12); label.toolTip = text; return label
+    }
     guard targets.indices.contains(row) else { return nil }; let target = targets[row]
     let text: String
     switch column?.identifier.rawValue {

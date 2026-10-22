@@ -95,6 +95,23 @@ final class PluginControlDelivery {
      "unknown": entries.filter { $0.state == .unknown }.count,
      "pending": pending, "needsReview": needsReview, "previewError": previewError]
   }
+  // Native review only: bounded pages preserve UUID selection and decimal
+  // host timestamps. These rows never become replayable capture requests.
+  func reviewPage(offset: Int, limit: Int = 10) -> [String: Any] {
+    let count = min(128, max(1, limit)), start = min(entries.count, max(0, offset))
+    let rows = entries.dropFirst(start).prefix(count).map { entry -> [String: Any] in
+      let state: String
+      switch entry.state {
+      case .waiting: state = "waiting"
+      case .submitted: state = "in flight"
+      case .refused: state = "refused"
+      case .unknown: state = "uncertain"
+      }
+      return ["id": entry.id.uuidString, "plugin": entry.input.plugin, "parameter": entry.input.parameter,
+        "value": entry.input.value, "hostTime": String(entry.input.timestamp), "state": state, "error": entry.error]
+    }
+    return ["document": owner?.document ?? "", "take": owner?.take ?? "", "total": entries.count, "offset": start, "events": rows]
+  }
   // Accepted/waiting progress cannot invalidate acknowledgement by itself.
   // Every newly refused/unknown original input and overflow must do so.
   var lossCensus: NSDictionary {

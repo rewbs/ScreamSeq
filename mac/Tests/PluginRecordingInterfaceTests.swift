@@ -134,6 +134,37 @@ extension InterfaceTests {
     try require(!nativeView.record.isEnabled && native.writes.count == beforeStart,
       "An unresolved native journal cannot start a replacement take even if a read reports no shared take")
 
+    let reviewCase = PluginTakeReplies(), reviewed = reviewCase.view
+    let originalTime: UInt64 = 9_007_199_254_740_993
+    var originalRows: [[String: Any]] = (0..<23).map { index in
+      ["id": "input-\(index)", "plugin": "plugin-a", "parameter": 7, "value": Double(index) / 100,
+       "hostTime": String(originalTime + UInt64(index)), "state": "refused", "error": "Existing envelope owns this parameter"]
+    }
+    reviewed.onDeliveryPage = { offset in
+      ["document": "song-a", "take": "take-a", "total": originalRows.count,
+       "events": Array(originalRows.dropFirst(offset).prefix(10))]
+    }
+    reviewCase.load(reviewCase.state(capturing: false))
+    reviewed.reviewMode.selectItem(at: 1); reviewed.changeReviewMode()
+    try require(reviewed.numberOfRows(in: reviewed.table) == 10 && !reviewed.previousInputs.isEnabled && reviewed.nextInputs.isEnabled,
+      "Original-input review shows bounded pages without replacing the retained take")
+    reviewed.table.selectRowIndexes(IndexSet(integer: 3), byExtendingSelection: false)
+    reviewed.tableViewSelectionDidChange(Notification(name: NSTableView.selectionDidChangeNotification))
+    let originalDetail = reviewed.inputDetail.stringValue
+    reviewCase.load(reviewCase.state(capturing: false))
+    try require(reviewed.table.selectedRow == 3 && reviewed.inputDetail.stringValue == originalDetail &&
+      originalDetail.contains(String(originalTime + 3)) && originalDetail.contains("Existing envelope") && reviewed.inputDetail.isSelectable,
+      "Polling preserves selected original input and copyable exact timestamp/error details")
+    originalRows.removeFirst(); reviewCase.load(reviewCase.state(capturing: false))
+    try require(reviewed.table.selectedRow == 2 && reviewed.inputDetail.stringValue == originalDetail,
+      "Accepted-input retirement cannot retarget the selected original event")
+    reviewed.changeInputPage(1); reviewed.changeInputPage(1)
+    try require(reviewed.inputOffset == 20 && reviewed.inputRows.count == 2 && !reviewed.nextInputs.isEnabled && reviewCase.writes.isEmpty,
+      "Last-page navigation cannot replay input or create musical history")
+    reviewed.reviewMode.selectItem(at: 0); reviewed.changeReviewMode()
+    try require(reviewed.numberOfRows(in: reviewed.table) == 1 && reviewed.previousInputs.isHidden && reviewed.nextInputs.isHidden,
+      "Returning to captured parameters retains the shared target summary")
+
     let focusCase = PluginTakeReplies(), focused = focusCase.view
     focused.onDelivery = { ["accepted": "2", "unknown": 1, "needsReview": true] }
     focused.onInputProtected = { true }
@@ -147,9 +178,21 @@ extension InterfaceTests {
     window.setContentSize(NSSize(width: 700, height: 500)); focused.layoutSubtreeIfNeeded()
     try require(focused.scope.frame.width > 0 && focused.keep.frame.width > 0 && focused.status.frame.width <= focused.bounds.width,
       "Compact retained take review keeps scope, actions and wrapped status inside its content")
-    for control in [focused.scope, focused.keep, focused.stop, focused.recovery, focused.inputDetail, focused.status] as [NSView] {
+    for control in [focused.scope, focused.keep, focused.stop, focused.recovery, focused.reviewMode, focused.inputDetail, focused.status] as [NSView] {
       try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
         "Compact take review cannot clip a native action, scope or status outside the window")
+    }
+    focused.onDeliveryPage = reviewed.onDeliveryPage
+    focused.reviewMode.selectItem(at: 1); focused.changeReviewMode()
+    focused.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    focused.tableViewSelectionDidChange(Notification(name: NSTableView.selectionDidChangeNotification))
+    focused.layoutSubtreeIfNeeded(); focused.poll(); focusCase.answer(focusCase.state())
+    try require(window.firstResponder === focused.table && focused.table.selectedRow == 0 &&
+      focused.inputDetail.toolTip?.contains(String(originalTime + 1)) == true,
+      "Original-input polling preserves keyboard focus and full copyable details in the compact window")
+    for control in [focused.reviewMode, focused.previousInputs, focused.nextInputs, focused.inputDetail, focused.keep] as [NSView] {
+      try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
+        "Compact original-input review must retain readable controls and details inside its content")
     }
     window.close()
   }

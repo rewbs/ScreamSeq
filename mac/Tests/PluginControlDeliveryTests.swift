@@ -86,6 +86,18 @@ extension InterfaceTests {
       events(bounded).last?["hostTime"] as? String == String(first.timestamp + 1023),
       "Capacity exhaustion reports loss without dropping, replacing or coalescing retained original input")
     let archive = bounded.recovery!
+    let review = bounded.reviewPage(offset: 10)
+    let reviewRows = review["events"] as? [[String: Any]] ?? []
+    try require(reviewRows.count == 10 && review["total"] as? Int == 1024 &&
+      review["document"] as? String == owner.document && review["take"] as? String == owner.take &&
+      reviewRows.first?["hostTime"] as? String == String(first.timestamp + 10) &&
+      reviewRows.last?["hostTime"] as? String == String(first.timestamp + 19) &&
+      (reviewRows as NSArray).isEqual(to: bounded.reviewPage(offset: 10)["events"] as? [[String: Any]] ?? []),
+      "Review pages preserve exact original timestamps, stable row identities and take ownership without consuming input")
+    try require((bounded.reviewPage(offset: -1, limit: 10000)["events"] as? [[String: Any]])?.count == 128 &&
+      (bounded.reviewPage(offset: Int.max)["events"] as? [[String: Any]])?.isEmpty == true &&
+      (bounded.recovery! as NSDictionary).isEqual(archive),
+      "Out-of-range review navigation is bounded and cannot alter or replay the recovery archive")
     let encoded = try PropertyListSerialization.data(fromPropertyList: archive, format: .binary, options: 0)
     let decoded = try PropertyListSerialization.propertyList(from: encoded, options: [], format: nil) as! [String: Any]
     try require((decoded as NSDictionary).isEqual(archive) && decoded["reviewOnly"] as? Bool == true && decoded["lost"] as? String == "1",

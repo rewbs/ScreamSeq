@@ -12,7 +12,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   using Json=Api::Json;
   using Request=std::function<Json(const std::string &,const Json &)>;
   using Context=std::function<std::pair<std::string,std::string>()>;
-  enum:int {parameter=3950,reload=3955,close=3958,heading=3959,statusLabel=3961,previous,next,applyAll,search,rowBase=4000,stride=10,pageSize=10};
+  enum:int {parameter=3950,reload=3955,close=3958,heading=3959,statusLabel=3961,previous,next,applyAll,search,reviewTake,rowBase=4000,stride=10,pageSize=10};
   enum Part:int {nameLabel,slider,value,choices,toggle,apply,rangeLabel,less,more};
   struct Row {int index=-1;PluginParameterField field;bool dirty=false;};
   std::array<Row,pageSize> rows_;
@@ -24,6 +24,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   Request request_;Context context_;NativeWriteCompletion::Write write_;std::function<bool()> available_;
   std::function<bool()> recording_;
   std::function<void(uint32_t,double,uint64_t)> capture_;
+  std::function<void()> reviewTake_;
   bool recording()const{return recording_&&recording_();}
   void recordControl(int row,double candidate,uint64_t timestamp,bool typed=false) {
     auto &r=rows_.at(size_t(row));const auto &f=r.field;
@@ -46,7 +47,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     setting_=false;
     parameters_[size_t(r.index)]["value"]=candidate;parameters_[size_t(r.index)]["manualValue"]=candidate;
     r.field.value=candidate;r.dirty=false;++generation_;
-    status(L"Recording original parameter input / Stop the take to review");
+    status(L"Original parameter input queued / Recording opens the take review");
   }
   std::string plugin_,graph_,node_,document_,revision_;Json parameters_=Json::array(),report_,submitted_;
   Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
@@ -243,6 +244,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   void action(int id,unsigned notification)override{
     const auto inputTime=hostTime100ns();
     if(setting_)return;if(id==close){hide();return;}
+    if(id==reviewTake&&notification==BN_CLICKED){if(reviewTake_)reviewTake_();return;}
     const int row=(id-rowBase)/stride,part=(id-rowBase)%stride;
     const bool rowControl=id>=rowBase&&row<pageSize&&rows_[row].index>=0;
     if(rowControl&&part==value&&notification==EN_CHANGE){
@@ -325,6 +327,7 @@ class PluginParametersWindow final : public NativeToolWindow {
       for(auto part:{slider,value,choices,toggle,apply,less,more})EnableWindow(controls_.at(control(i,part)),ready&&visible&&f.editable()&&(part!=slider||f.maximum>f.minimum));
     }
     place(statusLabel,12,h-82,w-24,38);place(reload,12,h-36,134,26);place(applyAll,w-150,h-36,138,26,dirty()&&!pending_&&automaticEditFailed_);
+    place(reviewTake,158,h-36,142,26,bool(reviewTake_));
     EnableWindow(controls_.at(previous),ready&&page_>0);EnableWindow(controls_.at(next),ready&&page_+1<pages());EnableWindow(controls_.at(parameter),ready);EnableWindow(controls_.at(applyAll),ready&&dirty());EnableWindow(controls_.at(reload),!pending_||backgroundRead_);set(reload,completion_.retained()?L"Review result":L"Reload values");
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
@@ -343,8 +346,14 @@ public:
     // Keep the focused HWND enabled until the guarded reload begins. Its
     // normal pending/readback path already preserves and restores field focus.
   }
-  void recording(std::function<bool()> active,std::function<void(uint32_t,double,uint64_t)> capture) {
-    recording_=std::move(active);capture_=std::move(capture);
+  void recordingNeedsReview(const std::string &document,const std::string &reason) {
+    if(!graph_.empty()||document!=document_)return;
+    // A delivery refusal is asynchronous. Never leave the enqueue prompt
+    // claiming success, and never rewrite the original text or move focus.
+    status(L"Take needs review: "+wide(reason)+L" / Open Recording");
+  }
+  void recording(std::function<bool()> active,std::function<void(uint32_t,double,uint64_t)> capture,std::function<void()> review={}) {
+    recording_=std::move(active);capture_=std::move(capture);reviewTake_=std::move(review);layout();
   }
   PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available,std::string graph={},std::string node={}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)),graph_(std::move(graph)),node_(std::move(node)){
     if(graph_.empty()!=node_.empty()||plugin_.empty()==graph_.empty())throw std::invalid_argument("Parameter editor requires one rack identity or graph/node pair");
@@ -352,7 +361,7 @@ public:
     const auto title=wide(name)+L" — Parameters";create(L"ScreamSeq.PluginParameters",title.c_str(),720,740);combo(parameter);edit(search,L"",256);
     SendMessageW(controls_.at(search),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(L"Find a parameter (Ctrl+F)"));
     accessibleName(search,L"Find plugin parameter");accessibleName(parameter,L"Parameter page");
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Retry values"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{reload,L"Reload values"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{applyAll,L"Retry values"},{reviewTake,L"Recording…"}})button(id,text);
     label(heading,wide(name).c_str());label(statusLabel,L"");
     for(int i=0;i<pageSize;++i){label(control(i,nameLabel),L"");label(control(i,rangeLabel),L"");edit(control(i,value),L"",64);combo(control(i,choices));button(control(i,toggle),L"Off");button(control(i,apply),L"Set");button(control(i,less),L"−");button(control(i,more),L"+");
       const auto track=add(control(i,slider),TRACKBAR_CLASSW,L"Parameter",TBS_HORZ|TBS_NOTICKS);NativeInputGate::present(track,TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));NativeInputGate::present(track,TBM_SETLINESIZE,0,100);NativeInputGate::present(track,TBM_SETPAGESIZE,0,1000);}
@@ -362,7 +371,7 @@ public:
       SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order plugin parameter controls");};
     for(int id:{search,previous,parameter,next,close})order(id);
     for(int row=0;row<pageSize;++row)for(auto part:{slider,value,choices,toggle,less,more})order(control(row,part));
-    order(reload);order(applyAll);
+    order(reload);order(reviewTake);order(applyAll);
     focusPresentationChanged([this]{const auto focus=GetFocus();if(focus!=window_&&owns(focus))navigationFocus_=focus;});
     finish();load();
   }

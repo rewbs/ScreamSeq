@@ -38,6 +38,7 @@ extension AppController {
       } ?? []
     }
     view.onDelivery = { [weak self] in self?.pluginRecordingInput.delivery.summary ?? [:] }
+    view.onDeliveryPage = { [weak self] offset in self?.pluginRecordingInput.delivery.reviewPage(offset: offset) ?? [:] }
     view.onDeliveryLoss = { [weak self] in self?.pluginRecordingInput.delivery.lossCensus ?? [:] }
     view.onInputProtected = { [weak self] in self?.pluginRecordingInput.protectsDocument ?? false }
     view.onRequest = { [weak self] method, params, reply in

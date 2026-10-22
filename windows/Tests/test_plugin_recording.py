@@ -2,12 +2,18 @@
 import ctypes
 import os
 import plistlib
+from pathlib import Path
+import sys
 import time
 import unittest
+from ctypes import wintypes
 
 import private_desktop
 import test_song_routing as routing
 from client import ApiError
+
+private_desktop.user.IsWindowVisible.argtypes = [wintypes.HWND]
+private_desktop.user.IsWindowVisible.restype = wintypes.BOOL
 
 
 class PluginRecordingTests(unittest.TestCase):
@@ -118,6 +124,43 @@ class PluginRecordingTests(unittest.TestCase):
         plugin = self.add_gain()
         project = self.folder / 'recording-source.screamseq'
         self.write('document.save', path=str(project))
+        self.record_keep_history_reopen_and_discard(plugin, project)
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
+    def test_composed_fixture_records_without_losing_cross_domain_edits(self):
+        # Reuse the strict six-domain typed-tree journey rather than substituting
+        # a blank song or checking only the final automation count.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'editor/Tests/Conformance'))
+        from composing_history import run
+        from project_tree import differences, read_project, digest
+        from native_roundtrip import write_json
+        evidence = Path(os.environ.get('SCREAMSEQ_COMPOSING_EVIDENCE_DIR', self.folder / 'composing-evidence'))
+        report = run(self.client, evidence)
+        self.assertTrue(report['passed'])
+        project = evidence / report['exchangeInput']
+        before = read_project(project)
+        plugin = before['plugins'][0]['instanceID']
+        # F04 intentionally has a Gain envelope. Exercise that refusal first,
+        # then record Balance without disabling or replacing existing music.
+        self.record_keep_history_reopen_and_discard(plugin, project, parameter=2, conflicting_parameter=1)
+        saved = evidence / 'recorded-composing-journey.screamseq'
+        self.write('document.save', path=str(saved))
+        after = read_project(saved)
+        expected = dict(before, automation=after['automation'])
+        comparison = differences(expected, after)
+        self.assertTrue(comparison['equal'], comparison)
+        self.assertNotEqual(before['automation'], after['automation'])
+        write_json(evidence / 'recording-journey.json', dict(
+            passed=True, parityComplete=False, silentNativePlayback=True,
+            foregroundVisualQualified=False, source=project.name, saved=saved.name,
+            beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
+            onlyRecordedAutomationChanged=comparison,
+            checks=['six-domain composing history', 'occupied Gain refusal preserves music', 'native Balance capture',
+                    'Stop preserves playback', 'Keep is one Undo', 'Redo',
+                    'Discard preserves preceding music', 'save/reopen',
+                    'exact unrelated project preservation']))
+
+    def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None):
         self.launch(project)
         self.assertTrue(self.read('transport.get')['playing'])
         baseline = self.read('plugin.state.get', plugin=plugin)
@@ -140,14 +183,50 @@ class PluginRecordingTests(unittest.TestCase):
         self.desktop.send(main, 0x111, 300 | (1 << 16), rack)
         self.main_command(304)
         parameters = self.window('ScreamSeq.PluginParameters')
-        field = private_desktop.user.GetDlgItem(parameters, 4012)
-        self.assertTrue(field)
-        text = ctypes.create_unicode_buffer('-6.5')
-        self.desktop.send(field, 0xC, 0, ctypes.addressof(text))
-        captured = self.wait_for(self.take, lambda s: s['eventCount'] >= 1)
+        def enter(identifier, value):
+            self.idle()
+            editor = next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin'] == plugin)
+            row = next(r for r in editor['rows'] if r['id'] == identifier)
+            field = private_desktop.user.GetDlgItem(parameters, row['valueControl'])
+            self.assertTrue(field)
+            self.assertTrue(private_desktop.user.IsWindowVisible(field))
+            text = ctypes.create_unicode_buffer(value)
+            self.desktop.send(field, 0xC, 0, ctypes.addressof(text))
+
+        if conflicting_parameter is not None:
+            before_refusal = self.doc()
+            enter(conflicting_parameter, '-6.5')
+            review = self.wait_for(lambda: self.read('workspace.get')['parameterRecording'],
+                                   lambda s: s['delivery']['needsReview'])
+            refused = review['delivery']['events']
+            self.assertEqual(len(refused), 1)
+            self.assertEqual({k: refused[0][k] for k in ('plugin', 'parameter', 'value', 'state')},
+                             dict(plugin=plugin, parameter=conflicting_parameter, value=-6.5, state='refused'))
+            self.assertIn('envelopes', refused[0]['error'])
+            self.wait_for(lambda: next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin'] == plugin),
+                          lambda p: 'envelopes' in p['status'])
+            self.assertEqual(self.take()['eventCount'], 0)
+            self.assertEqual(self.doc(), before_refusal)
+            self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
+            self.assertEqual(self.read('automation.get'), points_before)
+            self.recording_button(9722)
+            self.recording_button(9724)
+            self.assertFalse(self.take()['retained'])
+            self.idle()
+            self.recording_button(9721)
+            take = self.wait_for(self.take, lambda s: s['retained'] and s['capturing'])
+
+        enter(parameter, '-6.5')
+        try:
+            captured = self.wait_for(self.take, lambda s: s['eventCount'] >= 1)
+        except AssertionError as failure:
+            # Preserve the native target/draft/admission state, not only the
+            # worker's empty event list, when a composing journey finds a gap.
+            self.fail(str(dict(failure=str(failure), expectedPlugin=plugin,
+                               recording=self.read('workspace.get')['parameterRecording'])))
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
-        events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=1)
+        events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
         self.assertTrue(any(e['value'] == -6.5 for e in events['events']))
         self.assertTrue(all(int(e['timestamp']) >= int(take['startTime']) for e in events['events']))
         self.recording_button(9722)
@@ -172,12 +251,12 @@ class PluginRecordingTests(unittest.TestCase):
         second = self.write('automation.recording.start', plugins=[plugin])
         timestamp = self.take()['hostTime']
         params = dict(expectedRevision=self.doc()['revision'], take=second['take'], plugin=plugin,
-                      parameter=1, value=-12.25, timestamp=timestamp)
+                      parameter=parameter, value=-12.25, timestamp=timestamp)
         self.idle()
         accepted = self.client.call('automation.recording.capture', params, request_id='original-control-once')
         self.assertTrue(accepted['data']['accepted'])
         self.assertEqual(self.client.call('automation.recording.capture', params, request_id='original-control-once'), accepted)
-        self.assertEqual(self.read('automation.recording.events', take=second['take'], plugin=plugin, parameter=1)['total'], 1)
+        self.assertEqual(self.read('automation.recording.events', take=second['take'], plugin=plugin, parameter=parameter)['total'], 1)
         self.write('automation.recording.stop', take=second['take'])
         # A hidden review has no poll timer. Its departure summary must follow
         # the confirmed API Discard without needing to reopen/refresh it.

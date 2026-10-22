@@ -91,9 +91,9 @@ void applicationRecordedParameterControls() {
     app.openGraphPluginParameters(plugin);auto &editor=*app.graphPluginParameters.at(plugin);const auto window=editor.window();
     ScreamSeq::Tests::ownGuiWindow(window);
     struct Event{uint32_t parameter;double value;uint64_t timestamp;};std::vector<Event> events;
-    bool failCapture=false,held=false;
+    bool failCapture=false,held=false;unsigned reviews=0;
     editor.recording([&]{if(held)throw std::runtime_error("Retained take review");return true;},
-        [&](uint32_t id,double value,uint64_t time){if(failCapture)throw std::runtime_error("Owned queue refusal");events.push_back({id,value,time});});
+        [&](uint32_t id,double value,uint64_t time){if(failCapture)throw std::runtime_error("Owned queue refusal");events.push_back({id,value,time});},[&]{++reviews;});
     const auto music=songState(app),state=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
     const auto value=GetDlgItem(window,4012),slider=GetDlgItem(window,4011);
     const auto before=ScreamSeq::hostTime100ns();SetFocus(value);rawDraftText(value,L"-12.00");
@@ -103,6 +103,17 @@ void applicationRecordedParameterControls() {
         "Recorded typed control lost original input time, stable identity, raw formatting or focus");
     const auto field=controlState(value);SendMessageW(window,WM_TIMER,7,0);
     restoreCheck(controlState(value)==field,"Background parameter refresh reformatted recorded text or moved its caret");
+    const auto queuedStatus=editor.snapshot().at("status");
+    editor.recordingNeedsReview("another document","Foreign refusal");
+    restoreCheck(editor.snapshot().at("status")==queuedStatus,"Foreign recording failure changed a retained editor");
+    editor.recordingNeedsReview(app.documentId,"Disable this parameter's envelopes before recording gestures");
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(editor.snapshot().at("status").get<std::string>().find("envelopes")!=std::string::npos&&
+        controlState(value)==field&&GetFocus()==value&&events.size()==1,"Async refusal was hidden or changed original text/caret/focus");
+    const auto review=GetDlgItem(window,3966);
+    restoreCheck(IsWindowVisible(review)&&IsWindowEnabled(review),"Parameter editor has no direct recording review action");
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(3966,BN_CLICKED),reinterpret_cast<LPARAM>(review));
+    restoreCheck(reviews==1&&events.size()==1&&controlState(value)==field,"Opening recording review resubmitted original input");
     for(const auto position:{5000,6000,7000}){
         SendMessageW(slider,TBM_SETPOS,TRUE,position);
         SendMessageW(window,WM_HSCROLL,MAKEWPARAM(TB_THUMBTRACK,position),reinterpret_cast<LPARAM>(slider));

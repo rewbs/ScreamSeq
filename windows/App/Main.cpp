@@ -639,7 +639,12 @@ public:
         try {
             if(parameterControlDelivery.pending())controller->service();
             parameterControlDelivery.collect();
-            if(parameterControlDelivery.needsReview())status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+            if(parameterControlDelivery.needsReview()) {
+                status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+                const auto reason=parameterControlDelivery.reviewMessage();
+                for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())
+                    editor->recordingNeedsReview(parameterTakeDocument,reason);
+            }
             if(!parameterControlDelivery.pending())KillTimer(window,11);
         }catch(const std::exception &e){status=wide(e.what());}
     }

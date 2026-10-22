@@ -58,6 +58,8 @@ void applicationPatternHeaderLayout(){
         for(int id:{effectColumnChooser,graphCommandsCommand,noteColumnMuteCommand,effectsCommand,scratchGesturesCommand,patternHeaderMenuCommand}){
             const auto control=app.controls.at(id);if(!IsWindowVisible(control))continue;
             RECT bounds{};GetWindowRect(control,&bounds);MapWindowPoints(nullptr,app.window,reinterpret_cast<POINT *>(&bounds),2);
+            std::cout<<"Pattern header control "<<id<<" bounds "<<bounds.left<<","<<bounds.top<<","<<bounds.right<<","<<bounds.bottom
+                <<" grid "<<grid.x<<","<<grid.y<<","<<grid.w<<" scale "<<scale<<"\n";
             restoreCheck(bounds.left>=int(grid.x*scale)-1&&bounds.right<=int((grid.x+grid.w)*scale)+1&&
                 bounds.top>=int(grid.y*scale)&&bounds.bottom<=int((grid.y+27)*scale)+1,
                 "Pattern header control escaped its grid into another panel or row");

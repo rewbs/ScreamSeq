@@ -1321,3 +1321,95 @@ groups and parameter-take/recovery session gates. Actual Mac generic-control
 worker contention, manual Undo grouping, recovery timer, native playback and
 reciprocal typed save/reopen remain required before a parity-completion claim.
 No production package or main merge follows from this source checkpoint.
+
+### 22 October 20:51 UTC — composed-song recording and original-input review
+
+The coordinated checkpoint froze **337fcfdac7b6056684e9b5fa7280d83d70a481e8**.
+Local ARM64 Release compiled once at20:31:08–20:33:11 UTC, SHA256
+`341c7ecfe05a709f7b925e75cedb099636b2ccf041f8bb1bb606f7cc84f3657b`.
+Receipts are in `bin/mac-gesture-20261022/native-control-integration/`.
+The13 native registrations passed12 and failed `workspace-context-panel-tests`:
+the new Pattern-header containment assertion failed at200% DPI. Do not overwrite
+`checks.json` or treat the separate diagnostic runs as a qualification pass.
+The preceding stale instrument-assignment regression now passed.
+
+`diagnostic-app.json` records28 actual-app passes plus one optional installed
+Surge XT skip, with frozen source/binary unchanged. The required CI runs are
+Mac39849557952 (Intel120071747522, ARM120071747873) and
+Windows39849557976/job120071747426. At20:45 UTC all three were still building.
+Latest actual build start20:31:35 UTC makes **21:31:35 UTC /14:31:35 Pacific**
+the next allowed coordinated checkpoint; inspect current jobs before proceeding.
+PR#7 is at337fcfda; the backup branch may advance without another CI checkpoint.
+
+The new `test_composed_fixture_records_without_losing_cross_domain_edits` first
+runs the exact shared F04 six-domain composing contract: note, sample loop,
+instrument pan envelope, plugin value, graph edge and mixer send; dry runs,
+stale/no-op behavior, full chronological Undo/Redo, branch fork and typed
+save/reopen comparison. It then opens that edited project in an owned silent
+WASAPI process and exercises native parameter recording, Keep, one-step Undo,
+Redo, a second-take Discard and reopening. Its final typed comparison permits
+only the expected recorded-automation change; plugin state and all other music
+remain exact. Outputs persist beside the receipts for reciprocal exchange.
+
+Two initial runs (`composing-journey` and `composing-diagnosis`) failed because
+the reused blank-song test incorrectly expected Gain capture to succeed: F04
+has an enabled Gain envelope. The diagnostic preserved the real refused event,
+original value/timestamp and shared reason “Disable this parameter's envelopes
+before recording gestures”. This is the intended shared conflict guard, not
+permission to disable existing music. The corrected journey explicitly asserts
+that refusal and unchanged song/plugin/automation state, stops/discards that
+take, then records the unoccupied Balance parameter. `composing-conflict.json`
+passed against frozen337fcfda in23.9s; all typed unrelated-data comparisons passed.
+The current source additionally requires the new editor-level refusal message,
+so that new assertion awaits the next executable. No assertion on conflict or
+data preservation has been relaxed.
+
+Fresh Computer Use on owned PID41072 observed Windows→Plugin automation take,
+Record during silent F04 playback, opening Gainer Params, a gain-slider drag,
+the same envelope refusal with exact retained input in the review, and Stop
+preserving playback. This exposed misleading editor text: the parameter window
+still said Recording after asynchronous refusal. Search/Tab observations reported
+root focus, so this session does **not** qualify keyboard continuity. The process
+exited normally after600s; original fixture and binary hashes are unchanged.
+`foreground-diagnostic.json` is explicitly failed/diagnostic. The audio receipt
+reported43 deadline overruns at48kHz/480 frames, no starvation/device errors and
+no processor fault. Concurrent diagnostic work and screenshots do not qualify
+realtime performance, temporal flicker or sustained presentation.
+
+Source following337fcfda, **unbuilt**:
+
+- Windows `PluginParametersWindow.hpp`, `ParameterControlDelivery.hpp`,
+  `MixerEditor.inc`, `Main.cpp`: asynchronous refused/uncertain input is surfaced
+  in the retained parameter editor without rewriting text/caret/focus. A native
+  **Recording…** footer action opens the existing take owner directly. Queued
+  input is labelled queued, not accepted. Original values are never replayed.
+  Native cases cover foreign-document refusal, focus/caret retention and opening
+  review without another input. The actual composed-song case checks the real
+  worker refusal reaches the editor.
+- Windows `WorkspaceView.inc`: explicitly sizes the owner-drawn FX combo's
+  closed selection to16DIP while preserving22DIP popup rows, to fit the23DIP
+  header controls. `NavigationApplicationTests.inc` prints the offending control
+  rectangle before the unchanged containment assertion. The exact failed
+  rectangle was not in the old receipt; this diagnosis remains unconfirmed
+  until rebuilt, not a claimed fix.
+- Mac `PluginControlDelivery.swift` exposes bounded, read-only original-input
+  pages with stable UUID rows and decimal UInt64 host times. `PluginRecording.swift`
+  adds native review-mode and paging controls, selectable complete details,
+  unchanged-selection polling and the existing captured-parameter summary.
+  It is wired through `PluginRecordingIntegration.swift`. No new capture API,
+  replay path, project format or audio-callback work is introduced. Tests cover
+  exact timestamps beyond2^53, bounded pages, unchanged recovery evidence,
+  stable selection as accepted rows retire, last-page navigation and compact
+  action containment. These Swift changes are not compiled yet.
+
+Next bounded checkpoint: retain the13 native registrations, add the composed-song
+actual-app case to the28-case selection, and run Mac plugin-control-delivery,
+plugin-recording and existing session/recovery gates in the coordinated CI build.
+Fresh Windows Computer Use must check the rebuilt header at200% DPI and compact
+width, direct Recording action, visible refusal, Balance capture and keyboard
+focus. Preserve prior receipts; no package/merge until required checks pass.
+Mac live Keep/Discard restoration still requires stopped transport and opaque
+Discard requires closed editors: safely removing that restriction needs a
+separate host-state/preview-restoration batch, not removal of its guard. Native
+vendor/device checks, Mac real-control recording, reciprocal edited-project
+exchange and the complete A01–A18 composing journeys remain open.

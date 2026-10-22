@@ -97,6 +97,10 @@
 		if(controlDpi!=dpi) {
 			HFONT next=CreateFontW(-int(12*s),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
 			for(auto [id,h]:controls) SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(next),TRUE);
+            // The dropdown rows remain 22 DIP, but its closed selection belongs
+            // in the 23-DIP Pattern header band. Owner-drawn combos otherwise
+            // retain the taller row height plus native borders at high DPI.
+            SendMessageW(controls.at(effectColumnChooser),CB_SETITEMHEIGHT,WPARAM(-1),MulDiv(16,dpi,96));
 			if(controlFont) DeleteObject(controlFont);controlFont=next;controlDpi=dpi;
 		}
 		auto place=[&](int id,float x,float y,float w,float h,bool visible=true) {
