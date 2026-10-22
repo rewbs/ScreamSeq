@@ -37,6 +37,18 @@ static void recordedGestureCapture() {
     settled(chain,-15);
     rejects([&]{capture.publish(prepared,[](const auto &,bool){return true;});});
   }
+  for(const uint32_t rate:{44100u,48000u,96000u}) {
+    auto mixedClock=std::make_shared<RecordingFrameTimeline>();
+    check(mixedClock->publish(1000,11000,0,rate/100,rate,7),"Mixed-source capture clock failed");
+    RecordedGestureCapture mixed(key,mixedClock,rack,before,document.native(),catalog,2);
+    mixed.append({1,-12,1050},7,9);mixed.append({1,-9,1049},7,9);mixed.seal(1060);
+    auto result=mixed.prepare(key.revision,7,9,rack,document.native(),catalog);
+    check(result.points().size()==before.size()+1&&result.points().back()==ParameterChange{0,1,-12,2}&&
+      std::equal(before.begin(),before.end(),result.points().begin()),"Older delayed input overwrote a newer point in the same canonical frame");
+    mixed.append({1,-18,1050},7,9);result=mixed.prepare(key.revision,7,9,rack,document.native(),catalog);
+    check(mixed.events().size()==3&&result.points().back()==ParameterChange{0,1,-18,2},
+      "Same original timestamp lost its last-input tie-breaker or raw evidence");
+  }
   auto clock=std::make_shared<RecordingFrameTimeline>();
   check(clock->publish(1000,1200,0,960,48000,7),"Capture safety clock failed");
   const auto make=[&](const auto &points){return std::make_unique<RecordedGestureCapture>(key,clock,rack,points,document.native(),catalog,2);};

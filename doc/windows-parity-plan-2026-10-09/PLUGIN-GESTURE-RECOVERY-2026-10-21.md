@@ -521,3 +521,11 @@ are connected; no running application exposes this unfinished workflow.
 Both Mac architectures passed the preceding `d1c8fddff` run `39708338698`.
 That result protects the earlier shared inputs only; the subsequent queue,
 restoration and session changes still need the next combined checkpoint.
+
+Mixed-source review also found a shared same-frame collision issue: worker arrival
+order could let an older event overwrite a newer event when both map to one
+canonical frame. `RecordedGestureCapture::overlay` now tracks each frame's newest
+original host time; equal timestamps keep the existing last-accepted tie-breaker.
+Baseline point order and all raw events remain intact. Added portable checks cover
+44.1/48/96 kHz, reversed delivery, equal timestamps and unrelated baseline points.
+This change is source-only and needs both platforms' recorded-automation gates.
