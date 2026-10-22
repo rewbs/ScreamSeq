@@ -1,5 +1,46 @@
 # Shared capture: Mac AU intake continuation
 
+## Stopped control handoff, 22 October 12:57 UTC — unbuilt
+
+The retained timeline path already called AudioOutputUnitStop before adopting
+stopped work, but AudioDevice's catalog read, preview cancellation, graph preview
+restoration, parameter activity initialization and latency refresh still used
+`!active()` as proof of quiescence. The callback sets playing_ false on a fault
+before reading processor tail state and, on natural completion, before closing
+its final timeline interval. These native control paths must not adopt work
+while that callback is still finishing.
+
+`AudioDevice::joinStoppedProcessing` centralizes the existing checked native
+output-stop handoff. Those paths and recorded-timeline preparation/publication
+now use it. It returns immediately for an active device. It never calls the
+user-facing `stop()` method, resets processors or closes the retained clock.
+All joining remains on the serialized control owner; the audio callback has no
+new work, allocation, lock or logging. See Apple's
+[AudioOutputUnitStop contract](https://developer.apple.com/documentation/audiotoolbox/audiooutputunitstop(_:)).
+
+The native-plugin regression extends stopped review to eight repeated preview,
+catalog read, cancellation and latency-refresh cycles, requiring the effective
+value to restore while the accepted manual value, provider, editor and timeline
+owner remain unchanged. It now runs the stopped timeline/preview checks for
+both process-local AU and VST3 fixtures; the existing owned VST3 editor path
+still checks window retention. No output device is opened by these cases.
+They require the next Mac ARM/Intel build and native-plugin ordinary/owned-UI
+checks plus unified-history. They do not simulate an in-flight Core Audio
+callback: natural-end/fault/device and sustained realtime qualification remain
+separate runtime requirements. Full retained-take session/API/UI remains open.
+
+## Reciprocal and Intel update, 22 October 12:57 UTC
+
+Intel ab5 job 119813994178 also completed 133/134 native registrations; its sole
+failure is the same obsolete plugin-trust assertion corrected in source.
+All 35 interface groups and the recovery, native editor, private socket and
+shared conformance stages passed. The full logs were inspected; excerpts are
+`admission-followup/mac-intel-result-excerpts.log`.
+Windows→Intel run 39781599519 and Intel→Windows run 39782231757 passed all ten
+fixture legs with build jobs skipped. Together with the ARM return above, this
+qualifies the exact ab5 project exchange on both architectures, not the pending
+source corrections or complete parity.
+
 ## Execution update, 22 October 12:45 UTC
 
 The ab5f677c1 Mac ARM job 119813994591 (run 39775712080) completed:

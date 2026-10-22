@@ -230,12 +230,7 @@ bool AudioDevice::publishLiveRack(std::unique_ptr<LiveRackPlan> &plan) noexcept 
 }
 std::unique_ptr<AudioDevice::LiveRecordedPlan> AudioDevice::prepareRecordedAutomation(const std::vector<ParameterChange> &points,std::span<const ParameterChange> manualBaselines) {
   if(!plugins_)throw std::runtime_error("Recorded automation processor is unavailable");
-  if(!active()) {
-    // Do not call stop(): joining an already stopped callback must not shorten
-    // its retained presentation clock (natural output may still be queued).
-    if(unit_)check(AudioOutputUnitStop(unit_),"Cannot join stopped automation processing");
-    plugins_->applyPending();
-  }
+  if(joinStoppedProcessing())plugins_->applyPending();
   auto plan=std::make_unique<LiveRecordedPlan>();plan->pluginEpoch=pluginEpoch_;
   plan->points=points;plan->hosted=plugins_->prepareRecordedAutomation(points,manualBaselines);return plan;
 }
@@ -243,8 +238,7 @@ bool AudioDevice::publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan> pl
   // Pointer equality inside the hosted plan is insufficient after a complete
   // rack replacement: allocator address reuse must not accept an old plan.
   if(!plan||!plugins_||plan->pluginEpoch!=pluginEpoch_)return false;
-  const bool stopped=!active();
-  if(stopped&&unit_)check(AudioOutputUnitStop(unit_),"Cannot join stopped automation processing");
+  const bool stopped=joinStoppedProcessing();
   if(!plugins_->publishRecordedAutomation(std::move(plan->hosted)))return false;
   automation_.swap(plan->points);
   if(stopped)plugins_->applyPending();
@@ -266,9 +260,17 @@ void AudioDevice::stop() {
     AudioOutputUnitStop(unit_);
   if(frameTimeline_)frameTimeline_->close(captureGeneration_,mach_absolute_time());
 }
+bool AudioDevice::joinStoppedProcessing() {
+  if(active())return false;
+  // Natural completion/fault changes playing_ inside the callback before its
+  // final processor/timing work. Never infer quiescence from that flag alone.
+  // Keep this separate from stop(), which closes the clock at the user's cut.
+  if(unit_)check(AudioOutputUnitStop(unit_),"Cannot join stopped plugin processing");
+  return true;
+}
 void AudioDevice::refreshPluginLatencies(const NativeSong &native) {
   if(!plugins_)return;
-  if(active()) {
+  if(!joinStoppedProcessing()) {
     // Preparation can wait behind an accepted transition. The existing plan
     // remains audible; the pending vendor serial makes the next UI poll retry.
     auto prepared=native;prepared.ensureMixer();plugins_->refreshLatencies(prepared);

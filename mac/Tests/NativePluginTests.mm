@@ -56,6 +56,25 @@ static void stoppedRecordedPublication(const PluginState &state,bool visible=fal
       "Stopped recorded publication replaced its native processor");
     if(visible)check(window.visible,"Stopped recorded publication closed its native editor");
   };
+  // Stopped control reads/cancellation and latency refresh share the same
+  // native handoff as timeline publication. They must remain useful without
+  // opening a device or replacing the retained editor/manual baseline.
+  const auto originalClock=audio.recordingFrameTimeline();
+  for(int repeat=0;repeat<8;++repeat) {
+    const std::array<ParameterChange,1> preview{{{0,original.id,.7f,0}}};
+    check(audio.previewPluginParameters(preview),"Queue stopped parameter preview");
+    const auto effective=audio.pluginParameters(0).at(0);
+    check(std::abs(effective.value-.7f)<1e-6 && effective.manualValue &&
+          std::abs(*effective.manualValue-original.value)<1e-6,
+          "Stopped preview changed the accepted manual baseline or failed to adopt");
+    check(audio.cancelPluginParameterPreview(0,original.id),"Cancel stopped parameter preview");
+    audio.refreshPluginLatencies(NativeSong{});
+    const auto restored=audio.pluginParameters(0).at(0);
+    check(std::abs(restored.value-original.value)<1e-6 && restored.manualValue &&
+          std::abs(*restored.manualValue-original.value)<1e-6 && audio.recordingFrameTimeline()==originalClock,
+          "Stopped handoff lost baseline restoration or replaced the recording clock");
+    unchangedOwner();
+  }
   const std::vector<ParameterChange> points{{0,original.id,.6f,0}};
   auto prepared=audio.prepareRecordedAutomation(points,baseline);
   check(audio.publishRecordedAutomation(std::move(prepared)),"Publish stopped recorded timeline");
@@ -227,6 +246,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       closedInputProtection(gain);
       PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";
       closedInputProtection(closedAU);
+      stoppedRecordedPublication(closedAU);
       NativePlugin effect(gain, 48000);
       check(effect.parameter(7, .3f), "VST3 parameter write");
       auto saved = effect.state();

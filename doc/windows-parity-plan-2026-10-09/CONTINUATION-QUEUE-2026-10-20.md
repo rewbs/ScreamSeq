@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:57 UTC:** both preceding Mac jobs are now terminal, each with
+133/134 native passes and the same plugin-trust failure. All 35 interface groups
+and the other scheduled Mac stages passed. Both retained ARM and Intel round
+trips passed ten fixtures per leg; no build was repeated. The additional
+[stopped Mac control handoff](MAC-GESTURE-INTAKE-2026-10-22.md) is prepared to join
+the still-unstarted focus/recovery checkpoint. Read its freeze for the final
+source hash; the hourly gate remains **13:06:48 UTC**. Mac native-plugin and
+unified-history checks must execute against this new handoff. No current QA
+window exists; launch a fresh owned instance only after the automated gate.
+
 **22 October 12:48 UTC:** the prepared `focus-followup` checkpoint now contains
 scratch focus plus deep recovery storage and the Mac trust test correction.
 It is still unexecuted. Its freeze records the superseded e986-only preparation;
