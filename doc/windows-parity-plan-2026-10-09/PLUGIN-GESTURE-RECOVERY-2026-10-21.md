@@ -1199,3 +1199,26 @@ runtime assertions, corpus, inventory baseline and `parityComplete:false` are
 unchanged. Six focused Python tests passed without a build. Existing reports are
 immutable historical receipts, not relabeled executions. This change prevents
 fixed integer/dry-run/replay contracts from being reported as still-open gaps.
+
+At 06:50 UTC the Intel and Windows evidence archives above were downloaded,
+SHA-256 verified, and selected reports safely extracted beneath
+`ci/mac-intel-7154/` and `ci/windows-x64-7154/`. Each `inspection.json` retains
+individual report hashes. Intel confirms the same 5 fixture legs, 8 editing
+contracts, 41 API/21 codec cases, 3 duration cases, 18 metadata stages, 21 history
+saves and 25 bank saves as ARM; its interface log confirms 35/35 groups. Its
+executable hash is
+`0fd848d15a199f254038dfcf4ad610a4951a7a18cde094b812d71e3c73222564`.
+The x64 reports confirm original corpus, executable and fixture inputs unchanged
+and passing requested conformance; executable hash
+`38e3affe3462b513c8d41e628d60a54640b32d491ed92317a66f971f13ed0ce7`.
+Both are the identical-tree CI merge `4c40b3e0`, not the next Windows correction.
+
+The x64 audio diagnostic specifically reports `audio.devices.get: devices=[]`,
+inactive audio, zero callbacks and an invalid recording clock. Its service
+receipt shows AudioEndpointBuilder and Audiosrv both Running after being started.
+This establishes missing endpoints in that runner; it does not qualify device
+playback or excuse any unrelated native failure. All earlier logs remain intact.
+The new foreground wrapper and all prepared PowerShell scripts passed syntax
+parsing. The prepared checkpoint builds only two targets and runs 12 selected
+native registrations plus the 13 actual-app cases; foreground global focus and
+Computer Use remain required separately. No correction build has started.
