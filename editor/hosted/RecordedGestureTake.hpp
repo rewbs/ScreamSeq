@@ -138,6 +138,7 @@ public:
   uint64_t playbackEpoch()const noexcept{return playbackEpoch_;}
   size_t eventCount()const noexcept{return eventCount_;}
   size_t targetCount()const noexcept{return targets_.size();}
+  size_t providerCount()const noexcept{return sources_.size();}
   Failure failure()const noexcept{return failure_;}
   bool completed()const noexcept{return completed_;}
   uint64_t rejectedEvents()const noexcept{return rejected_;}

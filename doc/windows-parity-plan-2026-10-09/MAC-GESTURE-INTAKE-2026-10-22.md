@@ -160,3 +160,28 @@ These new tests have not run. The legacy manual path remains unchanged.
 The same next batch fixes the recording test module's import order so it can be
 selected independently. A standalone import passed without launching the app;
 the candidate's three recording cases passed through the explicit-path follow-up.
+
+## Following source batch: shared bounded drain policy
+
+`editor/hosted/RecordedGestureDrain.hpp` extracts Windows' provider preflight,
+128-events-per-provider poll, fixed-stop-cut handling, paired empty-read
+acknowledgement and latest-original-timestamp preview selection. The Windows
+adapter now delegates those rules while preserving its existing API errors,
+preview-publication retry and native baseline restoration. Missing/partial
+catalogues or fixed cuts are rejected before consuming notifications.
+
+The callbacks are serialized control-owner operations: observation returns an
+optional exact provider identity/loss counter; reading returns Event, Complete
+or a rejected boundary and always supplies its paired provider source. A native
+adapter may throw its own lookup error. Native cut creation, UI leases, provider
+hosting, stable slot mapping and audio preview remain platform-specific. No UI,
+device, project format or public API is introduced by this extraction.
+
+`editor/Tests/RecordedGestureDrainTests.inc`, registered through the existing
+recorded-automation executable, covers exact-budget continuation, a later
+provider failing before any pop, changed revision, fixed suffix retention,
+stale/unsupported/partial cuts, original out-of-order timestamps, equal-time
+last delivery and loss on an empty provider. These are prepared source tests,
+not executed results. Mac still requires a session take owner and guarded
+preview/baseline restoration before replacing its legacy recording consumer;
+the raw rack adapter and shared drain are prerequisites, not API parity closure.

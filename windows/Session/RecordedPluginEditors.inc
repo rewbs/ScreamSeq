@@ -139,63 +139,38 @@ bool PluginOperations::drainRecordedEditors(const RecordedCuts &cuts,bool acknow
   auto &capture=*recordedEditors_;auto &take=*capture.take;
   if(take.completed())return true; // Keep exclusion until restoration succeeds.
   const auto [revision,epoch]=capture.context();
-  // Validate all providers before popping any queue. A changed context must
-  // remain reviewable without consuming input which belongs to another owner.
-  for(const auto &[identity,catalog]:capture.catalogs) {
+  const auto observe=[&](const std::string &identity)->std::optional<PluginEditSource> {
     const auto found=editors_.find(identity);
-    if(found==editors_.end()||!found->second||
-       !take.observeProvider(identity,found->second->editSource(),revision,epoch))
-      throw Api::ApiError(-32001,"Parameter recording context or provider changed; queued input retained");
-  }
-  bool empty=true;
-  for(const auto &[identity,catalog]:capture.catalogs) {
+    if(found==editors_.end()||!found->second)return std::nullopt;
+    return found->second->editSource();
+  };
+  const auto read=[&](const std::string &identity,const PluginEditBoundary *cut,PluginEdit &event,PluginEditSource &source) {
     const auto found=editors_.find(identity);
     if(found==editors_.end()||!found->second)
       throw Api::ApiError(-32002,"Recorded plugin provider is unavailable; take and baseline protection retained");
-    auto &provider=*found->second;bool drained=false;
-    PluginEdit event;PluginEditSource source;
-    const auto cut=cuts.find(identity);
-    for(unsigned n=0;n<128;++n) {
-      if(cut==cuts.end()) {
-        if(!provider.popEdit(event,source)){drained=true;break;}
-      } else {
-        const auto result=provider.popEditBefore(cut->second,event,source);
-        need(result==PluginEditRead::Event||result==PluginEditRead::Complete,
-          "Recorded input boundary is no longer valid; input and protection retained");
-        if(result==PluginEditRead::Complete){drained=true;break;}
-      }
-      (void)take.append(identity,event,source,revision,epoch,document_.native(),catalog);
-    }
-    // Exactly 128 notifications means another bounded poll is needed; never
-    // manufacture the empty paired pop needed for a completed native drain.
-    empty=empty&&drained;
-    if(drained) {
-      if(acknowledgeStop)(void)take.drained(identity,source,revision,epoch);
-      else (void)take.observeProvider(identity,source,revision,epoch);
-    } else (void)take.observeProvider(identity,source,revision,epoch);
-  }
-  const auto failure=take.failure();
-  if(failure==RecordedGestureTake::Failure::Context||failure==RecordedGestureTake::Failure::Provider||
-     failure==RecordedGestureTake::Failure::Target)
+    auto &provider=*found->second;
+    return cut?provider.popEditBefore(*cut,event,source):
+      provider.popEdit(event,source)?PluginEditRead::Event:PluginEditRead::Complete;
+  };
+  const auto drained=RecordedGestureDrain::poll(take,revision,epoch,document_.native(),capture.catalogs,cuts,
+    acknowledgeStop,observe,read);
+  if(drained==RecordedGestureDrain::Result::ContextOrProvider)
+    throw Api::ApiError(-32001,"Parameter recording context or provider changed; queued input retained");
+  need(drained!=RecordedGestureDrain::Result::InvalidBoundary,
+    "Recorded input boundary is no longer valid; input and protection retained");
+  if(drained==RecordedGestureDrain::Result::FailedTake)
     throw Api::ApiError(-32001,"Parameter recording context or provider changed; input and baseline protection retained");
   if(preview&&capture.previewedEvents!=take.eventCount()) {
     // Build from the retained raw take so allocation/queue refusal cannot lose
     // audible retry data after notifications have already been consumed.
     std::vector<ParameterChange> changes;changes.reserve(take.targetCount());
-    for(size_t i=0;i<take.targetCount();++i) {
-      const auto &target=take.target(i);const auto events=target.events();
-      if(!events.empty()) {
-        // Standard-control and vendor callbacks can reach the worker in a
-        // different order. Preview the latest original time, preserving the
-        // last delivered event for equal timestamps, rather than a late old edit.
-        const auto *latest=&events.front();for(const auto &event:events)if(event.hostTime>=latest->hostTime)latest=&event;
-        changes.push_back({uint32_t(slot({{"plugin",target.key().plugin}})),target.key().parameter,latest->value,0});
-      }
-    }
+    RecordedGestureDrain::latest(take,[&](const auto &key,const auto &event){
+      changes.push_back({uint32_t(slot({{"plugin",key.plugin}})),key.parameter,event.value,0});
+    });
     capture.preview(changes); // Must throw on transient queue refusal.
     capture.previewedEvents=take.eventCount();
   }
-  return empty;
+  return drained==RecordedGestureDrain::Result::Complete;
 }
 void PluginOperations::captureRecordedRecoveryInput() {
   if(!recordedEditors_||recordedEditors_->take->completed())return;
@@ -210,7 +185,7 @@ void PluginOperations::captureRecordedRecoveryInput() {
   // bounded poll proves completion when the prefix is exactly divisible by 128.
   // Later input cannot extend this recovery work or enter the archived prefix.
   try {
-    for(size_t poll=0;poll<=PluginEditQueue::capacity/128;++poll)
+    for(size_t poll=0;poll<=PluginEditQueue::capacity/RecordedGestureDrain::eventsPerProvider;++poll)
       if(drainRecordedEditors(cuts,!capture.releaseCuts.empty(),false))return;
   } catch(const Api::ApiError &) {
     const auto reason=capture.take->failure();

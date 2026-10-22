@@ -2,6 +2,7 @@
 #include "editor/hosted/RecordedCapture.hpp"
 #include "editor/hosted/RecordedGestureCapture.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
+#include "editor/hosted/RecordedGestureDrain.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
@@ -52,6 +53,7 @@ static void settled(PluginChain &chain,float decibels) {
 }
 #include "RecordedGestureCaptureTests.inc"
 #include "RecordedGestureTakeTests.inc"
+#include "RecordedGestureDrainTests.inc"
 #include "RecordedGestureRecoveryTests.inc"
 #include "ControlInputRecoveryTests.inc"
 #include "PluginInputRecoveryReviewTests.inc"
@@ -144,6 +146,7 @@ int main() {
     capturePreparation();
     recordedGestureCapture();
     recordedGestureTake();
+    recordedGestureDrainTests();
     recordedGestureRecoveryTests();
     controlInputRecoveryTests();
     pluginInputRecoveryReviewTests();
