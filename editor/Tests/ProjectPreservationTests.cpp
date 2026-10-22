@@ -71,10 +71,14 @@ int main() {
 		imported["recoveryTake"]={{"events",Json::array()}};
 		ScreamSeq::Project::ProjectMetadata metadata;
 		check(!metadata.capture(imported,knownProject,false),"Valid extensions must not require inactive recovery");
+		const auto detached=metadata.importedMetadata();
+		check(detached["futureRoot"]==imported["futureRoot"]&&!detached.contains("module")&&!detached.contains("recoveryTake")&&
+			!detached["plugins"][0].contains("state"),"Detached review exposes owned state or loses original evidence");
 		auto edited=knownProject;edited["module"]=Json::binary({5,6,7});
 		edited["native"]["tracks"]=reordered;
 		edited["plugins"]=changedRack;
 		auto saved=metadata.merge(edited);
+		check(ScreamSeq::Project::sameStoredValue(metadata.importedMetadata(),detached),"Saving current music changed detached imported evidence");
 		check(saved["module"]==edited["module"] && !saved.contains("recoveryTake"),"Owned snapshot/take content must not be resurrected");
 		check(saved["plugins"][1]["state"]==changedRack[1]["state"] && saved["plugins"][1]["extension"]=="only-plugin-a" &&
 			!saved["plugins"][0].contains("extension"),"Current plugin state and opaque extension must follow the same stable plugin");

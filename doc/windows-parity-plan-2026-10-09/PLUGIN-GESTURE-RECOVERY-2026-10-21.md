@@ -893,3 +893,40 @@ Latest bounded observation of older `ffe4a330c` Mac Intel job `119629368438`:
 build, model/host tests, Swift tests and native interface harness passed; socket
 conformance was still running. This is supporting evidence for the older inputs,
 not qualification of the newer shared recovery helper or Windows integration.
+
+## Shared detached recovery reads on Mac (source, awaiting qualification)
+
+The earlier public-read asymmetry is now addressed in source. Mac
+`PluginRecoveryReviewAPI.inc` exposes the same `automation.recovery.list/get`
+contracts, paging limits and stale-document guard as Windows. It delegates
+archive validation and event projection to `PluginInputRecoveryReview.hpp`.
+`ProjectMetadata::importedMetadata()` provides a const view of detached imported
+metadata, excluding owned module/plugin state. Reads do not serialize the current
+audio/plugin graph or merge old input into current music. Mac's socket cache now
+classifies recovery List as a read, so repeating a read request cannot return a
+cached earlier document's catalogue. Both public schemas/guides describe this.
+The seven live `automation.recording.*` methods remain Windows-specific; this
+batch does not silently replace the Mac's existing native recording lifecycle.
+
+Mac's existing parameter-activity registration now includes a native bridge test
+for a future archive beside valid input, exact counters/doubles, independent
+selection, invalid/stale requests, unchanged music/history, save-copy preservation
+and untouched source. The shared project-preservation target checks that the
+const imported view excludes owned state and survives current-model saves.
+The existing paired edited-metadata conformance workload now calls these reads
+on both platforms at initial import, after deleting the original plugin, and
+after reopening. It requires unchanged original timestamps, values, loss/epoch
+counters and stable target IDs; those requests are recorded in the same evidence
+journal as the save/Undo/Redo checks. This adds execution coverage to an existing
+build and fixture workload, not another build cycle.
+
+These additions remain unbuilt/unexecuted at this source checkpoint. Local
+qualification adds the shared project-preservation target to the same hourly
+build. Mac native and actual-socket checks require the next coordinated CI run;
+prior Mac results cannot be reused for these changed adapters or conformance
+inputs. Reciprocal exchange must use the new saved opaque fixture outputs.
+
+At approximately 04:47 UTC the older Mac Intel job `119629368438` completed
+successfully, including its socket conformance and interface checks. Together
+with the older ARM result this closes that old Mac checkpoint only. Both Mac
+jobs must execute again for the now-changed shared metadata and native adapter.

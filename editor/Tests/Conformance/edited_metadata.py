@@ -126,6 +126,27 @@ def run(client, output):
         report["stages"].append(dict(leg=leg, stage=stage, file=path.name,
                                      sha256=immutable[path], typedSHA256=digest(tree), comparison=comparison))
         require(comparison["equal"], f"{leg}/{stage}: unexpected typed metadata change")
+        if leg == "opaque" and stage in ("baseline", "rack-remove", "reopened"):
+            before = call("document.get")
+            catalogue = call("automation.recovery.list")["data"]
+            require(catalogue["total"] == 2 and all(e["headerSupported"] for e in catalogue["entries"]),
+                    "Detached input catalogue omitted a valid independent archive")
+            for kind, archive in (("gestures", gesture_archive), ("nativeControls", control_archive)):
+                page = call("automation.recovery.get", dict(expectedRevision=before["revision"],
+                            kind=kind, index=0, limit=512))["data"]
+                events = archive["targets"][0]["events"] if kind == "gestures" else archive["events"]
+                require(page["reviewOnly"] and page["total"] == len(events), "Detached review lost original inputs")
+                require(page["summary"]["revision"] == archive["revision"], "Original revision was remapped to current song")
+                for expected_event, actual in zip(events, page["events"]):
+                    require(all(actual[k] == value for k, value in expected_event.items()),
+                            "Detached review changed original timestamps, values or delivery state")
+                    require(actual["plugin"] == plugin_id, "Detached input followed a reordered/removed rack slot")
+                if kind == "gestures":
+                    require(page["summary"]["rejected"] == archive["rejected"] and
+                            page["summary"]["playbackEpoch"] == archive["playbackEpoch"], "Gesture review narrowed original loss or epoch")
+                else:
+                    require(page["summary"]["accepted"] == archive["accepted"], "Native input review narrowed accepted count")
+            require(call("document.get") == before, "Detached review changed music, history or document identity")
         return path, tree
 
     try:

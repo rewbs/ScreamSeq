@@ -22,6 +22,10 @@ class ProjectMetadata {
 		return result;
 	}
 public:
+	// Read-only detached import evidence. This excludes owned module/plugin state
+	// and is not a projection of the current musical model. Readers must not
+	// reconstruct or publish current music from this baseline.
+	const Json &importedMetadata() const noexcept {return original;}
 	// Returns true when recovery required an inactive original-metadata archive.
 	// The archive includes rejected plugin states/takes, but never a second
 	// embedded module. Existing archives are retained under their original keys.

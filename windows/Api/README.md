@@ -14,8 +14,9 @@ Closing the review window only hides it. A retained take protects song departure
 
 [plugin-recording.schema.json](plugin-recording.schema.json) specifies the
 Windows adapter; use `api.describe` before calling it. The underlying take,
-musical timing, history and persisted automation are shared. These new lifecycle
-and recovery request names are not yet exposed by the Mac API adapter.
+musical timing, history and persisted automation are shared. The detached recovery
+reads are also exposed by the Mac adapter. The seven new live recording lifecycle
+request names remain Windows-specific; Mac retains its native recording path.
 
 - `automation.recording.get {}` returns the retained take, original `startTime`,
   optional `endTime`, playback epoch, target counts and loss. `hostTime` is the

@@ -2,6 +2,26 @@
 
 ScreamSeq exposes the open song to local applications and agents through a versioned JSON interface. It can read the cursor and song, edit patterns, manipulate samples and instruments, and change native plugins and automation. It works without screen capture, simulated clicks, or audio playback. No language model is embedded: an external agent translates a musical request into explicit edits.
 
+## Detached plugin input recovery
+
+`automation.recovery.list {offset?, limit?}` and
+`automation.recovery.get {expectedRevision, kind, index, offset?, limit?}` inspect
+the same imported original-input archives on Mac and Windows. List defaults to
+64 entries (maximum 128); Get defaults to 128 events (maximum 512). `kind` is
+`gestures` or `nativeControls`, and `index` is within that kind. Get guards the
+current song revision; its summary retains the archive's original revision,
+clock and plugin identities. Unsupported archive headers remain visible without
+hiding valid independent archives. `headerSupported` does not promise that the
+complete archive is valid; Get validates it before returning any event rows.
+
+Review is read only: no recording is armed, no old event is replayed, and no
+current-clock mapping, history or playback changes occur. Decimal timestamp/loss
+strings and native values remain exact; removed plugins are still reviewable.
+Native saves preserve the typed originals, including unsupported independent
+archives. These methods read detached imported evidence, not the current live
+take. The separate `automation.recording.*` lifecycle is currently exposed only
+by the [Windows adapter](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review).
+
 ## Scratch phrases
 
 `scratch.gestures.get` returns song-local `gestures` with integer `id` (1–255), `name`, `motion`, `fader`, and `uses`; the read also returns factory `presets`, `unitsPerCycle:65536`, and limits. Preset identifiers are `baby`, `chirp`, `transform`, `one-click-flare`, `two-click-flare`, `crab`, and `scribble`. These are editable starting gestures, not recorded commercial presets.
