@@ -189,6 +189,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   var onSavePreset: ((Int) -> Void)?, onLoadPreset: ((Int) -> Void)?
   var savePresetButton: ActionButton!, loadPresetButton: ActionButton!
   var onActivity:(()->Void)?
+  var onRecordingTake: (() -> Void)?
   var onPatternAutomation: (() -> Void)?
   let rack = PluginRack(frame: .zero)
   var onGesture: ((Bool) -> Void)?, onGraph: ((String) -> Void)?
@@ -237,6 +238,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   func actionMenu(_ identity: String? = nil) -> NSMenu {
     let menu = NSMenu(title: "Plugin"); menu.autoenablesItems = false
     menu.addItem(ContextAction("Add built-in effect…") { [weak self] in self?.onAddBuiltIn?() })
+    menu.addItem(ContextAction("Plugin automation take…") { [weak self] in self?.onRecordingTake?() })
     guard let id = identity ?? selectedIdentity, let slot = plugins.firstIndex(where: { $0["instanceID"] as? String == id }) else {
       for title in ["Open interface / controls", "Bypass / enable plugin", "Show in Graph…", "Audio buses…", "Programs…", "Save preset…", "Load preset…", "Automation envelopes…", "Parameter activity…", "New trigger instrument…", "Assign tracker instruments…", "Move earlier", "Move later", "Remove plugin"] {
         let item=ContextAction(title,enabled:false){};item.toolTip="Select a plugin in Plugin controls first";menu.addItem(item)

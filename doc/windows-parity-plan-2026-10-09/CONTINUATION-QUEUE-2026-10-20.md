@@ -14,6 +14,12 @@ with the 19:12:11 UTC gate unchanged. Later primary-checkout work fixes Mac
 retained-plugin-take autosave scheduling, recovery admission after intake errors,
 and close/replace ownership guards. It is not part of frozen69fe8; see the intake
 report for unexecuted tests and remaining real-app timer/device qualification.
+The following source also adds the native Mac take-review window, retained
+lifecycle intent and its isolated interface group. It is wired to Window/plugin
+menus and command-palette discovery, but remains unbuilt and must not be packaged
+as a complete workflow before generic native-control delivery/recovery is wired.
+Next coding dependency: original-time, stable-identity generic rack input with
+retained pending/refused/unknown evidence; see the intake report's newest section.
 
 **22 October 18:38 UTC source checkpoint:** backup branch
 `codex/mac-gesture-next-checkpoint` contains `3c159554e` (Windows recording

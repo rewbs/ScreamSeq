@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory(prefix='resonance-workspace-') as temporary:
             client.call('workspace.panel',{'panel':'notes','return':True})
             assert client.call('context.get')['data']['row']==0
             shortcuts=client.call('workspace.commands.get')['data']['commands']
+            assert any('Plugin Automation Take' in c['name'] for c in shortcuts), 'Native take review must be discoverable from the main menu/command palette'
             command=next(c for c in shortcuts if 'Graph' in c['name'])
             original=command['keys']
             try:

@@ -1071,3 +1071,47 @@ store tests, actual-app recovery regression, native parameter take admission,
 and the explicit BlackHole real-session lifecycle. A real-app timed recovery
 check with captured plugin input remains necessary; the pure scheduling and
 session tests do not establish the full app timer/socket path.
+
+### Following source batch — native Mac take review
+
+`mac/App/PluginRecording.swift` adds an AppKit review component for the existing
+shared lifecycle API. `PluginRecordingIntegration.swift` retains one window;
+Window → Plugin Automation Take, the plugin action menu, and the command palette
+reach it without navigating away from Pattern. Close/replacement protection
+raises this review. Closing only the review window leaves input retained and
+does not implicitly Keep, Discard or stop transport. The window polls only while
+visible; the existing session intake and recovery remain independent of it.
+
+Record captures stable selected/all-rack identities and a revision. Stop ends
+the take; Keep uses one shared history transaction; committed-but-unrestored
+results expose **Finish restoration** and disable Discard. A lifecycle action
+clicked during polling retains one intent. The completed read must match its
+original document, take, revision, capture/completion state and acknowledged
+loss before submission. Read failure cancels the unsubmitted intent. Writes
+are never replayed automatically; errors retain the review and require an
+explicit readback before another action. Malformed readback cannot re-enable
+Record. Incompatible context cannot be bypassed by acknowledging loss. Provider
+loss is shown even when no parameter event survived. Unchanged reads preserve
+target selection and native table focus; ordinary polling keeps action controls
+enabled rather than blinking them off.
+
+The `plugin-recording` interface group covers those ordering/failure cases,
+scope retention, duplicates, exact write counts, new loss, completed restoration,
+all ambiguous receipt variants, source-only loss, native focus and compact
+layout. It is registered in the full isolated interface runner and compile list.
+The actual-app workspace fixture requires menu/command-palette discoverability.
+**Source only; after frozen69fe8, not built or run.** Required later gates include
+both Mac architectures, the new interface group and the complete interface run,
+actual-app workspace, real native AU/VST3 input and Keep/restoration/reopen, and
+visible keyboard/resize checks on Mac. Counts and offscreen interface tests do
+not qualify real vendor input, presentation or accessibility.
+
+This window currently describes recording from native plugin windows. Generic
+Mac rack controls still use their older immediate/manual delivery path and
+cannot safely join this retained take until original timestamps, stable targets,
+pending/refused/uncertain input recovery and worker completion are wired through.
+That is the next required integration step; do not package or call this a
+complete Mac recording workflow yet. Windows's equivalent retained native input
+delivery already exists in `App/ParameterControlDelivery.hpp`. Live Mac release
+without stopped transport, native device evidence and reciprocal project gates
+also remain open.

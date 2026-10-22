@@ -32,6 +32,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var pluginBrowserWindow: NSWindow?
   var sampleBrowserWindow: NSWindow?
   var sampleRecordingWindow: NSWindow?
+  var pluginRecordingWindow: NSWindow?
   lazy var sampleLibrary = SampleLibrary(directory: sampleLibraryDirectory)
   let sampleAudition = SampleAudition()
   let sampleInspectionQueue = DispatchQueue(label: "org.resonance.sample-inspection", qos: .userInitiated)
@@ -1225,6 +1226,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     pluginEditor.onSavePreset = { [weak self] slot in self?.showPluginPreset(slot: slot, saving: true) }
     pluginEditor.onLoadPreset = { [weak self] slot in self?.showPluginPreset(slot: slot, saving: false) }
     pluginEditor.onSelect = { [weak self] _ in self?.refreshPlugins() }
+    pluginEditor.onRecordingTake = { [weak self] in self?.showPluginRecording() }
     pluginEditor.onOpen = { [weak self] slot in
       guard let self, !self.busy else { return }
       if self.model.nativePlugins.indices.contains(slot), self.model.nativePlugins[slot]["format"] as? String == "Built-in" {
@@ -1745,6 +1747,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   enum UnsavedChoice { case proceed, save, cancel }
   func unsavedChoice() -> UnsavedChoice {
     if session.parameterRecordingTakeID != nil {
+      showPluginRecording()
       statusLabel.stringValue = "Keep or discard the plugin automation take and finish its restoration before closing or replacing this song."
       return .cancel
     }
@@ -2064,6 +2067,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(workspaceMenu, "Restore Custom Layout", #selector(restoreWorkspaceLayout))
     let win = submenu("Window")
     item(win, "Mixer…", #selector(showMixer), "m", [.command, .shift])
+    item(win, "Plugin Automation Take…", #selector(showPluginRecording))
     win.addItem(
       withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
     NSApp.windowsMenu = win
