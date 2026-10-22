@@ -34,7 +34,12 @@ class PluginParametersWindow final : public NativeToolWindow {
     r.dirty=true;
     capture_(id,candidate,timestamp); // Enqueue only; never pump or await here.
     setting_=true;struct ResetSetting{bool &value;~ResetSetting(){value=false;}}resetSetting{setting_};
-    if(!typed)set(control(row,value),Json(candidate));
+    // The retained event keeps its original double value and timestamp. The
+    // host consumes a float scalar; display that scalar without its binary
+    // promotion tail, and never rewrite a musician's typed text.
+    if(!typed){const auto scalar=std::abs(candidate)<=std::numeric_limits<float>::max()?double(static_cast<float>(candidate)):candidate;
+      set(control(row,value),wide(PluginParameterField::editableText(
+        std::isfinite(scalar)&&scalar>=f.minimum&&scalar<=f.maximum?scalar:candidate,f.minimum,f.maximum)));}
     if(f.kind==PluginParameterField::Kind::Toggle)set(control(row,toggle),wide(f.choices.at(size_t(candidate))));
     else if(f.kind==PluginParameterField::Kind::Choice)NativeInputGate::present(controls_.at(control(row,choices)),CB_SETCURSEL,WPARAM(candidate));
     else if(f.maximum>f.minimum)NativeInputGate::present(controls_.at(control(row,slider)),TBM_SETPOS,TRUE,LPARAM(std::lround((candidate-f.minimum)/(f.maximum-f.minimum)*10000)));
@@ -285,8 +290,9 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void timer(UINT_PTR id)override{
     if(id==8){if(pending_)return;KillTimer(window_,8);if(sliderCancelPending_)cancelSlider();else if(sliderRow_>=0&&(sliderEndPending_||!GetCapture()))finishSlider();return;}
-    if(id!=7||!visible()||pending_||dirty()||completion_.retained()||needsReload_||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
+    if(id!=7||(!visible()&&!takeRefreshPending_)||pending_||dirty()||completion_.retained()||needsReload_||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
     try{load();}catch(const Api::ApiError &e){if(e.code!=-32002){needsReload_=true;throw;}}catch(...){needsReload_=true;throw;}
+    if(!visible()&&!takeRefreshPending_)KillTimer(window_,7);
   }
   void layout()override{
     if(!ready_)return;const auto focus=GetFocus();if(pending_&&!pendingFocus_&&owns(focus))pendingFocus_=focus;
@@ -311,6 +317,10 @@ public:
     // Discard can preserve the song revision. Still re-read the accepted
     // baseline before allowing another edit, without losing a partial number.
     takeRefreshPending_=true;cancelAutomaticEdit();
+    // A closed editor must not leave an otherwise finished take blocking the
+    // next Record forever. Schedule one guarded read even while hidden; dirty
+    // or uncertain fields retain their existing protection and are not reset.
+    if(!dirty()&&!pending_&&!completion_.retained()&&!needsReload_)SetTimer(window_,7,250,nullptr);
     status(dirty()?L"Take finished / unsaved text retained. Reload values to discard that text.":L"Take finished / refreshing accepted parameter values");
     // Keep the focused HWND enabled until the guarded reload begins. Its
     // normal pending/readback path already preserves and restores field focus.
@@ -340,7 +350,9 @@ public:
   }
   void show(){const auto focus=navigationFocus_;NativeToolWindow::show();SetTimer(window_,7,250,nullptr);
     SetFocus(focus&&owns(focus)&&IsWindowVisible(focus)&&IsWindowEnabled(focus)?focus:controls_.at(parameter));}
-  void hide()override{if(sliderRow_>=0||!previewToken_.empty()){cancelPreview();sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;if(!completion_.retained()&&!needsReload_){++generation_;presentPage();}}KillTimer(window_,7);KillTimer(window_,8);NativeToolWindow::hide();}
+  void hide()override{if(sliderRow_>=0||!previewToken_.empty()){cancelPreview();sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;if(!completion_.retained()&&!needsReload_){++generation_;presentPage();}}
+    KillTimer(window_,7);KillTimer(window_,8);NativeToolWindow::hide();
+    if(takeRefreshPending_&&!dirty()&&!pending_&&!completion_.retained()&&!needsReload_)SetTimer(window_,7,250,nullptr);}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
     return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",filtered_.empty()?-1:int(filtered_.at(size_t(page_*pageSize)))},{"page",page_},{"pages",pages()},{"rows",rows},{"search",utf8(field(search))},{"appliedSearch",utf8(appliedSearch_)},{"matches",filtered_.size()},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}
 };

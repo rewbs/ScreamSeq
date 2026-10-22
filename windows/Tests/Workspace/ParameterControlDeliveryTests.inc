@@ -136,6 +136,27 @@ void applicationRecordedParameterControls() {
     editor.recording({},{});editor.takeFinished();SendMessageW(window,WM_TIMER,7,0);
     restoreCheck(!editor.retainedDraft()&&restoreText(value)==L"0"&&GetFocus()==value&&app.view->session.revision==revision,
         "Discard at the same revision left transient recorded gain visible or lost native field focus");
+    // Foreground F04 exposed this with Params closed before Discard: the
+    // hidden clean editor still required a reload and blocked the next Record.
+    editor.recording([]{return true;},[&](uint32_t id,double v,uint64_t time){events.push_back({id,v,time});});
+    SendMessageW(slider,TBM_SETPOS,TRUE,7694);
+    const auto gestureStart=ScreamSeq::hostTime100ns();
+    SendMessageW(window,WM_HSCROLL,MAKEWPARAM(TB_THUMBTRACK,7694),reinterpret_cast<LPARAM>(slider));
+    restoreCheck(events.back().value==-96.+120.*7694/10000.&&events.back().timestamp>=gestureStart&&
+        restoreText(value)==L"-3.672","Generated recording text exposed a binary tail or rounded the retained original event");
+    editor.hide();SetFocus(app.window);const auto mainFocus=GetFocus();
+    editor.recording({},{});editor.takeFinished();SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!editor.visible()&&!editor.retainedDraft()&&restoreText(value)==L"0"&&GetFocus()==mainFocus&&
+        app.view->session.revision==revision,"Hidden completed parameter editor blocked the next take, reopened or stole focus");
+    // Closing between completion and its deferred read must work as well.
+    editor.show();editor.takeFinished();editor.hide();SetFocus(app.window);
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!editor.retainedDraft()&&!editor.visible()&&GetFocus()==app.window,
+        "Closing a completed parameter editor cancelled its required baseline refresh");
+    editor.show();editor.recording([]{return true;},[](uint32_t,double,uint64_t){});rawDraftText(value,L"-.");
+    editor.hide();editor.recording({},{});editor.takeFinished();SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(editor.retainedDraft()&&restoreText(value)==L"-."&&!editor.visible(),
+        "Hidden post-take refresh discarded unfinished musician text");
 }
 
 void applicationRecordedRackControls() {

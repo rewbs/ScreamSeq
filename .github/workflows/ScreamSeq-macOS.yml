@@ -137,7 +137,7 @@ jobs:
           set -o pipefail
           python - <<'PY' 2>&1 | tee screamseq-macos-plugin-editors.log
           import os, pathlib, subprocess
-          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
+          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR']).resolve(strict=True)
           subprocess.run([str(build / 'native-plugin-tests'),
               str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui'],
               check=True, timeout=120)

@@ -8,6 +8,18 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Unlocked follow-up, 22 October 08:27 UTC:** Computer Use completed native
+typing/focus and Record/Stop/Keep/Discard checks on the existing `352ee334b`
+executable. It found a hidden parameter refresh blocking the next take and long
+generated numeric text; source corrections and regression cases are prepared.
+The 663-second interactive report recorded 79 audio overruns and does not qualify
+realtime performance or temporal flicker. Mac ARM CI passed the build, native,
+interface and conformance steps, but the added provider UI step used a relative
+fixture path rejected by the existing trust boundary. The workflow invocation is
+corrected in source; no provider pass is claimed. See the
+[foreground report](PLUGIN-FOREGROUND-2026-10-22.md). Production packaging and
+merge remain pending. The 09:00 UTC next-build gate below still applies.
+
 **Latest checkpoint, 22 October 08:06 UTC:** PR #6 now targets frozen source
 `352ee334b18bbe7bc7c52105946ae7e00867853d`. One five-target Windows ARM64 Release
 build ran 07:57:28–07:58:25 UTC; executable SHA-256 is
