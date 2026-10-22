@@ -102,6 +102,58 @@ static void stoppedRecordedPublication(const PluginState &state,bool visible=fal
   check(audio.pluginEpoch()!=epoch&&!audio.publishRecordedAutomation(std::move(replaced)),
     "A replaced rack accepted an old recorded plan");
 }
+static void stoppedTakePreviewRestoration(const PluginState &first,const PluginState &second) {
+  // Exercise the native AudioDevice handoff with two different providers,
+  // without opening Core Audio or replacing either processor to restore it.
+  AudioDevice audio;audio.setPlugins({first,second});
+  const auto epoch=audio.pluginEpoch();
+  const auto source0=audio.pluginEditSource(0),source1=audio.pluginEditSource(1);
+  check(source0.incarnation&&source1.incarnation&&source0.incarnation!=source1.incarnation,
+    "Take restoration fixture needs two distinct native providers");
+  const auto original0=audio.pluginParameters(0).at(0),original1=audio.pluginParameters(1).at(0);
+  const auto clock=audio.recordingFrameTimeline();
+  const std::array<ParameterChange,2> preview{{{0,original0.id,.7f,0},{1,original1.id,.6f,0}}};
+  // Reverse target order intentionally: request order is not a rack index.
+  const std::array<AudioDevice::ParameterPreviewOwner,2> targets{{
+    {second.instanceID,original1.id,source1.incarnation},{first.instanceID,original0.id,source0.incarnation}}};
+  auto unchangedOwners=[&] {
+    check(!audio.active()&&audio.pluginEpoch()==epoch&&audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1&&
+      audio.recordingFrameTimeline()==clock,"Take preview restoration replaced a provider, device or recording clock");
+  };
+  auto values=[&](double expected0,double expected1) {
+    const auto actual0=audio.pluginParameters(0).at(0),actual1=audio.pluginParameters(1).at(0);
+    check(std::abs(actual0.value-expected0)<1e-6&&std::abs(actual1.value-expected1)<1e-6&&
+      actual0.manualValue&&actual1.manualValue&&std::abs(*actual0.manualValue-original0.value)<1e-6&&
+      std::abs(*actual1.manualValue-original1.value)<1e-6,"Take preview restoration changed a prefix or the manual baseline");
+  };
+  check(audio.previewPluginParameters(preview),"Queue two-provider stopped take preview");values(.7,.6);
+  check(!audio.cancelPluginParameterPreviews(epoch+1,targets),"Stale rack epoch accepted preview restoration");
+  values(.7,.6);unchangedOwners();
+  auto invalid=targets;invalid[1].plugin="missing-take-plugin";
+  check(!audio.cancelPluginParameterPreviews(epoch,invalid),"Invalid later provider accepted partial take restoration");
+  values(.7,.6);unchangedOwners();
+  invalid=targets;invalid[1].provider=source1.incarnation;
+  check(!audio.cancelPluginParameterPreviews(epoch,invalid),"Foreign provider incarnation accepted take restoration");
+  values(.7,.6);unchangedOwners();
+  invalid=targets;invalid[1].parameter=UINT32_MAX;
+  check(!audio.cancelPluginParameterPreviews(epoch,invalid),"Invalid later parameter accepted partial take restoration");
+  values(.7,.6);unchangedOwners();
+  check(audio.cancelPluginParameterPreviews(epoch,targets),"Restore a stopped multi-provider take atomically");
+  values(original0.value,original1.value);unchangedOwners();
+  check(audio.cancelPluginParameterPreviews(epoch,targets),"Repeated restoration of an already clean take failed");
+  values(original0.value,original1.value);unchangedOwners();
+  audio.setPlugins({second,first});
+  const auto replacementEpoch=audio.pluginEpoch();
+  const auto replacement0=audio.pluginEditSource(0),replacement1=audio.pluginEditSource(1);
+  const auto parameter=audio.pluginParameters(0).at(0);
+  const std::array<ParameterChange,1> newer{{{0,parameter.id,.8f,0}}};
+  check(audio.previewPluginParameters(newer),"Queue replacement provider preview");
+  check(!audio.cancelPluginParameterPreviews(epoch,targets),"Old take restored a replacement rack by slot");
+  check(!audio.cancelPluginParameterPreviews(replacementEpoch,targets),"Current rack epoch hid stale take provider identities");
+  check(std::abs(audio.pluginParameters(0).at(0).value-.8f)<1e-6&&audio.pluginEpoch()==replacementEpoch&&
+    audio.pluginEditSource(0)==replacement0&&audio.pluginEditSource(1)==replacement1&&!audio.active(),
+    "Refused old take changed a replacement provider or its preview");
+}
 static void chainInputProtection(const PluginState &state){
   PluginChain chain({state},48000,true);chain.showEditor(0);
   NSSlider *slider=nil;NSWindow *owned=nil;
@@ -252,6 +304,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       auto saved = effect.state();
       check(saved.instanceID == gain.instanceID, "VST3 host state retains plugin instance identity");
       stoppedRecordedPublication(saved);
+      stoppedTakePreviewRestoration(saved,closedAU);
       NativePlugin recalled(saved, 48000);
       check(std::abs(recalled.parameters()[0].value - .3f) < 1e-6, "VST3 processor/controller state recall");
       std::array<float, 1024> buffer;

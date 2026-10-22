@@ -385,3 +385,41 @@ last delivery and loss on an empty provider. These are prepared source tests,
 not executed results. Mac still requires a session take owner and guarded
 preview/baseline restoration before replacing its legacy recording consumer;
 the raw rack adapter and shared drain are prerequisites, not API parity closure.
+
+## Following source batch: atomic Mac take preview restoration — unbuilt
+
+`AudioDevice::cancelPluginParameterPreviews` now accepts a complete set of
+stable plugin IDs, parameter IDs and process-local provider incarnations,
+plus the captured whole-chain epoch. It resolves current slots on the control
+owner and delegates the all-or-nothing cancellation to the existing shared
+`PluginChain::cancelParameterPreviews`. This avoids restoring one plugin and
+then failing on another, and leaves accepted manual baselines independent of
+transient preview values. The existing single-parameter preview API is unchanged.
+
+Source inspection found that `publishLiveRack` can reorder the control rack
+without incrementing `pluginEpoch_`; that epoch protects whole-chain replacement,
+not positional identity. The new adapter therefore resolves stable IDs and
+checks native incarnations both before the stopped handoff and after applying
+already-accepted pending work. An old take cannot use a new epoch to bypass a
+replaced provider's identity. It never calls `pluginStates()` (which stops the
+device), reconstructs a vendor, opens an output device or closes a native editor.
+Active publication uses the existing bounded parameter queue. Native input
+leases, fixed Stop cuts and provider rechecks remain required in the future
+session owner; this helper alone does not establish that lifecycle.
+
+`NativePluginTests.mm::stoppedTakePreviewRestoration` adds one mixed AU/VST3
+case to the existing `native-plugins` executable. It checks two-target restoration
+in reverse request order, stale epoch, missing later plugin, foreign provider,
+invalid later parameter, unchanged manual baselines and clock/provider identity,
+idempotent restoration, and a reordered replacement rack with a new preview.
+The shared `ParameterPreviewTests.cpp::takeCancellation` already covers queue
+capacity refusal, invalid suffixes, duplicates, unrelated preview ownership and
+rendered PCM; those assertions remain unchanged. No new build or test has run
+for this adapter. Both Mac architectures must execute the native case before
+this source is qualified; active callback/natural-end behavior and full
+Keep/Discard UI/API/history/recovery integration remain open.
+
+This follow-up is on the backup branch after the Windows palette freeze077e.
+Do not silently include it in the prepared `palette-availability/` candidate or
+start another build for it. Group it with the subsequent coherent Mac take
+owner batch and its required Mac gates, preserving the hourly build cadence.

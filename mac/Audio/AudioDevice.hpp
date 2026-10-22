@@ -4,6 +4,7 @@
 #include "editor/RecordingFrameClock.hpp"
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreAudio/CoreAudio.h>
+#include <algorithm>
 #include <atomic>
 namespace Tracker {
 struct DeviceInfo {
@@ -93,6 +94,33 @@ public:
   }
   uint64_t pluginEpoch()const noexcept{return pluginEpoch_;}
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
+  struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
+  // Control owner only. Resolve stable identities again: live rack publication
+  // can reorder slots without replacing the whole chain. Guard the native
+  // incarnation as well as the epoch before taking over stopped processing.
+  bool cancelPluginParameterPreviews(uint64_t expectedEpoch,std::span<const ParameterPreviewOwner> owners) {
+    if(!plugins_||expectedEpoch!=pluginEpoch_)return false;
+    std::vector<PluginChain::ParameterPreviewTarget> targets;targets.reserve(owners.size());
+    const auto resolve=[&] {
+      targets.clear();
+      for(const auto &owner:owners) {
+        const auto found=std::find_if(pluginStates_.begin(),pluginStates_.end(),[&](const auto &state){return state.instanceID==owner.plugin;});
+        if(found==pluginStates_.end()||!owner.provider)return false;
+        const auto slot=size_t(found-pluginStates_.begin());
+        if(plugins_->editSource(slot).incarnation!=owner.provider)return false;
+        targets.push_back({uint32_t(slot),owner.parameter});
+      }
+      return true;
+    };
+    if(!resolve())return false;
+    if(joinStoppedProcessing())plugins_->applyPending();
+    // Pending accepted work can adopt a prepared vendor. Never restore that
+    // new incarnation with an old take just because its stable ID survived.
+    if(expectedEpoch!=pluginEpoch_||!resolve())return false;
+    // The shared publisher validates all IDs and reserves the complete queue
+    // before clearing any transient ownership or publishing a restore prefix.
+    return plugins_->cancelParameterPreviews(targets);
+  }
   bool cancelPluginParameterPreview(size_t slot,uint32_t id){
     if(!plugins_||!plugins_->hasParameterPreview(slot,id))return true;
     if(joinStoppedProcessing())plugins_->applyPending();
