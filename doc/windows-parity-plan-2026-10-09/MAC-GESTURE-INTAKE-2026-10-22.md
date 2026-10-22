@@ -1038,3 +1038,36 @@ single-commit/retained-state requirements. Existing normal coalescing, prior
 commit preservation, typed values, stable bus and bounded strip allocation
 assertions remain. **Unbuilt**: include editor draft and mixer strip interface
 groups on both Mac architectures at the next coordinated checkpoint.
+
+### Following source batch — retained-take autosave admission
+
+The next candidate is frozen at `69fe8bf206049c163742ad10105a1de87afde24b`
+in the clean qualification checkout. `bin/mac-gesture-20261022/take-review/`
+contains prepared, source/time-pinned build/check/package scripts; none has run.
+Do not include later source implicitly or start before 19:12:11 UTC.
+
+Source inspection found two application-level gaps above the already implemented
+session recovery serializer: autosave considered only MIDI ownership, so plugin
+input could be skipped at an unchanged musical revision; strict preliminary
+plugin polling could prevent recovery after a provider refused further intake.
+`TrackerSession.parameterRecordingTakeID` now exposes retained ownership through
+Stop and kept-but-unrestored completion. `RecoverySnapshotPolicy` schedules each
+retained snapshot and one after release. `RecoveryIntegration` lets the existing
+best-effort session serializer collect recovery input, while ordinary manual
+plugin edits retain their strict preflight. Recovery API status/list/save remain
+available during retained-input failure. Restore and native close/replacement
+reject a retained plugin owner before replacing the song.
+
+No audio callback, musical transaction, file format or public method change.
+The existing `hasRecording` metadata still means resumable MIDI; plugin input
+remains detached `automation.recovery.*` evidence after reopening. Tests added
+to `RecoveryTests.swift` exercise unchanged-revision input and final-release
+scheduling. The explicit-device `ParameterTakeSessionTests.inc` now checks owner
+identity, consecutive recovery evidence at the same musical revision, detached
+save/reopen with preserved plugin baselines, and kept-but-unrestored lifetime.
+**Unbuilt and unexecuted**: these changes are after frozen69fe8 and belong to the
+following coordinated checkpoint. Required checks: both Mac builds, recovery
+store tests, actual-app recovery regression, native parameter take admission,
+and the explicit BlackHole real-session lifecycle. A real-app timed recovery
+check with captured plugin input remains necessary; the pure scheduling and
+session tests do not establish the full app timer/socket path.

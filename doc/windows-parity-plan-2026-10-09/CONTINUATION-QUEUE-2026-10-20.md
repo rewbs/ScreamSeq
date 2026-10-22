@@ -8,6 +8,13 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October following source batch:** candidate `69fe8bf20` is prepared in
+`bin/mac-gesture-20261022/take-review/` and the clean qualification checkout,
+with the 19:12:11 UTC gate unchanged. Later primary-checkout work fixes Mac
+retained-plugin-take autosave scheduling, recovery admission after intake errors,
+and close/replace ownership guards. It is not part of frozen69fe8; see the intake
+report for unexecuted tests and remaining real-app timer/device qualification.
+
 **22 October 18:38 UTC source checkpoint:** backup branch
 `codex/mac-gesture-next-checkpoint` contains `3c159554e` (Windows recording
 intent across polling reads, diagnostic evidence) and `a0e022ca8` (Mac mixer

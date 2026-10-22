@@ -50,7 +50,10 @@ extension AppController {
     // Take lifecycle owns its bounded intake and reports retained failures.
     // A preliminary manual drain could block Get/Discard precisely when the
     // musician needs to inspect or resolve a refused native input boundary.
-    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") ? 0 :
+    // Recovery snapshots have their own best-effort intake. Listing/status must
+    // also remain available when a retained provider has refused more input.
+    let retainedRecovery = method.hasPrefix("recovery.") && session.parameterRecordingTakeID != nil
+    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") || retainedRecovery ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 {
       dirty = true

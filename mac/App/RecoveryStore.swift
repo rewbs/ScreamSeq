@@ -1,5 +1,15 @@
 import Foundation
 
+// Capturing and stopped-but-retained takes can gain input/loss/restoration
+// evidence without a musical revision. Save each timed snapshot while either
+// owner exists, then one final snapshot after release even for an empty take.
+enum RecoverySnapshotPolicy {
+  static func needsCopy(force: Bool, dirty: Bool, revision: String, lastRevision: String?,
+    take: String?, lastTake: String?) -> Bool {
+    force || take != nil || lastTake != nil || (dirty && revision != lastRevision)
+  }
+}
+
 struct RecoveryEntry {
   let url: URL
   let date: Date

@@ -1544,6 +1544,13 @@ notes in the snapshot without stopping live recording. After recovery, inspect
 (or use Pattern → Finish Recording Take). A take whose underlying song changed
 remains available for inspection but cannot be silently committed to a different
 song. Finish or discard an existing take before restoring another document.
+Retained plugin automation takes also receive timed recovery copies even when
+the musical revision has not changed. Recovery preserves captured input when
+further provider intake fails. These archives reopen as detached evidence for
+`automation.recovery.list/get`; they never resume a live plugin take or replay
+uncertain input. `hasRecording` retains its resumable MIDI-take meaning. Close
+or replacement waits until a live plugin take is kept/discarded and its native
+restoration has finished.
 A normal Save removes only the current session's recovery copies. Older recovered
 sources and other sessions remain available.
 

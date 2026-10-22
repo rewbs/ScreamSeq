@@ -25,6 +25,7 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     check(value!=nil,"Decode retained take recovery");return value;
   };
   NSDictionary *baseline=tree();
+  check(session.parameterRecordingTakeID==nil,"A session without a retained take exposes no recovery owner");
   check([session configureDevice:device buffer:frames error:&error],"Select explicit virtual output for session take");
   [session setPlaybackLoop:YES];
   auto start=[&] {
@@ -45,6 +46,10 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     error=nil;
   };
   start();const auto armed=[session parameterTakeReview];NSString *revision=session.automationRevision;
+  NSString *retainedID=session.parameterRecordingTakeID;
+  check([retainedID isEqual:@(armed.token.c_str())]&&session.recordingTakeID==nil,
+    "Parameter recovery identity is missing or incorrectly exposed as resumable MIDI");
+  NSDictionary *emptyRecovery=tree();
   denied([session editPattern:0 row:0 channel:0 values:@[@62,@0,@0,@0,@0,@0] error:&error]);
   denied([session editCells:@[@{@"pattern":@0,@"row":@0,@"channel":@0,@"values":@[@62,@0,@0,@0,@0,@0]}] error:&error]);
   denied([session editOrder:0 pattern:0 operation:@"insert" error:&error]);
@@ -81,6 +86,20 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   check([recovering[@"plugins"] isEqual:baseline[@"plugins"]]&&
     [recovering[@"screamseqPluginGestureRecovery"] count]==1&&session.playing,
     "Recovery baked preview into plugin state, lost evidence or stopped playback");
+  check([session.parameterRecordingTakeID isEqual:retainedID]&&[session.automationRevision isEqual:revision]&&
+    ![recovering[@"screamseqPluginGestureRecovery"] isEqual:emptyRecovery[@"screamseqPluginGestureRecovery"]],
+    "Consecutive recovery snapshots must retain new input without requiring a musical revision");
+  NSString *recoveryPath=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@"-retained-recovery.screamseq"]];
+  NSData *recoveryBytes=[NSPropertyListSerialization dataWithPropertyList:recovering format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error];
+  check([recoveryBytes writeToFile:recoveryPath options:NSDataWritingAtomic error:&error],
+    "Write retained-input recovery fixture");
+  TrackerSession *recovered=[TrackerSession new];
+  check([recovered openPath:recoveryPath error:&error]&&recovered.parameterRecordingTakeID==nil&&recovered.recordingTakeID==nil,
+    "Recovery must not recreate live plugin ownership or a resumable MIDI take");
+  NSDictionary *detached=[NSPropertyListSerialization propertyListWithData:[recovered recoveryData:&error] options:0 format:nil error:&error];
+  check([detached[@"screamseqPluginGestureRecovery"] isEqual:recovering[@"screamseqPluginGestureRecovery"]]&&
+    [detached[@"plugins"] isEqual:baseline[@"plugins"]],"Reopened recovery changed detached input evidence or accepted plugin baselines");
+  [recovered shutdown];[[NSFileManager defaultManager] removeItemAtPath:recoveryPath error:nil];
   [session pollParameterTake:YES];const auto stopped=[session parameterTakeReview];
   [session pollParameterTake:YES];check([session parameterTakeReview].endTime==stopped.endTime&&session.playing,
     "Take Stop moved its cut or stopped transport");
@@ -92,7 +111,9 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   bool refused=false;try{[session releaseStoppedParameterTake:NO];}catch(const std::exception &){refused=true;}
   check(refused&&session.playing&&[session parameterTakeReview].completed,
     "Stopped restoration touched an active vendor or lost committed ownership");
+  check([session.parameterRecordingTakeID isEqual:retainedID],"Kept-but-unrestored input lost its recovery owner");
   [session stop];check([session releaseStoppedParameterTake:NO],"Verify stopped native baselines after Keep");
+  check(session.parameterRecordingTakeID==nil,"Finished restoration retained a stale recovery owner");
   NSDictionary *saved=tree();
   check([saved[@"automation"] count]==2&&[saved[@"plugins"] isEqual:baseline[@"plugins"]]&&
     [[session snapshot:0][@"cells"] isEqual:snapshot[@"cells"]],"Keep lost unrelated music or accepted manual state");

@@ -53,10 +53,12 @@ extension AppController {
       recoveryError = error.localizedDescription; updateRecoveryStatus()
       reply?(AutomationServer.error(-32003, error.localizedDescription)); return
     }
-    let take = session.recordingTakeID
+    let midiTake = session.recordingTakeID
+    let take = session.parameterRecordingTakeID ?? midiTake
     guard model.editable else { reply?(AutomationServer.error(-32003, "This document cannot be autosaved")); return }
     let revision = session.automationRevision
-    if !force && ((!dirty && take == nil && recoveryLastTake == nil) || (take == nil && recoveryLastTake == nil && recoveryLastRevision == revision)) { return }
+    guard RecoverySnapshotPolicy.needsCopy(force: force, dirty: dirty, revision: revision,
+      lastRevision: recoveryLastRevision, take: take, lastTake: recoveryLastTake) else { return }
     let store = RecoveryStore(directory: recoveryDirectory), id = recoveryID
     let title = model.title, source = documentURL?.path ?? (documentLoadReport.sourcePath.isEmpty ? nil : documentLoadReport.sourcePath)
     let epoch = recoveryEpoch
@@ -82,7 +84,9 @@ extension AppController {
           self.busy = false
           self.recoveryWriter.async {
             do {
-              let file = try store.save(id: id, format: "screamseq", title: title, source: source, hasRecording: take != nil) {
+              // hasRecording retains its existing resumable MIDI-take meaning.
+              // Parameter input archives reopen as detached review evidence.
+              let file = try store.save(id: id, format: "screamseq", title: title, source: source, hasRecording: midiTake != nil) {
                 try snapshot.write(to: $0, options: .atomic)
               }
               DispatchQueue.main.async { finish(file, nil) }
@@ -98,6 +102,10 @@ extension AppController {
     }
   }
   private func collectRecoveryEdits() -> NSError? {
+    // recoveryData owns bounded best-effort take intake and preserves previously
+    // captured evidence when a provider refuses further input. A preliminary
+    // strict drain would defeat that recovery path precisely when it is needed.
+    if session.parameterRecordingTakeID != nil { return nil }
     var error: NSError?
     if session.collectPluginEdits(pluginEditor.record.state == .on, error: &error) > 0 {
       dirty = true; window.isDocumentEdited = true
@@ -154,10 +162,10 @@ extension AppController {
     guard !busy, !recoverySaving, window.attachedSheet == nil, NSApp.modalWindow == nil else {
       reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return
     }
-    if let error = collectRecoveryEdits() { reply(AutomationServer.error(-32003, error.localizedDescription)); return }
-    guard session.recordingTakeID == nil else {
+    guard session.recordingTakeID == nil && session.parameterRecordingTakeID == nil else {
       reply(AutomationServer.error(-32003, "Finish or discard the current recording take before recovering another song")); return
     }
+    if let error = collectRecoveryEdits() { reply(AutomationServer.error(-32003, error.localizedDescription)); return }
     // Use a separate identity for the protected current song so retention can
     // never prune the very copy the user has selected for restoration.
     let store = RecoveryStore(directory: recoveryDirectory), currentID = UUID().uuidString

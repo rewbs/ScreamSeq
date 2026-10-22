@@ -132,6 +132,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSDictionary *> *)midiEvents;
 @property(nonatomic, readonly) BOOL recordingActive;
 @property(nonatomic, readonly, nullable) NSString *recordingTakeID;
+// Retained through Stop/Keep until native preview restoration has completed.
+// Recovery reopens its evidence detached; it never recreates this live owner.
+@property(nonatomic, readonly, nullable) NSString *parameterRecordingTakeID;
 @property(nonatomic, readonly, nullable) NSString *sampleRecordingTakeID;
 - (BOOL)prepareAudition:(NSError **)error;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on;

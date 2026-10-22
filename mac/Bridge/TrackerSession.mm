@@ -2406,6 +2406,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (NSString *)recordingTakeID {return _recordingID;}
+- (NSString *)parameterRecordingTakeID {
+  return _parameterTake ? @(_parameterTake->take().token().c_str()) : nil;
+}
 - (BOOL)recordingActive { return _recording && _recording->capturing; }
 - (void)captureRecordingEvent:(uint64_t)timestamp status:(uint8_t)status note:(uint8_t)note velocity:(uint8_t)velocity {
   if(!_recording||!_recording->capturing)return;

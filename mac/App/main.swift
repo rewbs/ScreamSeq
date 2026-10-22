@@ -1744,6 +1744,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   enum UnsavedChoice { case proceed, save, cancel }
   func unsavedChoice() -> UnsavedChoice {
+    if session.parameterRecordingTakeID != nil {
+      statusLabel.stringValue = "Keep or discard the plugin automation take and finish its restoration before closing or replacing this song."
+      return .cancel
+    }
     if session.sampleRecordingTakeID != nil {
       showSampleRecorder()
       statusLabel.stringValue = "Add or discard the recorded sample before closing or replacing this song."
