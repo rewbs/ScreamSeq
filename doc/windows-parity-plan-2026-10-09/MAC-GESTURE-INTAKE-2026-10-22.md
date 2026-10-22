@@ -1514,3 +1514,131 @@ the existing failed foreground receipt. Mac native interface/session gates,
 reciprocal edited-project exchange and device/audio qualification remain before
 merge or complete parity claims. Keep Mac stopped restoration and closed-editor
 opaque Discard guards. Backup-only source pushes between coordinated checkpoints.
+
+## 22 October 23:14 checkpoint and recovery-flow continuation
+
+The prior9195204 CI completed: **both Mac ARM and Intel jobs passed** in
+run39858573202. Windows x64 compiled but its required private-desktop/live-audio
+stage failed16 cases with two skips. The retained log confirms
+`audio.devices.get` returned an empty device list; do not call that suite passed
+or remove its assertions. Read-only recent-run inspection found no newer builds
+or concurrent checkpoint before proceeding.
+
+Frozen `cc6da0bd314344dd89a692b61734e2fc2fa631c2` was pushed to PR#7 alongside
+one local ARM64 build at23:14:45 UTC. It compiled successfully at23:17:36;
+SHA256 `9ecbe9994dbc71b9ecf6aada5afeb35f2fa24eb286f45d9e73720d4ab0e94901`.
+All14 native groups passed, including strict native correlation gaps, unchanged
+PCM, callback allocation/free audit and terminal hardware discontinuity. The
+actual-app run was still progressing at this report entry; later receipts,
+not this intermediate statement, determine its result. Evidence is under
+`bin/mac-gesture-20261022/clock-recovery/`. Never repeat its build/check scripts
+when their receipts exist.
+
+Current coordinated CI: Mac39870506422 (ARM120143455474,
+Intel120143455255), Windows39870506136 (x64120143454737). Actual latest
+start23:15:10 UTC makes **2026-10-23 00:15:10 UTC** the earliest next build,
+subject to later starts and current-job inspection. Qualification checkout
+remains frozen atcc6da0bd3 while primary source work proceeds independently.
+
+### Recovery usability source following cc6da0bd3, unbuilt
+
+- Mac `PluginRecording.swift` now honors the API's `discardable:true` after
+  stopped playback even if a failed recording cut leaves `capturing:true`.
+  The prior UI required `!capturing` unconditionally and could trap a take which
+  the backend explicitly permitted the musician to discard. Keep remains
+  disabled for incompatible context; opaque Discard still requires closed
+  editors and preserves every backend safety check.
+- The same native view adds a distinct **Stop playback** action for failed
+  capture or stopped-take restoration. It sends one captured, revision-guarded
+  `transport.stop`, reads the take after confirmed completion, and never commits
+  or discards automatically. Queued actions recheck take identity, revision,
+  capture/completion state and current eligibility. Uncertain completion
+  requires explicit readback without replay. `PluginRecordingInterfaceTests.swift`
+  covers these transitions, changed eligibility, duplicates and compact bounds.
+- Source inspection found that `AutomationIntegration.swift` performed
+  `collectPluginEdits` before `transport.stop/panic`; with a retained failed
+  take, that function calls `pollParameterTake` and can throw before Stop ever
+  reaches the session. These two explicit transport exits now bypass that
+  preliminary drain while a take owns input. Session Stop already catches a
+  failed drain and stops audio while preserving the take. Actual Mac failed-clock
+  AppController/device qualification remains required; the view harness alone
+  does not prove that integration path.
+- Windows `ParameterRecordingWindow.hpp` now includes the exact decimal
+  original host timestamp in its copyable read-only details for both captured
+  events and refused/uncertain deliveries. Previously the backing snapshot
+  retained the timestamp but rendered only value, song time and status. Native
+  assertions use9007199254740993/994, preserve read-only text and keep existing
+  focus/selection checks. No timestamp conversion, replay, schema or history
+  change is introduced.
+- `mac/AUTOMATION.md` now describes the implemented generic-control intake,
+  recovery eligibility and explicit playback Stop. It removes the obsolete
+  claim that the retained native UI was unconnected. Live native restoration,
+  vendor/device evidence and complete composing qualification remain open.
+
+Next source batch gates: reuse unaffected clock/PCM receipts atcc6da0bd3;
+rebuild changed native UI/application paths at the next coordinated checkpoint.
+Run Mac plugin-recording/interface, session and actual AppController admission
+checks; Windows workspace-departure and recording app cases; then fresh native
+recovery/focus UI inspection. Preserve exact failed-clock evidence and do not
+substitute UI harness success for real device/context recovery.
+
+### 23:35 UTC: clock candidate qualified for targeted workflows; next batch unbuilt
+
+Compiled source `cc6da0bd314344dd89a692b61734e2fc2fa631c2` passed all 14 selected
+native groups and 30 actual-app cases; one optional installed-Surge case skipped.
+The 95-second capture test and F04 six-domain composing/recording journey passed.
+Receipts are in `bin/mac-gesture-20261022/clock-recovery/`; do not rerun them.
+
+Fresh Computer Use targeted PID 19476 only, with the disposable F04 project and
+silent WASAPI output. The process exited normally after 600.038 seconds; the
+original fixture and executable hashes were unchanged. At native DPI 192:
+
+- Params opened Recording directly. Balance slider gestures produced four
+  retained inputs across a 99.566-second capture interval. Stop retained
+  playback; Keep released the take and advanced musical history once. Exact
+  one-step Undo/Redo and save/reopen have separate automated app evidence.
+- A second Gain gesture was refused because F04 already has its enabled
+  envelope. Params displayed the actionable refusal and Recording link. The
+  project revision remained unchanged; existing Gain automation was not disabled.
+- Dock search typed `Balance`, Backspace produced `Balanc`, Tab reached the
+  selector and Shift+Tab returned. Three read-only native/global focus receipts
+  passed for the actual search HWND. Computer Use's root-focus report was not
+  treated as an application failure or used as the sole focus evidence.
+- Compact resize exposed the Pattern More menu, with commands readable after
+  its native animation settled. The closed FX selector remained inside the
+  header. Maximize/restore retained the search. Floating typing continuity
+  remains unverified; targeting Main can reactivate it.
+
+The run had 22 deadline overruns at 48 kHz/480 frames, maximum callback
+11754.8 microseconds, zero starvation/device errors and no processor fault.
+Realtime performance and temporal flicker are **not qualified**. The foreground
+receipt's pass is explicitly limited to functional UI checks. Its packaged
+copy retains that scope and these limits. No main merge is justified by it.
+
+Usable optimized ARM64 candidate:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-cc6da0bd3/ScreamSeq.exe`.
+SHA256 `9ecbe9994dbc71b9ecf6aada5afeb35f2fa24eb286f45d9e73720d4ab0e94901`.
+Scanner, ARM64 CRT, OpenMPT/VST3 notices, source manifest and copied hashes are
+included. This package excludes the later unbuilt recovery changes above.
+
+The next source batch also adds a mandatory native VST3 composing journey to
+`windows/Tests/test_plugin_recording.py`: use the bundled instrument class
+`5245534F4E414E43494E535452550001`, preserve F04's sample instrument/keymap and
+envelopes, assign MIDI channel 3 with Undo/Redo/no-op checks, route its main
+output to a new group, then capture parameter 7 through actual Params controls.
+Keep/Undo/Redo, Discard and save/reopen must preserve opaque state, aliases,
+routing and every unrelated typed project field. Values are .25/.75/.5 for the
+fixture's normalized parameter; existing built-in tests retain their original
+negative-value assertions. This does not replace optional vendor tests or claim
+layered PCM proof by checking only metadata. Pair it with native-audio-bus's
+existing layered stem/ordinary/precise/audition checks and hosted instrument UI
+coverage at the next checkpoint. Only syntax/static review has run for this new
+test so far.
+
+At 23:34:58, exact-source Mac ARM and Windows x64 compilation had passed;
+their remaining jobs and Mac Intel were still running. CI runs are 39870506422
+and 39870506136. Do not repeat/restart them. Next build is no earlier than
+2026-10-23 00:15:10 UTC and only after current jobs finish and later starts are
+checked. Required Mac native recovery/device checks, reciprocal edited-project
+preservation and Windows native audio gates remain open before merge/parity
+claims. Keep full scope active; no recurring automation is requested.

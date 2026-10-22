@@ -169,7 +169,78 @@ class PluginRecordingTests(unittest.TestCase):
                     'Discard preserves preceding music', 'save/reopen',
                     'exact unrelated project preservation']))
 
-    def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0):
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
+    def test_sample_layered_vst3_composing_and_recording_journey(self):
+        # This mandatory fixture path must not depend on an installed commercial
+        # synth. Keep the optional Surge coverage as a separate vendor check.
+        self.assertTrue(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'), 'Native VST3 fixture cache is required')
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'editor/Tests/Conformance'))
+        from composing_history import run
+        from project_tree import differences, read_project, digest
+        from native_roundtrip import write_json
+        root = Path(os.environ.get('SCREAMSEQ_COMPOSING_EVIDENCE_DIR', self.folder / 'composing-evidence'))
+        evidence = root.parent / (root.name + '-layered-instrument')
+        report = run(self.client, evidence)
+        self.assertTrue(report['passed'])
+        descriptor = next(p for p in self.read('plugin.discover', format='VST3')
+                          if p['classID'] == '5245534F4E414E43494E535452550001')
+        self.assertTrue(descriptor['isInstrument'])
+        self.write('plugin.add', descriptor=descriptor)
+        plugin = self.doc()['data']['nativePlugins'][-1]['instanceID']
+        instrument = self.read('instrument.get', instrument=1)
+        self.assertTrue(any(instrument['mapping']), 'Journey needs a real sample layer')
+        opaque = self.read('plugin.state.get', plugin=plugin)
+        unassigned = self.read('plugin.instruments.get', plugin=plugin)
+        # Assign the new synth to the existing composing voice, retaining its
+        # sample map/envelopes and the preceding six-domain history.
+        self.write('instrument.plugin.set', instrument=1, plugin=plugin, channel=3)
+        assigned = self.read('plugin.instruments.get', plugin=plugin)
+        self.assertEqual([(a['instrument'], a['channel']) for a in assigned['assignments']], [(1, 3)])
+        self.assertEqual(self.read('instrument.get', instrument=1), instrument)
+        self.write('history.undo')
+        self.assertEqual(self.read('plugin.instruments.get', plugin=plugin), unassigned)
+        self.assertEqual(self.read('instrument.get', instrument=1), instrument)
+        self.write('history.redo')
+        self.assertEqual(self.read('plugin.instruments.get', plugin=plugin), assigned)
+        unchanged = self.doc()
+        self.write('instrument.plugin.set', instrument=1, plugin=plugin, channel=3)
+        self.assertEqual(self.doc(), unchanged, 'Repeated assignment must not consume history')
+        group = self.write('mixer.bus.add', kind='group', name='Recorded synth layer')['bus']
+        routes_before = self.read('mixer.get')['instruments']
+        self.write('mixer.instrument.route', plugin=plugin, target=group, output=0)
+        routed = self.read('mixer.get')['instruments']
+        self.assertTrue(any(r['plugin'] == plugin and r['target'] == group and r['output'] == 0 for r in routed))
+        self.write('history.undo')
+        self.assertEqual(self.read('mixer.get')['instruments'], routes_before)
+        self.write('history.redo')
+        self.assertEqual(self.read('mixer.get')['instruments'], routed)
+        self.assertEqual(self.read('plugin.state.get', plugin=plugin), opaque)
+        project = evidence / 'layered-routed-source.screamseq'
+        self.write('document.save', path=str(project))
+        before = read_project(project)
+        self.record_keep_history_reopen_and_discard(plugin, project, parameter=7, values=(.25, .75, .5))
+        self.assertEqual(self.read('instrument.get', instrument=1), instrument)
+        self.assertEqual(self.read('plugin.instruments.get', plugin=plugin), assigned)
+        self.assertEqual(self.read('mixer.get')['instruments'], routed)
+        saved = evidence / 'recorded-layered-instrument.screamseq'
+        self.write('document.save', path=str(saved))
+        after = read_project(saved)
+        comparison = differences(dict(before, automation=after['automation']), after)
+        self.assertTrue(comparison['equal'], comparison)
+        self.assertNotEqual(before['automation'], after['automation'])
+        write_json(evidence / 'recording-journey.json', dict(
+            passed=True, parityComplete=False, silentNativePlayback=True,
+            foregroundVisualQualified=False, layeredPCMQualified=False,
+            plugin=plugin, classID=descriptor['classID'], instrument=1, midiChannel=3,
+            source=project.name, saved=saved.name, beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
+            onlyRecordedAutomationChanged=comparison,
+            checks=['six-domain composing history', 'sample-preserving VST3 assignment', 'group output route history',
+                    'native VST3 parameter capture', 'Stop preserves playback', 'Keep is one Undo',
+                    'Redo', 'Discard', 'opaque state and aliases retained', 'exact save/reopen preservation']))
+
+    def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,
+                                              values=(-6.5, -3.25, -12.25)):
+        first_value, later_value, discard_value = values
         self.launch(project, seconds=180 if sustain_seconds else 120)
         self.assertTrue(self.read('transport.get')['playing'])
         baseline = self.read('plugin.state.get', plugin=plugin)
@@ -225,7 +296,7 @@ class PluginRecordingTests(unittest.TestCase):
             self.recording_button(9721)
             take = self.wait_for(self.take, lambda s: s['retained'] and s['capturing'])
 
-        enter(parameter, '-6.5')
+        enter(parameter, str(first_value))
         try:
             captured = self.wait_for(self.take, lambda s: s['eventCount'] >= 1)
         except AssertionError as failure:
@@ -247,14 +318,14 @@ class PluginRecordingTests(unittest.TestCase):
                 self.assertEqual(current['eventCount'], initial_count, current)
                 self.assertNotIn('intakeError', current)
                 time.sleep(.5)
-            enter(parameter, '-3.25')
+            enter(parameter, str(later_value))
             self.wait_for(self.take, lambda s: s['eventCount'] > initial_count)
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
         events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
-        self.assertTrue(any(e['value'] == -6.5 for e in events['events']))
+        self.assertTrue(any(e['value'] == first_value for e in events['events']))
         if sustain_seconds:
-            self.assertTrue(any(e['value'] == -3.25 for e in events['events']))
+            self.assertTrue(any(e['value'] == later_value for e in events['events']))
         self.assertTrue(all(int(e['timestamp']) >= int(take['startTime']) for e in events['events']))
         self.recording_button(9722)
         stopped = self.wait_for(self.take, lambda s: s['retained'] and not s['capturing'])
@@ -278,7 +349,7 @@ class PluginRecordingTests(unittest.TestCase):
         second = self.write('automation.recording.start', plugins=[plugin])
         timestamp = self.take()['hostTime']
         params = dict(expectedRevision=self.doc()['revision'], take=second['take'], plugin=plugin,
-                      parameter=parameter, value=-12.25, timestamp=timestamp)
+                      parameter=parameter, value=discard_value, timestamp=timestamp)
         self.idle()
         accepted = self.client.call('automation.recording.capture', params, request_id='original-control-once')
         self.assertTrue(accepted['data']['accepted'])

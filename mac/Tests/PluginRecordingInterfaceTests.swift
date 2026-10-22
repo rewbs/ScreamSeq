@@ -59,6 +59,49 @@ extension InterfaceTests {
     try require(view.record.isEnabled && view.take.isEmpty && view.targets.isEmpty && !view.completed,
       "Verified release retires only the finished take and its displayed targets")
 
+    let failedClock = PluginTakeReplies(), failedView = failedClock.view
+    var failedState = failedClock.state(); failedState["compatible"] = false
+    failedState["transportPlaying"] = true; failedState["discardable"] = false
+    failedClock.load(failedState); failedView.act(.discard)
+    try require(failedClock.writes.isEmpty && !failedView.discard.isEnabled && !failedView.keep.isEnabled &&
+      failedView.stopPlayback.isEnabled && !failedView.stopPlayback.isHidden,
+      "Failed live recording exposes explicit playback Stop without enabling premature Discard")
+    failedView.poll(); failedView.act(.stopPlayback); failedView.act(.stopPlayback)
+    failedClock.answer(failedState)
+    try require(failedClock.writes.count == 1 && failedClock.writes[0].0 == "transport.stop" &&
+      failedClock.writes[0].1["expectedRevision"] as? String == failedClock.revision && failedClock.writes[0].1["take"] == nil,
+      "Playback Stop waits for its read and sends one ordinary revision-guarded transport command")
+    failedClock.answer(["playing": false])
+    try require(failedView.polling && failedClock.writes.count == 1 && !failedView.discard.isEnabled,
+      "Stopping playback reads the take and never automatically discards original input")
+    var stoppedFailure = failedState; stoppedFailure["transportPlaying"] = false; stoppedFailure["discardable"] = true
+    failedClock.answer(stoppedFailure)
+    try require(failedView.capturing && failedView.discard.isEnabled && !failedView.keep.isEnabled && failedView.stopPlayback.isHidden,
+      "The API's stopped failed-clock Discard remains available when the normal recording cut could not finish")
+    failedView.act(.discard)
+    try require(failedClock.writes.count == 2 && failedClock.writes.last?.0 == "automation.recording.discard" &&
+      failedClock.writes.last?.1["take"] as? String == "take-a", "Recovery Discard preserves the original take identity")
+    failedClock.answer(failedClock.state(""))
+
+    for change in ["take", "transport", "discardable"] {
+      let stale = PluginTakeReplies(), v = stale.view
+      let discardCase = change == "discardable"
+      stale.load(discardCase ? stoppedFailure : failedState); v.poll(); v.act(discardCase ? .discard : .stopPlayback)
+      var changed = discardCase ? stoppedFailure : failedState
+      if change == "take" { changed["take"] = "another-take" }
+      else if change == "transport" { changed["transportPlaying"] = false }
+      else { changed["discardable"] = false; changed["transportPlaying"] = true }
+      stale.answer(changed)
+      try require(stale.writes.isEmpty && !v.pending,
+        "A queued recovery action cannot cross changed \(change) eligibility")
+    }
+    let uncertainStop = PluginTakeReplies(), uncertainStopView = uncertainStop.view
+    uncertainStop.load(failedState); uncertainStopView.act(.stopPlayback)
+    uncertainStop.replies.removeFirst()(["error": ["code": -32002, "message": "Unknown transport completion"]])
+    uncertainStopView.act(.stopPlayback); uncertainStopView.act(.discard); uncertainStopView.poll()
+    try require(uncertainStop.writes.count == 1 && uncertainStopView.needsReadback && uncertainStopView.refresh.isEnabled,
+      "An uncertain playback Stop cannot be replayed or authorize dependent Discard")
+
     for change in ["take", "revision", "document", "completed", "read-error"] {
       let guardCase = PluginTakeReplies(), v = guardCase.view
       guardCase.load(guardCase.state(capturing: false)); v.poll(); v.act(.discard)
@@ -182,6 +225,11 @@ extension InterfaceTests {
       try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
         "Compact take review cannot clip a native action, scope or status outside the window")
     }
+    var stoppedReview = focusCase.state(capturing: false); stoppedReview["transportPlaying"] = true
+    focusCase.load(stoppedReview); focused.layoutSubtreeIfNeeded()
+    try require(!focused.stopPlayback.isHidden && focused.stopPlayback.isEnabled &&
+      focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(focused.stopPlayback.bounds, from: focused.stopPlayback)),
+      "Compact stopped take exposes playback Stop for native restoration without clipping")
     focused.onDeliveryPage = reviewed.onDeliveryPage
     focused.reviewMode.selectItem(at: 1); focused.changeReviewMode()
     focused.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)

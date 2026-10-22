@@ -24,11 +24,12 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   let acknowledge = NSButton(checkboxWithTitle: "Keep the captured input despite the reported loss", target: nil, action: nil)
   lazy var record = ActionButton("Record", symbol: "record.circle", prominent: true) { [weak self] in self?.act(.start) }
   lazy var stop = ActionButton("Stop recording", symbol: "stop.fill") { [weak self] in self?.act(.stop) }
+  lazy var stopPlayback = ActionButton("Stop playback") { [weak self] in self?.act(.stopPlayback) }
   lazy var keep = ActionButton("Keep take", prominent: true) { [weak self] in self?.act(.keep) }
   lazy var discard = ActionButton("Discard take") { [weak self] in self?.act(.discard) }
   lazy var refresh = ActionButton("Check take", symbol: "arrow.clockwise") { [weak self] in self?.poll(explicit: true) }
   lazy var recovery = ActionButton("Save recovery copy", symbol: "square.and.arrow.down") { [weak self] in self?.saveRecovery() }
-  enum Action { case start, stop, keep, discard }
+  enum Action { case start, stop, keep, discard, stopPlayback }
   private struct Intent {
     let action: Action, document: String, revision: String, take: String
     let capturing: Bool, completed: Bool, loss: NSDictionary, params: [String: Any]
@@ -68,7 +69,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     acknowledge.setAccessibilityLabel("Acknowledge reported plugin recording loss")
     scope.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
     let content = stack(.vertical, [stack(.horizontal, [heading, NSView(), scope], spacing: 12),
-      stack(.horizontal, [record, stop, NSView(), refresh], spacing: 8), detail,
+      stack(.horizontal, [record, stop, stopPlayback, NSView(), refresh], spacing: 8), detail,
       stack(.horizontal, [reviewMode, NSView(), previousInputs, nextInputs], spacing: 8), inputDetail, scroll, acknowledge,
       stack(.horizontal, [discard, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 16)
@@ -159,6 +160,13 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       (state["sources"] as? [[String: Any]] ?? []).contains { (($0["lost"] as? NSNumber)?.uint64Value ?? 0) > 0 }
   }
   @objc private func acknowledgementChanged() { updateControls() }
+  private var mayDiscard: Bool {
+    retained && !completed && (!capturing || state["discardable"] as? Bool == true)
+  }
+  private var needsPlaybackStop: Bool {
+    retained && state["transportPlaying"] as? Bool == true &&
+      (!capturing || state["compatible"] as? Bool != true)
+  }
   private func decoded(_ response: [String: Any]) -> (revision: String, data: [String: Any])? {
     guard let result = response["result"] as? [String: Any], let revision = result["revision"] as? String, !revision.isEmpty,
       let data = result["data"] as? [String: Any], let retained = data["retained"] as? Bool,
@@ -180,7 +188,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     stop.isEnabled = ready && retained && capturing
     keep.isEnabled = ready && retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on)
-    discard.isEnabled = ready && retained && !capturing && !completed
+    discard.isEnabled = ready && mayDiscard
+    stopPlayback.isHidden = !needsPlaybackStop
+    stopPlayback.isEnabled = ready && needsPlaybackStop
     scope.isEnabled = !pending && !retained && !needsReadback
     acknowledge.isHidden = !retained || !hasLoss || completed
     acknowledge.isEnabled = ready && !capturing
@@ -232,7 +242,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     } else if completed {
       status.stringValue = "The take is kept. Stop song playback, then finish native restoration; this adds no second Undo step."
     } else if retained && state["compatible"] as? Bool != true {
-      status.stringValue = "The original song or plugin context has changed. Input remains available for recovery; this take cannot be kept in the changed context."
+      status.stringValue = state["transportPlaying"] as? Bool == true ?
+        "Recording context lost. Stop playback, then save recovery or discard the retained take." :
+        "Recording context lost. Original input is retained; save recovery or discard this take."
     } else if capturing { status.stringValue = "Recording plugin gestures. Closing this window retains the take." }
     else if retained { status.stringValue = hasLoss ? "Some input was lost. Review the counts before keeping this take." : "Take stopped. Keep it as one Undo step, or discard it." }
     else { status.stringValue = "Start song playback, then Record gestures from plugin windows." }
@@ -266,7 +278,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     case .stop: guard retained && capturing else { return }
     case .keep: guard retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on) else { return }
-    case .discard: guard retained && !capturing && !completed else { return }
+    case .discard: guard mayDiscard else { return }
+    case .stopPlayback: guard needsPlaybackStop else { return }
     }
     var params: [String: Any] = ["expectedRevision": revision]
     if action == .start {
@@ -274,7 +287,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       let plugins = (onPlugins?() ?? []).filter { selected == nil || $0.id == selected }.map(\.id)
       guard !plugins.isEmpty else { status.stringValue = "Add a plugin to the rack before recording."; return }
       params["plugins"] = plugins
-    } else { params["take"] = take }
+    } else if action != .stopPlayback { params["take"] = take }
     if action == .keep { params["acknowledgeLoss"] = acknowledge.state == .on }
     let intent = Intent(action: action, document: currentDocument, revision: revision, take: take,
       capturing: capturing, completed: completed, loss: loss, params: params)
@@ -284,17 +297,27 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   private func submit(_ intent: Intent) {
     guard onDocument?() == intent.document, document == intent.document, revision == intent.revision,
       take == intent.take, capturing == intent.capturing, completed == intent.completed,
+      intent.action != .discard || mayDiscard,
+      intent.action != .stopPlayback || needsPlaybackStop,
       intent.action != .keep || intent.loss.isEqual(loss), let onRequest else {
       pending = false; status.stringValue = "The take changed before this action. Review it and choose again."; updateControls(); return
     }
     let operation: String
-    switch intent.action { case .start: operation = "start"; case .stop: operation = "stop"; case .keep: operation = "commit"; case .discard: operation = "discard" }
-    onRequest("automation.recording." + operation, intent.params) { [weak self] response in
+    switch intent.action { case .start: operation = "automation.recording.start"; case .stop: operation = "automation.recording.stop"
+    case .keep: operation = "automation.recording.commit"; case .discard: operation = "automation.recording.discard"
+    case .stopPlayback: operation = "transport.stop" }
+    onRequest(operation, intent.params) { [weak self] response in
       guard let self else { return }; self.pending = false
       guard self.onDocument?() == intent.document else {
         self.needsReadback = true; self.status.stringValue = "The song changed while this action completed. Check the current take."; self.updateControls(); return
       }
-      if let read = self.decoded(response) {
+      if intent.action == .stopPlayback, let result = response["result"] as? [String: Any],
+        result["revision"] as? String == intent.revision,
+        let transport = result["data"] as? [String: Any], transport["playing"] as? Bool == false {
+        // Stopping playback is an explicit action, never an implicit Keep or
+        // Discard. Read the retained owner before enabling its next action.
+        self.poll(explicit: true)
+      } else if intent.action != .stopPlayback, let read = self.decoded(response) {
         self.accept(read.data, revision: read.revision, document: intent.document)
       } else {
         // No automatic replay, including after a transport/error reply. An

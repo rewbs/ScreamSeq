@@ -131,6 +131,8 @@ private:
     else for(const auto &entry:targets_)if(entry.dump()==targetKey_){name=targetName(entry);break;}
     auto text=name+L" · Value: "+cell(size_t(row),1);
     if(!event.contains("plugin"))text+=L" · Song time: "+cell(size_t(row),0);
+    const auto timestamp=event.value(event.contains("plugin")?"hostTime":"timestamp",std::string());
+    text+=L"\r\nOriginal host time: "+(timestamp.empty()?std::wstring(L"Unavailable"):wide(timestamp));
     text+=L"\r\n"+cell(size_t(row),3);
     set(inputDetails,text);
   }

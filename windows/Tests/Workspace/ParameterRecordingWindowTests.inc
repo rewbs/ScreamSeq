@@ -66,6 +66,7 @@ void applicationParameterRecordingReview() {
     restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
         "New captured music stayed hidden behind an empty native delivery page");
     restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find("Gain")!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos&&
       (GetWindowLongPtrW(control(9739),GWL_STYLE)&ES_READONLY)&&
       GetNextDlgTabItem(window,control(9732),FALSE)==control(9739),
       "Recording details are not readable, read-only or adjacent to the list in Tab order");
@@ -75,10 +76,12 @@ void applicationParameterRecordingReview() {
       {"state","unknown"},{"error","Original delivery is uncertain; inspect current state before retrying."}}});
     delivery["retained"]=2;delivery["needsReview"]=true;
     SendMessageW(control(9728),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
-    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos,
+    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos,
       "Recording review truncated the actionable refusal reason");
     SetFocus(control(9732));SendMessageW(control(9732),WM_KEYDOWN,VK_DOWN,0);
-    restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos,
+    restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740994")!=std::string::npos,
       "Arrow-key selection did not update the complete recording input details");
     SendMessageW(control(9732),WM_KEYDOWN,VK_UP,0);
     SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);

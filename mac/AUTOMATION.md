@@ -21,8 +21,9 @@ Native saves preserve the typed originals, including unsupported independent
 archives. These methods read detached imported evidence, not the current live
 take. The separate `automation.recording.*` lifecycle addresses the live retained
 take on each platform; see the [Windows guide](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review)
-and the Mac release limits below. The newly added Mac adapter is awaiting native
-session/socket qualification; its presence is not a claim of complete UI parity.
+and the Mac release limits below. The Mac adapter has native session/socket
+coverage; live vendor/device and complete composing qualification remain separate
+gates. Method availability alone is not a claim of complete UI parity.
 
 ## Plugin parameter recording
 
@@ -55,8 +56,20 @@ Neither operation silently stops playback or drops ownership after a failed
 cleanup. `discardCleanupPending` identifies an adopted opaque repair whose
 original queues/backends remain retained. New input on a repaired provider is
 preserved and refuses release; a dedicated review flow for that case and live
-native restoration remain unfinished. Native Record controls still use their
-preceding flow until the new retained-take UI is connected and qualified.
+native restoration remain unfinished. Generic native rack controls now send
+original values and timestamps through the retained-take owner. Its native review
+provides Record, Stop recording, Keep, Discard and original-input pages.
+
+Get's `transportPlaying`, `discardable` and
+`releaseRequiresStoppedTransport` describe recovery eligibility. In particular,
+a failed recording clock can leave `capturing:true` after its normal Stop cut
+fails. Once playback has stopped, `discardable:true` permits explicit Discard;
+clients must not trap that take behind a requirement for `capturing:false`.
+The native Mac take window offers a separate **Stop playback** action when
+recovery or restoration needs it. This sends the normal revision-guarded
+`transport.stop` and rereads the take; it never automatically commits, discards
+or retries an uncertain write. The closed-editor opaque-Discard requirement
+still applies.
 
 ## Scratch phrases
 

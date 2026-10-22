@@ -71,7 +71,11 @@ extension AppController {
     // Recovery snapshots have their own best-effort intake. Listing/status must
     // also remain available when a retained provider has refused more input.
     let retainedRecovery = method.hasPrefix("recovery.") && session.parameterRecordingTakeID != nil
-    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") || retainedRecovery ? 0 :
+    // A failed take drain must never prevent the explicit Stop needed to
+    // recover it. stop/panic own their transport boundary; input stays with the
+    // retained take rather than being retried through the manual edit prefix.
+    let retainedTransportExit = session.parameterRecordingTakeID != nil && (method == "transport.stop" || method == "transport.panic")
+    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
