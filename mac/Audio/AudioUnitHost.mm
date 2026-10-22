@@ -15,6 +15,23 @@
 #include <stdexcept>
 #include <set>
 #include <mach/mach_time.h>
+@interface RSPluginEditorWindow : NSWindow
+@property(nonatomic) BOOL recordingInputProtected;
+@end
+@implementation RSPluginEditorWindow
+- (void)sendEvent:(NSEvent *)event {
+  if(self.recordingInputProtected) {
+    switch(event.type) {
+      case NSEventTypeAppKitDefined:case NSEventTypeSystemDefined:case NSEventTypeApplicationDefined:case NSEventTypePeriodic:break;
+      default:return;
+    }
+  }
+  [super sendEvent:event];
+}
+- (BOOL)performKeyEquivalent:(NSEvent *)event {return self.recordingInputProtected?YES:[super performKeyEquivalent:event];}
+- (void)performClose:(id)sender {if(!self.recordingInputProtected)[super performClose:sender];}
+- (void)close {if(!self.recordingInputProtected)[super close];}
+@end
 @implementation RSPluginWindowDelegate
 - (void)windowWillClose:(NSNotification *)notification {
   if (self.onClose)
@@ -33,7 +50,7 @@ void RSResizePluginEditorWindow(NSWindow *window,NSSize size) {
 }
 NSWindow *RSCreatePluginEditorWindow(NSSize size,NSString *title) {
   if(!RSValidPluginEditorSize(size))throw std::runtime_error("Invalid plugin editor dimensions");
-  NSWindow *window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,size.width,size.height)
+  NSWindow *window=[[RSPluginEditorWindow alloc] initWithContentRect:NSMakeRect(0,0,size.width,size.height)
     styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
   window.releasedWhenClosed=NO;window.title=title;
   window.contentView=[[NSView alloc] initWithFrame:NSMakeRect(0,0,size.width,size.height)];
@@ -70,6 +87,42 @@ NSWindow *RSCreatePluginEditorWindow(NSSize size,NSString *title) {
 - (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
 @end
 namespace Tracker {
+MacPluginInputBarrier::MacPluginInputBarrier(NSWindow *window):window_(window) {
+  if(!NSThread.isMainThread)throw std::runtime_error("Plugin input protection requires the native main owner");
+  if(!window_)return; // Backend token also prevents opening a new editor.
+  if(![window_ isKindOfClass:RSPluginEditorWindow.class]||((RSPluginEditorWindow *)window_).recordingInputProtected)
+    throw std::runtime_error("Plugin editor input is already protected or belongs to another owner");
+  CFStringRef mode=CFRunLoopCopyCurrentMode(CFRunLoopGetMain());
+  const bool tracking=mode&&!CFEqual(mode,kCFRunLoopDefaultMode);if(mode)CFRelease(mode);
+  NSResponder *responder=window_.firstResponder;
+  const bool textEditing=[responder isKindOfClass:NSTextView.class]&&((NSTextView *)responder).isFieldEditor;
+  if(tracking||NSEvent.pressedMouseButtons||window_.attachedSheet||window_.childWindows.count||textEditing)
+    throw std::runtime_error("Finish the plugin text edit, drag, menu or dialog before restoring its baseline");
+  std::vector<NSView *> pending;if(window_.contentView)pending.push_back(window_.contentView);
+  size_t visited=0;
+  while(!pending.empty()) {
+    NSView *view=pending.back();pending.pop_back();
+    if(++visited>8192)throw std::runtime_error("Plugin editor hierarchy exceeds the native input protection bound");
+    if([view isKindOfClass:NSControl.class])controls_.push_back({(NSControl *)view,bool(((NSControl *)view).enabled)});
+    NSArray<NSView *> *children=view.subviews;
+    if(children.count>8192-visited||pending.size()>8192-visited-children.count)
+      throw std::runtime_error("Plugin editor hierarchy exceeds the native input protection bound");
+    for(NSView *child in children)pending.push_back(child);
+  }
+  ((RSPluginEditorWindow *)window_).recordingInputProtected=YES;
+  try {for(const auto &entry:controls_)if(entry.enabled&&entry.control.window==window_)entry.control.enabled=NO;}
+  catch(...){release();throw;}
+}
+void MacPluginInputBarrier::release()noexcept {
+  if(!NSThread.isMainThread)std::terminate();
+  if(!window_)return;
+  // Keep the event gate up while reenabling controls; never make the window key
+  // or restore an obsolete first responder after the musician changed windows.
+  for(const auto &entry:controls_)if(entry.control.window==window_&&bool(entry.control.enabled)!=entry.enabled)entry.control.enabled=entry.enabled;
+  ((RSPluginEditorWindow *)window_).recordingInputProtected=NO;
+  controls_.clear();window_=nil;
+}
+MacPluginInputBarrier::~MacPluginInputBarrier(){release();}
 static_assert(audioUnitMusicDeviceType == kAudioUnitType_MusicDevice);
 static_assert(kAudioUnitParameterUnit_Generic == 0 && kAudioUnitParameterUnit_Indexed == 1 &&
   kAudioUnitParameterUnit_Boolean == 2 && kAudioUnitParameterUnit_Percent == 3 &&
@@ -92,6 +145,8 @@ class MacPluginBackend final : public PluginBackend {
   uint64_t renderPosition_ = 0;
   std::unique_ptr<VST3Plugin> vst_;
   std::unique_ptr<AudioUnitEditIntake> auEdits_;
+  std::unique_ptr<MacPluginInputBarrier> inputBarrier_;
+  uint64_t inputBarrierSerial_=0,releasedInputBarrier_=0;
   std::vector<PluginAudioBus> buses_;
   std::vector<uint32_t> auxiliaryInputs_, auxiliaryOutputs_;
   std::unique_ptr<PluginAudioBufferPlan> audio_;
@@ -130,6 +185,8 @@ public:
   bool popEdit(PluginEdit &) noexcept override;
   uint64_t droppedEdits() const noexcept override;
   std::optional<PluginEditFence> editFence() override;
+  std::optional<uint64_t> beginEditorInputBarrier() override;
+  bool endEditorInputBarrier(uint64_t) override;
   PluginEditRead popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept override {
     return vst_?vst_->popEditBefore(fence,event):auEdits_->popBefore(fence,event);
   }
@@ -493,6 +550,7 @@ void MacPluginBackend::showEditor() {
     vst_->showEditor();
     return;
   }
+  if(inputBarrier_)throw std::runtime_error("Plugin editor input is protected while restoring its baseline");
   if (editorWindow_) {
     [(__bridge NSWindow *)editorWindow_ makeKeyAndOrderFront:nil];
     return;
@@ -566,6 +624,7 @@ void MacPluginBackend::closeEditor() {
     return;
   }
   auto close = ^{
+    if(inputBarrier_){inputBarrier_.reset();releasedInputBarrier_=inputBarrierSerial_;}
     if (parameterListener_) {
       auto *observer=static_cast<AUEditObserver *>(parameterListener_);
       // Retire delivery from this view, retaining already delivered events on
@@ -608,6 +667,25 @@ std::optional<PluginEditFence> MacPluginBackend::editFence() {
   PluginEditFence fence;
   pluginMainCall([&]{fence=auEdits_->fence(mach_absolute_time());});
   return fence;
+}
+std::optional<uint64_t> MacPluginBackend::beginEditorInputBarrier() {
+  if(vst_)return vst_->beginEditorInputBarrier();
+  std::optional<uint64_t> token;
+  pluginMainCall([&]{
+    if(inputBarrier_||inputBarrierSerial_==UINT64_MAX)return;
+    auto barrier=std::make_unique<MacPluginInputBarrier>((__bridge NSWindow *)editorWindow_);
+    inputBarrier_=std::move(barrier);token=++inputBarrierSerial_;
+  });return token;
+}
+bool MacPluginBackend::endEditorInputBarrier(uint64_t token) {
+  if(vst_)return vst_->endEditorInputBarrier(token);
+  bool released=false;
+  pluginMainCall([&]{
+    if(!token)return;
+    if(!inputBarrier_){released=releasedInputBarrier_==token;return;}
+    if(inputBarrierSerial_!=token)return;
+    inputBarrier_.reset();releasedInputBarrier_=token;released=true;
+  });return released;
 }
 namespace {
 class MacBackendFactory final : public PluginBackendFactory {

@@ -367,6 +367,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   IConnectionPoint *componentConnection = nullptr, *controllerConnection = nullptr;
   IPlugView *view = nullptr;
   NSWindow *window = nil;
+  std::unique_ptr<MacPluginInputBarrier> inputBarrier;
+  uint64_t inputBarrierSerial=0,releasedInputBarrier=0;
   NSView *container = nil;
   RSPluginWindowDelegate *windowDelegate = nil;
   bool editorSized = false;
@@ -537,6 +539,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
   }
   void close() {
+    if(inputBarrier){inputBarrier.reset();releasedInputBarrier=inputBarrierSerial;}
     if(editorClosing)return;
     editorClosing=true;
     window.delegate = nil;
@@ -772,6 +775,23 @@ PluginEditFence VST3Plugin::editFence() {
 PluginEditRead VST3Plugin::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {
   return impl_->edits.popBefore({fence.position},event);
 }
+std::optional<uint64_t> VST3Plugin::beginEditorInputBarrier() {
+  std::optional<uint64_t> token;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(s.inputBarrier||s.inputBarrierSerial==UINT64_MAX)return;
+    auto barrier=std::make_unique<MacPluginInputBarrier>(s.window);
+    s.inputBarrier=std::move(barrier);token=++s.inputBarrierSerial;
+  });return token;
+}
+bool VST3Plugin::endEditorInputBarrier(uint64_t token) {
+  bool released=false;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(!token)return;
+    if(!s.inputBarrier){released=s.releasedInputBarrier==token;return;}
+    if(s.inputBarrierSerial!=token)return;
+    s.inputBarrier.reset();s.releasedInputBarrier=token;released=true;
+  });return released;
+}
 void VST3Plugin::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
 }
@@ -987,6 +1007,7 @@ void VST3Plugin::closeEditor() {
 void VST3Plugin::showEditor() {
   pluginMainCall([&] {
     auto &s = *impl_;
+    if(s.inputBarrier)throw std::runtime_error("Plugin editor input is protected while restoring its baseline");
     if (s.window) {
       [s.window makeKeyAndOrderFront:nil];
       return;

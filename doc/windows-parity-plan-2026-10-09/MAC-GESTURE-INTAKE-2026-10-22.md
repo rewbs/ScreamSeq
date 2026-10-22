@@ -41,6 +41,19 @@ audio rendering must not consume it or allocate its storage.
   which uses `AUParameterSet`, exercising the real AU notification API. Default
   multi-bus/audio fixtures retain their previous no-editor behavior. The fixture
   is never installed or registered outside its process.
+- `mac/Audio/PluginWindow.hpp` and the owned `RSPluginEditorWindow` in
+  `AudioUnitHost.mm` now provide a native-main-owner input lease. It gates normal
+  events, key equivalents and user close on that specific host window, retains
+  each native control's previous enabled state, and restores those states without
+  making a window key or replacing its first responder. Active field-editor
+  drafts, tracking/modal run-loop modes, mouse drags and attached child/dialog
+  windows refuse admission before control mutation. Enumeration is bounded at
+  8,192 views. These conservative admission rules still need ergonomic testing.
+- Both AU and `mac/Audio/VST3Host.mm` implement the existing backend lease
+  interface: exact provider/token identity, no nested lease, no editor opening
+  while protected, retryable cleanup and explicit host-close cleanup. This does
+  not discard programmatic vendor notifications; the shared take owner must
+  retain/recheck unexpected input before publishing a restored baseline.
 
 The notification API choice follows Apple's [Audio Unit view/event guide](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/AudioUnitProgrammingGuide/TheAudioUnitView/TheAudioUnitView.html)
 and [AUParameterListenerNotify reference](https://developer.apple.com/documentation/audiotoolbox/auparameterlistenernotify(_:_:_:)).
@@ -61,6 +74,11 @@ The test is intended to qualify actual delivery, not infer it from the API name.
    invocation lacks `--ui`; the Mac CI workflow now explicitly schedules this
    bounded 120-second owned-editor check from the same build, retaining its log.
    This is not a physical display or Core Audio loopback qualification.
+   It also protects actual AU/VST3 fixture windows, checks native close refusal,
+   unchanged values/geometry/focus, native control reenable, and original-time
+   programmatic delivery while protected. The ordinary native-plugin test covers
+   closed-editor leases for both providers: wrong/foreign/stale tokens, nested
+   refusal, blocked opening, retryable release and explicit-close cleanup.
 4. The shared queue header is a Windows provider input: rebuild the relevant
    Windows host/recorded-automation targets once, retain real VST3 notification,
    audible latest-value, overflow and callback-allocation assertions. Do not
@@ -69,16 +87,25 @@ The test is intended to qualify actual delivery, not infer it from the API name.
    Existing native provider/PCM tests cover the storage-accounting change and
    unchanged audio/property behavior. API inventory/project format are unchanged;
    the final paired history/persistence/exchange gate still remains required.
+6. `plugin-window-geometry` retains its existing geometry assertions and adds
+   owned, offscreen native input checks: key dispatch and key equivalents before,
+   during and after a lease; independent-window input; enabled/disabled controls;
+   close notification; raw text/focus retention; and refusal of an active field
+   editor or child window. This exercises AppKit directly, not OS-level input or
+   Computer Use. Live keyboard/IME and real-vendor behavior remain separate gates.
 
 Cheap checks so far are source/diff review only. No compilation, native test,
 new AU runtime observation, or passing CI is claimed.
 
 ## Remaining work and limits
 
-A fixed notification cut is not an exclusive native input lease. AU events not
+A fixed notification cut alone is not an exclusive native input lease. AU events not
 yet delivered by Apple's listener when it is disposed are outside this queue's
-retention guarantee. Native AU/VST3 editor input barriers, fixed release cuts,
-manual/vendor-state restoration, retained recovery and Mac session/API/UI
+retention guarantee. The newly prepared native AU/VST3 barriers are unqualified;
+they protect the existing host window, not arbitrary programmatic vendor activity
+or a separately created vendor top-level window. Late vendor windows/input must
+be accounted for by the session's admission/recheck policy before enabling this
+lifecycle publicly. Fixed release cuts, manual/vendor-state restoration, retained recovery and Mac session/API/UI
 integration are still required before exposing the shared take there. Merely
 adding the seven API names would not preserve these semantics.
 

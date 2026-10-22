@@ -63,6 +63,32 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
     @"isInstrument" : @(d.instrument)
   };
 }
+static void closedInputProtection(const PluginState &state){
+  NativePlugin plugin(state,48000),other(state,48000);
+  const auto lease=plugin.beginEditorInputBarrier();
+  check(lease&&lease->token&&lease->incarnation==plugin.editSource().incarnation,"Closed native input lease lost provider identity");
+  check(!plugin.beginEditorInputBarrier(),"Nested native input lease accepted");
+  check(!other.endEditorInputBarrier(*lease),"Another provider released a native input lease");
+  auto wrong=*lease;++wrong.token;
+  check(!plugin.endEditorInputBarrier(wrong),"Wrong native input token released the lease");
+  bool refused=false;try{plugin.showEditor();}catch(const std::exception &){refused=true;}
+  check(refused&&!plugin.editorOpen(),"Editor opened through a protected native input lease");
+  check(plugin.endEditorInputBarrier(*lease)&&plugin.endEditorInputBarrier(*lease),"Native input cleanup is not retryable");
+  const auto next=plugin.beginEditorInputBarrier();
+  check(next&&next->token!=lease->token&&!plugin.endEditorInputBarrier(*lease),"Old token released a new lease");
+  plugin.closeEditor();check(plugin.endEditorInputBarrier(*next),"Explicit close did not clean up its native lease");
+}
+static PluginEditorInputBarrier protectOpenEditor(NativePlugin &plugin,NSSlider *slider){
+  NSWindow *window=slider.window;NSResponder *responder=window.firstResponder;
+  const auto value=slider.doubleValue;const auto frame=window.frame;
+  const auto lease=plugin.beginEditorInputBarrier();
+  check(lease&&lease->token&&!slider.enabled&&plugin.editorOpen(),"Open native editor did not protect its input");
+  [window performClose:nil];[window close];
+  bool refused=false;try{plugin.showEditor();}catch(const std::exception &){refused=true;}
+  check(refused&&plugin.editorOpen()&&window.visible&&window.firstResponder==responder&&
+    slider.doubleValue==value&&NSEqualRects(window.frame,frame),"Protection closed, raised or mutated the retained editor");
+  return *lease;
+}
 static void auNotificationLifetime() {
   setFixtureAUHasEditor(true);
   struct ResetEditorMode{~ResetEditorMode(){setFixtureAUHasEditor(false);}}reset;
@@ -94,7 +120,11 @@ static void auNotificationLifetime() {
       [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:.005]];
     }
   };
+  const auto lease=protectOpenEditor(plugin,slider);
+  // Programmatic vendor delivery remains observable while ordinary native
+  // input is gated. The take owner must retain it, never suppress it as noise.
   const auto beforeFirst=mach_absolute_time();const auto first=observe(.25f,1);
+  check(plugin.endEditorInputBarrier(lease)&&slider.enabled,"AU input release did not restore its slider");
   const auto second=observe(.75f,2);
   plugin.closeEditor();const auto closed=plugin.editBoundary();
   check(closed&&closed->source==second.source&&closed->fence.position==second.fence.position&&closed->fence.pending==2,
@@ -126,6 +156,9 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       PluginState gain{descriptors[0]}, synth{descriptors[1]};
       gain.instanceID = "test-gain-instance";
       synth.instrument = 1;
+      closedInputProtection(gain);
+      PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";
+      closedInputProtection(closedAU);
       NativePlugin effect(gain, 48000);
       check(effect.parameter(7, .3f), "VST3 parameter write");
       auto saved = effect.state();
@@ -347,6 +380,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
             if ([item isKindOfClass:NSSlider.class])
               slider = (NSSlider *)item;
         check(slider != nil, "plugin-owned slider attached");
+        const auto inputLease=protectOpenEditor(plugin,slider);
         const auto originalSource=plugin.editSource();
         const auto recordedCatalog=plugin.parameters();
         const std::array<PluginState,1> recordedRack{gain};
@@ -370,6 +404,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         PluginEdit edit;PluginEditSource source;
         check(plugin.popEdit(edit,source) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
         check(originalSource.incarnation&&source==originalSource&&!source.dropped,"Custom editor notification lost its provider incarnation");
+        check(plugin.endEditorInputBarrier(inputLease)&&slider.enabled,"VST3 input release did not restore its slider");
         check(beforeEdit&&edit.hostTime>=beforeEdit&&edit.hostTime<=afterEdit&&plugin.droppedEdits()==0,"Native facade retains custom editor callback time and loss count");
         check(recordedTake.append(gain.instanceID,edit,source,"revision",19,recordedNative,recordedCatalog)==RecordedGestureTake::Intake::Captured,
           "Delayed native slider notification enters its original take after release");
