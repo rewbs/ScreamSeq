@@ -21,6 +21,11 @@ are terminal and must not be repeated. Its Windows/macOS CI jobs remain separate
 live observations until terminal; do not restart them. The menu source correction
 is unbuilt. Prior Mac passes do not qualify the newly changed recovery adapter.
 
+The same pending batch also fixes [MIDI sound navigation with a hidden context
+panel](MIDI-SOUND-NAVIGATION-2026-10-22.md), discovered through Computer Use on
+the qualified navigation package and reproduced by a new actual-app regression.
+Its native menu/keyboard/focus checks join this checkpoint, without another build.
+
 The immediate queue is: finish source review, freeze the startup correction, then
 build once after the gate; inspect bounded
 native and actual-app results; perform Computer Use on that executable, including

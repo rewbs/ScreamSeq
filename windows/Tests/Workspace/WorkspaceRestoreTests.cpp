@@ -1261,6 +1261,7 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
                     timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
+                    timedRestoreCase("recording sound choice with hidden context and retained settings",applicationRecordingSoundChoice);
                     timedRestoreCase("navigation placements and retained graph",applicationNavigation);
                     timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
                     timedRestoreCase("navigation resize and explicit destinations",applicationNavigationResizeAndDestinations);

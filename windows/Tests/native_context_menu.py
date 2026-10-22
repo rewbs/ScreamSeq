@@ -78,6 +78,17 @@ def await_menu(test, owner):
 
 
 class Menu:
+    @classmethod
+    def from_button(cls, test, owner, identifier):
+        """Open a native button menu without blocking its modal message loop."""
+        result = cls.__new__(cls)
+        result.test, result.owner = test, owner
+        control = user.GetDlgItem(owner, identifier)
+        test.assertTrue(control, identifier)
+        private_desktop.check(user.PostMessageW(owner, 0x111, identifier, control))
+        result.hwnd, result.menu = await_menu(test, owner)
+        return result
+
     def __init__(self, test, owner, point=None, source=None):
         self.test, self.owner = test, source or owner
         post_context(owner, point, source)

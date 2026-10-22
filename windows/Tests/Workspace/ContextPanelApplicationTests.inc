@@ -1,3 +1,40 @@
+void applicationRecordingSoundChoice() {
+    RestoreFixture fixture;auto &app=*fixture.app;app.command(patternCommand);SetFocus(app.window);
+    app.refreshTypingSounds();const auto catalog=app.typingCatalog(app.typingSample);
+    restoreCheck(catalog.size()>1,"Sound choice fixture needs two distinct sound identities");
+    app.toggleContextPanel();app.openMidiRecording();const auto tool=app.midiWindow->window();ScreamSeq::Tests::ownGuiWindow(tool);
+    const auto field=GetDlgItem(tool,7208);rawDraftText(field,L"-");SetFocus(field);SendMessageW(field,EM_SETSEL,1,1);
+    const auto nativeDraft=app.midiWindow->snapshot().at("draft"),layout=app.workspaceDockSnapshot().at("configuration"),music=songState(app);
+    const auto recording=app.view->recording;
+    const auto desired=catalog[1].at("id").get<std::string>();const auto target=app.typingSoundChoiceTarget();
+    auto next=app.position();next["row"]=3;app.navigate(next); // Playback/cursor movement is not an input-sound change.
+    const auto context=app.position(),selection=app.selection();
+    app.selectTypingSoundChoice(target,desired);
+    restoreCheck(app.typingSoundId==desired&&app.typingSound==catalog[1].at("index")&&!app.inputInstrumentOverride,
+        "MIDI sound choice did not resolve the stable sound identity");
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    restoreCheck(!app.workspaceState.contextPanelVisible&&!IsWindowVisible(app.controls.at(soundChooser))&&
+        app.workspaceDockSnapshot().at("configuration")==layout&&GetFocus()==field&&first==1&&last==1&&
+        app.midiWindow->snapshot().at("draft")==nativeDraft&&app.view->recording==recording&&songState(app)==music&&
+        app.position()==context&&app.selection()==selection,
+        "Sound choice revealed the sidebar, stole focus, changed a take or lost a raw MIDI settings draft");
+    const auto unchanged=app.contextRevision;app.selectTypingSoundChoice(app.typingSoundChoiceTarget(),desired);
+    restoreCheck(app.contextRevision==unchanged,"Choosing the current sound changed input context");
+    restoreRejected([&]{app.selectTypingSoundChoice(target,catalog[0].at("id"));});
+    restoreCheck(app.typingSoundId==desired,"Stale popup redirected a newer sound selection");
+    const auto current=app.typingSoundChoiceTarget();app.busy=true;
+    restoreRejected([&]{app.selectTypingSoundChoice(current,catalog[0].at("id"));});app.busy=false;
+    restoreCheck(app.typingSoundId==desired&&songState(app)==music,"Busy sound choice partly applied");
+    restoreRejected([&]{app.selectTypingSoundChoice(current,"removed-sound");});
+    app.inputInstrumentOverride=255;const auto overridden=app.typingSoundChoiceTarget();
+    restoreRejected([&]{app.selectTypingSoundChoice(current,desired);});
+    app.selectTypingSoundChoice(overridden,desired);
+    restoreCheck(!app.inputInstrumentOverride&&app.typingSoundId==desired,"Sound choice failed to replace an explicit empty-slot input override");
+    const auto beforeEdit=app.typingSoundChoiceTarget();app.edit("document.patch",{{"title","Changed while choosing a sound"}});
+    restoreRejected([&]{app.selectTypingSoundChoice(beforeEdit,catalog[0].at("id"));});
+    restoreCheck(app.typingSoundId==desired,"Sound menu crossed an intervening document revision");
+}
+
 void applicationContextPanel() {
     RestoreFixture fixture;auto &app=*fixture.app;
     ScreamSeq::Tests::ownGuiWindow(app.window);SetFocus(app.window);
