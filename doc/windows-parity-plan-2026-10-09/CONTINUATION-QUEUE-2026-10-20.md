@@ -72,6 +72,15 @@ recorded by the rack workflow, seven new live recording APIs remain Windows-only
 and broader accessibility/device/temporal performance qualification remains open.
 The older chronological entries below do not describe the current branch state.
 
+**Next source batch:** `codex/mac-gesture-intake`, based on the backed-up Windows
+candidate, prepares shared bounded AU notification intake and a real process-local
+AU editor notification regression. See [Mac intake continuation](MAC-GESTURE-INTAKE-2026-10-22.md).
+Source is backed up, but unbuilt; prior Mac CI cannot qualify it. The Windows
+`313893b9f` executable/receipts remain intact. The next dependency is native Mac
+input exclusion and complete retained-take session ownership before API/UI
+exposure, including close/stop and manual-state recovery races. Do not count the
+intake foundation as completed Mac recording behavior.
+
 **Scope/reuse audit, 22 October 06:54 UTC:** Mac
 `mac/App/GraphActionCatalog.swift` explicitly limits pattern/recorded parameter
 sources to song rack processors too. Recipe-copy recording is therefore a shared
