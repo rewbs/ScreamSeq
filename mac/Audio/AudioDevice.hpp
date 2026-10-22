@@ -99,6 +99,11 @@ public:
   }
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
   struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
+  struct PluginStateOwner {std::string plugin;PluginEditSource source;};
+  // Caller holds the full group's native input leases and rechecks its fixed
+  // cuts before and after. Never stops an active device or rewrites saved blobs.
+  // Refusal/exception retains the take, including after partial vendor restore.
+  void restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner>,std::span<const PluginState>);
   // Control owner only. Resolve stable identities again: live rack publication
   // can reorder slots without replacing the whole chain. Guard the native
   // incarnation as well as the epoch before taking over stopped processing.

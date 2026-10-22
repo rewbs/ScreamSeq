@@ -80,3 +80,8 @@
   });
   // Completed input remains owned until guarded native restoration succeeds.
 }
+- (BOOL)releaseStoppedParameterTake:(BOOL)discard {
+  if(!_parameterTake)return YES;
+  if(!_parameterTake->restoreStopped(discard,_plugins))return NO;
+  _parameterTake.reset();return YES;
+}

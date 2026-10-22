@@ -589,3 +589,41 @@ input, single Undo/Redo, recovery while live, save/reopen and protected vendor
 restoration. Those end-to-end successful session cases await the release/API
 integration. No new build was started for this source; the next eligible start
 remains 2026-10-22 16:09:04UTC, with no obligation to build an incomplete batch.
+
+## Following source batch: real stopped vendor verification — unbuilt
+
+Source inspection found a specific live-release hazard: Mac
+`VST3Plugin::state()` flushes pending changes with a zero-frame `process` call
+and synchronizes controller values. Calling it concurrently with the same
+rendering vendor is unsafe. `AudioDevice::pluginStates()` additionally stops
+transport. Neither is suitable for an unnoticed live release.
+
+`AudioDevice::restoreStoppedPluginBaselines` now provides the quiescent part of
+release. It rejects active playback, joins a naturally stopped callback without
+changing the retained frame clock, validates the entire group's native sources,
+prepares canonical accepted state and writable values using isolated providers,
+then restores those values in bounded batches. It rechecks all stable slots and
+provider/loss identities across vendor calls, pending work and each publication.
+The actual retained vendors' opaque bytes and audio layouts must match the
+canonical accepted baselines. A failure retains the take even after a partial
+vendor restoration; saved plugin blobs and musical history are never rewritten.
+The outer take still owns native leases and fixed-cut checks before and after.
+
+Shared `PluginChain::state(slot)` supplies the existing quiescent capture policy
+for one provider, avoiding serialization of unrelated vendors. `states()` uses
+the same policy; transient preview exclusion and the audio-block guard remain.
+The captured rack entry is retained across vendor calls. Prepared shared preview
+tests check per-provider accepted-state capture and missing-slot refusal.
+
+`NativeParameterTake::restoreStopped` composes this with grouped leases, and
+the internal session releases ownership only after success. Mixed AU/VST3
+fixtures now include real saved-baseline verification after Keep, opaque AU
+hidden-state mismatch, retained ownership after refusal and successful retry.
+They remain unexecuted. Existing visible lease, suffix, timing and history
+assertions are retained, with both Mac architectures and shared Windows/Mac
+parameter-preview/recorded gates required at the next source checkpoint.
+
+This is a prerequisite, **not a substitute for the requested final behavior**.
+Release during playback, closed-editor opaque replacement/explicit suffix
+abandonment, and full native controls/API/session qualification remain open.
+Public Mac recording is still the legacy flow; no new lifecycle UI is exposed.

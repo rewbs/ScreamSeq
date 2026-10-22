@@ -259,5 +259,15 @@ public:
       const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
     }
   }
+  // Safe stopped subset of release. Keep can publish while playing, but this
+  // verification must not call a VST3 state() implementation that flushes a
+  // zero-frame process concurrently with its audio vendor. The session retains
+  // ownership until this succeeds; a later live-release path needs its own gate.
+  bool restoreStopped(bool discard,std::span<const PluginState> saved) {
+    require(!audio_.active(),"Stop playback before native plugin state verification; take retained");
+    std::vector<AudioDevice::PluginStateOwner> owners;owners.reserve(catalogs_.size());
+    for(const auto &[identity,cut]:stoppedCuts_)owners.push_back({identity,cut.source});
+    return restoreRetained(discard,[&]{audio_.restoreStoppedPluginBaselines(hostEpoch_,owners,saved);});
+  }
 };
 }

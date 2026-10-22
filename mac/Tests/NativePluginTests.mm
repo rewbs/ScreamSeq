@@ -280,6 +280,20 @@ static void nativeTakeGroupedRestoration(const PluginState &first,const PluginSt
   }),"Grouped restoration could not retry after a later native lease refusal");
   check(audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1&&!audio.active()&&take->eventCount()==2,
     "Grouped restoration replaced native ownership or discarded retained evidence");
+  // A hidden AU setting cannot be restored by its published Gain parameter.
+  // Use a mismatched accepted blob to represent such an opaque divergence;
+  // rejection must retain both providers and permit retry with the real baseline.
+  auto wrong=std::vector<PluginState>{first,second};
+  NSData *hidden=[NSPropertyListSerialization dataWithPropertyList:@{@"gain":@(parameter1.value),@"hidden":@(.375f)}
+    format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+  check(hidden.length>0,"Prepare hidden-state mismatch fixture");
+  const auto bytes=static_cast<const std::byte *>(hidden.bytes);wrong[1].state.assign(bytes,bytes+hidden.length);
+  refused=false;try{owner.restoreStopped(true,wrong);}catch(const std::exception &){refused=true;}
+  check(refused&&owner.owns(first.instanceID)&&owner.owns(second.instanceID)&&take->eventCount()==2&&
+    audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1,
+    "Hidden-state verification released a partial take or replaced its providers");
+  check(owner.restoreStopped(true,rack),"Stopped native baseline verification could not retry after hidden-state refusal");
+  check(owner.owns(first.instanceID)&&take->eventCount()==2,"Native verification silently dropped session ownership or input");
 }
 static void nativeTakeAtomicPublication(const PluginState &first,const PluginState &second) {
   AudioDevice audio;audio.setPlugins({first,second});
@@ -330,6 +344,7 @@ static void nativeTakeAtomicPublication(const PluginState &first,const PluginSta
   check(owner.restoreRetained(false,[&]{
     check(audio.pluginEditSource(0)==source0&&audio.pluginEditSource(1)==source1,"Keep restoration replaced a native provider");
   }),"Completed take could not restore after its session revision advanced");
+  check(owner.restoreStopped(false,rack),"Kept take could not verify its real stopped AU/VST3 baselines");
   const auto emptyStart=mach_absolute_time();
   auto emptyTake=std::make_shared<RecordedGestureTake>("empty-native-mac-take",revision,emptyStart,timeline,rack,points,providers);
   NativeParameterTake empty(audio,emptyTake,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,points);

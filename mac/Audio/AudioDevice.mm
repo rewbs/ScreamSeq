@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <mach/mach_time.h>
+#include "editor/hosted/ParameterEdits.hpp"
 namespace Tracker {
 namespace {
 void check(OSStatus status, const char *message) {
@@ -253,6 +254,60 @@ std::vector<PluginState> AudioDevice::pluginStates() {
   if (plugins_)
     pluginStates_ = plugins_->states();
   return pluginStates_;
+}
+void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
+    std::span<const PluginState> saved) {
+  const auto validate=[&] {
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Stop playback before native plugin state verification; take retained");
+    for(const auto &owner:owners) {
+      const auto slot=pluginSlot(owner.plugin);
+      if(!slot||*slot>UINT32_MAX||!owner.source.incarnation||plugins_->editSource(*slot)!=owner.source)
+        throw std::runtime_error("Native provider changed during baseline restoration; take retained");
+    }
+  };
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid native restoration group");
+  validate();
+  if(!joinStoppedProcessing())throw std::runtime_error("Plugin processing is still active; take retained");
+  plugins_->applyPending();validate();
+  struct Restore {PluginStateOwner owner;size_t slot;PluginState expected;std::vector<ParameterChange> values;};
+  std::vector<Restore> prepared;prepared.reserve(owners.size());std::set<std::string> seen;
+  for(const auto &owner:owners) {
+    if(!seen.insert(owner.plugin).second)throw std::invalid_argument("Duplicate native restoration provider");
+    const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(baseline==saved.end())throw std::runtime_error("Saved plugin baseline is missing; take retained");
+    const auto slot=*pluginSlot(owner.plugin);
+    NativePlugin probe(*baseline,sampleRate_);
+    auto expected=probe.state();auto parameters=probe.parameters();
+    validate();if(pluginSlot(owner.plugin)!=slot)throw std::runtime_error("Native rack moved during restoration preparation");
+    const auto catalog=plugins_->parameters(slot);validate();
+    std::vector<std::pair<uint32_t,double>> requested;
+    for(const auto &p:parameters)if(p.writable)requested.emplace_back(p.id,p.manualValue.value_or(p.value));
+    Restore item{owner,slot,std::move(expected),{}};item.values.reserve(requested.size());
+    if(!requested.empty())for(const auto &[id,value]:prepareParameterEdits(catalog,requested))
+      item.values.push_back({uint32_t(slot),id,value,0});
+    prepared.push_back(std::move(item));
+  }
+  // Vendor preparation can pump native work. Validate the entire group again
+  // before writing its first value. The outer owner checks queue positions too.
+  const auto validatePrepared=[&] {
+    validate();
+    for(const auto &item:prepared)if(pluginSlot(item.owner.plugin)!=item.slot)
+      throw std::runtime_error("Native rack moved during restoration publication");
+  };
+  validatePrepared();
+  for(const auto &item:prepared) {
+    for(size_t offset=0;offset<item.values.size();offset+=128) {
+      validatePrepared();plugins_->applyPending();validatePrepared();
+      if(!plugins_->enqueueParameters(std::span(item.values).subspan(offset,std::min<size_t>(128,item.values.size()-offset))))
+        throw std::runtime_error("Native baseline parameter queue refused restoration; take retained");
+    }
+    plugins_->applyPending();validatePrepared();
+    const auto restored=plugins_->state(item.slot);validatePrepared();
+    if(pluginSlot(item.owner.plugin)!=item.slot||restored.instanceID!=item.owner.plugin||
+       restored.state!=item.expected.state||restored.audioLayout!=item.expected.audioLayout)
+      throw std::runtime_error("Native hidden state differs from the saved baseline; take retained for explicit restoration");
+  }
 }
 void AudioDevice::stop() {
   playing_ = false;

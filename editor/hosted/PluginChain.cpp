@@ -554,30 +554,36 @@ void PluginChain::applyPending() noexcept {
 }
 std::vector<PluginState> PluginChain::states() {
   if(parameterBlockOpen_)throw std::logic_error("Finish the audio block before capturing plugin state");
+  while(read_.load()!=write_.load())applyPending();
+  std::vector<PluginState> out;out.reserve(rack_.size());
+  for(size_t slot=0;slot<rack_.size();++slot)out.push_back(state(slot));
+  return out;
+}
+PluginState PluginChain::state(size_t slot) {
+  if(parameterBlockOpen_)throw std::logic_error("Finish the audio block before capturing plugin state");
+  if(slot>=rack_.size())throw std::out_of_range("Plugin state target no longer exists");
   while (read_.load() != write_.load())
     applyPending();
-  std::vector<PluginState> out;
-  for(const auto &entry:rack_) {
-    auto state=entry->plugin->state();const auto &baseline=entry->baseline;
-    if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool value){return value;})) {
-      // Never reset the audible vendor just to save. Keep its other opaque
-      // settings, replacing only transient parameter values in a private copy.
-      NativePlugin accepted(state,sampleRate_,offline_);
-      for(size_t n=0;n<entry->parameters.size();++n)if(entry->previewed[n]) {
-        const auto &parameter=entry->parameters[n];
-        if(!accepted.parameter(parameter.id,parameter.value)) {
-          (void)accepted.state(); // Drain this private vendor's bounded queue.
-          if(!accepted.parameter(parameter.id,parameter.value))
-            throw std::runtime_error("Cannot capture accepted plugin values while previewing");
-        }
+  if(slot>=rack_.size())throw std::out_of_range("Plugin state target changed during pending publication");
+  const auto entry=rack_[slot]; // Vendor callbacks must not invalidate this owner.
+  auto state=entry->plugin->state();const auto &baseline=entry->baseline;
+  if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool value){return value;})) {
+    // Never reset the audible vendor just to save. Keep its other opaque
+    // settings, replacing only transient parameter values in a private copy.
+    NativePlugin accepted(state,sampleRate_,offline_);
+    for(size_t n=0;n<entry->parameters.size();++n)if(entry->previewed[n]) {
+      const auto &parameter=entry->parameters[n];
+      if(!accepted.parameter(parameter.id,parameter.value)) {
+        (void)accepted.state(); // Drain this private vendor's bounded queue.
+        if(!accepted.parameter(parameter.id,parameter.value))
+          throw std::runtime_error("Cannot capture accepted plugin values while previewing");
       }
-      state=accepted.state();
     }
-    state.bypass=entry->plugin->bypassed();state.instrument=baseline.instrument;state.midiChannel=baseline.midiChannel;state.aliases=baseline.aliases;
-    state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
-    out.push_back(std::move(state));
+    state=accepted.state();
   }
-  return out;
+  state.bypass=entry->plugin->bypassed();state.instrument=baseline.instrument;state.midiChannel=baseline.midiChannel;state.aliases=baseline.aliases;
+  state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
+  return state;
 }
 std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
   std::vector<PluginFailureEntry> result;

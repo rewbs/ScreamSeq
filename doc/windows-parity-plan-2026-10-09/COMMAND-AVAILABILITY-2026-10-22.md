@@ -169,3 +169,29 @@ Mac ARM job119904967607 passed all gates. Intel119904968198 built successfully
 and remained in its test phase at the last check. No CI job was restarted.
 Main integration remains pending; a merge-triggered CI run also counts toward
 the coordinated16:09:04UTC gate. Newer session code is outside this candidate.
+
+### 16:02UTC exact search-focus observation
+
+A fresh owned077e process29036 used another disposable F04 copy. Computer Use
+clicked dock search, typed `gain`, moved forward with Tab and returned with
+Shift+Tab. The existing read-only `qualify_foreground_focus.ps1` observer passed
+after the click and after Shift+Tab: native GUI-thread focus and global UIA
+GetFocusedElement both identified the exact search HWND, with ValuePattern,
+TextPattern and selection available. The observer supplied no input or activation.
+Receipts: `palette-availability/focus-observer/search-click.json` and
+`search-shift-tab.json` (including observer/binary hashes and process creation).
+
+Computer Use's `focused_element` still said Main in the same sequence. The
+earlier discrepancy is therefore a tool reporting observation for this field,
+not a demonstrated application accessible-focus defect. This does not establish
+Narrator behavior or floating-window typing. Alt+F4 closed only the QA process,
+normal exit0, original F04 unchanged. Its103.526s silent48kHz/480-frame diagnostic
+reported8 deadline overruns and no device/starvation/processor errors; realtime
+and temporal-presentation qualification remain false.
+
+Both Mac job logs now show all scheduled gates passed, including Intel's native
+interface and fixture stages ending15:49UTC. The run reports success; the jobs
+listing briefly retained an in-progress Intel status despite all steps complete.
+PR#6's description now names077e and this bounded evidence, and is ready for
+review. It contains no later Mac take session/restoration source. Do not trigger
+its merge build before16:09:04UTC.

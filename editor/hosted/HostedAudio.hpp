@@ -686,6 +686,9 @@ public:
   // Standalone process() callers retain their automatic parameter consumption.
   void beginRenderBlock() noexcept;
   std::vector<PluginState> states();
+  // Quiescent control owner only, like states(). Capture one retained provider
+  // without serializing unrelated vendors. Native input leases are external.
+  PluginState state(size_t slot);
   void applyPending() noexcept;
   std::vector<PluginParameter> parameters(size_t slot) const;
   std::vector<PluginProgram> programs(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->programs() : std::vector<PluginProgram>{}; }

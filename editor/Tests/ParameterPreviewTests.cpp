@@ -49,6 +49,9 @@ static void workflow(unsigned rate,unsigned block){
   const auto pcm=render(chain,2048,block);
   check(std::abs(pcm.back()-std::pow(10.f,-18.f/20))<1e-6f,"Preview did not affect real audio");
   check(chain.states()==original,"Captured opaque state baked in a preview");
+  check(chain.state(0)==original[0]&&chain.state(1)==original[1],"Single-provider capture baked in transient state");
+  bool missingRefused=false;try{(void)chain.state(2);}catch(const std::out_of_range &){missingRefused=true;}
+  check(missingRefused,"Single-provider state capture accepted a missing rack slot");
   check(parameter(chain,0,1).value==-12&&parameter(chain,1,1).value==-6,"Saving reset the audible preview");
   check(chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),"Capture consumed preview ownership");
   PluginChain reopened(chain.states(),rate,true);
