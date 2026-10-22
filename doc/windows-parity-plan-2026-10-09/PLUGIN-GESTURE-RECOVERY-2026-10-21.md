@@ -1009,3 +1009,62 @@ disabled repeat/new-write controls, exact submission count, and Refresh focus
 through recovery. These assertions are **source-only**, included in the existing
 `workspace-plugin-search-tests` gate at the next hourly build. No build or
 native pass is claimed for this correction.
+
+## 22 October 05:56 UTC checkpoint — two native focus failures
+
+Source `7154b9f323def1c448a7948eb27b6933c6a40021` built once locally from
+05:56:28.8304205 to 05:58:28.4394101 UTC. Executable SHA-256:
+`8abb2a711c2a1e6233a67f46b35a27dd87a6dcb9d34b60ccf022aecb2c08be57`.
+Terminal receipts are under
+`bin/plugin-control-review-20261022/startup-correction`; never rerun its build.
+The 05:58:37–06:01:18 check run passed **22/24 native registrations and 13/13
+actual-app cases**. Source and executable hashes remained unchanged.
+
+Passing public workflows include real Record/Keep/history/reopen/Discard,
+detached recovery, parameter search and later-ID editing, preview/close barriers,
+and hidden-context MIDI sound selection through native keyboard input. These
+passes do not erase the two separate native failures:
+
+- `workspace-pattern-accessibility-tests`: Main's custom fragment root omitted
+  its focused native Song settings field, before the external-client focus check.
+- `workspace-context-panel-tests`: the immediate post-scan sound-choice fixture
+  failed its combined draft/focus/history assertion. Its existing layout case
+  passed. The successful actual-app case waits for idle, unlike this immediate
+  native call; it is not evidence that the transient state is safe.
+
+Prepared corrections, **not yet built**: `RecordingIntegration.inc::rescanMidi`
+  now clears `midiBusy` before publishing the completed scan's UI snapshot. Its
+  guard still handles exception cleanup. The native case requires enabled fields
+  and acquired focus immediately, then separately checks layout, draft, caret,
+  take/history and cursor/selection preservation. No assertion was relaxed.
+  `NativePatternAccessibility.hpp::nativeFragment` now starts at the native
+  parent root and follows explicit `GW_OWNER` links, with thread and bounded-chain
+  guards. The previous `GA_ROOTOWNER`/`GetParent` path misses ownership of the
+  application's overlapped tool windows. The native regression retains direct
+  bridge HWND and external MTA-client focus assertions, verifies the production
+  owner chain, and rejects an unrelated focused window on the same GUI thread.
+  This source explanation still requires runtime confirmation of the full bridge.
+  Relevant Windows contracts: [GetParent](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getparent)
+  and [GetAncestor](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getancestor).
+
+PR #6 head is the frozen candidate. CI merge `4c40b3e0b792f73953b71d2727dd8580548e696e`
+has the same Git tree `d41c9221ae92a1615aa5eb79c22ba52a862d9185`. Windows run
+`39730905720`/job `119665472145`; Mac run `39730906060`, ARM job `119665473046`,
+Intel job `119665473245` were still building at 06:12 UTC. The latest build start
+was Windows at 05:56:56 UTC: **no next build or build-triggering push/merge before
+06:56:56 UTC**. Backup-only pushes remain separate from this gate.
+
+Foreground diagnostic process PID 20700 used this exact executable, silent audio
+and a disposable F04 copy. Its API observed active playback with a valid clock;
+this is not visual or audible-performance evidence. Computer Use found Main but
+Windows denied input twice (`GetCursorPos: Access is denied`). Input stopped and
+an unlock request remains pending. The returned wallpaper image is not an app
+visual pass. Never reuse this PID/handle after exit. No foreground qualification
+receipt, package or main merge is authorized by these failing results.
+
+Previous `bcd10d8a8` CI is terminal: Windows passed its build and all 158 worker
+tests, but only 20/49 native UI registrations; the duplicate menu prevented the
+public workflows from starting. Both Macs passed native/interface checks and
+failed the stale inventory baseline. A separate retained old Mac ARM run passed
+5 original fixtures, 41 API and 21 codec cases after tooling review; it does not
+cover the current source or the extended edited-fixture reciprocal gate.

@@ -101,8 +101,17 @@ void applicationPatternAccessibility() {
     app.command(songPropertiesCommand);ScreamSeq::Tests::ownGuiWindow(app.songPropertiesWindow->window());
     const auto songTitle=GetDlgItem(app.songPropertiesWindow->window(),8601);
     restoreCheck(GetFocus()==songTitle,"Song settings did not focus its native title field");
+    restoreCheck(GetAncestor(songTitle,GA_ROOT)==app.songPropertiesWindow->window()&&
+        GetWindow(app.songPropertiesWindow->window(),GW_OWNER)==app.window&&
+        (GetWindowLongPtrW(app.songPropertiesWindow->window(),GWL_STYLE)&WS_CHILD)==0,
+        "Accessibility fixture must retain the production floating inspector owner chain");
     ScreamSeq::ComPtr<IRawElementProviderFragment> nativeFocus;
-    ScreamSeq::check(rootFragment->GetFocus(&nativeFocus),"Delegate native field focus from the pattern root");
+    const auto nativeFocusResult=rootFragment->GetFocus(&nativeFocus);
+    if(FAILED(nativeFocusResult)||!nativeFocus)std::cout<<"Native focus delegation: result="<<nativeFocusResult
+        <<" focus="<<GetFocus()<<" expected="<<songTitle<<" parentRoot="<<GetAncestor(songTitle,GA_ROOT)
+        <<" rootOwner="<<GetAncestor(songTitle,GA_ROOTOWNER)<<" explicitOwner="<<GetWindow(GetAncestor(songTitle,GA_ROOT),GW_OWNER)
+        <<" Main="<<app.window<<std::endl;
+    ScreamSeq::check(nativeFocusResult,"Delegate native field focus from the pattern root");
     restoreCheck(bool(nativeFocus),"Pattern root omitted its focused native inspector");
     auto nativeProvider=accessibleInterface<IRawElementProviderSimple>(nativeFocus.Get());VARIANT nativeChild{};
     ScreamSeq::ComPtr<IAccessible> nativeAccessible;
@@ -111,6 +120,21 @@ void applicationPatternAccessibility() {
     const bool self=nativeChild.vt==VT_I4&&nativeChild.lVal==CHILDID_SELF;VariantClear(&nativeChild);
     ScreamSeq::check(nativeResult,"Read bridged native focus HWND");
     restoreCheck(self&&nativeHandle==songTitle,"Pattern focus bridge returned a different native HWND");
+    // Same UI thread is insufficient: another top-level window must not be
+    // claimed by Main's fragment merely because it owns keyboard focus.
+    const auto unrelated=CreateWindowExW(0,L"STATIC",L"Owned unrelated accessibility fixture",
+        WS_OVERLAPPEDWINDOW,10,10,240,160,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    restoreCheck(unrelated!=nullptr,"Create unrelated native focus fixture");ScreamSeq::Tests::ownGuiWindow(unrelated);
+    struct CloseUnrelated{HWND window;~CloseUnrelated(){DestroyWindow(window);}} closeUnrelated{unrelated};
+    const auto unrelatedField=CreateWindowExW(0,L"EDIT",L"Unrelated field",WS_CHILD|WS_VISIBLE|WS_TABSTOP,
+        10,10,160,24,unrelated,nullptr,GetModuleHandleW(nullptr),nullptr);
+    restoreCheck(unrelatedField!=nullptr,"Create unrelated field");ScreamSeq::Tests::ownGuiWindow(unrelatedField);
+    ShowWindow(unrelated,SW_SHOWNOACTIVATE);SetActiveWindow(unrelated);SetFocus(unrelatedField);
+    restoreCheck(GetFocus()==unrelatedField,"Unrelated focus fixture did not acquire native focus");
+    ScreamSeq::ComPtr<IRawElementProviderFragment> foreignFocus;
+    ScreamSeq::check(rootFragment->GetFocus(&foreignFocus),"Read unrelated native focus");
+    restoreCheck(!foreignFocus,"Pattern root claimed another top-level window's native field");
+    ShowWindow(unrelated,SW_HIDE);SetActiveWindow(app.songPropertiesWindow->window());SetFocus(songTitle);
     patternAccessibilityClient(app.window,app.controls.at(patternChooser),songTitle);
     restoreCheck(app.row==2&&app.channel==0&&GetFocus()==app.window&&songState(app)==changed,"Marshaled UIA navigation failed or changed song/history");
     restoreCheck(tool->snapshot().at("draft")==draft&&tool->snapshot().at("captured")==captured&&restoreText(field)==L"-","UIA navigation overwrote or rebased a retained invalid inspector draft");

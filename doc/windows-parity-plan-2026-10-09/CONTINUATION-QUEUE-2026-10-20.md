@@ -13,24 +13,28 @@ must not override current source or the active goal.
 is merged and its production navigation package is available; see
 [navigation evidence](NAVIGATION-IMPLEMENTATION-2026-10-21.md). The next working
 batch is native plugin parameter controls, retained gesture recording and detached
-input recovery. The candidate `bcd10d8a8` compiled but failed startup qualification; read the
+input recovery. The candidate `7154b9f323` compiled, passed 22/24 selected native
+registrations and all 13 actual-app cases, but failed native accessibility focus
+and the immediate post-scan MIDI sound-choice focus check. Read the
 [current recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) before touching
-its checkpoint. The next hourly gate is **2026-10-22 05:56:14 UTC**. The local
-build and check receipts under `bin/plugin-control-review-20261022/correction`
-are terminal and must not be repeated. Mac ARM job 119647128083 passed all 134
-native/35 interface groups but failed the stale API inventory baseline after
-the five original fixture roundtrips. The [reviewed inventory correction and
-additional vectors](PLUGIN-API-INVENTORY-2026-10-22.md) join the next checkpoint.
-Windows x64 and Mac Intel jobs remain live observations until terminal; do not
-restart them. The menu source correction is unbuilt. The bounded Mac passes
-do not establish completed conformance or reciprocal qualification.
+its checkpoint. The next hourly gate is **2026-10-22 06:56:56 UTC**. The local
+build and check receipts under `bin/plugin-control-review-20261022/startup-correction`
+are terminal and must not be repeated. Source corrections to completed-scan UI
+publication and explicit floating-window ownership are prepared but unbuilt.
+Current Windows x64 job `119665472145`, Mac ARM `119665473046` and Mac Intel
+`119665473245` remain live; do not restart them. The previous jobs are terminal:
+Windows failed startup; both Macs passed native/interface gates but failed the
+old inventory baseline. The [reviewed inventory correction and additional
+vectors](PLUGIN-API-INVENTORY-2026-10-22.md) are in the current checkpoint.
+Computer Use on the current executable stopped after two desktop input-access
+denials; no fresh visual or keyboard pass or production package is claimed.
 
 The same pending batch also fixes [MIDI sound navigation with a hidden context
 panel](MIDI-SOUND-NAVIGATION-2026-10-22.md), discovered through Computer Use on
 the qualified navigation package and reproduced by a new actual-app regression.
 Its native menu/keyboard/focus checks join this checkpoint, without another build.
 
-The immediate queue is: finish source review, freeze the startup correction, then
+The immediate queue is: finish source review, freeze the focus correction, then
 build once after the gate; inspect bounded
 native and actual-app results; perform Computer Use on that executable, including
 keyboard focus and silent recording; qualify current x64/Mac adapters and fresh

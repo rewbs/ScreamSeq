@@ -3,7 +3,11 @@ void applicationRecordingSoundChoice() {
     app.refreshTypingSounds();const auto catalog=app.typingCatalog(app.typingSample);
     restoreCheck(catalog.size()>1,"Sound choice fixture needs two distinct sound identities");
     app.toggleContextPanel();app.openMidiRecording();const auto tool=app.midiWindow->window();ScreamSeq::Tests::ownGuiWindow(tool);
-    const auto field=GetDlgItem(tool,7208);rawDraftText(field,L"-");SetFocus(field);SendMessageW(field,EM_SETSEL,1,1);
+    const auto field=GetDlgItem(tool,7208);
+    restoreCheck(!app.midiWindow->snapshot().at("pending").get<bool>()&&IsWindowEnabled(field),
+        "Completed MIDI scan left native fields busy until an unrelated timer poll");
+    rawDraftText(field,L"-");SetFocus(field);SendMessageW(field,EM_SETSEL,1,1);
+    restoreCheck(GetFocus()==field,"MIDI latency draft did not receive native focus");
     const auto nativeDraft=app.midiWindow->snapshot().at("draft"),layout=app.workspaceDockSnapshot().at("configuration"),music=songState(app);
     const auto recording=app.view->recording;
     const auto desired=catalog[1].at("id").get<std::string>();const auto target=app.typingSoundChoiceTarget();
@@ -14,10 +18,11 @@ void applicationRecordingSoundChoice() {
         "MIDI sound choice did not resolve the stable sound identity");
     DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
     restoreCheck(!app.workspaceState.contextPanelVisible&&!IsWindowVisible(app.controls.at(soundChooser))&&
-        app.workspaceDockSnapshot().at("configuration")==layout&&GetFocus()==field&&first==1&&last==1&&
-        app.midiWindow->snapshot().at("draft")==nativeDraft&&app.view->recording==recording&&songState(app)==music&&
-        app.position()==context&&app.selection()==selection,
-        "Sound choice revealed the sidebar, stole focus, changed a take or lost a raw MIDI settings draft");
+        app.workspaceDockSnapshot().at("configuration")==layout,"Sound choice revealed or changed the hidden context layout");
+    restoreCheck(GetFocus()==field&&first==1&&last==1,"Sound choice lost the raw MIDI field focus/caret");
+    restoreCheck(app.midiWindow->snapshot().at("draft")==nativeDraft,"Sound choice changed the raw MIDI settings draft");
+    restoreCheck(app.view->recording==recording&&songState(app)==music,"Sound choice changed the recording take or song/history");
+    restoreCheck(app.position()==context&&app.selection()==selection,"Sound choice redirected the editing cursor or selection");
     const auto unchanged=app.contextRevision;app.selectTypingSoundChoice(app.typingSoundChoiceTarget(),desired);
     restoreCheck(app.contextRevision==unchanged,"Choosing the current sound changed input context");
     restoreRejected([&]{app.selectTypingSoundChoice(target,catalog[0].at("id"));});

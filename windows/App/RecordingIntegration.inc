@@ -264,7 +264,10 @@
             refreshMidiInputStatus();
             midiError="Selected MIDI input disconnected";retainRecordingLoss(1,midiError);
         }
-        updateRecordingWindow();
+        // Publish the completed scan, not a snapshot which still says busy.
+        // The guard retains exception cleanup, but ordinary completion must
+        // re-enable native fields before returning to their caller/focus owner.
+        midiBusy=false;updateRecordingWindow();
     }
     Json midiOperation(const std::string &method,const Json &p) {
         const auto need=[](bool yes,const char *message){if(!yes)throw ScreamSeq::Api::ApiError(-32602,message);};

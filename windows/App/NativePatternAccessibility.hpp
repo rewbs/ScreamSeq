@@ -65,8 +65,14 @@ class Node final : public IRawElementProviderSimple,public IRawElementProviderFr
   // from UIA. Delegate to Windows' MSAA/UIA bridge, preserving its text/value
   // and selection implementation rather than inventing another edit provider.
   HRESULT nativeFragment(HWND window,IRawElementProviderFragment **value)const {
-    if(!window||window==context_->window||GetWindowThreadProcessId(window,nullptr)!=context_->thread||
-        GetAncestor(window,GA_ROOTOWNER)!=context_->window)return S_OK;
+    if(!window||window==context_->window||GetWindowThreadProcessId(window,nullptr)!=context_->thread)return S_OK;
+    // NativeToolWindow uses owned WS_OVERLAPPEDWINDOWs. GA_ROOTOWNER walks
+    // GetParent, which does not return an overlapped window's owner. Start at
+    // the actual parent root, then follow explicit ownership instead; docked
+    // controls already have Main as their parent root.
+    auto owner=GetAncestor(window,GA_ROOT);
+    for(unsigned depth=0;owner&&owner!=context_->window&&depth<64;++depth)owner=GetWindow(owner,GW_OWNER);
+    if(owner!=context_->window)return S_OK;
     IAccessible *accessible=nullptr;
     auto result=AccessibleObjectFromWindow(window,OBJID_CLIENT,IID_IAccessible,reinterpret_cast<void **>(&accessible));
     if(FAILED(result)||!accessible)return FAILED(result)?result:S_OK;
