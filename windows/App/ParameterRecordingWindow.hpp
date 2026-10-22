@@ -232,6 +232,22 @@ private:
   }
 public:
   bool protectsClose()const{return retained()||pending_||completion_.retained();}
+  // The API can finish a take while this review is hidden (its poll timer is
+  // stopped). Adopt confirmed worker boundaries immediately for departure
+  // admission. Do not pump reads or acknowledge this window's own unresolved
+  // write here; its receipt/generation still owns that reconciliation.
+  void observeBoundary(const std::string &document,const std::string &method,const Json &state) {
+    if(document!=document_||callbacks_.context().first!=document_||pending_||completion_.retained())return;
+    if(method!="automation.recording.start"&&method!="automation.recording.stop"&&
+       method!="automation.recording.commit"&&method!="automation.recording.discard")return;
+    if(!state.is_object()||!state.contains("retained")||!state.contains("take"))return;
+    // A late completion must not replace a newer take shown in this window.
+    if(method!="automation.recording.start"&&retained()&&state.at("take")!=take())return;
+    if(state.at("take")!=take()){
+      offset_=0;targetKey_.clear();targetChosen_=false;lossAcknowledged_=false;
+    }
+    state_=state;
+  }
   ParameterRecordingWindow(HWND owner,Callbacks callbacks):NativeToolWindow(owner),callbacks_(std::move(callbacks)) {
     document_=callbacks_.context().first;minimumClientWidth_=650;minimumClientHeight_=500;
     INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};check(InitCommonControlsEx(&common),"Initialize parameter recording review");

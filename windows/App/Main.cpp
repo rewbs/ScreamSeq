@@ -739,8 +739,13 @@ public:
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
                 parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
+                if(status==L"Parameter input was lost / take review required"||
+                   status==L"Parameter input needs review / original values and timestamps retained")
+                    status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
                 for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
             }
+            if(parameterRecordingWindow&&!parameterRecordingWindow->retired())
+                parameterRecordingWindow->observeBoundary(documentId,method,result);
         }
         refreshDocument();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();

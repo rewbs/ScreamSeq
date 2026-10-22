@@ -99,6 +99,10 @@ void applicationParameterRecordingReview() {
     deferKeepReceipt=true;click(9723);const auto submitted=writes.size();
     restoreCheck(lateReceipt&&lateCompletion&&!tool.snapshot().at("completion").at("returned").get<bool>(),
       "Unclassified completion failure failed to retain its unresolved receipt");
+    const auto unresolved=tool.snapshot();
+    tool.observeBoundary(app.documentId,"automation.recording.discard",{{"take","review-owned-take"},{"retained",false}});
+    restoreCheck(tool.snapshot()==unresolved&&tool.protectsClose(),
+      "External take completion acknowledged this window's unresolved write");
     SetFocus(control(9725));click(9725);
     restoreCheck(!tool.snapshot().at("take").at("retained").get<bool>()&&tool.protectsClose()&&
       !tool.snapshot().at("completion").is_null()&&!IsWindowEnabled(control(9721))&&GetFocus()==control(9725),
@@ -127,4 +131,23 @@ void applicationParameterRecordingReview() {
       "Explicit Record after a pure refusal could not start a fresh take");
     click(9722);click(9724);
     restoreCheck(!tool.protectsClose()&&songState(app)==music,"Refusal/retry left native protection or changed music");
+    // API completion must update hidden departure protection without relying
+    // on the disabled poll timer, fetching data or stealing another editor's focus.
+    tool.hide();SetFocus(app.window);const auto hiddenFocus=GetFocus();const auto boundaryWrites=writes.size();
+    Json external={{"take","api-take"},{"retained",true},{"capturing",true}};
+    tool.observeBoundary(app.documentId,"automation.recording.start",external);
+    restoreCheck(tool.protectsClose()&&tool.snapshot().at("take")==external,
+      "Hidden review did not observe API Start");
+    external["capturing"]=false;tool.observeBoundary(app.documentId,"automation.recording.stop",external);
+    const auto stoppedReview=tool.snapshot();
+    const Json finished={{"take","api-take"},{"retained",false},{"capturing",false}};
+    tool.observeBoundary("another song","automation.recording.discard",finished);
+    tool.observeBoundary(app.documentId,"automation.recording.get",finished);
+    tool.observeBoundary(app.documentId,"automation.recording.discard",{{"take","older-take"},{"retained",false}});
+    restoreCheck(tool.snapshot()==stoppedReview&&tool.protectsClose(),
+      "Foreign, read-only or older completion cleared the hidden review");
+    tool.observeBoundary(app.documentId,"automation.recording.discard",finished);
+    restoreCheck(!tool.protectsClose()&&!tool.visible()&&tool.snapshot().at("take")==finished&&
+      writes.size()==boundaryWrites&&GetFocus()==hiddenFocus,
+      "Confirmed API Discard retained a hidden departure barrier, repeated a write or stole focus");
 }

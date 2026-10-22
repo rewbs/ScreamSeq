@@ -173,8 +173,17 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertEqual(self.client.call('automation.recording.capture', params, request_id='original-control-once'), accepted)
         self.assertEqual(self.read('automation.recording.events', take=second['take'], plugin=plugin, parameter=1)['total'], 1)
         self.write('automation.recording.stop', take=second['take'])
+        # A hidden review has no poll timer. Its departure summary must follow
+        # the confirmed API Discard without needing to reopen/refresh it.
+        self.recording_button(9725)
+        self.assertEqual(self.read('workspace.get')['parameterRecording']['take']['take'], second['take'])
+        self.recording_button(9727)
         self.write('automation.recording.discard', take=second['take'])
         self.assertFalse(self.take()['retained'])
+        review = self.read('workspace.get')['parameterRecording']
+        self.assertFalse(review['visible'])
+        self.assertFalse(review['take']['retained'])
+        self.assertIsNone(review['completion'])
         self.assertEqual(self.doc(), state_before)
         self.assertEqual(self.read('automation.get'), points)
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)

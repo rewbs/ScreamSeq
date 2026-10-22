@@ -196,6 +196,66 @@ The obsolete `finish-navigation-validation` one-shot also fired with d1c8's
 repeated. The stale reminder is now paused, alongside the already-paused mixer
 reminder. Active source and the 10:05 build gate remain current.
 
+## 10:05 checkpoint and hidden review correction
+
+Frozen source `3cefb9ab9ff0a892586c21442e5c8d78746fbd03` built once at
+10:05:33–10:08:46 UTC. ARM64 executable SHA-256:
+`c6a7d7bc4f9d1feb4cf242979dac9c14b5623ec2b57960886ceb53d96bcb3799`.
+Receipts/logs are in `bin/mac-gesture-20261022/clock-followup/`.
+Seven native registrations passed. Five of six app cases passed; the native
+recording/Keep/history/Discard journey failed on `document.open` with a retained
+native editor guard. Do not replace this failed receipt with a diagnostic pass.
+
+One isolated rerun of that exact case passed. A second targeted diagnostic forced
+the stopped second take into the review, hid it (stopping its poll timer), then
+performed API Discard. This reproduced the guard deterministically.
+`reopen-failure.json` shows worker `retained:false`, but hidden
+`workspace.parameterRecording.take.retained:true`, with no pending or uncertain
+completion. Thus this is stale native presentation, not permission to discard a
+real draft. No sleeps, assertion relaxation or repeated broad suite were used.
+
+Prepared source: `ParameterRecordingWindow::observeBoundary` receives confirmed
+Start/Stop/Keep/Discard results from `Application::finishDocumentOperation`.
+It updates cached departure state even while hidden, performs no worker read,
+and leaves pending/uncertain local receipts untouched. Foreign documents and
+older completions cannot clear a current take. Existing polling still refreshes
+rows/controls. Native tests exercise these guards and unchanged focus; the actual
+app test now forces the hidden state before Discard and asserts immediate reopen.
+The resolved native-input warning also changes to a completion message after
+Keep/Discard. These changes have not been built or executed.
+
+### Diagnostic foreground evidence on 3cefb
+
+Owned silent F04 PID 40384/main HWND 12845678 was launched with a disposable
+project/recovery directory. This was explicitly diagnostic because the app gate
+failed; neither the normal launcher nor package guard was weakened. Computer Use
+observed stopped Record refusal with usable Record/Close, successful Record after
+Play, and retained refused Gain input because F04 already modulates that target.
+Discard cleared that take. The next take captured two Balance inputs at 22.12;
+Params was hidden before Stop/Keep. Keep completed, and a subsequent Record
+started without reopening Params, then Stop/Discard completed.
+
+One related-screenshot Keep click did not activate the control. Fresh main-window
+coordinates did, with the take cleared and song dirty. The related floating
+element index was unavailable to the helper. Do not report these helper targeting
+limitations as an application Keep/focus defect.
+
+Main rack search accepted `balance`, Backspace produced `balanc`, and Tab then
+Shift+Tab returned to search. Read-only `qualify_foreground_focus.ps1` receipts
+`foreground/focus-search.json` and `focus-return.json` both passed exact global
+and native focus, Value/Text patterns and selection for field HWND 6032864.
+Floating-field typing continuity and clean performance were not requalified.
+The clock observer recorded healthy generation 1, stopped generation 1, then
+healthy generation 2; no terminal frame-timeline failure was observed during
+this run. This is not proof the earlier timing failure is fixed. Snapshots do
+not qualify temporal flicker, and the diagnostic workload had audio overruns.
+
+Next build/CI checkpoint **not before 11:06 UTC**. Rebuild the affected app and
+workspace target once with the next cohesive batch; rerun the changed recording
+journey and native review registration, then the hidden API completion/foreground
+focus paths. Reuse unchanged seven-native evidence by dependency. Keep current
+Mac shared/provider CI gates and final reciprocal project checks required.
+
 ## Previous checkpoint instructions (superseded by the update above)
 
 No new build or build-triggering PR push/merge before **09:00 UTC, 22 October**.

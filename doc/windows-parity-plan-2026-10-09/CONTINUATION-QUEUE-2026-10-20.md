@@ -8,6 +8,37 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 10:25 UTC:** source `3cefb9ab9ff0a892586c21442e5c8d78746fbd03`
+is backed up and on PR #6. The coordinated local checkpoint started 10:05:33
+and built all five targets once. Seven native registrations passed; five of six
+app cases passed. The recording journey failed at final reopen after API Discard:
+a hidden native review still reported the discarded take as retained. One focused
+diagnostic passed; forcing Refresh then hiding that review before API Discard
+reproduced the failure and captured worker-empty/native-retained snapshots.
+The original failed receipt remains authoritative; no package or merge.
+
+The prepared Windows correction observes confirmed recording boundaries in the
+review window without polling, pumping reads or clearing pending/uncertain
+receipts. Tests cover hidden Discard, foreign/old completions, read-only snapshots,
+unresolved receipts, focus and immediate reopen. This source is **unbuilt**.
+Next coordinated build/CI checkpoint: **not before 11:06 UTC**. Do not repeat
+`bin/mac-gesture-20261022/clock-followup/{build,checks}.json`.
+
+The diagnostic foreground check on owned silent PID 40384 confirmed recoverable
+stopped-Record refusal, subsequent recording, modulation-conflict refusal with
+original input retained, successful Balance capture/Stop/Keep with Params hidden,
+then another Record/Stop/Discard without reopening Params. Search typing,
+Backspace and Tab/Shift+Tab passed with two exact native/global focus receipts.
+No timing invalidation occurred during this observation; it does not prove the
+earlier clock failure fixed. See [foreground evidence](PLUGIN-FOREGROUND-2026-10-22.md).
+
+Current CI: Mac `39760505711` (ARM `119763197802`, Intel `119763198384`),
+Windows `39760505712` (`119763198584`), still building at 10:20. Do not restart.
+Preceding d699 Intel had the same duplicate-AU fixture failure as ARM; its shared,
+interface and conformance gates passed. d699 Windows passed build, 158 portable/
+worker and 49 native UI gates; the 91-case app suite had 14 failures/2 skips with
+no WASAPI endpoints. Those failures remain recorded, not waived as passes.
+
 **22 October 09:31 UTC:** d699 Mac ARM job `119734779069` is terminal. Build,
 134 native tests, recovery/picker, interface and conformance passed. Its new
 provider UI gate failed on duplicate process-local AU registration. The test now
