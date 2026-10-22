@@ -34,6 +34,22 @@ int main(int argc,char **argv){try{
   check(gesture,"Native fixture gesture export");
   auto send=[&](double value){int accepted=-1;WindowsVST3::pluginMainCall([&]{accepted=gesture(value);});return accepted;};
   {
+    NativePlugin plugin(state,48000,true),other(state,48000,true);
+    const auto lease=plugin.beginEditorInputBarrier();
+    check(lease&&lease->token&&lease->incarnation==plugin.editSource().incarnation,"Native input lease lost provider identity");
+    check(!plugin.beginEditorInputBarrier(),"Nested native input lease accepted");
+    check(!other.endEditorInputBarrier(*lease),"Another provider released the input lease");
+    auto wrong=*lease;++wrong.token;
+    check(!plugin.endEditorInputBarrier(wrong),"Wrong native input token released the lease");
+    bool refused=false;try{plugin.showEditor();}catch(const std::exception &){refused=true;}
+    check(refused&&!plugin.editorOpen(),"Editor opened through a protected native input lease");
+    check(plugin.endEditorInputBarrier(*lease)&&plugin.endEditorInputBarrier(*lease),"Native input cleanup is not retryable");
+    const auto next=plugin.beginEditorInputBarrier();
+    check(next&&next->token!=lease->token&&!plugin.endEditorInputBarrier(*lease),"Old token released a new lease");
+    plugin.closeEditor();
+    check(plugin.endEditorInputBarrier(*next),"Explicit close did not clean up its native lease");
+  }
+  {
     NativePlugin plugin(state,48000,true);
     check(send(.25)==1,"Pre-boundary native gesture failed");
     const auto boundary=plugin.editBoundary();

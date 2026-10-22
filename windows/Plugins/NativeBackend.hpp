@@ -34,6 +34,8 @@ public:
  uint64_t droppedEdits()const noexcept override;
  std::optional<PluginEditFence> editFence()override;
  PluginEditRead popEditBefore(const PluginEditFence &,PluginEdit &)noexcept override;
+ std::optional<uint64_t> beginEditorInputBarrier()override;
+ bool endEditorInputBarrier(uint64_t)override;
  PluginFailure failure()const noexcept override;
 };
 }

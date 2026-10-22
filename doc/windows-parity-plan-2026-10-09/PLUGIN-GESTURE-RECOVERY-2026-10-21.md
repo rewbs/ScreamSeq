@@ -443,3 +443,38 @@ restoration, then verifies explicit closed-editor discard preserves the baseline
 The arming test's manual value is also corrected to .375: fixture attachment
 already sets .625, so reusing .625 would incorrectly expect a no-op to add history.
 Assertions remain strict. These changes await the next hourly build.
+
+## Native restoration input leases (source only)
+
+Windows VST3 now implements an incarnation-bound control-owner input lease.
+`windows/Plugins/EditorInputBarrier.hpp` subclasses the existing editor HWND tree
+on its native STA, disables its root during restoration, blocks keyboard/mouse,
+commands and timer input, and permits programmatic presentation. It refuses an
+active mouse capture. Cleanup restores the original enabled state and field focus
+only within the still-active owned editor, without activating another app. New
+editor opening is refused while the provider lease is held. Explicit Close
+releases the lease; retrying the last completed token is safe. Mac backends retain
+the unsupported default and their existing behavior.
+
+`releaseRecordedEditors` acquires every vendor lease after fallible baseline
+preparation, rechecks the fixed Stop cuts, restores the audible preview on the
+worker, and restores open vendor parameter baselines on the native owner. No
+native thread waits for a reciprocal worker call. Every exit attempts lease
+cleanup; a transient cleanup refusal retains its token with the take for retry.
+The session must still own admission of ScreamSeq's standard controls.
+
+Removed the former blind restoration-notification drain. Input from vendor code
+outside ordinary HWND messages is possible even under a lease: changed native
+queue positions/loss refuse completion and retain both the take and queue.
+Explicit closed-editor discard remains the way to abandon this transient input.
+This is not a guarantee against arbitrary vendor-created windows or callbacks.
+
+New unexecuted regressions cover keyboard blocking and restoration, focus,
+original disabled state, active-drag refusal, nested/token/incarnation rejection,
+Close/retry cleanup, and a vendor callback injected during restoration. The last
+case requires a second release attempt to see the same retained input, unchanged
+saved baseline/history and successful explicit closed-editor discard. Existing
+preview refusal, one Undo, opaque-state and save/reopen assertions remain intact.
+They are included in the prepared notification and private-desktop recovery-manual
+gates; no additional build is needed. All additions are unbuilt until the combined
+checkpoint no earlier than 22 October 02:54:09 UTC.

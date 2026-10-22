@@ -108,5 +108,6 @@ struct PluginEditSource {
 // poll. Arming can reject unflushed manual input without consuming it.
 struct PluginEditFence {uint64_t position=0,hostTime=0,dropped=0,pending=0;};
 struct PluginEditBoundary {PluginEditSource source;PluginEditFence fence;};
+struct PluginEditorInputBarrier {uint64_t incarnation=0,token=0;};
 enum class PluginEditRead { Event, Complete, InvalidFence, Unsupported };
 } // namespace Tracker

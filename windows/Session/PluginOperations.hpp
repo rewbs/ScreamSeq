@@ -56,6 +56,7 @@ class PluginOperations {
     std::function<void(std::span<const Tracker::ParameterChange>)> preview;
     std::map<std::string,std::vector<Tracker::PluginParameter>> catalogs;
     std::map<std::string,Tracker::PluginEditBoundary> releaseCuts;
+    std::map<std::string,Tracker::PluginEditorInputBarrier> inputBarriers;
     size_t previewedEvents=0;
   };
   std::unique_ptr<RecordedEditors> recordedEditors_;
@@ -134,14 +135,14 @@ public:
   bool pollRecordedEditors(bool releaseBarrier=false);
   // Capture all VST3 queue cuts on their one native owner, then seal once.
   // Later polls stop at these cuts even when new input continues to arrive.
-  // This is an input boundary, not a lease for baseline restoration: the
-  // session still needs the exclusive native barrier required by release.
+  // This is an input boundary; release obtains native vendor HWND leases.
   uint64_t sealRecordedEditors();
   bool hasRecordedEditors()const noexcept{return bool(recordedEditors_);}
-  // Called under the same input barrier after commit or explicit discard.
+  // Called after commit or explicit discard while host-control input is held.
+  // Acquires/restores provider-native HWND leases around vendor restoration.
   // Restore audible previews before releasing ownership; refusal retains it.
   // An open vendor must restore its complete state in place. If hidden state
-  // cannot be restored from parameters, close it explicitly and retry so its
+  // cannot be restored from parameters, close it explicitly and retry.
   // accepted baseline can replace the closed provider without a false capture.
   // Post-cut input blocks restoration. Only explicit discard with the editor
   // closed may abandon that later transient input along with the stopped take.

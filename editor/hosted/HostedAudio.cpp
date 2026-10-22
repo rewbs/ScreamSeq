@@ -238,5 +238,14 @@ PluginEditRead NativePlugin::popEditBefore(const PluginEditBoundary &boundary,Pl
   if(source.incarnation!=boundary.source.incarnation||source.dropped<boundary.source.dropped)return PluginEditRead::InvalidFence;
   return p->backend_?p->backend_->popEditBefore(boundary.fence,event):PluginEditRead::Unsupported;
 }
+std::optional<PluginEditorInputBarrier> NativePlugin::beginEditorInputBarrier() {
+  auto *p=publishedVendor();if(!p->backend_)return {};
+  const auto token=p->backend_->beginEditorInputBarrier();if(!token)return {};
+  return PluginEditorInputBarrier{p->editIncarnation_,*token};
+}
+bool NativePlugin::endEditorInputBarrier(PluginEditorInputBarrier barrier) {
+  auto *p=publishedVendor();
+  return barrier.incarnation==p->editIncarnation_&&p->backend_&&p->backend_->endEditorInputBarrier(barrier.token);
+}
 uint64_t NativePlugin::droppedEdits() const noexcept {const auto *p=publishedVendor();return p->backend_?p->backend_->droppedEdits():0;}
 } // namespace Tracker

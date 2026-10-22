@@ -3,6 +3,7 @@
 #include "windows/Session/LiveParameterPublication.hpp"
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Plugins/UiOwner.hpp"
+#include "windows/Plugins/EditorInputBarrier.hpp"
 #include "windows/App/PatternClipboard.hpp"
 #include "windows/App/DocumentDraftRegistry.hpp"
 #include "windows/Project/BinaryPlist.hpp"

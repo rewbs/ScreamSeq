@@ -4,6 +4,37 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
     const std::filesystem::path &directory) {
   using namespace Tracker;
   WindowsVST3::configure(scanner.generic_string(),cache.generic_string());
+  WindowsVST3::pluginMainCall([]{
+    // This fixture runs on the isolated private desktop, never the musician's.
+    const auto root=CreateWindowExW(0,L"STATIC",L"Input lease fixture",WS_OVERLAPPEDWINDOW,
+      0,0,300,180,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    need(root!=nullptr,"Native input lease fixture root failed");
+    struct Window {HWND h;~Window(){DestroyWindow(h);}} cleanup{root};
+    const auto field=CreateWindowExW(0,L"EDIT",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,
+      10,10,180,24,root,nullptr,GetModuleHandleW(nullptr),nullptr);
+    need(field!=nullptr,"Native input lease fixture field failed");
+    ShowWindow(root,SW_SHOWNOACTIVATE);SetActiveWindow(root);SetFocus(field);
+    need(GetFocus()==field,"Native input lease fixture focus failed");
+    {
+      WindowsVST3::EditorInputBarrier barrier(root);
+      need(!IsWindowEnabled(root),"Native input lease left root enabled");
+      SendMessageW(field,WM_CHAR,L'x',1);
+      need(GetWindowTextLengthW(field)==0,"Native input lease accepted keyboard input");
+      SetWindowTextW(field,L"host");
+      need(GetWindowTextLengthW(field)==4,"Native input lease blocked host presentation");
+      bool refused=false;try{WindowsVST3::EditorInputBarrier nested(root);}catch(const std::exception &){refused=true;}
+      need(refused&&!IsWindowEnabled(root),"Nested lease released its parent's protection");
+    }
+    need(IsWindowEnabled(root)&&GetFocus()==field,"Native input lease failed to restore enabled state/focus");
+    SetWindowTextW(field,L"");SendMessageW(field,WM_CHAR,L'y',1);
+    need(GetWindowTextLengthW(field)==1,"Native keyboard input remained blocked after release");
+    EnableWindow(root,FALSE);{WindowsVST3::EditorInputBarrier barrier(root);}
+    need(!IsWindowEnabled(root),"Native input lease enabled an originally disabled editor");
+    EnableWindow(root,TRUE);SetCapture(field);
+    need(GetCapture()==field,"Native drag fixture did not capture input");
+    bool refused=false;try{WindowsVST3::EditorInputBarrier barrier(root);}catch(const std::exception &){refused=true;}
+    ReleaseCapture();need(refused&&IsWindowEnabled(root),"Native input lease interrupted an active drag");
+  });
   auto document=Document::demo();auto project=Project::newProjectState(*document);
   unsigned stops=0,manual=0,previews=0,publications=0;bool rejectPreview=true,stale=false;
   std::vector<ParameterChange> audible;
@@ -299,5 +330,26 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   operations.invoke("plugin.editor.close",{{"slot",0}});
   need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==beforeRestore,
     "Explicit discard after nested native input changed the baseline");
-  std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
+  // A callback from vendor state code during protected restoration is still
+  // real input. Never silently pop it just because the HWND lease is held.
+  operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto protectedBaseline=encoded();const auto protectedSequence=document->historySequence();
+  clock=std::make_shared<RecordingFrameTimeline>();const auto arm7=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm7,arm7+1,0,1,48000,41),"Protected restore clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers7{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("protected-restore",revision(),arm7,clock,rack,projectAbsoluteAutomation(project),providers7);
+  operations.beginRecordedEditors(take,context,[](auto){});send(.25);operations.pollRecordedEditors();operations.sealRecordedEditors();
+  unsigned protectedRestores=0;
+  refuses([&]{operations.releaseRecordedEditors(true,[&]{
+    ++protectedRestores;WindowsVST3::pluginMainCall([&]{gestureOnRead(.875);});return true;
+  });});
+  need(protectedRestores==1&&operations.hasRecordedEditors()&&take->eventCount()==1&&
+    encoded()==protectedBaseline&&document->historySequence()==protectedSequence,
+    "Protected restoration lost its take or changed the saved baseline/history");
+  refuses([&]{operations.releaseRecordedEditors(true,[&]{++protectedRestores;return true;});});
+  need(protectedRestores==1,"Protected restoration blindly consumed a vendor callback");
+  operations.invoke("plugin.editor.close",{{"slot",0}});
+  need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==protectedBaseline,
+    "Protected restoration failure prevented explicit closed-editor discard");
+  std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native input leases/close/restore, one Undo and persistence\n";
 }

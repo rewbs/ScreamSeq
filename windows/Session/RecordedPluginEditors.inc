@@ -1,5 +1,6 @@
 // Worker-only vendor intake and saved-baseline exclusion. The DocumentController
-// adapter supplies native input barriers, playback preview and take recovery.
+// adapter supplies host-control admission, playback preview and take recovery.
+// Vendor HWND restoration leases belong to the native plugin provider.
 bool PluginOperations::overlayRecordedRecovery(Project::ProjectState &copy)const {
   if(!recordedEditors_)return false;
   auto archive=recordedGestureRecovery(recordedEditors_->take->review());
@@ -202,9 +203,19 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
   auto &capture=*recordedEditors_;
   need(restorePreview&&(capture.take->completed()||(discard&&capture.take->endTime())),
     "Commit the take, or stop and explicitly discard it, before releasing plugin ownership");
+  const auto endInputBarriers=[&]{
+    for(auto i=capture.inputBarriers.begin();i!=capture.inputBarriers.end();) {
+      if(i->second.token)need(editors_.at(i->first)->endEditorInputBarrier(i->second),
+        "Native plugin input is still protected; close its editor or retry restoration");
+      i=capture.inputBarriers.erase(i);
+    }
+  };
+  // A transient native-owner refusal may leave a lease in its owning provider.
+  // Keep that token with the take and finish cleanup before another attempt.
+  endInputBarriers();
   // A stop cut is not permission to discard later vendor input. Until the
-  // session owns a native restoration barrier, new gestures must retain this
-  // owner and their queue, rather than disappear in the restoration drain.
+  // restoration lease has been acquired, new gestures must retain this owner
+  // and their queue, rather than disappear during baseline restoration.
   const auto requireStoppedInput=[&]{for(const auto &[identity,cut]:capture.releaseCuts) {
     // Explicit stopped discard with a closed editor abandons its transient
     // input as well as the take. Normal completion never takes this escape.
@@ -233,29 +244,46 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
   // Check again before restoring even the audible preview, not just before
   // preparation. Later input must never enter the owned restoration drain.
   requireStoppedInput();
-  // Queue refusal makes no vendor, history or saved-state change. A failure
-  // during later vendor restoration still keeps exclusion and permits retry.
-  if(!restorePreview())return false;
-  for(auto &item:prepared)if(item.open) {
-    auto &native=*editors_.at(item.identity);
-    // The isolated editor may still have recorded notifications in its vendor
-    // audio queue. Flush those transient values before queueing the baseline,
-    // otherwise they could overwrite the restoration at the next state read.
-    (void)native.state();
-    for(const auto &p:item.catalog)if(p.writable)
-      if(!native.parameter(p.id,float(p.manualValue.value_or(p.value))))
-        throw Api::ApiError(-32002,"Close the plugin editor to restore its saved baseline; recording retained");
-    const auto restored=native.state();
-    if(restored.state!=item.expected.state||restored.audioLayout!=item.expected.audioLayout)
-      throw Api::ApiError(-32002,"Close the plugin editor to restore hidden state; recording retained");
-  }
-  // After successful restoration, discard only notifications generated during
-  // the owned native barrier. No musical state is read back from these editors.
-  for(const auto &item:prepared)if(item.open) {
-    PluginEdit event;PluginEditSource source;
-    for(unsigned n=0;n<8192&&editors_.at(item.identity)->popEdit(event,source);++n){}
-    if(editors_.at(item.identity)->popEdit(event,source))
-      throw Api::ApiError(-32002,"Plugin restoration is still producing input; recording protection retained");
+  try {
+    // Allocate every token slot before acquiring any native lease. Each lease
+    // lives on the provider STA, so worker/audio publication never blocks that
+    // thread while waiting for a reciprocal native call.
+    for(const auto &item:prepared)capture.inputBarriers.emplace(item.identity,PluginEditorInputBarrier{});
+    for(auto &[identity,barrier]:capture.inputBarriers) {
+      const auto acquired=editors_.at(identity)->beginEditorInputBarrier();
+      need(acquired.has_value(),"Plugin cannot protect native editor input during restoration");
+      barrier=*acquired;
+    }
+    requireStoppedInput();
+    const auto beforeRestore=recordedEditorCuts(capture);
+    for(const auto &item:prepared)if(!discard||item.open)
+      need(beforeRestore.at(item.identity).fence.pending==0,"Drain the retained recording input before restoring its baseline");
+    // Queue refusal leaves manual state/history and retained input untouched.
+    if(!restorePreview()){endInputBarriers();return false;}
+    for(auto &item:prepared)if(item.open) {
+      auto &native=*editors_.at(item.identity);
+      // Flush the isolated vendor's pending audible values before restoring
+      // its baseline. Editor input is held throughout these vendor calls.
+      (void)native.state();
+      for(const auto &p:item.catalog)if(p.writable)
+        if(!native.parameter(p.id,float(p.manualValue.value_or(p.value))))
+          throw Api::ApiError(-32002,"Close the plugin editor to restore its saved baseline; recording retained");
+      const auto restored=native.state();
+      if(restored.state!=item.expected.state||restored.audioLayout!=item.expected.audioLayout)
+        throw Api::ApiError(-32002,"Close the plugin editor to restore hidden state; recording retained");
+    }
+    // A vendor may emit callbacks independently of ordinary HWND input. Do not
+    // classify those as disposable restoration noise: retain the queue/take and
+    // require explicit review/Close rather than blindly draining notifications.
+    const auto afterRestore=recordedEditorCuts(capture);
+    for(const auto &item:prepared)if(!discard||item.open) {
+      const auto &before=beforeRestore.at(item.identity),&after=afterRestore.at(item.identity);
+      need(before.source==after.source&&before.fence.position==after.fence.position,
+        "Plugin produced input during restoration; close its editor to discard or retain it for review");
+    }
+    endInputBarriers();
+  }catch(...) {
+    const auto failure=std::current_exception();endInputBarriers();std::rethrow_exception(failure);
   }
   for(auto &item:prepared) {
     if(!item.open) {

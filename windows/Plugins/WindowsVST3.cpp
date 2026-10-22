@@ -6,6 +6,7 @@
 #include "Module.hpp"
 #include "windows/Project/BinaryPlist.hpp"
 #include "UiOwner.hpp"
+#include "EditorInputBarrier.hpp"
 #include "windows/Audio/HostClock.hpp"
 
 #include "pluginterfaces/base/ibstream.h"
@@ -316,6 +317,8 @@ struct NativeBackend::Impl {
   bool componentConnected=false,controllerConnected=false;
   IPlugView *view = nullptr;
   HWND window = nullptr;
+  std::unique_ptr<EditorInputBarrier> inputBarrier;
+  uint64_t inputBarrierSerial=0,releasedInputBarrier=0;
   bool attached = false;
   bool userResizable=false,resizeBusy=false,sizeNotified=false;
   int viewWidth=0,viewHeight=0;
@@ -580,6 +583,7 @@ struct NativeBackend::Impl {
     for(size_t i=0;i<metadata.size();++i){auto v=values[i].load(std::memory_order_relaxed);if(controllerValues[i]!=v){if(controller->setParamNormalized(metadata[i].id,v)!=kResultOk){fail(Failure::ControllerParameter,metadata[i].id);return;}controllerValues[i]=v;}}
   }
   void close() {
+    if(inputBarrier){inputBarrier.reset();releasedInputBarrier=inputBarrierSerial;}
     if(view){if(attached)view->removed();attached=false;view->setFrame(nullptr);view->release();view=nullptr;}
     if(window){auto h=window;window=nullptr;DestroyWindow(h);}
     sizeNotified=false;viewWidth=viewHeight=0;
@@ -827,6 +831,25 @@ std::optional<PluginEditFence> NativeBackend::editFence() {
 PluginEditRead NativeBackend::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {
   return impl_->edits.popBefore({fence.position},event);
 }
+std::optional<uint64_t> NativeBackend::beginEditorInputBarrier() {
+  std::optional<uint64_t> token;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(s.inputBarrier||s.inputBarrierSerial==UINT64_MAX)return;
+    auto barrier=std::make_unique<EditorInputBarrier>(s.window);
+    s.inputBarrier=std::move(barrier);token=++s.inputBarrierSerial;
+  });
+  return token;
+}
+bool NativeBackend::endEditorInputBarrier(uint64_t token) {
+  bool released=false;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(!token)return;
+    if(!s.inputBarrier){released=s.releasedInputBarrier==token;return;}
+    if(s.inputBarrierSerial!=token)return;
+    s.inputBarrier.reset();s.releasedInputBarrier=token;released=true;
+  });
+  return released;
+}
 void NativeBackend::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
 }
@@ -1045,7 +1068,7 @@ void NativeBackend::closeEditor() {
   pluginMainCall([&] { impl_->close(); });
 }
 void NativeBackend::showEditor(){
- pluginMainCall([&]{auto &s=*impl_;if(s.window)return;if(!s.controller)throw std::runtime_error("VST3 has no controller/editor");
+ pluginMainCall([&]{auto &s=*impl_;if(s.inputBarrier)throw std::runtime_error("Plugin editor input is protected while restoring its baseline");if(s.window)return;if(!s.controller)throw std::runtime_error("VST3 has no controller/editor");
   // Manual recipe values may still be queued for the processor. A newly
   // created editor must observe those values before its initialization gestures;
   // waiting for the editor timer would let the old controller state win.
