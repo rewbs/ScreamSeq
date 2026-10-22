@@ -73,3 +73,16 @@ palette layout. Repeat scratch drag/release/status and visible Main Undo/Redo.
 Retain prior unaffected resize/parameter observations where inputs match. This
 does not replace a Narrator/high-contrast/DPI journey or temporal flicker/audio
 measurement. No new production package or main merge is approved yet.
+
+## Prepared combined checkpoint
+
+`bin/mac-gesture-20261022/palette-availability/` now contains parsed, unexecuted
+build/check/package scripts and a fresh isolated foreground launcher. Its
+`freeze.json` pins source `077e35f290c335226ff13655a5d8706df6fc3da3` and the
+15:07:58UTC gate. It builds the three targets together, selects the five native
+groups above and all eight actual-app cases, and retains source/hash checks and
+strict automated/foreground package guards. The earlier `scratch-status/`
+preparation is superseded and must not be executed separately. The qualification
+checkout remains on96b until its retained-binary checks are finished; advance it
+only to the frozen candidate before the single next build. Backup source is
+pushed on `codex/mac-gesture-intake`; PR #6 remains96b until that checkpoint.
