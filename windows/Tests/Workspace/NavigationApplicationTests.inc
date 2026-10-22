@@ -57,7 +57,7 @@ void applicationNavigationResizeAndDestinations(){
         "Default graph action did not preserve Pattern beside the graph and retain the collapsed lower page");
     const auto handle=owner->window();ScreamSeq::Tests::ownGuiWindow(handle);
     const auto click=[&](int id){SendMessageW(handle,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(handle,id)));};
-    click(3816);
+    click(3848); // Readable view; the View button opens the native choice menu.
     const auto centre=[&]{const auto canvas=owner->snapshot().at("canvas");const auto viewport=canvas.at("viewport");
         restoreCheck(viewport[2]>0&&viewport[3]>0&&!canvas.at("nodes").empty(),"Viewport fixture lost its canvas");
         const auto &node=canvas.at("nodes")[0];const auto zoom=canvas.at("zoom").get<float>();
@@ -83,5 +83,36 @@ void applicationNavigationResizeAndDestinations(){
         "Precise notes panel tab reopened a floating window or replaced its owner");
     app.command(navigationPatternCommand);
     restoreCheck(app.position()==position&&GetFocus()==app.window&&songState(app)==song,"Presentation navigation changed music, cursor or Pattern focus");
+    fixture.close();
+}
+
+void applicationDenseRoutingFraming(){
+    RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1300,720);
+    app.edit("mixer.enable",RestoreJson::object());
+    const auto plugin=addRestoreGain(app),target="plugin:"+plugin;
+    app.edit("graph.layout.set",{{"positions",RestoreJson::array({{{"node",target},{"x",100000},{"y",100000}}})}});
+    const auto song=songState(app),graph=app.documentOperation("graph.get",{{"includeState",false}});
+    app.command(mixingGraphPanelCommand);auto *owner=app.songRoutingWindow.get();
+    restoreCheck(owner&&owner->docked(),"Dense graph did not open beside Pattern");
+    const auto handle=owner->window();ScreamSeq::Tests::ownGuiWindow(handle);
+    const auto canvas=[&]{return owner->snapshot().at("canvas");};
+    const auto contained=[&](const RestoreJson &n){const auto c=canvas(),v=c.at("viewport"),r=n.at("rect");
+        return r[0].get<float>()>=v[0].get<float>()-.1f&&r[1].get<float>()>=v[1].get<float>()-.1f&&
+            r[0].get<float>()+r[2].get<float>()<=v[0].get<float>()+v[2].get<float>()+.1f&&
+            r[1].get<float>()+r[3].get<float>()<=v[1].get<float>()+v[3].get<float>()+.1f;};
+    restoreCheck(canvas().at("zoom")>=.75f&&contained(canvas().at("nodes")[0]),"Dense graph opened as unreadable or offscreen nodes");
+    SendMessageW(handle,WM_COMMAND,MAKEWPARAM(3849,BN_CLICKED),0);
+    restoreCheck(canvas().at("zoom")<.15f,"Dense overview fixture did not exercise the old clipped zoom floor");
+    const auto nodes=canvas().at("nodes");for(const auto &n:nodes)restoreCheck(contained(n),"Whole overview clips a saved node");
+    const auto found=std::find_if(nodes.begin(),nodes.end(),[&](const auto &n){return n.at("id")==target;});
+    restoreCheck(found!=nodes.end(),"Dense routing target missing");
+    const auto picker=GetDlgItem(handle,3802);SendMessageW(picker,CB_SETCURSEL,found-nodes.begin(),0);
+    SendMessageW(handle,WM_COMMAND,MAKEWPARAM(3802,CBN_SELCHANGE),LPARAM(picker));
+    SetFocus(handle);SendMessageW(handle,WM_KEYDOWN,VK_HOME,0);SendMessageW(handle,WM_KEYUP,VK_HOME,0);
+    const auto focused=canvas();restoreCheck(focused.at("zoom")==1&&owner->snapshot().at("selected")==target&&GetFocus()==handle,"Home did not focus the retained selected stage");
+    for(const auto &n:focused.at("nodes"))if(n.at("id")==target)restoreCheck(contained(n)&&n.at("rect")[2]>=184,"Selected stage is not readable inside the viewport");
+    app.command(mixingGraphFloatCommand);app.command(mixingGraphPanelCommand);
+    restoreCheck(canvas()==focused,"Float/dock lost dense graph framing");
+    restoreCheck(songState(app)==song&&app.documentOperation("graph.get",{{"includeState",false}})==graph,"View framing changed saved music, layout or history");
     fixture.close();
 }

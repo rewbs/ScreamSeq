@@ -51,6 +51,7 @@ void applicationScratchWriteAdmission(){
         restoreCheck(savedStatus.get<std::string>().find("Phrase saved")!=std::string::npos,"Successful retry still claims its draft is waiting");
         refusePreview=true;SendMessageW(window,WM_TIMER,3,0);
         restoreCheck(tool.snapshot().at("status")==savedStatus&&!tool.snapshot().at("dirty").get<bool>(),"A busy preview read misreported an accepted phrase write");
+        const auto busyPreview=tool.snapshot();for(const auto &lane:busyPreview.at("lanes"))restoreCheck(lane.at("renderedSamples").get<size_t>()>=257,"Busy worker preview erased the immediate scratch interpolation");
         refusePreview=false;SendMessageW(window,WM_TIMER,3,0);
         restoreCheck(tool.snapshot().at("lanes")[0].at("previewSamples").get<size_t>()>0&&tool.snapshot().at("lanes")[1].at("previewSamples").get<size_t>()>0,"Busy preview did not retry both lanes");
         restoreCheck(tool.snapshot().at("status")==savedStatus&&attempts==2,"Preview retry changed write status or repeated a mutation");
@@ -96,6 +97,7 @@ void applicationScratchExternalRefresh(){
   restoreCheck(app.view->session.revision==revision,"Scratch refresh wrote to song history");
   app.edit("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,5,0);
   restoreCheck(tool.snapshot().at("draft")==before.at("draft"),"Main-window Undo left the clean scratch canvas stale");
+  const auto refreshed=tool.snapshot();for(const auto &lane:refreshed.at("lanes"))restoreCheck(lane.at("renderedSamples").get<size_t>()>=257,"Undo refresh displayed straight point segments while waiting for preview");
   restoreCheck(tool.snapshot().at("target").at("row")==before.at("target").at("row"),"External refresh recaptured the cursor");
 
   const auto field=GetDlgItem(window,3112);SetFocus(field);SetWindowTextW(field,L"-.");SendMessageW(field,EM_SETSEL,0,2);

@@ -1307,6 +1307,7 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("navigation placements and retained graph",applicationNavigation);
                     timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
                     timedRestoreCase("navigation resize and explicit destinations",applicationNavigationResizeAndDestinations);
+                    timedRestoreCase("dense routing readable focus and complete overview",applicationDenseRoutingFraming);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"worker-presentation") {

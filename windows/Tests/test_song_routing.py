@@ -98,9 +98,12 @@ class SongRoutingTests(unittest.TestCase):
             data.update(privateDesktop=True,foregroundVisualQualified=False)
             (folder/(name+'.json')).write_text(json.dumps(data,indent=2),encoding='utf-8')
     def bus(self,identifier):return next(b for b in self.buses() if b['id']==identifier)
-    def start(self):
+    def start(self,overview=True):
         self.idle();self.main_command(417);self.idle();state=self.read('workspace.get')
         self.assertTrue(state['songRouting']['visible'],json.dumps(state,ensure_ascii=False))
+        # Cable fixtures intentionally address distant stages at once. Choose
+        # the explicit overview, rather than depending on the initial framing.
+        if overview:self.desktop.send(self.window(),0x111,3849,0);self.idle()
     def test_rack_parameter_window_without_graph_retains_and_saves(self):
         plugin=self.add_gain();self.main_command(316);self.idle()
         main=self.desktop.hwnd(self.pid);rack=private_desktop.user.GetDlgItem(main,300)
@@ -286,6 +289,26 @@ class SongRoutingTests(unittest.TestCase):
             self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right)
             if previous is not None:self.assertGreaterEqual(rect.left,previous)
             previous=rect.right
+
+    def test_dense_graph_readable_focus_overview_preserve_saved_layout(self):
+        first,_,_=self.setup_mixer();plugin=self.add_gain();target='plugin:'+plugin
+        self.write('graph.layout.set',positions=[dict(node=target,x=100000,y=100000)])
+        before=self.doc();saved=self.read('graph.get',includeState=False);self.start(overview=False)
+        def contained(node):
+            x,y,w,h=node['rect'];vx,vy,vw,vh=self.local()['canvas']['viewport']
+            self.assertGreaterEqual(x,vx-.1);self.assertGreaterEqual(y,vy-.1)
+            self.assertLessEqual(x+w,vx+vw+.1);self.assertLessEqual(y+h,vy+vh+.1)
+        self.assertGreaterEqual(self.local()['canvas']['zoom'],.75);contained(self.node(first))
+        self.desktop.send(self.window(),0x111,3849,0);self.idle()
+        self.assertLess(self.local()['canvas']['zoom'],.15)
+        for node in self.nodes():contained(node)
+        old_zoom=self.local()['canvas']['zoom'];self.press(3817)
+        self.assertLess(self.local()['canvas']['zoom'],old_zoom)  # Minus cannot jump in from a tiny overview.
+        self.choose_node(3802,target);self.desktop.send(self.window(),0x111,3848,0);self.idle()
+        self.assertEqual(self.local()['canvas']['zoom'],1);contained(self.node(target))
+        self.assertEqual(self.node(target)['rect'][2:], [184,68]);self.assertEqual(self.local()['selected'],target)
+        self.assertEqual(self.doc(),before);self.assertEqual(self.read('graph.get',includeState=False),saved)
+        self.record('dense-routing-framing',canvas=self.local()['canvas'],graph=saved)
 
     def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
         first,second,master=self.setup_mixer();third=self.buses()[2]['id']

@@ -9,7 +9,7 @@ class SongRoutingWindow final:public NativeToolWindow {
   using Json=Api::Json;using Node=SongRoutingCanvas::Node;
   using Request=std::function<Json(const std::string &,const Json &)>;using Context=std::function<std::pair<std::string,std::string>()>;
   enum:int {filter=3801,nodePicker,wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,reload,fit,zoomOut,zoomIn,arrange,close,open,enable,page,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,saveLayout,verify,
-    inputPorts,outputPorts,addEffect,addGroup,addReturn,showInserts,showAssignment,helpLabel,removeNode,inspectorToggle,floatToggle,title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
+    inputPorts,outputPorts,addEffect,addGroup,addReturn,showInserts,showAssignment,helpLabel,removeNode,inspectorToggle,floatToggle,focusGraph,overview,title=3900,nodeLabel,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel,statusLabel};
   Request request_;Context context_;std::function<void(const Node &)> inspect_;
   std::function<void(const std::string &,const std::string &,const std::string &)> addEffect_;
   std::function<bool()> canRefresh_;bool contextOpen_=false;
@@ -34,7 +34,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     canvas_.viewport=next;canvas_.geometry();
   }
   bool compact()const{const auto [w,h]=size();return w<1040||h<620;}
-  void resumeVisiblePresentation()noexcept override{SetTimer(window_,7,250,nullptr);if(!presented_&&!data_.empty()){presented_=true;try{canvas_.fit();}catch(...){}}}
+  void resumeVisiblePresentation()noexcept override{SetTimer(window_,7,250,nullptr);if(!presented_&&!data_.empty()){presented_=true;try{canvas_.focus(selected_,filter_);}catch(...){}}}
   std::map<int,std::vector<std::string>> choices_;int drag_=0;std::string dragNode_;SongRoutingCanvas::Point dragStart_,dragOrigin_,pointer_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     if(unresolved())return describeDraft(operationDocument_,operationRevision_,operationParams_.dump(),generation_,dirty_||layoutDirty_,pending_,!pending_);
@@ -84,7 +84,7 @@ class SongRoutingWindow final:public NativeToolWindow {
   void finishResult(){
     const auto result=completion_.returned();if(!result)throw std::runtime_error("Routing result is uncertain / use Review result");
     auto report=Json{{"outcome","returned"},{"submission",{{"method",operation_},{"document",operationDocument_},{"revision",operationRevision_},{"params",operationParams_},{"fields",completion_.fields()}}},{"result",result->result}};
-    if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation()){if(operation_=="mixer.bus.add")selected_=result->result.at("bus").get<std::string>();load(true);if(operation_=="mixer.bus.add"||operation_=="mixer.enable")canvas_.fit();}
+    if(context_()==std::pair(result->document,result->revision)&&generation_==completion_.generation()){if(operation_=="mixer.bus.add")selected_=result->result.at("bus").get<std::string>();load(true);if(operation_=="mixer.bus.add"||operation_=="mixer.enable")canvas_.focus(selected_,filter_);}
     report_=std::move(report);completion_.finish();operation_.clear();
     status(dirty_||layoutDirty_?L"Earlier routing edit completed / newer draft retained / no write repeated":L"Routing edit completed / document Undo available");
   }
@@ -135,7 +135,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(!canvas_.viewport.contains(x,y)||drag_)return false;
     const float delta=float(GET_WHEEL_DELTA_WPARAM(keys))/WHEEL_DELTA;
     if(message==WM_MOUSEWHEEL&&(GET_KEYSTATE_WPARAM(keys)&MK_CONTROL)){
-      const auto anchor=canvas_.world(x,y);canvas_.zoom=std::clamp(canvas_.zoom*std::pow(1.2f,delta),.15f,2.f);
+      const auto anchor=canvas_.world(x,y);canvas_.zoom=std::clamp(canvas_.zoom*std::pow(1.2f,delta),.001f,2.f);
       canvas_.panX=x-canvas_.viewport.x-anchor.x*canvas_.zoom;canvas_.panY=y-canvas_.viewport.y-anchor.y*canvas_.zoom;
     }else if(message==WM_MOUSEHWHEEL||(GET_KEYSTATE_WPARAM(keys)&MK_SHIFT))canvas_.panX+=delta*48;
     else canvas_.panY+=delta*48;
@@ -155,7 +155,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     item(removeNode,L"Remove selected node\tDelete / Backspace",cleanDraft&&removable(n));
     item(disconnect,L"Disconnect selected wire\tDelete / Backspace",wire_>=0&&!canvas_.edges[size_t(wire_)].action.empty()&&!layoutDirty_);
     menu.push_back({0,L""});item(addGroup,L"Add group bus",cleanDraft&&active);item(addReturn,L"Add return bus",cleanDraft&&active);
-    menu.push_back({0,L""});item(fit,L"Fit graph\tHome");item(arrange,L"Arrange nodes",cleanDraft);item(saveLayout,L"Save layout",layoutDirty_&&!dirty_);
+    menu.push_back({0,L""});item(focusGraph,L"Readable view / focus selected stage\tHome");item(overview,L"Whole graph overview\tCtrl+Home");item(arrange,L"Arrange nodes",cleanDraft);item(saveLayout,L"Save layout",layoutDirty_&&!dirty_);
     const auto before=context_();const auto generation=generation_;const auto selected=selected_;const auto wire=wire_;
     contextOpen_=true;struct Reset{bool &flag;~Reset(){flag=false;}}reset{contextOpen_};
     const auto command=NativeContextMenu::show(window_,at,menu);
@@ -214,7 +214,13 @@ class SongRoutingWindow final:public NativeToolWindow {
   void savePositions(){if(dirty_)throw std::runtime_error("Apply or Reload the route draft first");Json positions=Json::array();for(const auto &n:canvas_.nodes)positions.push_back({{"node",n.id},{"x",n.x},{"y",n.y}});mutate("graph.layout.set",{{"positions",positions}});}
   void arrangeNodes(){clean();std::vector<unsigned> levels(canvas_.nodes.size());for(size_t step=0;step<canvas_.nodes.size();++step){bool changed=false;for(const auto &e:canvas_.edges){auto a=canvas_.index.at(e.source),b=canvas_.index.at(e.target);if(levels[b]<levels[a]+1){levels[b]=std::min(unsigned(canvas_.nodes.size()),levels[a]+1);changed=true;}}if(!changed)break;}
     std::map<unsigned,float> y;for(size_t i=0;i<canvas_.nodes.size();++i){auto &n=canvas_.nodes[i];n.x=std::min(100000.0f,28+levels[i]*236.0f);n.y=28+y[levels[i]];y[levels[i]]+=112;}layoutDirty_=true;++generation_;canvas_.fit();savePositions();layout();}
-  void scale(float multiplier){auto centre=canvas_.world(canvas_.viewport.x+canvas_.viewport.w/2,canvas_.viewport.y+canvas_.viewport.h/2);canvas_.zoom=std::clamp(canvas_.zoom*multiplier,.15f,2.0f);canvas_.panX=canvas_.viewport.w/2-centre.x*canvas_.zoom;canvas_.panY=canvas_.viewport.h/2-centre.y*canvas_.zoom;canvas_.geometry();requestPaint();}
+  void scale(float multiplier){auto centre=canvas_.world(canvas_.viewport.x+canvas_.viewport.w/2,canvas_.viewport.y+canvas_.viewport.h/2);canvas_.zoom=std::clamp(canvas_.zoom*multiplier,.001f,2.0f);canvas_.panX=canvas_.viewport.w/2-centre.x*canvas_.zoom;canvas_.panY=canvas_.viewport.h/2-centre.y*canvas_.zoom;canvas_.geometry();requestPaint();}
+  void viewMenu(){
+    RECT rect{};if(!GetWindowRect(controls_.at(fit),&rect))return;
+    contextOpen_=true;struct Reset{bool &flag;~Reset(){flag=false;}}reset{contextOpen_};
+    const auto command=NativeContextMenu::show(window_,{rect.left,rect.bottom},{{focusGraph,L"Readable view / focus selected stage\tHome"},{overview,L"Whole graph overview\tCtrl+Home"}});
+    if(command&&visible()&&!pending_)action(command,BN_CLICKED);
+  }
   void action(int id,unsigned note)override{
     if(setting_)return;if(id==close&&note==BN_CLICKED){hide();return;}
     if(note==BN_CLICKED&&id==inspectorToggle){inspector_=!inspector_;layout();SetFocus(inspector_?controls_.at(page):window_);requestPaint();return;}
@@ -224,14 +230,14 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(note==CBN_DROPDOWN&&(id==inputPorts||id==outputPorts)){refreshPluginPorts(id==inputPorts?input:output);return;}
     if(note==CBN_SELCHANGE){
       if(id==inputPorts||id==outputPorts){choosePluginPort(id);return;}
-      if(id==filter){const auto next=choice(filter);if(dirty_||layoutDirty_){choose(filter,filter_);clean();}filter_=next;rebuild();canvas_.fit();return;}
+      if(id==filter){const auto next=choice(filter);if(dirty_||layoutDirty_){choose(filter,filter_);clean();}filter_=next;rebuild();canvas_.focus(selected_,filter_);return;}
       if(id==nodePicker){const auto next=choice(id);if(dirty_||layoutDirty_){choose(id,selected_);clean();}selectNode(next);return;}
       if(id==wirePicker){const auto selected=choice(id);if(dirty_||layoutDirty_){choose(id,wire_<0?"":std::to_string(wire_));clean();}selectWire(selected.empty()?-1:std::stoi(selected));return;}
       if(id==page){const auto next=int(SendMessageW(controls_.at(page),CB_GETCURSEL,0,0));if(dirty_||layoutDirty_){ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,page_,0);clean();}page_=next;inspectFields();return;}
       if(id==kind||id==source||id==destination||id==graphPicker){changed();if(id!=graphPicker)refreshRoutePorts();}return;
     }
     if(note!=BN_CLICKED)return;
-    if(id==reload)load();else if(id==fit){canvas_.fit();requestPaint();}else if(id==zoomIn||id==zoomOut)scale(id==zoomIn?1.25f:.8f);else if(id==arrange)arrangeNodes();else if(id==saveLayout)savePositions();
+    if(id==reload)load();else if(id==fit)viewMenu();else if(id==focusGraph||id==overview){if(id==focusGraph)canvas_.focus(selected_,filter_);else canvas_.fit();requestPaint();}else if(id==zoomIn||id==zoomOut)scale(id==zoomIn?1.25f:.8f);else if(id==arrange)arrangeNodes();else if(id==saveLayout)savePositions();
     else if(id==addEffect)browseEffect();
     else if(id==removeNode)removeSelectedNode();
     else if(id==addGroup||id==addReturn){clean();mutate("mixer.bus.add",{{"kind",id==addGroup?"group":"return"}});}
@@ -251,7 +257,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(ctrl&&(key=='Z'||key=='Y')){clean();mutate(key=='Y'||shift?"history.redo":"history.undo",{{"domain","document"}});return true;}
     if(key==VK_INSERT){action(addEffect,BN_CLICKED);return true;}
     if(key==VK_APPS||(shift&&key==VK_F10)){contextMenu(window_,{-1,-1});return true;}
-    if(key==VK_HOME){canvas_.fit();requestPaint();return true;}if(key==VK_OEM_PLUS||key==VK_ADD){scale(1.25f);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){scale(.8f);return true;}
+    if(key==VK_HOME){if(ctrl)canvas_.fit();else canvas_.focus(selected_,filter_);requestPaint();return true;}if(key==VK_OEM_PLUS||key==VK_ADD){scale(1.25f);return true;}if(key==VK_OEM_MINUS||key==VK_SUBTRACT){scale(.8f);return true;}
     if(key==VK_DELETE||key==VK_BACK){action(wire_>=0?disconnect:removeNode,BN_CLICKED);return true;}if(key==VK_RETURN){action(open,BN_CLICKED);return true;}
     if(key>=VK_LEFT&&key<=VK_DOWN){if(dirty_)clean();if(auto n=canvas_.find(selected_)){const float amount=shift?16:4;n->x=std::clamp(n->x+(key==VK_RIGHT?amount:key==VK_LEFT?-amount:0),0.0f,100000.0f);n->y=std::clamp(n->y+(key==VK_DOWN?amount:key==VK_UP?-amount:0),0.0f,100000.0f);layoutDirty_=keyboardMove_=true;++generation_;canvas_.geometry();status(L"Moving node / release the arrow key to save one Undo step");layout();}return true;}return false;
   }
@@ -311,7 +317,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     wasCompact_=compact();
     if(!compact()){canvasViewport({12,82,w-352,h-170});
     place(filter,12,12,220,240);place(enable,240,12,114,26);place(addEffect,362,12,124,26);place(addGroup,494,12,90,26);place(addReturn,592,12,90,26);place(reload,w-226,12,120,26);place(close,w-98,12,86,26);
-    place(fit,12,46,52,26);place(zoomOut,70,46,32,26);place(zoomIn,108,46,32,26);place(arrange,148,46,82,26);place(saveLayout,238,46,108,26);place(removeNode,354,46,112,26);place(title,x,48,cw,24);
+    place(fit,12,46,62,26);place(zoomOut,80,46,32,26);place(zoomIn,118,46,32,26);place(arrange,158,46,82,26);place(saveLayout,248,46,108,26);place(removeNode,364,46,112,26);place(title,x,48,cw,24);
     set(nodeLabel,L"Selected stage");place(nodeLabel,x,82,cw,18);place(nodePicker,x,104,cw-78,260);place(open,x+cw-72,104,72,26);place(page,x,140,cw,240);
     for(int id:{wirePicker,kind,source,destination,gain,input,output,pre,enabled,connect,update,disconnect,verify,insertPicker,effectPicker,insertAdd,insertRemove,insertUp,insertDown,graphPicker,amount,wet,assign,clear,wireLabel,sourceLabel,destinationLabel,gainLabel,inputLabel,outputLabel,insertLabel,effectLabel,graphLabel,amountLabel,wetLabel})ShowWindow(controls_.at(id),SW_HIDE);
     if(page_==0){place(wireLabel,x,182,cw,18);place(wirePicker,x,204,cw,260);place(kind,x,240,cw,220);place(sourceLabel,x,278,cw,18);place(source,x,300,cw,240);place(destinationLabel,x,336,cw,18);place(destination,x,358,cw,240);place(gainLabel,x,397,92,18);place(outputLabel,x+104,397,92,18);place(inputLabel,x+208,397,92,18);place(gain,x,419,94,26);place(output,x+104,419,94,26);place(input,x+208,419,98,26);place(pre,x,456,146,26);place(enabled,x+154,456,152,26);place(connect,x,494,146,26);place(update,x+154,494,152,26);place(verify,x,530,146,26);place(disconnect,x+154,530,152,26);}
@@ -355,8 +361,8 @@ class SongRoutingWindow final:public NativeToolWindow {
       place(filter,8,42,std::max(80.f,w-212),240);
       const bool empty=data_.value("mixer",Json::object()).value("buses",Json::array()).empty();
       place(empty?enable:addEffect,w-198,42,108,26);place(open,w-84,42,76,26);
-      place(fit,8,76,42,26);place(zoomOut,54,76,28,26);place(zoomIn,86,76,28,26);
-      place(addGroup,120,76,82,26);place(addReturn,208,76,82,26);place(removeNode,296,76,std::min(112.f,std::max(70.f,w-304)),26);
+      place(fit,8,76,62,26);place(zoomOut,74,76,28,26);place(zoomIn,106,76,28,26);
+      place(addGroup,140,76,72,26);place(addReturn,218,76,72,26);place(removeNode,296,76,std::min(112.f,std::max(70.f,w-304)),26);
     }else{
       place(page,8,42,132,220);set(nodeLabel,L"Node");place(nodeLabel,146,46,38,18);
       place(nodePicker,188,42,std::max(60.f,w-272),260);place(open,w-78,42,70,26);
@@ -407,16 +413,16 @@ public:
     for(auto name:{L"Main output",L"Send",L"Graph sidechain",L"Graph auxiliary",L"Plugin sidechain",L"Plugin output",L"Plugin cable"})ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(kind),CB_SETCURSEL,0,0);
     for(auto name:{L"Connections",L"Insert chain",L"Ordinary graph"})ScreamSeq::NativeInputGate::present(controls_.at(page),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));ScreamSeq::NativeInputGate::present(controls_.at(page),CB_SETCURSEL,0,0);
     for(int id:{gain,input,output,amount,wet})edit(id,L"",32);
-    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{addEffect,L"Add effect…"},{addGroup,L"Add group"},{addReturn,L"Add return"},{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{addEffect,L"Add effect…"},{addGroup,L"Add group"},{addReturn,L"Add return"},{pre,L"Pre-fader: off"},{enabled,L"Route enabled"},{connect,L"Connect"},{update,L"Update wire"},{disconnect,L"Disconnect"},{reload,L"Reload"},{fit,L"View ▾"},{zoomOut,L"−"},{zoomIn,L"+"},{arrange,L"Arrange"},{close,L"Close"},{open,L"Open"},{enable,L"Enable routing"},{insertAdd,L"Append effect"},{insertRemove,L"Remove insert"},{insertUp,L"Up"},{insertDown,L"Down"},{assign,L"Assign graph"},{clear,L"Clear graph"},{saveLayout,L"Save layout"},{verify,L"Verify route"}})button(id,name);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Song routing"},{nodeLabel,L"Selected stage"},{wireLabel,L"Connection"},{sourceLabel,L"From"},{destinationLabel,L"To"},{gainLabel,L"Gain / dB"},{inputLabel,L"Input port"},{outputLabel,L"Output port"},{insertLabel,L"Explicit inserts / processed in this order"},{effectLabel,L"Unassigned effects / otherwise processed on master"},{graphLabel,L"Each channel or sample voice gets an independent copy"},{amountLabel,L"Amount / 0…1"},{wetLabel,L"Wet / 0…1"},{statusLabel,L""}})label(id,name);
     button(removeNode,L"Remove node");
     button(inspectorToggle,L"Inspector [F6]");button(floatToggle,L"Float");
     label(helpLabel,L"Drag sockets: connect · Drag wire handle to empty space: cut · Backspace: delete · Ctrl-click / double-click body: inspect");
-    finish();load();canvas_.fit();
+    finish();load();canvas_.focus(selected_,filter_);
   }
   void show(){NativeToolWindow::show();SetTimer(window_,7,250,nullptr);SetFocus(window_);}
   void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
-  void fitView(){canvas_.fit();requestPaint();}
+  void fitView(){canvas_.focus(selected_,filter_);requestPaint();}
   bool retainedDraft()const{return dirty_||layoutDirty_||pending_||unresolved()||drag_;}
   Json snapshot()const{
     const auto catalog=[](const PortCatalog &value){return Json{{"plugin",value.plugin},{"document",value.document},{"revision",value.revision},{"error",value.error},{"ports",value.ports},{"indices",value.indices}};};
