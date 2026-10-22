@@ -24,13 +24,16 @@ private:
   ScratchEditorState state_;Json bank_=Json::array(),presets_=Json::array();
   std::array<AutomationCanvas,2> canvases_;std::array<Json,2> values_{Json::array(),Json::array()};
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
-  bool writeUncertain_=false;
+  bool writeUncertain_=false,refreshScheduled_=false;
   bool pending_=false,setting_=false,fieldsDirty_=false,dragging_=false,previewNeeded_=false,saveNeeded_=false,hiding_=false,transportSpace_=false;
   Json dragBefore_;std::array<int,2> dragSelection_{};unsigned snapUnits_=4096;
   void require(bool value,const char *why)const{if(!value)throw std::runtime_error(why);}
   bool draft()const{return state_.dirty()||fieldsDirty_;}
   bool sameDocument()const{return context_().first==document_;}
   bool current()const{return context_()==std::pair(document_,revision_);}
+  // Coalesce publications without restarting the deadline: frequent worker
+  // observations during playback must not starve the first pending refresh.
+  void scheduleRefresh(){if(!refreshScheduled_){SetTimer(window_,5,250,nullptr);refreshScheduled_=true;}}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what())+(writeUncertain_?L" · Write outcome needs review; Reload reads the current phrase · Your draft is retained":L" · Your draft is retained"));}
   double cycleBeats()const{if(target_&&target_->gesture()){const auto &p=target_->command.at("parameters");return p.value("beats",1.0)/std::max(1.0,p.value("repeats",1.0));}return 1;}
@@ -86,7 +89,7 @@ private:
     const auto focus=GetFocus();
     if(owns(focus)){
       const auto id=GetDlgCtrlID(focus);
-      if(id==name||id==pointPosition||id==pointValue||id==pointFormula){SetTimer(window_,5,250,nullptr);return;}
+      if(id==name||id==pointPosition||id==pointValue||id==pointFormula){scheduleRefresh();return;}
     }
     const auto selected=state_.id();const auto old=state_.draft;const auto selection=state_.selected;
     load(false,selected);
@@ -225,8 +228,8 @@ private:
     const auto delta=double(GET_WHEEL_DELTA_WPARAM(flags))/WHEEL_DELTA;if(GET_KEYSTATE_WPARAM(flags)&MK_CONTROL)canvases_[0].zoom(std::pow(2.,delta),256);else canvases_[0].pan((message==WM_MOUSEHWHEEL?1:-1)*delta*(canvases_[0].end-canvases_[0].start)*.125,256);
     canvases_[1].start=canvases_[0].start;canvases_[1].end=canvases_[0].end;previewNeeded_=true;SetTimer(window_,3,100,nullptr);return true;
   }
-  void timer(UINT_PTR id)override{KillTimer(window_,id);if(!visible())return;if(pending_||dragging_){SetTimer(window_,id,100,nullptr);return;}
-    if(id==5){try{refreshCleanPhrase();}catch(const Api::ApiError &e){if(e.code==-32002)SetTimer(window_,5,250,nullptr);throw;}return;}
+  void timer(UINT_PTR id)override{KillTimer(window_,id);if(id==5)refreshScheduled_=false;if(!visible())return;if(pending_||dragging_){if(id==5)scheduleRefresh();else SetTimer(window_,id,100,nullptr);return;}
+    if(id==5){try{refreshCleanPhrase();}catch(const Api::ApiError &e){if(e.code==-32002)scheduleRefresh();throw;}return;}
     if(id==3&&previewNeeded_)preview();if(id==4&&saveNeeded_&&!writeUncertain_&&state_.dirty()&&!fieldsDirty_)save();}
   void layout()override{
     // Requests hold a native input lease. Keep the existing controls and focus
@@ -276,12 +279,12 @@ public:
   }
   ~ScratchGestureWindow()override{ready_=false;for(int id:{pointPosition,pointValue,pointFormula})RemoveWindowSubclass(controls_.at(id),pointFieldProc,2);}
   void openAt(){if(visible()||retainedDraft()){show();return;}load(true,0,true);show();}
-  void documentChanged(){if(visible()&&!current())SetTimer(window_,5,250,nullptr);}
+  void documentChanged(){if(visible()&&!current())scheduleRefresh();}
   bool retainedDraft()const{return draft()||pending_||writeUncertain_||(workbench_&&(workbench_->visible()||workbench_->retainedDraft()));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,revision_,std::to_string(state_.id()),state_.generation,draft()||dragging_||saveNeeded_||writeUncertain_,pending_);
   }
-  void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);KillTimer(window_,5);hiding_=true;NativeToolWindow::hide();hiding_=false;}
+  void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);KillTimer(window_,5);refreshScheduled_=false;hiding_=true;NativeToolWindow::hide();hiding_=false;}
   void show(){NativeToolWindow::show();documentChanged();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}
   Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"writeNeedsReview",writeUncertain_},{"saveQueued",saveNeeded_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
 };
