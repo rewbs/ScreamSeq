@@ -8,6 +8,23 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:27 UTC:** focus correction `e98697fb8` is committed and pushed
+to `codex/mac-gesture-intake` only. Prepared, parsed, unexecuted scripts under
+`bin/mac-gesture-20261022/focus-followup/` freeze its full hash. They permit one
+build of ScreamSeq/workspace-restore-tests no earlier than **13:06:48 UTC**,
+then five native groups (command results, departure, parameter preview, plugin
+search/recording and worker presentation) and seven app cases (three scratch,
+three recording, selected graph cable/Backspace). No build has run for this
+correction and the qualification checkout remains clean ab5f677c1. Before the
+checkpoint, inspect current CI for terminal outcomes and ensure no concurrent
+checkpoint; fast-forward the qualification checkout to the frozen source only
+when ready. Push the PR head alongside the coordinated gate, not before it.
+Reuse unchanged successful ab5 API/session-cache/shared tests; retain its failed
+native gate. `admission-followup/diagnostic-foreground.json` is explicitly
+nonqualifying. Fresh foreground observation must follow automated passes with
+no simultaneous private-desktop input. Do not overwrite an old package or
+replace the musician's session. No QA process remains at this checkpoint.
+
 **22 October 12:23 UTC:** ab5f677c1 ARM64 build succeeded; six of seven native
 registrations passed. Scratch busy admission found genuine focus loss during
 synchronous requests, so this candidate is not package/merge qualified. All
@@ -772,8 +789,8 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Candidate `7154b9f323` passes startup, 22/24 native and 13/13 actual-app cases. MIDI scan focus and accessibility handoff corrections are backed up but unbuilt. Current Mac ARM passed 134 native/35 interface groups and full requested conformance. | Follow the current integration boundary and focus investigation in the recording report. The prepared `focus-correction` scripts build only ScreamSeq and workspace-restore-tests after 06:56:56 UTC; retain unaffected worker evidence. Global focus on the locked/private desktop has a failing standard-control baseline: do not weaken the exact assertion or claim visible qualification. Package and merge only a qualifying checkpoint. |
-| 2 / L | Shared original-time capture, provider ownership, Windows native controls/delivery/recovery and a public retained-take window exist. All three public recording actual-app cases now pass, including real Keep/history/reopen and Discard. Foreground recording interaction remains open. Mac's existing recording adapter and the seven Windows-only live APIs remain separate contracts. | Complete the unlocked Computer Use Record → Stop → review → Keep/Discard journey, then reconcile the Mac lifecycle/API implementation with the shared capture owner. Do not infer missing Windows implementation or failed startup from superseded reports. |
+| 1 / M | Candidate ab5f677c1 built; six of seven targeted native groups passed. The new scratch admission regression found focus loss. Source correction e98697fb8 is backed up but unbuilt. Nine app selections have bounded passes, with original failures and narrow rerun limits retained. | Follow the current integration boundary and `focus-followup` freeze/check scripts at or after 13:06:48 UTC. Reuse unchanged ab5 worker/API evidence, retain the failed native assertion, and inspect its ongoing Mac/x64 CI. Package and merge only a qualified checkpoint. |
+| 2 / L | Shared original-time capture, provider ownership, Windows native controls/delivery/recovery and a public retained-take window exist. Windows recording has actual-app and bounded97bd foreground Keep/Discard evidence; the fresh ab5 diagnostic did not requalify the full flow. Mac's existing recording adapter and seven Windows-only live APIs remain separate contracts. | Recheck the changed input-lease boundary on the next Windows candidate, then integrate the Mac take owner, native baseline restoration and API/UI with shared capture. Do not infer complete parity from the prepared Mac prerequisites or superseded Windows absence reports. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | Typed preservation and both native ownership adapters exist and have preceding paired corpus execution; this is no longer an uncompiled Mac port. New exact-history behavior and final current-candidate exchange remain open. | Qualify current Mac history and perform reciprocal edited F01–F05/output checks on retained same-candidate binaries. Keep source protection, opaque state, exact typed comparisons and merged-tree validation. Large-file memory and unsupported encodings remain explicit risks. |
 | 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
