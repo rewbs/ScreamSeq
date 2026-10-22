@@ -1008,3 +1008,33 @@ Current-source corrections (unbuilt):
 
 No package or merge from this candidate. Preserve the 19:12:11 UTC gate. Required
 Mac native/interface/socket/device and reciprocal project gates remain open.
+
+### Subsequent source batch — retained Mac mixer outcomes
+
+`mac/App/MixerEditor.swift` completes the previously noted mixer admission
+audit. A busy code alone no longer permits write replay: retries require the
+shared Swift `NativeRequestOutcome` helper's explicit `notCommitted` receipt,
+preserve the original payload/revision and stop at the configured bound. The
+old display-tick path restarting exhausted chains has been removed. Reads keep
+their bounded retry behavior. A failed/uncertain write preserves raw controls,
+stable bus, queued newer values and revision, blocks dependent writes, and
+shows a contextual **Reload saved state** action. Normal successful gestures
+still apply immediately with one durable commit.
+
+Explicit Reload now reads the accepted mixer before cancelling preview values.
+It never sends pre-request saved values after a commit that might have succeeded.
+Failed reads/cancellation retain the draft and cleanup keys; a later explicit
+Reload reads again. Fields changed while readback is in flight survive its late
+completion. This is native AppKit presentation/reconciliation only; no model,
+DSP, metadata, or public protocol change. Existing Windows receipt guards remain.
+
+`EditorDraftInterfaceTests.swift` covers exact bounded retry payloads, no
+display-tick retry restart, absent/unknown/committed/noChange error receipts,
+fresh-baseline cancellation, failed readback/release and newer raw fields.
+`MixerStripsInterfaceTests.swift` requires an uncertain successful width commit
+to remain visible and survive reconciliation. Earlier assertions expecting
+blind resends or stale baseline rollback have been replaced with stricter
+single-commit/retained-state requirements. Existing normal coalescing, prior
+commit preservation, typed values, stable bus and bounded strip allocation
+assertions remain. **Unbuilt**: include editor draft and mixer strip interface
+groups on both Mac architectures at the next coordinated checkpoint.

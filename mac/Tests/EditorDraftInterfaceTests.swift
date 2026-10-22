@@ -199,7 +199,7 @@ extension InterfaceTests {
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     mixer.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
     func ok(_ revision: String, _ data: [String: Any] = [:]) { replies.removeFirst()(["result": ["revision": revision, "data": data]]) }
-    func busy() { replies.removeFirst()(["error": ["code": -32002, "message": "The document is busy; retry shortly"]]) }
+    func busy() { replies.removeFirst()(["error": ["code": -32002, "message": "The document is busy; retry shortly", "data": ["writeOutcome": "notCommitted"]]]) }
     try require(mixer.output.numberOfItems == 4 && mixer.output.selectedItem?.representedObject as? String == "g1", "Equally named destinations stay distinct and the saved output is selected")
     mixer.output.selectItem(at: 2); mixer.name.stringValue = "Typed name"; mixer.effect.selectItem(at: 1)
     mixer.update(data)
@@ -208,11 +208,14 @@ extension InterfaceTests {
     try require(calls.last?.0 == "mixer.bus.set" && calls.last?.1["output"] as? String == "g2", "Route sends the chosen bus, not the one sharing its name")
     replies.removeFirst()(["error": ["code": -32000, "message": "No"]])
     try require(replies.isEmpty, "A rejected routing edit has nothing to resynchronize")
+    try require(mixer.needsReload, "Uncertain routing result blocks later writes until readback")
+    mixer.reload();try require(calls.last?.0 == "mixer.get", "Routing review reads accepted state without replaying the edit");ok("r0",data)
     let existing=mixer.insertMenu(nil).items.compactMap(\.submenu).flatMap(\.items).filter{$0.title=="Gain"}
     try require(existing.count==2,"Duplicate-named effects remain distinct menu entries")
     _ = NSApp.sendAction(existing[1].action!,to:existing[1].target,from:existing[1])
     try require(calls.last?.1["plugins"] as? [String] == ["fx2"], "Add effect uses the chosen plugin's stable ID")
     replies.removeFirst()(["error": ["code": -32000, "message": "No"]])
+    mixer.reload();ok("r0",data)
 
     mixer.control("gainDB", value: -3.27, final: true)
     try require(calls.last?.1["preview"] as? Bool == false && calls.last?.1["gainDB"] as? Double == -3.27, "Release commits the exact fader value")
@@ -225,19 +228,29 @@ extension InterfaceTests {
     try require(calls.count == sentBefore + 1 && calls.last?.1["gainDB"] as? Double == -3.27 && mixer.hasPendingControls, "A busy reply retries the same commit and keeps it pending")
     busy();waitForRetry{calls.count>=sentBefore+2}
     try require(calls.count==sentBefore+2 && replies.count==1,"The second busy retry sends exactly one pending commit")
+    try require(NSDictionary(dictionary:calls[sentBefore-1].1).isEqual(to:calls.last!.1),
+      "Admitted busy retry preserves the exact original mixer revision and payload")
     busy();waitForRetry{mixer.status.stringValue.contains("kept")}
     try require(replies.isEmpty && mixer.hasPendingControls && mixer.status.stringValue.contains("kept"), "Exhausted busy retries keep the fader commit instead of discarding it")
     mixer.synchronize("r0")
-    try require(replies.isEmpty, "The deferred retry waits before asking again")
+    try require(replies.isEmpty, "Exhausted write retries wait for explicit review")
     wait(1.05); mixer.synchronize("r0")
-    try require(calls.last?.1["gainDB"] as? Double == -3.27 && calls.last?.1["preview"] as? Bool == false, "The kept commit is sent once the wait has passed")
+    try require(replies.isEmpty && calls.count==sentBefore+2 && mixer.needsReload, "Synchronize cannot restart an exhausted retry chain")
+    mixer.reload();try require(calls.last?.0=="mixer.get","Explicit reload reads the accepted state first");ok("r0",data)
+    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["gainDB"] as? Double == 0,
+      "Reload cancels audition to its fresh accepted baseline");ok("r0")
+    mixer.control("gainDB", value: -3.27, final: true)
     ok("r1")
-    try require(!mixer.hasPendingControls && mixer.selected?["gainDB"] as? Double == -3.27, "The retried commit reaches the document")
+    try require(!mixer.hasPendingControls && mixer.selected?["gainDB"] as? Double == -3.27, "A new explicit commit after review reaches the document")
 
     mixer.control("pan", value: 0.5, final: true)
     replies.removeFirst()(["error": ["code": -32000, "message": "Song changed; reload"]])
-    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["pan"] as? Double == 0 && mixer.status.stringValue.contains("Song changed"), "A rejected edit previews the saved value so the engine matches the document")
-    ok("r1")
+    try require(replies.isEmpty && mixer.needsReload && mixer.status.stringValue.contains("Song changed"), "An uncertain edit retains its fields without restoring stale saved values")
+    var accepted=data;var acceptedBuses=data["buses"] as! [[String:Any]]
+    acceptedBuses[0]["gainDB"] = -3.27;acceptedBuses[0]["pan"] = 0.25;accepted["buses"] = acceptedBuses
+    mixer.reload();try require(calls.last?.0=="mixer.get","Uncertain commit review starts with a read");ok("r1",accepted)
+    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["pan"] as? Double == 0.25,
+      "Review cancels only to the newly read baseline, never the pre-request pan");ok("r1")
     try require(!mixer.hasPendingControls && !mixer.loading, "Resynchronizing leaves no pending edit")
 
     let fader = mixer.controls[2], before = calls.count
@@ -256,6 +269,50 @@ extension InterfaceTests {
     try require(mixer.peak.stringValue == "−∞ dB", "A current silent observation reports negative infinity")
     mixer.showMeters([])
     try require(mixer.peak.stringValue == "—", "Missing observation is unavailable rather than measured silence")
+    try mixerUncertainOutcomeChecks(data)
+  }
+
+  static func mixerUncertainOutcomeChecks(_ data: [String:Any]) throws {
+    for outcome in [nil,"unknown","committed","noChange"] as [String?] {
+      let mixer=MixerEditor(frame:.zero);mixer.revision="original";mixer.update(data)
+      mixer.busyRetryDelay=0.001;mixer.busyRetryLimit=1
+      var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
+      mixer.onRequest={method,params,reply in calls.append((method,params));replies.append(reply)}
+      mixer.control("gainDB",value:-6.5,final:true)
+      var error:[String:Any]=["code":-32002,"message":"Uncertain owned mixer outcome"]
+      if let outcome {error["data"]=["writeOutcome":outcome]}
+      replies.removeFirst()(["error":error]);wait(0.03)
+      mixer.synchronize("later");mixer.finishGesture();mixer.load()
+      try require(calls.count==1 && mixer.needsReload && mixer.hasPendingControls && mixer.revision=="original" &&
+        !mixer.selectBus("g1"),"Only an explicit notCommitted receipt permits mixer replay; uncertain edits retain revision and bus")
+      mixer.name.stringValue="Name typed while reviewing"
+      mixer.reload();try require(calls.last?.0=="mixer.get","Unknown mixer result is reconciled by reading first")
+      replies.removeFirst()(["error":["code":-32000,"message":"Owned readback failure"]])
+      try require(mixer.needsReload && mixer.name.stringValue=="Name typed while reviewing" && calls.count==2,
+        "Failed Reload preserves the unknown edit and raw fields without a write")
+      mixer.reload()
+      var accepted=data;var buses=data["buses"] as! [[String:Any]]
+      buses[0]["gainDB"] = -6.5;accepted["buses"]=buses
+      replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
+      try require(calls.last?.0=="mixer.bus.set" && calls.last?.1["preview"] as? Bool==true &&
+        calls.last?.1["expectedRevision"] as? String=="accepted" && calls.last?.1["gainDB"] as? Double == -6.5,
+        "Reload never cancels an uncertain successful commit to the obsolete baseline")
+      replies.removeFirst()(["error":["code":-32002,"message":"Owned uncertain preview release","data":["writeOutcome":"unknown"]]])
+      let before=calls.count;mixer.synchronize("accepted");wait(0.03)
+      try require(calls.count==before && mixer.needsReload && mixer.name.stringValue=="Name typed while reviewing",
+        "Unknown audition release keeps its cleanup ownership without automatic retries")
+      mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
+      mixer.name.stringValue="Newer text during release"
+      replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
+      try require(mixer.needsReload && mixer.name.stringValue=="Newer text during release" && mixer.hasPendingControls,
+        "A late Reload completion cannot erase fields typed while it was in flight")
+      mixer.reload();replies.removeFirst()(["result":["revision":"accepted","data":accepted]])
+      replies.removeFirst()(["result":["revision":"accepted","data":[:]]])
+      try require(!mixer.needsReload && !mixer.hasPendingControls && mixer.selected?["gainDB"] as? Double == -6.5,
+        "Explicit successful reconciliation releases the retained state without repeating the durable commit")
+      try require(calls.filter{$0.0=="mixer.bus.set" && $0.1["preview"] as? Bool==false}.count==1,
+        "Uncertain mixer commit is issued exactly once across reads and failed release retries")
+    }
   }
 
   static func graphDraftChecks() throws {
