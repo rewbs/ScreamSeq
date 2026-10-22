@@ -1,4 +1,5 @@
 #include "../Audio/AudioDevice.hpp"
+#include "../Bridge/NativeParameterTake.hpp"
 #include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/AudioUnitHost.hpp"
@@ -154,6 +155,73 @@ static void stoppedTakePreviewRestoration(const PluginState &first,const PluginS
     audio.pluginEditSource(0)==replacement0&&audio.pluginEditSource(1)==replacement1&&!audio.active(),
     "Refused old take changed a replacement provider or its preview");
 }
+static void nativeTakeIntake(const PluginState &state,bool visible=false) {
+  AudioDevice audio;audio.setPlugins({state});
+  const auto source=audio.pluginEditSource(0);const auto hostEpoch=audio.pluginEpoch();
+  const auto parameter=audio.pluginParameters(0).at(0);
+  NSSlider *slider=nil;NSWindow *window=nil;
+  if(visible) {
+    audio.showPluginEditor(0);
+    for(NSWindow *candidate in NSApp.windows)if(candidate.visible&&[candidate.title isEqualToString:@(state.descriptor.name.c_str())])
+      for(NSView *view in candidate.contentView.subviews)for(NSView *child in view.subviews)
+        if([child isKindOfClass:NSSlider.class]){check(slider==nil,"Take native editor is ambiguous");slider=(NSSlider *)child;window=candidate;}
+    check(slider!=nil,"Take native editor has no fixture slider");
+  }
+  const auto arm=mach_absolute_time();auto timeline=std::make_shared<RecordingFrameTimeline>();
+  check(timeline->publish(arm,arm+1,0,1,48000,29),"Take adapter fixture clock starts");
+  const std::array<PluginState,1> rack{state};
+  const std::array<RecordedGestureTake::Provider,1> providers{{{state.instanceID,source}}};
+  auto take=std::make_shared<RecordedGestureTake>("native-mac-take","revision",arm,timeline,rack,std::span<const ParameterChange>{},providers);
+  std::string revision="revision";NativeSong native;
+  NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,{});
+  const auto timestamp=mach_absolute_time();
+  check(owner.capture(native,state.instanceID,parameter.id,.4,timestamp),"Original native control input was not retained");
+  bool refused=false;try{owner.capture(native,state.instanceID,parameter.id,.8,UINT64_MAX);}catch(const std::exception &){refused=true;}
+  check(refused&&take->eventCount()==1,"Future control time changed the retained take");
+  if(visible){slider.doubleValue=.7;check([slider sendAction:slider.action to:slider.target],"Send native take gesture");}
+  const auto end=owner.stop();check(owner.stop()==end&&take->endTime()==end,"Repeated Stop moved the native input cut");
+  check(timeline->publish(arm+1,end,1,479,48000,29),"Publish original-time take coverage after delayed delivery");
+  if(visible){slider.doubleValue=.9;check([slider sendAction:slider.action to:slider.target],"Send post-Stop native input");}
+  revision="changed";refused=false;try{owner.poll(native);}catch(const std::exception &){refused=true;}
+  check(refused&&take->eventCount()==1,"Changed session context consumed native input");revision="revision";
+  if(!visible) {
+    const std::vector<ParameterChange> crowded(4096,{0,parameter.id,.2f,0});
+    check(audio.previewPluginParameters(crowded),"Fill take preview queue for retry check");
+    refused=false;try{owner.poll(native);}catch(const std::exception &){refused=true;}
+    check(refused&&take->eventCount()==1&&owner.owns(state.instanceID),"Busy preview discarded or duplicated captured input");
+    (void)audio.pluginParameters(0); // Quiescent stopped-owner drain, no device.
+  }
+  check(owner.poll(native),"Fixed take input did not drain");
+  check(take->eventCount()==(visible?2:1)&&take->targetCount()==1&&owner.owns(state.instanceID),
+    "Take adapter lost an input or included the post-Stop suffix");
+  const auto effective=audio.pluginParameters(0).at(0);
+  check(std::abs(effective.value-(visible?.7:.4))<1e-6&&effective.manualValue&&
+    std::abs(*effective.manualValue-parameter.value)<1e-6,"Take adapter overwrote manual baseline or chose the wrong original-time preview");
+  const auto &events=take->target(0).events();
+  check(events.front().hostTime==timestamp&&events.front().frame.has_value(),"Delayed control input lost its original mapped frame");
+  owner.captureRecovery(native);check(take->eventCount()==(visible?2:1),"Recovery consumed later native input or duplicated the stopped prefix");
+  if(visible) {
+    const auto suffix=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(suffix&&suffix->fence.pending==1&&window.visible,"Stopped take lost its later native input or closed the editor");
+    auto next=std::make_shared<RecordedGestureTake>("refused-native-arm","revision",mach_absolute_time(),timeline,rack,std::span<const ParameterChange>{},providers);
+    refused=false;try{NativeParameterTake refusedOwner(audio,next,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,{});}
+    catch(const std::exception &){refused=true;}
+    const auto retained=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(refused&&!next->eventCount()&&retained&&retained->fence.pending==1,
+      "Fresh take consumed preceding manual input instead of refusing to arm");
+    PluginEdit event;PluginEditSource from;
+    check(audio.popPluginInputBefore(0,*suffix,event,from)==PluginEditRead::Event&&event.value==.9f,
+      "Native take suffix is not the original later value");
+  }
+  // This fixture owns its native input and consumed the known suffix above;
+  // production release must additionally hold leases and verify vendor state.
+  const auto lease=audio.beginPluginInputBarrier(0);check(lease.has_value(),"Protect stopped take fixture restoration");
+  check(owner.restorePreview(true),"Discarded take could not restore its audible baseline");
+  check(audio.endPluginInputBarrier(0,*lease),"Release stopped take fixture input lease");
+  check(std::abs(audio.pluginParameters(0).at(0).value-parameter.value)<1e-6&&audio.pluginEpoch()==hostEpoch&&
+    audio.pluginEditSource(0)==source&&!audio.active(),"Take restoration replaced its owner or retained the transient value");
+  if(visible){check(window.visible,"Take preview restoration closed the native editor");[window close];}
+}
 static void chainInputProtection(const PluginState &state){
   PluginChain chain({state},48000,true);chain.showEditor(0);
   NSSlider *slider=nil;NSWindow *owned=nil;
@@ -305,6 +373,8 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       check(saved.instanceID == gain.instanceID, "VST3 host state retains plugin instance identity");
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
+      nativeTakeIntake(saved);
+      nativeTakeIntake(closedAU);
       NativePlugin recalled(saved, 48000);
       check(std::abs(recalled.parameters()[0].value - .3f) < 1e-6, "VST3 processor/controller state recall");
       std::array<float, 1024> buffer;
@@ -592,6 +662,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         editorSizeMode(0);dlclose(fixtureModule);
         chainInputProtection(gain);
         stoppedRecordedPublication(saved,true);
+        nativeTakeIntake(saved,true);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);

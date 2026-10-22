@@ -423,3 +423,40 @@ This follow-up is on the backup branch after the Windows palette freeze077e.
 Do not silently include it in the prepared `palette-availability/` candidate or
 start another build for it. Group it with the subsequent coherent Mac take
 owner batch and its required Mac gates, preserving the hourly build cadence.
+
+## Following source batch: native Mac take intake adapter — unbuilt
+
+`mac/Bridge/NativeParameterTake.hpp` now coordinates the Mac control-owner
+portion of a retained take. It delegates fresh-arm/Stop validation to shared
+`RecordedGestureBoundary`, bounded original-time polling and latest-value
+selection to `RecordedGestureDrain`, and event/time/range/conflict/recovery
+state to `RecordedGestureTake`. Native catalogues, stable-ID-to-slot lookup,
+Mach clock reads and Core Audio preview publication stay in the Mac adapter.
+The owner is noncopyable and rejects reentrant entry, changed document/clock
+context and a replaced audio host. Arming rechecks context after fallible
+catalogue work and refuses earlier queued manual input without consuming it.
+
+Live polls capture a bounded native prefix; Stop retains one fixed cut and
+repeated Stop cannot move it. Later native notifications remain queued. A
+preview queue refusal retains the original take and retries its latest values
+on the next poll. Recovery reads a bounded prefix without sealing a live take
+or publishing preview values. Explicit host controls retain their original
+past Mach timestamp and reject future times before intake. Audible restoration
+uses the identity-guarded multi-target adapter above.
+
+The native-plugin fixture adds closed AU/VST3 host-control cases and a visible
+VST3 slider case to `--ui`. They assert original-time mapping after delayed
+clock coverage, full-queue refusal/retry without duplicated input, repeated
+Stop, changed-context refusal, a post-Stop suffix, refusal to arm over that
+suffix, baseline restoration under a native lease, and retained provider/window
+identity. These are prepared assertions, not executed results. Original native
+and rendered shared queue assertions remain mandatory.
+
+The session does **not** instantiate this owner yet. It still needs exclusive
+manual-consumer admission, grouped native restoration leases and opaque-state
+verification, commit into the existing unified history, recovery storage, the
+seven API contracts and native controls/review UI. `restorePreview` alone is not
+release: the caller must hold input leases, recheck fixed cuts and verify vendor
+state before dropping ownership. In particular, Mac's rendering vendor is also
+its editor vendor; copying Windows' isolated-vendor state replacement would be
+incorrect. This source must not be described as completed recording parity.

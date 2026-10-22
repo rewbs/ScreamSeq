@@ -93,6 +93,10 @@ public:
     return plugins_ && plugins_->enqueueParameters(changes);
   }
   uint64_t pluginEpoch()const noexcept{return pluginEpoch_;}
+  std::optional<size_t> pluginSlot(const std::string &identity)const noexcept {
+    const auto found=std::find_if(pluginStates_.begin(),pluginStates_.end(),[&](const auto &state){return state.instanceID==identity;});
+    return found==pluginStates_.end()?std::nullopt:std::optional<size_t>(size_t(found-pluginStates_.begin()));
+  }
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
   struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
   // Control owner only. Resolve stable identities again: live rack publication
@@ -104,11 +108,9 @@ public:
     const auto resolve=[&] {
       targets.clear();
       for(const auto &owner:owners) {
-        const auto found=std::find_if(pluginStates_.begin(),pluginStates_.end(),[&](const auto &state){return state.instanceID==owner.plugin;});
-        if(found==pluginStates_.end()||!owner.provider)return false;
-        const auto slot=size_t(found-pluginStates_.begin());
-        if(plugins_->editSource(slot).incarnation!=owner.provider)return false;
-        targets.push_back({uint32_t(slot),owner.parameter});
+        const auto slot=pluginSlot(owner.plugin);
+        if(!slot||!owner.provider||plugins_->editSource(*slot).incarnation!=owner.provider)return false;
+        targets.push_back({uint32_t(*slot),owner.parameter});
       }
       return true;
     };
