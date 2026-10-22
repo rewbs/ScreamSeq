@@ -49,6 +49,13 @@ No build, compilation or new test execution has run for this change.
   retention, no-match/clear, one Undo and save/reopen. All earlier slider,
   recovery, stale-draft and persistence assertions remain.
 - Existing recipe editor registration also exercises this shared native window.
+- Actual executable/pipe case
+  `test_song_routing.SongRoutingTests.test_parameter_search_targets_later_id_and_preserves_draft_history`
+  types a query through native messages, edits a filtered later stable ID using
+  automatic on-edit admission, preserves invalid drafts, checks independent
+  parameters, retained reopening, exact opaque-state Undo/Redo and save/reopen.
+  It runs on its own never-switched private desktop and supplements the native
+  focus harness; it is not Computer Use or foreground visual evidence.
 - Add `workspace-pattern-accessibility-tests` for external UIA focus and bounds
   alongside its existing cell, revision, lifetime and native-control assertions.
 - Computer Use on the new isolated build: add EQ10, open Params directly from

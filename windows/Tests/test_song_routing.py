@@ -130,6 +130,53 @@ class SongRoutingTests(unittest.TestCase):
         self.write('document.open',path=str(project),discard=True)
         self.assertEqual(self.read('plugin.state.get',plugin=plugin),after)
         self.assertFalse(self.local()['visible'])
+    def test_parameter_search_targets_later_id_and_preserves_draft_history(self):
+        descriptor=next(p for p in self.read('plugin.discover',format='Built-in') if p['name']=='EQ10')
+        self.write('plugin.add',descriptor=descriptor)
+        plugin=self.doc()['data']['nativePlugins'][-1]['instanceID']
+        self.main_command(316);self.idle()
+        main=self.desktop.hwnd(self.pid);rack=private_desktop.user.GetDlgItem(main,300)
+        slot=next(i for i,p in enumerate(self.doc()['data']['nativePlugins']) if p['instanceID']==plugin)
+        self.desktop.send(rack,0x186,slot);self.desktop.send(main,0x111,300|(1<<16),rack)
+        self.main_command(304);self.idle();owner=self.window('ScreamSeq.PluginParameters')
+        local=lambda:next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==plugin)
+        query=private_desktop.user.GetDlgItem(owner,3965);self.assertTrue(query)
+        def text(control,value):
+            data=ctypes.create_unicode_buffer(value);self.desktop.send(control,0xC,0,ctypes.addressof(data))
+        def command(identifier):
+            self.desktop.send(owner,0x111,identifier,private_desktop.user.GetDlgItem(owner,identifier));self.idle()
+        before=self.doc();catalog=self.read('plugin.parameters.get',plugin=plugin);opaque=self.read('plugin.state.get',plugin=plugin)
+        for i,character in enumerate('frequency'):
+            self.desktop.send(query,0x102,ord(character),1)
+            self.assertEqual(local()['search'],'frequency'[:i+1]);self.assertEqual(self.doc(),before)
+        self.assertEqual(local()['matches'],10);self.assertEqual(len(local()['rows']),10)
+        text(query,'bÁnD 10 gÁIn');self.assertEqual(local()['matches'],1)
+        target=next(p for p in catalog if p['name']=='Band 10 gain')
+        self.assertEqual(local()['rows'][0]['id'],target['id']);self.assertGreaterEqual(local()['rows'][0]['index'],20)
+        value=private_desktop.user.GetDlgItem(owner,local()['rows'][0]['valueControl'])
+        text(value,'-.');text(query,'frequency')
+        self.assertTrue(local()['dirty']);self.assertEqual(local()['rows'][0]['id'],target['id'])
+        self.assertEqual(local()['rows'][0]['value'],'-.');self.assertEqual(self.doc(),before)
+        command(3955);self.assertEqual(local()['matches'],10)
+        text(query,'Band 10 gain');text(value,'-6.5')
+        deadline=time.monotonic()+8
+        while self.doc()['revision']==before['revision'] and time.monotonic()<deadline:time.sleep(.02)
+        self.idle()
+        accepted=self.read('plugin.parameters.get',plugin=plugin)
+        self.assertEqual(next(p for p in accepted if p['id']==target['id'])['manualValue'],-6.5)
+        self.assertEqual([p for p in accepted if p['id']!=target['id']],[p for p in catalog if p['id']!=target['id']])
+        saved=self.read('plugin.state.get',plugin=plugin)
+        command(3958);self.main_command(335);self.idle()
+        self.assertEqual(self.window('ScreamSeq.PluginParameters'),owner)
+        self.assertEqual(local()['search'],'Band 10 gain');self.assertEqual(local()['rows'][0]['id'],target['id'])
+        self.write('history.undo');self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
+        self.write('history.redo');self.assertEqual(self.read('plugin.state.get',plugin=plugin),saved)
+        text(query,'no-such-parameter-unique');self.assertEqual(local()['rows'],[])
+        text(query,'');self.assertEqual(local()['matches'],len(catalog));self.assertEqual(len(local()['rows']),10)
+        project=self.folder/'filtered-parameters.screamseq';self.write('document.save',path=str(project))
+        self.write('document.open',path=str(project),discard=True)
+        self.assertEqual(self.read('plugin.state.get',plugin=plugin),saved)
+
     def setup_mixer(self):
         self.write('mixer.enable');b=self.buses();return b[0]['id'],b[1]['id'],b[-1]['id']
     def route(self,kind,source,target,gain=None,input=None,output=None):
