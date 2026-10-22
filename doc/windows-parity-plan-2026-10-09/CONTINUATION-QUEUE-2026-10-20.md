@@ -8,6 +8,40 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 09:07 UTC:** frozen correction `d699a71338147cd1b0ac5596b7b814aa1abd52f3`
+is pushed to PR #6. Its single local ARM64 checkpoint ran 09:00:20–09:04:12;
+all five targets built. Seven native registrations and six actual-app cases
+passed without retries. Executable SHA-256:
+`6e02063b14a1a5f6d8d454935b142a84f55c872dc35e6bcf71403a9aed6e1ddf`.
+This includes the hidden completed parameter refresh, concise generated values,
+typed pre-intake refusal, raw rack adapter and shared bounded drain regressions.
+`bin/mac-gesture-20261022/correction/` contains pinned build/check receipts,
+logs, manifest and guarded package script. No production package was made.
+
+Fresh isolated silent QA PID 17072 / main HWND 12387380 launched from that
+output, but activation twice returned `GetCursorPos: Access is denied`. Input
+is stopped and a new unlock request is pending. Do not reuse handles without
+fresh Computer Use selection; the launcher has a 900-second lifetime. The
+earlier successful foreground observation belongs to `352`, not this build.
+Repeat hidden Params before/after Keep and Discard, then Record without the
+reopening workaround, plus typing/Tab/Shift+Tab/Backspace and exact native focus.
+
+CI is active for d699: Mac run `39752055185` (ARM job `119734779069`, Intel
+`119734779331`), Windows run `39752055281` (job `119734779345`). Inspect these
+existing runs; do not restart. **No build or build-triggering push/merge before
+10:05 UTC.** The primary branch may accumulate/back up later source separately.
+
+The preceding `352` evidence is now complete for bounded reciprocal storage:
+Mac exchange run `39750405926`, Windows ARM-return run `39750841593`, and
+Intel-return run `39750985047` passed without rebuilding. The verified final
+returns preserve ten files per architecture against originating Windows typed
+trees (twenty comparisons). Five Mac-origin fixture saves per architecture also
+passed local ARM64 save/reopen. Reports, ZIP hashes and lineage are under
+`bin/mac-gesture-20261022/ci/` and `reciprocal-verification.json`; this does not
+qualify the d699 recording changes. Current three-platform API reports still
+agree on 39/41 selected outcomes, with the two retained-take reads differing.
+See `current-api-comparison.json` and the foreground report for limits.
+
 **Unlocked follow-up, 22 October 08:27 UTC:** Computer Use completed native
 typing/focus and Record/Stop/Keep/Discard checks on the existing `352ee334b`
 executable. It found a hidden parameter refresh blocking the next take and long
