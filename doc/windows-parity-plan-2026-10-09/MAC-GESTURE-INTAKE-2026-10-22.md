@@ -1,5 +1,21 @@
 # Shared capture: Mac AU intake continuation
 
+## Mac ARM checkpoint, 22 October 13:37 UTC
+
+Source `1fbfebd7346013926b908250390b8dd0b5af31a7` passed Mac ARM job
+119842551604 in run39784093814. Its terminal log confirms **134/134 native
+tests**, including native-plugins, plugin-trust and unified-history. The full
+native interface harness passed (34 named groups plus the final editor/keyboard
+checks); private socket, owned AU/VST3 editor lifecycle, sample library,
+recovery/picker and fixture/shared editing conformance stages passed too.
+Excerpts: `focus-followup/mac-arm-result-excerpts.log`.
+
+This qualifies the stopped-control prerequisite below on that architecture's
+fixtures. It does not add the unfinished retained-take session/API/UI or prove
+an in-flight Core Audio natural-end/fault callback and sustained realtime
+behavior. Intel job119842551391 is still running at this observation. No job
+was restarted. Later scratch-refresh source changes are Windows-only.
+
 ## Stopped control handoff, 22 October 12:57 UTC — unbuilt
 
 The retained timeline path already called AudioOutputUnitStop before adopting

@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 13:37 UTC:** Mac ARM 1fb job119842551604 passed all134 native tests
+and its complete scheduled interface/socket/fixture stages; terminal log
+inspected. Intel and Windows x64 remain running. Scratch correction is backed
+up as b0bd776825bae12bbdc72543d867f92fba8468fd. Parsed, unexecuted scripts in
+`bin/mac-gesture-20261022/scratch-refresh/` enforce **14:07:23 UTC**, a frozen
+source and new receipt/output paths. They build two targets together, then
+run three native groups and four scratch app cases. Inspect freeze/receipts;
+do not run the earlier build again. Qualification checkout and PR still1fb.
+No QA process remains. Foreground receipt is `needs-correction`, not a pass;
+the next candidate must clear the scratch refresh regression before packaging.
+
 **22 October 13:31 UTC:** the coordinated 1fbfebd73 checkpoint built once and
 passed six native groups plus all 23 app/controller cases with bounded combined
 evidence (21 original passes and two Python-only long-path fixture repairs).
