@@ -377,3 +377,21 @@ steps successfully; Intel remained in its build. Windows x64 failed compilation
 on the same missing recovery-decoder include as local ARM64 (plus its cascading
 comparison error). The direct include correction is already in `ddefc311c` and
 will be validated with this combined source. Do not rerun the old CI candidate.
+
+## Correction checkpoint: 22 October 01:53 UTC — failed compilation
+
+Frozen `d1c8fddff13686884f8c7ba66d216fa718edd54e` configured successfully,
+then failed in `RecordedPluginEditors.inc:74`: `pluginMainCall` was not declared
+in the `PluginOperations.cpp` translation unit. The direct native-owner header
+`windows/Plugins/UiOwner.hpp` is now included there. This correction has not been
+compiled. The local attempt ran 01:53:51–01:55:34 UTC; retain
+`bin/plugin-take-lifecycle-20261021/correction/build.json` and its log.
+No ScreamSeq app was produced, no candidate checks or Computer Use qualification
+were run, and no package or merge is justified from this attempt.
+
+Updated PR CI began at 01:54:08 UTC: Mac run `39708338698`, Windows run
+`39708338863`. The next coordinated build must not start before **02:54:09 UTC**.
+Do not restart this failed local build or push another PR update before that gate.
+Both Mac architectures passed the preceding `2ff11b8ae` CI run; that result does
+not qualify the new shared queue. Source corrections should continue on the local
+branch and be pushed to the non-CI backup branch between checkpoints.

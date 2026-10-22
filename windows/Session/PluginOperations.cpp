@@ -1,4 +1,5 @@
 #include "PluginOperations.hpp"
+#include "windows/Plugins/UiOwner.hpp"
 #include "RecordedGestureRecovery.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/ParameterBaseline.hpp"
