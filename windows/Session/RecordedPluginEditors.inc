@@ -31,6 +31,23 @@ void PluginOperations::requireManualOperation(const std::string &method)const {
   const auto methods=writes();
   if(std::find(methods.begin(),methods.end(),method)!=methods.end())requireManualEditors();
 }
+PluginOperations::RecordedCuts PluginOperations::recordedEditorCuts(const RecordedEditors &capture)const {
+  RecordedCuts cuts;
+  for(const auto &[identity,catalog]:capture.catalogs)cuts.emplace(identity,PluginEditBoundary{});
+  // All allocations precede the group cut. No vendor state/catalog call can
+  // pump native input between providers inside this one owner invocation.
+  WindowsVST3::pluginMainCall([&]{
+    for(auto &[identity,cut]:cuts) {
+      const auto found=editors_.find(identity);
+      need(found!=editors_.end()&&found->second,"Recorded provider is unavailable; input retained");
+      const auto current=found->second->editBoundary();
+      need(current.has_value(),"Recorded provider cannot establish an original-input boundary");
+      cut=*current;
+      need(cut.fence.pending<=PluginEditQueue::capacity,"Recorded input boundary exceeds native capacity");
+    }
+  });
+  return cuts;
+}
 void PluginOperations::beginRecordedEditors(std::shared_ptr<RecordedGestureTake> take,
     std::function<std::pair<std::string,uint64_t>()> context,
     std::function<void(std::span<const ParameterChange>)> preview) {
@@ -59,15 +76,13 @@ void PluginOperations::beginRecordedEditors(std::shared_ptr<RecordedGestureTake>
   // Catalog preparation may pump native input after the caller's manual flush.
   // Inspect all queues on their native owner, without consuming notifications
   // or reading vendor state. A failed arm leaves those edits for manual capture.
-  const auto providers=next->take->providers();
-  WindowsVST3::pluginMainCall([&]{
-    for(const auto &provider:providers) {
-      const auto cut=editors_.at(provider.plugin)->editBoundary();
-      need(cut&&cut->source==provider.source&&cut->fence.hostTime>=next->take->startTime(),
+  const auto cuts=recordedEditorCuts(*next);
+  for(const auto &provider:next->take->providers()) {
+      const auto &cut=cuts.at(provider.plugin);
+      need(cut.source==provider.source&&cut.fence.hostTime>=next->take->startTime(),
         "Recording needs a current native input boundary; earlier input retained");
-      need(cut->fence.pending==0,"Flush earlier manual plugin input before recording; queued input retained");
-    }
-  });
+      need(cut.fence.pending==0,"Flush earlier manual plugin input before recording; queued input retained");
+  }
   need(next->context()==current,"Recording context changed while checking native input");
   recordedEditors_=std::move(next);
 }
@@ -79,20 +94,9 @@ uint64_t PluginOperations::sealRecordedEditors() {
   const auto context=capture.context();
   need(context.first==take.revision()&&context.second==take.playbackEpoch(),
     "Recording context changed; input and baseline protection retained");
-  // Allocate before visiting the native owner. No vendor state/catalog call is
-  // made inside this group cut, so no vendor can pump input between its cuts.
-  std::map<std::string,PluginEditBoundary> cuts;
-  for(const auto &[identity,catalog]:capture.catalogs)cuts.emplace(identity,PluginEditBoundary{});
+  auto cuts=recordedEditorCuts(capture);
   uint64_t end=0;
-  WindowsVST3::pluginMainCall([&]{
-    for(auto &[identity,cut]:cuts) {
-      const auto found=editors_.find(identity);
-      need(found!=editors_.end()&&found->second,"Recorded provider is unavailable; input retained");
-      const auto current=found->second->editBoundary();
-      need(current.has_value(),"Recorded provider cannot establish an original-input boundary");
-      cut=*current;end=std::max(end,cut.fence.hostTime);
-    }
-  });
+  for(const auto &[identity,cut]:cuts)end=std::max(end,cut.fence.hostTime);
   need(end&&end<UINT64_MAX&&capture.context()==context,
     "Recording clock or context changed while stopping; input retained");
   // The timestamp range is half-open; include every event produced in the
@@ -110,10 +114,21 @@ uint64_t PluginOperations::sealRecordedEditors() {
 }
 bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
   if(!recordedEditors_)return true;
+  need(!releaseBarrier||recordedEditors_->take->endTime().has_value(),"Seal the take before acknowledging a native release barrier");
+  return drainRecordedEditors(recordedEditors_->releaseCuts,releaseBarrier||!recordedEditors_->releaseCuts.empty(),true);
+}
+bool PluginOperations::drainRecordedEditors(const RecordedCuts &cuts,bool acknowledgeStop,bool preview) {
   auto &capture=*recordedEditors_;auto &take=*capture.take;
   if(take.completed())return true; // Keep exclusion until restoration succeeds.
-  need(!releaseBarrier||take.endTime().has_value(),"Seal the take before acknowledging a native release barrier");
   const auto [revision,epoch]=capture.context();
+  // Validate all providers before popping any queue. A changed context must
+  // remain reviewable without consuming input which belongs to another owner.
+  for(const auto &[identity,catalog]:capture.catalogs) {
+    const auto found=editors_.find(identity);
+    if(found==editors_.end()||!found->second||
+       !take.observeProvider(identity,found->second->editSource(),revision,epoch))
+      throw Api::ApiError(-32001,"Parameter recording context or provider changed; queued input retained");
+  }
   bool empty=true;
   for(const auto &[identity,catalog]:capture.catalogs) {
     const auto found=editors_.find(identity);
@@ -121,9 +136,9 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
       throw Api::ApiError(-32002,"Recorded plugin provider is unavailable; take and baseline protection retained");
     auto &provider=*found->second;bool drained=false;
     PluginEdit event;PluginEditSource source;
-    const auto cut=capture.releaseCuts.find(identity);
+    const auto cut=cuts.find(identity);
     for(unsigned n=0;n<128;++n) {
-      if(cut==capture.releaseCuts.end()) {
+      if(cut==cuts.end()) {
         if(!provider.popEdit(event,source)){drained=true;break;}
       } else {
         const auto result=provider.popEditBefore(cut->second,event,source);
@@ -137,7 +152,7 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
     // manufacture the empty paired pop needed for a completed native drain.
     empty=empty&&drained;
     if(drained) {
-      if(releaseBarrier||cut!=capture.releaseCuts.end())(void)take.drained(identity,source,revision,epoch);
+      if(acknowledgeStop)(void)take.drained(identity,source,revision,epoch);
       else (void)take.observeProvider(identity,source,revision,epoch);
     } else (void)take.observeProvider(identity,source,revision,epoch);
   }
@@ -145,7 +160,7 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
   if(failure==RecordedGestureTake::Failure::Context||failure==RecordedGestureTake::Failure::Provider||
      failure==RecordedGestureTake::Failure::Target)
     throw Api::ApiError(-32001,"Parameter recording context or provider changed; input and baseline protection retained");
-  if(capture.previewedEvents!=take.eventCount()) {
+  if(preview&&capture.previewedEvents!=take.eventCount()) {
     // Build from the retained raw take so allocation/queue refusal cannot lose
     // audible retry data after notifications have already been consumed.
     std::vector<ParameterChange> changes;changes.reserve(take.targetCount());
@@ -158,6 +173,29 @@ bool PluginOperations::pollRecordedEditors(bool releaseBarrier) {
     capture.previewedEvents=take.eventCount();
   }
   return empty;
+}
+void PluginOperations::captureRecordedRecoveryInput() {
+  if(!recordedEditors_||recordedEditors_->take->completed())return;
+  auto &capture=*recordedEditors_;const auto failure=capture.take->failure();
+  // Keep already captured failed takes reviewable. Never consume another
+  // context/provider's notifications or cross an externally owned Stop cut.
+  if(failure==RecordedGestureTake::Failure::Context||failure==RecordedGestureTake::Failure::Provider||
+     failure==RecordedGestureTake::Failure::Target||
+     (capture.take->endTime()&&capture.releaseCuts.empty()))return;
+  const auto cuts=capture.releaseCuts.empty()?recordedEditorCuts(capture):capture.releaseCuts;
+  // Every provider has at most the fixed native queue capacity. One extra
+  // bounded poll proves completion when the prefix is exactly divisible by 128.
+  // Later input cannot extend this recovery work or enter the archived prefix.
+  try {
+    for(size_t poll=0;poll<=PluginEditQueue::capacity/128;++poll)
+      if(drainRecordedEditors(cuts,!capture.releaseCuts.empty(),false))return;
+  } catch(const Api::ApiError &) {
+    const auto reason=capture.take->failure();
+    if(reason==RecordedGestureTake::Failure::Context||reason==RecordedGestureTake::Failure::Provider||
+       reason==RecordedGestureTake::Failure::Target)return; // Archive retained input and explicit failure.
+    throw;
+  }
+  throw Api::ApiError(-32002,"Recorded recovery input exceeded its fixed native boundary; take retained");
 }
 bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview) {
   if(!recordedEditors_)return true;

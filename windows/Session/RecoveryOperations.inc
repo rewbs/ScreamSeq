@@ -3,6 +3,9 @@ std::shared_ptr<const RecoverySnapshot> DocumentController::recoverySnapshot() {
       const auto capturedRevision=revision();
       // Do not publish a pending view or flush editors here. Capturing must not
       // alter the document, saved baselines, Undo, manual gestures or playback.
+      // Retain a fixed queued recording prefix first; preview publication stays
+      // deferred to ordinary polling and cannot block this protective snapshot.
+      plugins_->captureRecordedRecoveryInput();
       auto copiedProject=project_;
       if(recording_)overlayRecording(copiedProject,*recording_);
       const bool gestureRecording=plugins_->overlayRecordedRecovery(copiedProject);

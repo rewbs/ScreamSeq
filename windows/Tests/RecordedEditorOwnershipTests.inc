@@ -20,7 +20,8 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   const auto encoded=[&]{return Project::encodePlist(Project::nativeProjectTree(*document,project));};
   const auto baselineBytes=encoded();
   const auto revision=[&]{return std::to_string(document->revision)+":"+std::to_string(project.pluginRevision);};
-  const auto context=[&]{return std::pair{stale?std::string("stale"):revision(),uint64_t(41)};};
+  std::function<void()> contextHook;
+  const auto context=[&]{if(auto hook=std::exchange(contextHook,{}))hook();return std::pair{stale?std::string("stale"):revision(),uint64_t(41)};};
   const auto sequence=document->historySequence();
   const auto beforeStops=stops,beforeManual=manual;
   const auto module=GetModuleHandleW(std::filesystem::u8path(descriptor.at("path").get<std::string>()).c_str());
@@ -212,6 +213,8 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
     "Stop consumed or previewed a later gesture");
   need(operations.pollRecordedEditors()&&take->eventCount()==130&&operations.sealRecordedEditors()==end,
     "Repeated stopped polling consumed later input or changed the boundary");
+  operations.captureRecordedRecoveryInput();
+  need(take->eventCount()==130&&take->endTime()==end,"Recovery crossed an already sealed Stop boundary");
   need(take->preparedOwners(revision(),41).size()==1,"Fixed cut did not complete its captured input drain");
   unsigned restores=0;
   refuses([&]{operations.releaseRecordedEditors(true,[&]{++restores;return true;});});
@@ -241,5 +244,37 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
     document->historySequence()==beforeArmSequence+1,"Arming refusal lost the earlier manual gesture or its one history edit");
   operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
   need(encoded()==beforeArm,"Unflushed gesture did not retain exact manual Undo after refused arming");
+  // Recovery captures more than one ordinary poll's input, without previewing
+  // or turning the snapshot cut into Stop. Inject a later callback after the
+  // fixed native cut and before the first drain; it belongs to the next poll.
+  operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto beforeRecovery=encoded();const auto beforeRecoverySequence=document->historySequence();
+  const auto beforeRecoveryManual=manual,beforeRecoveryStops=stops;
+  clock=std::make_shared<RecordingFrameTimeline>();const auto arm5=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm5,arm5+1,0,1,48000,41),"Recovery prefix clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers5{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("recovery-prefix",revision(),arm5,clock,rack,projectAbsoluteAutomation(project),providers5);
+  unsigned recoveryPreviews=0;
+  operations.beginRecordedEditors(take,context,[&](auto){++recoveryPreviews;throw Api::ApiError(-32002,"Controlled recovery preview queue refusal");});
+  for(unsigned i=0;i<130;++i)send(i%2?.75:.25);
+  contextHook=[&]{send(.875);};
+  operations.captureRecordedRecoveryInput();
+  auto recoveryCopy=project;need(operations.overlayRecordedRecovery(recoveryCopy),"Recovery prefix archive missing");
+  const auto recoveryReview=readRecordedGestureRecovery(recoveryCopy.preserved.at("screamseqPluginGestureRecovery")[0]);
+  need(take->eventCount()==130&&recoveryReview.targets.size()==1&&recoveryReview.targets[0].events.size()==130&&
+    !recoveryReview.endTime&&!recoveryReview.sources[0].drained&&!recoveryPreviews&&
+    encoded()==beforeRecovery&&manual==beforeRecoveryManual&&stops==beforeRecoveryStops&&
+    document->historySequence()==beforeRecoverySequence,"Recovery changed playback/history, sealed Stop, previewed or crossed its prefix");
+  for(size_t i=0;i<130;++i)need(recoveryReview.targets[0].events[i].value==(i%2?.75f:.25f)&&
+    recoveryReview.targets[0].events[i].hostTime==take->target(0).events()[i].hostTime,
+    "Recovery prefix changed raw input order, value or original timestamp");
+  refuses([&]{operations.pollRecordedEditors();});
+  need(take->eventCount()==131&&take->target(0).events().back().value==.875f&&recoveryPreviews==1,
+    "Recovery consumed later input or lost preview retry ownership");
+  operations.captureRecordedRecoveryInput();
+  need(take->eventCount()==131&&recoveryPreviews==1,"Repeated recovery retried an audible preview or duplicated input");
+  operations.sealRecordedEditors();operations.invoke("plugin.editor.close",{{"slot",0}});
+  need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==beforeRecovery,
+    "Recovery-prefix discard changed the accepted baseline");
   std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
 }

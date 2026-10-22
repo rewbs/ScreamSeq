@@ -59,6 +59,9 @@ class PluginOperations {
     size_t previewedEvents=0;
   };
   std::unique_ptr<RecordedEditors> recordedEditors_;
+  using RecordedCuts=std::map<std::string,Tracker::PluginEditBoundary>;
+  RecordedCuts recordedEditorCuts(const RecordedEditors &)const;
+  bool drainRecordedEditors(const RecordedCuts &,bool acknowledgeStop,bool preview);
   bool recordedPublicationActive_=false;
   bool ownsRecordedEditor(const std::string &)const noexcept;
   void requireManualEditors()const;
@@ -103,6 +106,10 @@ public:
   // Archive already captured original-time input without touching providers,
   // playback, manual state or history. Restoring the archive never rearms it.
   bool overlayRecordedRecovery(Project::ProjectState &copy) const;
+  // Retain a fixed native queue prefix before recovery serialization. Does not
+  // preview, capture manual/opaque state or seal a live take. Only a previously
+  // sealed fixed Stop cut can acknowledge Stop and bounds that snapshot's input.
+  void captureRecordedRecoveryInput();
   void editorWarning(std::string text){editorWarning_=std::move(text);}
   std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;

@@ -408,3 +408,23 @@ history edit. Shared queue and both native provider tests cover pending counts.
 The original native barrier requirement remains; this does not expose a finished
 recording workflow. These additions have not been compiled or executed and join
 the next hourly build after 02:54:09 UTC.
+
+## Recovery captures its fixed pending prefix (source only)
+
+`DocumentController::recoverySnapshot` now asks the recorded owner to retain the
+native queue prefix before creating the archive. Arming, Stop and recovery share
+one group-cut helper. Recovery drains at most 65 rounds of 128 notifications per
+provider, bounded by the real 8192-entry native queue; later callbacks cannot
+extend that work. A previously sealed Stop cut remains authoritative. A live
+snapshot neither seals the take nor acknowledges Stop.
+
+Recovery intake never calls audible preview or reads vendor state into saved
+manual state. Preview remains pending for normal polling, including when its
+queue refuses. All provider/context checks precede consumption; already failed
+takes remain archivable. The archive remains detached review-only evidence.
+
+Added real-provider assertions cover 130 queued callbacks, an injected callback
+after the recovery cut, exact raw values/timestamps, no history/manual/Stop or
+preview changes, deferred preview refusal, repeated snapshots, and existing Stop
+boundaries. The prior normal 128-event poll assertion remains intact. These
+changes and tests are unbuilt; use the next combined hourly checkpoint.
