@@ -529,3 +529,26 @@ original host time; equal timestamps keep the existing last-accepted tie-breaker
 Baseline point order and all raw events remain intact. Added portable checks cover
 44.1/48/96 kHz, reversed delivery, equal timestamps and unrelated baseline points.
 This change is source-only and needs both platforms' recorded-automation gates.
+
+## Follow-up checkpoint and subsequent built-in work
+
+Frozen `fb228cb3e019c1040f3f73c556313fce4de90a92` began its single ARM64 build
+at 22 October 02:54:09.923 UTC. Receipts/logs are under
+`bin/plugin-take-lifecycle-20261021/followup`. Windows CI run `39713958236`
+started at 02:54:47 UTC and Mac run `39713958110` at 02:54:46 UTC. The next build
+must not start before **03:54:48 UTC**. Completion/check/UI/package status must be
+read from those receipts; starting the build does not qualify this candidate.
+
+The primary checkout subsequently adds control-only built-in recording support,
+outside that frozen build. A built-in `NativePlugin` has no vendor callback queue
+or HWND. Its adapter supplies the native host time for an identified empty cut;
+paired reads validate the incarnation and acknowledge only that empty source.
+Its no-editor lease has token zero and still checks incarnation on explicit end.
+Native backends retain their own queue/barrier contract; an unsupported backend
+does not become a built-in. Windows worker cuts now supply the host-only time.
+
+Added unexecuted portable checks cover absent/injected host time, exact source,
+empty drain, rejected vendor positions and no-editor lease identity. A worker
+fixture exercises built-in control capture, Stop, live commit, preserved manual
+state, one Undo/Redo and save/reopen in `document-controller-recording`. This work
+remains internal along with the vendor lifecycle and awaits a later checkpoint.

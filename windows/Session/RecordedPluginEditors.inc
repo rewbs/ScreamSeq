@@ -41,7 +41,7 @@ PluginOperations::RecordedCuts PluginOperations::recordedEditorCuts(const Record
     for(auto &[identity,cut]:cuts) {
       const auto found=editors_.find(identity);
       need(found!=editors_.end()&&found->second,"Recorded provider is unavailable; input retained");
-      const auto current=found->second->editBoundary();
+      const auto current=found->second->editBoundary(ScreamSeq::hostTime100ns());
       need(current.has_value(),"Recorded provider cannot establish an original-input boundary");
       cut=*current;
       need(cut.fence.pending<=PluginEditQueue::capacity,"Recorded input boundary exceeds native capacity");
@@ -242,7 +242,7 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
     // Explicit stopped discard with a closed editor abandons its transient
     // input as well as the take. Normal completion never takes this escape.
     if(discard&&!editors_.at(identity)->editorOpen())continue;
-    const auto current=editors_.at(identity)->editBoundary();
+    const auto current=editors_.at(identity)->editBoundary(ScreamSeq::hostTime100ns());
     need(current&&current->source==cut.source&&current->fence.position==cut.fence.position,
       "Plugin received input after Stop; later input and recording protection retained");
   }};

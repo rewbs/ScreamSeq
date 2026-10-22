@@ -226,8 +226,9 @@ PluginEditSource NativePlugin::editSource() const noexcept {
   const auto *p=publishedVendor();
   return {p->editIncarnation_,p->backend_?p->backend_->droppedEdits():0};
 }
-std::optional<PluginEditBoundary> NativePlugin::editBoundary() {
+std::optional<PluginEditBoundary> NativePlugin::editBoundary(uint64_t hostOnlyTime) {
   auto *p=publishedVendor();
+  if(p->builtin_&&hostOnlyTime)return PluginEditBoundary{{p->editIncarnation_,0},{0,hostOnlyTime,0,0}};
   if(!p->backend_)return {};
   const auto fence=p->backend_->editFence();
   if(!fence||publishedVendor()!=p)return {};
@@ -236,15 +237,20 @@ std::optional<PluginEditBoundary> NativePlugin::editBoundary() {
 PluginEditRead NativePlugin::popEditBefore(const PluginEditBoundary &boundary,PluginEdit &event,PluginEditSource &source) noexcept {
   auto *p=publishedVendor();source={p->editIncarnation_,p->backend_?p->backend_->droppedEdits():0};
   if(source.incarnation!=boundary.source.incarnation||source.dropped<boundary.source.dropped)return PluginEditRead::InvalidFence;
+  if(p->builtin_)return boundary.fence.hostTime&&!boundary.fence.position&&!boundary.fence.pending&&!boundary.fence.dropped?
+    PluginEditRead::Complete:PluginEditRead::InvalidFence;
   return p->backend_?p->backend_->popEditBefore(boundary.fence,event):PluginEditRead::Unsupported;
 }
 std::optional<PluginEditorInputBarrier> NativePlugin::beginEditorInputBarrier() {
-  auto *p=publishedVendor();if(!p->backend_)return {};
+  auto *p=publishedVendor();
+  if(p->builtin_)return PluginEditorInputBarrier{p->editIncarnation_,0}; // No vendor HWND or callback source exists.
+  if(!p->backend_)return {};
   const auto token=p->backend_->beginEditorInputBarrier();if(!token)return {};
   return PluginEditorInputBarrier{p->editIncarnation_,*token};
 }
 bool NativePlugin::endEditorInputBarrier(PluginEditorInputBarrier barrier) {
   auto *p=publishedVendor();
+  if(p->builtin_)return barrier.incarnation==p->editIncarnation_&&!barrier.token;
   return barrier.incarnation==p->editIncarnation_&&p->backend_&&p->backend_->endEditorInputBarrier(barrier.token);
 }
 uint64_t NativePlugin::droppedEdits() const noexcept {const auto *p=publishedVendor();return p->backend_?p->backend_->droppedEdits():0;}

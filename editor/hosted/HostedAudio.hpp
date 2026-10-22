@@ -338,7 +338,9 @@ public:
   bool popEdit(PluginEdit &) noexcept;
   bool popEdit(PluginEdit &,PluginEditSource &) noexcept;
   PluginEditSource editSource() const noexcept;
-  std::optional<PluginEditBoundary> editBoundary();
+  // Built-ins have no vendor notification queue. Their native adapter supplies
+  // its original host-clock cut; native backends establish their own cut.
+  std::optional<PluginEditBoundary> editBoundary(uint64_t hostOnlyTime=0);
   std::optional<PluginEditorInputBarrier> beginEditorInputBarrier();
   bool endEditorInputBarrier(PluginEditorInputBarrier);
   PluginEditRead popEditBefore(const PluginEditBoundary &,PluginEdit &,PluginEditSource &) noexcept;

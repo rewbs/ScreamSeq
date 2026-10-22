@@ -1,5 +1,6 @@
 #include "PluginOperations.hpp"
 #include "windows/Plugins/UiOwner.hpp"
+#include "windows/Audio/HostClock.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "RecordedGestureRecovery.hpp"
 #include "editor/RackMove.hpp"
