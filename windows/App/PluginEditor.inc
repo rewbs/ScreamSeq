@@ -198,12 +198,20 @@
         }
     }
     void pluginDiscreteValue(int id) {
+        const auto inputTime=ScreamSeq::hostTime100ns();
         if(settingPluginFields)return;
         if(pluginDraft){syncPluginDiscreteCandidate();throw std::runtime_error("Apply or discard the retained parameter/program draft before changing a control");}
         if(!pluginParameterField.editable()||pluginValueControl()!=id){syncPluginDiscreteCandidate();throw std::runtime_error("This parameter control is unavailable");}
         const auto selected=id==pluginValueToggle?(SendMessageW(controls.at(id),BM_GETCHECK,0,0)==BST_CHECKED?1:0):SendMessageW(controls.at(id),CB_GETCURSEL,0,0);
         if(selected<0||size_t(selected)>=pluginParameterField.choices.size()){syncPluginDiscreteCandidate();throw std::runtime_error("Choose an available parameter value");}
         const auto value=std::to_wstring(selected);
+        if(parameterTakeState.value("retained",false)) {
+            // The hidden numeric field normally emits EN_CHANGE. Present it
+            // under the native guard and capture once at the switch event time.
+            settingPluginFields=true;struct Reset{bool &flag;~Reset(){flag=false;}}reset{settingPluginFields};
+            ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());settingPluginFields=false;
+            pluginFieldChanged(inputTime);syncPluginDiscreteCandidate();return;
+        }
         ScreamSeq::NativeInputGate::text(controls.at(pluginValue),value.c_str());
         if(!pluginDraft)pluginFieldChanged();
         // Capture the catalogue revision, not a newer revision which may have
@@ -284,11 +292,29 @@
         if(api)PostMessageW(window,ScreamSeq::ApiDispatch::message,0,0);
     }
     bool pluginAutoQueued=false,pluginAutoFailed=false;ULONGLONG pluginEditDue=0;bool automaticPluginEdit=false;
-    void pluginFieldChanged() {
+    void pluginFieldChanged(uint64_t inputTime=ScreamSeq::hostTime100ns()) {
         if(settingPluginFields) return;
-        ++pluginDraftGeneration;pluginAutoQueued=true;pluginAutoFailed=false;pluginEditDue=GetTickCount64()+600;SetTimer(window,1,100,nullptr);
+        ++pluginDraftGeneration;
         if(!pluginDraft) {pluginDraft=true;pluginProgramDraft=false;pluginDraftRevision=view->session.revision;pluginDraftTarget=selectedPlugin;pluginDraftParameter=selectedParameter;}
         frameRequested=true;
+        if(parameterTakeState.value("retained",false)) {
+            pluginAutoQueued=false;pluginAutoFailed=false;
+            if(pluginProgramDraft||pluginDraftRevision!=pluginDetailsRevision||pluginDraftTarget!=pluginDetailsTarget||
+                pluginDraftTarget!=selectedPlugin||pluginDraftParameter!=selectedParameter||!pluginParameterField.editable())
+                throw std::runtime_error("Recorded control target changed; original field retained");
+            // Preserve the raw native text/caret. Partial numbers remain drafts;
+            // valid edits are sent immediately, never by the debounce timer.
+            wchar_t text[66]{};GetWindowTextW(controls.at(pluginValue),text,66);wchar_t *end=nullptr;const auto value=wcstod(text,&end);
+            const auto &field=pluginParameterField;
+            if(end==text||*end||!std::isfinite(value)||value<field.minimum||value>field.maximum||
+                (field.kind!=ScreamSeq::PluginParameterField::Kind::Number&&std::floor(value)!=value))
+                throw std::runtime_error("Enter a finite recorded value in the displayed range");
+            captureParameterControl(documentId,selectedPlugin,selectedParameter,value,inputTime);
+            for(auto &parameter:pluginParameters)if(parameter.at("id")==selectedParameter){parameter["value"]=value;parameter["manualValue"]=value;break;}
+            pluginParameterField.value=value;pluginDraft=false;
+            status=L"Recording original parameter input / Stop the take to review";return;
+        }
+        pluginAutoQueued=true;pluginAutoFailed=false;pluginEditDue=GetTickCount64()+600;SetTimer(window,1,100,nullptr);
     }
     template<class Place> void layoutPluginControls(const Place &place) {
         syncPluginRack();const auto r=workspaceMainEditorRect();const bool show=pluginEditorVisible();const auto x=r.x+230,y=r.y;
@@ -443,6 +469,10 @@
             pendingPluginTriggers.erase(selectedPlugin);pluginDetailsRevision.clear();
         } else if(id==pluginApply) {
             pluginAutoQueued=false;
+            if(parameterTakeState.value("retained",false)) {
+                if(pluginDraft)throw std::runtime_error("Correct the recorded field; Retry cannot change its original timestamp");
+                return true;
+            }
             if(pluginDraft&&pluginProgramDraft)throw std::runtime_error("Load or discard the program selection first");
             if(!pluginParameterField.editable())throw std::runtime_error("This parameter is read-only or its metadata is unavailable");
             if(pluginDraft && (pluginDraftRevision!=view->session.revision || pluginDraftTarget!=selectedPlugin || pluginDraftParameter!=selectedParameter))throw ScreamSeq::Api::ApiError(-32001,"The song or target changed. Escape discards the parameter draft; re-enter it against the current state.");

@@ -79,6 +79,11 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    ScreamSeq::ParameterControlDelivery::Submit parameterControlSubmit;
+    std::future<ScreamSeq::Api::CompletedCall> submitParameterControl(const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt)override {
+        if(parameterControlSubmit)return parameterControlSubmit(params,receipt);
+        return Application::submitParameterControl(params,receipt);
+    }
     std::function<void(const std::string &)> sampleMutationCompletion;
     std::function<void(const std::string &,Json &)> sampleReadResult;
     std::function<void()> sampleLibraryCompletionFault;
@@ -1127,6 +1132,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "AutomaticEditsApplicationTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
+#include "ParameterControlDeliveryTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1200,7 +1206,7 @@ int wmain(int argc,wchar_t **argv) {
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
-                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();applicationParameterRecordingAdmission();std::cout<<"PASS native plugin search/value controls, recording admission and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
+                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();applicationParameterRecordingAdmission();parameterControlDeliveryCases();applicationRecordedParameterControls();applicationRecordedRackControls();std::cout<<"PASS native plugin search/value controls, recording admission/delivery and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;

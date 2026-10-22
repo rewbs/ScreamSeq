@@ -613,3 +613,47 @@ No additional build may start before **03:54:48 UTC**. Reuse passing evidence on
 for unchanged inputs; rerun the now-corrected lifecycle and accessibility checks,
 the expanded native admission fixture, and existing shared built-in/gesture gates
 on the next frozen source.
+
+## Original-time native controls (source after 03:30 UTC; not built)
+
+`windows/App/ParameterControlDelivery.hpp` now retains a bounded 1,024-event
+UI-owner queue. Each original event carries document/revision/take/plugin/parameter,
+native value and exact decimal host timestamp. Submission uses the serial worker's
+future and per-call receipt without a native wait or message pump. Collection is
+nonblocking, checks completion identity, and can reconcile a lost callback from its
+receipt. Refused/unknown events remain reviewable; they are never blindly resent.
+Overflow/allocation loss is counted separately and blocks commit. Commit/Discard
+wait for pending submissions; only explicit completed take release clears the queue.
+
+The independent ten-parameter rack windows and main rack fields/switches use this
+path during an internally armed take. Ordinary manual editing retains its existing
+path. Valid typed values preserve raw formatting/caret; partial numbers stay drafts,
+and Retry cannot create a later timestamp. Slider movements are not coalesced into
+the final thumb position. Discrete controls suppress their hidden numeric EN_CHANGE
+to avoid submitting twice. The native timer services worker hooks and completion
+receipts; it does not allocate or wait on the audio callback.
+
+`windows/Tests/Workspace/ParameterControlDeliveryTests.inc` adds deterministic future/
+receipt tests (delayed and out-of-order completion, lost callbacks, identity mismatch,
+late receipts, explicit refusal, exact timestamps above 2^53, capacity and pagination),
+plus actual native parameter-window/rack event-handler checks for text, caret, dense
+sliders, switches, failed drafts, held takes and unchanged manual state/history.
+They join `workspace-plugin-search-tests`; they are source assertions, **not executed
+evidence**. The window tests substitute only capture delivery, not controls; worker
+timing/publication is independently covered by the lifecycle fixtures.
+
+This still-internal workflow must not be exposed in menus or `api.describe` yet.
+Remaining prerequisites: durable review of native refused/unknown/lost inputs;
+fresh take status/presentation after commit/discard; native recording review UI;
+schema/catalogue/guide; actual-app end-to-end recording checks. The current native
+queue is process memory, not crash recovery. Worker-accepted gestures already have
+the separate shared recovery archive. Do not call this complete recording parity.
+
+The `fb228cb3e` Windows x64 CI run `39713958236` has now failed: all 158 worker
+registrations passed; 48/49 native UI registrations passed, with the same external
+UIA focus failure. The audio probe returned an empty device list. Audio-dependent
+actual-app cases then failed to start WASAPI/a valid recording clock (with secondary
+process-liveness assertions). Keep these failures visible; do not weaken or skip
+their required assertions. The owned vendor/lifecycle step also failed and needs
+the corrected-fixture checkpoint. Mac ARM in run `39713958110` passed; Intel was
+still executing the interface harness when last inspected around 03:28 UTC.

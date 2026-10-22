@@ -28,6 +28,7 @@
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginParameterField.hpp"
 #include "PluginParametersWindow.hpp"
+#include "ParameterControlDelivery.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
@@ -580,6 +581,39 @@ public:
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
+    ScreamSeq::ParameterControlDelivery parameterControlDelivery;
+    Json parameterTakeState={{"retained",false},{"capturing",false}};
+    std::string parameterTakeDocument;
+    bool servicingParameterControls=false;
+    bool capturesParameterControl(const std::string &document,const std::string &plugin)const {
+        if(!parameterTakeState.value("retained",false))return false;
+        if(parameterTakeDocument!=document||documentId!=document||!parameterTakeState.value("capturing",false)||
+            !parameterTakeState.value("compatible",false)||parameterTakeState.value("failure",0u)||
+            parameterTakeState.value("baseRevision",std::string())!=view->session.revision||parameterControlDelivery.needsReview())
+            throw std::runtime_error("Review or finish the retained parameter recording before editing controls");
+        for(const auto &source:parameterTakeState.at("sources"))if(source.at("plugin")==plugin)return true;
+        throw std::runtime_error("This plugin is not armed in the retained parameter recording");
+    }
+    virtual std::future<ScreamSeq::Api::CompletedCall> submitParameterControl(const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt) {
+        return controller->invokeCompleted("automation.recording.capture",params,receipt);
+    }
+    void captureParameterControl(const std::string &document,const std::string &plugin,uint32_t parameter,double value,uint64_t timestamp) {
+        if(parameterRecordingInput||departureInput||!capturesParameterControl(document,plugin))
+            throw std::runtime_error("Parameter recording is not accepting this input");
+        parameterControlDelivery.enqueue({document,parameterTakeState.at("baseRevision").get<std::string>(),parameterTakeState.at("take").get<std::string>(),plugin,parameter,value,timestamp},
+            [this](const Json &params,const auto &receipt){return submitParameterControl(params,receipt);});
+        SetTimer(window,11,20,nullptr);
+    }
+    void serviceParameterControlDelivery() {
+        if(busy||servicingParameterControls)return;
+        servicingParameterControls=true;struct Reset{bool &value;~Reset(){value=false;}}reset{servicingParameterControls};
+        try {
+            if(parameterControlDelivery.pending())controller->service();
+            parameterControlDelivery.collect();
+            if(parameterControlDelivery.needsReview())status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+            if(!parameterControlDelivery.pending())KillTimer(window,11);
+        }catch(const std::exception &e){status=wide(e.what());}
+    }
     std::unique_ptr<ScreamSeq::NativeInputGate> parameterRecordingInput;
     static bool parameterRecordingBoundary(const std::string &method) {
         return method=="automation.recording.start"||method=="automation.recording.stop"||
@@ -598,10 +632,17 @@ public:
             if(app.parameterRecordingInput||app.departureInput||GetCapture())
                 throw ScreamSeq::Api::ApiError(-32002,"Finish the current drag or state change before changing parameter recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             if(method=="automation.recording.start") {
+                if(app.parameterControlDelivery.retained()||app.parameterControlDelivery.lost())
+                    throw std::runtime_error("Review the retained original parameter input before starting another take");
                 if(app.pluginDraft)throw ScreamSeq::Api::ApiError(-32002,"Finish the retained rack parameter or program edit before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
                 for(const auto &[id,editor]:app.graphPluginParameters)if(editor&&!editor->retired()&&editor->retainedDraft())
                     throw ScreamSeq::Api::ApiError(-32002,"Finish the retained parameter controls before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             }
+            app.parameterControlDelivery.collect();
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&app.parameterControlDelivery.pending())
+                throw std::runtime_error("Wait for original parameter input delivery before finishing the take");
+            if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview())
+                throw std::runtime_error("Original parameter input was refused or uncertain; review it before committing the take");
             // Freeze raw native fields through worker admission, baseline
             // restoration and readback. Release musical keys before filtering
             // their queued key-ups; do not disable/recreate the focused field.
@@ -662,6 +703,10 @@ public:
     // Keep presentation/recovery completion separate from worker success. The
     // owned native fixture injects faults here after the real worker has run.
     virtual void finishDocumentOperation(const std::string &method,const Json &result) {
+        if(method.starts_with("automation.recording.")&&result.is_object()&&result.contains("retained")) {
+            parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>())parameterControlDelivery.release();
+        }
         refreshDocument();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
         // A dropped vendor editor never blocks the operation; say what happened.
@@ -1113,7 +1158,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_MENUSELECT:if(HIWORD(wp)!=0xFFFF&&!(HIWORD(wp)&MF_POPUP))app->menuBarHint(LOWORD(wp));break;
         case WM_CANCELMODE:app->menuArmed=false;app->endMenuBar();break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();if(wp==11)app->serviceParameterControlDelivery();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);

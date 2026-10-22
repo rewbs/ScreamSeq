@@ -2,6 +2,7 @@
 #include "NativeToolWindow.hpp"
 #include "NativeWriteCompletion.hpp"
 #include "PluginParameterField.hpp"
+#include "../Audio/HostClock.hpp"
 #include <set>
 
 namespace ScreamSeq {
@@ -21,6 +22,27 @@ class PluginParametersWindow final : public NativeToolWindow {
   std::wstring appliedSearch_;
   int pages()const{return std::max(1,int((filtered_.size()+pageSize-1)/pageSize));}
   Request request_;Context context_;NativeWriteCompletion::Write write_;std::function<bool()> available_;
+  std::function<bool()> recording_;
+  std::function<void(uint32_t,double,uint64_t)> capture_;
+  bool recording()const{return recording_&&recording_();}
+  void recordControl(int row,double candidate,uint64_t timestamp,bool typed=false) {
+    auto &r=rows_.at(size_t(row));const auto &f=r.field;
+    if(!capture_||!f.editable()||!std::isfinite(candidate)||candidate<f.minimum||candidate>f.maximum||
+        (f.kind!=PluginParameterField::Kind::Number&&std::floor(candidate)!=candidate))
+      throw std::runtime_error("Enter a writable parameter value in the displayed range");
+    const auto id=parameters_.at(size_t(r.index)).at("id").get<uint32_t>();
+    r.dirty=true;
+    capture_(id,candidate,timestamp); // Enqueue only; never pump or await here.
+    setting_=true;struct ResetSetting{bool &value;~ResetSetting(){value=false;}}resetSetting{setting_};
+    if(!typed)set(control(row,value),Json(candidate));
+    if(f.kind==PluginParameterField::Kind::Toggle)set(control(row,toggle),wide(f.choices.at(size_t(candidate))));
+    else if(f.kind==PluginParameterField::Kind::Choice)NativeInputGate::present(controls_.at(control(row,choices)),CB_SETCURSEL,WPARAM(candidate));
+    else if(f.maximum>f.minimum)NativeInputGate::present(controls_.at(control(row,slider)),TBM_SETPOS,TRUE,LPARAM(std::lround((candidate-f.minimum)/(f.maximum-f.minimum)*10000)));
+    setting_=false;
+    parameters_[size_t(r.index)]["value"]=candidate;parameters_[size_t(r.index)]["manualValue"]=candidate;
+    r.field.value=candidate;r.dirty=false;++generation_;
+    status(L"Recording original parameter input / Stop the take to review");
+  }
   std::string plugin_,graph_,node_,document_,revision_;Json parameters_=Json::array(),report_,submitted_;
   Json target()const{return graph_.empty()?Json{{"plugin",plugin_}}:Json{{"graph",graph_},{"node",node_}};}
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
@@ -163,6 +185,9 @@ class PluginParametersWindow final : public NativeToolWindow {
   });}
   void commit(){
     cancelAutomaticEdit();requireReady();if(!dirty())return;
+    // Valid recording input was already submitted at its original event time.
+    // A retained partial/failed edit must never become a later manual write.
+    if(recording())throw std::runtime_error("Correct the retained value while recording; it cannot be retried with a new timestamp");
     if(context_()!=std::pair(document_,revision_))throw std::runtime_error("Song changed / parameter text retained. Reload before applying");
     Json values=Json::array(),raw=Json::array();
     for(int i=0;i<pageSize;++i)if(rows_[i].dirty){const auto &r=rows_[i];const auto &f=r.field;if(!f.editable()||r.index<0)throw std::runtime_error("This parameter is read-only or unavailable");
@@ -196,12 +221,17 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(page<0||page>=pages())return;page_=page;++generation_;presentPage();
   }
   void action(int id,unsigned notification)override{
+    const auto inputTime=hostTime100ns();
     if(setting_)return;if(id==close){hide();return;}
     const int row=(id-rowBase)/stride,part=(id-rowBase)%stride;
     const bool rowControl=id>=rowBase&&row<pageSize&&rows_[row].index>=0;
-    if(rowControl&&part==value&&notification==EN_CHANGE){rows_[row].dirty=true;++generation_;queueTypedEdit();return;}
+    if(rowControl&&part==value&&notification==EN_CHANGE){
+      rows_[row].dirty=true;++generation_;
+      if(recording()) {cancelAutomaticEdit();recordControl(row,number(id),inputTime,true);}
+      else queueTypedEdit();return;
+    }
     if(pending_)return;
-    if(id==reload&&notification==BN_CLICKED){if(completion_.retained())review();else load();return;}requireReady();
+    if(id==reload&&notification==BN_CLICKED){if(recording())throw std::runtime_error("Stop and finish the parameter take before reloading its controls");if(completion_.retained())review();else load();return;}requireReady();
     if(id==search&&notification==EN_CHANGE){
       if(dirty()){flushAutomaticEdit();if(dirty())throw std::runtime_error("Correct or reload unsaved values before searching / current page retained");}
       ++generation_;filterParameters(true);status(std::to_wstring(filtered_.size())+L" of "+std::to_wstring(parameters_.size())+L" parameters / Ctrl+Page Up or Down changes page");return;
@@ -216,14 +246,23 @@ class PluginParametersWindow final : public NativeToolWindow {
       if(part==choices){const auto i=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);if(i<0||size_t(i)>=f.choices.size())throw std::runtime_error("Choose an available parameter value");candidate=double(i);}
       else if(part==toggle)candidate=f.value==0?1:0;
       else{const auto step=f.step>0?f.step:(f.maximum-f.minimum)/100;candidate=std::clamp(candidate+(part==more?step:-step),f.minimum,f.maximum);}
+      if(recording()){recordControl(row,candidate,inputTime);return;}
       setting_=true;set(control(row,value),Json(candidate));setting_=false;r.dirty=true;++generation_;commit();
     }
   }
   bool controlScroll(UINT message,WPARAM event,HWND child)override{
+    const auto inputTime=hostTime100ns();
     const int id=GetDlgCtrlID(child),row=(id-rowBase)/stride;
     if(message!=WM_HSCROLL||id<rowBase||row>=pageSize||(id-rowBase)%stride!=slider)return false;
     const auto code=LOWORD(event);
     if(setting_)return true;
+    if(recording()) {
+      if(code==TB_ENDTRACK)return true;
+      if(dirty())throw std::runtime_error("Correct the retained parameter text before moving a slider");
+      auto candidate=sliderValue(row);const auto &f=rows_[row].field;
+      if(code==TB_LINEUP||code==TB_LINEDOWN){const auto step=f.step>0?f.step:(f.maximum-f.minimum)/100;candidate=std::clamp(f.value+(code==TB_LINEUP?-step:step),f.minimum,f.maximum);}
+      recordControl(row,candidate,inputTime);return true;
+    }
     if(pending_){if(code==TB_ENDTRACK&&sliderRow_==row){sliderEndPending_=true;SetTimer(window_,8,1,nullptr);}return true;}
     requireReady();auto &r=rows_[row];const auto &f=r.field;
     if(!f.editable()||f.kind!=PluginParameterField::Kind::Number||f.maximum<=f.minimum)return true;
@@ -266,6 +305,9 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
 public:
+  void recording(std::function<bool()> active,std::function<void(uint32_t,double,uint64_t)> capture) {
+    recording_=std::move(active);capture_=std::move(capture);
+  }
   PluginParametersWindow(HWND owner,std::string plugin,std::string name,Request request,Context context,NativeWriteCompletion::Write write,std::function<bool()> available,std::string graph={},std::string node={}):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),write_(std::move(write)),available_(std::move(available)),plugin_(std::move(plugin)),graph_(std::move(graph)),node_(std::move(node)){
     if(graph_.empty()!=node_.empty()||plugin_.empty()==graph_.empty())throw std::invalid_argument("Parameter editor requires one rack identity or graph/node pair");
     const auto captured=context_();document_=captured.first;revision_=captured.second;minimumClientWidth_=620;minimumClientHeight_=650;
