@@ -266,9 +266,16 @@ class SongRoutingWindow final:public NativeToolWindow {
   }
   void mouse(UINT message,float x,float y,WPARAM keys)override{
     pointer_={x,y};if(message==WM_CAPTURECHANGED){drag_=0;return;}if(pending_||unresolved()||readbackNeedsReload_)return;
-    if(message==WM_LBUTTONDBLCLK&&canvas_.viewport.contains(x,y)){if(canvas_.socketAt(x,y).first>=0)return;drag_=0;ReleaseCapture();clean();if(const auto i=canvas_.nodeAt(x,y);i>=0){selectNode(canvas_.nodes[size_t(i)].id);action(open,BN_CLICKED);}return;}
+    if(message==WM_LBUTTONDBLCLK&&canvas_.viewport.contains(x,y)){
+      const auto i=canvas_.nodeAt(x,y);
+      if(canvas_.overviewScale()&&i>=0){clean();drag_=0;ReleaseCapture();selectNode(canvas_.nodes[size_t(i)].id);canvas_.focus(selected_,filter_);requestPaint();return;}
+      if(canvas_.socketAt(x,y).first>=0)return;drag_=0;ReleaseCapture();clean();if(i>=0){selectNode(canvas_.nodes[size_t(i)].id);action(open,BN_CLICKED);}return;}
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)){SetFocus(window_);
       if(keys&MK_CONTROL){clean();if(const auto i=canvas_.nodeAt(x,y);i>=0){selectNode(canvas_.nodes[size_t(i)].id);action(open,BN_CLICKED);}return;}
+      if(canvas_.overviewScale())if(const auto i=canvas_.nodeAt(x,y);i>=0){
+        clean();selectNode(canvas_.nodes[size_t(i)].id);drag_=0;
+        status(L"Stage selected / Home or double-click for readable editing");return;
+      }
       if(wire_>=0&&!canvas_.edges.at(size_t(wire_)).action.empty()){
         const auto &edge=canvas_.edges.at(size_t(wire_));const auto h=edge.points[28];
         if(std::hypot(x-h.x,y-h.y)<=7){clean();dragNode_=edge.source;dragStart_={x,y};drag_=4;SetCapture(window_);requestPaint();return;}
@@ -315,6 +322,7 @@ class SongRoutingWindow final:public NativeToolWindow {
     if(!ready_)return;const auto [w,h]=size();const float x=w-322,cw=306;
     if(compact()&&!wasCompact_){const auto focus=GetFocus();for(int id:{nodePicker,wirePicker,kind,source,destination,gain,input,output,page,insertPicker,effectPicker,graphPicker,amount,wet,inputPorts,outputPorts})if(focus==controls_.at(id))inspector_=true;}
     wasCompact_=compact();
+    set(addGroup,compact()?L"+ Group":L"Add group");set(addReturn,compact()?L"+ Return":L"Add return");
     if(!compact()){canvasViewport({12,82,w-352,h-170});
     place(filter,12,12,220,240);place(enable,240,12,114,26);place(addEffect,362,12,124,26);place(addGroup,494,12,90,26);place(addReturn,592,12,90,26);place(reload,w-226,12,120,26);place(close,w-98,12,86,26);
     place(fit,12,46,62,26);place(zoomOut,80,46,32,26);place(zoomIn,118,46,32,26);place(arrange,158,46,82,26);place(saveLayout,248,46,108,26);place(removeNode,364,46,112,26);place(title,x,48,cw,24);

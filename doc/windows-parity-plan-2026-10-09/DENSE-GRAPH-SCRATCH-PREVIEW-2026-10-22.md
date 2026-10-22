@@ -92,3 +92,59 @@ fixture codec/exchange evidence can be reused with an explicit input comparison.
 Do not merge this branch until required shared/native gates and the new Windows
 checks pass. Broader parity, including complete recording UI/API and live take
 release, remains unfinished.
+
+## Frozen da8c89f07 checkpoint, 22 October 17:10–17:34 UTC
+
+The ARM64 Release build succeeded from
+`da8c89f07d0d586086e028e1f1db6cd9b25df083`. Executable SHA256:
+`fbb88581c367e3724f0351963c21627d4c6e51bc4ede22e246a82265b08cc7cb`.
+All 13 selected native registrations passed. The first 29-case actual-app run
+had 17 failures: the legacy routing finder enumerated only top-level windows,
+but ordinary navigation now opens a docked descendant. No musical assertions
+were reached in those failing cases. The original failed receipts are retained.
+
+Fixture correction 90787eeb5 enumerates both desktop roots and descendants,
+keeps the exactly-one-window assertion, and explicitly floats legacy routing
+fixtures after verifying the ordinary dock action. The new dense-layout case
+still tests the dock. Replaying the routing/recording cases against the unchanged
+executable passed 21, skipped unavailable installed Surge XT, and failed one
+old single-row toolbar assumption. The compact toolbar intentionally wraps.
+The corrected bounds case checks every visible compact control, window bounds
+and pairwise overlap across all rows; it passed on that same binary. It is
+committed in 2f89631d3. Combining these bounded replays gives **28 unique app
+cases passed, one provider skip**, not a new all-green original run or CI result.
+`bin/mac-gesture-20261022/stopped-repair-framing/bounded-results.json` lists
+each case's evidence and hashes. No extra build was run for fixture corrections.
+
+Fresh Computer Use on isolated PID44912, silent F04 at 48 kHz/480 frames,
+observed readable initial graph stages, native View menu, complete overview,
+selected Home focus, raw gain typing, Tab/Shift+Tab and Backspace, retained
+Float/Dock and maximize/restore. A motion point moved from .5/100% to
+.625/71.4656%; release, Main Undo and Redo showed the correct smooth curve.
+The private copy was saved. Undo/Redo reset point selection; no selection
+retention claim is made. The helper activates Main for keyboard input, so this
+does not qualify floating typing continuity. A corner drag did not resize the
+window; arbitrary resize remains unqualified in this visible run. Screenshots
+do not establish absence of transient flashes or intermediate drag-frame pacing.
+Closing correctly warned about the intentionally incomplete routing draft;
+Cancel retained it. No musician process or audio defaults were touched.
+
+The visible check also found two unbuilt corrections: compact Add group/return
+labels truncate, and fixed socket hit regions swallow tiny overview bodies.
+The next source uses **+ Group / + Return** in compact layout and gives body
+selection priority below 15% zoom. At that overview scale a body drag does not
+edit routing/layout; Home or double-click focuses the selected stage for
+readable editing, with a status hint. Normal-scale socket editing and explicit
+Ctrl-click inspection remain intact. Native and actual-app cases exercise the
+overlapping hit targets, absence of unintended edits, double-click focus and
+unchanged song/history. These corrections await the next build.
+
+Mac ARM job119969861549 failed compiling a new test that called private
+`RecordedGestureCapture::sameBaseline`. 2f89631d3 replaces that call with an
+independent, bit-exact point comparison; it does not widen production access or
+weaken preservation. Both Mac architectures still need successful execution.
+Windows run39820404888 and Mac run39820404224 must be inspected for terminal
+results. No CI job was restarted. The latest coordinated build start was
+17:11:23 UTC; **no next build before 18:11:23 UTC / 11:11:23 Pacific**.
+Do not package or merge this candidate as fully qualified while these gates
+remain unresolved. The preceding 077e ARM64 package remains available.

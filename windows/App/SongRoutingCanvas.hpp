@@ -103,6 +103,9 @@ struct SongRoutingCanvas {
     zoom=1;panX=viewport.w/2-(n.x+92);panY=viewport.h/2-(n.y+34);geometry();
   }
   int nodeAt(float x,float y)const{for(size_t i=nodes.size();i>0;--i)if(nodes[i-1].rect.contains(x,y))return int(i-1);return -1;}
+  // At overview scale the fixed socket hit radius can cover an entire stage.
+  // Give its body selection priority; focus it before making precise edits.
+  bool overviewScale()const noexcept{return zoom<.15f;}
   std::pair<int,bool> socketAt(float x,float y)const{for(size_t i=nodes.size();i>0;--i){const auto &r=nodes[i-1].rect;const auto cy=r.y+r.h/2;if(std::abs(y-cy)>9)continue;if(std::abs(x-r.x-r.w)<=9)return {int(i-1),true};if(std::abs(x-r.x)<=9)return {int(i-1),false};}return {-1,false};}
   int edgeAt(float x,float y)const{float best=7;int found=-1;for(size_t i=0;i<edges.size();++i)if(edges[i].bounds.contains(x,y))for(size_t j=1;j<edges[i].points.size();++j){auto d=GraphCanvas::distance({x,y},edges[i].points[j-1],edges[i].points[j]);if(d<best){best=d;found=int(i);}}return found;}
   Json snapshot()const{Json ns=Json::array(),es=Json::array();for(const auto &n:nodes)ns.push_back({{"id",n.id},{"stageRole",roleName(n.role)},{"canEditInserts",n.canEditInserts()},{"canAssignGraph",n.canAssignGraph()},{"bus",n.bus},{"plugin",n.plugin},{"graph",n.graph},{"instrument",n.instrument},{"x",n.x},{"y",n.y},{"rect",{n.rect.x,n.rect.y,n.rect.w,n.rect.h}}});for(const auto &e:edges)es.push_back({{"source",e.source},{"target",e.target},{"action",e.action},{"enabled",e.enabled},{"midpoint",{e.points[16].x,e.points[16].y}},{"targetHandle",{e.points[28].x,e.points[28].y}}});return {{"nodes",ns},{"edges",es},{"viewport",{viewport.x,viewport.y,viewport.w,viewport.h}},{"zoom",zoom}};}

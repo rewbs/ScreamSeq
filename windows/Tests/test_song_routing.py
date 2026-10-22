@@ -326,6 +326,17 @@ class SongRoutingTests(unittest.TestCase):
         self.choose_node(3802,target);self.desktop.send(self.window(),0x111,3848,0);self.idle()
         self.assertEqual(self.local()['canvas']['zoom'],1);contained(self.node(target))
         self.assertEqual(self.node(target)['rect'][2:], [184,68]);self.assertEqual(self.local()['selected'],target)
+        for _ in range(10):self.press(3817)
+        self.choose_node(3802,first)
+        self.assertNotEqual(self.local()['selected'],target)
+        small=self.local()['canvas'];x,y,w,h=self.node(target)['rect'];self.assertLess(w,20)
+        scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,0 if message==0x202 else 1,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        mouse(0x201,x+w/2,y+h/2);mouse(0x200,x+w/2+20,y+h/2+20);mouse(0x202,x+w/2,y+h/2);self.idle()
+        self.assertEqual(self.local()['selected'],target);self.assertFalse(self.local()['draft']);self.assertFalse(self.local()['layoutDraft'])
+        self.assertEqual(self.local()['canvas'],small)
+        mouse(0x203,x+w/2,y+h/2);mouse(0x202,x+w/2,y+h/2);self.idle()
+        self.assertEqual(self.local()['canvas']['zoom'],1);contained(self.node(target))
         self.assertEqual(self.doc(),before);self.assertEqual(self.read('graph.get',includeState=False),saved)
         self.record('dense-routing-framing',canvas=self.local()['canvas'],graph=saved)
 

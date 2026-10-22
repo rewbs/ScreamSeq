@@ -8,6 +8,26 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 17:34 UTC follow-up (supersedes the build gate below):** main is
+still 0fe8f3400. PR#7 `codex/mac-gesture-intake` is frozen at da8c89f07.
+Local ARM64 build passed 13 native registrations; bounded same-binary app
+replays total 28 unique passes and one unavailable-provider skip. Original
+failed finder/toolbar receipts remain. Fresh Computer Use verified readable
+graph framing, keyboard text/focus, retained Float/Dock and maximize/restore,
+and scratch drag/release plus Undo/Redo curves. It found compact label clipping
+and tiny overview hit targets; corrections and native/app regressions are now
+source-only. Mac ARM failed a private-helper call in a test; the independent
+bit-exact assertion correction is also source-only. See
+[dense graph/scratch evidence](DENSE-GRAPH-SCRATCH-PREVIEW-2026-10-22.md).
+No merge or new production package yet. The next coordinated build is no
+earlier than **18:11:23 UTC / 11:11:23 Pacific**; inspect
+`stopped-repair-framing/ci-checkpoint.json` before dispatch. Do not repeat the
+recorded da8c build or restart its CI. Back up ongoing commits on
+`codex/mac-gesture-next-checkpoint`, not the frozen PR branch, between gates.
+The unbuilt device-level opaque repair wrapper still needs retained cleanup
+integration before enabling replacement in the native take/session. Real Mac
+device-session, both architecture and reciprocal preservation gates remain.
+
 **22 October 16:12UTC integration checkpoint:** PR#6 was merged at
 `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, with exactly the qualified077e tree.
 Both local main and this temporary source branch now include that merge. Mac

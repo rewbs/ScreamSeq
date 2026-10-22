@@ -9,6 +9,7 @@
 #include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
+#include <algorithm>
 #include <cmath>
 #include <bit>
 #include <filesystem>
