@@ -7,6 +7,7 @@
 #include "../Session/LiveParameterPublication.hpp"
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
+#include "PresentationBackoff.hpp"
 #include "ApiDispatch.hpp"
 #include "ModuleExportDialog.hpp"
 #include "WorkspaceState.hpp"
@@ -259,6 +260,7 @@ public:
     bool silentOutput=false; // Explicit diagnostic mode; DSP still runs in full.
     bool frameRequested=true;
     uint64_t idleWaits=0;
+    ScreamSeq::PresentationBackoff presentationBackoff;
 	unsigned patternIndex = 0, row = 0, channel = 0, column = 0, firstRow = 0;
 	std::wstring status = L"Ready / demo document / no unsaved user song";
 
@@ -291,7 +293,8 @@ public:
 			{"frames",t.frames},{"callbacks",audio.callbackCount},{"overruns",audio.deadlineOverruns},
 			{"maxMicros",audio.maxCallbackNanoseconds / 1000.0},{"fault",preparedPlayback && preparedPlayback->failed()}};
         result.transport["audioActive"]=device.running();result.transport["audition"]=device.running()&&auditionOnly;result.transport["auditionDropped"]=auditionDropped;result.transport["playbackEpoch"]=stopGeneration;
-        result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits}};
+        result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits},
+            {"occluded",presentationBackoff.occluded()},{"occlusionBackoffs",presentationBackoff.count()}};
         result.transport["faultDetails"]=preparedPlayback?preparedPlayback->failureDiagnostics():Json(nullptr);
         const auto clock=device.clockStatus();
         result.transport["recordingClock"]={{"valid",clock.valid},{"generation",clock.generation},{"lastHostTime",std::to_string(clock.lastHostTime)},
@@ -1115,6 +1118,7 @@ public:
 			return;
 		}
 		if(result == DXGI_STATUS_OCCLUDED) ++occluded;
+        presentationBackoff.presented(result==DXGI_STATUS_OCCLUDED,GetTickCount64());
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
 		previousSubmit = now;
@@ -1128,6 +1132,7 @@ public:
 		out << std::setprecision(12) << "{\"durationSeconds\":" << seconds << ",\"drawnFrames\":" << cpuDraw.size()
             << ",\"textCacheEntries\":" << surface->textCacheSize() << ",\"textCacheHits\":" << surface->textHits() << ",\"textCacheMisses\":" << surface->textMisses()
             << ",\"idleWaits\":" << idleWaits
+            << ",\"occlusionBackoffs\":" << presentationBackoff.count()
 			<< ",\"occludedFrames\":" << occluded << ",\"sustainedPresentationQualified\":false"
 			<< ",\"cpuDrawP99Micros\":" << (sorted.empty() ? 0 : sorted[static_cast<size_t>(std::ceil(sorted.size() * .99)) - 1])
 			<< ",\"audio\":{\"sampleRate\":" << lastRate << ",\"periodFrames\":" << lastPeriod
@@ -1153,7 +1158,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	if(!app) return DefWindowProcW(window, message, wp, lp);
     if(message==WM_PAINT || message==WM_SIZE || message==WM_DPICHANGED || message==WM_SETFOCUS || message==WM_KILLFOCUS ||
        message==WM_COMMAND || message==WM_KEYDOWN || message==WM_SYSKEYDOWN || message==WM_LBUTTONDOWN || message==WM_LBUTTONUP ||
-       message==WM_MOUSEWHEEL || (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) app->frameRequested=true;
+       message==WM_MOUSEWHEEL || message==WM_SHOWWINDOW || message==WM_ACTIVATEAPP || message==WM_ACTIVATE ||
+       (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) {app->frameRequested=true;app->presentationBackoff.resume();}
 	try {
 		switch(message) {
 		case WM_GETOBJECT: if(static_cast<LONG>(lp)==UiaRootObjectId&&app->patternAccessibility)return app->patternAccessibility->object(wp,lp);break;
@@ -1390,7 +1396,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, app.rulerFuture.valid()?25:drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            const auto wait=app.presentationBackoff.waitMilliseconds(GetTickCount64(),app.rulerFuture.valid()?25:drawFailures?100:1000);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }

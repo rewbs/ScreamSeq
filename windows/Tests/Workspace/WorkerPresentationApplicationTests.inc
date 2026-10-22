@@ -1,8 +1,29 @@
 // Exercise real await/message pumping and native presentation separately from
 // worker admission. No hardware or timing-dependent fast worker is required.
 void applicationWorkerPresentation(){
+    {
+        ScreamSeq::PresentationBackoff pacing;
+        restoreCheck(pacing.ready(100)&&pacing.waitMilliseconds(100,1000)==1000,"Visible presentation acquired an artificial redraw delay");
+        pacing.presented(true,100);
+        restoreCheck(pacing.occluded()&&!pacing.ready(349)&&pacing.ready(350)&&pacing.count()==1,
+            "Occluded frame did not retain the bounded retry deadline");
+        restoreCheck(pacing.waitMilliseconds(100,1000)==250&&pacing.waitMilliseconds(100,25)==25&&pacing.waitMilliseconds(349,1000)==1,
+            "Occlusion wait delayed earlier service or missed its retry deadline");
+        pacing.presented(true,350);
+        restoreCheck(!pacing.ready(599)&&pacing.ready(600)&&pacing.count()==2,"Repeated occlusion reset to full-rate painting");
+        pacing.resume();restoreCheck(pacing.ready(351)&&!pacing.occluded()&&pacing.count()==2,"Native input did not release the redraw backoff immediately");
+        pacing.presented(true,600);pacing.presented(false,601);
+        restoreCheck(pacing.ready(601)&&!pacing.occluded(),"Successful presentation retained the hidden-window delay");
+        pacing.presented(true,UINT64_MAX-10);restoreCheck(!pacing.ready(UINT64_MAX-1)&&pacing.ready(UINT64_MAX),"Redraw deadline overflowed");
+    }
     RestoreFixture fixture;auto &app=*fixture.app;
     app.command(mixerCommand);SetFocus(app.window);app.refreshContextPanel();
+    app.frameRequested=true;app.presentationBackoff.presented(true,100);
+    restoreCheck(!app.presentationNeeded(100),"Application ignored occlusion pacing while a redraw was pending");
+    SendMessageW(app.window,WM_TIMER,0,0);
+    restoreCheck(app.presentationBackoff.occluded(),"A service-only timer canceled occlusion backoff");
+    SendMessageW(app.window,WM_PAINT,0,0);
+    restoreCheck(app.presentationNeeded(100)&&!app.presentationBackoff.occluded(),"Native repaint did not resume the retained workspace immediately");
     const auto action=app.controls.at(contextActionFirst);
     restoreCheck(IsWindowEnabled(action),"Mixer context action unavailable before worker wait");
     {

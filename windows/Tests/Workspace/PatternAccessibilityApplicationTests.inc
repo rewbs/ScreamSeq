@@ -1,6 +1,52 @@
 template<typename T,typename U>ScreamSeq::ComPtr<T> accessibleInterface(U *source) {
     ScreamSeq::ComPtr<T> result;ScreamSeq::check(source->QueryInterface(IID_PPV_ARGS(&result)),"Query accessibility interface");return result;
 }
+void verifyNativeFocusField(IUIAutomationElement *focused,HWND expected,const std::wstring &expectedText) {
+    restoreCheck(focused!=nullptr,"UIA lost focused native field");
+    UIA_HWND handle{};ScreamSeq::check(focused->get_CurrentNativeWindowHandle(&handle),"Read focused native HWND");
+    restoreCheck(reinterpret_cast<HWND>(handle)==expected,"UIA returned a different HWND instead of the focused native field");
+    ScreamSeq::ComPtr<IUIAutomationValuePattern> value;
+    ScreamSeq::check(focused->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)),"Focused field retained its native Value pattern");
+    BSTR text=nullptr;ScreamSeq::check(value->get_CurrentValue(&text),"Read focused native edit value");
+    const bool sameValue=(text?std::wstring_view(text,SysStringLen(text)):std::wstring_view())==expectedText;SysFreeString(text);
+    restoreCheck(sameValue,"Focus handoff changed or concealed the native edit value");
+    ScreamSeq::ComPtr<IUIAutomationTextPattern> pattern;
+    ScreamSeq::check(focused->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&pattern)),"Focused field retained native Text/selection support");
+    ScreamSeq::ComPtr<IUIAutomationTextRangeArray> selected;
+    ScreamSeq::check(pattern->GetSelection(&selected),"Read focused native text selection");
+    restoreCheck(bool(selected),"Focus handoff omitted native text selection");
+}
+// Read-only foreground gate, explicitly separate from never-switched private
+// desktop fixtures. Computer Use must focus the QA field before invoking this;
+// this mode never launches an app, activates a window or supplies input.
+void inspectForegroundNativeFocus(DWORD pid,HWND root,HWND field) {
+    DWORD rootPid=0,fieldPid=0;const auto rootThread=GetWindowThreadProcessId(root,&rootPid);
+    const auto fieldThread=GetWindowThreadProcessId(field,&fieldPid);
+    restoreCheck(pid&&rootThread&&fieldThread==rootThread&&rootPid==pid&&fieldPid==pid,"Foreground focus target is not the specified QA process");
+    auto owner=GetAncestor(field,GA_ROOT);
+    for(unsigned depth=0;owner&&owner!=root&&depth<64;++depth)owner=GetWindow(owner,GW_OWNER);
+    restoreCheck(owner==root&&field!=root,"Foreground field is not owned by the specified QA Main window");
+    GUITHREADINFO native{sizeof(native)};restoreCheck(GetGUIThreadInfo(fieldThread,&native)&&native.hwndFocus==field,"QA native keyboard focus differs from the requested field");
+    ScreamSeq::check(CoInitializeEx(nullptr,COINIT_MULTITHREADED),"Initialize foreground UIA observer");
+    struct Com{~Com(){CoUninitialize();}}com;
+    ScreamSeq::ComPtr<IUIAutomation2> client;ScreamSeq::check(CoCreateInstance(CLSID_CUIAutomation8,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&client)),"Create foreground UIA observer");
+    ScreamSeq::check(client->put_ConnectionTimeout(3000),"Bound foreground UIA connection");
+    ScreamSeq::check(client->put_TransactionTimeout(3000),"Bound foreground UIA transaction");
+    ScreamSeq::ComPtr<IUIAutomationElement> direct,focused;
+    ScreamSeq::check(client->ElementFromHandle(field,&direct),"Read expected foreground field");
+    ScreamSeq::ComPtr<IUIAutomationValuePattern> value;
+    ScreamSeq::check(direct->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)),"Read expected foreground Value pattern");
+    BSTR text=nullptr;ScreamSeq::check(value->get_CurrentValue(&text),"Read expected foreground value");
+    const std::wstring expectedText=text?std::wstring(text,SysStringLen(text)):L"";SysFreeString(text);
+    ScreamSeq::check(client->GetFocusedElement(&focused),"Read actual global UIA keyboard focus");
+    verifyNativeFocusField(focused.Get(),field,expectedText);
+    BOOL hasFocus=FALSE;ScreamSeq::check(focused->get_CurrentHasKeyboardFocus(&hasFocus),"Read global UIA focus property");
+    restoreCheck(hasFocus!=FALSE,"Global UIA element did not advertise keyboard focus");
+    restoreCheck(GetGUIThreadInfo(fieldThread,&native)&&native.hwndFocus==field,"QA focus moved during the read-only assertion");
+    std::cout<<RestoreJson{{"status","passed"},{"pid",pid},{"root",reinterpret_cast<uintptr_t>(root)},
+        {"field",reinterpret_cast<uintptr_t>(field)},{"globalFocusExact",true},{"nativeFocusExact",true},
+        {"valuePattern",true},{"textPattern",true},{"selection",true},{"readOnly",true}}.dump()<<std::endl;
+}
 void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
     // UIA clients run on an MTA worker; the main STA pumps normal messages. This
     // exercises WM_GETOBJECT, UIA marshaling and native/virtual child merging.
@@ -23,32 +69,14 @@ void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
         ScreamSeq::check(field->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&originalValue)),"Read native edit Value pattern before focus handoff");
         BSTR originalText=nullptr;ScreamSeq::check(originalValue->get_CurrentValue(&originalText),"Read native edit before focus handoff");
         const std::wstring expectedText=originalText?std::wstring(originalText,SysStringLen(originalText)):L"";SysFreeString(originalText);
-        // Query through the external UIA client, not only GetFocus in the app.
-        // A custom grid root must not conceal ordinary native field focus.
+        // Exercise marshaled focus and native patterns on the private desktop.
+        // Global GetFocusedElement observes the input desktop, not this one;
+        // its exact-HWND assertion lives in the mandatory foreground gate above.
         ScreamSeq::check(field->SetFocus(),"Focus named native field through UIA");
-        ScreamSeq::ComPtr<IUIAutomationElement> focused;ScreamSeq::check(client->GetFocusedElement(&focused),"Read actual UIA keyboard focus");
-        UIA_HWND focusedHandle{};restoreCheck(bool(focused),"UIA lost focused native field");
-        ScreamSeq::check(focused->get_CurrentNativeWindowHandle(&focusedHandle),"Read focused native HWND");
-        if(reinterpret_cast<HWND>(focusedHandle)!=namedField) {
-            GUITHREADINFO input{sizeof(input)};const auto thread=GetWindowThreadProcessId(namedField,nullptr);
-            const bool native=GetGUIThreadInfo(thread,&input)!=FALSE;
-            BOOL fieldFocused=FALSE;const auto property=field->get_CurrentHasKeyboardFocus(&fieldFocused);
-            std::cout<<"UIA focus mismatch: requested="<<namedField<<" returned="<<reinterpret_cast<HWND>(focusedHandle)
-                <<" Main="<<root<<" nativeRead="<<native<<" nativeFocus="<<input.hwndFocus<<" active="<<input.hwndActive
-                <<" foreground="<<GetForegroundWindow()<<" fieldHasFocusResult="<<property<<" fieldHasFocus="<<fieldFocused<<std::endl;
-        }
-        restoreCheck(reinterpret_cast<HWND>(focusedHandle)==namedField,"UIA reported Main instead of the focused native field");
-        // Handoff must not replace the native edit with a label-only fragment.
-        ScreamSeq::ComPtr<IUIAutomationValuePattern> focusedValue;
-        ScreamSeq::check(focused->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&focusedValue)),"Focused field retained its native Value pattern");
-        BSTR focusedText=nullptr;ScreamSeq::check(focusedValue->get_CurrentValue(&focusedText),"Read focused native edit value");
-        const bool sameValue=focusedText&&std::wstring_view(focusedText,SysStringLen(focusedText))==expectedText;SysFreeString(focusedText);
-        restoreCheck(sameValue,"Focus handoff changed or concealed the native edit value");
-        ScreamSeq::ComPtr<IUIAutomationTextPattern> focusedTextPattern;
-        ScreamSeq::check(focused->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&focusedTextPattern)),"Focused field retained native Text/selection support");
-        ScreamSeq::ComPtr<IUIAutomationTextRangeArray> selectedText;
-        ScreamSeq::check(focusedTextPattern->GetSelection(&selectedText),"Read focused native text selection");
-        restoreCheck(bool(selectedText),"Focus handoff omitted native text selection");
+        GUITHREADINFO input{sizeof(input)};
+        restoreCheck(GetGUIThreadInfo(GetWindowThreadProcessId(namedField,nullptr),&input)&&input.hwndFocus==namedField,
+            "Marshaled UIA focus did not reach the exact private-desktop native field");
+        verifyNativeFocusField(field.Get(),namedField,expectedText);
         ScreamSeq::ComPtr<IUIAutomationGridPattern> pattern;ScreamSeq::check(grid->GetCurrentPatternAs(UIA_GridPatternId,IID_PPV_ARGS(&pattern)),"Read UIA Grid pattern");
         ScreamSeq::ComPtr<IUIAutomationElement> cell;ScreamSeq::check(pattern->GetItem(2,0,&cell),"Read actual UIA pattern cell");
         ScreamSeq::ComPtr<IUIAutomationValuePattern> value;ScreamSeq::check(cell->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)),"Read cell Value pattern");

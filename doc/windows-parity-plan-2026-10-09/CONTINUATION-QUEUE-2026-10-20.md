@@ -21,13 +21,27 @@ its checkpoint. The next hourly gate is **2026-10-22 06:56:56 UTC**. The local
 build and check receipts under `bin/plugin-control-review-20261022/startup-correction`
 are terminal and must not be repeated. Source corrections to completed-scan UI
 publication and explicit floating-window ownership are prepared but unbuilt.
-Current Windows x64 job `119665472145`, Mac ARM `119665473046` and Mac Intel
-`119665473245` remain live; do not restart them. The previous jobs are terminal:
+Current Windows x64 job `119665472145` is terminal failure: 158/158 worker/model
+checks passed, 46/49 native registrations passed, and actual-app failures include
+missing endpoint/clock startup. The third native failure is the original take
+protection fixture attempting a now-refused reentrant native start; source keeps
+its late-worker-completion assertions and adds explicit native refusal checks.
+Mac ARM `119665473046` and Mac Intel `119665473245` are terminal success, including
+134 native tests per architecture and full conformance. Do not restart these jobs.
+The previous jobs are terminal:
 Windows failed startup; both Macs passed native/interface gates but failed the
 old inventory baseline. The [reviewed inventory correction and additional
 vectors](PLUGIN-API-INVENTORY-2026-10-22.md) are in the current checkpoint.
 Computer Use on the current executable stopped after two desktop input-access
 denials; no fresh visual or keyboard pass or production package is claimed.
+QA PID 20700 has exited normally. Its 30-minute diagnostic recorded 79,216
+occluded frames and 246 audio deadline overruns; causality is not established.
+Bounded occlusion redraw backoff is prepared, unbuilt. A private-desktop UIA
+control probe showed that global focus cannot be measured there: the exact global
+HWND/Value/Text/selection assertion is now a separate mandatory, read-only
+foreground gate after Computer Use focuses the fresh QA field. Native private
+tests retain exact application focus, native patterns, ownership and retirement
+assertions. See the current report for executable command and package gate.
 
 The same pending batch also fixes [MIDI sound navigation with a hidden context
 panel](MIDI-SOUND-NAVIGATION-2026-10-22.md), discovered through Computer Use on

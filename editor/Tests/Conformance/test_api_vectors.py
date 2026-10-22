@@ -11,6 +11,35 @@ from project_tree import EvidenceError, read_bytes, sha256
 
 
 class APIInventoryTests(unittest.TestCase):
+    def test_historical_contract_is_not_an_open_difference_when_expectations_agree(self):
+        vector = {'difference': 'reviewed-history', 'expected': {'windows': 'success', 'macos': 'success'}}
+        self.assertEqual(api_vectors.contract_labels(vector),
+                         {'knownDifference': None, 'regressionFor': 'reviewed-history'})
+        self.assertEqual(api_vectors.contract_labels({'expected': vector['expected']}),
+                         {'knownDifference': None, 'regressionFor': None})
+
+    def test_preservation_drift_remains_open_even_when_outcomes_agree(self):
+        for key, windows, macos in (
+                ('expected', 'success', -32601),
+                ('documentUnchanged', True, False),
+                ('changedPaths', [], ['$.revision']),
+                ('persistedDifference', None, {'equal': False})):
+            vector = {'difference': 'reviewed-drift', 'expected': {'windows': 'success', 'macos': 'success'}}
+            vector[key] = {'windows': windows, 'macos': macos}
+            with self.subTest(key=key):
+                self.assertEqual(api_vectors.contract_labels(vector),
+                                 {'knownDifference': 'reviewed-drift', 'regressionFor': None})
+
+    def test_current_corpus_keeps_take_gap_and_historical_regressions_distinct(self):
+        corpus = json.loads(read_bytes(api_vectors.VECTORS))
+        labels = [api_vectors.contract_labels(vector) for vector in corpus['cases']]
+        labels.append(api_vectors.contract_labels({'difference': 'API-REPLAY-ERROR',
+                                                   'expected': corpus['rejectedRequestIDReuse']}))
+        self.assertEqual({row['knownDifference'] for row in labels if row['knownDifference']},
+                         {'API-NATIVE-PARAMETER-TAKE'})
+        self.assertEqual({row['regressionFor'] for row in labels if row['regressionFor']},
+                         {'API-INTEGER-TYPES', 'API-PLUGIN-DRY-RUN', 'API-REPLAY-ERROR'})
+
     def test_reviewed_schema_and_platform_deltas_are_consistent(self):
         baseline = json.loads(read_bytes(api_vectors.BASELINE))
         schema_path = api_vectors.ROOT / baseline['schema']['path']

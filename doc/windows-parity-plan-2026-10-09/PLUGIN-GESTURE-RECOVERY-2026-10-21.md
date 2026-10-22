@@ -1131,3 +1131,71 @@ targets retain their 7154 evidence. No prepared script has been executed.
 The qualification checkout remains on 7154 while its diagnostic QA process is
 alive. At 06:30 UTC, x64 was running merged actual-app checks and Intel Mac was
 running its native interface harness; await their terminal results, never restart.
+
+### 06:45 UTC terminal evidence and next source correction
+
+All three 7154 jobs are now terminal. Mac Intel `119665473245` also passed its
+134 native tests, interface step and full requested conformance. Its logs archive
+hash is `5a97c58034521e0c94c9b36380149ac1e8c815e8af368c31927bd3fc74e02abd`;
+the archive has not yet been downloaded/individually inspected. Windows x64
+`119665472145` passed 158/158 worker/model checks, scratch checks and the full
+typed conformance step, but only 46/49 native registrations. Besides the two
+local focus failures, `workspace-restore-tests` failed when its sample-read hook
+attempted a new native MIDI start inside the aggregate input gate. Its fixture
+now separately checks late worker completion (the original recheck/retention
+assertions), refused native reentrancy with exact NotCommitted outcome, unchanged
+song/takes, fail-closed read error and gate release. This is a test-boundary
+correction, not removal of the protective product gate; rebuilt confirmation is
+required. Add the default workspace registration to the next bounded selection.
+
+The x64 actual-app log has 91 tests, 14 failure records and two skips. Fourteen
+is not a count of distinct failing tests: three audition cases also fail teardown.
+Reported failures involve startup, missing WASAPI endpoint or invalid recording
+clock. Inspect the retained endpoint inventory/artifact before classifying the
+runner environment; do not call x64 playback qualified. Windows logs artifact
+12406382727 has SHA-256
+`478e2d849164682c7d391286fb7b702ede037dfe57ef77355ca9ca4543e9824c`.
+
+The isolated foreground diagnostic process 20700 ended normally; its original
+F04 input hash is unchanged. Its 1,800-second silent playback report contains
+79,216 drawn frames, all reported occluded, zero idle waits, CPU draw p99
+6,347.9 microseconds, 48 kHz/480-frame buffers, 179,953 callbacks and 246 audio
+deadline overruns (maximum callback 14,506.8 microseconds). There were no device
+errors or starvation events. Development and synthetic probes ran concurrently;
+this does not establish the cause of overruns. The report's false realtime-audit
+and sustained-presentation flags do not represent executed allocation/presentation
+audits. No successful foreground input or temporal-flicker result was obtained.
+
+`PresentationBackoff.hpp`, Main and the existing await presentation predicate now
+pace repeated DXGI occlusion at a bounded 250 ms retry. Native input/visibility
+events resume immediately; timers alone do not cancel the backoff. Message,
+worker and audio servicing remain outside the presentation gate. Fixed-clock
+boundary/overflow checks and a real Main WM_PAINT/WM_TIMER fixture are included.
+This source is unbuilt. Require a quiet occluded observation on the new binary,
+then visible restore and Computer Use keyboard checks; do not infer an audio or
+temporal-flicker fix from the pacing unit assertions.
+
+**UIA qualification boundary correction:** The exact global focused-HWND assertion
+is preserved, moved out of the never-switched private desktop where even a plain
+Windows EDIT fails the global-focus baseline. Private tests still require exact
+native focus after the marshaled UIA SetFocus call, native Value/Text/selection,
+owned inspector handoff, unrelated-window exclusion and retired-provider safety.
+The same exact HWND plus native patterns are required by the read-only executable
+mode `workspace-restore-tests.exe --inspect-foreground-focus PID MAIN_HWND FIELD_HWND`;
+it additionally requires the global UIA focus property. It never focuses or types.
+After Computer Use focuses an observed field in the isolated fresh QA process, run
+`windows/Tests/qualify_foreground_focus.ps1` with `-BuildReceipt`, `-QaProcessId`,
+`-MainWindow`, `-FieldWindow` and a fresh `-Output` receipt path. The wrapper pins
+the QA executable/process lifetime and probe hashes. Prepared packaging must
+require `foreground-focus.json` alongside the broader `foreground-check.json`.
+Both automated and foreground gates remain required; a private pass alone cannot
+qualify accessibility or authorize packaging/merge. The foreground mode and source
+handoff still need rebuilt and unlocked-desktop confirmation.
+
+API-vector reporting now labels identical platform contract projections as
+historical regression coverage rather than current expected differences. Outcome,
+unchanged-document, changed-path and persistence expectations all participate;
+runtime assertions, corpus, inventory baseline and `parityComplete:false` are
+unchanged. Six focused Python tests passed without a build. Existing reports are
+immutable historical receipts, not relabeled executions. This change prevents
+fixed integer/dry-run/replay contracts from being reported as still-open gaps.
