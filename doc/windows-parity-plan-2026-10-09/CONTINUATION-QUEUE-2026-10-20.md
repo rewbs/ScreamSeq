@@ -8,6 +8,31 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 15:21 UTC:** The single077e command/scratch checkpoint passed all
+five native groups and eight selected actual-app cases. Fresh Computer Use
+verified unavailable command explanations, availability after a real edit,
+palette Run dispatch, scratch release/save feedback, retained Main Undo/Redo
+and dock typing/Backspace/Tab. Floating-window key injection and accessible-focus
+reporting remain bounded tool observations, not claimed passes. A separately
+packaged ARM64 candidate is in Downloads; see
+[qualification and executable identity](COMMAND-AVAILABILITY-2026-10-22.md).
+PR#6 is077e; paired Windows39802007518/Mac39802008354 are still running.
+No build before **16:09:04UTC**; inspect receipts, never repeat this build.
+No QA process remains. Newer Mac intake/restore source is backed up separately
+at100fca5f0 and remains unbuilt; do not conflate it with the package.
+
+Retained96b fixture exchange passed Windows→Mac ARM/Intel (run39800910382),
+then Mac ARM→Windows (39801329971) and Mac Intel→Windows (39802052452).
+Both return artifacts were downloaded with matching GitHub SHA256, safely
+unpacked and all five report hashes matched their retained-run receipts.
+Each architecture/return contains ten passing files: F01–F05, two edited
+render/import projects, opaque metadata, unified history and envelope bank.
+Every report retains unchanged input/binary assertions. No builds were used.
+Both96b Mac CI jobs passed; Windows96b had no runner audio endpoints, with
+its original failures retained and12/12 affected exact-binary local replay passes.
+This qualifies the bounded exchange, not native x64 audio or full parity.
+Evidence is in `bin/mac-gesture-20261022/retained-{exchange,return-arm,return-intel}-96b/`.
+
 **22 October 14:37 UTC:** Source work now also closes the confirmed command
 palette availability gap from reference row 02/A16. It shares the native menu
 policy, shows unavailable reasons, retains query/focus during updates and routes

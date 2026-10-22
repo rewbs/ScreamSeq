@@ -92,3 +92,46 @@ checkout was fast-forwarded to077e. Build/check receipts are still absent in the
 new folder: preparation and source alignment do not mean a build has started.
 Later Mac-only intake/restore source on the backup branch is intentionally
 outside this freeze and needs its own coherent qualification checkpoint.
+
+## Executed 15:08 checkpoint
+
+Frozen077e built once at15:08:30–15:10:49UTC. ARM64 Release executable SHA256:
+`13bf7e429db3d6555635a17ef3247f77320a857369aff0b5c70d29611f9dae08`.
+All five native groups passed in109.36s (command-results74.63s,
+scratch11.74s); all eight selected actual-app cases passed in29.117s.
+Original failed96b aggregate evidence is retained. Source/hash checks passed.
+
+Fresh Computer Use on owned PID38224 observed default-size Commands, unavailable
+Edit/Plugins Undo explanations and disabled Run. After a scratch edit, Edit Undo
+was available; selecting it and clicking Run executed history and closed the
+palette. Scratch middle-point drag changed0.5/100 to0.5625/71.4656290531777,
+kept the curve visible at release and reported a successful phrase save. Main
+Ctrl+Z/Ctrl+Y refreshed the retained curve correctly. Dock search accepted gain,
+Backspace to gai, Tab/Shift+Tab and subsequent n back to gain during playback.
+The disposable copy was saved and the QA process exited normally; original F04
+hash remained unchanged. No musician process or audio route was changed.
+
+Computer Use still exposes floating windows only as related UI. Typing targeted
+at Main reactivates Main; it did not qualify direct palette/floating-field typing.
+Later UIA set_value attempts reported cached-element unavailability; coordinate
+selection worked. Dock focus was proven by the caret and actual text changes,
+but Computer Use's focused_element reported Main: exact accessible-focus reporting
+needs follow-up. Native keyboard/caret assertions passed. These limits are
+recorded in `palette-availability/foreground-check.json`; no Narrator, compact
+resized palette, high-DPI or temporal flicker claim is made.
+
+Silent WASAPI ran350.2746093s at48kHz/480frames:29 deadline overruns,
+zero device errors/starvation/processor faults. Realtime audit and sustained
+presentation qualification are false. This remains functional UI evidence.
+
+A separate candidate package is available at
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-077e35f29/ScreamSeq.exe`.
+Its copied executable/scanner hashes, ARM64 PE machines, runtime and notices were
+verified. BuildInfo and ReleaseProvenance record frozen source; it is not a full
+parity release. The newer Mac intake/restoration source is excluded.
+
+PR#6 now points at077e. Windows run39802007518 and Mac run39802008354 are
+the paired checkpoint, still running at15:15UTC; do not restart them. The latest
+compile start was15:09:04UTC, so no next coordinated build before16:09:04UTC.
+Main has not been merged. CI and current native audio evidence still require
+review before integration; retained96b reciprocal exchange is recorded separately.
