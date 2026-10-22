@@ -2,6 +2,21 @@
 // timestamps and history; this owner protects presentation and original input.
     std::unique_ptr<ScreamSeq::ParameterRecordingWindow> parameterRecordingWindow;
     std::unique_ptr<ScreamSeq::PluginRecoveryReviewWindow> pluginRecoveryReviewWindow;
+    ScreamSeq::Api::CompletedCall stopParameterRecordingPlayback(const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt) {
+        // Transport belongs to SessionHost, not the document worker dispatcher.
+        // Use the same Stop as the public API, publishing its receipt before
+        // fallible presentation readback. It never Keep/Discards a take.
+        guardDepartureOperation("transport.stop");guardParameterRecordingInput("transport.stop");
+        if(busy||recoveryRestoring)throw ScreamSeq::Api::ApiError(-32002,"Wait for the current song operation before stopping playback",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        const auto current=snapshot();
+        if(!params.is_object()||params.size()!=1||!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())
+            throw ScreamSeq::Api::ApiError(-32602,"Playback Stop requires only expectedRevision",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        if(params.at("expectedRevision")!=current.revision)
+            throw ScreamSeq::Api::ApiError(-32001,"Song changed before playback Stop",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        const auto call=std::make_shared<const ScreamSeq::Api::CompletedCall>(ScreamSeq::Api::CompletedCall{"transport.stop",current.documentId,current.revision,{{"playing",false}}});
+        stop();if(receipt)receipt->publish(call);
+        finishDocumentOperation(call->method,call->result);return *call;
+    }
     void openPluginRecoveryReview() {
         if(busy||departureInput||parameterRecordingInput)throw std::runtime_error("Wait for the current song operation before reviewing recovered inputs");
         if(!pluginRecoveryReviewWindow)pluginRecoveryReviewWindow=std::make_unique<ScreamSeq::PluginRecoveryReviewWindow>(window,
@@ -10,6 +25,11 @@
         pluginRecoveryReviewWindow->show();
     }
     void reconcileParameterRecording(const ScreamSeq::Api::CompletedCall &call) {
+        if(call.method=="transport.stop") {
+            if(call.document!=documentId||call.revision.empty()||!call.result.is_object()||call.result.value("playing",true))
+                throw std::runtime_error("Playback Stop completion belongs to another song or operation");
+            refreshDocument();return; // Readback only; never stop a newly started playback.
+        }
         if(call.document!=documentId||!parameterRecordingBoundary(call.method)||
             !call.result.is_object()||!call.result.contains("retained"))
             throw std::runtime_error("Recording completion belongs to another song or operation");
@@ -36,7 +56,8 @@
             return L"Parameter "+std::to_wstring(parameter);
         };
         callbacks.read=[this](const auto &method,const auto &params){return documentOperation(method,params);};
-        callbacks.write=[this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);};
+        callbacks.write=[this](const auto &method,const auto &params,const auto &receipt){return method=="transport.stop"?
+            stopParameterRecordingPlayback(params,receipt):documentOperationWithOutcome(method,params,receipt);};
         callbacks.reconcile=[this](const auto &call){reconcileParameterRecording(call);};
         callbacks.delivery=[this](size_t offset,size_t limit){
             parameterControlDelivery.collect();

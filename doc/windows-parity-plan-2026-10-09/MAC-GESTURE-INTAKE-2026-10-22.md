@@ -1642,3 +1642,58 @@ and 39870506136. Do not repeat/restart them. Next build is no earlier than
 checked. Required Mac native recovery/device checks, reciprocal edited-project
 preservation and Windows native audio gates remain open before merge/parity
 claims. Keep full scope active; no recurring automation is requested.
+
+### Follow-up source: explicit Windows playback recovery and Mac CI diagnosis
+
+The cc6da0bd3 Mac ARM application compiled, but job120143455474 failed the
+`plugin-control-delivery` native interface group's compound asynchronous-refusal
+assertion. `plugin-recording` passed. The failure did not identify whether
+focus, selection, text, musical preservation or compact geometry failed. The
+fixture now lays out the initially zero-sized editor and requires a real search
+field editor before capturing focus. Separate, equally strict assertions report
+each condition and actual geometry. This is an unbuilt fixture correction and
+diagnostic improvement, **not proof that the Mac regression is fixed**.
+
+Windows x64 job120143454737 compiled and completed with required live-app
+failures: its audio-environment evidence reports an empty WASAPI device list,
+and the app suite reports missing playback clocks/owned audio startup failures.
+The required vendor ownership step also failed. Preserve those failures;
+neither successful compilation nor local ARM64 evidence qualifies x64 hardware.
+Mac Intel was still building at23:47UTC. Raw exact-source logs are retained in
+`bin/mac-gesture-20261022/clock-recovery/current-job-*.log`.
+
+Windows `ParameterRecordingWindow.hpp` now exposes a separate **Stop playback**
+button for stopped-take restoration or failed capture context. It keeps Record,
+Stop recording and playback Stop distinct, fits the compact header, and places
+the new action immediately after Stop recording in keyboard navigation. A
+queued action captures document/revision/take/capture/completion state and
+rechecks current transport eligibility. It never automatically Keeps or
+Discards. The button stays visible but disabled after playback stops so the
+recovery layout remains stable until the take is resolved.
+
+`ParameterRecordingIntegration.inc` routes this action through the native
+`SessionHost::stop` owner, since `transport.stop` is not a DocumentController
+worker method. It validates the captured revision and argument domain, publishes
+a matching native completion receipt before fallible presentation readback,
+and reconciles that receipt without stopping any subsequently restarted
+playback. The existing ordinary transport API remains unchanged. This is a
+native presentation/ownership change, with no new musical operation or storage.
+
+New mandatory checks in the existing workspace plugin-search group cover
+compact bounds and Tab order, duplicate Stop during a polling read, changed
+transport eligibility, retained failed-clock take identity, dependent-write
+blocking after a presentation failure, and explicit readback with retained
+focus. The actual application fixture exercises native Stop dispatch, stale/
+wrong-domain rejection and post-Stop presentation failure receipts. The full
+plugin composing journey now also presses this native action after its second
+take stops recording, checking stopped transport, exact retained original
+events, unchanged song/history, then explicit Discard and save/reopen. The
+mock failure state is not substituted for a real failed-device test.
+
+These changes, the prior Mac recovery batch and mandatory sample-plus-VST3
+journey remain unbuilt. Reuse unaffected cc6da0bd3 evidence; the next coordinated
+checkpoint must rebuild native UI/application paths, run the prepared bounded
+native/app selections and the full Mac interface gates, then inspect the fresh
+binary with Computer Use. No build before00:15:10UTC on October23, and no overlap
+with the preceding CI. Do not rerun recorded attempts or merge from partial
+diagnostic evidence.

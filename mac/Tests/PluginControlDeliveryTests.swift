@@ -152,21 +152,33 @@ extension InterfaceTests {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
       styleMask: [.titled, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false; defer { window.close() }
-    window.contentView = editor; window.makeFirstResponder(editor.search)
+    window.contentView = editor
+    // The retained editor starts at .zero. Lay out its real search control
+    // before asking AppKit to create a field editor; otherwise an offscreen
+    // test can proceed without ever establishing the focus it claims to test.
+    editor.layoutSubtreeIfNeeded()
+    try require(editor.search.bounds.width > 0 && editor.search.bounds.height > 0 && window.makeFirstResponder(editor.search),
+      "Recording feedback fixture must establish a laid-out native search responder")
     editor.search.stringValue = "Gain"
-    let field = editor.search.currentEditor(); field?.selectedRange = NSRange(location: 1, length: 2)
+    guard let field = editor.search.currentEditor() else {
+      throw InterfaceFailure(message: "Recording feedback fixture did not establish an active native field editor")
+    }
+    field.selectedRange = NSRange(location: 1, length: 2)
     let responder = window.firstResponder, originalCount = original.count, beforeValues = editor.parameterValues as NSArray
     editor.recordingNeedsReview("Disable this parameter's envelopes before recording gestures")
     editor.recordingNeedsReview("Disable this parameter's envelopes before recording gestures")
     window.setContentSize(NSSize(width: 700, height: 500)); editor.layoutSubtreeIfNeeded()
     let noteBounds = editor.convert(editor.note.bounds, from: editor.note)
     let reviewBounds = editor.convert(editor.recordingReviewButton.bounds, from: editor.recordingReviewButton)
-    try require(editor.note.stringValue.contains("envelopes") && !editor.recordingReviewButton.isHidden &&
-      window.firstResponder === responder && field?.selectedRange == NSRange(location: 1, length: 2) &&
-      editor.search.stringValue == "Gain" && (editor.parameterValues as NSArray).isEqual(beforeValues) &&
-      original.count == originalCount && manual == [0.4] && noteBounds.minX >= 0 && noteBounds.maxX <= reviewBounds.minX &&
-      reviewBounds.maxX <= editor.bounds.maxX,
-      "Asynchronous recording refusal is visible beside controls without stealing focus, changing text or replaying input")
+    try require(editor.note.stringValue.contains("envelopes") && !editor.recordingReviewButton.isHidden,
+      "Asynchronous recording refusal and direct Review action must be visible")
+    try require(window.firstResponder === responder && field.selectedRange == NSRange(location: 1, length: 2) &&
+      editor.search.stringValue == "Gain",
+      "Asynchronous recording refusal changed native search focus/text/selection: focus=\(window.firstResponder === responder), text=\(editor.search.stringValue), selection=\(field.selectedRange)")
+    try require((editor.parameterValues as NSArray).isEqual(beforeValues) && original.count == originalCount && manual == [0.4],
+      "Asynchronous recording refusal must not alter values or replay musical input")
+    try require(noteBounds.minX >= 0 && noteBounds.maxX <= reviewBounds.minX && reviewBounds.maxX <= editor.bounds.maxX,
+      "Compact recording feedback must not overlap or leave its editor: note=\(noteBounds), review=\(reviewBounds), editor=\(editor.bounds)")
     var reviews = 0; editor.onRecordingTake = { reviews += 1 }; editor.recordingReviewButton.performClick(nil)
     try require(reviews == 1 && original.count == originalCount && manual == [0.4],
       "Review opens the existing take directly without replaying refused input")

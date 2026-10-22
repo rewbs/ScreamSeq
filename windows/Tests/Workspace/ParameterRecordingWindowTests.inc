@@ -5,7 +5,8 @@ void applicationParameterRecordingReview() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);const auto music=songState(app);
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
-    bool deferKeepReceipt=false,failReconcile=false,refuseStart=false;
+    bool deferKeepReceipt=false,failReconcile=false,refuseStart=false,failAfterPlaybackStop=false;
+    unsigned playbackReconciled=0;
     std::function<void()> duringRead;
     std::string contextRevision;
     bool available=true;
@@ -16,7 +17,9 @@ void applicationParameterRecordingReview() {
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
     callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
     callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
-    callbacks.reconcile=[&](const Call &call){restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
+    callbacks.reconcile=[&](const Call &call){if(call.method=="transport.stop"){
+      restoreCheck(call.result.at("playing")==false,"Review accepted an invalid playback Stop receipt");++playbackReconciled;return;}
+      restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
       "Native review reconciled the wrong completion");
       if(std::exchange(failReconcile,false))throw std::runtime_error("Owned readback failure");++reconciled;};
     callbacks.delivery=[&](size_t offset,size_t limit){auto page=delivery;page["events"]=Json::array();
@@ -41,6 +44,9 @@ void applicationParameterRecordingReview() {
           Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         take={{"retained",true},{"capturing",true},{"take","review-owned-take"},{"compatible",true},{"eventCount",130},{"failure",0},
           {"targets",Json::array({{{"plugin",plugin},{"parameter",1},{"unmapped",1},{"overflow",0}}})},{"sources",Json::array()}};
+      }else if(method=="transport.stop"){
+        restoreCheck(!params.contains("take")&&params.size()==1,"Playback Stop leaked recording-only arguments");
+        take["transportPlaying"]=false;take["discardable"]=true;
       }else {
         restoreCheck(params.at("take")==take.at("take"),"Recording action targeted a different retained take");
         if(method=="automation.recording.stop")take["capturing"]=false;
@@ -49,12 +55,13 @@ void applicationParameterRecordingReview() {
         }else if(method=="automation.recording.discard")take={{"retained",false},{"capturing",false},{"take",""}};
         else throw std::runtime_error("Unexpected review write");
       }
-      const Call result{method,app.documentId,app.view->session.revision,take};
+      const Call result{method,app.documentId,app.view->session.revision,method=="transport.stop"?Json{{"playing",false}}:take};
       if(method=="automation.recording.commit"&&std::exchange(deferKeepReceipt,false)){
         lateReceipt=receipt;lateCompletion=std::make_shared<const Call>(result);
         throw std::runtime_error("Owned missing native completion");
       }
       receipt->publish(std::make_shared<const Call>(result));
+      if(method=="transport.stop"&&std::exchange(failAfterPlaybackStop,false))throw std::runtime_error("Owned post-Stop presentation failure");
       if(method=="automation.recording.commit"&&std::exchange(failAfterKeep,false))throw std::runtime_error("Owned post-commit presentation failure");return result;
     };
     ScreamSeq::ParameterRecordingWindow tool(app.window,std::move(callbacks));tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
@@ -119,15 +126,46 @@ void applicationParameterRecordingReview() {
     take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
       {"transportPlaying",true},{"discardable",false},{"targets",Json::array()},{"sources",Json::array()}};
     SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&
+    restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&IsWindowEnabled(control(9740))&&IsWindowVisible(control(9740))&&
       restoreText(control(9734)).find(L"stop playback")!=std::wstring::npos,
       "Failed live clock still claimed to record or hid the safe recovery action");
-    take["transportPlaying"]=false;take["discardable"]=true;
+    MINMAXINFO minimum{};SendMessageW(window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&minimum));
+    restoreCheck(SetWindowPos(window,nullptr,0,0,minimum.ptMinTrackSize.x,minimum.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Resize compact recording recovery");
+    RECT client{},previousBounds{};GetClientRect(window,&client);
+    for(int id:{9721,9722,9740}) {
+      RECT bounds{};GetWindowRect(control(id),&bounds);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&bounds),2);
+      restoreCheck(bounds.left>=previousBounds.right&&bounds.right<=client.right&&bounds.top>=0&&bounds.bottom<=client.bottom,
+        "Compact recording and playback buttons overlap or leave the client");previousBounds=bounds;
+    }
+    restoreCheck(GetNextDlgTabItem(window,control(9722),FALSE)==control(9740),"Playback recovery is missing from adjacent keyboard navigation");
+    // A stop arriving during a polling read is retained once; completion may
+    // only stop playback, never implicitly Keep or Discard the original input.
+    const auto beforePlaybackStop=writes.size();
+    duringRead=[&]{click(9740);click(9740);restoreCheck(writes.size()==beforePlaybackStop,
+      "Playback Stop reentered the worker during a recording refresh");};
     SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&
+    restoreCheck(tool.snapshot().at("queuedAction")=="transport.stop","Refresh lost explicit playback Stop");
+    failAfterPlaybackStop=true;SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforePlaybackStop+1&&!tool.snapshot().at("completion").is_null()&&
+      !IsWindowEnabled(control(9740))&&tool.protectsClose(),"Uncertain playback Stop lost its receipt or allowed an immediate retry");
+    click(9740);click(9724);restoreCheck(writes.size()==beforePlaybackStop+1,"Uncertain playback Stop allowed a second write");
+    SetFocus(control(9725));click(9725);
+    restoreCheck(playbackReconciled==1&&tool.snapshot().at("completion").is_null()&&GetFocus()==control(9725),
+      "Playback Stop review did not reconcile its receipt while preserving keyboard focus");
+    restoreCheck(writes.size()==beforePlaybackStop+1&&writes.back().first=="transport.stop"&&take.at("retained")==true&&
+      take.at("capturing")==true&&take.at("take")=="failed-clock-take"&&tool.protectsClose()&&
+      IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9740))&&
       restoreText(control(9734)).find(L"Playback stopped")!=std::wstring::npos,
-      "Stopped transport with a failed Stop cut trapped the retained take behind disabled Discard");
-    click(9724);restoreCheck(writes.size()==4&&writes.back().first=="automation.recording.discard"&&
+      "Explicit playback Stop lost the failed take, duplicated a write or failed to offer safe Discard");
+    click(9740);restoreCheck(writes.size()==beforePlaybackStop+1,"Disabled playback Stop submitted again");
+    // Eligibility can change without changing the take or musical revision.
+    take["transportPlaying"]=true;take["discardable"]=false;SendMessageW(window,WM_TIMER,7,0);
+    duringRead=[&]{click(9740);take["transportPlaying"]=false;take["discardable"]=true;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforePlaybackStop+1&&tool.snapshot().at("queuedAction").is_null()&&
+      tool.snapshot().at("error").get<std::string>().find("Playback changed during refresh")!=std::string::npos,
+      "Queued playback Stop ignored changed transport eligibility");
+    click(9724);restoreCheck(writes.size()==5&&writes.back().first=="automation.recording.discard"&&
       writes.back().second.at("take")=="failed-clock-take"&&!tool.protectsClose(),
       "Discard of a stopped failed-context take lost its identity or retained a false close barrier");
     // A read of the present take is not a receipt for an earlier write. Even

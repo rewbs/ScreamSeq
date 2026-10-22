@@ -65,7 +65,7 @@ Get's `transportPlaying`, `discardable` and
 a failed recording clock can leave `capturing:true` after its normal Stop cut
 fails. Once playback has stopped, `discardable:true` permits explicit Discard;
 clients must not trap that take behind a requirement for `capturing:false`.
-The native Mac take window offers a separate **Stop playback** action when
+The native Mac and Windows take windows offer a separate **Stop playback** action when
 recovery or restoration needs it. This sends the normal revision-guarded
 `transport.stop` and rereads the take; it never automatically commits, discards
 or retries an uncertain write. The closed-editor opaque-Discard requirement
