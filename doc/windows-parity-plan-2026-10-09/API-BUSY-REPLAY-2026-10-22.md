@@ -81,4 +81,3 @@ the real retained window/worker with all four write outcomes plus an unclassifie
 error. It requires original text/caret/focus retention, exactly one Undo after a
 safe retry or lost committed completion, no replay on reopen/typing, and explicit
 Reload reconciliation. This is source-only until the next coordinated gate.
-

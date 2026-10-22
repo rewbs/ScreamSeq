@@ -8,6 +8,45 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 11:59 UTC:** backup source `3eddd0f12` follows `1f2335722` on
+`codex/mac-gesture-intake`. Paired API dispatch now distinguishes explicit
+pre-admission busy refusals from uncertain/committed terminal replies, protects
+active request IDs against changed payloads, and retains terminal replies.
+Native scratch autosave likewise retries only explicit pre-write busy;
+uncertain writes retain their drafts until explicit Reload. Real socket,
+adapter and native-window regressions are prepared. See
+[busy/replay report](API-BUSY-REPLAY-2026-10-22.md). These and the preceding
+Mac manual-state/stopped-publication changes remain **unbuilt**.
+
+The 97bd596a4 checkpoint finished on both Mac architectures: run `39768081195`,
+ARM job `119788424801`, Intel job `119788425112`, both success. Windows x64
+run `39768081068` passed build, portable/worker, native UI, vendor ownership
+and conformance; its app stage retains fourteen failures, one error and two
+skips. CI had no WASAPI devices; the graph error was a pre-write busy refusal.
+The exact retained x64 executable SHA-256
+`fafc3773607f9bb5ac00945dd9033c87e527d9e0467ba3874029bf535a376bfc`
+then passed twelve targeted actual-app checks on this ARM64 Windows host under
+x64 emulation, with silent WASAPI/private desktops and the bounded-retry
+Python client. This is not a native x64 hardware/performance or foreground pass.
+Receipt: `bin/mac-gesture-20261022/review-followup/ci/windows-x64/device-checks.json`.
+
+Without recompiling, Windows fixture outputs passed ten strict open/save checks
+on each Mac architecture in run `39773398979`. Both ten-file return legs back
+into the same Windows x64 binary passed: ARM-origin run `39774049785` and
+Intel-origin run `39774117964`. This includes the original five native fixtures,
+rendered/imported outputs, edited opaque metadata, composing history and linked
+envelope-bank saves. Dispatches used explicit artifact/run identities and skipped
+the build jobs. These passes belong to 97bd596a4, not newer source.
+
+Next coordinated build/PR-head push remains **12:06:17 UTC or later**.
+`bin/mac-gesture-20261022/admission-followup/` contains the single-build guard,
+freeze, bounded checks and guarded package script. Inspect receipts first.
+Include the scratch native regression in the same checkpoint; no extra build
+was used. The Downloads package and PR #6 remain at 97bd596a4; main is unchanged.
+Fresh Computer Use must inspect the new candidate after passing checks; never
+reuse stale PIDs or window handles. Full Mac retained-take session/API/UI and
+native opaque-state restoration remain open.
+
 **22 October 11:34 UTC:** source `db369e3bd` is committed and pushed on the
 separate backup branch `codex/mac-gesture-intake`. Mac stopped recorded-point
 edits/Clear/history now use the retained processor publication instead of
