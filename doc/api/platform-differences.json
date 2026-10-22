@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "394111d72215ddc0fed253d6ba1ebb2a9cc6e1f49cf6da813eb26a5536c6d4f2",
+    "sha256": "6ed82845fe7be698f88b03d79b687c318c1230056e71d12c238ea60a9deadbd5",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -20,6 +20,13 @@
       "automation.recorded.clear",
       "automation.recorded.edit",
       "automation.recorded.get",
+      "automation.recording.capture",
+      "automation.recording.commit",
+      "automation.recording.discard",
+      "automation.recording.events",
+      "automation.recording.get",
+      "automation.recording.start",
+      "automation.recording.stop",
       "automation.recovery.get",
       "automation.recovery.list",
       "automation.replaceLane",
@@ -532,13 +539,6 @@
         "audio.devices.get",
         "audio.settings.get",
         "audio.settings.set",
-        "automation.recording.capture",
-        "automation.recording.commit",
-        "automation.recording.discard",
-        "automation.recording.events",
-        "automation.recording.get",
-        "automation.recording.start",
-        "automation.recording.stop",
         "document.new",
         "document.open",
         "graph.plugin.path.get",
@@ -653,6 +653,8 @@
         "automation.pattern.copy",
         "automation.pattern.get",
         "automation.recorded.get",
+        "automation.recording.events",
+        "automation.recording.get",
         "automation.recovery.get",
         "automation.recovery.list",
         "automation.target.get",
@@ -726,6 +728,11 @@
         "automation.pattern.transform",
         "automation.recorded.clear",
         "automation.recorded.edit",
+        "automation.recording.capture",
+        "automation.recording.commit",
+        "automation.recording.discard",
+        "automation.recording.start",
+        "automation.recording.stop",
         "automation.replaceLane",
         "context.set",
         "document.exportModule",
@@ -937,6 +944,24 @@
         "removed": [],
         "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-API-INVENTORY-2026-10-22.md",
         "note": "Inventory expectations only; no passing full conformance or final parity claim."
+      },
+      "pendingNativeTakeReview20261022": {
+        "status": "source-reviewed-runtime-unqualified",
+        "sourceCommit": "0198032752f8a55f2a5e003a382a78e131803aef",
+        "readsAdded": [
+          "automation.recording.events",
+          "automation.recording.get"
+        ],
+        "writesAdded": [
+          "automation.recording.capture",
+          "automation.recording.commit",
+          "automation.recording.discard",
+          "automation.recording.start",
+          "automation.recording.stop"
+        ],
+        "removed": [],
+        "evidence": "doc/windows-parity-plan-2026-10-09/MAC-GESTURE-INTAKE-2026-10-22.md",
+        "note": "Expected source contract only. Both Mac jobs stopped on inventory preflight before compilation; no native lifecycle qualification. Stopped native release, native UI delivery and new-provider cleanup review remain open."
       }
     }
   },
@@ -1053,12 +1078,14 @@
     {
       "id": "API-NATIVE-PARAMETER-TAKE",
       "phase": "P4b/P6a",
-      "status": "platform-difference-open",
-      "finding": "Seven live parameter-take methods are Windows-only. Mac native gesture recording does not yet expose this lifecycle contract. Read-only imported recovery archives use the two shared automation.recovery methods. The Windows-only methods remain outside the shared schema and must not be called cross-platform parity.",
+      "status": "implemented-pending-qualification-live-release-open",
+      "finding": "Both native sources expose seven retained-take methods and share summary/event paging. The two read/admission vectors now require matching outcomes; this is expected behavior, not passing runtime evidence. Mac native release still requires stopped transport, and native controls plus new-provider cleanup review remain unfinished. Full live lifecycle, socket success, Undo/save/reopen, audio and reciprocal gates remain necessary.",
       "sources": [
         "windows/Session/ParameterRecordingOperations.inc",
         "windows/Session/PluginOperations.cpp",
-        "mac/Bridge/TrackerSessionAPI.inc"
+        "mac/Bridge/TrackerSessionAPI.inc",
+        "editor/hosted/RecordedGestureRead.hpp",
+        "mac/Bridge/ParameterRecordingAPI.inc"
       ]
     }
   ]

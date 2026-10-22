@@ -926,3 +926,28 @@ revision, and show the original error. New interface cases require no replay
 after an unknown outcome and bounded exhaustion with an editable draft. This is
 not part of frozen 019803275 or its upcoming build. Mixer request/reconciliation
 still needs its own retained-draft audit; a plain code check is not sufficient.
+
+### 18:12 UTC checkpoint failure and conformance correction
+
+Frozen 019803275 was pushed to PR#7 alongside the local ARM64 build, which
+started 18:11:42 UTC. Both Mac jobs stopped **before compiling**: the API
+inventory preflight correctly found the seven newly shared schema methods
+missing from `doc/api/platform-differences.json`. This was an omitted expected
+inventory update, not an unavailable Mac compiler or passing native result.
+Keep failed run39829213878/job120000567927 (ARM) and job120000567435 (Intel).
+Do not rerun the build or alter the frozen checkout to hide this failure.
+
+The following source correction reviews exactly the seven additions, updates
+Mac expected reads/writes, recomputes each platform's schema delta and the LF
+schema hash, and preserves earlier binary receipts. The Mac review is explicitly
+source-only. Two existing take read vectors now require the implemented success/
+strict-unknown-field outcomes. Six additional vectors cover empty arming and
+missing-owner events/capture/Stop/Keep/Discard without changing music. Matching
+read/admission expectations are historical regressions, not an open method-name
+gap; the contract remains `implemented-pending-qualification-live-release-open`.
+Live release/UI/input cleanup and full lifecycle/socket/device checks remain.
+
+All six portable inventory tests passed on the corrected source in 3.144 s,
+including refusal of unreviewed methods before any document access. Runtime
+vectors and both native Mac builds still need the next hourly checkpoint.
+This correction is subsequent to 019803275 and is not included in its binary.
