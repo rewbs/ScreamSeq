@@ -238,3 +238,39 @@ linked to the candidate's actual `TrackerHosted` and fixture/scanner. Its native
 architecture assertion remains strict, selecting ARM64 or AMD64 at compile time;
 emulation is still rejected. This makes the existing broader provider assertions
 usable in both local ARM64 qualification and x64 CI without an extra build.
+
+## Main CI follow-up, 22 October 00:43 UTC
+
+Navigation main `4e4862bcc` Windows run `39696261383`, job `119554252323`,
+built successfully but failed the broad application step: 87 tests, 14 failure
+records and two skips. These are retained failures, not a successful gate.
+Its audio probe explicitly reports `devices: []`; transport has no active
+endpoint or playback clock. Thirteen failure records involve required audio
+startup, including secondary audition teardown failures. Starting the runner's
+audio services did not provide a device. Do not skip these assertions or replace
+native-device evidence with offline rendering to turn this run green.
+
+The remaining failure was a stale Precise Notes saved-layout assertion: version 5
+adds `mixingGraph` to the exact location set. The test now requires that complete
+contract. On the retained qualified ARM64 executable `86538cb42`, the corrected
+test passes with its draft, caret, compact-layout and persistence assertions.
+
+A private-desktop silent-audio recheck on that same retained binary passed the
+two affected transport tests and all four recording and three audition cases.
+The shortcut case reached its actual assertion locally and exposed another stale
+fixture: Ctrl+Alt+P now belongs to Pattern navigation. The fixture explicitly
+unbinds command 647 before assigning it to playback, preserving conflict rejection
+and all live-playback, text and focus checks. That corrected case passes.
+The first local selection skipped eight opt-in audio cases; those skips are not
+counted as evidence. `live-app.log` records seven audio passes and the shortcut
+conflict; `shortcut-corrected.log` records its subsequent pass. No build was run.
+
+Evidence is under `bin/plugin-take-lifecycle-20261021/main-ci-recheck`, including
+the CI audio probe, logs and binary/tool hash receipt. This establishes bounded
+local ARM64 behavior, not Windows x64 device qualification. The hosted runner
+still requires an available WASAPI endpoint or an additional suitably equipped
+Windows qualification host. Mac ARM64 main CI passed; Intel was still running at
+the last observation. These main results do not qualify the new plugin source.
+
+Include both corrected fixture cases in the next candidate's bounded application
+selection (seven actual-app cases total), with explicit silent-audio opt-in.
