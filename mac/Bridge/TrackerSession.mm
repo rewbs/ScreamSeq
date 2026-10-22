@@ -25,6 +25,7 @@
 #include "editor/GraphClipboard.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/ManualParameterState.hpp"
 #include "editor/hosted/RecordedCapture.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
@@ -790,57 +791,16 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // Fold manual parameter edits into the saved baseline without baking the current
 // playback automation values into it. Runs on the control worker while UI writes
 // are suspended; the live parameter queue remains bounded and cheap.
-// This runs inside Save, recovery and Play, so it never throws and never keeps
-// an entry: values a plugin refuses are dropped and reported as a warning.
+// Save/recovery and playback callers report exceptions. Retain every pending
+// value on failure so retry or Undo remains possible; never save partial edits.
 - (void)commitManualParameters {
-  if (_manualParameters.empty())
-    return;
-  const auto pending = std::move(_manualParameters);
-  _manualParameters.clear();
-  auto states = _plugins;
-  size_t dropped = 0;
-  std::string detail;
-  for (size_t slot = 0; slot < states.size(); ++slot) {
-    const auto count = size_t(std::count_if(pending.begin(), pending.end(), [&](const auto &p) { return p.slot == slot; }));
-    if (!count)
-      continue;
-    size_t rejected = 0;
-    try {
-      if (const auto issue = [self rackLocationIssue:std::vector<PluginState>{states[slot]}]; !issue.empty())
-        throw std::runtime_error(issue);
-      NativePlugin plugin(states[slot], _audio->sampleRate());
-      for (const auto &point : pending) {
-        if (point.slot != slot || plugin.parameter(point.id, point.value))
-          continue;
-        // A full host queue is drained by capturing state; then retry once.
-        (void)plugin.state();
-        if (!plugin.parameter(point.id, point.value))
-          ++rejected;
-      }
-      auto state = plugin.state();
-      state.bypass = states[slot].bypass;
-      state.instrument = states[slot].instrument;
-      states[slot] = std::move(state);
-    } catch (const std::exception &e) {
-      // Keep the previously saved state of this slot.
-      rejected = count;
-      detail = e.what();
-    }
-    if (rejected) {
-      dropped += rejected;
-      detail = "\"" + states[slot].descriptor.name + "\"" + (detail.empty() ? "" : " (" + detail + ")");
-    }
-  }
-  for (const auto &point : pending)
-    if (point.slot >= states.size())
-      ++dropped;
-  _plugins = std::move(states);
-  if (dropped) {
-    _pluginWarning = std::to_string(dropped) + " manual plugin parameter edit" + (dropped == 1 ? " was" : "s were") +
-                     " not stored in the saved plugin state" + (detail.empty() ? "" : ": " + detail) + ".";
-    NSLog(@"ScreamSeq: %s", _pluginWarning.c_str());
-  } else
-    _pluginWarning.clear();
+  if (_manualParameters.empty()) return;
+  commitManualParameterState(_plugins, _manualParameters, [&](const PluginState &state) {
+    if (const auto issue = [self rackLocationIssue:std::vector<PluginState>{state}]; !issue.empty())
+      throw std::runtime_error(issue);
+    return std::make_unique<NativePlugin>(state, _audio->sampleRate());
+  });
+  _pluginWarning.clear();
 }
 - (NSData *)projectData {
   return [self projectDataForRecovery:NO];

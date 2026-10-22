@@ -4,6 +4,7 @@
 #include "editor/hosted/RecordedGestureTake.hpp"
 #include "editor/hosted/RecordedGestureDrain.hpp"
 #include "editor/hosted/RecordedGestureBoundary.hpp"
+#include "editor/hosted/ManualParameterState.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
@@ -30,6 +31,7 @@ static void check(bool condition,const char *message){if(!condition)throw std::r
 #include "LatestParameterEditsTests.inc"
 #include "PluginEditQueueTests.inc"
 #include "RecordingFrameClockTests.inc"
+#include "ManualParameterStateTests.inc"
 static void process(PluginChain &chain,float *pcm,unsigned frames) {
   bool okay;
 #ifdef _WIN32
@@ -143,7 +145,9 @@ static void captureBaselineRestoration() {
   }
 }
 int main() {
+  // Control-owned persistence failures must never consume accepted edits.
   try {
+    manualParameterStateTests();
     recordingFrameClock();
     capturePreparation();
     recordedGestureCapture();

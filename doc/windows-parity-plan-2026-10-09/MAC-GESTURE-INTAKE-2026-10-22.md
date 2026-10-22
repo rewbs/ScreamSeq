@@ -1,5 +1,39 @@
 # Shared capture: Mac AU intake continuation
 
+## Manual-state preservation prerequisite, 22 October 11:01 UTC
+
+Source inspection found that Mac `commitManualParameters` moved and cleared
+the accepted deltas before constructing temporary providers, then dropped any
+refused values or failed slots and continued Save/recovery/Play with a warning.
+This is unsafe as the baseline for a retained gesture take: accepted manual
+values must survive a provider failure independently of live automation.
+
+The new control-only `editor/hosted/ManualParameterState.hpp` stages every opaque
+state before swapping the rack and clearing deltas. Its factory constructs an
+isolated native provider from saved state. A queue refusal gets the existing
+single drain-and-retry; a repeated refusal, construction or serialization failure
+preserves the entire original rack and pending set. Project-owned identity,
+assignment, layout, aliases and bypass are preserved exactly. The Mac bridge
+uses this helper; Windows' existing transaction ownership is not replaced.
+
+All save/recovery/play and rack mutation callers already catch standard
+exceptions and return failure. Export's existing `serializedData` fallback
+returns empty data on failure. No file is written by this helper, and no playing
+vendor or audio callback is touched. Save/recovery now refuses instead of storing
+a partial manual baseline. Pending values remain in memory and Undo snapshots;
+this does not add an on-disk detached manual-delta recovery format, so failed
+recovery still needs explicit visibility and retry in the future lifecycle UI.
+
+Prepared tests in `ManualParameterStateTests.inc` cover second-provider refusal,
+construction and serialization failure after the first provider succeeds;
+preflight of invalid slots/nonfinite values; successful retry, queue drainage,
+last-write ordering, exact metadata/unrelated state, and real builtin
+serialization/reopen. These join `recorded-automation-tests`. Existing Mac
+`UnifiedHistoryTests.mm::exactParameterHistory` covers folded pending state,
+interleaved Undo/Redo, opaque fields and save/reopen. Run both and Mac actual
+socket save/history checks at the next shared checkpoint. **Unbuilt and untested**;
+the 97bd596a4 review build stays frozen. Full Mac retained recording remains open.
+
 ## Current execution and next source, 22 October 10:43 UTC
 
 The `3cefb9ab9ff0a892586c21442e5c8d78746fbd03` Mac ARM job
