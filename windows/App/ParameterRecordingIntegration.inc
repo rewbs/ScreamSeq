@@ -1,6 +1,14 @@
 // Application ownership for the native parameter take. The worker owns music,
 // timestamps and history; this owner protects presentation and original input.
     std::unique_ptr<ScreamSeq::ParameterRecordingWindow> parameterRecordingWindow;
+    std::unique_ptr<ScreamSeq::PluginRecoveryReviewWindow> pluginRecoveryReviewWindow;
+    void openPluginRecoveryReview() {
+        if(busy||departureInput||parameterRecordingInput)throw std::runtime_error("Wait for the current song operation before reviewing recovered inputs");
+        if(!pluginRecoveryReviewWindow)pluginRecoveryReviewWindow=std::make_unique<ScreamSeq::PluginRecoveryReviewWindow>(window,
+            [this](const auto &method,const auto &params){return documentOperation(method,params);},
+            [this]{return std::pair(documentId,view->session.revision);});
+        pluginRecoveryReviewWindow->show();
+    }
     void reconcileParameterRecording(const ScreamSeq::Api::CompletedCall &call) {
         if(call.document!=documentId||!parameterRecordingBoundary(call.method)||
             !call.result.is_object()||!call.result.contains("retained"))
@@ -36,6 +44,7 @@
         };
         callbacks.saveRecovery=[this]{saveRecovery(view->session.revision,true);};
         callbacks.available=[this]{return !busy&&!recoveryRestoring&&!departureInput&&!parameterRecordingInput;};
+        callbacks.recoveredInputs=[this]{openPluginRecoveryReview();};
         parameterRecordingWindow=std::make_unique<ScreamSeq::ParameterRecordingWindow>(window,std::move(callbacks));
         connectSampleCaptureTransport(*parameterRecordingWindow);
     }

@@ -809,3 +809,30 @@ invalid bounds and immutable input. The existing native worker lifecycle fixture
 now reopens an actual protective copy and checks both archive kinds, original
 identity, stale/invalid request refusal, no live take and unchanged music/history.
 Those new checks have not run; keep them in the next coordinated checkpoint.
+
+## Native imported-input review (next source batch)
+
+`windows/App/PluginRecoveryReviewWindow.hpp` adds the retained, read-only Win32
+view over the shared catalogue/pages. It has separate bounded archive/input pages,
+an ordinary native report list, and selectable exact original input or archive
+details. Unmapped events and unsupported collections/versions remain explicit;
+an unsupported first entry does not prevent opening the window or inspecting an
+independent valid archive. Reading has no mutation/replay callback. The captured
+document and revision guard page requests. Native input is protected during a
+pumped read; unchanged refresh retains the selected row and detail-text caret.
+
+Application owns this separate window and retires it with its document. The live
+recording review opens it via **Recovered inputs…** without changing a live take.
+This is internal navigation until the recording entry point/catalogue is exposed.
+`PluginRecoveryReviewWindowTests.inc` joins the existing plugin-search registration:
+future/malformed and valid archives together, 130 input rows, 68 archived entries,
+exact counters/timestamps, read-only Backspace, retained focus/caret/page, failure
+and retry, and document change during a read. These are source assertions only.
+
+CI observation at approximately 04:25 UTC for the older `ffe4a330c` checkpoint:
+Windows x64 job `119629368462` in run `39719480632` failed compilation on the same
+missing `PluginParametersWindow::retainedDraft` member in both Main and the native
+workspace fixture. The corrected source was already committed in `225ddb62a`.
+Mac ARM job `119629368448` in run `39719480594` passed; Mac Intel job `119629368438`
+was still building. This does not qualify any source added after `ffe4a330c`.
+The next build gate stays **04:55:42 UTC**; do not restart the failed run.

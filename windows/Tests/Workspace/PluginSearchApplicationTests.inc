@@ -41,6 +41,10 @@ void applicationParameterRecordingAdmission() {
     app.parameterRecordingWindow->hide();
     const auto owner=app.parameterRecordingWindow.get();app.openParameterRecording();
     restoreCheck(app.parameterRecordingWindow.get()==owner&&app.parameterRecordingWindow->visible(),"Reopening parameter review replaced its retained owner");
+    SendMessageW(recording,WM_COMMAND,MAKEWPARAM(9738,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(recording,9738)));
+    restoreCheck(app.pluginRecoveryReviewWindow&&app.pluginRecoveryReviewWindow->visible()&&app.pluginRecoveryReviewWindow->snapshot().at("archiveTotal")==0,
+        "Recovered inputs navigation did not open the current song's separate native review window");
+    ScreamSeq::Tests::ownGuiWindow(app.pluginRecoveryReviewWindow->window());app.pluginRecoveryReviewWindow->hide();
     const auto musicBeforeReview=songState(app);
     ScreamSeq::Api::CompletedCall proof{"automation.recording.discard",app.documentId,app.view->session.revision,{{"retained",false},{"capturing",false},{"take","already-finished"}}};
     app.reconcileParameterRecording(proof);

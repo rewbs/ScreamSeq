@@ -22,10 +22,11 @@ public:
     std::function<Json(size_t,size_t)> delivery;
     std::function<void()> saveRecovery;
     std::function<bool()> available;
+    std::function<void()> recoveredInputs;
   };
 private:
   enum:int {scope=9720,start,stop,keep,discard,review,saveCopy,close,target,previous,next,acknowledge,
-    events,heading,summary,help,page,statusLabel};
+    events,heading,summary,help,page,statusLabel,recovered};
   static constexpr UINT_PTR notificationSubclass=0x50525731;
   static constexpr UINT_PTR listSubclass=0x50525732;
   Callbacks callbacks_;
@@ -160,6 +161,7 @@ private:
     if(id==target&&notification==CBN_SELCHANGE){const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
       if(selected<0||size_t(selected)>targets_.size())return;targetKey_=selected?targets_[size_t(selected-1)].dump():std::string();offset_=0;refresh();return;}
     if(notification!=BN_CLICKED)return;
+    if(id==recovered&&callbacks_.recoveredInputs){callbacks_.recoveredInputs();return;}
     if(id==review){
       const auto returned=completion_.returned();if(returned&&callbacks_.reconcile){requireContext();callbacks_.reconcile(*returned);}
       refresh();if(completion_.retained()){
@@ -186,7 +188,7 @@ private:
   void timer(UINT_PTR id)override{if(id==7&&visible()&&!pending_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();}
   void error(const std::exception &error)override{error_=error.what();set(statusLabel,wide(error_));layout();}
   void layout()override {
-    if(!ready_)return;const auto [w,h]=size();place(heading,12,10,w-24,24);place(summary,12,40,w-24,40);
+    if(!ready_)return;const auto [w,h]=size();place(heading,12,10,w-(callbacks_.recoveredInputs?218:24),24);place(recovered,w-198,8,186,26,bool(callbacks_.recoveredInputs));place(summary,12,40,w-24,40);
     place(scope,12,84,w-246,240);place(start,w-226,84,100,26);place(stop,w-118,84,106,26);
     place(help,12,118,w-24,42);place(target,12,168,w-252,240);place(previous,w-232,168,68,26);place(next,w-156,168,68,26);place(close,w-80,168,68,26);
     place(events,12,204,w-24,std::max(80.f,h-346));place(page,12,h-134,w-24,22);
@@ -228,7 +230,7 @@ public:
     create(L"ScreamSeq.ParameterRecording",L"Plugin automation recording",820,650);
     combo(scope);combo(target);NativeInputGate::present(controls_.at(target),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Native input delivery"));NativeInputGate::present(controls_.at(target),CB_SETCURSEL,0,0);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{start,L"Record"},{stop,L"Stop recording"},{keep,L"Keep take"},{discard,L"Discard take"},
-      {review,L"Refresh / review (Ctrl+R)"},{saveCopy,L"Save recovery copy"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"}})button(id,text);
+      {review,L"Refresh / review (Ctrl+R)"},{saveCopy,L"Save recovery copy"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{recovered,L"Recovered inputs…"}})button(id,text);
     add(acknowledge,L"BUTTON",L"Keep accepted points despite reported input loss",BS_AUTOCHECKBOX);
     for(int id:{heading,summary,help,page,statusLabel})label(id,id==heading?L"PLUGIN AUTOMATION RECORDING":L"");
     accessibleName(scope,L"Plugins to record");accessibleName(target,L"Recording input target");accessibleName(acknowledge,L"Keep accepted points despite reported input loss");
@@ -239,7 +241,7 @@ public:
     for(int i=0;i<4;++i){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(names[i]);column.cx=MulDiv(i==0?190:i==1?100:220,GetDpiForWindow(list),96);ListView_InsertColumn(list,i,&column);}
     check(SetWindowSubclass(window_,notifications,notificationSubclass,reinterpret_cast<DWORD_PTR>(this))&&
       SetWindowSubclass(list,listNotifications,listSubclass,reinterpret_cast<DWORD_PTR>(this)),"Install parameter recording notifications");
-    for(int id:{scope,start,stop,target,previous,next,close,events,acknowledge,keep,discard,saveCopy,review})
+    for(int id:{scope,start,stop,recovered,target,previous,next,close,events,acknowledge,keep,discard,saveCopy,review})
       check(SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order recording controls for keyboard navigation");
     finish();refresh();
   }

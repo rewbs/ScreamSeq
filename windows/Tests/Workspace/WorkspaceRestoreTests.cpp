@@ -5,6 +5,7 @@
 #undef wWinMain
 #include "../PrivateGuiProcessTest.hpp"
 #include "../AccessibleControl.hpp"
+#include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include <fstream>
 #include <iostream>
 
@@ -1134,6 +1135,7 @@ static void retainedTakesProtectLeavingDocument() {
 #include "PluginSearchApplicationTests.inc"
 #include "ParameterControlDeliveryTests.inc"
 #include "ParameterRecordingWindowTests.inc"
+#include "PluginRecoveryReviewWindowTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1207,7 +1209,7 @@ int wmain(int argc,wchar_t **argv) {
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
-                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();applicationParameterRecordingAdmission();parameterControlDeliveryCases();applicationRecordedParameterControls();applicationRecordedRackControls();applicationParameterRecordingReview();std::cout<<"PASS native plugin search/value controls, recording admission/delivery/review and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
+                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();applicationParameterRecordingAdmission();parameterControlDeliveryCases();applicationRecordedParameterControls();applicationRecordedRackControls();applicationParameterRecordingReview();applicationPluginRecoveryReview();std::cout<<"PASS native plugin search/value controls, recording admission/delivery/recovery review and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;
