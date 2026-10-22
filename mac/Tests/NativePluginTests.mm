@@ -36,6 +36,7 @@ static void check(bool value, const char *message) {
     throw std::runtime_error(message);
 }
 #include "editor/Tests/PluginChainCaptureTests.inc"
+#include "StoppedPluginRepairTests.inc"
 static void stoppedRecordedPublication(const PluginState &state,bool visible=false) {
   // No device is configured: stopped review must work without opening output.
   AudioDevice audio;audio.setPlugins({state});
@@ -557,6 +558,10 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       check(effect.parameter(7, .3f), "VST3 parameter write");
       auto saved = effect.state();
       check(saved.instanceID == gain.instanceID, "VST3 host state retains plugin instance identity");
+      stoppedNativeRepair(saved);
+      stoppedNativeRepair(closedAU,true);
+      auto repairInstrument=synth;repairInstrument.instanceID="stopped-instrument-repair";
+      stoppedNativeRepair(repairInstrument);
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
       nativeTakeGroupedRestoration(saved,closedAU);

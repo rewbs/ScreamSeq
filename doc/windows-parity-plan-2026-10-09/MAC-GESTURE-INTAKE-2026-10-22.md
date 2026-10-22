@@ -711,3 +711,34 @@ replacement path must preserve unrelated processors and routing. Live release
 must avoid concurrent VST3 state serialization/zero-frame process calls and
 retain editor usability; a stopped-only escape does not close that requirement.
 Full native controls, seven API contracts and socket qualification remain open.
+
+## Following source batch: prepared stopped opaque replacement primitive — unbuilt
+
+`NativePlugin::prepareStoppedReplacement` prepares a fresh native backend from
+the accepted opaque blob without serializing or resetting the old vendor.
+It rejects an open editor, an unsettled preset handoff, changed persistent
+identity/assignments/bypass, ports, latency or parameter catalogue. It captures
+the current provider and canonical replacement state before returning.
+`adoptStoppedReplacement` exchanges backend ownership behind the existing
+scheduling facade, changes the native notification incarnation, and retains
+the old backend in the plan. Its input lease must be released through that
+retained old provider. Stale and double adoption are refused. All of this is
+quiescent control-owner work; playback must be prepared afresh before rendering.
+It is **not** an audio-boundary/live-preset replacement.
+
+This is an internal building block with no session caller yet. Before wiring
+closed-editor opaque Discard, add complete-group preparation and validation,
+combined retained/prepared storage accounting, revision/queue guards and
+retryable old-provider lease cleanup. No successful prefix may escape a failed
+group. A new provider cannot inherit the old take's input cut. The ordinary
+scalar restoration path and public recording behavior are unchanged.
+
+The shared parameter-preview registration now covers builtin state/identity
+preservation, unrelated/stale/double-adoption refusal, reopened PCM, and repair
+behind a completed live preset. `mac/Tests/StoppedPluginRepairTests.inc` adds
+native VST3 effect/instrument and AU opaque-hidden-state coverage, old-lease
+cleanup against the correct provider, save-state reconstruction, effect PCM
+comparison and the existing host realtime allocation/free/lock audit. These
+are source assertions, not execution evidence. Run them with the next coherent
+both-Mac-architecture/shared-Windows checkpoint; no build was started for this
+source batch. It does not close live release, native take UI or socket coverage.

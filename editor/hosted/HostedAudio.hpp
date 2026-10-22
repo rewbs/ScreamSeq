@@ -163,7 +163,9 @@ struct GraphControlPlan {
 class NativePlugin {
   static constexpr uint32_t maximumFrames = 4096;
   static uint64_t nextEditIncarnation();
-  const uint64_t editIncarnation_=nextEditIncarnation(); // Allocated off audio at construction.
+  // Allocated off audio. A quiescent stopped backend repair swaps this with
+  // its prepared replacement; native input observation is control-owner work.
+  uint64_t editIncarnation_=nextEditIncarnation();
   std::atomic<double> latency_{0};
   std::atomic<double> tail_{0};
   PluginDescriptor descriptor_;
@@ -287,6 +289,25 @@ public:
   void loadProgram(const std::string &id); // Control-thread only, on a stopped/prepared instance.
   std::optional<EffectMeters> meters() const noexcept {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->meters() : std::nullopt;}
   PluginState state() const;
+  // Quiescent native-owner repair, never an audio callback or live preset.
+  // The native adapter must protect/close editor input and drain accepted work.
+  // It also guards input cuts, document/rack revision and storage for the whole
+  // group before adoption. This primitive does not acquire or release leases.
+  // Following adoption it must reprepare playback before rendering this facade.
+  // The old vendor remains owned by the plan until control-thread retirement.
+  // Finish its old input lease through plan.prepared after adoption: the live
+  // facade deliberately has a new notification-provider incarnation then.
+  struct StoppedReplacement {
+    std::unique_ptr<NativePlugin> prepared;
+    NativePlugin *expected=nullptr;
+    PluginEditSource source;
+    PluginState canonical;
+    double tail=0;
+    bool adopted=false;
+  };
+  std::unique_ptr<StoppedReplacement> prepareStoppedReplacement(const PluginState &,bool offline) const;
+  bool acceptsStoppedReplacement(const StoppedReplacement &) const noexcept;
+  bool adoptStoppedReplacement(StoppedReplacement &) noexcept;
   std::vector<PluginInstrumentAlias> assignments() const;
   double latency() const { return latency_; }
   bool latencyChangePending() const noexcept;

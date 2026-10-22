@@ -74,6 +74,41 @@ static void workflow(unsigned rate,unsigned block){
   check(chain.cancelParameterPreviews(1,id),"Second cancellation failed");render(chain,2048,block);
   check(parameter(chain,1,1).value==-3&&chain.states()==accepted,"Second cancellation ignored the current manual baseline");
 }
+static void stoppedVendorReplacement() {
+  NativePlugin original(gain("stopped-state"),48000,true),unrelated(gain("unrelated-state"),48000,true);
+  const auto initial=original.state(),other=unrelated.state();const auto source=original.editSource();
+  NativePlugin accepted(initial,48000,true);check(accepted.parameter(1,-9),"Prepare stopped accepted state");
+  const auto saved=accepted.state();
+  auto older=original.prepareStoppedReplacement(saved,true),plan=original.prepareStoppedReplacement(saved,true);
+  check(original.state()==initial&&original.editSource()==source,"Stopped preparation changed the audible vendor");
+  check(!unrelated.acceptsStoppedReplacement(*plan)&&!unrelated.adoptStoppedReplacement(*plan)&&unrelated.state()==other,
+    "Stopped replacement adopted another facade's plan");
+  auto invalid=saved;invalid.instanceID="different";bool refused=false;
+  try{(void)original.prepareStoppedReplacement(invalid,true);}catch(const std::invalid_argument &){refused=true;}
+  check(refused&&original.state()==initial,"Stopped replacement changed a persistent plugin identity");
+  check(original.adoptStoppedReplacement(*plan)&&plan->adopted&&original.state()==saved,
+    "Stopped replacement failed to restore accepted state");
+  check(original.editSource().incarnation!=source.incarnation&&plan->prepared->editSource()==source&&
+    plan->prepared->state()==initial&&unrelated.state()==other,"Stopped replacement lost native identity or retired its old owner early");
+  check(!original.adoptStoppedReplacement(*plan)&&!original.acceptsStoppedReplacement(*older)&&
+    !original.adoptStoppedReplacement(*older)&&original.state()==saved,"Stale stopped replacement replayed its old provider");
+  // Playback is prepared afresh after this stopped-only operation. No old
+  // schedule/voice/parameter cache is reused as a live replacement mechanism.
+  NativePlugin reopened(original.state(),48000,true);std::array<float,256> pcm;pcm.fill(1);
+  check(reopened.process(pcm.data(),128,0)&&std::abs(pcm.back()-std::pow(10.f,-9.f/20))<1e-6f,
+    "Reprepared stopped state did not render its accepted value");
+  // The published vendor can already belong to a completed live preset. Keep
+  // that stable facade and its retained preset owners intact during repair.
+  NativePlugin facade(initial,48000,true);auto preset=facade.preparePreset(saved,true,{});
+  facade.adoptPreset(*preset);refused=false;
+  try{(void)facade.prepareStoppedReplacement(initial,true);}catch(const std::runtime_error &){refused=true;}
+  check(refused,"Stopped repair entered an incomplete live vendor handoff");
+  std::array<float,2048> fade;fade.fill(1);check(facade.process(fade.data(),1024,0),"Finish prior live preset fixture");
+  const auto presetSource=facade.editSource();auto repair=facade.prepareStoppedReplacement(initial,true);
+  check(facade.adoptStoppedReplacement(*repair)&&facade.state()==initial&&repair->prepared->state()==saved&&
+    repair->prepared->editSource()==presetSource&&facade.editSource().incarnation!=presetSource.incarnation,
+    "Stopped repair failed behind a previously replaced stable scheduling facade");
+}
 static void refusal(){
   PluginChain chain({gain("preview-a"),gain("preview-b")},48000,true);
   const auto original=chain.states();
@@ -212,6 +247,7 @@ static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
   check(accepted.signal.library[0].nodes[1].plugin.state==initial.signal.library[0].nodes[1].plugin.state&&doc->native()==untouched,"Recipe preview altered opaque state or the owning document");
 }
 int main(){try{
+  stoppedVendorReplacement();
   ownership();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);

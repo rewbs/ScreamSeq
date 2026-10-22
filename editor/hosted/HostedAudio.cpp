@@ -195,6 +195,53 @@ std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
   result.insert(result.end(), aliases_.begin(), aliases_.end());
   return result;
 }
+std::unique_ptr<NativePlugin::StoppedReplacement> NativePlugin::prepareStoppedReplacement(const PluginState &saved,bool offline) const {
+  const auto *current=publishedVendor();
+  const auto source=editSource();
+  if(!presetSettled_.load(std::memory_order_acquire)||renderVendor_!=current)
+    throw std::runtime_error("Finish the pending vendor handoff before stopped state repair");
+  if(editorOpen())throw std::runtime_error("Close the native editor before stopped state repair");
+  if(saved.descriptor!=descriptor_||saved.instanceID!=instanceID_||
+     saved.bypass!=bypassed()||saved.instrument!=assignedInstrument_||saved.midiChannel!=midiChannel_||saved.aliases!=aliases_||
+     saved.auxiliaryInputs!=auxiliaryInputs_||saved.auxiliaryOutputs!=auxiliaryOutputs_)
+    throw std::invalid_argument("Stopped state repair must retain plugin identity, assignments and ports");
+  auto result=std::make_unique<StoppedReplacement>();
+  result->expected=const_cast<NativePlugin *>(current);result->source=source;
+  result->prepared=std::make_unique<NativePlugin>(saved,rate_,offline);
+  const auto &next=*result->prepared;
+  if(next.audioLayout_!=audioLayout_||next.preparedInputs_!=preparedInputs_||next.preparedOutputs_!=preparedOutputs_||
+     std::llround(next.latency()*rate_)!=std::llround(latency()*rate_))
+    throw std::invalid_argument("Stopped state repair changes prepared ports or latency");
+  const auto before=parameters(),after=next.parameters();
+  if(before.size()!=after.size())throw std::invalid_argument("Stopped state repair changes parameter identities");
+  for(size_t i=0;i<before.size();++i) {
+    const auto &a=before[i],&b=after[i];
+    if(a.id!=b.id||a.min!=b.min||a.max!=b.max||a.step!=b.step||a.writable!=b.writable||a.continuous!=b.continuous)
+      throw std::invalid_argument("Stopped state repair changes the parameter catalogue");
+  }
+  result->canonical=next.state();result->tail=next.tail();
+  if(!std::isfinite(result->tail)||result->tail<0||editorOpen()||!acceptsStoppedReplacement(*result))
+    throw std::runtime_error("Native provider changed during stopped state preparation");
+  return result;
+}
+bool NativePlugin::acceptsStoppedReplacement(const StoppedReplacement &plan) const noexcept {
+  return !plan.adopted&&plan.prepared&&plan.expected==publishedVendor()&&renderVendor_==plan.expected&&
+    presetSettled_.load(std::memory_order_acquire)&&editSource()==plan.source;
+}
+bool NativePlugin::adoptStoppedReplacement(StoppedReplacement &plan) noexcept {
+  if(!acceptsStoppedReplacement(plan))return false;
+  auto &current=*plan.expected;auto &next=*plan.prepared;
+  // The backend object's address remains stable, preserving its own native
+  // callbacks. Only unique ownership moves; the stable scheduler facade,
+  // instrument bindings and routing pointers are not replaced. Old objects
+  // are retained in plan.prepared, with their original notification identity,
+  // until the native owner finishes lease cleanup and retires the plan.
+  current.backend_.swap(next.backend_);current.builtin_.swap(next.builtin_);
+  std::swap(current.editIncarnation_,next.editIncarnation_);
+  current.tail_.store(plan.tail,std::memory_order_release);tail_.store(plan.tail,std::memory_order_release);
+  presetTailEpoch_.fetch_add(1,std::memory_order_release);
+  plan.adopted=true;return true;
+}
 double NativePlugin::tail() const {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->tail() : tail_.load(std::memory_order_acquire);}
 uint64_t NativePlugin::tailRevision() const noexcept {const auto *p=publishedVendor();return presetTailEpoch_.load(std::memory_order_acquire)+(p->builtin_ ? p->builtin_->tailRevision() : 0);}
 void NativePlugin::includeParameterRange(uint32_t id, float minimum, float maximum) noexcept {
