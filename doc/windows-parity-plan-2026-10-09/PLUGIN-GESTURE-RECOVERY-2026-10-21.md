@@ -223,10 +223,18 @@ capacity/loss and invalid-value failure tests remain. Mac's existing
 order, exact loss, state flush and actual PCM; it is required for this extraction.
 
 To avoid another build cycle, validate these two source batches together at the
-00:53:09 UTC gate after freezing the combined commit. Add Windows `vst3-tests` and
+00:53:09 UTC gate after freezing the combined commit. Add Windows `vst3-native-tests` and
 CTest `vst3-native` to the earlier bounded selection. Mac qualification must include
 `plugin-robustness`, native-plugins, musical-automation, recorded-automation and
 parameter-preview. Main CI triggered by the prior navigation merge is not evidence
 for this new backend. At 00:26 UTC its Mac ARM64 job had passed; Mac Intel and
 Windows x64 were still running. Keep new source on the feature branch until the
 new candidate's required checks pass.
+
+The legacy standalone `windows/Tests/Plugins` project imported engine libraries
+from an old build directory and asserted ARM64 unconditionally. The grouped root
+build now registers that same native PCM/scheduling suite as `vst3-native-tests`,
+linked to the candidate's actual `TrackerHosted` and fixture/scanner. Its native
+architecture assertion remains strict, selecting ARM64 or AMD64 at compile time;
+emulation is still rejected. This makes the existing broader provider assertions
+usable in both local ARM64 qualification and x64 CI without an extra build.
