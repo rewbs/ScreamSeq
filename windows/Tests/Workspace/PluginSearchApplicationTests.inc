@@ -89,6 +89,17 @@ void applicationPluginSearch() {
 
 void applicationPluginValueControls() {
     using Field=ScreamSeq::PluginParameterField;
+    restoreCheck(Field::text(double(-13.656f))=="-13.656","Generated parameter exposed float promotion noise");
+    for(const float value:{-96.f,-13.656f,0.f,.00000001f,24.f,1234567.f}) {
+        const auto text=Field::text(double(value));float parsed=0;
+        const auto result=std::from_chars(text.data(),text.data()+text.size(),parsed);
+        restoreCheck(result.ec==std::errc{}&&result.ptr==text.data()+text.size()&&parsed==value,
+            "Readable parameter text changed its stored float");
+    }
+    const double precise=1.00000000000001;const auto exact=Field::text(precise);double parsed=0;
+    const auto decoded=std::from_chars(exact.data(),exact.data()+exact.size(),parsed);
+    restoreCheck(decoded.ec==std::errc{}&&decoded.ptr==exact.data()+exact.size()&&parsed==precise,
+        "Double parameter metadata was narrowed while formatting");
     RestoreJson metadata={{"name","Mode"},{"min",0},{"max",2},{"value",2},{"manualValue",1},
         {"choices",{"Low","Middle","High"}},{"unit",1},{"step",1},{"writable",true}};
     const auto interpreted=Field::read(metadata);

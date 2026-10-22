@@ -274,3 +274,39 @@ the last observation. These main results do not qualify the new plugin source.
 
 Include both corrected fixture cases in the next candidate's bounded application
 selection (seven actual-app cases total), with explicit silent-audio opt-in.
+
+## First combined candidate, 22 October 00:53 UTC
+
+Frozen source `2ff11b8ae` ran exactly one coordinated checkpoint: local ARM64
+started 00:53:09 UTC; draft PR #6 started Windows/Mac workflows at 00:53:34.
+Next build must wait until **01:53:35 UTC**, or later if another actual build
+start supersedes that gate. Local app and workspace executable compiled, but
+the batch failed compiling `DocumentControllerTests.cpp`: its recovery test
+used the shared decoder without including its header. Add the direct include;
+do not remove the decoder roundtrip assertion. Later test targets were not built.
+
+The resulting app SHA256 is
+`1a766736ca49c69f232fd029ef64ed2e8251c4df6a96c3243f8b41d79f673948`.
+Partial evidence lives in `candidate/partial.json`: all five compiled workspace
+registrations passed. Five of six app cases passed; direct parameter-window
+invocation initially failed in the Python helper because command 335 is a menu
+command without a child HWND. Pass LPARAM zero for such commands. The corrected
+case then passed on the same executable, retaining parameter edit, history,
+draft and save/reopen assertions. This is not a pass of all required gates.
+
+Computer Use inspected isolated inspection/automation PID 30260 on this binary.
+Add Gainer, rack Params, the contextual Parameter controls destination and retained
+reopening worked. Dragging Gain changed 0 to -13.656000137329102 and displayed
+the successful one-Undo status. This exposed numeric presentation noise: shortest
+round-trip float text now replaces promoted-double JSON text in generated rack
+and window fields. Actual double metadata retains double precision; user draft
+text is untouched. Added tests check scalar roundtrips and genuine double values.
+These corrections are source-only until the next build.
+
+The Computer Use helper only listed Main as a targetable window. Related-window
+coordinates worked, but related accessibility indexes were rejected even after
+refresh. Main field focus observations returned Main rather than an edit after
+clicks; do not claim typing, Tab or floating-field continuity verified from those
+observations. Native focus/caret/Tab assertions passed in the workspace harness;
+fresh Computer Use focus verification remains required. No temporal flicker or
+audio-performance claim is made. Candidate is not packaged or merged.

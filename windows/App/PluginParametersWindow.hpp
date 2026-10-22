@@ -100,12 +100,12 @@ class PluginParametersWindow final : public NativeToolWindow {
     setting_=true;
     for(int i=0;i<pageSize;++i){auto &r=rows_[i];r={};const auto index=page_*pageSize+i;if(size_t(index)>=parameters_.size())continue;
       r.index=index;r.field=PluginParameterField::read(parameters_[size_t(index)]);const auto &f=r.field;
-      set(control(i,nameLabel),wide(f.name));set(control(i,value),f.valid?wide(Json(f.value).dump()):L"");
+      set(control(i,nameLabel),wide(f.name));set(control(i,value),f.valid?wide(PluginParameterField::text(f.value)):L"");
       const auto picker=controls_.at(control(i,choices));NativeInputGate::present(picker,CB_RESETCONTENT,0,0);
       for(const auto &name:f.choices){const auto label=wide(name);NativeInputGate::present(picker,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));}
       if(f.valid&&f.kind!=PluginParameterField::Kind::Number)NativeInputGate::present(picker,CB_SETCURSEL,WPARAM(f.value),0);
       set(control(i,toggle),f.valid&&f.kind==PluginParameterField::Kind::Toggle?wide(f.choices[size_t(f.value)]):L"Unavailable");
-      set(control(i,rangeLabel),f.valid?wide(std::string(f.writable?"":"Read only · ")+Json(f.minimum).dump()+" … "+Json(f.maximum).dump()+" "+f.unit):L"Unavailable metadata");
+      set(control(i,rangeLabel),f.valid?wide(std::string(f.writable?"":"Read only · ")+PluginParameterField::text(f.minimum)+" … "+PluginParameterField::text(f.maximum)+" "+f.unit):L"Unavailable metadata");
       const auto position=f.valid&&f.maximum>f.minimum?int(std::round((f.value-f.minimum)/(f.maximum-f.minimum)*10000)):0;
       NativeInputGate::present(controls_.at(control(i,slider)),TBM_SETPOS,TRUE,position);
       for(auto part:{slider,value,choices,toggle}){const auto label=wide(f.name+(part==slider?" slider":" manual value"));NativeAccessibility::name(controls_.at(control(i,part)),label.c_str());}
@@ -230,7 +230,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   void layout()override{
     if(!ready_)return;const auto focus=GetFocus();if(pending_&&!pendingFocus_&&owns(focus))pendingFocus_=focus;
     const auto [w,h]=size();place(heading,12,10,w-24,24);place(previous,12,42,64,26);place(parameter,84,42,w-244,260);place(next,w-152,42,64,26);place(close,w-80,42,68,26);
-    const bool ready=!pending_&&!completion_.retained()&&!needsReload_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/pageSize));
+    const bool ready=!pending_&&!completion_.retained()&&!needsReload_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
     for(int i=0;i<pageSize;++i){const auto &r=rows_[i];const auto &f=r.field;const bool visible=r.index>=0;const bool numeric=f.kind==PluginParameterField::Kind::Number;const float y=82+i*rowHeight;
       place(control(i,nameLabel),12,y,178,19,visible);place(control(i,rangeLabel),12,y+20,178,20,visible);
       place(control(i,slider),196,y+4,w-418,30,visible&&numeric);

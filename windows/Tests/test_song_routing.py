@@ -53,7 +53,7 @@ class SongRoutingTests(unittest.TestCase):
         return result
     add_gain=support.GraphMixerAppTests.add_gain
     def main_command(self,identifier):
-        hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier))
+        hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier) or 0)
     def local(self):return self.read('workspace.get')['songRouting']
     def window(self,class_name='ScreamSeq.SongRouting'):
         found=[]

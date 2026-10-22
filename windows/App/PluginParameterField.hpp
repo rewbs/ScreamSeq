@@ -1,8 +1,10 @@
 #pragma once
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <charconv>
 #include <limits>
 #include <string>
+#include <stdexcept>
 #include <vector>
 
 namespace ScreamSeq {
@@ -15,6 +17,20 @@ struct PluginParameterField {
   bool valid=false,writable=false;
   std::string name,unit;
   std::vector<std::string> choices;
+  // Stored host scalars are floats, promoted by JSON to double. Show the
+  // shortest round-tripping scalar rather than exposing that promotion's
+  // binary tail. Genuine double metadata keeps its full round-trip precision.
+  // Only generated text uses this; never rewrite a user's retained draft.
+  static std::string text(double value) {
+    char buffer[64];
+    const bool inFloatRange=std::isfinite(value)&&std::abs(value)<=std::numeric_limits<float>::max();
+    const auto scalar=inFloatRange?static_cast<float>(value):0.f;
+    const auto result=inFloatRange&&double(scalar)==value
+      ?std::to_chars(buffer,buffer+sizeof(buffer),scalar)
+      :std::to_chars(buffer,buffer+sizeof(buffer),value);
+    if(result.ec!=std::errc{})throw std::runtime_error("Cannot format plugin parameter");
+    return {buffer,result.ptr};
+  }
   static PluginParameterField read(const nlohmann::json &p) {
     PluginParameterField field;
     try {
