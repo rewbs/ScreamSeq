@@ -8,6 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 15:50UTC follow-up:**077e Windows CI built and passed its portable,
+native, vendor and conformance gates;12 distinct app cases failed at playback/
+startup on the runner. All12 passed unchanged locally on the exact downloaded
+x64 CI executable (34.950s, ARM64 emulation, silent private desktops). CI remains
+failed and that local evidence is bounded; see the command report's appended
+receipt section. Mac ARM passed; Intel built and is still testing. No rebuild
+or extra CI run. The16:09:04UTC earliest next checkpoint remains in force.
+
+New unbuilt source now includes internal Mac session ownership, exclusive take
+polling, one-step Keep history and shared typed recovery overlay. It is not yet
+exposed by the API or UI: guarded opaque-state restoration/release, lifecycle
+controls and successful session/socket/history/reopen checks are next. See
+`MAC-GESTURE-INTAKE-2026-10-22.md`'s latest section for concrete files and gates.
+The older boundary below describes the077e package, not these later changes.
+
 **22 October 15:21 UTC:** The single077e command/scratch checkpoint passed all
 five native groups and eight selected actual-app cases. Fresh Computer Use
 verified unavailable command explanations, availability after a real edit,

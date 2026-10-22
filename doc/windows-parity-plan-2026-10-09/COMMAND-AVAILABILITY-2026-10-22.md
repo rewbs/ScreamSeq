@@ -135,3 +135,37 @@ the paired checkpoint, still running at15:15UTC; do not restart them. The latest
 compile start was15:09:04UTC, so no next coordinated build before16:09:04UTC.
 Main has not been merged. CI and current native audio evidence still require
 review before integration; retained96b reciprocal exchange is recorded separately.
+
+### 15:50UTC CI review and exact-binary audio replay
+
+Windows39802007518/job119904965173 built successfully and passed158 portable/
+worker registrations,50 native editor/preference/recovery registrations, scratch,
+vendor-ownership and conformance gates. The93-case app group failed15 times across
+12 distinct playback/startup cases (three additional teardown records), with two
+skips. Transport cases explicitly reported that a WASAPI endpoint was required;
+other failures occurred before a live playback clock or app startup. This is
+consistent with the preceding runner-device limitation, not proof by itself
+that every assertion would pass with a device. The CI result remains failed.
+
+Downloaded artifact12437828292 was verified against GitHub ZIP SHA256
+`ba52de3bee720e98a7ea5f5143a2e0d9b027cdd97348b369420a737d92d6a485`.
+Its retained x64 executable SHA256 is
+`70a9afa713eaeaf7df5815a41df29c69b99fd9a8dfd43b33b06f2cd282259947`.
+Build receipt source5159720f4f2355c0a8f16ed6d433ff625d4d9f06 is the synthetic
+PR merge; its tree was checked equal to077e before execution. Archive, nested
+bundle, executable and build-receipt hashes and the x64 PE machine were verified.
+
+All12 affected cases then passed unchanged in34.950s using that exact executable
+on this Windows ARM64 host under x64 emulation, silent private desktops and the
+available endpoint. No rebuild, broader rerun, assertion/timeout relaxation or
+system route change. This replay kept the preceding local12-case order; it is
+not a rerun of all93 tests in their CI order or native x64 hardware qualification.
+Receipts and original CI logs are under
+`bin/mac-gesture-20261022/palette-availability/ci/windows-x64/`, particularly
+`verified-identity.json`, `device-order-diagnostic.json` and its log. Executable
+hash remained unchanged. All owned replay processes were closed by the harness.
+
+Mac ARM job119904967607 passed all gates. Intel119904968198 built successfully
+and remained in its test phase at the last check. No CI job was restarted.
+Main integration remains pending; a merge-triggered CI run also counts toward
+the coordinated16:09:04UTC gate. Newer session code is outside this candidate.
