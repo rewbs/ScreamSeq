@@ -5,6 +5,7 @@
 #undef wWinMain
 #include "../PrivateGuiProcessTest.hpp"
 #include "../AccessibleControl.hpp"
+#include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include <fstream>
 #include <iostream>
 
@@ -79,6 +80,11 @@ struct RestoreApplication final:Application {
     bool sampleGuardFails=false;
     std::function<void()> duringSampleGuard;
     std::function<void()> completionFault;
+    ScreamSeq::ParameterControlDelivery::Submit parameterControlSubmit;
+    std::future<ScreamSeq::Api::CompletedCall> submitParameterControl(const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt)override {
+        if(parameterControlSubmit)return parameterControlSubmit(params,receipt);
+        return Application::submitParameterControl(params,receipt);
+    }
     std::function<void(const std::string &)> sampleMutationCompletion;
     std::function<void(const std::string &,Json &)> sampleReadResult;
     std::function<void()> sampleLibraryCompletionFault;
@@ -1080,17 +1086,46 @@ static void retainedTakesProtectLeavingDocument() {
     });
     withRestoreFixture([](RestoreApplication &app) {
         app.sampleGuardState=Json{{"take",""}};
+        // A request already admitted by the worker can complete during a
+        // pumped read. Inject that completion below the newer native input
+        // gate; the aggregate guard must still recheck the adopted MIDI state.
+        const auto completeMidiStart=[&] {
+            const auto result=app.await(app.controller->invoke("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}}));
+            app.finishDocumentOperation("recording.start",result);
+        };
         app.duringSampleGuard=[&] {
-            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+            completeMidiStart();
         };
         restoreCheck(!app.protectRecordingTake()&&app.hasRecordingTake(),"MIDI begun while sample read pumps must be rechecked");
         const auto midi=app.view->recording.at("take");
         app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
         app.duringSampleGuard=[&] {
-            app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});
+            completeMidiStart();
         };
         app.sampleGuardFails=true;
         restoreCheck(!app.canClose()&&app.hasRecordingTake(),"Failed sample read after MIDI start must not offer Close anyway");
+    });
+    withRestoreFixture([](RestoreApplication &app) {
+        app.sampleGuardState=Json{{"take",""}};
+        const auto before=songState(app);unsigned rejected=0;
+        const auto attemptNativeStart=[&] {
+            try {app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}});}
+            catch(const ScreamSeq::Api::ApiError &error) {
+                restoreCheck(error.code==-32002&&error.outcome&&error.outcome->state==Tracker::CommitOutcome::NotCommitted,
+                    "Pumped native recording refusal lost its pre-queue outcome");++rejected;return;
+            }
+            throw std::runtime_error("Native recording start bypassed the aggregate take input gate");
+        };
+        app.duringSampleGuard=attemptNativeStart;
+        restoreCheck(app.protectRecordingTake()&&rejected==1&&!app.hasRecordingTake()&&songState(app)==before&&!app.parameterRecordingInput,
+            "Successful take inspection admitted pumped input or failed to release its gate");
+        app.duringSampleGuard=attemptNativeStart;app.sampleGuardFails=true;
+        restoreCheck(!app.canClose()&&rejected==2&&!app.hasRecordingTake()&&songState(app)==before&&!app.parameterRecordingInput,
+            "Failed sample inspection allowed Close, admitted input or retained its gate");
+        app.sampleGuardFails=false;
+        const auto midi=app.documentOperation("recording.start",{{"expectedRevision",app.view->session.revision},{"channels",Json::array({0})},{"instrument",1}}).at("take");
+        restoreCheck(app.hasRecordingTake(),"Resolved take inspection left native recording disabled");
+        app.documentOperation("recording.discard",{{"expectedRevision",app.view->session.revision},{"take",midi}});
     });
 }
 
@@ -1125,8 +1160,12 @@ static void retainedTakesProtectLeavingDocument() {
 #include "SongPropertiesApplicationTests.inc"
 #include "KeyboardSettingsApplicationTests.inc"
 #include "AutomaticEditsApplicationTests.inc"
+#include "ScratchWriteAdmissionTests.inc"
 #include "PatternAccessibilityApplicationTests.inc"
 #include "PluginSearchApplicationTests.inc"
+#include "ParameterControlDeliveryTests.inc"
+#include "ParameterRecordingWindowTests.inc"
+#include "PluginRecoveryReviewWindowTests.inc"
 #include "UnknownAssetApplicationTests.inc"
 #include "ParityFixtureApplicationTests.inc"
 
@@ -1174,6 +1213,12 @@ void nativeCompletionRetainsOutcome() {
 
 int wmain(int argc,wchar_t **argv) {
     try {
+        if(argc>1&&std::wstring_view(argv[1])==L"--inspect-foreground-focus") {
+            restoreCheck(argc==5,"Foreground focus observer requires QA PID, Main HWND and field HWND");
+            const auto number=[](const wchar_t *text){size_t end=0;const auto value=std::stoull(text,&end,0);restoreCheck(end==wcslen(text),"Invalid foreground focus identity");return value;};
+            const auto pid=number(argv[2]);restoreCheck(pid>0&&pid<=std::numeric_limits<DWORD>::max(),"Invalid QA PID");
+            inspectForegroundNativeFocus(DWORD(pid),reinterpret_cast<HWND>(uintptr_t(number(argv[3]))),reinterpret_cast<HWND>(uintptr_t(number(argv[4]))));return 0;
+        }
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqWorkspaceRestore",argc,argv,[] {
             const auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);ScreamSeq::check(initialized,"Initialize restore test COM");
@@ -1200,7 +1245,7 @@ int wmain(int argc,wchar_t **argv) {
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"plugin-search") {
-                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();std::cout<<"PASS native plugin search/value controls and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
+                    applicationPluginSearch();applicationPluginValueControls();applicationPluginParameterNavigation();applicationPluginRackPosition();applicationParameterRecordingAdmission();parameterControlDeliveryCases();applicationRecordedParameterControls();applicationRecordedRackControls();applicationParameterRecordingReview();applicationPluginRecoveryReview();std::cout<<"PASS native plugin search/value controls, recording admission/delivery/recovery review and rack positions: stable identities, drafts, keyboard, metadata, history and persistence\n";return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"pattern-accessibility") {
                     applicationPatternAccessibility();std::cout<<"PASS native pattern UIA tree, values, geometry, guarded navigation, MTA client and retirement\n";return;
@@ -1246,12 +1291,19 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("song routing catalogue refusal",applicationSongRoutingCatalogRefusal);
                     return;
                 }
+                if(length<std::size(group)&&std::wstring_view(group)==L"scratch-editor") {
+                    timedRestoreCase("scratch write admission",applicationScratchWriteAdmission);
+                    timedRestoreCase("scratch external refresh",applicationScratchExternalRefresh);
+                    return;
+                }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
+                    timedRestoreCase("parameter refresh focus and retry",applicationParameterRefreshFocus);
                     timedRestoreCase("retained rack parameters and preview lifecycle",applicationGraphParameterInspector);
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"context-panel") {
                     timedRestoreCase("context panel, visibility, layouts and retained focus",applicationContextPanel);
+                    timedRestoreCase("recording sound choice with hidden context and retained settings",applicationRecordingSoundChoice);
                     timedRestoreCase("navigation placements and retained graph",applicationNavigation);
                     timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
                     timedRestoreCase("navigation resize and explicit destinations",applicationNavigationResizeAndDestinations);

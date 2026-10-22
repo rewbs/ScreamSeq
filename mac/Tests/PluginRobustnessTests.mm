@@ -4,6 +4,7 @@
 // automation, malformed saved state and events for processors nobody renders.
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/AudioUnitHost.hpp"
+#include "../Audio/AudioUnitEditIntake.hpp"
 #include "../Audio/VST3Host.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "soundlib/ModInstrument.h"
@@ -43,6 +44,34 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
   effect.instanceID = "robust-effect"; synth.instanceID = "robust-synth";
   uint64_t a = 0, f = 0, l = 0;
 
+  { // AU notifications retain their existing, smaller budget and exact input.
+    auto intake=std::make_unique<AudioUnitEditIntake>();PluginEdit event{99,-1,17};
+    const auto empty=intake->fence(100);
+    check(empty.hostTime==100&&!empty.pending&&!empty.dropped&&
+      intake->popBefore(empty,event)==PluginEditRead::Complete&&event.id==99,"Empty AU boundary changed input");
+    check(intake->push({7,.25f,0}),"AU intake rejected an original unavailable timestamp");
+    const auto first=intake->fence(200);
+    check(intake->push({7,.75f,201}),"AU intake rejected later input");
+    check(intake->popBefore(first,event)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&event.hostTime==0,
+      "AU intake replaced original input or invented a timestamp");
+    check(intake->popBefore(first,event)==PluginEditRead::Complete&&intake->fence(300).pending==1,
+      "AU intake consumed input after its fixed boundary");
+    check(intake->pop(event)&&event.value==.75f&&event.hostTime==201&&!intake->pop(event),"AU intake lost its unread suffix");
+    check(intake->popBefore(first,event)==PluginEditRead::InvalidFence,"AU intake accepted a passed boundary");
+    for(unsigned round=0;round<2;++round) {
+      for(size_t i=0;i<AudioUnitEditIntake::capacity;++i)check(intake->push({7,float(i),i+1}),"AU budget shrank");
+      check(!intake->push({7,-1,999})&&intake->dropped()==round+1,"AU overflow overwrote input or reset its loss evidence");
+      const auto full=intake->fence(400+round);
+      check(full.pending==1024&&full.dropped==round+1,"AU fence lost exact pending/loss evidence");
+      for(size_t i=0;i<AudioUnitEditIntake::capacity;++i)check(intake->popBefore(full,event)==PluginEditRead::Event&&
+        event.value==float(i)&&event.hostTime==i+1,"AU wrap changed delivered input");
+      check(intake->popBefore(full,event)==PluginEditRead::Complete&&intake->dropped()==round+1,"AU drain reset loss evidence");
+    }
+    tracker_audit_begin();const bool pushed=intake->push({7,.5f,500});const auto cut=intake->fence(501);
+    const auto popped=intake->popBefore(cut,event);tracker_audit_end(&a,&f,&l);
+    check(pushed&&popped==PluginEditRead::Event&&a+f+l==0,"AU notification intake allocated/freed/locked");
+  }
+
   { // Factory strings filled to the last byte have no terminator.
     unterminated(true);
     const auto found = NativePlugin::discoverVST3(argv[1]);
@@ -72,6 +101,23 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
     check(std::filesystem::exists(path) && std::filesystem::file_size(path) > 44, "Export completes with a setup-time latency notification");
     std::filesystem::remove(path);
     announce(false);
+  }
+  { // A native-owner boundary must leave the next gesture for its next owner.
+    NativePlugin p(effect,48000);
+    check(edit(7,.25)==1,"Pre-boundary Mac gesture failed");
+    const auto boundary=p.editBoundary();
+    check(boundary&&boundary->fence.hostTime&&boundary->fence.pending==1&&boundary->source==p.editSource(),"Mac native boundary lost its provider/time/pending input");
+    check(edit(7,.75)==1,"Post-boundary Mac gesture failed");
+    PluginEdit event;PluginEditSource source;
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&
+      event.hostTime<=boundary->fence.hostTime&&source==boundary->source,"Mac native boundary changed its original event");
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::Complete,"Mac native boundary consumed newer input");
+    check(p.popEdit(event,source)&&event.value==.75f&&event.hostTime>=boundary->fence.hostTime,"Mac lost post-boundary input");
+    const auto drained=p.editBoundary();
+    check(drained&&drained->fence.pending==0,"Drained Mac provider still reports pending input");
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,"Mac accepted an already passed boundary");
+    NativePlugin replacement(effect,48000);
+    check(replacement.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,"Mac reused another provider's boundary");
   }
   { // Editor reports: clamp, ignore, coalesce. None stops rendering.
     VST3Plugin p(effect, 48000, false);

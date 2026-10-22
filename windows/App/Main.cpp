@@ -7,6 +7,7 @@
 #include "../Session/LiveParameterPublication.hpp"
 #include "../Plugins/WindowsVST3.hpp"
 #include "RenderSurface.hpp"
+#include "PresentationBackoff.hpp"
 #include "ApiDispatch.hpp"
 #include "ModuleExportDialog.hpp"
 #include "WorkspaceState.hpp"
@@ -28,6 +29,7 @@
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginParameterField.hpp"
 #include "PluginParametersWindow.hpp"
+#include "ParameterControlDelivery.hpp"
 #include "PluginLibraryWindow.hpp"
 #include "PluginPathWindow.hpp"
 #include "SongRoutingWindow.hpp"
@@ -56,6 +58,8 @@
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
 #include "MidiRecordingWindow.hpp"
+#include "ParameterRecordingWindow.hpp"
+#include "PluginRecoveryReviewWindow.hpp"
 #include "ArrangementWindow.hpp"
 #include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
@@ -110,8 +114,9 @@ constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixi
     navigationInstrumentsCommand=649,navigationPluginsCommand=650,navigationMixerCommand=651,
     navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
 constexpr int navigationEffectsCommand=655,navigationRecipesCommand=656,
-    floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660;
-static_assert(contextActionLast<700&&floatCurveCommand<700,"Application commands must not overlap effect field controls");
+    floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660,
+    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662;
+static_assert(contextActionLast<700&&pluginRecoveryReviewCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -142,7 +147,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     pluginBypass=305,pluginRemove=306,pluginUp=307,pluginDown=308,pluginUndo=309,pluginRedo=310,
     pluginParameter=311,pluginValue=312,pluginApply=313,pluginInstrument=314,pluginAssign=315,pluginsCommand=316,pluginNewInstrument=317,
     pluginPage=318,pluginProgram=319,pluginLoadProgram=320,pluginPort=321,pluginTogglePort=322,pluginAliases=323,pluginSavePreset=324,pluginLoadPreset=325,pluginBrowse=326,pluginReconnect=327,
-    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,pluginMove=334,
+    pluginParameterSearch=328,pluginProgramSearch=329,pluginValueChoice=330,pluginValueToggle=331,pluginAutomate=332,pluginActivity=333,pluginMove=334,pluginParametersCommand=335,
     effectsCommand=340,effectKind=341,effectValue=342,effectOffset=343,effectDuration=344,effectRange=345,
     effectBinding=346,effectApply=347,effectReload=348,effectSearch=349,effectUnits=350,
     effectFieldBase=700,effectChoiceBase=720,
@@ -255,6 +260,7 @@ public:
     bool silentOutput=false; // Explicit diagnostic mode; DSP still runs in full.
     bool frameRequested=true;
     uint64_t idleWaits=0;
+    ScreamSeq::PresentationBackoff presentationBackoff;
 	unsigned patternIndex = 0, row = 0, channel = 0, column = 0, firstRow = 0;
 	std::wstring status = L"Ready / demo document / no unsaved user song";
 
@@ -287,11 +293,22 @@ public:
 			{"frames",t.frames},{"callbacks",audio.callbackCount},{"overruns",audio.deadlineOverruns},
 			{"maxMicros",audio.maxCallbackNanoseconds / 1000.0},{"fault",preparedPlayback && preparedPlayback->failed()}};
         result.transport["audioActive"]=device.running();result.transport["audition"]=device.running()&&auditionOnly;result.transport["auditionDropped"]=auditionDropped;result.transport["playbackEpoch"]=stopGeneration;
-        result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits}};
+        result.transport["presentation"]={{"frames",cpuDraw.size()},{"idleWaits",idleWaits},
+            {"occluded",presentationBackoff.occluded()},{"occlusionBackoffs",presentationBackoff.count()}};
         result.transport["faultDetails"]=preparedPlayback?preparedPlayback->failureDiagnostics():Json(nullptr);
         const auto clock=device.clockStatus();
         result.transport["recordingClock"]={{"valid",clock.valid},{"generation",clock.generation},{"lastHostTime",std::to_string(clock.lastHostTime)},
             {"discontinuities",clock.discontinuities},{"hostTicksPerSecond",ScreamSeq::hostTicksPerSecond}};
+        if(preparedPlayback) {
+            const auto timeline=preparedPlayback->recordingTimeline();
+            const auto failure=timeline->absoluteFrames.failureDetails();
+            result.transport["recordingClock"]["frameTimeline"]={{"generation",timeline->absoluteFrames.generation()},
+                {"stopped",timeline->absoluteFrames.stopped()},{"failure",Tracker::RecordingFrameTimeline::failureName(failure.reason)},
+                {"start",std::to_string(failure.start)},{"previousStart",std::to_string(failure.previousStart)},
+                {"end",std::to_string(failure.end)},{"previousEnd",std::to_string(failure.previousEnd)},
+                {"frame",std::to_string(failure.frame)},{"previousFrameEnd",std::to_string(failure.previousFrameEnd)},
+                {"rate",failure.rate},{"previousRate",failure.previousRate}};
+        }
         auto &positions=result.transport["voicePositions"]=Json::array();
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},
@@ -403,6 +420,8 @@ public:
             {"shortcuts",{{"pending",workspaceShortcuts&&workspaceShortcuts->pending()},{"hint",workspaceShortcuts?workspaceShortcuts->hint():std::string()}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
+            {"parameterRecording",parameterRecordingWindow?parameterRecordingWindow->snapshot():Json{{"visible",false}}},
+            {"pluginRecoveryReview",pluginRecoveryReviewWindow?pluginRecoveryReviewWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
             {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
                 {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
@@ -419,6 +438,8 @@ public:
             {"unavailable",{"arbitraryPanelDocking","simultaneousMainEditors"}}};
 	}
 	Json workspace(const std::string &method,const Json &p) override {
+        if(parameterRecordingInput&&method!="workspace.get"&&method!="workspace.commands.get")
+            throw ScreamSeq::Api::ApiError(-32002,"Parameter recording is changing state; workspace input was not queued");
         if(method!="workspace.get"&&method!="workspace.commands.get")rejectDepartureInput();
 		auto require=[](bool ok,const char *message){if(!ok) throw ScreamSeq::Api::ApiError(-32602,message);};
 		if(method=="workspace.get") { require(p.empty(),"workspace.get accepts no parameters"); return workspaceSnapshot(); }
@@ -576,13 +597,97 @@ public:
         resolveArrangementSelection();revealGraphLane();waveSample=UINT_MAX;updateInspector();ensureCursorVisible();layoutControls();updateTitle();updateRecordingWindow();updateSongTools();if(graphWorkflowWindow)graphWorkflowWindow->update();
         if(sampleRecordingWindow)sampleRecordingWindow->documentChanged();
         if(patternSampleRenderWindow)patternSampleRenderWindow->documentChanged();
+        if(scratchGestureWindow)scratchGestureWindow->documentChanged();
     }
     bool supportsDocumentOperations() const override {return true;}
+    ScreamSeq::ParameterControlDelivery parameterControlDelivery;
+    Json parameterTakeState={{"retained",false},{"capturing",false}};
+    std::string parameterTakeDocument;
+    bool servicingParameterControls=false;
+    Json parameterControlRecovery() {
+        parameterControlDelivery.collect();
+        if(!parameterTakeState.value("retained",false)) {
+            if(parameterControlDelivery.hasOwner()||parameterControlDelivery.retained()||parameterControlDelivery.lost())
+                throw std::runtime_error("Original parameter input has no known take; recovery evidence retained in memory");
+            return Json();
+        }
+        return parameterControlDelivery.recovery(parameterTakeDocument,parameterTakeState.at("baseRevision").get<std::string>(),
+            parameterTakeState.at("take").get<std::string>());
+    }
+    bool capturesParameterControl(const std::string &document,const std::string &plugin)const {
+        if(!parameterTakeState.value("retained",false))return false;
+        if(parameterTakeDocument!=document||documentId!=document||!parameterTakeState.value("capturing",false)||
+            !parameterTakeState.value("compatible",false)||parameterTakeState.value("failure",0u)||
+            parameterTakeState.value("baseRevision",std::string())!=view->session.revision||parameterControlDelivery.needsReview())
+            throw std::runtime_error("Review or finish the retained parameter recording before editing controls");
+        for(const auto &source:parameterTakeState.at("sources"))if(source.at("plugin")==plugin)return true;
+        throw std::runtime_error("This plugin is not armed in the retained parameter recording");
+    }
+    virtual std::future<ScreamSeq::Api::CompletedCall> submitParameterControl(const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt) {
+        return controller->invokeCompleted("automation.recording.capture",params,receipt);
+    }
+    void captureParameterControl(const std::string &document,const std::string &plugin,uint32_t parameter,double value,uint64_t timestamp) {
+        if(parameterRecordingInput||departureInput||!capturesParameterControl(document,plugin))
+            throw std::runtime_error("Parameter recording is not accepting this input");
+        parameterControlDelivery.enqueue({document,parameterTakeState.at("baseRevision").get<std::string>(),parameterTakeState.at("take").get<std::string>(),plugin,parameter,value,timestamp},
+            [this](const Json &params,const auto &receipt){return submitParameterControl(params,receipt);});
+        SetTimer(window,11,20,nullptr);
+    }
+    void serviceParameterControlDelivery() {
+        if(busy||servicingParameterControls)return;
+        servicingParameterControls=true;struct Reset{bool &value;~Reset(){value=false;}}reset{servicingParameterControls};
+        try {
+            if(parameterControlDelivery.pending())controller->service();
+            parameterControlDelivery.collect();
+            if(parameterControlDelivery.needsReview())status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+            if(!parameterControlDelivery.pending())KillTimer(window,11);
+        }catch(const std::exception &e){status=wide(e.what());}
+    }
+    std::unique_ptr<ScreamSeq::NativeInputGate> parameterRecordingInput;
+    static bool parameterRecordingBoundary(const std::string &method) {
+        return method=="automation.recording.start"||method=="automation.recording.stop"||
+            method=="automation.recording.commit"||method=="automation.recording.discard";
+    }
+    void guardParameterRecordingInput(const std::string &method)const {
+        if(!parameterRecordingInput)return;
+        const auto reads=additionalDocumentReads();
+        if(method=="synchronizeView"||method=="automation.recording.get"||method=="automation.recording.events"||std::find(reads.begin(),reads.end(),method)!=reads.end())return;
+        throw ScreamSeq::Api::ApiError(-32002,"Parameter recording is changing state; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    }
+    struct ParameterRecordingInputLease {
+        Application &app;bool held=false;
+        ParameterRecordingInputLease(Application &owner,const std::string &method,const Json &params=Json::object()):app(owner) {
+            if(!parameterRecordingBoundary(method))return;
+            if(app.parameterRecordingInput||app.departureInput||GetCapture())
+                throw ScreamSeq::Api::ApiError(-32002,"Finish the current drag or state change before changing parameter recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            if(method=="automation.recording.start") {
+                if(app.parameterControlDelivery.hasOwner()||app.parameterControlDelivery.retained()||app.parameterControlDelivery.lost())
+                    throw ScreamSeq::Api::ApiError(-32002,"Review the retained original parameter input before starting another take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+                if(app.pluginDraft)throw ScreamSeq::Api::ApiError(-32002,"Finish the retained rack parameter or program edit before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+                for(const auto &[id,editor]:app.graphPluginParameters)if(editor&&!editor->retired()&&editor->retainedDraft())
+                    throw ScreamSeq::Api::ApiError(-32002,"Finish the retained parameter controls before recording",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            }
+            app.parameterControlDelivery.collect();
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&app.parameterControlDelivery.pending())
+                throw ScreamSeq::Api::ApiError(-32002,"Wait for original parameter input delivery before finishing the take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview()&&
+                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>()))
+                throw ScreamSeq::Api::ApiError(-32002,"Review original refused or uncertain input and explicitly acknowledge loss before keeping accepted points",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            // Freeze raw native fields through worker admission, baseline
+            // restoration and readback. Release musical keys before filtering
+            // their queued key-ups; do not disable/recreate the focused field.
+            app.releaseTypedNotes();const auto roots=app.departureRoots();
+            app.parameterRecordingInput=std::make_unique<ScreamSeq::NativeInputGate>(roots);held=true;
+        }
+        ParameterRecordingInputLease(const ParameterRecordingInputLease &)=delete;
+        ~ParameterRecordingInputLease(){if(held)app.parameterRecordingInput.reset();}
+    };
     std::vector<std::string> additionalDocumentReads() const override {auto r=ScreamSeq::AssetOperations::reads();r.insert(r.end(),{"recording.get","graph.signal.get","graph.scope.get","graph.listen.get","parameter.activity.targets","parameter.activity.parameters","parameter.activity.sources","parameter.activity.get"});for(const auto &methods:{ScreamSeq::PluginOperations::reads(),ScreamSeq::PatternOperations::reads(),ScreamSeq::GraphOperations::reads(),ScreamSeq::MixerOperations::reads(),ScreamSeq::TrackOperations::reads(),ScreamSeq::EnvelopeOperations::reads(),ScreamSeq::SampleRecordingOperations::reads()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     std::vector<std::string> additionalDocumentWrites() const override {auto r=ScreamSeq::AssetOperations::writes();r.insert(r.end(),{"document.new","transport.note","transport.panic","recording.start","recording.capture","recording.stop","recording.commit","recording.discard","graph.signal.clear","graph.scope.watch","graph.listen.set","parameter.activity.watch","sample.renderSelection"});for(const auto &methods:{ScreamSeq::PluginOperations::writes(),ScreamSeq::PatternOperations::writes(),ScreamSeq::GraphOperations::writes(),ScreamSeq::MixerOperations::writes(),ScreamSeq::TrackOperations::writes(),ScreamSeq::EnvelopeOperations::writes(),ScreamSeq::SampleRecordingOperations::writes()})r.insert(r.end(),methods.begin(),methods.end());return r;}
     #include "SignalObservation.inc"
     Json documentOperation(const std::string &method,const Json &params) override {
         guardDepartureOperation(method);
+        guardParameterRecordingInput(method);
         if(method=="transport.note"||method=="transport.panic")return auditionOperation(method,params);
         if(busy||(recoveryRestoring&&!departureRefreshing)) throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         if(method=="graph.signal.get"||method=="graph.signal.clear"||method=="graph.scope.get"||method=="graph.scope.watch"||method=="graph.listen.get"||method=="graph.listen.set")return signalObservationOperation(method,params);
@@ -590,7 +695,9 @@ public:
     }
     ScreamSeq::Api::CompletedCall documentOperationWithOutcome(const std::string &method,const Json &params,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &receipt={}) {
         guardDepartureOperation(method);
+        guardParameterRecordingInput(method);
         if(busy||(recoveryRestoring&&!departureRefreshing))throw ScreamSeq::Api::ApiError(-32002,"Document worker is busy; no mutation was queued",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        ParameterRecordingInputLease recordingInput(*this,method,params);
         struct ClearConsent {Application &app;bool replacing;~ClearConsent(){if(replacing)app.nativeDepartureConsent.reset();}}clearConsent{*this,method=="document.open"||method=="document.new"};
         ScreamSeq::Api::CompletedCall call;call.method=method;
         bool completed=false;
@@ -626,6 +733,21 @@ public:
     // Keep presentation/recovery completion separate from worker success. The
     // owned native fixture injects faults here after the real worker has run.
     virtual void finishDocumentOperation(const std::string &method,const Json &result) {
+        if(method.starts_with("automation.recording.")&&result.is_object()&&result.contains("retained")) {
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()&&
+                !parameterControlDelivery.belongsTo(documentId,result.at("take").get<std::string>()))
+                throw std::runtime_error("Recording completion does not own the retained native input");
+            parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
+            if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
+                parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
+                if(status==L"Parameter input was lost / take review required"||
+                   status==L"Parameter input needs review / original values and timestamps retained")
+                    status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
+                for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
+            }
+            if(parameterRecordingWindow&&!parameterRecordingWindow->retired())
+                parameterRecordingWindow->observeBoundary(documentId,method,result);
+        }
         refreshDocument();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
         // A dropped vendor editor never blocks the operation; say what happened.
@@ -786,6 +908,7 @@ public:
     #include "GraphWorkflowIntegration.inc"
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
+    #include "ParameterRecordingIntegration.inc"
     #include "SampleCaptureIntegration.inc"
     #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;
@@ -1011,6 +1134,7 @@ public:
 			return;
 		}
 		if(result == DXGI_STATUS_OCCLUDED) ++occluded;
+        presentationBackoff.presented(result==DXGI_STATUS_OCCLUDED,GetTickCount64());
 		auto now = ScreamSeq::ticks();
 		if(previousSubmit && submitIntervals.size() < 120000) submitIntervals.push_back((now - previousSubmit) * 1000 / frequency);
 		previousSubmit = now;
@@ -1024,6 +1148,7 @@ public:
 		out << std::setprecision(12) << "{\"durationSeconds\":" << seconds << ",\"drawnFrames\":" << cpuDraw.size()
             << ",\"textCacheEntries\":" << surface->textCacheSize() << ",\"textCacheHits\":" << surface->textHits() << ",\"textCacheMisses\":" << surface->textMisses()
             << ",\"idleWaits\":" << idleWaits
+            << ",\"occlusionBackoffs\":" << presentationBackoff.count()
 			<< ",\"occludedFrames\":" << occluded << ",\"sustainedPresentationQualified\":false"
 			<< ",\"cpuDrawP99Micros\":" << (sorted.empty() ? 0 : sorted[static_cast<size_t>(std::ceil(sorted.size() * .99)) - 1])
 			<< ",\"audio\":{\"sampleRate\":" << lastRate << ",\"periodFrames\":" << lastPeriod
@@ -1049,7 +1174,8 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 	if(!app) return DefWindowProcW(window, message, wp, lp);
     if(message==WM_PAINT || message==WM_SIZE || message==WM_DPICHANGED || message==WM_SETFOCUS || message==WM_KILLFOCUS ||
        message==WM_COMMAND || message==WM_KEYDOWN || message==WM_SYSKEYDOWN || message==WM_LBUTTONDOWN || message==WM_LBUTTONUP ||
-       message==WM_MOUSEWHEEL || (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) app->frameRequested=true;
+       message==WM_MOUSEWHEEL || message==WM_SHOWWINDOW || message==WM_ACTIVATEAPP || message==WM_ACTIVATE ||
+       (message==WM_MOUSEMOVE && (wp&MK_LBUTTON))) {app->frameRequested=true;app->presentationBackoff.resume();}
 	try {
 		switch(message) {
 		case WM_GETOBJECT: if(static_cast<LONG>(lp)==UiaRootObjectId&&app->patternAccessibility)return app->patternAccessibility->object(wp,lp);break;
@@ -1077,7 +1203,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         case WM_MENUSELECT:if(HIWORD(wp)!=0xFFFF&&!(HIWORD(wp)&MF_POPUP))app->menuBarHint(LOWORD(wp));break;
         case WM_CANCELMODE:app->menuArmed=false;app->endMenuBar();break;
         case WM_CONTEXTMENU:app->cancelWorkspaceShortcut();if(app->workspaceContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)})||app->sampleCaptureContextMenu(reinterpret_cast<HWND>(wp),POINT{GET_X_LPARAM(lp),GET_Y_LPARAM(lp)}))return 0;break;
-        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();return 0;
+        case WM_TIMER: if(wp==1)app->pluginTimer();if(wp==3)app->mixerTimer();if(wp==4)app->graphTimer();if(wp==8)app->shortcutTimer();if(wp==9)app->recoveryTimer();if(wp==10)app->serviceMidi();if(wp==11)app->serviceParameterControlDelivery();return 0;
         case WM_DEVICECHANGE: app->midiRescanRequested=!app->midiSource.empty();return 0;
 		case WM_DPICHANGED: {
 			auto rect = reinterpret_cast<RECT *>(lp);
@@ -1286,7 +1412,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             if(!renderPending) ++app.idleWaits;
             // A ready swapchain stays signaled without Present. Exclude it while
             // stopped/unchanged, otherwise the idle loop spins at full CPU.
-			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, app.rulerFuture.valid()?25:drawFailures?100:1000, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            const auto wait=app.presentationBackoff.waitMilliseconds(GetTickCount64(),app.rulerFuture.valid()?25:drawFailures?100:1000);
+			auto result = MsgWaitForMultipleObjectsEx(renderPending?1:0, renderPending?&event:nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 			MSG message{};
 			while(PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 				if(message.message == WM_QUIT) { closed = true; break; }

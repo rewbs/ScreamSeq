@@ -76,6 +76,7 @@ std::wstring uppercase(std::wstring value) {
   return value;
 }
 std::filesystem::path validateDirectory(std::filesystem::path directory) {
+  directory.make_preferred();
   const auto &raw = directory.native();
   require(!raw.empty() && raw.find(L'\0') == std::wstring::npos && directory.is_absolute(), "Recovery directory requires an absolute path without NUL");
   require(!raw.starts_with(L"\\\\?\\") && !raw.starts_with(L"\\\\.\\"), "Device paths are not recovery directories");
@@ -92,6 +93,14 @@ std::filesystem::path validateDirectory(std::filesystem::path directory) {
   }
   return directory.lexically_normal();
 }
+// Only for absolute paths derived from validateDirectory and generated/validated
+// entry names. Keep public paths and fault-hook paths ordinary. The prefix is an
+// implementation detail, never permission to accept caller-supplied device paths.
+std::filesystem::path nativePath(std::filesystem::path path) {
+  const auto value = path.make_preferred().native();
+  if(value.starts_with(L"\\\\")) return L"\\\\?\\UNC\\" + value.substr(2);
+  return L"\\\\?\\" + value;
+}
 BY_HANDLE_FILE_INFORMATION information(HANDLE file) {
   BY_HANDLE_FILE_INFORMATION info{};
   if(!GetFileInformationByHandle(file, &info)) fail("Cannot inspect recovery file");
@@ -107,7 +116,8 @@ struct DirectoryLease {
     const auto open = [&](const std::filesystem::path &path) {
       // Holding every ancestor without DELETE sharing prevents a checked
       // directory from being exchanged for a junction during an operation.
-      Handle handle(CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+      const auto native = nativePath(path);
+      Handle handle(CreateFileW(native.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                 nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
       if(handle.value == INVALID_HANDLE_VALUE) {
         const auto error = GetLastError();
@@ -122,14 +132,16 @@ struct DirectoryLease {
       if(!exists) break;
       if(component.empty()) continue;
       current /= component;
-      if(create && !CreateDirectoryW(current.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+      const auto native = nativePath(current);
+      if(create && !CreateDirectoryW(native.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
         fail("Cannot create recovery directory");
       open(current);
     }
   }
 };
 Handle openRegular(const std::filesystem::path &path, bool deleting = false) {
-  Handle file(CreateFileW(path.c_str(), GENERIC_READ | (deleting ? DELETE : 0), FILE_SHARE_READ, nullptr,
+  const auto native = nativePath(path);
+  Handle file(CreateFileW(native.c_str(), GENERIC_READ | (deleting ? DELETE : 0), FILE_SHARE_READ, nullptr,
                          OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr));
   if(file.value == INVALID_HANDLE_VALUE) fail("Cannot open recovery file");
   require(!(information(file.value).dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY), "Recovery entry is not a regular file");
@@ -176,12 +188,12 @@ std::uint64_t timestamp() {
 }
 std::vector<Name> candidates(const std::filesystem::path &directory, const std::string *clearingSession = nullptr) {
   std::vector<Name> result;
-  for(const auto &entry : std::filesystem::directory_iterator(directory)) {
+  for(const auto &entry : std::filesystem::directory_iterator(nativePath(directory))) {
     std::optional<Name> name;
     try {
       name = parseName(utf8(entry.path().filename()));
       if(clearingSession && name->session != *clearingSession) continue;
-      auto file = openRegular(entry.path());
+      auto file = openRegular(directory / entry.path().filename());
       length(file.value, RecoveryStore::maximumBytes, true);
       result.push_back(std::move(*name));
     } catch(const std::invalid_argument &) { } catch(const std::system_error &) {
@@ -226,7 +238,8 @@ void removeRegular(const std::filesystem::path &path) {
 void removeQuietly(const std::filesystem::path &path) noexcept { try { removeRegular(path); } catch(...) { } }
 void writeStaging(const std::filesystem::path &path, std::span<const std::byte> content,
                   const RecoveryStore::FaultHook &fault, RecoveryStore::FaultPoint point, bool &created) {
-  Handle file(CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+  const auto native = nativePath(path);
+  Handle file(CreateFileW(native.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
   if(file.value == INVALID_HANDLE_VALUE) fail("Cannot reserve recovery staging file");
   created = true;
   std::size_t offset = 0;
@@ -242,7 +255,8 @@ void writeStaging(const std::filesystem::path &path, std::span<const std::byte> 
   file.close();
 }
 void publish(const std::filesystem::path &source, const std::filesystem::path &destination) {
-  if(!MoveFileExW(source.c_str(), destination.c_str(), MOVEFILE_WRITE_THROUGH)) fail("Cannot publish recovery file");
+  const auto nativeSource = nativePath(source), nativeDestination = nativePath(destination);
+  if(!MoveFileExW(nativeSource.c_str(), nativeDestination.c_str(), MOVEFILE_WRITE_THROUGH)) fail("Cannot publish recovery file");
 }
 } // namespace
 

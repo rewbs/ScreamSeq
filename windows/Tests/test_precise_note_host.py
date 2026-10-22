@@ -69,9 +69,9 @@ class PreciseNoteHostTests(PreciseNoteNativeMixin, unittest.TestCase):
         baseline, song = self.editor(), self.doc()
         self.assertTrue(baseline['retainedDraft'])
         saved = self.layout('Save custom', savedName='Precise and routing')
-        self.assertEqual(saved['editorDock']['configuration']['version'], 4)
+        self.assertEqual(saved['editorDock']['configuration']['version'], 5)
         self.assertEqual(set(saved['editorDock']['configuration']['locations']),
-                         {'automation', 'instruments', 'graphCurve', 'preciseNotes'})
+                         {'automation', 'instruments', 'graphCurve', 'preciseNotes', 'mixingGraph'})
         # Observe actual field focus immediately after a width-driven collapse.
         compact = self.resize_main(1000, 720)
         self.assertEqual(compact['editorDock']['mode'], 'tabs')

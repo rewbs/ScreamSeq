@@ -41,7 +41,7 @@ extension AppController {
     }
     let ownMultisampleReview = method == "instrument.importMultisample" && NSApp.modalWindow?.contentView is MultisampleImportView
     guard !busy, window.attachedSheet == nil, NSApp.modalWindow == nil || ownMultisampleReview else {
-      reply(AutomationServer.error(-32002, "The document is busy; retry shortly"))
+      reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly"))
       return
     }
     var error: NSError?

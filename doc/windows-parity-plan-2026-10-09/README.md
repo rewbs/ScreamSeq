@@ -1,6 +1,24 @@
 # ScreamSeq Windows parity implementation plan
 
-**Latest executed checkpoint (20 October, `7fb99d0b2`):**
+**Current boundary (21 October Pacific / 22 October UTC):** shared main is
+`4e4862bcc575795bd736fe5edc126f8e873f1d24`, including the qualified navigation
+and flicker work. The separate Windows ARM64 navigation package is recorded in
+[navigation implementation](NAVIGATION-IMPLEMENTATION-2026-10-21.md).
+The plugin controls/recording batch is on draft PR #6. Candidate `bcd10d8a8`
+compiled but Windows startup failed on a duplicate menu command. The prepared
+menu and MIDI chooser corrections await the next coordinated checkpoint, no
+earlier than **2026-10-22 05:56:14 UTC**. Its Mac ARM build passed 134 native tests
+and 35 interface groups, then stopped on a stale API inventory baseline. The
+[reviewed inventory correction](PLUGIN-API-INVENTORY-2026-10-22.md) includes
+additional contract checks and a cheap pre-build gate. Consult the
+[current queue](CONTINUATION-QUEUE-2026-10-20.md) and
+[recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) for candidate identities
+and limits. Original input, Undo/persistence and
+fresh reciprocal fixtures remain release gates. **The overall 117-row parity
+inventory is not complete.** The dated entries below are historical checkpoints,
+not current absence claims or permission to repeat an old build.
+
+**Historical executed checkpoint (20 October, `7fb99d0b2`):**
 [recorded take/graph qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md)
 records the successful Windows ARM64 batch, all six selected CTest registrations
 and the affected actual-app graph parameter/assignment case. Windows x64 and

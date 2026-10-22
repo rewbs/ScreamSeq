@@ -129,18 +129,24 @@ private:
   void overlay(std::vector<ParameterChange> &points)const {
     const auto target=std::find(rackIDs_.begin(),rackIDs_.end(),key_.plugin);
     const auto slot=uint32_t(target-rackIDs_.begin());
-    std::map<uint64_t,size_t> at;
+    struct Position {size_t index=0;uint64_t hostTime=0;};
+    std::map<uint64_t,Position> at;
     for(size_t i=0;i<points.size();++i)if(points[i].slot==slot&&points[i].id==key_.parameter)
-      if(!at.emplace(points[i].frame,i).second)at[points[i].frame]=SIZE_MAX;
+      if(!at.emplace(points[i].frame,Position{i,0}).second)at[points[i].frame].index=SIZE_MAX;
     for(const auto &event:events_)if(event.frame) {
       const ParameterChange point{slot,key_.parameter,event.value,*event.frame};
       const auto old=at.find(point.frame);
       if(old!=at.end()) {
-        if(old->second==SIZE_MAX)throw std::invalid_argument("Existing recorded automation has duplicate points at this time; edit the lane first");
-        if(points[old->second].value!=point.value)points[old->second]=point;
+        if(old->second.index==SIZE_MAX)throw std::invalid_argument("Existing recorded automation has duplicate points at this time; edit the lane first");
+        // Distinct native input sources may drain out of order and collapse to
+        // one canonical frame. Preserve the newest original timestamp; only
+        // equal timestamps use arrival order as the deterministic tie-breaker.
+        if(event.hostTime<old->second.hostTime)continue;
+        old->second.hostTime=event.hostTime;
+        if(points[old->second.index].value!=point.value)points[old->second.index]=point;
       } else {
         if(points.size()==maximumRecordedPoints)throw std::invalid_argument("Automation reached 100,000 points");
-        at.emplace(point.frame,points.size());points.push_back(point);
+        at.emplace(point.frame,Position{points.size(),event.hostTime});points.push_back(point);
       }
     }
   }
@@ -248,7 +254,8 @@ public:
     Candidate result;result.loss_=validatePreparation(revision,playbackEpoch,providerEpoch,rack,native,catalog,acknowledgeLoss);
     result.points_=*before_;
     // Only index this gesture's target. Preserve other slots/parameters and the
-    // original point order. Last accepted input wins at the same canonical time.
+    // original point order. Newest original input wins at one canonical frame;
+    // equal timestamps retain the last accepted input.
     overlay(result.points_);
     result.changed_=!sameBaseline(result.points_,*before_);result.key=key_;result.identity=identity_;result.version=version_;result.owner=this;return result;
   }

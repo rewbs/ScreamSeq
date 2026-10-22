@@ -31,6 +31,10 @@ class AudioDevice {
   std::string activityTarget_;
   uint32_t activityParameter_=0;
   void restoreParameterActivity();
+  // Control owner only. A false playing flag can precede callback completion.
+  // Join the output unit before taking over stopped processor work; do not
+  // close/trim the retained recording timeline as an explicit Stop would.
+  bool joinStoppedProcessing();
   bool previewing_ = false, usesDefault_ = true, listening_ = false, renderEnded_ = false;
   uint64_t tailFrames_ = 0, tailBudgetFrames_ = 0, tailRevision_ = 0;
   std::atomic<float> outputLeft_{0}, outputRight_{0};
@@ -64,14 +68,19 @@ public:
   struct LiveRecordedPlan {
     std::unique_ptr<RecordedAutomationPlan> hosted;
     std::vector<ParameterChange> points;
+    uint64_t pluginEpoch=0;
   };
+  // The same retained processor publication works while playing or stopped.
+  // Stopped adoption first joins the output callback; active() alone does not
+  // establish quiescence after a natural end or processor fault.
   std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &,std::span<const ParameterChange> manualBaselines={});
   bool publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan>);
+  bool hasPluginChain()const noexcept{return bool(plugins_);}
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }
   std::vector<PluginAudioBus> pluginBuses(size_t slot) const { return plugins_ ? plugins_->buses(slot) : std::vector<PluginAudioBus>{}; }
   std::vector<PluginParameter> pluginParameters(size_t slot) {
-    if (plugins_ && !active())
+    if (plugins_ && joinStoppedProcessing())
       plugins_->applyPending();
     return plugins_ ? plugins_->parameters(slot) : std::vector<PluginParameter>{};
   }
@@ -86,7 +95,7 @@ public:
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
   bool cancelPluginParameterPreview(size_t slot,uint32_t id){
     if(!plugins_||!plugins_->hasParameterPreview(slot,id))return true;
-    if(!active())plugins_->applyPending();
+    if(joinStoppedProcessing())plugins_->applyPending();
     const std::array<uint32_t,1> ids{id};return plugins_->cancelParameterPreviews(slot,ids);
   }
   bool pluginBypass(size_t slot,bool value) {
@@ -104,14 +113,29 @@ public:
   }
   PluginEditSource pluginEditSource(size_t slot) const noexcept {return plugins_?plugins_->editSource(slot):PluginEditSource{};}
   uint64_t droppedPluginEdits(size_t slot) const noexcept {return plugins_?plugins_->droppedEdits(slot):0;}
+  // Retained-take adapter; caller keeps pluginEpoch/identity guards and must
+  // not mix these raw reads with the legacy manual popPluginEdit consumer.
+  std::optional<PluginEditBoundary> pluginInputBoundary(size_t slot,uint64_t hostOnlyTime=0) {
+    return plugins_?plugins_->editorInputBoundary(slot,hostOnlyTime):std::nullopt;
+  }
+  PluginEditRead popPluginInputBefore(size_t slot,const PluginEditBoundary &boundary,PluginEdit &event,PluginEditSource &source)noexcept {
+    source={};return plugins_?plugins_->popEditorInputBefore(slot,boundary,event,source):PluginEditRead::InvalidFence;
+  }
+  std::optional<PluginEditorInputBarrier> beginPluginInputBarrier(size_t slot) {
+    return plugins_?plugins_->beginEditorInputBarrier(slot):std::nullopt;
+  }
+  bool endPluginInputBarrier(size_t slot,PluginEditorInputBarrier barrier) {
+    return plugins_&&plugins_->endEditorInputBarrier(slot,barrier);
+  }
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
   NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}
   std::vector<SignalActivity> graphActivity() const {return active()&&plugins_?plugins_->graphActivity():std::vector<SignalActivity>{};}
   void watchParameterActivity(const std::string &key,uint32_t parameter,double baseline,bool clear) {
     if(!plugins_)throw std::runtime_error("No prepared parameter processors");
+    const bool stopped=joinStoppedProcessing();
     plugins_->parameterActivity().watch(key,parameter,baseline,clear);activityTarget_=key;activityParameter_=parameter;
-    if(!active())plugins_->parameterActivity().begin(0);
+    if(stopped)plugins_->parameterActivity().begin(0);
   }
   ParameterActivity *parameterActivity() {return plugins_?&plugins_->parameterActivity():nullptr;}
   SignalObservation *signalObservation() {return plugins_?&plugins_->signalObservation():nullptr;}
@@ -137,7 +161,7 @@ public:
   }
   bool restoreGraphParameterPreview(const NativeSong &native) {
     if(!plugins_)return true;
-    if(!active())plugins_->applyPending(); // Only a quiescent callback may be drained here.
+    if(joinStoppedProcessing())plugins_->applyPending();
     auto plan=plugins_->prepareGraphControls(native);
     return plan&&plugins_->publishGraphControls(std::move(plan));
   }

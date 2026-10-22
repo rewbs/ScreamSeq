@@ -114,6 +114,42 @@ static void ownership(){
   check(owner.cancel(key,[](const auto &){return true;})&&!owner.active(),"Accepted cancel retained ownership");
   check(owner.cancel(key,[](const auto &){throw std::runtime_error("should not publish");return false;}),"Repeated cancel was not harmless");
 }
+static void takeCancellation(unsigned rate,unsigned block) {
+  using Target=PluginChain::ParameterPreviewTarget;
+  PluginChain chain({gain("take-a"),gain("take-b"),gain("unrelated")},rate,true);
+  const auto original=chain.states();
+  const std::array<ParameterChange,3> input{{{0,1,-6,0},{1,1,-12,0},{2,1,-3,0}}};
+  check(chain.previewParameters(input),"Multi-plugin take preview failed");
+  check(std::abs(render(chain,2048,block).back()-std::pow(10.f,-21.f/20))<1e-6f,"Take preview PCM is wrong");
+  const std::array<Target,2> targets{{{0,1},{1,1}}};
+  for(const auto &invalid:std::vector<std::vector<Target>>{{{0,1},{3,1}},{{0,1},{1,999}}}) {
+    check(!chain.cancelParameterPreviews(invalid)&&chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),
+      "Invalid later take target restored a valid prefix");
+  }
+  // Leave one queue cell free: a two-target restore must refuse atomically.
+  // Traffic uses the unrelated plugin so it cannot consume the take's flags.
+  std::vector<ParameterChange> crowded(4095,{2,1,-3,0});
+  check(chain.enqueueParameters(crowded),"Take cancellation saturation fixture failed");
+  check(!chain.cancelParameterPreviews(targets)&&chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),
+    "Partially full queue restored only the first take target");
+  check(std::abs(render(chain,2048,block).back()-std::pow(10.f,-21.f/20))<1e-6f,"Refused take restore changed audio");
+  // Restore the unrelated preview independently; its durable value is now -3.
+  const std::array<ParameterChange,1> unrelated{{{2,1,-9,0}}};
+  check(chain.previewParameters(unrelated),"Unrelated preview failed");
+  check(chain.cancelParameterPreviews(targets),"Take restore after queue drain failed");
+  check(!chain.hasParameterPreview(0,1)&&!chain.hasParameterPreview(1,1)&&chain.hasParameterPreview(2,1),
+    "Take restore forgot ownership or cancelled an unrelated preview");
+  check(std::abs(render(chain,2048,block).back()-std::pow(10.f,-9.f/20))<1e-6f,"Take restore did not reach both processors");
+  check(chain.states()[0]==original[0]&&chain.states()[1]==original[1],"Take cancellation changed saved vendor state");
+  // A durable value queued after preview wins even before the callback drains.
+  check(chain.previewParameters(input),"Second take preview failed");
+  check(chain.parameter(1,1,-18),"Accepted value during take review failed");
+  const std::array<Target,4> repeated{{{0,1},{1,1},{0,1},{1,1}}};
+  check(chain.cancelParameterPreviews(repeated),"Repeated take targets did not cancel");
+  check(std::abs(render(chain,2048,block).back()-std::pow(10.f,-21.f/20))<1e-6f&&
+    parameter(chain,1,1).manualValue==-18&&!chain.hasParameterPreview(1,1)&&chain.hasParameterPreview(2,1),
+    "Take restoration replayed an old baseline over newer accepted input");
+}
 static void recipeBlock(PluginChain &chain,Renderer &renderer,float *pcm,unsigned count){
   bool okay=false;
   const auto render=[&]{chain.beginRenderBlock();chain.syncTransport(renderer);renderer.render(pcm,count);okay=chain.process(pcm,count)&&!renderer.faulted();};
@@ -175,6 +211,7 @@ static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
 int main(){try{
   ownership();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);
   refusal();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})for(bool samples:{false,true})recipePreview(rate,block,samples);
   std::cout<<"PASS transient parameter PCM, manual/opaque state isolation, reopen, current-baseline cancel, atomic refusal and callback audit\n";

@@ -69,6 +69,25 @@ public:
 // publish is audio-writer-only; close/invalidate may run after that writer has
 // quiesced. Missing presentation intervals remain holes in the ring.
 class RecordingFrameTimeline {
+public:
+  enum class Failure:uint32_t {None,Invalidated,HostStartRegression,HostEndRegression,FrameRegression,RateChanged};
+  struct FailureDetails {
+    Failure reason=Failure::None;
+    uint64_t start=0,previousStart=0,end=0,previousEnd=0,frame=0,previousFrameEnd=0;
+    double rate=0,previousRate=0;
+  };
+  static constexpr const char *failureName(Failure reason) noexcept {
+    switch(reason) {
+      case Failure::None:return "none";
+      case Failure::Invalidated:return "playback-invalidated";
+      case Failure::HostStartRegression:return "host-start-regression";
+      case Failure::HostEndRegression:return "host-end-regression";
+      case Failure::FrameRegression:return "frame-regression";
+      case Failure::RateChanged:return "rate-changed";
+    }
+    return "unknown";
+  }
+private:
   RecordingFrameClock clock_;
   std::atomic<uint64_t> generation_{0},first_{0},end_{0};
   std::atomic<bool> stopped_{false};
@@ -78,6 +97,16 @@ class RecordingFrameTimeline {
   uint64_t newestGeneration_=0,lastStart_=0,lastFrameEnd_=0;
   double rate_=0;
   bool invalidated_=false;
+  // Published once, only on terminal failure. The release/acquire flag makes
+  // this immutable diagnostic payload safe for control readers without a
+  // callback allocation, log, lock, or steady-state atomic payload traffic.
+  FailureDetails failureDetails_;
+  std::atomic<uint32_t> failure_{0};
+  void fail(Failure reason) noexcept {
+    if(invalidated_)return;
+    invalidated_=true;generation_.store(0,std::memory_order_release);
+    failureDetails_.reason=reason;failure_.store(uint32_t(reason),std::memory_order_release);
+  }
 public:
   bool publish(uint64_t start,uint64_t end,uint64_t frame,uint32_t frames,double rate,uint64_t generation) noexcept {
     if(invalidated_||!generation||generation<newestGeneration_||
@@ -86,8 +115,16 @@ public:
     // Correlated device boundaries can overlap slightly as their estimate
     // settles. Reject regression of the boundaries or the musical frame origin;
     // do not turn a forward unmapped interval into fabricated coverage.
-    if(previous==generation&&(start<lastStart_||end<=end_.load(std::memory_order_relaxed)||
-       frame<lastFrameEnd_||rate!=rate_)) {invalidate();return false;}
+    if(previous==generation) {
+      const auto previousEnd=end_.load(std::memory_order_relaxed);
+      const auto reason=start<lastStart_?Failure::HostStartRegression:
+        end<=previousEnd?Failure::HostEndRegression:frame<lastFrameEnd_?Failure::FrameRegression:
+        rate!=rate_?Failure::RateChanged:Failure::None;
+      if(reason!=Failure::None) {
+        failureDetails_={reason,start,lastStart_,end,previousEnd,frame,lastFrameEnd_,rate,rate_};
+        fail(reason);return false;
+      }
+    }
     if(!clock_.publish(start,end,frame,frames,rate,generation))return false;
     if(previous!=generation) {
       generation_.store(0,std::memory_order_release);first_.store(0);end_.store(0);stopped_.store(false);
@@ -108,7 +145,10 @@ public:
     if(time&&time<end)end_.store(time,std::memory_order_release);
     stopped_.store(true,std::memory_order_release);
   }
-  void invalidate() noexcept {invalidated_=true;generation_.store(0,std::memory_order_release);}
+  void invalidate() noexcept {fail(Failure::Invalidated);}
+  FailureDetails failureDetails() const noexcept {
+    return failure_.load(std::memory_order_acquire)?failureDetails_:FailureDetails{};
+  }
   uint64_t generation() const noexcept {return generation_.load(std::memory_order_acquire);}
   bool stopped() const noexcept {return stopped_.load(std::memory_order_acquire);}
   std::optional<uint64_t> stoppedEndTime(uint64_t expectedGeneration) const noexcept {

@@ -14,7 +14,10 @@
         if(!device.running()||!renderer)return false;const auto t=renderer->telemetry();
         return t.voices||t.left>1e-6f||t.right>1e-6f;
     }
-    bool presentationNeeded()const {
+    bool presentationNeeded(uint64_t now=GetTickCount64())const {
+        if(!presentationBackoff.ready(now))return false;
+        // A stopped window still retries its unpresented frame until visible.
+        if(presentationBackoff.occluded())return true;
         if(frameRequested)return true;if(!device.running())return false;
         return !auditionOnly||auditionWasAnimating||auditionAnimating()||(preparedPlayback&&(preparedPlayback->failed()||preparedPlayback->chain().latencyChangePending()));
     }

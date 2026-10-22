@@ -20,10 +20,16 @@ final class AutomationServer {
   private var cache = [String: (String, [String: Any], Int)]()
   private var cacheOrder = [String]()
   private var cacheBytes = 0
-  private var pending = Set<String>()
+  private var pending = [String: String]()
 
   static func error(_ code: Int, _ message: String, data: [String: Any] = [:]) -> [String: Any] {
     ["error": ["code": code, "message": message, "data": data]]
+  }
+
+  // Use only before dispatch, with no musical, file or native-host effects.
+  // A busy code alone says nothing about an already admitted write's outcome.
+  static func notAdmittedBusy(_ message: String) -> [String: Any] {
+    error(-32002, message, data: ["writeOutcome": "notCommitted"])
   }
 
   init(discoveryDirectory: URL? = nil, handler: @escaping Handler) throws {
@@ -225,21 +231,30 @@ final class AutomationServer {
           : reply(Self.error(-32600, "Request id was already used for a different request")))
       return
     }
-    guard pending.insert(id).inserted else {
-      completion(reply(Self.error(-32002, "This request is still running; retry the same id")))
+    if let original = pending[id] {
+      completion(reply(original == digest
+        ? Self.error(-32002, "This request is still running; inspect its outcome before retrying",
+                     data: ["writeOutcome": "unknown"])
+        : Self.error(-32600, "Request id is running with different content")))
       return
     }
+    pending[id] = digest
     handler(method, params) { [weak self] body in
       guard let self else { return }
-      self.pending.remove(id)
+      self.pending.removeValue(forKey: id)
       let response = reply(body)
       // A conservative bound for cached mutation replies, including before/after
       // pattern patches. Large payloads and reads are never cached. In particular,
       // no base64 or JSON encoding of plugin/sample data happens on the main thread.
       let count = requestBytes * 20 + 4096
-      // Busy requests are retryable. Large results are not retained in memory.
-      if !method.hasSuffix(".get"), !["parameter.activity.targets", "parameter.activity.parameters", "parameter.activity.sources", "api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
-        (body["error"] as? [String: Any])?["code"] as? Int != -32002, count <= 4 * 1024 * 1024
+      let failure = body["error"] as? [String: Any]
+      let rejectedBeforeCommit = failure?["code"] as? Int == -32002 &&
+        (failure?["data"] as? [String: Any])?["writeOutcome"] as? String == "notCommitted"
+      // Only a classified pre-write refusal may enter the handler again.
+      // Keep uncertain/committed/unclassified small replies just like other
+      // terminal mutation results. Large results retain the existing bound.
+      if !method.hasSuffix(".get"), !["automation.recovery.list", "parameter.activity.targets", "parameter.activity.parameters", "parameter.activity.sources", "api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
+        !rejectedBeforeCommit, count <= 4 * 1024 * 1024
       {
         self.cache[id] = (digest, response, count)
         self.cacheOrder.append(id)

@@ -1,0 +1,432 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScreamSeq Windows plugin recording and detached recovery review",
+  "description": "Windows lifecycle adapter for shared recorded gestures. Discover availability with api.describe. This does not claim matching Mac API exposure.",
+  "$defs": {
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "take": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "plugin": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "parameter": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 512
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.events"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "take": {
+              "$ref": "#/$defs/take"
+            },
+            "plugin": {
+              "$ref": "#/$defs/plugin"
+            },
+            "parameter": {
+              "$ref": "#/$defs/parameter"
+            },
+            "offset": {
+              "$ref": "#/$defs/offset"
+            },
+            "limit": {
+              "$ref": "#/$defs/limit"
+            }
+          },
+          "required": [
+            "take",
+            "plugin",
+            "parameter"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.start"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "plugins": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/plugin"
+              }
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "plugins"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.capture"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "take": {
+              "$ref": "#/$defs/take"
+            },
+            "plugin": {
+              "$ref": "#/$defs/plugin"
+            },
+            "parameter": {
+              "$ref": "#/$defs/parameter"
+            },
+            "value": {
+              "type": "number"
+            },
+            "timestamp": {
+              "type": "string",
+              "pattern": "^[0-9]{1,20}$",
+              "description": "Original nonzero past Windows QPC host time in 100 ns units, within uint64. Never restamp a retry or use a timestamp from another process."
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "take",
+            "plugin",
+            "parameter",
+            "value",
+            "timestamp"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.stop"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "take": {
+              "$ref": "#/$defs/take"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.commit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "take": {
+              "$ref": "#/$defs/take"
+            },
+            "acknowledgeLoss": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recording.discard"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "take": {
+              "$ref": "#/$defs/take"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "take"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recovery.list"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "$ref": "#/$defs/offset"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "automation.recovery.get"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "$ref": "#/$defs/revision"
+            },
+            "kind": {
+              "enum": [
+                "gestures",
+                "nativeControls"
+              ]
+            },
+            "index": {
+              "$ref": "#/$defs/offset"
+            },
+            "offset": {
+              "$ref": "#/$defs/offset"
+            },
+            "limit": {
+              "$ref": "#/$defs/limit"
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "kind",
+            "index"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

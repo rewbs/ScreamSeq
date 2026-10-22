@@ -275,7 +275,7 @@ extension AppController {
     if method=="workspace.input" {
       guard Set(params.keys).isSubset(of:["expectedRevision","expectedContext","instrument","octave"]),params["instrument"] != nil || params["octave"] != nil else {fail("Supply instrument and/or octave with revision and context guards");return true}
       guard let revision=params["expectedRevision"] as? String,let context=params["expectedContext"] as? String else{fail("Supply expectedRevision and expectedContext");return true}
-      guard !busy else{reply(AutomationServer.error(-32002,"The document is busy"));return true}
+      guard !busy else{reply(AutomationServer.notAdmittedBusy("The document is busy"));return true}
       guard revision==session.automationRevision,context==patternView.contextToken else{reply(AutomationServer.error(-32001,"Song or input context changed; read context.get again"));return true}
       var instrument=patternView.instrument,octave=patternView.octave
       for (key,range) in [("instrument",1...255),("octave",0...8)] {

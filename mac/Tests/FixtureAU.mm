@@ -2,12 +2,46 @@
 // Unlike the VST3 fixture it requires all enabled output pulls to use one
 // timestamp and frame count, and rejects duplicate processing of a bus.
 #include "../Audio/AudioUnitHost.hpp"
-#import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
+#import <AudioUnit/AUCocoaUIView.h>
 #include <algorithm>
 #include <cstring>
 static std::atomic<bool> fixtureAUChannelWeights{false};
 static bool fixtureAUPitchMode=false,fixtureAUStepped=false,fixtureAUWideBuses=false;
 static bool fixtureAUInstrumentInputs=false;
+static bool fixtureAUHasEditor=false;
+static OSStatus fixtureAUEditResult=noErr;
+void setFixtureAUHasEditor(bool enabled){fixtureAUHasEditor=enabled;}
+OSStatus fixtureAULastEditResult(){return fixtureAUEditResult;}
+
+// Opt-in, process-local Cocoa editor. Exercise the same AUParameterSet ->
+// AUEventListener delivery as a native vendor view; no host test injection.
+@interface RSFixtureAUParameterView : NSView { AudioUnit _unit; }
+- (instancetype)initWithUnit:(AudioUnit)unit;
+- (void)changeGain:(NSSlider *)sender;
+@end
+@implementation RSFixtureAUParameterView
+- (instancetype)initWithUnit:(AudioUnit)unit {
+  self=[super initWithFrame:NSMakeRect(0,0,320,90)];if(!self)return nil;_unit=unit;
+  NSSlider *slider=[[NSSlider alloc] initWithFrame:NSMakeRect(20,30,280,24)];
+  slider.identifier=@"fixture-au-gain";slider.minValue=0;slider.maxValue=1;slider.continuous=YES;
+  Float32 value=.5f;AudioUnitGetParameter(unit,7,kAudioUnitScope_Global,0,&value);slider.doubleValue=value;
+  slider.target=self;slider.action=@selector(changeGain:);[self addSubview:slider];return self;
+}
+- (void)changeGain:(NSSlider *)sender {
+  const AudioUnitParameter parameter{_unit,7,kAudioUnitScope_Global,0};
+  fixtureAUEditResult=AUParameterSet(nullptr,nullptr,&parameter,sender.floatValue,0);
+}
+@end
+@interface RSFixtureAUCocoaUI : NSObject <AUCocoaUIBase>
+@end
+@implementation RSFixtureAUCocoaUI
+- (unsigned)interfaceVersion{return 0;}
+- (NSString *)description{return @"Process-local AU notification fixture";}
+- (NSView *)uiViewForAudioUnit:(AudioUnit)unit withSize:(NSSize)size {
+  return [[RSFixtureAUParameterView alloc] initWithUnit:unit];
+}
+@end
 void setFixtureAUInstrumentInputs(bool enabled){fixtureAUInstrumentInputs=enabled;}
 void setFixtureAUWideBuses(bool enabled){fixtureAUWideBuses=enabled;}
 void setFixtureAUStepped(bool enabled){fixtureAUStepped=enabled;}
@@ -24,6 +58,7 @@ struct FixtureAU {
   bool instrument = false;
   const bool wideBuses=fixtureAUWideBuses;
   const bool instrumentInputs=fixtureAUInstrumentInputs;
+  const bool hasEditor=fixtureAUHasEditor;
   UInt32 audioChannels(UInt32 bus)const{return wideBuses?(bus?3:5):(bus%2?1:2);}
   std::array<uint16_t, 16 * 128> notes{};
   float gain = .5f,hiddenGain=fixtureAUHiddenGain,lastVelocity=1;
@@ -43,7 +78,7 @@ struct FixtureAU {
     for (size_t i = 0; i < outputs.size(); ++i) outputs[i].mChannelsPerFrame = audioChannels(UInt32(i));
   }
   static OSStatus initialize(void *) { return noErr; }
-  static OSStatus info(void *, AudioUnitPropertyID id, AudioUnitScope, AudioUnitElement, UInt32 *size, Boolean *writable) {
+  static OSStatus info(void *self, AudioUnitPropertyID id, AudioUnitScope, AudioUnitElement, UInt32 *size, Boolean *writable) {
     UInt32 bytes = 0;
     switch (id) {
       case kAudioUnitProperty_ElementCount: case kAudioUnitProperty_ParameterList: bytes = sizeof(UInt32); break;
@@ -51,6 +86,9 @@ struct FixtureAU {
       case kAudioUnitProperty_Latency: case kAudioUnitProperty_TailTime: bytes = sizeof(double); break;
       case kAudioUnitProperty_FactoryPresets: case kAudioUnitProperty_ClassInfo: case kAudioUnitProperty_ElementName: bytes = sizeof(CFTypeRef); break;
       case kAudioUnitProperty_ParameterInfo: bytes = sizeof(AudioUnitParameterInfo); break;
+      case kAudioUnitProperty_CocoaUI:
+        if(!static_cast<FixtureAU *>(self)->hasEditor)return kAudioUnitErr_InvalidProperty;
+        bytes=sizeof(AudioUnitCocoaViewInfo);break;
       default: return kAudioUnitErr_InvalidProperty;
     }
     if (size) *size = bytes; if (writable) *writable = id == kAudioUnitProperty_StreamFormat || id == kAudioUnitProperty_ClassInfo;
@@ -69,6 +107,11 @@ struct FixtureAU {
         *static_cast<CFStringRef *>(out) = CFStringCreateWithFormat(nullptr, nullptr, CFSTR("Fixture bus %u"), unsigned(bus + 1)); break;
       case kAudioUnitProperty_Latency: case kAudioUnitProperty_TailTime: *static_cast<double *>(out) = 0; break;
       case kAudioUnitProperty_ParameterList: *static_cast<AudioUnitParameterID *>(out) = 7; break;
+      case kAudioUnitProperty_CocoaUI: {
+        auto &view=*static_cast<AudioUnitCocoaViewInfo *>(out);
+        view.mCocoaAUViewBundleLocation=static_cast<CFURLRef>(CFRetain((__bridge CFURLRef)NSBundle.mainBundle.bundleURL));
+        view.mCocoaAUViewClass[0]=CFStringCreateCopy(nullptr,CFSTR("RSFixtureAUCocoaUI"));break;
+      }
       case kAudioUnitProperty_ParameterInfo: {
         if (bus != 7) return kAudioUnitErr_InvalidParameter;
         auto &p = *static_cast<AudioUnitParameterInfo *>(out); p = {};

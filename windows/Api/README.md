@@ -1,5 +1,62 @@
 # Windows local API subset
 
+## Plugin automation recording and recovered input review
+
+Open **Playback → Plugin automation take…** or **Tools → Automation → Plugin
+automation take…**. Both this window and **Recovered plugin inputs…** are also
+in the separate-windows menu and command palette; opening them retains the
+Pattern layout. Start playback, choose rack plugins, then Record. Changes in
+native rack parameter controls and supported vendor editors retain original
+event times. Graph recipe copies are independent and are not armed by this
+workflow. Stop take leaves playback running. Keep publishes one chronological
+Undo step; Discard restores the transient baseline without adding history.
+Closing the review window only hides it. A retained take protects song departure.
+
+[plugin-recording.schema.json](plugin-recording.schema.json) specifies the
+Windows adapter; use `api.describe` before calling it. The underlying take,
+musical timing, history and persisted automation are shared. The detached recovery
+reads are also exposed by the Mac adapter. The seven new live recording lifecycle
+request names remain Windows-specific; Mac retains its native recording path.
+
+- `automation.recording.get {}` returns the retained take, original `startTime`,
+  optional `endTime`, playback epoch, target counts and loss. `hostTime` is the
+  current Windows QPC clock in 100 ns units (`clock: windows-qpc-100ns`); all
+  clock values are decimal strings. Reading an absent take does not arm one.
+  Retained takes also report `transportPlaying` and `discardable`; a clock/context
+  failure may prevent a normal Stop cut, but explicit Discard remains available
+  once transport has actually stopped. Provider restoration can still retain it.
+- `automation.recording.start {expectedRevision, plugins}` arms distinct stable
+  rack identities during timed playback. Finish competing takes, manual drafts
+  and previews first. It does not change song history.
+- `automation.recording.capture {expectedRevision, take, plugin, parameter,
+  value, timestamp}` submits original native input once. Use the same host clock
+  at the actual input event; never replace its time with a retry time. A returned
+  `accepted:true` remains accepted if `intakeError` reports preview failure.
+- `automation.recording.events {take, plugin, parameter, offset?, limit?}` pages
+  original values/timestamps and mapped frame strings at 48 kHz; `frame:null`
+  means timing is unavailable. Default page size is 128, maximum 512.
+- `automation.recording.stop`, `.commit` and `.discard` require
+  `{expectedRevision, take}`. Stop seals input. Commit additionally accepts
+  `acknowledgeLoss:true` after reviewing refused/unmapped/lost input. Pending
+  native delivery still blocks finishing. Commit requires a stopped take.
+  A `completed:true, retained:true` result means music was already committed but
+  native restoration needs finishing; it must not create a second Undo step.
+  A transport/clock failure retains evidence for recovery or explicit Discard.
+- `automation.recovery.list {offset?, limit?}` lists detached archive headers
+  (default 64, maximum 128). `headerSupported` is not full validation.
+  `automation.recovery.get {expectedRevision, kind, index, offset?, limit?}`
+  validates one complete archive, then pages its original inputs. `kind` is
+  `gestures` or `nativeControls`; `index` is per kind, not the catalogue row.
+  Unsupported archives remain visible and do not hide valid independent ones.
+
+Save a recovery copy before abandoning evidence that cannot be kept. Imported
+archives are read only: their old clock, IDs, native values and loss counters
+remain intact, and opening them never rearms or replays input. Canonical native
+saves retain them alongside the shared recorded music. Review uncertain write
+receipts and current state before another action; exact terminal request replay
+uses the existing bounded API cache, not a second recording write. Successful
+reads do not imply a new song revision. No lifecycle method accepts `dryRun`.
+
 `document.exportModule {expectedRevision, path, overwrite?, dryRun?}` exports the
 current MOD/XM/S3M/IT/MPTM format to an absolute path with its matching extension.
 It validates the actual module bytes before atomic publication; `overwrite`
@@ -886,7 +943,7 @@ revision as current. `committed` means an effect occurred but completion failed;
 
 The current worker classifies known committed publication failures. The adapter
 classifies completion failures after a returned host write, including invalid
-UTF-8 or a result exceeding the wire bound. An unclassified non-busy exception
+UTF-8 or a result exceeding the wire bound. An unclassified exception, including busy,
 after entering a host write is also `unknown`; the adapter cannot infer rejection
 or advertise its pre-write revision as current. The native application preserves a
 classified worker exception through best-effort view repair. This is not yet
@@ -894,6 +951,14 @@ exhaustive classification of every host side effect. Absence of outcome data,
 an ordinary `-32003`, or an unchanged song revision does **not** prove rejection.
 Filesystem, library, take and device effects require their own domain readback.
 Transport loss after sending can also leave the outcome unknown to the client.
+
+Both supplied Python clients make at most six attempts for a complete `-32002`
+reply explicitly classified `writeOutcome:"notCommitted"`, using bounded
+backoff and the same serialized ID, revision, timestamp and payload. Transport
+errors, malformed/mismatched replies, stale revisions, unclassified busy and all
+other outcomes return immediately for inspection; they are never automatically
+resent. Each exchange retains the configured transport timeout. This handles
+temporary inspector/worker contention without repeating an accepted edit.
 
 ### Bounded write replay
 
@@ -910,8 +975,11 @@ in-flight responses are outside this retention accounting.
 
 Terminal write-method replies enter the cache, including successful no-ops,
 `dryRun:true` previews, validation/stale errors and classified outcomes. A busy
-`-32002` remains retryable unless the write has a `committed` or `unknown`
-outcome; those outcomes must be reconciled even when the code says busy.
+`-32002` permits another host entry only with an explicit `notCommitted`
+outcome. Unclassified, `noChange`, `committed` and `unknown` busy completions
+remain retained. An in-flight duplicate reports `unknown` without replacing
+the original operation's eventual receipt; different content under that ID is
+rejected immediately, including a read that reuses an active write ID.
 Reads remain fresh and uncached. A retained request's ID, method and
 parameters must match its canonical parsed JSON exactly; key order/whitespace
 are irrelevant, but an integer changed
@@ -1610,3 +1678,23 @@ Saved editor preferences now encode V5, adding `locations.mixingGraph`.
 V2–V4 preferences migrate with the graph hidden; omitted editor preferences
 retain current placement. Project/music metadata and plugin state are unchanged.
 Newer workspace preferences are not readable by older Windows binaries.
+
+### Recording clock diagnostics
+
+`transport.get.recordingClock` describes the WASAPI device correlation. Its
+`valid` flag alone does not establish that plugin recording can map musical
+frames. When prepared playback exists, `frameTimeline` separately reports its
+`generation`, `stopped` flag and terminal `failure` (`none`,
+`playback-invalidated`, `host-start-regression`, `host-end-regression`,
+`frame-regression` or `rate-changed`). On boundary failure it retains the first
+rejected and preceding `start`/`end`, `frame`/`previousFrameEnd` and
+`rate`/`previousRate`. Host times and frames are decimal strings; rates are
+numbers. Zero fields mean no boundary diagnosis was retained.
+
+These are read-only diagnostics, not a recovery or timestamp-remapping API.
+Invalid timelines remain invalid; restarting playback prepares a new timeline.
+A start rejected before take ownership because transport is stopped or timing
+is unavailable returns a typed `notCommitted` outcome. The native recording
+window can retry that explicit action or close without protecting a nonexistent
+take. Unknown/post-acceptance outcomes still require their original completion
+receipt and retain their protection.

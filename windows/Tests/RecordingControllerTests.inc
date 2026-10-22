@@ -7,7 +7,40 @@ template<typename Action>void recordingRejected(DocumentController &c,Action act
   try{action();}catch(const Api::ApiError &e){rejected=e.code==code;}
   need(rejected&&view==c.view()&&take==stableRecording(c),message);
 }
+void builtinParameterRecordingTests(const std::filesystem::path &directory) {
+  bool active=false;PlaybackHooks hooks;
+  hooks.feedback=[&]{PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=61;return f;};
+  DocumentController c({},"builtin-parameter-recording",[&]{active=false;},[](const auto &){},{},64u*1024u*1024u,{},hooks);
+  const auto library=call(c,"plugin.discover",{{"format","Built-in"}});
+  invoke(c,"plugin.add",{{"descriptor",library.at(0)}});
+  const auto plugin=c.view()->session.document.at("nativePlugins")[0].at("instanceID");
+  const auto baseline=call(c,"plugin.state.get",{{"plugin",plugin}});
+  auto *playback=c.prepare(48000,Json::object(),true,true).get();active=true;
+  std::vector<float> pcm(96000);
+  need(playback->render(pcm.data(),48000,RenderTime{hostTime100ns(),61,48000,true,false,false}),"Built-in recording clock failed");
+  auto result=invoke(c,"automation.recording.start",{{"plugins",Json::array({plugin})}});const auto take=result.at("take");
+  const auto original=hostTime100ns();
+  result=invoke(c,"automation.recording.capture",{{"take",take},{"plugin",plugin},{"parameter",1},{"value",-6.25},{"timestamp",std::to_string(original)}});
+  need(result.at("accepted")==true&&result.at("eventCount")==1&&!result.contains("intakeError"),"Built-in standard control was not recorded");
+  result=invoke(c,"automation.recording.stop",{{"take",take}});
+  need(result.at("capturing")==false&&!result.contains("intakeError"),"Built-in empty notification source could not stop");
+  result=invoke(c,"automation.recording.commit",{{"take",take}});
+  need(result.at("completed")==true&&result.at("retained")==false&&!result.contains("restorationError")&&active,
+    "Built-in no-editor recording could not commit and release");
+  const auto points=call(c,"automation.get",Json::object());
+  need(points.at("total")==1&&points.at("points")[0].at("value")==-6.25&&
+    call(c,"plugin.state.get",{{"plugin",plugin}})==baseline,"Built-in capture changed its opaque manual baseline");
+  active=false;playback->chain().applyPending();invoke(c,"history.undo",{{"domain","plugins"}});
+  need(call(c,"automation.get",Json::object()).at("total")==0,"Built-in recording needed more than one Undo");
+  invoke(c,"history.redo",{{"domain","plugins"}});
+  const auto path=directory/"builtin-parameter-recording.screamseq";
+  invoke(c,"document.save",{{"path",path.generic_string()},{"overwrite",true}});
+  invoke(c,"document.open",{{"path",path.generic_string()},{"discard",true}});
+  need(call(c,"automation.get",Json::object())==points&&call(c,"plugin.state.get",{{"plugin",plugin}})==baseline,
+    "Built-in recorded control failed save/reopen");
+}
 void recordingControllerTests(const std::filesystem::path &directory) {
+  builtinParameterRecordingTests(directory);
   unsigned stops=0;DocumentController c({},"recording-worker",[&]{++stops;},[](const auto &){});
   const auto baseline=recoveryCapture(c);const auto original=c.view();
   recordingRejected(c,[&]{invoke(c,"recording.start");},"Missing start fields were not an atomic parameter error");

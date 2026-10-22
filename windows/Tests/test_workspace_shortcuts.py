@@ -125,6 +125,45 @@ class WorkspaceShortcutTests(unittest.TestCase):
         cell = self.read('pattern.get', pattern=0, startRow=7, rowCount=1, startChannel=0, channelCount=1)['cells'][0]
         self.assertEqual(cell['note'], 61)
 
+    def test_palette_availability_reason_rechecks_history_without_losing_query(self):
+        self.focus_pattern()
+        before = self.doc()
+        self.key(ord('K'), hwnd=self.native_window(), ctrl=True)
+        palette = self.native_window('ScreamSeqCommands')
+        search, results, run = (self.control(palette, identifier) for identifier in (101, 102, 103))
+        self.field(palette, 101, 'selected plugin parameter controls')
+        self.assertEqual(self.desktop.send(results, 0x18B), 1)
+        self.assertFalse(user.IsWindowEnabled(run), 'Missing plugin target left palette Run enabled')
+        length = self.desktop.send(results, 0x18A, 0)
+        self.assertGreater(length, 0)
+        row = ctypes.create_unicode_buffer(length + 1)
+        self.desktop.send(results, 0x189, 0, ctypes.addressof(row))
+        self.assertIn('Unavailable: Select a plugin', row.value)
+        self.key(0x0D, hwnd=search)
+        self.assertTrue(user.IsWindowVisible(palette))
+        self.assertEqual(self.doc(), before)
+
+        self.field(palette, 101, 'edit undo')
+        self.assertEqual(self.desktop.send(results, 0x18B), 1)
+        self.assertFalse(user.IsWindowEnabled(run))
+        self.desktop.send(search, 0xB1, 2, 6)  # Retain a caret selection during availability changes.
+        self.write('document.patch', title='History appeared while palette stayed open')
+        self.ready()
+        deadline = time.monotonic() + 3
+        while not user.IsWindowEnabled(run) and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(user.IsWindowEnabled(run), 'Visible palette did not follow new shared history')
+        self.assertEqual(self.text(search), 'edit undo')
+        self.assertEqual(self.desktop.focus(palette), search)
+        first, last = w.DWORD(), w.DWORD()
+        self.desktop.send(search, 0xB0, ctypes.addressof(first), ctypes.addressof(last))
+        self.assertEqual((first.value, last.value), (2, 6))
+        self.key(0x0D, hwnd=search)
+        self.assertFalse(user.IsWindowVisible(palette))
+        self.assertEqual(self.doc()['data']['title'], before['data']['title'])
+        self.assertTrue(self.doc()['data']['canRedo'])
+        self.assertEqual(self.desktop.focus(self.native_window()), self.native_window())
+
     def test_real_menu_loop_allows_new_song(self):
         # Enter USER32's actual modal menu loop. Sending WM_ENTERMENULOOP alone
         # does not acquire menu capture and missed the all-disabled regression.
@@ -704,6 +743,9 @@ class WorkspaceShortcutTests(unittest.TestCase):
         edit = self.field(tool, 4207, '3e')
         self.focus_control(edit)
         before = self.doc()
+        # Pattern navigation owns Ctrl+Alt+P by default. Release it explicitly
+        # before exercising a user remap; prefix conflicts must stay rejected.
+        self.bind(647, [])
         self.bind(545, ['ctrl+alt+p'])
         self.assertTrue(self.read('transport.get')['playing'])
         self.assertTrue(self.read('transport.get')['audioActive'])

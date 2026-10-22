@@ -12,6 +12,7 @@
 #include <deque>
 #include <optional>
 #include <memory>
+#include <map>
 #include <stdexcept>
 #include <set>
 #include <string>
@@ -103,9 +104,9 @@ class SessionAdapter {
   struct Cached { std::string id, request; Json response; std::size_t bytes; };
   std::deque<Cached> cache_;
   std::size_t cacheBytes_ = 0;
-  std::set<std::string> activeWrites_;
+  std::map<std::string,std::string> activeWrites_;
   // Terminal write replies, FIFO by insertion (replays do not refresh age).
-  // Busy is retryable only when no committed/unknown outcome was supplied.
+  // Busy is retryable only with an explicit NotCommitted outcome.
   // Charge compact UTF-8 JSON request + response bytes, excluding newlines.
   // This bounds retained serialized content, not JSON DOM/allocator heap usage.
   void cacheResponse(const Json &request, const Json &response, std::optional<std::size_t> serializedBytes = {}) noexcept {
@@ -166,7 +167,7 @@ class SessionAdapter {
         {"retainedEntries",cache_.size()},{"retainedSerializedBytes",cacheBytes_},
         {"accounting","compact UTF-8 JSON request plus response; excludes newlines; not heap usage"},
         {"eviction","oldest insertion first; replay does not refresh"},
-        {"scope","terminal write replies, including success, no-op, dryRun and errors; busy is retryable unless committed/unknown; exact parsed request replay while retained"},
+        {"scope","terminal write replies, including success, no-op, dryRun and errors; busy is retryable only when notCommitted; exact parsed request replay while retained"},
         {"oversize","success returned without caching; retention failure does not reject a completed write"},
         {"durable",false}}},
       {"revisionGuards",{{"transport.play",{"expectedRevision"}},{"transport.stop",{"expectedRevision"}},
@@ -197,6 +198,13 @@ class SessionAdapter {
       for(const auto &m:host_->additionalDocumentReads()) if(std::find(result["reads"].begin(),result["reads"].end(),m)==result["reads"].end())result["reads"].push_back(m);
       for(const auto &m:host_->additionalDocumentWrites()) {
         if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]=(m=="parameter.activity.watch"||m=="sample.recording.stop"||m=="sample.recording.discard")?Json::array():Json::array({m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"});
+      }
+      if(std::find(result["reads"].begin(),result["reads"].end(),"automation.recovery.get")!=result["reads"].end()) {
+        result["revisionGuards"]["automation.recovery.get"]={"expectedRevision"};
+        result["pluginRecording"]={{"schema","windows/Api/plugin-recording.schema.json"},{"clock","windows-qpc-100ns"},
+          {"scope","Stable rack plugin identities; independent graph recipe copies are not recorded"},
+          {"input","Original timestamp and native value; accepted input is never resent after preview failure"},
+          {"recovery","Detached read-only archives preserve original clocks and identities; never rearm or replay them"}};
       }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"scratch.gestures.get/set/clone/remove","Song-local SK gesture slots 1..255. Two normalized motion/fader lanes use 65536 units/cycle. Set accepts a preset seed and independent overrides; live edits publish a prepared bank, used gestures cannot be removed. Clone optionally reassigns its captured SK cell in one Undo."},
@@ -332,14 +340,18 @@ public:
       // that already returned. Only an exception from the host write itself
       // may supply that write's authoritative outcome and identity.
       if(write&&hostReturned)outcome=Tracker::WriteOutcome{};
-      else if(write&&hostEntered&&!outcome&&code!=-32002)outcome=Tracker::WriteOutcome{};
+      else if(write&&hostEntered&&!outcome)outcome=Tracker::WriteOutcome{};
+      else if(write&&!hostEntered&&!outcome&&code==-32002)
+        outcome=Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted};
       auto reply=errorResponse(q["id"],code,message);
       if(outcome)reply["error"]["data"]=outcomeData(*outcome);
       else if(!revision.empty())reply["error"]["data"]={{"revision",revision}};
       // Error codes do not establish whether a side effect occurred. Retain
       // terminal replies conservatively, including validation/stale errors.
-      // An authoritative uncertain/committed outcome outranks a busy code.
-      if(write&&(code!=-32002||(outcome&&outcome->needsReconciliation())))cacheResponse(q,reply);
+      // Only a proven pre-write refusal permits another host entry. A busy
+      // code with no classification is not evidence of a rejected operation.
+      const bool retryable=code==-32002&&outcome&&outcome->state==Tracker::CommitOutcome::NotCommitted;
+      if(write&&!retryable)cacheResponse(q,reply);
       return reply;
     };
     try {
@@ -349,12 +361,18 @@ public:
         if(cached.request!=q.dump()) return errorResponse(q["id"],-32600,"Request id was already used with different content");
         return cached.response;
       }
+      const auto requestId=q["id"].get<std::string>();
+      if(const auto pending=activeWrites_.find(requestId);pending!=activeWrites_.end()) {
+        if(pending->second!=q.dump())return errorResponse(q["id"],-32600,"Request id is running with different content");
+        auto reply=errorResponse(q["id"],-32002,"Request is still running; inspect its outcome before retrying");
+        reply["error"]["data"]=outcomeData(Tracker::WriteOutcome{});
+        return reply; // Do not cache over the original operation's completion.
+      }
       if(!write && !independentRead && !docRead && !workspace && method!="api.describe" && method!="document.get" && method!="context.get" && method!="pattern.get" && method!="transport.get")
         throw ApiError(-32601,"Unknown method; call api.describe");
       if(!host_ && method!="api.describe") throw ApiError(-32002,"Session is not attached");
-      const auto requestId=q["id"].get<std::string>();
-      if(write&&!activeWrites_.insert(requestId).second)throw ApiError(-32002,"Request is still running; retry with the same ID after it completes");
-      struct ActiveGuard {std::set<std::string> &ids;const std::string &id;bool active;~ActiveGuard(){if(active)ids.erase(id);}}active{activeWrites_,requestId,write};
+      if(write)activeWrites_.emplace(requestId,q.dump());
+      struct ActiveGuard {std::map<std::string,std::string> &ids;const std::string &id;bool active;~ActiveGuard(){if(active)ids.erase(id);}}active{activeWrites_,requestId,write};
       if(independentRead || independentWrite) {
         hostEntered=write;auto result=host_->independentOperation(method,p);hostReturned=true;
         Json response={{"jsonrpc","2.0"},{"id",q["id"]},{"result",std::move(result)}};

@@ -5,6 +5,7 @@
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
+#include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
 #include <cmath>
@@ -15,6 +16,9 @@
 #include <mach/mach_time.h>
 using namespace Tracker;
 using namespace OpenMPT;
+std::vector<Tracker::PluginDescriptor> registerFixtureAUs();
+void setFixtureAUHasEditor(bool);
+OSStatus fixtureAULastEditResult();
 #ifdef TRACKER_SANITIZER
 static void tracker_audit_begin() {}
 static void tracker_audit_end(uint64_t *a, uint64_t *f, uint64_t *l) {
@@ -29,6 +33,89 @@ static constexpr const char *auditSummary = "zero callback allocations/frees/loc
 static void check(bool value, const char *message) {
   if (!value)
     throw std::runtime_error(message);
+}
+#include "editor/Tests/PluginChainCaptureTests.inc"
+static void stoppedRecordedPublication(const PluginState &state,bool visible=false) {
+  // No device is configured: stopped review must work without opening output.
+  AudioDevice audio;audio.setPlugins({state});
+  const auto epoch=audio.pluginEpoch();
+  const auto source=audio.pluginEditSource(0);
+  const auto original=audio.pluginParameters(0).at(0);
+  const std::vector<ParameterChange> baseline{{0,original.id,original.value,0}};
+  NSWindow *window=nil;
+  if(visible) {
+    audio.showPluginEditor(0);
+    for(NSWindow *candidate in NSApp.windows)
+      if(candidate.visible&&[candidate.title isEqualToString:@(state.descriptor.name.c_str())]) {
+        check(window==nil,"Stopped review editor is ambiguous");window=candidate;
+      }
+    check(window!=nil,"Stopped review editor did not open");
+  }
+  auto unchangedOwner=[&] {
+    check(!audio.active()&&audio.pluginEpoch()==epoch&&audio.pluginEditSource(0)==source,
+      "Stopped recorded publication replaced its native processor");
+    if(visible)check(window.visible,"Stopped recorded publication closed its native editor");
+  };
+  // Stopped control reads/cancellation and latency refresh share the same
+  // native handoff as timeline publication. They must remain useful without
+  // opening a device or replacing the retained editor/manual baseline.
+  const auto originalClock=audio.recordingFrameTimeline();
+  for(int repeat=0;repeat<8;++repeat) {
+    const std::array<ParameterChange,1> preview{{{0,original.id,.7f,0}}};
+    check(audio.previewPluginParameters(preview),"Queue stopped parameter preview");
+    const auto effective=audio.pluginParameters(0).at(0);
+    check(std::abs(effective.value-.7f)<1e-6 && effective.manualValue &&
+          std::abs(*effective.manualValue-original.value)<1e-6,
+          "Stopped preview changed the accepted manual baseline or failed to adopt");
+    check(audio.cancelPluginParameterPreview(0,original.id),"Cancel stopped parameter preview");
+    audio.refreshPluginLatencies(NativeSong{});
+    const auto restored=audio.pluginParameters(0).at(0);
+    check(std::abs(restored.value-original.value)<1e-6 && restored.manualValue &&
+          std::abs(*restored.manualValue-original.value)<1e-6 && audio.recordingFrameTimeline()==originalClock,
+          "Stopped handoff lost baseline restoration or replaced the recording clock");
+    unchangedOwner();
+  }
+  const std::vector<ParameterChange> points{{0,original.id,.6f,0}};
+  auto prepared=audio.prepareRecordedAutomation(points,baseline);
+  check(audio.publishRecordedAutomation(std::move(prepared)),"Publish stopped recorded timeline");
+  unchangedOwner();
+  check(std::abs(*audio.pluginParameters(0).at(0).manualValue-original.value)<1e-6,
+    "Stopped recording baked its effective value into the manual baseline");
+  // Several edits without a UI catalog read must retire/adopt on the stopped
+  // control owner instead of exhausting the unconsumed publication slots.
+  for(int repeat=0;repeat<8;++repeat) {
+    auto next=audio.prepareRecordedAutomation(repeat%2?points:std::vector<ParameterChange>{},baseline);
+    check(audio.publishRecordedAutomation(std::move(next)),"Stopped timeline edits exhausted publication slots");
+    unchangedOwner();
+  }
+  auto staleManual=audio.prepareRecordedAutomation({},baseline);
+  check(audio.pluginParameter(0,original.id,.4f),"Queue intervening accepted manual write");
+  check(!audio.publishRecordedAutomation(std::move(staleManual)),"Stale stopped baseline overwrote a newer manual write");
+  check(std::abs(*audio.pluginParameters(0).at(0).manualValue-.4)<1e-6,"Refused baseline changed the accepted manual value");
+  check(audio.hasAutomatedState(),"Refused stopped Clear discarded the accepted timeline");
+  auto staleTimeline=audio.prepareRecordedAutomation({});
+  auto currentTimeline=audio.prepareRecordedAutomation(points);
+  check(audio.publishRecordedAutomation(std::move(currentTimeline))&&
+        !audio.publishRecordedAutomation(std::move(staleTimeline)),"An older stopped plan replaced a later timeline");
+  auto replaced=audio.prepareRecordedAutomation({},baseline);
+  audio.setPlugins({state});
+  check(audio.pluginEpoch()!=epoch&&!audio.publishRecordedAutomation(std::move(replaced)),
+    "A replaced rack accepted an old recorded plan");
+}
+static void chainInputProtection(const PluginState &state){
+  PluginChain chain({state},48000,true);chain.showEditor(0);
+  NSSlider *slider=nil;NSWindow *owned=nil;
+  for(NSWindow *window in NSApp.windows)if(window.visible&&[window.title isEqualToString:@(state.descriptor.name.c_str())])
+    for(NSView *view in window.contentView.subviews)for(NSView *child in view.subviews)
+      if([child isKindOfClass:NSSlider.class]){check(slider==nil,"Raw chain fixture window is ambiguous");slider=(NSSlider *)child;owned=window;}
+  check(slider!=nil,"Raw chain fixture has no owned native slider");
+  pluginChainCaptureChecks(chain,[&](double value){slider.doubleValue=value;return bool([slider sendAction:slider.action to:slider.target]);},
+    []{return mach_absolute_time();});
+  check(slider.enabled&&owned.visible,"Raw chain protection did not restore the native editor");
+  std::array<float,256> pcm;pcm.fill(1);
+  check(chain.process(pcm.data(),128),"Raw chain fixture failed to render");
+  for(auto value:pcm)check(value==.625f,"Raw chain capture changed latest audible manual delivery");
+  [owned close];
 }
 static std::vector<std::byte> module() {
   auto document = Document::demo();
@@ -60,6 +147,93 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
     @"isInstrument" : @(d.instrument)
   };
 }
+static void closedInputProtection(const PluginState &state){
+  NativePlugin plugin(state,48000),other(state,48000);
+  const auto lease=plugin.beginEditorInputBarrier();
+  check(lease&&lease->token&&lease->incarnation==plugin.editSource().incarnation,"Closed native input lease lost provider identity");
+  check(!plugin.beginEditorInputBarrier(),"Nested native input lease accepted");
+  check(!other.endEditorInputBarrier(*lease),"Another provider released a native input lease");
+  auto wrong=*lease;++wrong.token;
+  check(!plugin.endEditorInputBarrier(wrong),"Wrong native input token released the lease");
+  bool refused=false;try{plugin.showEditor();}catch(const std::exception &){refused=true;}
+  check(refused&&!plugin.editorOpen(),"Editor opened through a protected native input lease");
+  check(plugin.endEditorInputBarrier(*lease)&&plugin.endEditorInputBarrier(*lease),"Native input cleanup is not retryable");
+  const auto next=plugin.beginEditorInputBarrier();
+  check(next&&next->token!=lease->token&&!plugin.endEditorInputBarrier(*lease),"Old token released a new lease");
+  plugin.closeEditor();check(plugin.endEditorInputBarrier(*next),"Explicit close did not clean up its native lease");
+}
+static PluginEditorInputBarrier protectOpenEditor(NativePlugin &plugin,NSSlider *slider){
+  NSWindow *window=slider.window;NSResponder *responder=window.firstResponder;
+  const auto value=slider.doubleValue;const auto frame=window.frame;
+  const auto lease=plugin.beginEditorInputBarrier();
+  check(lease&&lease->token&&!slider.enabled&&plugin.editorOpen(),"Open native editor did not protect its input");
+  [window performClose:nil];[window close];
+  bool refused=false;try{plugin.showEditor();}catch(const std::exception &){refused=true;}
+  check(refused&&plugin.editorOpen()&&window.visible&&window.firstResponder==responder&&
+    slider.doubleValue==value&&NSEqualRects(window.frame,frame),"Protection closed, raised or mutated the retained editor");
+  return *lease;
+}
+static void auNotificationLifetime(const PluginDescriptor &descriptor) {
+  setFixtureAUHasEditor(true);
+  struct ResetEditorMode{~ResetEditorMode(){setFixtureAUHasEditor(false);}}reset;
+  // main already registered the process-local component for the closed-editor
+  // lease checks. Editor availability is captured by each new fixture instance,
+  // not by component registration; registering the same identity again fails.
+  PluginState state{descriptor};state.instanceID="au-notification-lifetime";
+  NativePlugin plugin(state,48000);PluginEdit event;PluginEditSource source;
+  const auto initial=plugin.editBoundary();
+  check(initial&&initial->fence.hostTime&&!initial->fence.pending&&!initial->source.dropped&&
+    plugin.popEditBefore(*initial,event,source)==PluginEditRead::Complete,"Closed AU has no valid empty notification boundary");
+  const auto sliderForWindow=[&]() -> NSSlider * {
+    for(NSWindow *window in NSApp.windows)if(window.visible&&[window.title isEqualToString:@(state.descriptor.name.c_str())])
+      for(NSView *view in window.contentView.subviews)for(NSView *child in view.subviews)
+        if([child isKindOfClass:NSSlider.class]&&[child.identifier isEqualToString:@"fixture-au-gain"])return (NSSlider *)child;
+    return nil;
+  };
+  plugin.showEditor();NSSlider *slider=sliderForWindow();check(slider!=nil,"Owned AU parameter view was not attached");
+  // Settle any listener-registration baseline before the explicit gesture.
+  NSDate *settled=[NSDate dateWithTimeIntervalSinceNow:.03];
+  while(settled.timeIntervalSinceNow>0)[[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:settled];
+  while(plugin.popEdit(event,source))check(event.id==7&&event.value==.5f,"AU registration delivered an unexpected baseline");
+  const auto observe=[&](float value,uint64_t pending) {
+    slider.floatValue=value;[slider sendAction:slider.action to:slider.target];
+    check(fixtureAULastEditResult()==noErr,"Owned AUParameterSet failed");
+    NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:2];
+    for(;;) {
+      const auto cut=plugin.editBoundary();
+      check(cut&&cut->source.incarnation==initial->source.incarnation&&!cut->source.dropped,"AU delivery changed provider or lost input");
+      if(cut->fence.pending==pending)return *cut;
+      check(cut->fence.pending<pending&&deadline.timeIntervalSinceNow>0,"Bounded AU listener delivery did not produce exactly the expected notifications");
+      [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:.005]];
+    }
+  };
+  const auto lease=protectOpenEditor(plugin,slider);
+  // Programmatic vendor delivery remains observable while ordinary native
+  // input is gated. The take owner must retain it, never suppress it as noise.
+  const auto beforeFirst=mach_absolute_time();const auto first=observe(.25f,1);
+  check(plugin.endEditorInputBarrier(lease)&&slider.enabled,"AU input release did not restore its slider");
+  const auto second=observe(.75f,2);
+  plugin.closeEditor();const auto closed=plugin.editBoundary();
+  check(closed&&closed->source==second.source&&closed->fence.position==second.fence.position&&closed->fence.pending==2,
+    "Closing the AU editor discarded delivered notifications or reset their boundary");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&
+    event.hostTime>=beforeFirst&&event.hostTime<=first.fence.hostTime&&source==first.source,
+    "Closed AU lost its first original-time notification");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::Complete,"Closed AU consumed input beyond its cut");
+  plugin.showEditor();slider=sliderForWindow();
+  check(slider&&std::abs(slider.floatValue-.75f)<1e-6,"Reopened AU view lost its actual parameter value");
+  const auto reopened=plugin.editBoundary();
+  check(reopened&&reopened->source==second.source&&reopened->fence.position==second.fence.position&&reopened->fence.pending==1,
+    "Reopening the AU editor reset or consumed unread notifications");
+  check(plugin.popEditBefore(second,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.75f&&
+    event.hostTime>=first.fence.hostTime&&event.hostTime<=second.fence.hostTime,
+    "Reopened AU lost the later original-time notification");
+  check(plugin.popEditBefore(second,event,source)==PluginEditRead::Complete&&!plugin.popEdit(event,source),"AU notification delivered more than once");
+  check(plugin.popEditBefore(first,event,source)==PluginEditRead::InvalidFence,"AU accepted a previously passed boundary");
+  plugin.closeEditor();NativePlugin replacement(state,48000);
+  check(replacement.popEditBefore(second,event,source)==PluginEditRead::InvalidFence,"Replacement AU accepted another provider's boundary");
+  std::cout<<"PASS AUParameterSet/listener original-time delivery, fixed cuts, close/reopen retention and provider replacement\n";
+}
 int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
   @autoreleasepool {
     try {
@@ -69,10 +243,15 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       PluginState gain{descriptors[0]}, synth{descriptors[1]};
       gain.instanceID = "test-gain-instance";
       synth.instrument = 1;
+      closedInputProtection(gain);
+      PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";
+      closedInputProtection(closedAU);
+      stoppedRecordedPublication(closedAU);
       NativePlugin effect(gain, 48000);
       check(effect.parameter(7, .3f), "VST3 parameter write");
       auto saved = effect.state();
       check(saved.instanceID == gain.instanceID, "VST3 host state retains plugin instance identity");
+      stoppedRecordedPublication(saved);
       NativePlugin recalled(saved, 48000);
       check(std::abs(recalled.parameters()[0].value - .3f) < 1e-6, "VST3 processor/controller state recall");
       std::array<float, 1024> buffer;
@@ -290,6 +469,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
             if ([item isKindOfClass:NSSlider.class])
               slider = (NSSlider *)item;
         check(slider != nil, "plugin-owned slider attached");
+        const auto inputLease=protectOpenEditor(plugin,slider);
         const auto originalSource=plugin.editSource();
         const auto recordedCatalog=plugin.parameters();
         const std::array<PluginState,1> recordedRack{gain};
@@ -299,25 +479,33 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         const auto arm=mach_absolute_time();
         check(recordedClock->publish(arm,arm+1,0,1,48000,19),"Native slider take clock starts");
         RecordedGestureTake recordedTake("mac-slider","revision",arm,recordedClock,recordedRack,{},recordedProviders);
+        const auto armCut=plugin.editBoundary();
+        check(armCut.has_value(),"Native slider has no arm boundary");
+        RecordedGestureBoundary::requireFresh(recordedTake,{{gain.instanceID,*armCut}});
         slider.doubleValue = .72;
         const auto beforeEdit=mach_absolute_time();
         [slider sendAction:slider.action to:slider.target];
         const auto afterEdit=mach_absolute_time();
         // The fixture emits synchronously on this AppKit owner. Seal after the
         // actual action returns, then drain later against retained coverage.
-        const auto release=mach_absolute_time();
+        const auto stopCut=plugin.editBoundary();
+        check(stopCut.has_value(),"Native slider has no stop boundary");
+        const RecordedGestureBoundary::Cuts stopCuts{{gain.instanceID,*stopCut}};
+        const auto release=RecordedGestureBoundary::stopTime(recordedTake,stopCuts);
         check(release>arm+1&&recordedClock->publish(arm+1,release,1,479,48000,19),
           "Native slider take retains presentation coverage");
-        recordedTake.seal(release);recordedClock->close(19,release);
+        check(RecordedGestureBoundary::seal(recordedTake,stopCuts)==release,"Native slider stop boundary changed");
+        recordedClock->close(19,release);
         [NSThread sleepForTimeInterval:.002];
         PluginEdit edit;PluginEditSource source;
-        check(plugin.popEdit(edit,source) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
+        check(plugin.popEditBefore(*stopCut,edit,source)==PluginEditRead::Event && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
         check(originalSource.incarnation&&source==originalSource&&!source.dropped,"Custom editor notification lost its provider incarnation");
+        check(plugin.endEditorInputBarrier(inputLease)&&slider.enabled,"VST3 input release did not restore its slider");
         check(beforeEdit&&edit.hostTime>=beforeEdit&&edit.hostTime<=afterEdit&&plugin.droppedEdits()==0,"Native facade retains custom editor callback time and loss count");
         check(recordedTake.append(gain.instanceID,edit,source,"revision",19,recordedNative,recordedCatalog)==RecordedGestureTake::Intake::Captured,
           "Delayed native slider notification enters its original take after release");
         PluginEdit emptyEdit;
-        check(!plugin.popEdit(emptyEdit,source)&&source==originalSource&&
+        check(plugin.popEditBefore(*stopCut,emptyEdit,source)==PluginEditRead::Complete&&source==originalSource&&
           recordedTake.drained(gain.instanceID,source,"revision",19),"Native slider release drains the paired provider");
         const auto expectedFrame=uint64_t(1.L+static_cast<long double>(edit.hostTime-(arm+1))*479/(release-(arm+1)));
         unsigned publications=0;
@@ -349,6 +537,8 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
           plugin.closeEditor();
         }
         editorSizeMode(0);dlclose(fixtureModule);
+        chainInputProtection(gain);
+        stoppedRecordedPublication(saved,true);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);
@@ -356,6 +546,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         apple.closeEditor();
         apple.showEditor();
         apple.closeEditor();
+        auNotificationLifetime(closedAU.descriptor);
         std::cout << "PASS native AU/VST3 editor attachment, close/reopen, and VST3 custom control-to-audio callback\n";
         if (argc > 3 && std::string(argv[3]) == "--loopback-record") {
           uint32_t virtualDevice = 0;

@@ -6,6 +6,7 @@ import time
 import unittest
 
 import private_desktop
+import native_context_menu
 import test_parameter_compact_ui as compact
 import test_recording as recording
 
@@ -145,3 +146,44 @@ class MidiRecordingUITests(unittest.TestCase):
         self.assertEqual(self.state()['selectedEvent'], selected)
         self.press(7213); self.assertEqual(self.state()['reviewedCount'], 0)
         self.assertFalse(private_desktop.user.IsWindowEnabled(self.control(7215)))
+
+    def test_sound_menu_with_hidden_context_keeps_layout_draft_and_history(self):
+        self.start()
+        if self.read('workspace.get')['contextPanel']['visible']:
+            self.command(635)
+        self.field(7208, '-')
+        self.focus_control(7205)
+        before = self.doc()
+        layout = self.read('workspace.get')['editorDock']['configuration']
+        draft = self.state()['draft']
+        musical_input = self.read('workspace.get')['musicalTyping']
+        catalogue = before['data']['samples' if musical_input['sample'] else 'instruments']
+        self.assertGreater(len(catalogue), 1)
+        chosen = catalogue[1]
+        with native_context_menu.Menu.from_button(self, self.window(), 7205) as menu:
+            items = menu.items()
+            self.assertEqual(len(items), len(catalogue))
+            self.assertTrue(all(item['enabled'] for item in items))
+            self.desktop.send(self.desktop.hwnd(self.pid), 0x10)  # WM_CLOSE must not destroy the owner under its menu.
+            menu.choose(2)
+        self.idle()
+        actual = self.read('workspace.get')
+        self.assertEqual((actual['musicalTyping']['id'], actual['musicalTyping']['slot']),
+                         (chosen['id'], chosen['index']))
+        self.assertEqual(actual['editorDock']['configuration'], layout)
+        self.assertFalse(actual['contextPanel']['visible'])
+        self.assertEqual(self.state()['draft'], draft)
+        self.assertEqual(self.desktop.focus(self.window()), self.control(7205))
+        self.assertIn(chosen['name'], self.text(7204))
+        self.assertEqual(self.doc(), before)
+        # A later input choice while the native menu pumps must not be overwritten.
+        with native_context_menu.Menu.from_button(self, self.window(), 7205) as menu:
+            context = self.read('context.get')
+            self.client.call('workspace.input', dict(expectedRevision=self.doc()['revision'],
+                expectedContext=context['contextRevision'], instrument=255))
+            menu.choose(1)
+        self.idle()
+        self.assertEqual(self.read('context.get')['instrument'], 255)
+        self.assertIn('changed', self.state()['error'])
+        self.assertEqual(self.state()['draft'], draft)
+        self.assertEqual(self.doc(), before)

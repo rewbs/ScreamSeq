@@ -13,6 +13,27 @@ public:
   };
   enum class Intake { Outside, Captured, Refused };
   enum class Failure { None, Context, Provider, Target, Capacity, Storage, Allocation };
+  // Detached, read-only recovery evidence. Native adapters serialize this on
+  // the control owner. It deliberately cannot be installed as a live take:
+  // host times and provider incarnations belong to the original process.
+  struct Review {
+    struct Source {Provider initial;uint64_t dropped=0;bool drained=false;};
+    struct Target {
+      RecordedGestureCapture::Key key;
+      float minimum=0,maximum=0;
+      RecordedGestureCapture::Loss loss;
+      std::vector<RecordedGestureCapture::Event> events;
+    };
+    std::string token,revision;
+    uint64_t playbackEpoch=0,startTime=0,rejected=0;
+    std::optional<uint64_t> endTime,stoppedEndTime;
+    Failure failure=Failure::None;
+    bool completed=false;
+    std::vector<std::string> rack;
+    std::vector<ParameterChange> baseline;
+    std::vector<Source> sources;
+    std::vector<Target> targets;
+  };
 private:
   struct Source {
     Provider initial;
@@ -117,9 +138,11 @@ public:
   uint64_t playbackEpoch()const noexcept{return playbackEpoch_;}
   size_t eventCount()const noexcept{return eventCount_;}
   size_t targetCount()const noexcept{return targets_.size();}
+  size_t providerCount()const noexcept{return sources_.size();}
   Failure failure()const noexcept{return failure_;}
   bool completed()const noexcept{return completed_;}
   uint64_t rejectedEvents()const noexcept{return rejected_;}
+  uint64_t startTime()const noexcept{return start_;}
   std::optional<uint64_t> endTime()const noexcept{return end_;}
   const RecordedGestureCapture &target(size_t index)const{return *targets_.at(index);}
   bool matchesBaseline(std::span<const PluginState> rack,std::span<const ParameterChange> points)const {
@@ -140,6 +163,29 @@ public:
     if(found==sources_.end())throw std::invalid_argument("Provider is not armed in this take");
     return found->dropped-found->initial.source.dropped;
   }
+  Review review()const {
+    Review result;
+    result.token=token_;result.revision=revision_;result.playbackEpoch=playbackEpoch_;
+    result.startTime=start_;result.endTime=end_;result.rejected=rejected_;
+    result.stoppedEndTime=timeline_->stoppedEndTime(playbackEpoch_);
+    result.failure=failure_;result.completed=completed_;result.baseline=*before_;
+    result.rack.reserve(rack_.size());result.sources.reserve(sources_.size());
+    result.targets.reserve(targets_.size());
+    for(const auto &plugin:rack_)result.rack.push_back(plugin.instanceID);
+    for(const auto &s:sources_)result.sources.push_back({s.initial,s.dropped,s.drained});
+    for(const auto &target:targets_) {
+      result.targets.push_back({target->key_,target->minimum_,target->maximum_,target->loss(),target->events_});
+      auto &copy=result.targets.back();
+      // Stop can shorten previously published presentation coverage before
+      // the next worker poll. Preserve the raw event, but not a false frame.
+      if(result.stoppedEndTime)for(auto &event:copy.events)
+        if(event.frame&&event.hostTime>=*result.stoppedEndTime)event.frame.reset();
+      copy.loss.unmapped=size_t(std::count_if(copy.events.begin(),copy.events.end(),[](const auto &event){return !event.frame;}));
+    }
+    // Do not mutate live mappings, consume vendor notifications, seal,
+    // acknowledge a drain or retire history here.
+    return result;
+  }
   bool observeProvider(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);
     if(!owner||completed_||!current(revision,epoch)||!observe(*owner,provider))return false;
@@ -152,6 +198,17 @@ public:
   // Call for every original notification before coalescing. A failed or full
   // take still owns its providers: native adapters must not divert its edits
   // into opaque/manual state. Native pending buffers retain publication retry.
+  void validateControlInput(const std::string &plugin,const PluginEdit &edit,
+      const NativeSong &native,std::span<const PluginParameter> catalog)const {
+    if(completed_||failure_!=Failure::None||!owns(plugin)||!edit.hostTime||edit.hostTime<start_||
+       (end_&&edit.hostTime>=*end_))
+      throw std::invalid_argument("Control input belongs to another or stopped parameter take");
+    RecordedGestureCapture::Key key;key.plugin=plugin;key.parameter=edit.id;
+    RecordedGestureCapture::conflict(native,key);
+    const auto &p=RecordedGestureCapture::parameter(catalog,edit.id);
+    if(!std::isfinite(edit.value)||edit.value<p.min||edit.value>p.max)
+      throw std::invalid_argument("Recorded control value is outside the parameter range");
+  }
   Intake append(const std::string &plugin,const PluginEdit &edit,PluginEditSource provider,
       const std::string &revision,uint64_t epoch,const NativeSong &native,std::span<const PluginParameter> catalog) noexcept {
     auto *owner=source(plugin);
@@ -196,8 +253,9 @@ public:
     end_=end;
   }
   // Native adapter calls this only after its original-time release/Stop input
-  // barrier AND an empty paired pop from this provider. An ordinary empty poll
-  // while capturing is not a completed drain. Late input invalidates it again.
+  // barrier AND an empty paired pop, or completed provider-qualified fixed cut.
+  // An ordinary empty poll while capturing is not a completed drain. Appending
+  // further input invalidates it again; adapters must retain post-cut input.
   bool drained(const std::string &plugin,PluginEditSource provider,const std::string &revision,uint64_t epoch) noexcept {
     auto *owner=source(plugin);
     if(!owner||!end_||completed_)return false;

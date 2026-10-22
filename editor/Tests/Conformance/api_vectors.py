@@ -14,6 +14,24 @@ VECTORS = Path(__file__).with_name("api-vectors.json")
 BASELINE = ROOT / "doc/api/platform-differences.json"
 
 
+def contract_labels(vector):
+    """Keep historical coverage without calling equal expectations open drift.
+
+    This classifies the reviewed contract, not runtime qualification on the other
+    platform. Actual outcomes/preservation must still match every expectation.
+    """
+    reference = vector.get("difference")
+    if not reference:
+        return dict(knownDifference=None, regressionFor=None)
+    def platform_contract(platform):
+        return {key: vector.get(key, {}).get(platform, default) for key, default in (
+            ("expected", None), ("documentUnchanged", True),
+            ("changedPaths", []), ("persistedDifference", None))}
+    differs = platform_contract("windows") != platform_contract("macos")
+    return dict(knownDifference=reference if differs else None,
+                regressionFor=None if differs else reference)
+
+
 def schema_methods(path):
     schema = json.loads(read_bytes(path))
     methods = []
@@ -135,7 +153,7 @@ def run(client, output):
                 baselineMatched=result == expected and unchanged["equal"] == expected_unchanged
                     and actual_paths == expected_paths, documentUnchanged=unchanged,
                 preservationPassed=unchanged["equal"],
-                knownDifference=vector.get("difference"), resolutionPhase=vector.get("phase"))
+                **contract_labels(vector), resolutionPhase=vector.get("phase"))
             report["cases"].append(row)
             print(f"{'KNOWN DIFFERENCE' if row['knownDifference'] else 'CHECK'} {row['id']}: {result}", flush=True)
             if not unchanged["equal"]:
@@ -158,7 +176,8 @@ def run(client, output):
         expected = corpus["rejectedRequestIDReuse"][platform_name]
         unchanged = differences(before, call("document.get"))
         report["cases"].append(dict(id="rejected-request-id-reuse", observed=replay, expected=expected,
-            firstRejection=rejected, knownDifference="API-REPLAY-ERROR", resolutionPhase="P6a",
+            firstRejection=rejected, **contract_labels(dict(difference="API-REPLAY-ERROR",
+                expected=corpus["rejectedRequestIDReuse"])), resolutionPhase="P6a",
             baselineMatched=rejected == -32602 and replay == expected and unchanged["equal"], documentUnchanged=unchanged))
 
         write("document.save", path=str(output / "after-noops.screamseq"), overwrite=False)
@@ -218,13 +237,15 @@ def run(client, output):
         report["editHistoryReplayPersistence"] = True
         report["baselineMatched"] = inventory_checked and all(row["baselineMatched"] for row in report["cases"])
         report["knownDifferences"] = sorted({row["knownDifference"] for row in report["cases"] if row["knownDifference"]})
+        report["historicalContractsExercised"] = sorted({row["regressionFor"] for row in report["cases"] if row["regressionFor"]})
         report["preservationFailures"] = [row["id"] for row in report["cases"] if not row["documentUnchanged"]["equal"]]
         # Known drift is still a release defect, even if the evidence ratchet matches.
         report["parityComplete"] = False
-        report["limitations"] = ["Mac predictions require actual socket execution",
+        report["limitations"] = [f"This report executes only the {platform_name} transport; paired platform evidence is separate",
             "Not every advertised API parameter or result contract is exercised",
-            "Mac inventory must be reviewed and pinned after its first current native run",
             "No playback, physical input, third-party provider or cache eviction qualification"]
+        if not inventory_checked:
+            report["limitations"].append(f"The {platform_name} method inventory has no reviewed runtime baseline")
         return report
     except Exception as error:
         report["error"] = dict(type=type(error).__name__, message=str(error))

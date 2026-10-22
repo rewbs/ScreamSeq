@@ -27,10 +27,14 @@ struct Handle {
   ~Handle() { CloseHandle(value); }
   Handle(const Handle &) = delete;
 };
+fs::path fixtureNativePath(fs::path path) {
+  const auto value = path.make_preferred().native();
+  return value.starts_with(L"\\\\") ? L"\\\\?\\UNC\\" + value.substr(2) : L"\\\\?\\" + value;
+}
 struct Scratch {
   fs::path path = fs::temp_directory_path() / ("screamseq-recovery-tests-" + RecoveryStore::newSessionID());
   Scratch() { check(fs::create_directory(path), "cannot reserve scratch directory"); }
-  ~Scratch() { std::error_code ignored; fs::remove_all(path, ignored); }
+  ~Scratch() { std::error_code ignored; fs::remove_all(fixtureNativePath(path), ignored); }
 };
 const std::vector<std::byte> payload{std::byte{0x00}, std::byte{0x7f}, std::byte{0x80}, std::byte{0xff}};
 void write(const fs::path &path, const std::string &value) {
@@ -128,7 +132,7 @@ void roundTripAndValidation(const fs::path &base) {
   for(const auto &invalid : std::vector<fs::path>{fs::path{}, fs::path("relative"), directory / ".." / "escape",
       directory / "." / "alias", directory / "NUL", directory / "con.txt", directory / "x.",
       directory / "x ", directory / "x:stream", directory.root_path(), fs::path(std::wstring(L"C:\\bad\0path", 11)),
-      fs::path(L"\\\\?\\C:\\store")})
+      fs::path(L"\\\\?\\C:\\store"), fs::path(L"//?/C:/store"), fs::path(L"//./C:/store")})
     rejected([&] { RecoveryStore invalidStore(invalid); }, "accepted an unsafe store directory");
   noPendingFiles(directory);
 }
@@ -302,6 +306,54 @@ void cleanupDoesNotRevoke(const fs::path &base) {
   }
   check(baseline.entries().size() == 1 && baseline.read(foreign.id) == payload, "clear retry damaged the other session");
 }
+void longPaths(const fs::path &base) {
+  // Cover both a short-enough directory whose generated filename crosses
+  // MAX_PATH, and a directory that itself crosses it. No machine policy opt-in.
+  auto directory = base / "long-paths";
+  while(directory.native().size() < 180) directory /= "nested-recovery-directory";
+  for(unsigned depth = 0; depth != 2; ++depth) {
+    if(depth) while(directory.native().size() < 320) directory /= "deeper-recovery-directory";
+    RecoveryStore store(directory);
+    const auto session = RecoveryStore::newSessionID(), other = RecoveryStore::newSessionID();
+    const auto foreign = store.save(other, payload, "Other session");
+    const auto saved = store.save(session, payload, "Deep recovery", base / "original.screamseq", true);
+    check((directory / saved.id).native().size() >= MAX_PATH, "long-path fixture did not cross MAX_PATH");
+    const auto entries = store.entries();
+    check(entries.size() == 2 && entries.front().id == saved.id && entries.front().title == "Deep recovery" &&
+          entries.front().source == base / "original.screamseq" && entries.front().hasRecording &&
+          store.read(saved.id) == payload, "deep recovery lost bytes or metadata");
+    bool injected = false;
+    RecoveryStore faulting(directory, [&](RecoveryStore::FaultPoint point, const fs::path &path) {
+      check(!path.native().starts_with(L"\\\\?\\"), "internal path prefix escaped through fault hook");
+      if(point == RecoveryStore::FaultPoint::projectPublish) {
+        injected = true;
+        throw std::runtime_error("deep publication failure");
+      }
+    });
+    rejected([&] { faulting.save(session, payload); }, "deep publication fault did not fail");
+    check(injected && store.entries().size() == 2 && store.read(saved.id) == payload, "deep rollback damaged durable recovery");
+    const auto native = fixtureNativePath(directory);
+    check(std::distance(fs::directory_iterator(native), fs::directory_iterator{}) == 4, "deep rollback left a sidecar or staging file");
+    for(unsigned i = 0; i < 12; ++i) store.save(session, payload);
+    check(store.entries().size() == 11 && store.read(foreign.id) == payload &&
+          !fs::exists(fixtureNativePath(directory / saved.id)) && !fs::exists(fixtureNativePath(sidecar(directory / saved.id))),
+          "deep retention failed or crossed sessions");
+    store.clear(session);
+    check(store.entries().size() == 1 && store.read(foreign.id) == payload, "deep clear crossed sessions");
+    store.clear(other);
+    check(store.entries().empty() && fs::is_empty(native), "deep clear left files");
+    const auto target = base / ("deep-junction-target-" + std::to_string(depth));
+    fs::create_directory(target);
+    write(target / "sentinel", "untouched");
+    const auto link = directory / "link";
+    junction(fixtureNativePath(link), target);
+    RecoveryStore linked(link / "escape");
+    rejected([&] { linked.save(session, payload); }, "deep recovery followed a junction");
+    rejected([&] { linked.entries(); }, "deep recovery listed through a junction");
+    check(contents(target / "sentinel") == "untouched" && !fs::exists(target / "escape"), "deep junction changed external target");
+    check(RemoveDirectoryW(fixtureNativePath(link).c_str()), "cannot remove deep junction fixture");
+  }
+}
 } // namespace
 int main() {
   try {
@@ -312,6 +364,7 @@ int main() {
     reparseAndAncestorPinning(scratch.path);
     publicationFailures(scratch.path);
     cleanupDoesNotRevoke(scratch.path);
+    longPaths(scratch.path);
     std::cout << "Recovery store: bounds, retention, isolation, reparse rejection and durable publication passed\n";
     return 0;
   } catch(const std::exception &error) {

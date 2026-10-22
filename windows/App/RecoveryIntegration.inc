@@ -101,7 +101,10 @@
         recoverySaving=true;updateRecoveryStatus();
         const auto epoch=recoveryEpoch;const auto id=recoverySession;const auto store=recoveryStore;
         try {
-            auto captured=await(controller->captureRecovery(expected));
+            // Capture native delivery evidence before entering the pumped wait.
+            // Worker FIFO then includes every already-submitted original input.
+            // "pending" is review evidence, never permission to replay it.
+            auto captured=await(controller->captureRecovery(expected,parameterControlRecovery()));
             // A clean song without manual editor changes needs no automatic copy.
             // Fingerprints also detect opaque vendor-state changes at the same revision.
             if(!force&&(!captured->needsProtection||captured->fingerprint==recoveryLastFingerprint)) {
@@ -125,7 +128,7 @@
         try {
             auto bytes=awaitLibrary(recoveryWriter->submit([store,id]{return std::make_shared<const std::vector<std::byte>>(store->read(id));}));
             RecoveryEditorInput editorInput;
-            auto captured=await(controller->captureRecovery(expected));
+            auto captured=await(controller->captureRecovery(expected,parameterControlRecovery()));
             if(captured->needsProtection) {
                 // Fresh identity: protecting this song cannot prune the selected copy.
                 auto protectedID=ScreamSeq::Project::RecoveryStore::newSessionID();
@@ -167,7 +170,7 @@
     void recoveryTimer() {
         serviceRecovery();
         if(!recoveryStore||busy||recoverySaving||recoveryRestoring||recoveryClosing||!view->session.document.value("editable",false))return;
-        if(!view->dirty&&!view->hasOpenEditors&&!view->session.document.value("hasRecoveryTake",false))return;
+        if(!view->dirty&&!view->hasOpenEditors&&!view->session.document.value("hasRecoveryTake",false)&&!parameterTakeState.value("retained",false))return;
         try{snapshot();saveRecovery(view->session.revision,false);}catch(const std::exception &){/* Persistent error is shown by saveRecovery. Retry next tick. */}
     }
     void reloadRecoveryBrowser(bool startup=false) {

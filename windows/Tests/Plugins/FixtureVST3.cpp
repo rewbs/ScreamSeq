@@ -95,6 +95,10 @@ extern "C" __declspec(dllexport) int ResonanceFixtureGesture(double value) {
   }
   return count;
 }
+// One-shot native reentrancy probe: a baseline state read can pump an editor
+// callback. Runs only on the fixture's control owner, never from processing.
+static double gestureOnStateRead=-1;
+extern "C" __declspec(dllexport) void ResonanceFixtureGestureOnStateRead(double value) {gestureOnStateRead=value;}
 static bool same(const TUID a, const FUID &b) {
   return FUnknownPrivate::iidEqual(a, b);
 }
@@ -264,6 +268,7 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API getState(IBStream *s) override {
+    if(gestureOnStateRead>=0){const auto value=gestureOnStateRead;gestureOnStateRead=-1;ResonanceFixtureGesture(value);}
     if(controllerOnly&&(reviewMode==1||reviewMode==5))return kNotImplemented;
     if(controllerOnly&&reviewMode==4)return kInternalError;
     if(!controllerOnly&&reviewMode==3)return kInternalError;

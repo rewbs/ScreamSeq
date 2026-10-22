@@ -52,6 +52,8 @@
     bool protectRecordingTake(){
         // Each session owns its take independently. Show one review at a time;
         // resolving it must never allow the other take to be discarded.
+        ParameterRecordingInputLease input(*this,"automation.recording.stop");
+        if(!protectParameterRecordingTake())return false;
         if(!protectMidiRecordingTake())return false;
         if(!protectSampleRecordingTake())return false;
         // Reading sample state pumps UI/API messages on the document worker

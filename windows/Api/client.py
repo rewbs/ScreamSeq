@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Explicit local Windows named-pipe client. No discovery and no send retries."""
+"""Explicit local Windows pipe client; retry only confirmed pre-write busy replies."""
 import argparse
 import ctypes
 from ctypes import wintypes as w
@@ -160,19 +160,31 @@ class Client:
         wire = (json.dumps(request, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n').encode('utf-8')
         if len(wire) > MAX_REQUEST:
             raise ValueError('Request exceeds 1 MiB')
-        # Exactly one exchange. Even transport writes must not be auto-retried.
-        raw = self._exchange(wire)
-        try:
-            reply = json.loads(raw)
-            if (not isinstance(reply, dict) or reply.get('jsonrpc') != '2.0'
-                    or reply.get('id') != request_id
-                    or ('result' in reply) == ('error' in reply)):
-                raise ValueError('Invalid response envelope or mismatched id')
-        except (ValueError, UnicodeError) as error:
-            raise TransportError('Invalid reply; outcome unknown', True) from error
-        if 'error' in reply:
-            raise ApiError(reply['error'])
-        return reply['result']
+        # Serialize once: a retry keeps the exact ID, revision, original input
+        # timestamp and payload. A transport failure or ambiguous reply never
+        # enters this retry path, even when a server may retain a replay cache.
+        for attempt in range(6):
+            raw = self._exchange(wire)
+            try:
+                reply = json.loads(raw)
+                if (not isinstance(reply, dict) or reply.get('jsonrpc') != '2.0'
+                        or reply.get('id') != request_id
+                        or ('result' in reply) == ('error' in reply)):
+                    raise ValueError('Invalid response envelope or mismatched id')
+                if 'error' in reply and (not isinstance(reply['error'], dict)
+                        or type(reply['error'].get('code')) is not int
+                        or not isinstance(reply['error'].get('message'), str)):
+                    raise ValueError('Invalid API error envelope')
+            except (ValueError, UnicodeError) as error:
+                raise TransportError('Invalid reply; outcome unknown', True) from error
+            if 'error' not in reply:
+                return reply['result']
+            error = ApiError(reply['error'])
+            if (error.code != -32002 or not isinstance(error.data, dict)
+                    or error.data.get('writeOutcome') != 'notCommitted' or attempt == 5):
+                raise error
+            time.sleep(min(0.05 * 2**attempt, 0.5))
+        raise AssertionError('unreachable')
 
 
 def main():

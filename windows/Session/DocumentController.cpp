@@ -3,6 +3,9 @@
 #include "windows/Audio/WasapiCapture.hpp"
 #include "editor/hosted/SelectionRender.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
+#include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include "soundlib/ModInstrument.h"
 #include "soundlib/mod_specifications.h"
 #include "common/mptString.h"
@@ -161,6 +164,7 @@ void DocumentController::open(const std::filesystem::path &path) {
   installCandidate(std::move(candidate));
 }
 void DocumentController::installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit) {
+  if(parameterRecording_)throw Api::ApiError(-32002,"Finish or discard the retained parameter take before replacing this song");
   if(sampleRecording_&&sampleRecording_->hasTake())throw Api::ApiError(-32602,"Add or discard the retained microphone take before replacing this song");
   bool valid=false;for(unsigned p=0;p<candidate.document->song().Patterns.Size();++p) valid|=candidate.document->song().Patterns.IsValidPat(p);
   if(!valid) throw Api::ApiError(-32602,"Document has no allocated pattern");
@@ -559,6 +563,22 @@ std::function<void()> DocumentController::prepareNativePublication(const Tracker
 #include "ParameterPreviewOperations.inc"
 #include "RecipeParameterPreviewOperations.inc"
 Json DocumentController::operation(const std::string &method,Json params) {
+  if(method.starts_with("automation.recovery.")) {
+    try{return pluginRecoveryReviewOperation(method,params);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
+    catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
+  }
+  if(method.starts_with("automation.recording.")) {
+    try{return parameterRecordingOperation(method,params);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
+    catch(const std::out_of_range &e){throw Api::ApiError(-32602,e.what());}
+    catch(const Json::exception &e){throw Api::ApiError(-32602,e.what());}
+  }
+  if(parameterRecording_&&(method.starts_with("plugin.parameters.preview.")||method.starts_with("graph.plugin.preview.")||
+      (method.starts_with("recording.")&&method!="recording.get")||
+      (method.starts_with("sample.recording.")&&method!="sample.recording.get"&&method!="sample.recording.devices")))
+    throw Api::ApiError(-32002,"Finish the retained parameter take before another recording or preview operation");
   const bool replacing=method=="document.open"||method=="document.new";
   if(method=="document.new") {
     // Reject malformed/stale creation requests before flushing native plugin
@@ -607,6 +627,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     if(changed || count!=plugins_->openEditorCount())publish();
   };
   if(method=="flushPluginEditors") {
+    pollParameterRecording();
     keys(params,{"force"});flushEditors(flag(params,"force"));
     Json reply=Json::object();if(auto warning=plugins_->takeEditorWarning();!warning.empty())reply["pluginEditorWarning"]=std::move(warning);
     return reply;
@@ -627,6 +648,8 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
   const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.exportModule" || replacing;
   if(write) {
+    if(parameterRecording_&&method!="plugin.editor.close")
+      throw Api::ApiError(-32002,"Finish or discard the retained parameter take before changing or saving the song");
     if(!params.contains("expectedRevision") || !params["expectedRevision"].is_string()) throw Api::ApiError(-32602,"expectedRevision is required");
     if(params["expectedRevision"]!=revision()) throw Api::ApiError(-32001,"Song changed on document worker; read and rebase");
     params.erase("expectedRevision");
@@ -943,9 +966,12 @@ std::future<Api::CompletedCall> DocumentController::invokeCompleted(std::string 
 }
 #include "RecoveryOperations.inc"
 #include "RecordingOperations.inc"
+#include "ParameterRecordingOperations.inc"
+#include "PluginRecoveryReviewOperations.inc"
 #include "ParameterActivityOperations.inc"
 std::future<HostedProjectPlayback *> DocumentController::prepare(unsigned rate,Json settings,bool loop,bool offline,bool audition) {
   auto task=std::make_shared<std::packaged_task<HostedProjectPlayback *()>>([this,rate,settings,loop,offline,audition]{
+    if(parameterRecording_)throw Api::ApiError(-32002,"Finish or discard the retained parameter take before restarting playback");
     Tracker::PlaybackRegion region;region.pattern=settings.value("pattern",UINT32_MAX);region.startRow=settings.value("startRow",0u);
     if(region.pattern!=UINT32_MAX && !document_->song().Patterns.IsValidPat(region.pattern)) throw Api::ApiError(-32602,"Pattern does not exist");
     region.endRow=settings.value("endRow",region.pattern==UINT32_MAX ? 0u : unsigned(document_->song().Patterns[region.pattern].GetNumRows()));

@@ -239,6 +239,46 @@ void applicationRecipeParameterInspector(){
   fixture.close();
 }
 
+void applicationParameterRefreshFocus(){
+  RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+  HWND field=nullptr;bool inspect=false,observed=false,keptFocus=false,protectedInput=false;int refusal=0;
+  ScreamSeq::PluginParametersWindow tool(app.window,plugin,"Parameter refresh focus",
+    [&](const auto &method,const auto &params){
+      if(method=="plugin.parameters.get"&&inspect){
+        observed=true;
+        keptFocus=GetFocus()==field&&IsWindowEnabled(field);
+        const auto before=restoreText(field);SendMessageW(field,WM_SETTEXT,0,LPARAM(L"Reentrant replacement"));
+        protectedInput=restoreText(field)==before;
+        if(refusal==1){refusal=0;throw ScreamSeq::Api::ApiError(-32002,"Injected busy catalogue read");}
+        auto result=app.documentOperation(method,params);
+        if(refusal==2){refusal=0;app.edit("document.patch",{{"title","Changed during catalogue read"}});}
+        return result;
+      }
+      return app.documentOperation(method,params);
+    },[&]{return std::pair(app.documentId,app.view->session.revision);},
+    [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+  tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
+  for(const int id:{4012,3965,3955})for(const int mode:{0,1,2}){
+    field=GetDlgItem(window,id);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);
+    const bool text=id!=3955;if(text)SendMessageW(field,EM_SETSEL,0,1);
+    DWORD first=0,last=0;if(text)SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    const auto raw=restoreText(field);const auto old=tool.snapshot().at("revision");
+    app.edit("document.patch",{{"title","Refresh "+std::to_string(id)+":"+std::to_string(mode)}});
+    inspect=true;observed=keptFocus=protectedInput=false;refusal=mode;SendMessageW(window,WM_TIMER,7,0);inspect=false;
+    restoreCheck(observed&&keptFocus&&protectedInput,"Background parameter read disabled/moved focused control or admitted pumped input");
+    restoreCheck(GetFocus()==field&&IsWindowEnabled(field)&&restoreText(field)==raw,"Parameter read changed focused text or control state");
+    if(text){DWORD a=0,b=0;SendMessageW(field,EM_GETSEL,WPARAM(&a),LPARAM(&b));restoreCheck(a==first&&b==last,"Parameter refresh lost the native caret selection");}
+    if(mode){
+      restoreCheck(tool.snapshot().at("revision")==old&&!tool.snapshot().at("needsReload").get<bool>(),"Transient parameter read rebased fields or permanently required Reload");
+      SendMessageW(window,WM_TIMER,7,0);
+    }
+    restoreCheck(tool.snapshot().at("revision")==app.view->session.revision&&!tool.snapshot().at("dirty").get<bool>(),"Clean parameter refresh did not converge after a read refusal");
+    restoreCheck(!ScreamSeq::NativeInputGate::protectedWindow(field),"Parameter refresh left native input protected");
+  }
+  tool.hide();fixture.close();
+  std::cout<<"PASS parameter automatic refresh: field/search/button focus, caret, protected read, busy and changed-context retry\n";
+}
+
 void applicationGraphParameterInspector(){
   RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());const auto plugin=addRestoreGain(app),other=addRestoreGain(app);
   app.openSongRouting();auto *graph=app.songRoutingWindow.get();ScreamSeq::Tests::ownGuiWindow(graph->window());
@@ -249,7 +289,9 @@ void applicationGraphParameterInspector(){
   const auto click=[&](int id){SendMessageW(window,WM_COMMAND,id,LPARAM(GetDlgItem(window,id)));};
   const auto original=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});const auto untouched=app.documentOperation("plugin.parameters.get",{{"plugin",other}});
   click(4004);restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})[0].at("value")!=original[0].at("value"),"Native parameter toggle did not apply");
-  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");click(3955);
+  app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",plugin}})==original,"Parameter toggle needed more than one Undo");
+  SendMessageW(window,WM_TIMER,7,0);
+  restoreCheck(editor->snapshot().at("parameters")==original,"Clean parameter inspector did not refresh after external Undo");
   const auto found=std::find_if(original.begin(),original.end(),[](const auto &p){const auto f=ScreamSeq::PluginParameterField::read(p);return f.editable()&&f.kind==ScreamSeq::PluginParameterField::Kind::Number&&f.maximum>f.minimum;});
   restoreCheck(found!=original.end(),"Gain fixture has no numeric parameter");const auto index=size_t(found-original.begin());const auto field=ScreamSeq::PluginParameterField::read(*found);
   const int rawControl=4002+int(index)*10,applyControl=4005+int(index)*10,moreControl=4008+int(index)*10;
@@ -360,7 +402,60 @@ void applicationGraphParameterInspector(){
   SetWindowTextW(raw,L"-.");pageClick(3963);restoreCheck(paged->snapshot().at("page")==1&&restoreText(raw)==L"-."&&app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqBefore,"Page navigation lost invalid text or wrote an invalid value");
   SetWindowTextW(raw,std::to_wstring(target).c_str());pageClick(3963);restoreCheck(paged->snapshot().at("page")==2&&!paged->snapshot().at("dirty").get<bool>(),"Page navigation did not save valid typed values automatically");
   const auto eqAfter=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});for(size_t i=0;i<count;++i)restoreCheck(i==size_t(10+changed)?eqAfter[i].at("value")==target:eqAfter[i]==eqBefore[i],"Page edit wrote a different parameter");
-  pageClick(3962);restoreCheck(paged->snapshot().at("rows")[size_t(changed)].at("value").get<std::string>()==eqAfter[size_t(10+changed)].at("value").dump(),"Page navigation lost committed parameter value");
+  pageClick(3962);restoreCheck(paged->snapshot().at("rows")[size_t(changed)].at("value").get<std::string>()==ScreamSeq::PluginParameterField::text(eqAfter[size_t(10+changed)].at("value").get<double>()),"Page navigation lost committed parameter value");
   app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqBefore,"Page edit failed atomic Undo");pageClick(3955);
-  app.edit("history.redo",{{"domain","all"}});pageClick(3955);saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqAfter,"Paged parameter values failed save/reopen");fixture.close();
+  app.edit("history.redo",{{"domain","all"}});pageClick(3955);
+  const auto search=GetDlgItem(pane,3965);restoreCheck(search&&ScreamSeq::Tests::accessibleName(search)==L"Find plugin parameter","Parameter search is missing or unnamed");
+  {
+    struct Keys{BYTE saved[256]{};Keys(){restoreCheck(GetKeyboardState(saved)!=FALSE,"Read parameter search modifiers");}~Keys(){SetKeyboardState(saved);}}keys;
+    BYTE modifiers[256]{};std::copy(std::begin(keys.saved),std::end(keys.saved),std::begin(modifiers));modifiers[VK_CONTROL]=0x80;modifiers[VK_MENU]=modifiers[VK_SHIFT]=0;
+    restoreCheck(SetKeyboardState(modifiers)!=FALSE,"Set parameter search modifiers");SendMessageW(pane,WM_KEYDOWN,'F',0);
+    restoreCheck(GetFocus()==search,"Ctrl+F did not focus parameter search");
+  }
+  const auto searchBaseline=songState(app);
+  std::wstring typed;
+  for(const auto character:std::wstring(L"frequency")){
+    SendMessageW(search,WM_CHAR,character,1);typed+=character;DWORD first=0,last=0;
+    SendMessageW(search,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    restoreCheck(GetFocus()==search&&restoreText(search)==typed&&first==typed.size()&&last==typed.size(),
+      "Search refresh lost focus, typing or caret position");
+  }
+  restoreCheck(paged->snapshot().at("matches")==10,"Typed search failed to expose the ten EQ frequency controls");
+  SendMessageW(search,WM_CHAR,'x',1);SendMessageW(search,WM_CHAR,VK_BACK,1);
+  restoreCheck(restoreText(search)==L"frequency"&&paged->snapshot().at("matches")==10&&GetFocus()==search,
+    "Backspace in parameter search failed to restore results and focus");
+  {
+    struct Keys{BYTE saved[256]{};Keys(){restoreCheck(GetKeyboardState(saved)!=FALSE,"Read parameter Tab modifiers");}~Keys(){SetKeyboardState(saved);}}keys;
+    BYTE modifiers[256]{};std::copy(std::begin(keys.saved),std::end(keys.saved),std::begin(modifiers));modifiers[VK_CONTROL]=modifiers[VK_MENU]=modifiers[VK_SHIFT]=0;
+    restoreCheck(SetKeyboardState(modifiers)!=FALSE,"Set parameter Tab modifiers");MSG tab{search,WM_KEYDOWN,VK_TAB,1};
+    restoreCheck(IsDialogMessageW(pane,&tab)&&GetFocus()==GetDlgItem(pane,3950),"Tab did not reach parameter pages from search");
+    modifiers[VK_SHIFT]=0x80;restoreCheck(SetKeyboardState(modifiers)!=FALSE,"Set reverse parameter Tab modifiers");tab.hwnd=GetFocus();
+    restoreCheck(IsDialogMessageW(pane,&tab)&&GetFocus()==search,"Shift+Tab did not return to parameter search");
+  }
+  SetWindowTextW(search,L"bÁnD 10 gÁIn");state=paged->snapshot();
+  restoreCheck(state.at("matches")==1&&state.at("rows").size()==1&&GetFocus()==search&&songState(app)==searchBaseline,
+    "Parameter search lost focus, failed native case/accent matching or changed history");
+  const auto filteredIndex=state.at("rows")[0].at("index").get<size_t>();
+  restoreCheck(filteredIndex>=20&&eqAfter[filteredIndex].at("name")=="Band 10 gain"&&state.at("rows")[0].at("id")==eqAfter[filteredIndex].at("id"),
+    "Filtered page aliased a visible row to the wrong stable parameter");
+  const auto filteredRaw=GetDlgItem(pane,4002);
+  restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(pane,4007))==L"Decrease Band 10 gain"&&
+    ScreamSeq::Tests::accessibleName(GetDlgItem(pane,4008))==L"Increase Band 10 gain","Filtered step buttons lost their target names");
+  SetWindowTextW(filteredRaw,L"-.");SetWindowTextW(search,L"frequency");
+  restoreCheck(paged->snapshot().at("dirty")==true&&paged->snapshot().at("matches")==1&&restoreText(filteredRaw)==L"-."&&songState(app)==searchBaseline,
+    "Search discarded or retargeted an invalid parameter draft");
+  pageClick(3955);state=paged->snapshot();restoreCheck(state.at("matches")==10&&state.at("rows").size()==10&&state.at("search")=="frequency",
+    "Reload did not apply retained search or lost ten-parameter paging");
+  SetWindowTextW(search,L"bÁnD 10 gÁIn");
+  const auto filteredField=ScreamSeq::PluginParameterField::read(eqAfter[filteredIndex]);const auto filteredValue=filteredField.value==filteredField.minimum?filteredField.maximum:filteredField.minimum;
+  SetWindowTextW(filteredRaw,wide(ScreamSeq::PluginParameterField::text(filteredValue)).c_str());pageClick(4005);
+  const auto filteredAfter=app.documentOperation("plugin.parameters.get",{{"plugin",eqID}});
+  for(size_t i=0;i<count;++i)restoreCheck(i==filteredIndex?filteredAfter[i].at("value")==filteredValue:filteredAfter[i]==eqAfter[i],"Filtered editor changed another parameter");
+  app.edit("history.undo",{{"domain","all"}});pageClick(3955);
+  restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqAfter&&paged->snapshot().at("matches")==1,
+    "Filtered edit failed one Undo or reload lost search");
+  SetFocus(search);SetWindowTextW(search,L"no-such-parameter-unique");state=paged->snapshot();
+  restoreCheck(state.at("matches")==0&&state.at("rows").empty()&&GetFocus()==search&&!IsWindowVisible(filteredRaw),"Empty parameter search retained stale editable controls or lost focus");
+  SetWindowTextW(search,L"");restoreCheck(paged->snapshot().at("matches")==count&&paged->snapshot().at("rows").size()==10&&GetFocus()==search,"Clearing search did not restore the full catalogue and focus");
+  saveDepartureFixture(fixture);app.documentOperation("document.open",departureOpenRequest(app,path));restoreCheck(app.documentOperation("plugin.parameters.get",{{"plugin",eqID}})==eqAfter,"Paged parameter values failed save/reopen");fixture.close();
 }

@@ -86,7 +86,7 @@
         }
     }
     Json recordingWindowSnapshot()const {
-        std::string label="Choose a sound in the main Sound selector";
+        std::string label="Choose a sound for note input";
         const auto &catalog=typingCatalog(typingSample);
         const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("id")==typingSoundId;});
         if(found!=catalog.end())label=(typingSample?"Sample ":"Instrument ")+std::to_string(typingSound)+" / "+found->value("name",std::string());
@@ -264,7 +264,10 @@
             refreshMidiInputStatus();
             midiError="Selected MIDI input disconnected";retainRecordingLoss(1,midiError);
         }
-        updateRecordingWindow();
+        // Publish the completed scan, not a snapshot which still says busy.
+        // The guard retains exception cleanup, but ordinary completion must
+        // re-enable native fields before returning to their caller/focus owner.
+        midiBusy=false;updateRecordingWindow();
     }
     Json midiOperation(const std::string &method,const Json &p) {
         const auto need=[](bool yes,const char *message){if(!yes)throw ScreamSeq::Api::ApiError(-32602,message);};
@@ -362,7 +365,7 @@
             callbacks.discard=[this](std::string take){discardRecordingTake(take);};
             callbacks.review=[this](std::string take){reviewRecordingTake(take);};
             callbacks.navigate=[this](std::string take,Json event){navigateRecordedEvent(take,event);};
-            callbacks.chooseSound=[this]{SetFocus(controls.at(soundChooser));};
+            callbacks.chooseSound=[this]{chooseTypingSound(GetDlgItem(midiWindow->window(),7205));};
             midiWindow=std::make_unique<ScreamSeq::MidiRecordingWindow>(window,std::move(callbacks));
         }
         midiWindow->update(recordingWindowSnapshot());midiWindow->show();if(!midiBusy&&!midiBoundaryActive)rescanMidi();

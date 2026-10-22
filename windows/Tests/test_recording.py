@@ -4,24 +4,24 @@ from ctypes import wintypes
 import os
 from pathlib import Path
 import sys
-import tempfile
 import time
 import unittest
 
 import private_desktop
+from fixture_paths import temporary_directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Api'))
 from client import Client, ApiError, TransportError
 
 
 class RecordingTests(unittest.TestCase):
     def setUp(self):
-        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='recording-app-', dir=os.environ['TMPDIR'])))
+        self.folder = self.enterContext(temporary_directory(prefix='recording-app-', root=os.environ['TMPDIR']))
         self.desktop = self.enterContext(private_desktop.PrivateDesktop())
         self.pid, self.client = self.launch()
 
-    def launch(self, audio=False, midi=True):
+    def launch(self, audio=False, midi=True, recovery_directory=None):
         args = [os.environ['SCREAMSEQ_TEST_EXE'], '--audio-test-silent' if audio else '--inspection', '--automation', '--seconds', '120',
-                '--recovery-test-directory', str(self.folder / ('LiveRecovery' if audio else 'Recovery'))]
+                '--recovery-test-directory', str(recovery_directory or self.folder / ('LiveRecovery' if audio else 'Recovery'))]
         if midi: args += ['--midi-test-input']
         if audio: args += ['--audio-test-allow-stop']
         pid = self.desktop.launch(args)
@@ -88,8 +88,8 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(len(sources), 1)
         self.configure(source=sources[0]['id'], armed=armed, channelsCount=columns)
         self.assertTrue(self.settings()['connected'])
-    def live(self, columns=1):
-        self.pid, self.client = self.launch(audio=True)
+    def live(self, columns=1, recovery_directory=None):
+        self.pid, self.client = self.launch(audio=True, recovery_directory=recovery_directory)
         self.connect(armed=True, columns=columns)
         self.assertTrue(self.take()['capturing'])
         time.sleep(.08)
@@ -249,7 +249,17 @@ class RecordingTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent output required')
     def test_autosave_live_take_is_immutable_restore_hydrates_fresh_stopped_take(self):
-        self.live(); self.inject([0x643c90])
+        self.live(); self.assert_live_recovery_roundtrip()
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent output required')
+    def test_long_recovery_directory_preserves_live_take_and_restores_copy(self):
+        directory = self.folder / 'DeepRecovery'
+        while len(str(directory)) < 300: directory /= 'nested-recovery-directory'
+        self.live(recovery_directory=directory)
+        self.assert_live_recovery_roundtrip()
+
+    def assert_live_recovery_roundtrip(self):
+        self.inject([0x643c90])
         before = self.stable(self.wait_recording(lambda take: take['eventCount'] == 1)); revision = self.doc()['revision']
         copy = self.write('recovery.save')['data']['lastCopy']
         self.assertEqual(before, self.stable(self.take())); self.assertTrue(self.read('transport.get')['playing'])

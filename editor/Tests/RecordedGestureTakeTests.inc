@@ -66,6 +66,8 @@ static void recordedGestureTake() {
   called=false;
   check(take->commit("revision",7,false,[&](auto,bool){called=true;return true;})&&take->completed()&&!called,
     "Empty take entered musical publication instead of retiring without history");
+  check(take->review().completed&&take->review().targets.empty(),
+    "Recovery revived a completed empty take");
   rejects([&]{take->commit("revision",7,false,[](auto,bool){return true;});});
 
   // Queue loss is per provider, including a provider whose first event was lost.
@@ -171,4 +173,43 @@ static void recordedGestureTake() {
   const auto longCandidate=RecordedGestureCapture::prepareBatch(longInputs,"revision",7,rack,document.native());
   check(longCandidate.points()==std::vector<ParameterChange>{{0,1,-6,240},{1,1,-3,120},{0,1,-18,576}}&&
     !longCandidate.loss(0).any(),"Long recording lost an early resolved event after clock-ring eviction");
+
+  // Recovery is evidence, never a new live take. Copy both mapped and unknown
+  // original times, provider loss without a target, and the exact baseline.
+  auto review=longTake.review();
+  check(review.token=="long-take"&&review.revision=="revision"&&review.playbackEpoch==7&&
+    review.startTime==1000&&review.endTime==end&&!review.completed&&review.rejected==0&&
+    review.failure==Take::Failure::None&&review.baseline==before&&
+    review.rack==std::vector<std::string>{rack[0].instanceID,rack[1].instanceID}&&
+    review.sources.size()==2&&review.sources[0].drained&&review.sources[1].drained&&
+    review.targets.size()==1&&review.targets[0].events[0].hostTime==1120&&
+    review.targets[0].events[0].frame==576&&review.targets[0].events[0].value==-18,
+    "Recovery copy lost capture identity, retained frames or baseline after clock eviction");
+  review.targets[0].events[0].value=0;review.baseline.clear();
+  check(longTake.target(0).events()[0].value==-18&&longTake.matchesBaseline(rack,before)&&
+    longTake.preparedOwners("revision",7).size()==1,
+    "Editing a recovery copy changed the live take, baseline or drain readiness");
+  take=make();put(*take,0,{1,-9,0},{9,2});
+  take->observeProvider(rack[1].instanceID,{10,7},"revision",7);
+  auto unmapped=take->review();
+  check(!unmapped.endTime&&!unmapped.sources[0].drained&&!unmapped.sources[1].drained&&
+    unmapped.sources[1].initial.source.dropped==5&&unmapped.sources[1].dropped==7&&
+    unmapped.targets[0].events[0].hostTime==0&&!unmapped.targets[0].events[0].frame&&
+    unmapped.targets[0].loss.unmapped==1&&!take->endTime(),
+    "Recovery snapshot invented a timestamp, dropped provider-only loss or sealed live input");
+  put(*take,0,{1,-12,1050},{11,2});
+  const auto failed=take->review();
+  check(failed.failure==Take::Failure::Provider&&failed.rejected==1&&failed.targets[0].events.size()==1,
+    "Recovery snapshot hid a provider failure or discarded retained input");
+  auto shortenedClock=std::make_shared<RecordingFrameTimeline>();
+  check(shortenedClock->publish(1000,2000,0,480,48000,7),"Recovery Stop clock fixture failed");
+  Take shortened("shortened","revision",1000,shortenedClock,rack,before,providers);
+  check(put(shortened,0,{1,-9,1900},{9,2})==Take::Intake::Captured&&shortened.target(0).events()[0].frame,
+    "Recovery Stop fixture did not retain its initial presentation frame");
+  shortenedClock->close(7,1800);
+  const auto stopped=shortened.review();
+  check(stopped.stoppedEndTime==1800&&!stopped.endTime&&stopped.targets[0].loss.unmapped==1&&
+    !stopped.targets[0].events[0].frame&&stopped.targets[0].events[0].hostTime==1900&&
+    shortened.target(0).events()[0].frame.has_value(),
+    "Recovery snapshot preserved a false post-Stop frame or mutated the live capture");
 }

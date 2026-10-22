@@ -35,6 +35,51 @@ def expect_error(code, action):
         raise AssertionError(f"Expected API error {code}")
 
 
+def busy_receipts(client):
+    """Real socket admission retries and duplicate IDs around a held request."""
+    before = client.call("document.get")
+    admitted = client.call("test.admissionBusy", request_id="busy-admission")
+    assert admitted == {"attempts": 3}, admitted
+    assert client.call("test.admissionBusy", request_id="busy-admission") == admitted
+
+    for outcome in ("unknown", "committed", "noChange", "unclassified"):
+        request_id = "busy-receipt-" + outcome
+        def refused(params):
+            try:
+                client.call("test.busyReceipt", params, request_id)
+            except APIError as error:
+                assert error.code == -32002, error
+                return error.data
+            raise AssertionError("Expected retained busy receipt")
+        first = refused({"outcome": outcome})
+        assert first["calls"] == 1, (outcome, first)
+        assert refused({"outcome": outcome}) == first, "Busy reply was executed again"
+        expect_error(-32600, lambda: client.call("test.busyReceipt", {"outcome": outcome, "changed": True}, request_id))
+
+    with ThreadPoolExecutor(1) as pool:
+        original = pool.submit(client.call, "test.pending", {}, "held-write")
+        try:
+            deadline = time.monotonic() + 5
+            while not client.call("test.pending.get")["held"]:
+                assert time.monotonic() < deadline, "Private test handler did not admit the held request"
+                time.sleep(.01)
+            try:
+                client.call("test.pending", {}, "held-write")
+            except APIError as error:
+                assert error.code == -32002 and error.data["writeOutcome"] == "unknown", error
+            else:
+                raise AssertionError("In-flight duplicate was accepted")
+            expect_error(-32600, lambda: client.call("test.pending", {"different": True}, "held-write"))
+            assert client.call("test.pending.get")["calls"] == 1
+        finally:
+            client.call("test.pendingRelease")
+        completed = original.result(timeout=5)
+    assert completed == {"calls": 1, "completed": True}
+    assert client.call("test.pending", {}, "held-write") == completed
+    assert client.call("document.get") == before, "Socket admission/replay checks changed the document"
+    print("PASS socket busy receipts: safe bounded retry, retained uncertain/committed replies, pending ID/content guards and exactly-once completion")
+
+
 def graph_provenance(client):
     """Canonical existing edits remain readable without preparing processors."""
     before=client.call("document.get")
@@ -2140,6 +2185,9 @@ def graph_stage_routing(client, directory):
 
 
 def main():
+    busy_only = "--busy-receipts-only" in sys.argv
+    if busy_only and "--app" in sys.argv:
+        raise ValueError("Busy fault injection requires the private windowless test host")
     with tempfile.TemporaryDirectory(prefix="resonance-api-tests-") as tmp:
         directory = Path(tmp)
         with open(directory / "host.log", "w+") as log:
@@ -2163,6 +2211,9 @@ def main():
                 assert Path(endpoint["socket"]).stat().st_mode & 0o777 == 0o600
                 assert Path(endpoint["socket"]).parent.stat().st_mode & 0o777 == 0o700
                 client = Client(endpoint["socket"])
+                if busy_only:
+                    busy_receipts(client)
+                    return
                 navigation_tools(client)
                 note_track_tools(client)
                 plugin_library_tools(client, directory)
@@ -2239,6 +2290,7 @@ def main():
                 expect_error(-32602, lambda: client.call("pattern.get", {"pattern": 0, "typo": 1}))
                 expect_error(-32601, lambda: client.call("shell.exec", {"command": "anything"}))
                 if not app_test:
+                    busy_receipts(client)
                     before_invalid_reply = client.call("document.get")["revision"]
                     expect_error(-32603, lambda: client.call("test.nonfinite", {}))
                     assert client.call("document.get")["revision"] == before_invalid_reply

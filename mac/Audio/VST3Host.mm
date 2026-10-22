@@ -1,4 +1,6 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
+#include "editor/hosted/LatestParameterEdits.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
 #include "VST3Host.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
@@ -77,7 +79,6 @@ template<size_t N> std::string bounded(const char (&value)[N]) {
   return std::string(value, strnlen(value, N));
 }
 // Sentinel for "no editor value waiting"; compared by bit pattern.
-constexpr float noPendingEdit = std::numeric_limits<float>::quiet_NaN();
 template<size_t N> std::string utf8(const TChar (&value)[N]) {
   return [[NSString alloc] initWithCharacters:reinterpret_cast<const unichar *>(value)
                                        length:std::find(value,value+N,TChar{})-value]
@@ -366,6 +367,8 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   IConnectionPoint *componentConnection = nullptr, *controllerConnection = nullptr;
   IPlugView *view = nullptr;
   NSWindow *window = nil;
+  std::unique_ptr<MacPluginInputBarrier> inputBarrier;
+  uint64_t inputBarrierSerial=0,releasedInputBarrier=0;
   NSView *container = nil;
   RSPluginWindowDelegate *windowDelegate = nil;
   bool editorSized = false;
@@ -422,14 +425,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // newest published slot), whereas one atomic per parameter can: the editor
   // thread stores, rendering takes the value with a single exchange. A long
   // gesture while the transport is stopped therefore cannot overflow.
-  std::array<PluginEdit,8192> edits{};
-  std::unique_ptr<std::atomic<float>[]> pendingEdits;
-  std::atomic<uint32_t> pendingGeneration{0};
-  uint32_t appliedGeneration = 0; // Render owner only.
-  bool pendingCarry = false;      // Render owner only: deferred by a full change list.
+  PluginEditQueue edits;
+  std::unique_ptr<LatestParameterEdits> pendingEdits;
   // Invalid or unknown editor values and UI-queue overflow; never a failure.
   std::atomic<uint64_t> droppedEdits{0};
-  std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
   std::atomic<uint64_t> latencySerial{0},acknowledgedLatency{0};
   BORROWED_REF
@@ -456,16 +455,12 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     const float normalized = float(std::clamp(value, 0., 1.));
     values[index].store(normalized, std::memory_order_relaxed);
     controllerValues[index] = normalized;
-    pendingEdits[index].store(normalized, std::memory_order_release);
-    pendingGeneration.fetch_add(1, std::memory_order_release);
-    auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
-    if (w - r >= edits.size()) {
+    (void)pendingEdits->publish(size_t(index),normalized);
+    if (!edits.push({id,normalized,mach_absolute_time()})) {
       // Only the UI notification is lost; parameters() still reports the value.
       droppedEdits.fetch_add(1, std::memory_order_relaxed);
       return kResultOk;
     }
-    edits[w % edits.size()] = {id,normalized,mach_absolute_time()};
-    editWrite.store(w + 1, std::memory_order_release);
     return kResultOk;
   }
   tresult PLUGIN_API restartComponent(int32 flags) override {
@@ -544,6 +539,7 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
   }
   void close() {
+    if(inputBarrier){inputBarrier.reset();releasedInputBarrier=inputBarrierSerial;}
     if(editorClosing)return;
     editorClosing=true;
     window.delegate = nil;
@@ -685,10 +681,9 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     }
     std::sort(metadata.begin(), metadata.end(), [](auto &a, auto &b) { return a.id < b.id; });
     values = std::make_unique<std::atomic<float>[]>(metadata.size());
-    auto pending = std::make_unique<std::atomic<float>[]>(metadata.size());
+    auto pending = std::make_unique<LatestParameterEdits>(metadata.size());
     for (size_t i = 0; i < metadata.size(); ++i) {
       values[i] = metadata[i].value;
-      pending[i] = noPendingEdit;
       controllerValues.push_back(metadata[i].value);
     }
     pendingEdits = std::move(pending);
@@ -717,21 +712,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // Render owner. Editor values never fail rendering; a full change list defers
   // the remainder to the next block unless a newer value arrives first.
   void applyPendingEdits() noexcept {
-    const auto generation = pendingGeneration.load(std::memory_order_acquire);
-    if (!pendingCarry && generation == appliedGeneration) return;
-    pendingCarry = false;
-    for (size_t i = 0; i < metadata.size(); ++i) {
-      if (std::isnan(pendingEdits[i].load(std::memory_order_relaxed))) continue;
-      const float value = pendingEdits[i].exchange(noPendingEdit, std::memory_order_acq_rel);
-      if (std::isnan(value) || setParameter(metadata[i].id, value, 0)) continue;
-      float expected = noPendingEdit;
-      pendingEdits[i].compare_exchange_strong(expected, value, std::memory_order_acq_rel);
-      pendingCarry = true;
-    }
-    appliedGeneration = generation;
+    pendingEdits->consume([&](size_t index,float value){return setParameter(metadata[index].id,value,0);});
   }
   bool editsPending() const noexcept {
-    return pendingCarry || pendingGeneration.load(std::memory_order_acquire) != appliedGeneration;
+    return pendingEdits&&pendingEdits->pending();
   }
   bool setParameter(uint32_t id, double value, uint32_t offset) noexcept {
     if (!std::isfinite(value) || value < 0 || value > 1)
@@ -770,8 +754,7 @@ bool VST3Plugin::popEdit(uint32_t &id, float &value) noexcept {
 }
 bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
   auto &s = *impl_;
-  auto r = s.editRead.load(std::memory_order_relaxed);
-  if (r == s.editWrite.load(std::memory_order_acquire)) {
+  if (!s.edits.pop(event)) {
     if (s.view && s.controller)
       for (size_t i = 0; i < s.metadata.size(); ++i) {
         auto value = s.values[i].load(std::memory_order_relaxed);
@@ -782,10 +765,32 @@ bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
       }
     return false;
   }
-  auto e = s.edits[r % s.edits.size()];
-  s.editRead.store(r + 1, std::memory_order_release);
-  event=e;
   return true;
+}
+PluginEditFence VST3Plugin::editFence() {
+  PluginEditFence fence;
+  pluginMainCall([&]{const auto cut=impl_->edits.fence();fence={cut.position,mach_absolute_time(),impl_->droppedEdits.load(std::memory_order_relaxed),cut.pending};});
+  return fence;
+}
+PluginEditRead VST3Plugin::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {
+  return impl_->edits.popBefore({fence.position},event);
+}
+std::optional<uint64_t> VST3Plugin::beginEditorInputBarrier() {
+  std::optional<uint64_t> token;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(s.inputBarrier||s.inputBarrierSerial==UINT64_MAX)return;
+    auto barrier=std::make_unique<MacPluginInputBarrier>(s.window);
+    s.inputBarrier=std::move(barrier);token=++s.inputBarrierSerial;
+  });return token;
+}
+bool VST3Plugin::endEditorInputBarrier(uint64_t token) {
+  bool released=false;
+  pluginMainCall([&]{auto &s=*impl_;
+    if(!token)return;
+    if(!s.inputBarrier){released=s.releasedInputBarrier==token;return;}
+    if(s.inputBarrierSerial!=token)return;
+    s.inputBarrier.reset();s.releasedInputBarrier=token;released=true;
+  });return released;
 }
 void VST3Plugin::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
@@ -1002,6 +1007,7 @@ void VST3Plugin::closeEditor() {
 void VST3Plugin::showEditor() {
   pluginMainCall([&] {
     auto &s = *impl_;
+    if(s.inputBarrier)throw std::runtime_error("Plugin editor input is protected while restoring its baseline");
     if (s.window) {
       [s.window makeKeyAndOrderFront:nil];
       return;

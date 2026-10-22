@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "33a8f57fe4031cd875d675976fbe6787730b2714706e6816069db2589c098654",
+    "sha256": "394111d72215ddc0fed253d6ba1ebb2a9cc6e1f49cf6da813eb26a5536c6d4f2",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -20,6 +20,8 @@
       "automation.recorded.clear",
       "automation.recorded.edit",
       "automation.recorded.get",
+      "automation.recovery.get",
+      "automation.recovery.list",
       "automation.replaceLane",
       "automation.target.get",
       "context.get",
@@ -265,6 +267,10 @@
         "automation.pattern.copy",
         "automation.pattern.get",
         "automation.recorded.get",
+        "automation.recording.events",
+        "automation.recording.get",
+        "automation.recovery.get",
+        "automation.recovery.list",
         "automation.target.get",
         "context.get",
         "document.get",
@@ -339,6 +345,11 @@
         "automation.pattern.transform",
         "automation.recorded.clear",
         "automation.recorded.edit",
+        "automation.recording.capture",
+        "automation.recording.commit",
+        "automation.recording.discard",
+        "automation.recording.start",
+        "automation.recording.stop",
         "automation.replaceLane",
         "context.set",
         "document.exportModule",
@@ -512,7 +523,6 @@
         "workspace.shortcut.set"
       ],
       "missingSharedMethods": [
-        "document.exportModule",
         "graph.controller",
         "plugin.locations.get",
         "plugin.locations.trust",
@@ -522,6 +532,13 @@
         "audio.devices.get",
         "audio.settings.get",
         "audio.settings.set",
+        "automation.recording.capture",
+        "automation.recording.commit",
+        "automation.recording.discard",
+        "automation.recording.events",
+        "automation.recording.get",
+        "automation.recording.start",
+        "automation.recording.stop",
         "document.new",
         "document.open",
         "graph.plugin.path.get",
@@ -599,6 +616,25 @@
         ],
         "removed": [],
         "evidence": "New explicit endpoint; native/shared contract and Windows control tests prepared, not executed. See RECORDED-CLEAR-BATCH-2026-10-20.md."
+      },
+      "inventoryReview20261022": {
+        "status": "source-reviewed-runtime-unqualified",
+        "readsAdded": [
+          "automation.recording.events",
+          "automation.recording.get",
+          "automation.recovery.get",
+          "automation.recovery.list"
+        ],
+        "writesAdded": [
+          "automation.recording.capture",
+          "automation.recording.commit",
+          "automation.recording.discard",
+          "automation.recording.start",
+          "automation.recording.stop"
+        ],
+        "removed": [],
+        "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-API-INVENTORY-2026-10-22.md",
+        "note": "Inventory expectations only; no passing full conformance or final parity claim."
       }
     },
     "macos": {
@@ -617,6 +653,8 @@
         "automation.pattern.copy",
         "automation.pattern.get",
         "automation.recorded.get",
+        "automation.recovery.get",
+        "automation.recovery.list",
         "automation.target.get",
         "context.get",
         "document.get",
@@ -888,12 +926,27 @@
         ],
         "removed": [],
         "evidence": "New explicit endpoint; native/shared contract and Windows control tests prepared, not executed. See RECORDED-CLEAR-BATCH-2026-10-20.md."
+      },
+      "inventoryReview20261022": {
+        "status": "observed-inventory-contract-vectors-pending",
+        "readsAdded": [
+          "automation.recovery.get",
+          "automation.recovery.list"
+        ],
+        "writesAdded": [],
+        "removed": [],
+        "evidence": "doc/windows-parity-plan-2026-10-09/PLUGIN-API-INVENTORY-2026-10-22.md",
+        "note": "Inventory expectations only; no passing full conformance or final parity claim."
       }
     }
   },
   "pairedContractReview20261020": {
     "sourceCommit": "d79321c7ccf59e7fdf0a4b2918d6906b41097ef4",
-    "platforms": ["Windows x64 binary on Windows ARM64", "macOS Apple Silicon", "macOS Intel"],
+    "platforms": [
+      "Windows x64 binary on Windows ARM64",
+      "macOS Apple Silicon",
+      "macOS Intel"
+    ],
     "caseCount": 28,
     "outcomesIdentical": true,
     "preservationFailures": 0,
@@ -995,6 +1048,17 @@
         "editor/hosted/PluginChain.cpp",
         "windows/Session/RecipeParameterPreviewOperations.inc",
         "mac/Bridge/RecipeParameterPreviewAPI.inc"
+      ]
+    },
+    {
+      "id": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "status": "platform-difference-open",
+      "finding": "Seven live parameter-take methods are Windows-only. Mac native gesture recording does not yet expose this lifecycle contract. Read-only imported recovery archives use the two shared automation.recovery methods. The Windows-only methods remain outside the shared schema and must not be called cross-platform parity.",
+      "sources": [
+        "windows/Session/ParameterRecordingOperations.inc",
+        "windows/Session/PluginOperations.cpp",
+        "mac/Bridge/TrackerSessionAPI.inc"
       ]
     }
   ]

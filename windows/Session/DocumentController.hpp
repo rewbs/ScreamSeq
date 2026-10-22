@@ -131,6 +131,18 @@ class DocumentController {
   void retireRecipeParameterPreview();
   Project::ProjectState project_;
   std::unique_ptr<RecordingTake> recording_;
+  struct ParameterRecordingSession {
+    std::shared_ptr<Tracker::RecordedGestureTake> take;
+    HostedProjectPlayback *host=nullptr;
+    uint64_t hostGeneration=0;
+    std::shared_ptr<const RecordingTimeline> timeline;
+  };
+  std::unique_ptr<ParameterRecordingSession> parameterRecording_;
+  Json parameterRecordingOperation(const std::string &,const Json &);
+  Json pluginRecoveryReviewOperation(const std::string &,const Json &);
+  Json parameterRecordingSummary()const;
+  void pollParameterRecording(bool stop=false);
+  bool restoreParameterRecordingPreview();
   std::string identity_;
   uint64_t generation_=0;
   std::shared_ptr<const DocumentView> view_;
@@ -175,7 +187,7 @@ class DocumentController {
   std::function<void()> prepareNativePublication(const Tracker::NativeSong &);
   void open(const std::filesystem::path &path);
   void installCandidate(Project::OpenedProject candidate,std::function<void()> beforeCommit={});
-  std::shared_ptr<const RecoverySnapshot> recoverySnapshot();
+  std::shared_ptr<const RecoverySnapshot> recoverySnapshot(const Json &controlInput=Json());
   Json recordingSummary(const RecordingTake *,const std::string &atRevision,bool events=false) const;
   std::unique_ptr<RecordingTake> hydrateRecording(const Tracker::Document &,const Project::ProjectState &,const std::string &nextRevision) const;
   std::optional<Tracker::RecordedPosition> recordingPosition(RecordingTake &,uint64_t timestamp);
@@ -200,7 +212,7 @@ public:
   std::shared_ptr<const DocumentView> view();
   std::future<Json> invoke(std::string method,Json params);
   std::future<Api::CompletedCall> invokeCompleted(std::string method,Json params,std::shared_ptr<NativeCallReceipt> receipt={});
-  std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision);
+  std::future<std::shared_ptr<const RecoverySnapshot>> captureRecovery(std::string expectedRevision,Json controlInput=Json());
   // Parse, validate and allocate the complete next view before stopping or
   // replacing anything. A recovered document has a new identity, no file path,
   // and explicit unsaved state, without manufacturing music/history edits.

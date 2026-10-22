@@ -1,5 +1,6 @@
 #pragma once
 #import <AppKit/AppKit.h>
+#include <vector>
 @interface RSPluginWindowDelegate : NSObject <NSWindowDelegate>
 @property(nonatomic, copy) void (^onClose)(void);
 @end
@@ -13,3 +14,19 @@
 bool RSValidPluginEditorSize(NSSize size);
 NSWindow *RSCreatePluginEditorWindow(NSSize size, NSString *title);
 void RSResizePluginEditorWindow(NSWindow *window, NSSize size);
+
+namespace Tracker {
+// Native-main-owner lease. The shared capture owner still retains unexpected
+// programmatic vendor notifications; this gates ordinary host-window input.
+class MacPluginInputBarrier final {
+  struct Control {NSControl *control;bool enabled;};
+  NSWindow *window_=nil;
+  std::vector<Control> controls_;
+  void release()noexcept;
+public:
+  explicit MacPluginInputBarrier(NSWindow *);
+  ~MacPluginInputBarrier();
+  MacPluginInputBarrier(const MacPluginInputBarrier &)=delete;
+  MacPluginInputBarrier &operator=(const MacPluginInputBarrier &)=delete;
+};
+}

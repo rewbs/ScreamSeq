@@ -55,9 +55,14 @@ class PluginOperations {
     std::function<std::pair<std::string,uint64_t>()> context;
     std::function<void(std::span<const Tracker::ParameterChange>)> preview;
     std::map<std::string,std::vector<Tracker::PluginParameter>> catalogs;
+    std::map<std::string,Tracker::PluginEditBoundary> releaseCuts;
+    std::map<std::string,Tracker::PluginEditorInputBarrier> inputBarriers;
     size_t previewedEvents=0;
   };
   std::unique_ptr<RecordedEditors> recordedEditors_;
+  using RecordedCuts=std::map<std::string,Tracker::PluginEditBoundary>;
+  RecordedCuts recordedEditorCuts(const RecordedEditors &)const;
+  bool drainRecordedEditors(const RecordedCuts &,bool acknowledgeStop,bool preview);
   bool recordedPublicationActive_=false;
   bool ownsRecordedEditor(const std::string &)const noexcept;
   void requireManualEditors()const;
@@ -99,6 +104,13 @@ public:
   // Does not consume notifications, commit history, stop playback or apply the
   // graph recipe editor's explicit-Apply draft.
   bool overlayRecoveryState(Project::ProjectState &copy) const;
+  // Archive already captured original-time input without touching providers,
+  // playback, manual state or history. Restoring the archive never rearms it.
+  bool overlayRecordedRecovery(Project::ProjectState &copy) const;
+  // Retain a fixed native queue prefix before recovery serialization. Does not
+  // preview, capture manual/opaque state or seal a live take. Only a previously
+  // sealed fixed Stop cut can acknowledge Stop and bounds that snapshot's input.
+  void captureRecordedRecoveryInput();
   void editorWarning(std::string text){editorWarning_=std::move(text);}
   std::string takeEditorWarning(){return std::exchange(editorWarning_,std::string{});}
   std::vector<GraphRackRecord> graphRack() const;
@@ -110,21 +122,33 @@ public:
   Tracker::PluginEditSource parameterEditSource(const std::string &identity);
   // Internal worker adapter; not a public recording API. The session must
   // flush earlier manual input and hold the native input barrier while arming.
+  // The final native-owner queue cut rejects any unflushed input which arrived
+  // during catalog preparation, without consuming it or claiming the take.
   // The scope retains the take even after failure/completion until restoration
   // succeeds. Preview must use transient playback controls, never manual writes.
   void beginRecordedEditors(std::shared_ptr<Tracker::RecordedGestureTake>,
     std::function<std::pair<std::string,uint64_t>()> context,
     std::function<void(std::span<const Tracker::ParameterChange>)> preview);
-  // One bounded poll per provider. true acknowledges empty paired drains only
-  // when the caller already holds its actual release/Stop native input barrier.
-  // Return false if a provider needs another poll. Ordinary flushes pass false.
+  // One bounded poll per provider. Fixed cuts acknowledge their own completion.
+  // Without cuts, true acknowledges empty paired drains only when the caller
+  // holds an actual native release barrier. False means another poll is needed.
   bool pollRecordedEditors(bool releaseBarrier=false);
+  // Validate a standard-control event before changing take ownership/counters.
+  // Its timestamp is captured by the native event handler, never worker delivery.
+  bool captureRecordedControl(const std::string &,uint32_t,double,uint64_t hostTime);
+  // Capture all VST3 queue cuts on their one native owner, then seal once.
+  // Later polls stop at these cuts even when new input continues to arrive.
+  // This is an input boundary; release obtains native vendor HWND leases.
+  uint64_t sealRecordedEditors();
   bool hasRecordedEditors()const noexcept{return bool(recordedEditors_);}
-  // Called under the same input barrier after commit or explicit discard.
+  // Called after commit or explicit discard while host-control input is held.
+  // Acquires/restores provider-native HWND leases around vendor restoration.
   // Restore audible previews before releasing ownership; refusal retains it.
   // An open vendor must restore its complete state in place. If hidden state
-  // cannot be restored from parameters, close it explicitly and retry so its
+  // cannot be restored from parameters, close it explicitly and retry.
   // accepted baseline can replace the closed provider without a false capture.
+  // Post-cut input blocks restoration. Only explicit discard with the editor
+  // closed may abandon that later transient input along with the stopped take.
   bool releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview);
   // Worker-only capture completion. The session supplies its current full
   // revision/clock epoch and retains the owners through this call. Normal

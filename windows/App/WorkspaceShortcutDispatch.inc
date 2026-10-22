@@ -64,6 +64,11 @@
             throw std::system_error(GetLastError(),std::system_category(),"Install workspace shortcuts");
     }
     void connectPaletteShortcuts() {
+        palette->configureAvailability([this](int id,HWND origin){
+            if(!IsWindow(origin)||!IsWindowVisible(origin))return std::wstring(L"The opening editor is no longer visible; close and reopen Commands");
+            const auto state=menuCommandState(id,origin,palette->window());
+            return state.enabled?std::wstring():state.reason;
+        });
         auto change=[this](int id,auto update){
             try{update();}
             catch(const ScreamSeq::Api::ApiError &error){

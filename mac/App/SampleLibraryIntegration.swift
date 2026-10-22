@@ -138,7 +138,7 @@ extension AppController {
         try sampleLibrary.setRoots(strings("roots", maximum: 32)); finish(sampleLibrary.status)
       case "sample.library.rescan":
         try keys(["expectedLibraryRevision"]); try version()
-        guard !sampleLibrary.indexing else { throw sampleLibraryError(-32002, "Sample library is already indexing") }
+        guard !sampleLibrary.indexing else { reply(AutomationServer.notAdmittedBusy("Sample library is already indexing"));return true }
         sampleLibrary.rescan(); finish(sampleLibrary.status)
       case "sample.library.inspect":
         try keys(["path"]); let path = try string("path")

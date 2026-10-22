@@ -152,6 +152,41 @@
         if(inputInstrumentOverride&&slot==*inputInstrumentOverride&&!typingSound)return;
         const auto held=typingTarget(typingSample,slot,49,window);typingSound=slot;typingSoundId=held.identity;inputInstrumentOverride.reset();++contextRevision;
     }
+    Json typingSoundChoiceTarget()const {
+        return Json::array({documentId,view->session.revision,typingSample,typingSoundId,typingSound,
+            inputInstrumentOverride?Json(*inputInstrumentOverride):Json()});
+    }
+    void selectTypingSoundChoice(const Json &target,const std::string &identity) {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring||midiBusy||midiBoundaryActive)
+            throw std::runtime_error("Wait for the current song operation before choosing a sound");
+        if(target!=typingSoundChoiceTarget())throw std::runtime_error("Song or input sound changed while the menu was open; choose again");
+        const auto &catalog=typingCatalog(typingSample);
+        const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &item){return item.at("id")==identity;});
+        if(found==catalog.end())throw std::runtime_error("The selected sound is no longer available");
+        if(!inputInstrumentOverride&&typingSoundId==identity)return;
+        typingSound=found->at("index").get<unsigned>();typingSoundId=identity;inputInstrumentOverride.reset();++contextRevision;
+        refreshTypingSounds();updateRecordingWindow();
+    }
+    void chooseTypingSound(HWND anchor) {
+        rejectDepartureInput();
+        if(busy||recoveryRestoring||midiBusy||midiBoundaryActive)
+            throw std::runtime_error("Wait for the current song operation before choosing a sound");
+        const auto target=typingSoundChoiceTarget();const auto catalog=typingCatalog(typingSample);
+        std::vector<ScreamSeq::NativeContextMenu::Item> items;
+        for(size_t i=0;i<catalog.size();++i){
+            const auto &entry=catalog[i];const auto slot=entry.at("index").get<unsigned>();
+            std::wstring name;for(const auto c:wide(entry.at("name").get<std::string>())){name+=c;if(c==L'&')name+=c;}
+            items.push_back({int(i+1),(typingSample?L"S":L"I")+std::to_wstring(slot)+L" · "+name,true,
+                inputInstrumentOverride?slot==*inputInstrumentOverride:entry.at("id")==typingSoundId});
+        }
+        if(items.empty())items.push_back({0,L"No sounds in this song"});
+        RECT bounds{};if(!IsWindow(anchor)||!GetWindowRect(anchor,&bounds))throw std::runtime_error("Sound chooser is unavailable");
+        // Keep the application owner alive while USER32 pumps this menu.
+        ModalScope modal(modalDepth);releaseTypedNotes();
+        const auto selected=ScreamSeq::NativeContextMenu::show(GetAncestor(anchor,GA_ROOT),{bounds.left,bounds.bottom},items);
+        if(selected>0&&size_t(selected)<=catalog.size())selectTypingSoundChoice(target,catalog[size_t(selected-1)].at("id"));
+    }
     Json typingSnapshot()const {
         Json held=Json::array();for(const auto &[key,h]:typedNotes)held.push_back({{"key",key},{"note",h.note},{"sample",h.sample},{"slot",h.slot},{"id",h.identity},{"pending",h.pending},{"started",h.started}});
         return {{"sample",typingSample},{"slot",typingSound},{"inputInstrument",inputInstrumentOverride.value_or(typingSound)},{"id",typingSoundId},{"held",held},{"noteMin",view->noteMin},{"noteMax",view->noteMax}};

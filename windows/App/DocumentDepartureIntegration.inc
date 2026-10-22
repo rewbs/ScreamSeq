@@ -83,6 +83,7 @@
         graphTrimsWindow.reset();graphCommandsWindow.reset();graphWorkflowWindow.reset();songRoutingWindow.reset();mixerStrips.reset();
         pluginInstruments.reset();pluginPathWindow.reset();sampleDetailWindow.reset();absoluteAutomationWindow.reset();parameterActivityWindow.reset();
         sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();
+        parameterRecordingWindow.reset();pluginRecoveryReviewWindow.reset();parameterTakeState={{"retained",false},{"capturing",false}};parameterTakeDocument.clear();
         createNoteTrackWindow.reset();groupNoteTrackWindow.reset();
         patternToolsWindow.reset();
         effectPickerWindow.reset();
@@ -118,7 +119,10 @@
             if(message.message==WM_KEYUP)departureRetryKeyHeld=false;
             return true;
         }
-        if(!departureInput||!ScreamSeq::NativeInputGate::queuedInput(message))return false;
+        if(!ScreamSeq::NativeInputGate::queuedInput(message))return false;
+        // Local editor requests also hold leases. Filter before application
+        // key-up/shortcut handling, not only when replacing a whole document.
+        if(!departureInput||parameterRecordingInput)return true;
         if(departureAdopted&&!busy&&!departureRefreshing&&message.message==WM_KEYDOWN&&message.wParam==VK_F5) {
             departureRetryKeyHeld=true;
             try{completeNativeDeparture();}catch(...){}
