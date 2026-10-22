@@ -695,3 +695,29 @@ but imported-archive review UI and end-to-end native capture/review are still pe
 No public recording entry point has been enabled. The latest completed Mac CI for
 the older frozen `fb228cb3e` passed on both Intel and ARM; it does not qualify these
 new shared/native changes. The hourly gate remains **03:54:48 UTC**.
+
+## Native take review component (source before the next hourly gate)
+
+`windows/App/ParameterRecordingWindow.hpp` implements a retained Win32 review
+component with Record / Stop recording / Keep take / Discard take, explicit loss
+acknowledgement, a recovery-copy action, native scope/target selectors and paginated
+input inspection. Musical song time is presented in seconds; exact original host
+times remain in its diagnostic snapshot. The host supplies parameter names, worker
+calls, delivery evidence and completion reconciliation. Close hides the component
+without finishing or discarding the take. Controls follow visible keyboard order;
+ordinary polling retains the selected page and native list focus.
+
+`ParameterRecordingWindowTests.inc` exercises the real native controls with
+controlled worker replies: stable scope/target and revision, two-page raw evidence,
+unmapped input, retained focus, closing while recording, explicit loss consent,
+recovery copy, a post-commit failure and receipt-based review without resubmission.
+The component is included in the existing native plugin-search registration and
+will compile in the next candidate. **No test execution is claimed yet.**
+
+This component is not connected to a public menu/API yet. The next implementation
+batch must provide Application ownership and protected Close/document departure,
+fresh native parameter presentation when the take ends, exact completion repair,
+native-input loss acknowledgement at admission, API catalogue/schema/guide and
+actual-app recording checks. Do not expose Record simply by adding a button before
+those ownership paths are connected. Imported detached recovery review is also still
+separate work; the new live-review component does not rearm old-process timestamps.

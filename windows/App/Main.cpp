@@ -57,6 +57,7 @@
 #include "RecoveryWindow.hpp"
 #include "../Audio/MidiInput.hpp"
 #include "MidiRecordingWindow.hpp"
+#include "ParameterRecordingWindow.hpp"
 #include "ArrangementWindow.hpp"
 #include "ArrangementMatrixWindow.hpp"
 #include "SongTimingWindow.hpp"
