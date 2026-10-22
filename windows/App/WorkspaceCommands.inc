@@ -82,6 +82,8 @@
             {editSectionCommand,L"Song / Name selected section",L""},
             {patternDetailsCommand,L"Pattern / Name and notes",L""},
             {midiRecordingCommand,L"Recording / MIDI input and take review",L""},
+            {parameterRecordingCommand,L"Recording / Plugin automation take…",L""},
+            {pluginRecoveryReviewCommand,L"Recording / Recovered plugin inputs…",L""},
             {midiArmCommand,L"Recording / Toggle MIDI arm",L""},
             {recordingFinishCommand,L"Recording / Finish retained take",L""},
             {recordingDiscardCommand,L"Recording / Discard retained take",L""},

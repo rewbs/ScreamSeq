@@ -46,6 +46,11 @@ void applicationParameterRecordingReview() {
     SendMessageW(control(9720),CB_SETCURSEL,1,0);click(9721);
     restoreCheck(writes.size()==1&&tool.snapshot().at("take").at("capturing")==true&&IsWindowEnabled(control(9722))&&!IsWindowEnabled(control(9723)),
         "Record did not enter the retained capture state or allowed Keep while capturing");
+    restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
+        "New captured music stayed hidden behind an empty native delivery page");
+    SendMessageW(control(9728),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
+    SendMessageW(window,WM_TIMER,7,0);restoreCheck(tool.snapshot().at("target")=="",
+        "Recording poll redirected an explicit native delivery review choice");
     SendMessageW(control(9728),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
     restoreCheck(tool.snapshot().at("events").size()==128&&tool.snapshot().at("events")[0].at("timestamp")=="9007199254740993",
         "Native review changed exact timestamps or failed bounded pagination");click(9730);

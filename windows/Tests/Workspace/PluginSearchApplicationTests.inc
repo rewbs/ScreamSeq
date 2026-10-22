@@ -34,17 +34,22 @@ void applicationParameterRecordingAdmission() {
     restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
     restoreCheck(!app.parameterRecordingInput&&controlState(title)==before&&songState(app)==music,"Rejected worker start left native fields locked");
     SetWindowTextW(title,L"Editable after failure");restoreCheck(restoreText(title)==L"Editable after failure","Recording boundary never resumed native editing");
-    app.openParameterRecording();const auto recording=app.parameterRecordingWindow->window();ScreamSeq::Tests::ownGuiWindow(recording);
+    const auto recordingLayout=app.workspaceDockSnapshot().at("configuration");
+    app.command(parameterRecordingCommand);const auto recording=app.parameterRecordingWindow->window();ScreamSeq::Tests::ownGuiWindow(recording);
     restoreCheck(app.parameterRecordingWindow->visible()&&!app.parameterRecordingWindow->protectsClose()&&
         app.parameterRecordingWindow->snapshot().at("document")==app.documentId,"Application failed to own the current song's parameter review window");
     restoreCheck(app.protectRecordingTake()&&!app.parameterRecordingInput,"Empty take inspection blocked departure or leaked its native input lease");
     app.parameterRecordingWindow->hide();
-    const auto owner=app.parameterRecordingWindow.get();app.openParameterRecording();
+    const auto owner=app.parameterRecordingWindow.get();app.command(parameterRecordingCommand);
     restoreCheck(app.parameterRecordingWindow.get()==owner&&app.parameterRecordingWindow->visible(),"Reopening parameter review replaced its retained owner");
     SendMessageW(recording,WM_COMMAND,MAKEWPARAM(9738,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(recording,9738)));
     restoreCheck(app.pluginRecoveryReviewWindow&&app.pluginRecoveryReviewWindow->visible()&&app.pluginRecoveryReviewWindow->snapshot().at("archiveTotal")==0,
         "Recovered inputs navigation did not open the current song's separate native review window");
     ScreamSeq::Tests::ownGuiWindow(app.pluginRecoveryReviewWindow->window());app.pluginRecoveryReviewWindow->hide();
+    app.command(pluginRecoveryReviewCommand);
+    restoreCheck(app.pluginRecoveryReviewWindow->visible()&&app.workspaceDockSnapshot().at("configuration")==recordingLayout,
+        "Separate recording/recovery window commands replaced the editor layout");
+    app.pluginRecoveryReviewWindow->hide();
     const auto musicBeforeReview=songState(app);
     ScreamSeq::Api::CompletedCall proof{"automation.recording.discard",app.documentId,app.view->session.revision,{{"retained",false},{"capturing",false},{"take","already-finished"}}};
     app.reconcileParameterRecording(proof);

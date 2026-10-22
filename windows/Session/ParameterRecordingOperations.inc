@@ -1,5 +1,5 @@
-// Internal worker lifecycle. Do not advertise these methods from SessionAdapter
-// until the native admission/standard-control path and review UI ship together.
+// Windows lifecycle adapter for the shared gesture take. Application admission
+// owns pending native controls; this worker owns timing, musical edits and Undo.
 Json DocumentController::parameterRecordingSummary()const {
   if(!parameterRecording_)return {{"take",""},{"capturing",false},{"retained",false}};
   const auto &take=*parameterRecording_->take;Json targets=Json::array();
@@ -15,6 +15,8 @@ Json DocumentController::parameterRecordingSummary()const {
     take.failure()!=Tracker::RecordedGestureTake::Failure::Context&&take.failure()!=Tracker::RecordedGestureTake::Failure::Provider&&
     take.failure()!=Tracker::RecordedGestureTake::Failure::Target);
   return {{"take",take.token()},{"baseRevision",take.revision()},
+    {"startTime",std::to_string(take.startTime())},{"endTime",take.endTime()?Json(std::to_string(*take.endTime())):Json()},
+    {"playbackEpoch",std::to_string(take.playbackEpoch())},
     {"capturing",!take.endTime()&&!take.completed()},{"completed",take.completed()},{"retained",true},
     {"compatible",compatible},{"eventCount",take.eventCount()},
     {"rejected",take.rejectedEvents()},{"failure",unsigned(take.failure())},
@@ -76,7 +78,9 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   if(method=="automation.recording.get") {
     keys(params,{});std::string warning;
     try{pollParameterRecording();}catch(const std::exception &e){warning=e.what();}
-    auto result=parameterRecordingSummary();if(!warning.empty())result["intakeError"]=std::move(warning);return result;
+    auto result=parameterRecordingSummary();result["hostTime"]=std::to_string(hostTime100ns());
+    result["clock"]="windows-qpc-100ns";
+    if(!warning.empty())result["intakeError"]=std::move(warning);return result;
   }
   const bool start=method=="automation.recording.start",stop=method=="automation.recording.stop",
     commit=method=="automation.recording.commit",discard=method=="automation.recording.discard",capture=method=="automation.recording.capture";
@@ -87,6 +91,7 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
       std::initializer_list<const char *>{"expectedRevision","take"});
   if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())
     throw Api::ApiError(-32602,"expectedRevision is required");
+  if(recordingText(params.at("expectedRevision"),200).empty())throw Api::ApiError(-32602,"expectedRevision must not be empty");
   if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed; read the retained parameter take before retrying");
   if(start) {
     if(parameterRecording_||plugins_->hasRecordedEditors())throw Api::ApiError(-32002,"Finish or discard the retained parameter take first");

@@ -1,5 +1,5 @@
-// Internal read boundary until native review, public schemas and both platform
-// adapters ship together. The guarded import tree is detached from live takes.
+// Windows read adapter for shared detached archives. Reads do not create live
+// takes or associate timestamps from an earlier process with the current clock.
 Json DocumentController::pluginRecoveryReviewOperation(const std::string &method,const Json &params) {
   if(!params.is_object())throw Api::ApiError(-32602,"Recovery review expects an object");
   if(method=="automation.recovery.list") {
@@ -12,6 +12,7 @@ Json DocumentController::pluginRecoveryReviewOperation(const std::string &method
   if(method!="automation.recovery.get")throw Api::ApiError(-32601,"Unknown recovery review method");
   keys(params,{"expectedRevision","kind","index","offset","limit"});
   if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())throw Api::ApiError(-32602,"expectedRevision is required for detached input review");
+  if(recordingText(params.at("expectedRevision"),200).empty())throw Api::ApiError(-32602,"expectedRevision must not be empty");
   if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Song changed; refresh the recovery catalogue");
   auto result=Tracker::pluginInputRecoveryPage(project_.preserved,recordingText(params.at("kind"),16),
     size_t(recordingInteger(params.at("index"),0,SIZE_MAX)),

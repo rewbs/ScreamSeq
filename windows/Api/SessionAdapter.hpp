@@ -198,6 +198,13 @@ class SessionAdapter {
       for(const auto &m:host_->additionalDocumentWrites()) {
         if(std::find(result["writes"].begin(),result["writes"].end(),m)==result["writes"].end())result["writes"].push_back(m);result["revisionGuards"][m]=(m=="parameter.activity.watch"||m=="sample.recording.stop"||m=="sample.recording.discard")?Json::array():Json::array({m=="plugin.library.set"?"expectedLibraryRevision":"expectedRevision"});
       }
+      if(std::find(result["reads"].begin(),result["reads"].end(),"automation.recovery.get")!=result["reads"].end()) {
+        result["revisionGuards"]["automation.recovery.get"]={"expectedRevision"};
+        result["pluginRecording"]={{"schema","windows/Api/plugin-recording.schema.json"},{"clock","windows-qpc-100ns"},
+          {"scope","Stable rack plugin identities; independent graph recipe copies are not recorded"},
+          {"input","Original timestamp and native value; accepted input is never resent after preview failure"},
+          {"recovery","Detached read-only archives preserve original clocks and identities; never rearm or replay them"}};
+      }
       result["windowsExtensions"]={{"document.open","absolute path, expectedRevision, discard:true required for unsaved work"},
         {"scratch.gestures.get/set/clone/remove","Song-local SK gesture slots 1..255. Two normalized motion/fader lanes use 65536 units/cycle. Set accepts a preset seed and independent overrides; live edits publish a prepared bank, used gestures cannot be removed. Clone optionally reassigns its captured SK cell in one Undo."},
         {"plugin.editor.open","slot and expectedRevision; native VST3 editor on the private STA; no musical change unless the vendor emits edits"},

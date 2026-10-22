@@ -289,6 +289,8 @@
             else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}
             else if(id==absoluteAutomationCommand){openAbsoluteAutomation();return;}
+            else if(id==parameterRecordingCommand){openParameterRecording();return;}
+            else if(id==pluginRecoveryReviewCommand){openPluginRecoveryReview();return;}
             else if(id==sampleDetailCommand){openSampleDetail();return;}
             else if(id==sampleRecordCommand){openSampleRecording();return;}
             else if(id==patternRenderSampleCommand||id==patternRenderInstrumentCommand){renderPatternSample(id==patternRenderInstrumentCommand);return;}

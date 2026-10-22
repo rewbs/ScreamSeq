@@ -836,3 +836,60 @@ workspace fixture. The corrected source was already committed in `225ddb62a`.
 Mac ARM job `119629368448` in run `39719480594` passed; Mac Intel job `119629368438`
 was still building. This does not qualify any source added after `ffe4a330c`.
 The next build gate stays **04:55:42 UTC**; do not restart the failed run.
+
+## Public Windows workflow integration (source, awaiting the hourly gate)
+
+Commands 661/662 now open the live plugin take and detached recovered-input
+windows directly. They are registered in the command palette, separate-windows
+navigation and Tools → Automation; the live take also appears in Playback.
+These are document-wide window commands with deferred-open handling. They retain
+the Pattern/docked editor layout and existing window ownership. The healthy take
+automatically selects its first captured parameter; subsequent polls respect an
+explicit parameter or delivery-review choice, page, keyboard focus and caret.
+
+`PluginOperations::reads/writes` exposes the existing worker lifecycle through the
+actual Windows pipe. `SessionAdapter::describe` advertises the request schema and
+the revision requirement for detached recovery Get. The new
+`windows/Api/plugin-recording.schema.json` and API README cover nine operations,
+original QPC 100 ns timestamps, bounded paging, stale/type rejection, loss
+acknowledgement, uncertain receipts, no replay, Keep/Discard, and recovery copies.
+The take Get now exposes a decimal host-clock sample and stable original
+start/end/epoch fields. Empty, oversized and NUL-containing detached revision
+tokens reject before indexing the archive. Shared music/history/project encoding
+is unchanged. **Mac API exposure of these new lifecycle/recovery names remains
+outstanding**; the Windows guide states that limit explicitly.
+
+`windows/Tests/test_plugin_recording.py` adds three actual-app checks:
+
+- Direct window navigation, catalogue/schema exposure, strict recovery request
+  validation, unchanged document/history and retained editor layout.
+- A future archive beside an independent valid original-input archive, exact
+  decimal counters above 2^53 and native doubles, retired plugin identity,
+  native selection of the valid archive, read-only review, no current-clock take,
+  and save-copy preservation without touching the recovered source.
+- Silent owned playback, native Record and standard rack value-field capture,
+  original timestamps, stopped-take review without stopping playback, Keep as
+  one Undo step, Redo, unchanged manual state, exact API capture replay, a second
+  discarded take, and native save/reopen of the committed music.
+
+The native plugin-search fixture now opens through the public commands and checks
+that window navigation preserves the dock configuration. Its recording review
+fixture checks initial event visibility and explicit delivery-page retention.
+Windows CI includes the actual-app class. The local checkpoint adds ApiTests and
+SessionCacheTests for the adapter change and the three new app cases. The prepared
+close-drain test selector was corrected from the nonexistent
+`RecoveryControllerTests.test_close_drains_pending_native_recovery_write` to the
+existing `RecoveryTests` method; the assertion itself is unchanged.
+
+At this source checkpoint only Python/JSON parsing and `git diff --check` have
+run. No native tests, builds or foreground qualification are claimed for these
+changes. The correction build script still enforces **04:55:42 UTC** and a clean
+frozen source commit. Before running it, inspect its receipts; after a successful
+build run the bounded checks, then use Computer Use on that exact executable for
+navigation, parameter controls, recording/review and keyboard focus. Keep failure
+evidence; do not package or merge an unqualified candidate.
+
+Latest bounded observation of older `ffe4a330c` Mac Intel job `119629368438`:
+build, model/host tests, Swift tests and native interface harness passed; socket
+conformance was still running. This is supporting evidence for the older inputs,
+not qualification of the newer shared recovery helper or Windows integration.

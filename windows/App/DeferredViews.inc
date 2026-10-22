@@ -12,7 +12,7 @@
         case notesCommand:case samplesCommand:case pluginsCommand:case pluginBrowse:case pluginParametersCommand:case pluginEditor:
         case effectsCommand:case mixerCommand:case mixerStripsCommand:case mixerDetailsCommand:case mixerAddEffect:case mixerRouting:case graphCommand:
         case curveBank:case curveReference:case graphCommandsCommand:case graphTrimsCommand:
-        case parameterAutomationCommand:case absoluteAutomationCommand:
+        case parameterAutomationCommand:case absoluteAutomationCommand:case parameterRecordingCommand:case pluginRecoveryReviewCommand:
         case openGraphCurveCommand:case dockGraphCurveCommand:case graphEditingWorkspaceCommand:case editorGraphCurveTab:
         case dockPreciseNotesCommand:case editorPreciseNotesTab:
         case connectedWorkspaceCommand:case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
@@ -21,6 +21,7 @@
         }
     }
     Json viewCommandTarget(int id)const {
+        if(id==parameterRecordingCommand||id==pluginRecoveryReviewCommand)return Json::array();
         if(id==pluginParametersCommand||id==pluginEditor)return Json::array({selectedPlugin});
         if(id==mixingGraphPanelCommand||id==mixingGraphFloatCommand||id==editorMixingGraphTab||id==mixerRouting||id==curveReference||id==pluginBrowse||id==sampleBrowseCommand||id==sampleRecordCommand||id==audioSettingsCommand)return Json::array();
         if(id==curveBank)return graphCurveOperationGuard();

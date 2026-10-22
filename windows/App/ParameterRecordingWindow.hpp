@@ -35,7 +35,7 @@ private:
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
   size_t offset_=0,total_=0;uint64_t generation_=0;
-  bool pending_=false,setting_=false,lossAcknowledged_=false;
+  bool pending_=false,setting_=false,lossAcknowledged_=false,targetChosen_=false;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,state_.value("baseRevision",callbacks_.context().second),take(),generation_,
       retained(),pending_,completion_.retained()&&!pending_);
@@ -94,6 +94,10 @@ private:
     if(identities==targets_)return;
     if(SendMessageW(controls_.at(target),CB_GETDROPPEDSTATE,0,0))return;
     for(const auto &entry:identities)rememberTarget(entry);
+    // A healthy take should immediately show captured music, rather than an
+    // empty delivery-error page. Respect an explicit target/delivery choice.
+    if(!targetChosen_&&targetKey_.empty()&&!identities.empty()&&!delivery_.value("needsReview",false))
+      targetKey_=identities.front().dump();
     targets_=std::move(identities);setting_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{setting_};
     NativeInputGate::present(controls_.at(target),CB_RESETCONTENT,0,0);
@@ -133,7 +137,7 @@ private:
     struct Reset{ParameterRecordingWindow &self;~Reset(){self.pending_=false;self.layout();}}reset{*this};
     const auto old=take();auto state=callbacks_.read("automation.recording.get",Json::object());requireContext();
     state_=std::move(state);delivery_=callbacks_.delivery(0,1);
-    if(take()!=old){offset_=0;targetKey_.clear();lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
+    if(take()!=old){offset_=0;targetKey_.clear();targetChosen_=false;lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
     const auto evidence=lossEvidence();if(evidence!=lossEvidence_){lossEvidence_=evidence;lossAcknowledged_=false;NativeInputGate::present(controls_.at(acknowledge),BM_SETCHECK,BST_UNCHECKED,0);}
     updateRack();updateTargets();
     if(deliveryView()&&offset_&&offset_>=delivery_.at("retained").get<size_t>())offset_=0;
@@ -159,7 +163,7 @@ private:
     if(setting_||pending_)return;if(id==close){hide();return;}
     if(id==acknowledge&&notification==BN_CLICKED){lossAcknowledged_=SendMessageW(controls_.at(id),BM_GETCHECK,0,0)==BST_CHECKED;layout();return;}
     if(id==target&&notification==CBN_SELCHANGE){const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
-      if(selected<0||size_t(selected)>targets_.size())return;targetKey_=selected?targets_[size_t(selected-1)].dump():std::string();offset_=0;refresh();return;}
+      if(selected<0||size_t(selected)>targets_.size())return;targetChosen_=true;targetKey_=selected?targets_[size_t(selected-1)].dump():std::string();offset_=0;refresh();return;}
     if(notification!=BN_CLICKED)return;
     if(id==recovered&&callbacks_.recoveredInputs){callbacks_.recoveredInputs();return;}
     if(id==review){

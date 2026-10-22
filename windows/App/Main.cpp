@@ -113,8 +113,9 @@ constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixi
     navigationInstrumentsCommand=649,navigationPluginsCommand=650,navigationMixerCommand=651,
     navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
 constexpr int navigationEffectsCommand=655,navigationRecipesCommand=656,
-    floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660;
-static_assert(contextActionLast<700&&floatCurveCommand<700,"Application commands must not overlap effect field controls");
+    floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660,
+    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662;
+static_assert(contextActionLast<700&&pluginRecoveryReviewCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -406,6 +407,8 @@ public:
             {"shortcuts",{{"pending",workspaceShortcuts&&workspaceShortcuts->pending()},{"hint",workspaceShortcuts?workspaceShortcuts->hint():std::string()}}},
             {"sampleDetail",sampleDetailWindow?sampleDetailWindow->snapshot():Json{{"visible",false}}},
             {"sampleRecording",sampleRecordingWindow?sampleRecordingWindow->snapshot():Json{{"visible",false}}},
+            {"parameterRecording",parameterRecordingWindow?parameterRecordingWindow->snapshot():Json{{"visible",false}}},
+            {"pluginRecoveryReview",pluginRecoveryReviewWindow?pluginRecoveryReviewWindow->snapshot():Json{{"visible",false}}},
             {"patternSampleRender",patternSampleRenderWindow?patternSampleRenderWindow->snapshot():Json{{"visible",false}}},
             {"pluginPresetAction",{{"pending",pluginPresetPending},{"completion",pluginPresetCompletion.snapshot()},{"target",pluginPresetTarget},
                 {"report",pluginPresetReport},{"needsReload",pluginPresetNeedsReload},{"status",utf8Path(pluginPresetStatus)}}},
