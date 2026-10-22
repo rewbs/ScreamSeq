@@ -221,5 +221,25 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   need(operations.releaseRecordedEditors(true,[&]{++restores;return true;})&&restores==1&&!operations.hasRecordedEditors()&&
     encoded()==fencedBaseline&&document->historySequence()==fencedSequence,
     "Explicit closed-provider discard failed to retain the accepted baseline");
-  std::cout<<"PASS recovery recorded editor exclusion, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
+  // A callback arriving after a caller's last manual flush must not be silently
+  // claimed by a new take. Refused arming leaves both the notification and its
+  // eventual ordinary history edit intact.
+  operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto beforeArm=encoded();const auto beforeArmSequence=document->historySequence();
+  clock=std::make_shared<RecordingFrameTimeline>();const auto arm4=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm4,arm4+1,0,1,48000,41),"Arming guard clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers4{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("unflushed",revision(),arm4,clock,rack,projectAbsoluteAutomation(project),providers4);
+  send(.625);unsigned armPreviews=0;
+  refuses([&]{operations.beginRecordedEditors(take,context,[&](auto){++armPreviews;});});
+  need(!operations.hasRecordedEditors()&&!armPreviews&&!take->eventCount()&&encoded()==beforeArm&&
+    document->historySequence()==beforeArmSequence,"Refused arm consumed input or changed state/history");
+  operations.flushEditors(true);
+  const auto manualParameters=operations.invoke("plugin.parameters.get",{{"slot",0}});
+  const auto pendingManual=std::find_if(manualParameters.begin(),manualParameters.end(),[](const auto &p){return p.at("id")==7;});
+  need(pendingManual!=manualParameters.end()&&pendingManual->at("manualValue")==.625f&&
+    document->historySequence()==beforeArmSequence+1,"Arming refusal lost the earlier manual gesture or its one history edit");
+  operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
+  need(encoded()==beforeArm,"Unflushed gesture did not retain exact manual Undo after refused arming");
+  std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
 }

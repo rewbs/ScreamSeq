@@ -766,7 +766,7 @@ bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
 }
 PluginEditFence VST3Plugin::editFence() {
   PluginEditFence fence;
-  pluginMainCall([&]{fence={impl_->edits.fence().position,mach_absolute_time(),impl_->droppedEdits.load(std::memory_order_relaxed)};});
+  pluginMainCall([&]{const auto cut=impl_->edits.fence();fence={cut.position,mach_absolute_time(),impl_->droppedEdits.load(std::memory_order_relaxed),cut.pending};});
   return fence;
 }
 PluginEditRead VST3Plugin::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {

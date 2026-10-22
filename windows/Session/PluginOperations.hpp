@@ -114,6 +114,8 @@ public:
   Tracker::PluginEditSource parameterEditSource(const std::string &identity);
   // Internal worker adapter; not a public recording API. The session must
   // flush earlier manual input and hold the native input barrier while arming.
+  // The final native-owner queue cut rejects any unflushed input which arrived
+  // during catalog preparation, without consuming it or claiming the take.
   // The scope retains the take even after failure/completion until restoration
   // succeeds. Preview must use transient playback controls, never manual writes.
   void beginRecordedEditors(std::shared_ptr<Tracker::RecordedGestureTake>,

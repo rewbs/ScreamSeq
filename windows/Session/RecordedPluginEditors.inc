@@ -56,6 +56,19 @@ void PluginOperations::beginRecordedEditors(std::shared_ptr<RecordedGestureTake>
   need(next->context()==current,"Recording context changed while preparing plugin catalogs");
   for(const auto &provider:next->take->providers())
     need(editors_.at(provider.plugin)->editSource()==provider.source,"Recording provider changed while preparing catalogs");
+  // Catalog preparation may pump native input after the caller's manual flush.
+  // Inspect all queues on their native owner, without consuming notifications
+  // or reading vendor state. A failed arm leaves those edits for manual capture.
+  const auto providers=next->take->providers();
+  WindowsVST3::pluginMainCall([&]{
+    for(const auto &provider:providers) {
+      const auto cut=editors_.at(provider.plugin)->editBoundary();
+      need(cut&&cut->source==provider.source&&cut->fence.hostTime>=next->take->startTime(),
+        "Recording needs a current native input boundary; earlier input retained");
+      need(cut->fence.pending==0,"Flush earlier manual plugin input before recording; queued input retained");
+    }
+  });
+  need(next->context()==current,"Recording context changed while checking native input");
   recordedEditors_=std::move(next);
 }
 uint64_t PluginOperations::sealRecordedEditors() {

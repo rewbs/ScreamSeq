@@ -200,3 +200,14 @@ program/editor lifetime and transport host callbacks. Review the private backend
 storage move, the per-slice auxiliary copy, double parameter forwarding and the
 TrackerPlugins forwarding target. Source integration is not Mac runtime
 qualification: a real Mac-to-Windows-to-Mac project round trip is still required.
+
+### Pending manual input at arming
+
+Native VST3 input cuts now include the unread notification count. The serialized
+consumer is held while the native producer captures that count. Windows checks
+all provider cuts after catalog preparation, before claiming a recording take;
+an unflushed callback, changed provider/loss counter or invalid clock boundary
+refuses without consuming the callback, creating history or calling preview.
+Earlier input remains available to ordinary manual capture. This supplements,
+and does not replace, the session's native arming/restoration barrier contract.
+No cut/count is written to project metadata.

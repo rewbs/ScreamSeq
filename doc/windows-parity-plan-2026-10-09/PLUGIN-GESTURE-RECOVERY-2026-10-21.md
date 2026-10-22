@@ -395,3 +395,16 @@ Do not restart this failed local build or push another PR update before that gat
 Both Mac architectures passed the preceding `2ff11b8ae` CI run; that result does
 not qualify the new shared queue. Source corrections should continue on the local
 branch and be pushed to the non-CI backup branch between checkpoints.
+
+## Pending-input arming guard (source only)
+
+The next batch adds native-owner unread counts to shared/VST3 input cuts.
+`beginRecordedEditors` checks these after catalog preparation, which can pump
+vendor callbacks. A pending callback refuses arming without consuming input,
+claiming the take or changing project/history. The real-provider worker test
+queues a manual gesture between preparation and arming, requires refusal, then
+verifies ordinary capture still produces the exact value and one reversible
+history edit. Shared queue and both native provider tests cover pending counts.
+The original native barrier requirement remains; this does not expose a finished
+recording workflow. These additions have not been compiled or executed and join
+the next hourly build after 02:54:09 UTC.

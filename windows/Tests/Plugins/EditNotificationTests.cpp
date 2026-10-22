@@ -37,7 +37,7 @@ int main(int argc,char **argv){try{
     NativePlugin plugin(state,48000,true);
     check(send(.25)==1,"Pre-boundary native gesture failed");
     const auto boundary=plugin.editBoundary();
-    check(boundary&&boundary->fence.hostTime&&boundary->source==plugin.editSource(),
+    check(boundary&&boundary->fence.hostTime&&boundary->fence.pending==1&&boundary->source==plugin.editSource(),
       "Native owner did not capture an identified timestamped boundary");
     check(send(.75)==1,"Post-boundary native gesture failed");
     PluginEdit event;PluginEditSource source;
@@ -47,6 +47,8 @@ int main(int argc,char **argv){try{
       "Native boundary consumed a later gesture");
     check(plugin.popEdit(event,source)&&event.value==.75f&&event.hostTime>=boundary->fence.hostTime,
       "Later native input was discarded by the recording drain");
+    const auto drained=plugin.editBoundary();
+    check(drained&&drained->fence.pending==0,"Drained native provider still reports pending input");
     check(plugin.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,
       "An already passed native boundary was silently accepted");
     NativePlugin replacement(state,48000,true);

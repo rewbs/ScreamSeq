@@ -821,7 +821,7 @@ bool NativeBackend::popEdit(PluginEdit &event) noexcept {
 uint64_t NativeBackend::droppedEdits() const noexcept {return impl_->droppedEdits.load(std::memory_order_relaxed);}
 std::optional<PluginEditFence> NativeBackend::editFence() {
   PluginEditFence fence;
-  pluginMainCall([&]{fence={impl_->edits.fence().position,ScreamSeq::hostTime100ns(),impl_->droppedEdits.load(std::memory_order_relaxed)};});
+  pluginMainCall([&]{const auto cut=impl_->edits.fence();fence={cut.position,ScreamSeq::hostTime100ns(),impl_->droppedEdits.load(std::memory_order_relaxed),cut.pending};});
   return fence;
 }
 PluginEditRead NativeBackend::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {

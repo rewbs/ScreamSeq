@@ -141,6 +141,7 @@ public:
   Failure failure()const noexcept{return failure_;}
   bool completed()const noexcept{return completed_;}
   uint64_t rejectedEvents()const noexcept{return rejected_;}
+  uint64_t startTime()const noexcept{return start_;}
   std::optional<uint64_t> endTime()const noexcept{return end_;}
   const RecordedGestureCapture &target(size_t index)const{return *targets_.at(index);}
   bool matchesBaseline(std::span<const PluginState> rack,std::span<const ParameterChange> points)const {
