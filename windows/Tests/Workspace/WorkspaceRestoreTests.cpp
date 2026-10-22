@@ -1307,6 +1307,7 @@ int wmain(int argc,wchar_t **argv) {
                     timedRestoreCase("navigation placements and retained graph",applicationNavigation);
                     timedRestoreCase("routing restore atomicity",applicationRoutingRestoreAtomicity);
                     timedRestoreCase("navigation resize and explicit destinations",applicationNavigationResizeAndDestinations);
+                    timedRestoreCase("Pattern header compact bounds, target guards and keyboard focus",applicationPatternHeaderLayout);
                     timedRestoreCase("dense routing readable focus and complete overview",applicationDenseRoutingFraming);
                     return;
                 }

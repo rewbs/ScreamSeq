@@ -115,8 +115,8 @@ constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixi
     navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
 constexpr int navigationEffectsCommand=655,navigationRecipesCommand=656,
     floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660,
-    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662;
-static_assert(contextActionLast<700&&pluginRecoveryReviewCommand<700,"Application commands must not overlap effect field controls");
+    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662,patternHeaderMenuCommand=663;
+static_assert(contextActionLast<700&&patternHeaderMenuCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -740,11 +740,16 @@ public:
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
                 parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
-                if(status==L"Parameter input was lost / take review required"||
+                if(status==L"Recording original parameter input / Stop the take to review"||
+                   status==L"Plugin automation take stopped / Keep or Discard to finish"||
+                   status==L"Parameter input was lost / take review required"||
                    status==L"Parameter input needs review / original values and timestamps retained")
                     status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
                 for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
             }
+            if(method=="automation.recording.stop"&&!result.value("capturing",false)&&
+               status==L"Recording original parameter input / Stop the take to review")
+                status=L"Plugin automation take stopped / Keep or Discard to finish";
             if(parameterRecordingWindow&&!parameterRecordingWindow->retired())
                 parameterRecordingWindow->observeBoundary(documentId,method,result);
         }

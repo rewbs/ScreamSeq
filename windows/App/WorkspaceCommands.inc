@@ -1,5 +1,6 @@
     std::vector<ScreamSeq::WorkspaceCommand> defaultWorkspaceCommands()const {
         return {
+            {patternHeaderMenuCommand,L"Pattern / Header actions",L""},
             {navigationEffectsCommand,L"Navigate / Pattern effects panel",L""},
             {navigationRecipesCommand,L"Navigate / Graph recipes panel",L""},
             {floatInstrumentCommand,L"Window / Float instruments",L""},{floatAutomationCommand,L"Window / Float pattern automation",L""},

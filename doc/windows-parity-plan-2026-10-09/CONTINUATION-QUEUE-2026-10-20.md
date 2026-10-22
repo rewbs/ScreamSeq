@@ -8,6 +8,28 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 19:34 UTC checkpoint (supersedes the prepared/earlier gates below):**
+frozen `69fe8bf206049c163742ad10105a1de87afde24b` built successfully once.
+Its 13 native registrations produced 12 passes and one stale instrument-assignment
+fixture failure; preserve `take-review/checks.json` as failed. A separate diagnostic
+actual-app run passed 28 cases with one optional installed-Surge-XT skip. Fresh
+Computer Use on owned PID27232 verified a captured native control through
+Record/Stop/Keep, search typing/Backspace/Tab/Shift+Tab, Pattern keyboard return,
+Float/Dock, maximize/restore and a scratch drag whose saved curve stayed visible.
+The process exited normally after 600 seconds; original F04 and binary hashes
+are unchanged. This is **not** a package/merge or temporal-flicker/audio pass:
+35 callback deadline overruns were reported. The native fixture failure and
+remaining Mac/device/reciprocal gates still block qualification.
+
+The next coordinated build is **no earlier than 20:13:13 UTC / 13:13:13 Pacific**,
+measured from the last actual CI build start. PR#7 remains at frozen69fe8; back up
+subsequent source only to `codex/mac-gesture-next-checkpoint` between gates.
+Current source separates clean chooser refresh from genuinely stale assignment
+in the failed fixture; it also fixes Pattern header collisions observed in the
+foreground and the stale Recording status after Stop/Keep. These fixes and their
+new assertions are unbuilt. Read the newest intake-report section before the
+next checkpoint; do not rerun the existing build/check/diagnostic receipts.
+
 **22 October following source batch:** candidate `69fe8bf20` is prepared in
 `bin/mac-gesture-20261022/take-review/` and the clean qualification checkout,
 with the 19:12:11 UTC gate unchanged. Later primary-checkout work fixes Mac

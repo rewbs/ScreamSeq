@@ -1163,3 +1163,96 @@ be `_automationDocumentID` (the first component of the API revision), not the
 separate AppController recovery-file grouping UUID. Existing generic controls
 must keep their ordinary non-recording behavior. Frozen69fe8 and its hourly gate
 are unchanged; this later source belongs to a following coordinated checkpoint.
+
+### 19:12 checkpoint and unlocked foreground diagnosis, 22 October
+
+Frozen source `69fe8bf206049c163742ad10105a1de87afde24b` was built exactly once
+at 19:12:27 UTC, completing 19:15:20. Executable SHA256:
+`91fbd8d47637cd373c65a0394b4e4a60f76c8626816833ec62ef2e66e44fe2bb`.
+The original `take-review/build.json` and `checks.json` are retained. Native
+registrations passed 12/13: departure, scratch editor, parameter-preview workspace,
+context/navigation, automation dock, graph workflow, graph curve, short instrument
+dock, plugin notifications, parameter preview, recorded automation and hosted
+project. `workspace-mixer-hosted-tests` failed **Stale assignment was replayed or
+redirected**. The bounded check script correctly stopped before app checks.
+
+An explicitly separate `diagnostic-app.ps1` then exercised the already-built
+product: 29 cases, **28 passed / 1 skipped** (optional installed Surge XT).
+The full routing, scratch-editor and plugin-recording classes plus retained graph
+navigation and global field-focus cases passed. This includes actual parameter
+capture, Stop/Keep/Discard, exactly-one Undo, save/reopen and detached input review.
+These results do not overwrite or qualify the failed native receipt. Diagnostic
+source and executable fingerprints remained unchanged.
+
+Source diagnosis of the failed assignment fixture found a timing ambiguity: the
+clean chooser's normal 250 ms refresh can adopt the new revision while the
+worker pumps messages, before the test edits the supposedly old presentation.
+`InstrumentPluginApplicationTests.inc` now checks that clean refresh explicitly,
+then stops/drains only the chooser's own refresh timer and proves the old revision
+is still presented before editing. Original refusal/no-redirection assertions
+remain, with a full failure snapshot. This is a **test-premise correction**, not
+proof that the failure is resolved; the corrected fixture is unbuilt.
+
+After the user unlocked the desktop, a new persistent diagnostic launcher started
+owned PID27232 with the exact frozen binary, copied F04, isolated recovery directory,
+silent output and 600-second duration. Computer Use observations:
+
+- Windows menu clearly exposes Plugin automation take. Record, close review,
+  click the actual Gainer Enabled control, reopen review: one captured input,
+  parameter Enabled, value 0.0, song time 56.8616 seconds, no reported input loss.
+  Stop retained it and playback continued; Keep released the take and enabled Undo.
+- Rack search accepted `Gain` without losing text; Backspace produced `Gai`.
+  Tab visibly focused the parameter selector and Shift+Tab returned the caret
+  to search. The helper's accessibility focus string remained the root window,
+  so this evidence uses actual text/caret/focus-ring changes, not that string.
+- Docked graph started at readable scale. Whole overview and Home restored
+  readable scale; explicit Float/Dock and maximize/restore retained the graph.
+  One tiny-body overview click did not yield sufficiently clear selection
+  evidence; retain native/app hit-target assertions, do not count that click
+  as a foreground selection pass. Compact Group/Return labels were readable.
+- Ctrl+Alt+P returned to Pattern, Down moved the edit cursor from row 0 to 1
+  and detached following. The scratch phrase editor opened from Windows.
+  Dragging its middle motion point left the curve rendered after release.
+  Read-only `workspace.get` confirmed position 36864, value
+  0.7172503242542153, `dirty:false`, `pending:false`, `saveQueued:false`,
+  and 1024 preview/rendered samples for both lanes. Snapshot is retained under
+  `take-review/foreground-partial-diagnostic/workspace-after-scratch-drag.json`.
+
+The process exited 0 normally; original F04 and executable hashes are unchanged.
+Its silent run reports 600.042 seconds, 48 kHz/480 frames, 59989 callbacks,
+35 deadline overruns, maximum callback 12269.2 microseconds, no starvation/device
+errors or processor faults. `realtimeAuditPassed:false` and
+`sustainedPresentationQualified:false` remain explicit failures/limits. This was
+loaded interactive diagnosis while CI was running, not an idle benchmark.
+Screenshots do not qualify temporal flicker, and floating-field typing continuity
+was not established by this helper. No package or main merge was made.
+
+Fresh diagnosis also found two presentation defects, now corrected in **unbuilt
+source**:
+
+1. The narrow Pattern header positioned three fixed buttons relative to a grid
+   narrower than their combined width; Pattern FX used the wider host including
+   graph lanes. This let controls overlap one another and the context sidebar.
+   `WorkspaceView.inc` now owns every header placement. At compact width a native
+   More menu retains mute, FX count, FX panel, graph-command and scratch actions;
+   direct controls return when space permits. `WorkspaceDraw.inc` uses the same
+   reserved title width. `WorkspaceNavigation.inc` captures document/revision/
+   selection and rejects a menu whose target changed. Musical commands continue
+   through existing shared edits/history; no project format changes. A newly
+   hidden focused action yields to the same header's visible replacement.
+   The context-panel native group adds control containment/non-overlap, target
+   refusal, one-step FX-count Undo, cursor/selection and resize-focus checks.
+2. Main retained “Recording original parameter input” after Stop/Keep even though
+   the review was correct. `finishDocumentOperation` now advances only those
+   recording-specific status messages on confirmed lifecycle results, preserving
+   unrelated errors/status. Existing actual-app recording checks assert the stale
+   recording prompt is gone after Stop and Keep.
+
+CI run IDs remain Windows39838064564 and Mac39838064576. At 19:26 UTC all three
+native jobs had passed portable preflight and were still building. Latest actual
+build start was Intel 19:13:13 UTC: **next build no earlier than 20:13:13 UTC**.
+Inspect existing run/receipt state before any follow-up; do not restart them.
+The new source needs the next bounded context-panel/mixer-hosted native groups,
+affected actual-app routing/recording checks and fresh compact-header Computer
+Use. Mac autosave/window/input-journal source after frozen69fe8 still needs its
+own compile/interface/session gates and the remaining AppController wiring above.

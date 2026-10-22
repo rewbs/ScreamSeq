@@ -47,6 +47,50 @@ void applicationRoutingRestoreAtomicity(){
     ScreamSeq::Tests::ownGuiWindow(app.songRoutingWindow->window());fixture.close();
 }
 
+void applicationPatternHeaderLayout(){
+    RestoreFixture fixture;auto &app=*fixture.app;ScreamSeq::Tests::ownGuiWindow(app.window);
+    resizeRestoreClient(app,1300,720);app.command(mixingGraphPanelCommand);app.command(navigationPatternCommand);
+    ScreamSeq::Tests::ownGuiWindow(app.songRoutingWindow->window());
+    const auto original=songState(app),position=app.position(),selection=app.selection();
+    const auto checkBounds=[&]{
+        const auto grid=app.patternGridRect();const float scale=GetDpiForWindow(app.window)/96.f;
+        std::vector<RECT> visible;
+        for(int id:{effectColumnChooser,graphCommandsCommand,noteColumnMuteCommand,effectsCommand,scratchGesturesCommand,patternHeaderMenuCommand}){
+            const auto control=app.controls.at(id);if(!IsWindowVisible(control))continue;
+            RECT bounds{};GetWindowRect(control,&bounds);MapWindowPoints(nullptr,app.window,reinterpret_cast<POINT *>(&bounds),2);
+            restoreCheck(bounds.left>=int(grid.x*scale)-1&&bounds.right<=int((grid.x+grid.w)*scale)+1&&
+                bounds.top>=int(grid.y*scale)&&bounds.bottom<=int((grid.y+27)*scale)+1,
+                "Pattern header control escaped its grid into another panel or row");
+            for(const auto &other:visible){RECT overlap{};restoreCheck(!IntersectRect(&overlap,&bounds,&other),"Pattern header controls overlap");}
+            visible.push_back(bounds);
+        }
+        restoreCheck(app.patternHeaderTextWidth()>0,"Pattern header lost all identity-label space");
+    };
+    checkBounds();restoreCheck(IsWindowVisible(app.controls.at(patternHeaderMenuCommand)),"Compact Pattern header lacks its action menu");
+    const auto items=app.patternHeaderItems();
+    for(int id:{noteColumnMuteCommand,effectsCommand,graphCommandsCommand,scratchGesturesCommand})
+        restoreCheck(app.workspaceMenuAllows(items,id),"Compact Pattern header lost an ordinary action");
+    const auto stale=app.patternHeaderTarget();auto moved=app.position();moved["row"]=3;app.navigate(moved);
+    restoreRejected([&]{app.dispatchPatternHeaderAction(stale,app.patternHeaderColumnsLast);});
+    restoreCheck(songState(app)==original,"Stale compact header menu changed another target");app.navigate(position);
+    const auto count=app.view->effectColumns.at(app.channel);const unsigned changed=count==8?7:count+1;
+    app.dispatchPatternHeaderAction(app.patternHeaderTarget(),app.patternHeaderColumnsFirst+int(changed)-1);
+    restoreCheck(app.view->effectColumns.at(app.channel)==changed,"Compact header FX count did not use the ordinary shared edit");
+    app.edit("history.undo",RestoreJson::object());
+    restoreCheck(app.view->effectColumns.at(app.channel)==count,"Compact header FX count was not one reversible edit");
+    app.command(mixingGraphFloatCommand);resizeRestoreClient(app,1600,950);checkBounds();
+    restoreCheck(IsWindowVisible(app.controls.at(noteColumnMuteCommand))&&!IsWindowVisible(app.controls.at(patternHeaderMenuCommand)),
+        "Wide Pattern header did not restore its direct actions");
+    SetFocus(app.controls.at(noteColumnMuteCommand));app.command(mixingGraphPanelCommand);resizeRestoreClient(app,1300,720);checkBounds();
+    // Explicitly focused controls hidden by a subsequent layout must yield to
+    // the same header's visible replacement, never an invisible native child.
+    app.command(mixingGraphFloatCommand);resizeRestoreClient(app,1600,950);SetFocus(app.controls.at(scratchGesturesCommand));
+    resizeRestoreClient(app,1000,720);checkBounds();
+    restoreCheck(IsWindowVisible(GetFocus()),"Header resize left keyboard focus on a hidden action");
+    restoreCheck(app.position()==position&&app.selection()==selection,"Header presentation changed Pattern cursor or selection");
+    fixture.close();
+}
+
 void applicationNavigationResizeAndDestinations(){
     RestoreFixture fixture;auto &app=*fixture.app;
     resizeRestoreClient(app,1300,720);app.command(navigationPluginsCommand);
