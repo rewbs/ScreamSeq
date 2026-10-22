@@ -50,6 +50,15 @@ public:
   // capture owners must retire its epoch. Read alongside failure() on the
   // same control owner as popEdit(), never from the audio callback.
   virtual uint64_t droppedEdits() const noexcept {return 0;}
+  // Control owner only; marshal capture to the native UI notification owner.
+  // A cut preserves later input; it does not freeze UI or restore vendor state.
+  virtual std::optional<PluginEditFence> editFence() {return {};}
+  virtual PluginEditRead popEditBefore(const PluginEditFence &,PluginEdit &) noexcept {return PluginEditRead::Unsupported;}
+  // Control owner only. Native adapters keep their lease on their own UI
+  // thread across worker calls. End is idempotent for the last completed token.
+  // Unsupported backends cannot promise an exclusive editor restoration.
+  virtual std::optional<uint64_t> beginEditorInputBarrier() {return {};}
+  virtual bool endEditorInputBarrier(uint64_t) {return false;}
   virtual PluginFailure failure() const noexcept { return {}; }
 };
 class PluginBackendFactory {

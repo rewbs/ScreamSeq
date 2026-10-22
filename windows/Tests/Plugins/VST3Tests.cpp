@@ -16,7 +16,18 @@ static std::wstring wide(const std::string &s){auto n=MultiByteToWideChar(CP_UTF
 static std::string utf(const std::filesystem::path &p){auto s=p.u8string();return {reinterpret_cast<const char*>(s.data()),s.size()};}
 template<class T>static T symbol(HMODULE dll,const char *name){auto p=reinterpret_cast<T>(GetProcAddress(dll,name));check(p!=nullptr,"fixture export missing");return p;}
 int main(int argc,char **argv){try{
- check(argc==4,"arguments");USHORT emulated=0,native=0;check(IsWow64Process2(GetCurrentProcess(),&emulated,&native)&&native==IMAGE_FILE_MACHINE_ARM64&&emulated==IMAGE_FILE_MACHINE_UNKNOWN,"not running native ARM64");std::cout<<"native-machine=ARM64, process=not-emulated\n";WindowsVST3::configure(argv[1],argv[3]);
+ check(argc==4,"arguments");
+#if defined(_M_ARM64)
+ constexpr USHORT expectedMachine=IMAGE_FILE_MACHINE_ARM64;
+#elif defined(_M_X64)
+ constexpr USHORT expectedMachine=IMAGE_FILE_MACHINE_AMD64;
+#else
+#error Native VST3 qualification requires a supported 64-bit Windows target
+#endif
+ USHORT emulated=0,native=0;
+ check(IsWow64Process2(GetCurrentProcess(),&emulated,&native)&&native==expectedMachine&&emulated==IMAGE_FILE_MACHINE_UNKNOWN,
+   "VST3 fixture must run natively on the compiled architecture");
+ std::cout<<"native-machine="<<native<<", process=not-emulated\n";WindowsVST3::configure(argv[1],argv[3]);
  auto descriptors=WindowsVST3::rescan(argv[2]);check(descriptors.size()==4,"real fixture DLL must expose four exact classes");
  check(descriptors[0].classID=="5245534F4E414E434546464543540001","canonical FUID class identity");
  PluginState effect{descriptors[0]};auto &factory=platformPluginBackendFactory();

@@ -44,6 +44,9 @@
         if(!editor||editor->retired()){editor=std::make_unique<ScreamSeq::PluginParametersWindow>(window,plugin,found->at("name").get<std::string>(),
             [this](const auto &method,const auto &params){return documentOperation(method,params);},[this]{return std::pair(documentId,view->session.revision);},
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},[this]{return !busy&&!recoveryRestoring;});
+            const auto document=documentId;
+            editor->recording([this,document,plugin]{return capturesParameterControl(document,plugin);},
+                [this,document,plugin](uint32_t parameter,double value,uint64_t time){captureParameterControl(document,plugin,parameter,value,time);});
             if(songRoutingWindow&&songRoutingWindow->visible()){
                 RECT graph{},panel{};GetWindowRect(songRoutingWindow->window(),&graph);GetWindowRect(editor->window(),&panel);
                 MONITORINFO monitor{sizeof(monitor)};if(GetMonitorInfoW(MonitorFromWindow(songRoutingWindow->window(),MONITOR_DEFAULTTONEAREST),&monitor)){

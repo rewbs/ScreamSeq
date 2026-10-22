@@ -8,7 +8,27 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**Latest executed boundary: `55d11e131`.** One six-target Windows ARM64 build
+**21 October Pacific / 22 October UTC update:** main is
+`4e4862bcc575795bd736fe5edc126f8e873f1d24`. The approved navigation/flicker batch
+is merged and its production navigation package is available; see
+[navigation evidence](NAVIGATION-IMPLEMENTATION-2026-10-21.md). The next working
+batch is native plugin parameter controls, retained gesture recording and detached
+input recovery. Its corrected code is backed up through `24355c4f2`; read the
+[current recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) before touching
+its checkpoint. The hourly gate is **2026-10-22 04:55:42 UTC**. The preceding
+Windows compile failure is terminal; both preceding Mac jobs are terminal passes.
+Do not poll/restart them or treat them as qualification of the newer source.
+
+The immediate queue is: build the clean frozen correction once; inspect bounded
+native and actual-app results; perform Computer Use on that executable, including
+keyboard focus and silent recording; qualify current x64/Mac adapters and fresh
+reciprocal edited fixtures; package and merge only the qualifying result. Continue
+the larger reference inventory afterward. Native graph recipe copies are not
+recorded by the rack workflow, seven new live recording APIs remain Windows-only,
+and broader accessibility/device/temporal performance qualification remains open.
+The older chronological entries below do not describe the current branch state.
+
+**Historical executed boundary: `55d11e131`.** One six-target Windows ARM64 build
 completed at 23:09:35 UTC. Eleven selected CTest registrations and the
 private-desktop vendor-ownership case passed, with one unchanged recipe-test
 rerun after foreground QA interfered with its foreground-preservation guard.

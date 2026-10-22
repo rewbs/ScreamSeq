@@ -16,6 +16,16 @@ ScreamSeq is an independent tracker DAW built on the OpenMPT playback engine, de
 
 The renderer and document are separate. Edits occur on the document worker; playback owns its prepared copy. AppKit controls belong to the main thread. Plugins and graph recipes must be prepared outside audio processing, and unsafe structural mutations must not race a live renderer. Do not move Foundation/AppKit into portable `editor/` code.
 
+The internal Windows parameter-take path retains original native control values and
+host timestamps in `App/ParameterControlDelivery.hpp`, submitting asynchronously to
+the serial worker with per-call receipts. Shared `editor/hosted/ControlInputRecovery.hpp`
+defines detached recovery evidence for pending/refused/unknown delivery in the optional
+`screamseqPluginControlRecovery` preservation array. This is never replayable input:
+an uncertain native event may already be present in the worker's gesture archive.
+Native UI queues and worker snapshots remain control-owner work. This source batch
+still awaits qualification and a public capture/review UI; see the
+[plugin recording report](windows-parity-plan-2026-10-09/PLUGIN-GESTURE-RECOVERY-2026-10-21.md).
+
 Native voice positions are published by `Renderer` through bounded atomic snapshots. UI/API readers consume sample frames and volume/pan/pitch envelope ticks without reading live engine channels or blocking audio. `pattern.timeline.get` uses the editor-only `GetLengthTarget.onRow` observer on the document worker to collect first-visit times in one engine walk; never calculate row timing in drawing or from a fixed BPM assumption. The ruler's order occurrence matters when a pattern repeats.
 
 A non-master mixer bus may have output zero to disconnect its main route while retaining sends and processors. Such projects require native metadata 15; ordinary connected projects retain their existing metadata requirements. Deleting a disconnected group moves its retained inserts/plugin outputs to master and leaves formerly connected child main outputs disconnected.
@@ -49,6 +59,18 @@ The native metadata17 `scratchGestures` array is optional on read and canonical 
 The native Mac scratch editor shares `AutomationCanvas` and the formula workbench; the Windows editor uses Win32 controls and Direct2D paired curves. Optional canvas units/endpoint limits preserve the normal automation editor's defaults. Scratch formula previews use `scratchBeats` so formula beat variables match the runtime cycle duration. `scratch.gestures.clone` optionally replaces one captured SK reference in the same history transaction. Captured navigation uses stable pattern/track identities; resolving Return or Preview does not rebase a guarded pattern mutation. See [Scratch phrases](SCREAMSEQ_SCRATCH_PHRASES.md) for musical semantics and boundaries.
 
 ## Build and qualification
+
+Imported plugin input evidence is reviewed through the pure shared
+`editor/hosted/PluginInputRecoveryReview.hpp` catalogue/page helpers. They validate
+one selected archive, preserve original event order/timestamps and never restore a
+live take or publish music. Native owners must guard document/revision before
+resolving an archive's collection index. Unsupported collections and versions stay
+opaque in the project. Windows's worker and the Mac session expose the same two
+read methods. Mac uses `ProjectMetadata::importedMetadata()` as a const view of
+detached import evidence, excluding owned module/plugin state; it never rebuilds
+the current musical model to read an archive. Windows also provides a retained
+native review window. Implementation and execution evidence remain tracked in
+`doc/windows-parity-plan-2026-10-09/PLUGIN-GESTURE-RECOVERY-2026-10-21.md`.
 
 Windows: `./windows/build.ps1 -Architecture ARM64 -BuildDirectory bin/windows-dev -Test`.
 Use `-Fresh` after a failed initial compiler configuration. The app and VST3 scanner

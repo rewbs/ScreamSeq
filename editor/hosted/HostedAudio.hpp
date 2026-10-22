@@ -338,6 +338,12 @@ public:
   bool popEdit(PluginEdit &) noexcept;
   bool popEdit(PluginEdit &,PluginEditSource &) noexcept;
   PluginEditSource editSource() const noexcept;
+  // Built-ins have no vendor notification queue. Their native adapter supplies
+  // its original host-clock cut; native backends establish their own cut.
+  std::optional<PluginEditBoundary> editBoundary(uint64_t hostOnlyTime=0);
+  std::optional<PluginEditorInputBarrier> beginEditorInputBarrier();
+  bool endEditorInputBarrier(PluginEditorInputBarrier);
+  PluginEditRead popEditBefore(const PluginEditBoundary &,PluginEdit &,PluginEditSource &) noexcept;
   uint64_t droppedEdits() const noexcept;
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };
@@ -662,6 +668,10 @@ public:
   // Restore CURRENT accepted values for these IDs, not a gesture's old copy.
   // Allocation/preparation may throw; queue refusal leaves every preview intact.
   bool cancelParameterPreviews(size_t slot,std::span<const uint32_t> ids);
+  struct ParameterPreviewTarget {uint32_t slot=0,id=0;bool operator==(const ParameterPreviewTarget &)const=default;};
+  // One publication across the whole take. Native adapters resolve stable IDs
+  // against the retained host before calling; no prefix may restore on refusal.
+  bool cancelParameterPreviews(std::span<const ParameterPreviewTarget> targets);
   bool bypass(size_t slot,bool value) noexcept;
   size_t bypassStorageBytes() const noexcept;
   // Pair with process(): instrument/mixer/effect stages see the same boundary.

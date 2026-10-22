@@ -5,6 +5,20 @@ static void recordedGestureCapture() {
   auto second=gain();second.instanceID="other-gain";
   const std::vector<PluginState> rack={gain(),second};
   NativePlugin provider(rack[0],48000,true);const auto catalog=provider.parameters();
+  {
+    check(!provider.editBoundary(),"Built-in notification boundary invented a platform timestamp");
+    const auto boundary=provider.editBoundary(1234);
+    check(boundary&&boundary->source==provider.editSource()&&!boundary->fence.pending&&boundary->fence.hostTime==1234,
+      "Built-in control-only boundary lost native time or provider identity");
+    PluginEdit event;PluginEditSource source;
+    check(provider.popEditBefore(*boundary,event,source)==PluginEditRead::Complete&&source==boundary->source,
+      "Built-in control-only source did not acknowledge its empty native queue");
+    auto invalid=*boundary;invalid.fence.position=1;
+    check(provider.popEditBefore(invalid,event,source)==PluginEditRead::InvalidFence,"Built-in source accepted a vendor queue position");
+    const auto lease=provider.beginEditorInputBarrier();NativePlugin replacement(rack[0],48000,true);
+    check(lease&&!lease->token&&provider.endEditorInputBarrier(*lease)&&!replacement.endEditorInputBarrier(*lease),
+      "Built-in no-editor lease lost its actual incarnation");
+  }
   const RecordedGestureCapture::Key key{"fixture","revision-1","recorded-gain",1,7,9,1000};
   const std::vector<ParameterChange> before={{0,1,-6,240},{1,1,-3,120}};
   for(const uint32_t rate:{44100u,48000u,96000u}) {
@@ -36,6 +50,18 @@ static void recordedGestureCapture() {
     })&&capture.retired(),"Captured gesture did not publish through the real recorded timeline");
     settled(chain,-15);
     rejects([&]{capture.publish(prepared,[](const auto &,bool){return true;});});
+  }
+  for(const uint32_t rate:{44100u,48000u,96000u}) {
+    auto mixedClock=std::make_shared<RecordingFrameTimeline>();
+    check(mixedClock->publish(1000,11000,0,rate/100,rate,7),"Mixed-source capture clock failed");
+    RecordedGestureCapture mixed(key,mixedClock,rack,before,document.native(),catalog,2);
+    mixed.append({1,-12,1050},7,9);mixed.append({1,-9,1049},7,9);mixed.seal(1060);
+    auto result=mixed.prepare(key.revision,7,9,rack,document.native(),catalog);
+    check(result.points().size()==before.size()+1&&result.points().back()==ParameterChange{0,1,-12,2}&&
+      std::equal(before.begin(),before.end(),result.points().begin()),"Older delayed input overwrote a newer point in the same canonical frame");
+    mixed.append({1,-18,1050},7,9);result=mixed.prepare(key.revision,7,9,rack,document.native(),catalog);
+    check(mixed.events().size()==3&&result.points().back()==ParameterChange{0,1,-18,2},
+      "Same original timestamp lost its last-input tie-breaker or raw evidence");
   }
   auto clock=std::make_shared<RecordingFrameTimeline>();
   check(clock->publish(1000,1200,0,960,48000,7),"Capture safety clock failed");

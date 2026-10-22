@@ -72,7 +72,7 @@
                 {mixerAddReturn,L"Add return"},{mixerDetailsCommand,L"Bus details…"}}};
         } else if(plugins) {
             contextPanelTitle=L"PLUGIN RACK";
-            contextActions={{{pluginBrowse,L"Add plugins…"},{pluginEditor,L"Plugin editor…",!selectedPlugin.empty()},
+            contextActions={{{pluginBrowse,L"Add plugins…"},{pluginParametersCommand,L"Parameter controls…",selectedPluginSlot()>=0},
                 {pluginAutomate,L"Automate parameter…",hasPluginParameterTarget()},
                 {pluginActivity,L"Parameter activity…",hasPluginParameterTarget()},
                 {pluginAliases,L"Instrument assignments…",!selectedPlugin.empty()},{mixingGraphPanelCommand,L"Song mixing graph panel"}}};

@@ -704,6 +704,9 @@ class WorkspaceShortcutTests(unittest.TestCase):
         edit = self.field(tool, 4207, '3e')
         self.focus_control(edit)
         before = self.doc()
+        # Pattern navigation owns Ctrl+Alt+P by default. Release it explicitly
+        # before exercising a user remap; prefix conflicts must stay rejected.
+        self.bind(647, [])
         self.bind(545, ['ctrl+alt+p'])
         self.assertTrue(self.read('transport.get')['playing'])
         self.assertTrue(self.read('transport.get')['audioActive'])

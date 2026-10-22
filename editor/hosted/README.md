@@ -21,7 +21,8 @@ vendor SDK types appear in these public headers or `PluginBackend.hpp`.
   compatibility constant is the persisted `aumu` FourCC, not an SDK type.
 - `mac/Audio/AudioUnitHost.mm` now holds only a private `MacPluginBackend`, AU
   storage/callbacks/editor/state code and the Mac AU/VST3 factory. Existing
-  `VST3Host.mm` remains unchanged. Mac CMake compiles these into TrackerHosted;
+  `VST3Host.mm` retains native VST3 integration while sharing audible mailboxes
+  and original-time notification queues. Mac CMake compiles these into TrackerHosted;
   TrackerPlugins forwards to that target instead of building another scheduler.
   That forwarding target is an interface, not an archive. Direct Swift compiler
   invocations in `mac/build.sh` and `mac/test-shutdown.sh` link `TrackerHosted`
@@ -30,6 +31,31 @@ vendor SDK types appear in these public headers or `PluginBackend.hpp`.
 
 All existing OpenMPT/ScreamSeq attribution and repository licensing still apply.
 This extraction does not change the project storage format or stable class IDs.
+
+### Original-time editor boundaries
+
+`LatestParameterEdits` coalesces audible values. `PluginEditQueue` separately
+retains all accepted notifications, including identical timestamps and unknown
+time zero, in the existing 8192-event capacity. Its single native UI producer and
+single control consumer must not be confused with a multi-producer queue.
+Platform adapters retain validation and overflow behavior: Windows still faults
+on raw FIFO overflow; Mac counts the dropped notification and continues audible
+delivery. Neither queue belongs to persistence or UI layout.
+
+`NativePlugin::editBoundary()` asks the VST3 native owner for a queue position,
+host timestamp and loss count, coupled to the actual provider incarnation.
+`popEditBefore()` drains that fixed cut across bounded polling turns without
+consuming a later gesture. A consumed or replaced-provider boundary is rejected.
+Capture can dispatch and throw on the control owner; it must never run in audio.
+Draining only copies prepared values. Existing ordinary `popEdit` remains valid.
+
+This is an input cut, not a freeze of the vendor UI or a complete recording
+transaction. The session still owns arming, native-control admission, Stop,
+preview restoration, post-stop input, recovery, commit/discard and history.
+The AU backend and built-ins currently report unsupported boundaries; their
+existing edit paths are unchanged. Never manufacture a boundary for them from
+poll time or an empty read. The new implementation requires the shared queue,
+Windows edit-notification and Mac plugin-robustness gates before qualification.
 
 ## Exact platform-provider contract
 
@@ -174,3 +200,14 @@ program/editor lifetime and transport host callbacks. Review the private backend
 storage move, the per-slice auxiliary copy, double parameter forwarding and the
 TrackerPlugins forwarding target. Source integration is not Mac runtime
 qualification: a real Mac-to-Windows-to-Mac project round trip is still required.
+
+### Pending manual input at arming
+
+Native VST3 input cuts now include the unread notification count. The serialized
+consumer is held while the native producer captures that count. Windows checks
+all provider cuts after catalog preparation, before claiming a recording take;
+an unflushed callback, changed provider/loss counter or invalid clock boundary
+refuses without consuming the callback, creating history or calling preview.
+Earlier input remains available to ordinary manual capture. This supplements,
+and does not replace, the session's native arming/restoration barrier contract.
+No cut/count is written to project metadata.

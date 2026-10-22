@@ -37,6 +37,7 @@
     string(method, 80);
     object(p);
     NSArray *reads = @[
+      @"automation.recovery.list", @"automation.recovery.get",
       @"graph.plugin.preview.get",
       @"sample.recording.devices", @"sample.recording.get",
       @"parameter.activity.targets", @"parameter.activity.parameters", @"parameter.activity.get", @"parameter.activity.sources", @"automation.recorded.get", @"envelope.bank.list", @"scratch.gestures.get", @"envelope.catalogue.list", @"transport.get", @"automation.formula.preview", @"automation.formula.reference", @"graph.provenance.get", @"graph.note.activity", @"graph.get", @"graph.selection.copy", @"graph.trim.get", @"graph.group.boundary", @"graph.signal.get", @"graph.scope.get", @"graph.listen.get", @"graph.automation.get", @"graph.plugin.get",
@@ -137,11 +138,15 @@
     } else if ([method isEqual:@"automation.formula.reference"]) {allowed(@[]);result=[TrackerSession formulaReference];
 #include "EnvelopeBankAPI.inc"
 #include "ScratchGestureAPI.inc"
+#include "PluginRecoveryReviewAPI.inc"
     } else if ([method isEqual:@"api.describe"]) {
       allowed(@[]);
       result = @{
         @"protocol" : @"ScreamSeq local API",
         @"version" : @1,
+        @"pluginInputRecovery" : @{@"methods":@[@"automation.recovery.list",@"automation.recovery.get"],
+          @"expectedRevision":@"Get requires the current song revision before selecting a detached archive by kind/index",
+          @"semantics":@"Read-only shared original-input archives; no clock remapping, take rearming, playback or history change. Header support does not imply complete archive validation."},
         @"reads" : [reads arrayByAddingObject:@"context.get"],
         @"writes" : [writes arrayByAddingObject:@"context.set"],
         @"coordinates" : @"Patterns, rows, channels, orders and plugin slots are zero-based. Samples and instruments "

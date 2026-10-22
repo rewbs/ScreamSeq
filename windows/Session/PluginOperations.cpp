@@ -1,4 +1,8 @@
 #include "PluginOperations.hpp"
+#include "windows/Plugins/UiOwner.hpp"
+#include "windows/Audio/HostClock.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
+#include "RecordedGestureRecovery.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/ParameterBaseline.hpp"
 #include "editor/hosted/PluginAudioLayout.hpp"
@@ -138,8 +142,8 @@ bool PluginOperations::commitRecordedGestures(std::span<RecordedGestureCapture *
   });
   return candidate.changed();
 }
-std::vector<std::string> PluginOperations::reads(){return {"graph.plugin.preview.get","plugin.parameters.preview.get","plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
-std::vector<std::string> PluginOperations::writes(){return {"graph.plugin.preview.set","graph.plugin.preview.commit","graph.plugin.preview.cancel","plugin.parameters.preview.set","plugin.parameters.preview.commit","plugin.parameters.preview.cancel","automation.replaceLane","automation.recorded.edit","automation.recorded.clear","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
+std::vector<std::string> PluginOperations::reads(){return {"automation.recording.get","automation.recording.events","automation.recovery.list","automation.recovery.get","graph.plugin.preview.get","plugin.parameters.preview.get","plugin.discover","plugin.library.get","plugin.path.get","graph.plugin.path.get","plugin.parameters.get","plugin.state.get","plugin.buses.get","plugin.instruments.get","plugin.programs.get","plugin.preset.inspect","automation.target.get","automation.get","automation.recorded.get","graph.plugin.get"};}
+std::vector<std::string> PluginOperations::writes(){return {"automation.recording.start","automation.recording.capture","automation.recording.stop","automation.recording.commit","automation.recording.discard","graph.plugin.preview.set","graph.plugin.preview.commit","graph.plugin.preview.cancel","plugin.parameters.preview.set","plugin.parameters.preview.commit","plugin.parameters.preview.cancel","automation.replaceLane","automation.recorded.edit","automation.recorded.clear","plugin.add","plugin.duplicate","plugin.library.set","plugin.path.scan","plugin.path.set","graph.plugin.path.scan","graph.plugin.path.set","plugin.remove","plugin.move","plugin.bypass","plugin.assign","plugin.parameters.set","plugin.state.set","plugin.buses.set","plugin.instruments.set","instrument.plugin.set","plugin.programs.load","plugin.preset.save","plugin.preset.load","plugin.editor.open","plugin.editor.close","graph.plugin.set","graph.plugin.bypass","graph.plugin.preset.save","graph.plugin.preset.load","graph.plugin.editor.open","graph.plugin.editor.commit","graph.plugin.editor.close"};}
 void PluginOperations::prepareRecipe(Tracker::GraphPluginRecipe &recipe) {
   Tracker::PluginState state;state.descriptor={recipe.type,recipe.subtype,recipe.manufacturer,recipe.name,recipe.format,recipe.path,recipe.classID,false};
   state.state=recipe.state;state.audioLayout=recipe.audioLayout;state.auxiliaryInputs=recipe.inputs;state.auxiliaryOutputs=recipe.outputs;
@@ -336,6 +340,11 @@ bool PluginOperations::flushEditors(bool force) {
   const bool graphClosed=graphEditorWindowOpen_&&graphEditor_&&!graphOpen;
   if(graphClosed)graphEditorWindowOpen_=false;
   (void)pollRecordedEditors();
+  // Other native windows may still send manual input while a selected set is
+  // recording. Defer that intake as well: advancing the musical revision from
+  // a background inspector read would invalidate the owned take. Their queues
+  // remain intact and ordinary capture resumes after explicit release.
+  if(recordedEditors_)return graphClosed;
   if(openEditors_.empty())return graphClosed;
   const auto &rack=project_.preserved.at("plugins");
   const auto now=std::chrono::steady_clock::now();

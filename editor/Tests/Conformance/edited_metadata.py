@@ -40,6 +40,35 @@ def run(client, output):
                     date=datetime.datetime(2024, 2, 29, 12, 34, 56),
                     uid=plistlib.UID(281474976710657), boolean=True)
     key = "parityEditedOpaque"
+    # Detached plugin input is evidence, not live automation. Its captured rack
+    # order and frames must survive even when the current rack is reordered or
+    # a provider disappears. Reopening must never rearm old host timestamps.
+    gesture_archive = dict(version=1, reviewOnly=True, take="parity-gesture-take",
+        revision="original-process:revision", playbackEpoch="9007199254740993",
+        startTime="1000", stoppedEndTime="1600", completed=False,
+        failure="provider", rejected="18446744073709551615", rack=plugin_ids,
+        baseline=[dict(slot=p[0], parameter=p[1], value=p[2], frame=str(p[3])) for p in original["automation"]],
+        providers=[dict(plugin=plugin_id, incarnation="9007199254740995",
+                        initialDropped="3", dropped="5", drained=False)],
+        targets=[dict(plugin=plugin_id, parameter=1, minimum=-60.0, maximum=12.0,
+            sourceLoss="2", overflow="0", unmapped=2, events=[
+                dict(hostTime="1700", value=-12.0),
+                dict(hostTime="1500", value=-9.0, frame="240"),
+                dict(hostTime="1500", value=-6.0, frame="240"),
+                dict(hostTime="0", value=-3.0)])])
+    # Native delivery can be uncertain even when the worker already accepted
+    # the same gesture. Preserve both observations exactly; never replay either
+    # detached archive or remove it when the current rack provider is deleted.
+    control_archive = dict(version=1, reviewOnly=True,
+        document="original-process:document", revision="original-process:revision",
+        take="parity-gesture-take", accepted="9007199254740993", lost="2",
+        previewError="Owned preview refusal", events=[
+            dict(plugin=plugin_id, parameter=1, value=-9.0,
+                 hostTime="9007199254740995", state="pending", error=""),
+            dict(plugin=plugin_id, parameter=1, value=-6.0,
+                 hostTime="9007199254740995", state="unknown", error="Completion unavailable"),
+            dict(plugin=plugin_id, parameter=1, value=-3.0,
+                 hostTime="18446744073709551615", state="refused", error="Not queued")])
     report = dict(format="screamseq-edited-metadata-v1", passed=False, parityComplete=False,
                   qualificationScope="Paired native edits and exact typed persistence; no reciprocal or foreground claim",
                   sourceSHA256=sha256(original_bytes), toolSHA256=sha256(read_bytes(Path(__file__))),
@@ -48,6 +77,12 @@ def run(client, output):
 
     def extended(tree):
         tree = copy.deepcopy(tree)
+        if "screamseqPluginGestureRecovery" in tree:
+            raise EvidenceError("Plugin gesture probe collides with existing recovered input")
+        tree["screamseqPluginGestureRecovery"] = [copy.deepcopy(gesture_archive)]
+        if "screamseqPluginControlRecovery" in tree:
+            raise EvidenceError("Native control probe collides with existing recovered input")
+        tree["screamseqPluginControlRecovery"] = [copy.deepcopy(control_archive)]
         # Inject only into identities that survive in the clean expected tree.
         # This checks deletion without resurrecting data and Undo restoration.
         targets = [("root", tree), ("native", tree["native"])]
@@ -91,6 +126,27 @@ def run(client, output):
         report["stages"].append(dict(leg=leg, stage=stage, file=path.name,
                                      sha256=immutable[path], typedSHA256=digest(tree), comparison=comparison))
         require(comparison["equal"], f"{leg}/{stage}: unexpected typed metadata change")
+        if leg == "opaque" and stage in ("baseline", "rack-remove", "reopened"):
+            before = call("document.get")
+            catalogue = call("automation.recovery.list")["data"]
+            require(catalogue["total"] == 2 and all(e["headerSupported"] for e in catalogue["entries"]),
+                    "Detached input catalogue omitted a valid independent archive")
+            for kind, archive in (("gestures", gesture_archive), ("nativeControls", control_archive)):
+                page = call("automation.recovery.get", dict(expectedRevision=before["revision"],
+                            kind=kind, index=0, limit=512))["data"]
+                events = archive["targets"][0]["events"] if kind == "gestures" else archive["events"]
+                require(page["reviewOnly"] and page["total"] == len(events), "Detached review lost original inputs")
+                require(page["summary"]["revision"] == archive["revision"], "Original revision was remapped to current song")
+                for expected_event, actual in zip(events, page["events"]):
+                    require(all(actual[k] == value for k, value in expected_event.items()),
+                            "Detached review changed original timestamps, values or delivery state")
+                    require(actual["plugin"] == plugin_id, "Detached input followed a reordered/removed rack slot")
+                if kind == "gestures":
+                    require(page["summary"]["rejected"] == archive["rejected"] and
+                            page["summary"]["playbackEpoch"] == archive["playbackEpoch"], "Gesture review narrowed original loss or epoch")
+                else:
+                    require(page["summary"]["accepted"] == archive["accepted"], "Native input review narrowed accepted count")
+            require(call("document.get") == before, "Detached review changed music, history or document identity")
         return path, tree
 
     try:

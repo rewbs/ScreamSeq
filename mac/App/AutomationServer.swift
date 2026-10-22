@@ -238,7 +238,7 @@ final class AutomationServer {
       // no base64 or JSON encoding of plugin/sample data happens on the main thread.
       let count = requestBytes * 20 + 4096
       // Busy requests are retryable. Large results are not retained in memory.
-      if !method.hasSuffix(".get"), !["parameter.activity.targets", "parameter.activity.parameters", "parameter.activity.sources", "api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
+      if !method.hasSuffix(".get"), !["automation.recovery.list", "parameter.activity.targets", "parameter.activity.parameters", "parameter.activity.sources", "api.describe", "plugin.discover", "plugin.preset.inspect", "pattern.commands", "automation.pattern.copy", "arrangement.matrix", "plugin.meters", "mixer.meters", "sample.library.search", "sample.library.inspect"].contains(method),
         (body["error"] as? [String: Any])?["code"] as? Int != -32002, count <= 4 * 1024 * 1024
       {
         self.cache[id] = (digest, response, count)

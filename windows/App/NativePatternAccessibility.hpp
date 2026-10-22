@@ -1,8 +1,10 @@
 #pragma once
 #include <windows.h>
 #include <UIAutomation.h>
+#include <oleacc.h>
 #include <atomic>
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <new>
@@ -58,6 +60,21 @@ class Node final : public IRawElementProviderSimple,public IRawElementProviderFr
       row_>=0&&row_<info.rows&&column_>=0&&column_<info.columns);
   }
   Node *make(Kind kind,const Info &info,int row=0,int column=0){return new Node(context_,kind,info,row,column);}
+  // The grid shares Main with standard HWND controls and owned inspectors.
+  // Returning Main (or no fragment) for their focus conceals the native field
+  // from UIA. Delegate to Windows' MSAA/UIA bridge, preserving its text/value
+  // and selection implementation rather than inventing another edit provider.
+  HRESULT nativeFragment(HWND window,IRawElementProviderFragment **value)const {
+    if(!window||window==context_->window||GetWindowThreadProcessId(window,nullptr)!=context_->thread||
+        GetAncestor(window,GA_ROOTOWNER)!=context_->window)return S_OK;
+    IAccessible *accessible=nullptr;
+    auto result=AccessibleObjectFromWindow(window,OBJID_CLIENT,IID_IAccessible,reinterpret_cast<void **>(&accessible));
+    if(FAILED(result)||!accessible)return FAILED(result)?result:S_OK;
+    IRawElementProviderSimple *provider=nullptr;
+    result=UiaProviderFromIAccessible(accessible,CHILDID_SELF,UIA_PFIA_DEFAULT,&provider);accessible->Release();
+    if(FAILED(result)||!provider)return FAILED(result)?result:S_OK;
+    result=provider->QueryInterface(IID_PPV_ARGS(value));provider->Release();return result;
+  }
   static HRESULT string(const std::wstring &text,VARIANT *value) {
     value->vt=VT_BSTR;value->bstrVal=SysAllocStringLen(text.data(),UINT(text.size()));return value->bstrVal?S_OK:E_OUTOFMEMORY;
   }
@@ -153,13 +170,20 @@ public:
   }
   HRESULT STDMETHODCALLTYPE ElementProviderFromPoint(double x,double y,IRawElementProviderFragment **value)override {
     if(!value)return E_POINTER;*value=nullptr;return safe([&]()->HRESULT{
-      const auto info=context_->read();const auto hit=context_->callbacks.hit(x,y);
+      const auto info=context_->read();
+      // The fragment owns only this HWND. Returning Main for a point outside
+      // it prevents UIA clients from correctly resolving another window.
+      if(!std::isfinite(x)||!std::isfinite(y)||x<info.windowBounds.left||y<info.windowBounds.top||
+          x>=info.windowBounds.left+info.windowBounds.width||y>=info.windowBounds.top+info.windowBounds.height)return S_OK;
+      const auto hit=context_->callbacks.hit(x,y);
       if(info.visible&&hit.first>=0&&hit.first<info.rows&&hit.second>=0&&hit.second<info.columns)*value=make(Kind::cell,info,hit.first,hit.second);
       else if(info.visible&&x>=info.bounds.left&&x<info.bounds.left+info.bounds.width&&y>=info.bounds.top&&y<info.bounds.top+info.bounds.height&&hit.first!=-2)*value=make(Kind::grid,info);
       else {*value=static_cast<IRawElementProviderFragment *>(this);AddRef();}return S_OK;});
   }
   HRESULT STDMETHODCALLTYPE GetFocus(IRawElementProviderFragment **value)override {
     if(!value)return E_POINTER;*value=nullptr;return safe([&]()->HRESULT{const auto info=context_->read();
+      const auto focused=::GetFocus();
+      if(focused&&focused!=context_->window)return nativeFragment(focused,value);
       if(info.visible&&info.focused&&info.row>=0&&info.row<info.rows&&info.column>=0&&info.column<info.columns)*value=make(Kind::cell,info,info.row,info.column);return S_OK;});
   }
   HRESULT STDMETHODCALLTYPE GetItem(int row,int column,IRawElementProviderSimple **value)override {

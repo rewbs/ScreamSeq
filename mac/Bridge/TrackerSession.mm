@@ -26,6 +26,7 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
 #include "editor/hosted/RecordedCapture.hpp"
+#include "editor/hosted/PluginInputRecoveryReview.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/PluginNoteSources.hpp"

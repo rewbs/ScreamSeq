@@ -1,5 +1,62 @@
 # Windows local API subset
 
+## Plugin automation recording and recovered input review
+
+Open **Playback → Plugin automation take…** or **Tools → Automation → Plugin
+automation take…**. Both this window and **Recovered plugin inputs…** are also
+in the separate-windows menu and command palette; opening them retains the
+Pattern layout. Start playback, choose rack plugins, then Record. Changes in
+native rack parameter controls and supported vendor editors retain original
+event times. Graph recipe copies are independent and are not armed by this
+workflow. Stop take leaves playback running. Keep publishes one chronological
+Undo step; Discard restores the transient baseline without adding history.
+Closing the review window only hides it. A retained take protects song departure.
+
+[plugin-recording.schema.json](plugin-recording.schema.json) specifies the
+Windows adapter; use `api.describe` before calling it. The underlying take,
+musical timing, history and persisted automation are shared. The detached recovery
+reads are also exposed by the Mac adapter. The seven new live recording lifecycle
+request names remain Windows-specific; Mac retains its native recording path.
+
+- `automation.recording.get {}` returns the retained take, original `startTime`,
+  optional `endTime`, playback epoch, target counts and loss. `hostTime` is the
+  current Windows QPC clock in 100 ns units (`clock: windows-qpc-100ns`); all
+  clock values are decimal strings. Reading an absent take does not arm one.
+  Retained takes also report `transportPlaying` and `discardable`; a clock/context
+  failure may prevent a normal Stop cut, but explicit Discard remains available
+  once transport has actually stopped. Provider restoration can still retain it.
+- `automation.recording.start {expectedRevision, plugins}` arms distinct stable
+  rack identities during timed playback. Finish competing takes, manual drafts
+  and previews first. It does not change song history.
+- `automation.recording.capture {expectedRevision, take, plugin, parameter,
+  value, timestamp}` submits original native input once. Use the same host clock
+  at the actual input event; never replace its time with a retry time. A returned
+  `accepted:true` remains accepted if `intakeError` reports preview failure.
+- `automation.recording.events {take, plugin, parameter, offset?, limit?}` pages
+  original values/timestamps and mapped frame strings at 48 kHz; `frame:null`
+  means timing is unavailable. Default page size is 128, maximum 512.
+- `automation.recording.stop`, `.commit` and `.discard` require
+  `{expectedRevision, take}`. Stop seals input. Commit additionally accepts
+  `acknowledgeLoss:true` after reviewing refused/unmapped/lost input. Pending
+  native delivery still blocks finishing. Commit requires a stopped take.
+  A `completed:true, retained:true` result means music was already committed but
+  native restoration needs finishing; it must not create a second Undo step.
+  A transport/clock failure retains evidence for recovery or explicit Discard.
+- `automation.recovery.list {offset?, limit?}` lists detached archive headers
+  (default 64, maximum 128). `headerSupported` is not full validation.
+  `automation.recovery.get {expectedRevision, kind, index, offset?, limit?}`
+  validates one complete archive, then pages its original inputs. `kind` is
+  `gestures` or `nativeControls`; `index` is per kind, not the catalogue row.
+  Unsupported archives remain visible and do not hide valid independent ones.
+
+Save a recovery copy before abandoning evidence that cannot be kept. Imported
+archives are read only: their old clock, IDs, native values and loss counters
+remain intact, and opening them never rearms or replays input. Canonical native
+saves retain them alongside the shared recorded music. Review uncertain write
+receipts and current state before another action; exact terminal request replay
+uses the existing bounded API cache, not a second recording write. Successful
+reads do not imply a new song revision. No lifecycle method accepts `dryRun`.
+
 `document.exportModule {expectedRevision, path, overwrite?, dryRun?}` exports the
 current MOD/XM/S3M/IT/MPTM format to an absolute path with its matching extension.
 It validates the actual module bytes before atomic publication; `overwrite`

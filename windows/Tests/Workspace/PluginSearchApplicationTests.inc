@@ -1,3 +1,62 @@
+void applicationParameterRecordingAdmission() {
+    RestoreFixture fixture;auto &app=*fixture.app;addRestoreGain(app);
+    app.openSongProperties();const auto tool=app.songPropertiesWindow->window();ScreamSeq::Tests::ownGuiWindow(tool);
+    const auto title=GetDlgItem(tool,8601);SetFocus(title);SendMessageW(title,EM_SETSEL,2,5);
+    const auto before=controlState(title),music=songState(app);
+    for(const auto *method:{"automation.recording.start","automation.recording.stop","automation.recording.commit","automation.recording.discard"}) {
+        bool threw=false;
+        try {
+            Application::ParameterRecordingInputLease lease(app,method);
+            restoreCheck(ScreamSeq::NativeInputGate::protectedWindow(title),"Recording boundary missed floating native fields");
+            SetWindowTextW(title,L"Must not replace the retained field");SendMessageW(title,WM_CHAR,'X',0);
+            SendMessageW(tool,WM_COMMAND,MAKEWPARAM(8605,BN_CLICKED),0);
+            restoreCheck(controlState(title)==before&&GetFocus()==title,"Recording boundary changed raw native text, selection or focus");
+            MSG key{};key.hwnd=title;key.message=WM_KEYDOWN;key.wParam=VK_BACK;
+            restoreCheck(app.filterDepartureMessage(key),"Recording boundary leaked queued keyboard input");
+            bool rejected=false;try{app.documentOperation("document.patch",{{"expectedRevision",app.view->session.revision},{"title","Nested write"}});}
+            catch(const ScreamSeq::Api::ApiError &error){rejected=error.code==-32002;}
+            restoreCheck(rejected,"Recording boundary admitted a reentrant API write");
+            restoreRejected([&]{app.workspace("workspace.layout",{{"name","Pattern focus"}});});
+            restoreRejected([&]{Application::ParameterRecordingInputLease nested(app,method);});
+            throw std::runtime_error("Owned recording boundary failure");
+        }catch(const std::runtime_error &error){threw=std::string_view(error.what())=="Owned recording boundary failure";if(!threw)throw;}
+        restoreCheck(threw&&!app.parameterRecordingInput&&!ScreamSeq::NativeInputGate::protectedWindow(title)&&
+            controlState(title)==before&&songState(app)==music,"Recording boundary failure leaked input protection or changed music");
+    }
+    SetCapture(title);
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(GetCapture()==title&&!app.parameterRecordingInput,"Recording admission stole an active drag");ReleaseCapture();
+    app.pluginDraft=true;
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(app.pluginDraft&&!app.parameterRecordingInput,"Recording admission discarded a retained rack edit");app.pluginDraft=false;
+    // Exercise the actual failing worker call too: admission is released even
+    // when no valid take can start in this device-free application fixture.
+    restoreRejected([&]{app.documentOperation("automation.recording.start",{{"expectedRevision",app.view->session.revision},{"plugins",RestoreJson::array()}});});
+    restoreCheck(!app.parameterRecordingInput&&controlState(title)==before&&songState(app)==music,"Rejected worker start left native fields locked");
+    SetWindowTextW(title,L"Editable after failure");restoreCheck(restoreText(title)==L"Editable after failure","Recording boundary never resumed native editing");
+    const auto recordingLayout=app.workspaceDockSnapshot().at("configuration");
+    app.command(parameterRecordingCommand);const auto recording=app.parameterRecordingWindow->window();ScreamSeq::Tests::ownGuiWindow(recording);
+    restoreCheck(app.parameterRecordingWindow->visible()&&!app.parameterRecordingWindow->protectsClose()&&
+        app.parameterRecordingWindow->snapshot().at("document")==app.documentId,"Application failed to own the current song's parameter review window");
+    restoreCheck(app.protectRecordingTake()&&!app.parameterRecordingInput,"Empty take inspection blocked departure or leaked its native input lease");
+    app.parameterRecordingWindow->hide();
+    const auto owner=app.parameterRecordingWindow.get();app.command(parameterRecordingCommand);
+    restoreCheck(app.parameterRecordingWindow.get()==owner&&app.parameterRecordingWindow->visible(),"Reopening parameter review replaced its retained owner");
+    SendMessageW(recording,WM_COMMAND,MAKEWPARAM(9738,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(recording,9738)));
+    restoreCheck(app.pluginRecoveryReviewWindow&&app.pluginRecoveryReviewWindow->visible()&&app.pluginRecoveryReviewWindow->snapshot().at("archiveTotal")==0,
+        "Recovered inputs navigation did not open the current song's separate native review window");
+    ScreamSeq::Tests::ownGuiWindow(app.pluginRecoveryReviewWindow->window());app.pluginRecoveryReviewWindow->hide();
+    app.command(pluginRecoveryReviewCommand);
+    restoreCheck(app.pluginRecoveryReviewWindow->visible()&&app.workspaceDockSnapshot().at("configuration")==recordingLayout,
+        "Separate recording/recovery window commands replaced the editor layout");
+    app.pluginRecoveryReviewWindow->hide();
+    const auto musicBeforeReview=songState(app);
+    ScreamSeq::Api::CompletedCall proof{"automation.recording.discard",app.documentId,app.view->session.revision,{{"retained",false},{"capturing",false},{"take","already-finished"}}};
+    app.reconcileParameterRecording(proof);
+    restoreCheck(songState(app)==musicBeforeReview&&!app.parameterRecordingInput,"Completion review resent a write or left native input locked");
+    proof.document="other song";restoreRejected([&]{app.reconcileParameterRecording(proof);});
+    restoreCheck(songState(app)==musicBeforeReview,"Foreign completion review changed this song");
+}
 void applicationPluginRackPosition() {
     RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
     const auto first=addRestoreGain(app),second=addRestoreGain(app),third=addRestoreGain(app);
@@ -40,6 +99,8 @@ void applicationPluginSearch() {
     app.selectedParameter=1000;app.filterPluginChoices(false);app.setPluginParameterField();app.layoutControls();
     restoreCheck(IsWindowVisible(query)&&IsWindowVisible(selector)&&IsWindowEnabled(selector),"Plugin search fixture did not expose its search/results controls");
     restoreCheck(GetNextDlgTabItem(app.window,query,FALSE)==selector,"Tab order does not lead from parameter search to results");
+    restoreCheck(GetNextDlgTabItem(app.window,selector,FALSE)==value&&GetNextDlgTabItem(app.window,value,TRUE)==selector,
+        "Parameter selector and its value are not adjacent in Tab/Shift+Tab order");
     SetFocus(query);rawDraftText(query,L"NEEDLE");
     restoreCheck(SendMessageW(selector,CB_GETCOUNT,0,0)==2&&app.selectedParameter==1000&&GetFocus()==query,
         "Parameter search did not filter or silently changed the selected target/focus");
@@ -87,6 +148,27 @@ void applicationPluginSearch() {
 
 void applicationPluginValueControls() {
     using Field=ScreamSeq::PluginParameterField;
+    restoreCheck(Field::text(double(-13.656f))=="-13.656","Generated parameter exposed float promotion noise");
+    restoreCheck(Field::editableText(double(-13.656f),-96,24)=="-13.656","Interior parameter lost readable formatting");
+    for(const float endpoint:{.1f,-.1f,std::numeric_limits<float>::max()}) {
+        const auto bound=double(endpoint);
+        for(const auto range:{std::pair<double,double>{bound,bound},std::pair<double,double>{bound,double(std::numeric_limits<float>::max())},std::pair<double,double>{-double(std::numeric_limits<float>::max()),bound}}) {
+            const auto text=Field::editableText(bound,range.first,range.second);double parsed=0;
+            const auto result=std::from_chars(text.data(),text.data()+text.size(),parsed);
+            restoreCheck(result.ec==std::errc{}&&result.ptr==text.data()+text.size()&&parsed>=range.first&&parsed<=range.second&&static_cast<float>(parsed)==endpoint,
+                "Generated endpoint text failed strict API range or changed stored scalar");
+        }
+    }
+    for(const float value:{-96.f,-13.656f,0.f,.00000001f,24.f,1234567.f}) {
+        const auto text=Field::text(double(value));float parsed=0;
+        const auto result=std::from_chars(text.data(),text.data()+text.size(),parsed);
+        restoreCheck(result.ec==std::errc{}&&result.ptr==text.data()+text.size()&&parsed==value,
+            "Readable parameter text changed its stored float");
+    }
+    const double precise=1.00000000000001;const auto exact=Field::text(precise);double parsed=0;
+    const auto decoded=std::from_chars(exact.data(),exact.data()+exact.size(),parsed);
+    restoreCheck(decoded.ec==std::errc{}&&decoded.ptr==exact.data()+exact.size()&&parsed==precise,
+        "Double parameter metadata was narrowed while formatting");
     RestoreJson metadata={{"name","Mode"},{"min",0},{"max",2},{"value",2},{"manualValue",1},
         {"choices",{"Low","Middle","High"}},{"unit",1},{"step",1},{"writable",true}};
     const auto interpreted=Field::read(metadata);
@@ -103,6 +185,8 @@ void applicationPluginValueControls() {
     app.selectedPlugin=gain;app.selectedParameter=0;app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.refreshPluginDetails();app.layoutControls();
     const auto toggle=app.controls.at(pluginValueToggle);
     restoreCheck(app.pluginValueControl()==pluginValueToggle&&IsWindowVisible(toggle)&&!IsWindowVisible(app.controls.at(pluginValue)),"Boolean did not use the native checkbox");
+    restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(pluginParameter),FALSE)==toggle,
+        "Tab from a boolean parameter did not reach its checkbox");
     restoreCheck(ScreamSeq::Tests::accessibleName(toggle)==L"Enabled manual value"&&SendMessageW(toggle,BM_GETCHECK,0,0)==BST_CHECKED,"Boolean lost its label or checked state");
     const auto baseline=app.documentOperation("plugin.state.get",{{"plugin",gain}});
     SetFocus(toggle);restoreCheck(app.key(VK_RETURN),"Enter did not operate the native parameter checkbox");
@@ -121,6 +205,8 @@ void applicationPluginValueControls() {
     app.edit("plugin.add",{{"descriptor",*filter}});const auto plugin=app.view->session.document.at("nativePlugins").back().at("instanceID").get<std::string>();
     app.selectedPlugin=plugin;app.selectedParameter=1;app.refreshPluginDetails();app.layoutControls();
     const auto choices=app.controls.at(pluginValueChoice);
+    restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(pluginParameter),FALSE)==choices,
+        "Tab from an indexed parameter did not reach its choices");
     restoreCheck(app.pluginValueControl()==pluginValueChoice&&IsWindowVisible(choices)&&SendMessageW(choices,CB_GETCOUNT,0,0)==5&&
         ScreamSeq::NativeControls::itemText(choices,3)==L"Notch","Native choices did not expose the effect's names");
     const auto filterBefore=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
@@ -164,5 +250,37 @@ void applicationPluginParameterNavigation() {
     app.selectedPlugin=second;app.refreshPluginDetails();app.pluginCommand(pluginAutomate);
     restoreCheck(app.parameterAutomationWindow->snapshot().at("generation")==draft.at("generation")&&app.parameterAutomationWindow->snapshot().at("fieldDraft")==true,"Returning to the same parameter reloaded its draft");
     restoreCheck(songState(app)==music&&app.position()==cursor,"Parameter navigation changed musical history or moved the editing cursor");
+    // Both the rack button for a built-in and the explicit separate-window
+    // command reach the retained ten-parameter owner without enabling routing.
+    app.selectedPlugin=first;app.refreshPluginDetails();app.layoutControls();
+    restoreCheck(IsWindowEnabled(app.controls.at(pluginEditor))&&app.menuCommandState(pluginParametersCommand).enabled,
+      "Built-in parameter controls remain hidden behind a disabled vendor editor");
+    app.command(pluginEditor);
+    auto *parameters=app.graphPluginParameters.at(first).get();const auto parameterWindow=parameters->window();
+    ScreamSeq::Tests::ownGuiWindow(parameterWindow);
+    restoreCheck(parameters->visible()&&(!app.songRoutingWindow||!app.songRoutingWindow->visible())&&parameters->snapshot().at("plugin")==first,
+      "Rack parameters required the mixing graph or opened another plugin");
+    const auto field=GetDlgItem(parameterWindow,4012),slider=GetDlgItem(parameterWindow,4011);
+    restoreCheck(GetNextDlgTabItem(parameterWindow,slider,FALSE)==field&&GetNextDlgTabItem(parameterWindow,field,TRUE)==slider,
+      "Parameter window slider/value Tab order differs from its visible order");
+    SetFocus(field);rawDraftText(field,L"-.");SendMessageW(field,EM_SETSEL,1,2);
+    const auto parameterDraft=parameters->snapshot();
+    SetFocus(app.window);
+    app.command(pluginParametersCommand);
+    DWORD caretStart=0,caretEnd=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&caretStart),reinterpret_cast<LPARAM>(&caretEnd));
+    restoreCheck(app.graphPluginParameters.at(first).get()==parameters&&parameters->window()==parameterWindow&&
+      parameters->snapshot().at("rows")==parameterDraft.at("rows")&&restoreText(field)==L"-."&&GetFocus()==field&&caretStart==1&&caretEnd==2,
+      "Repeated parameter navigation replaced its window or discarded text, focus or caret");
+    app.selectedPlugin=second;app.command(pluginParametersCommand);
+    restoreCheck(app.graphPluginParameters.size()==2&&app.graphPluginParameters.at(second)->snapshot().at("plugin")==second&&
+      parameters->snapshot().at("plugin")==first&&restoreText(field)==L"-.",
+      "Rack selection redirected an independent parameter draft");
+    app.busy=true;app.selectedPlugin=first;restoreCheck(app.deferView(pluginParametersCommand),"Busy parameter navigation was not retained");
+    app.selectedPlugin=second;app.busy=false;app.drainViews();
+    restoreCheck(app.deferredViews.empty()&&app.status.find(L"target changed")!=std::wstring::npos,
+      "Deferred parameter navigation followed a different selected plugin");
+    restoreCheck(songState(app)==music&&app.position()==cursor,"Opening parameter windows changed music/history/cursor");
     app.selectedPlugin.clear();restoreCheck(!app.menuCommandState(pluginAutomate).enabled&&!app.menuCommandState(pluginActivity).enabled,"Missing rack target remained actionable");
+    restoreCheck(!app.menuCommandState(pluginParametersCommand).enabled&&!app.menuCommandState(pluginEditor).enabled,
+      "Missing rack target left parameter windows actionable");
 }

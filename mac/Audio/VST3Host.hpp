@@ -37,6 +37,8 @@ public:
   // Editor values ignored as invalid/unknown, plus UI notifications lost to a
   // full queue. Diagnostic only: neither stops rendering.
   uint64_t droppedEdits() const noexcept;
+  PluginEditFence editFence();
+  PluginEditRead popEditBefore(const PluginEditFence &,PluginEdit &)noexcept;
   // Note-ons discarded because the releases owed to the same channel and pitch
   // by an earlier all-notes-off did not fit ahead of them. Diagnostic only.
   uint64_t droppedNotes() const noexcept;
