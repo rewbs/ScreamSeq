@@ -524,3 +524,10 @@ Session admission must exclude legacy `collectPluginEdits` and manual state
 capture for owned providers before exposing any lifecycle API. The existing
 legacy recording path still timestamps at polling time and remains a confirmed
 gap until that migration is complete. No public lifecycle claim is added yet.
+
+Catalogue observation additionally pairs the native slot/provider before and
+after each vendor query. A live rack reorder does not change the whole-chain
+epoch; resolving only the stable ID after a pumped catalogue call could pair
+another plugin's range metadata with the original target. Arming and Keep now
+reject that changed observation before using its catalogue. This guard remains
+part of the unbuilt Mac batch and does not change the frozen077e candidate.

@@ -44,6 +44,17 @@ private:
     const auto found=audio_.pluginSlot(identity);
     require(found.has_value()&&*found<=UINT32_MAX,"Recorded plugin identity is missing or outside the native slot range; input retained");return *found;
   }
+  struct CatalogObservation {PluginEditSource source;std::vector<PluginParameter> parameters;};
+  CatalogObservation observeCatalog(const std::string &identity) {
+    const auto index=slot(identity);const auto source=audio_.pluginEditSource(index);
+    auto parameters=audio_.pluginParameters(index);
+    // A catalogue call can pump native work. Live rack reorder does not advance
+    // the whole-chain epoch, so never pair another slot's catalogue with this
+    // identity's freshly resolved provider after returning from the vendor.
+    require(audio_.pluginEpoch()==hostEpoch_&&slot(identity)==index&&audio_.pluginEditSource(index)==source,
+      "Native parameter catalogue changed owner during observation; input retained");
+    return {source,std::move(parameters)};
+  }
   RecordedGestureBoundary::Cuts cuts()const {
     RecordedGestureBoundary::Cuts result;
     for(const auto &[identity,catalog]:catalogs_)result.emplace(identity,PluginEditBoundary{});
@@ -122,9 +133,9 @@ public:
     const auto before=current();
     require(take_->matchesBaseline(rack,baseline),"Parameter recording baseline changed before arming");
     for(const auto &provider:take_->providers()) {
-      const auto index=slot(provider.plugin);
-      require(audio_.pluginEditSource(index)==provider.source,"Parameter provider changed before arming");
-      catalogs_.emplace(provider.plugin,audio_.pluginParameters(index));
+      auto observed=observeCatalog(provider.plugin);
+      require(observed.source==provider.source,"Parameter provider changed before arming");
+      catalogs_.emplace(provider.plugin,std::move(observed.parameters));
     }
     require(current()==before,"Parameter context changed during catalogue preparation");
     RecordedGestureBoundary::requireFresh(*take_,cuts());
@@ -145,11 +156,10 @@ public:
     require(take_->matchesBaseline(rack,baseline),"Parameter recording baseline changed before Keep; input retained");
     // Native parameter queries can pump the UI owner; prepare all catalogues
     // before selecting the final take membership and recheck every provider.
-    struct Provider {PluginEditSource source;std::vector<PluginParameter> parameters;};
-    std::map<std::string,Provider> providers;
+    std::map<std::string,CatalogObservation> providers;
     for(const auto &provider:take_->providers()) {
-      const auto index=slot(provider.plugin);auto parameters=audio_.pluginParameters(index);
-      providers.emplace(provider.plugin,Provider{audio_.pluginEditSource(slot(provider.plugin)),std::move(parameters)});
+      auto observed=observeCatalog(provider.plugin);
+      providers.emplace(provider.plugin,std::move(observed));
     }
     require(current()==before,"Parameter context changed during Keep preparation; input retained");
     for(const auto &[identity,provider]:providers)
