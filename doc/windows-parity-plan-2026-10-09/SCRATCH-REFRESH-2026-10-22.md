@@ -1,5 +1,37 @@
 # Scratch inspector refresh after external history
 
+## Parameter refresh follow-up, 22 October — source only
+
+The same batch now protects automatic plugin-parameter reads with a short native
+input lease instead of disabling their focused controls. Search/value fields keep
+their HWND and caret selection; a focused Reload button also remains enabled.
+The read still guards document/revision/generation, and a revision that changes
+during a background read retries the read without forcing a permanent Reload.
+Dirty/uncertain controls retain their previous protection. Explicit Reload and
+durable writes retain their existing admission rules. This is a source-confirmed
+focus hazard, not an explanation proven for the intermittent timeout below.
+
+`applicationParameterRefreshFocus` covers focused numeric/search/button controls,
+reentrant input rejection, busy reads and changing-context reads. The existing
+parameter-preview group executes it. These new assertions are unbuilt. Add the
+two actual-app rack/search cases and all three plugin-recording cases to the four
+scratch cases at the next checkpoint (nine cases total). No additional build.
+
+Current Windows x64 CI run39784093856 passed158 portable/worker and49 native
+UI/preferences/recovery registrations. Its audio diagnostic returned devices=[];
+the merged92-case app group retained15 failures (12 unique playback-dependent
+methods) and2 skips. The exact CI binary, SHA256
+`f33c65d4f96520f1ba4df9fc9e66bbf7d4e81d277242e4163728c1e2aa62698a`, was downloaded
+and hash/PE-verified locally. Synthetic merge d10e53f1 has exactly the1fb source
+tree. Local silent-WASAPI execution passed11/12 affected cases; the plugin take
+Keep/Undo/Redo case timed out in the fixture's inspector idle wait after Redo.
+One focused diagnostic and three bounded repeats passed unchanged assertions.
+The original failure is unresolved, not erased by those passes. Improved timeout
+diagnostics retain expected/current document and full workspace state for the
+next occurrence. Receipts/logs: `focus-followup/ci/windows-x64/`. These runs used
+the unchanged x64 CI executable under ARM64 emulation, with the653 fixture-only
+long-path helpers; they do not qualify native x64 hardware or realtime behavior.
+
 ## Observed on 22 October, 13:18–13:28 UTC
 
 The 13:07 coordinated checkpoint built source

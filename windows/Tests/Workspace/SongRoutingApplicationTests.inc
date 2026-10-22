@@ -239,6 +239,46 @@ void applicationRecipeParameterInspector(){
   fixture.close();
 }
 
+void applicationParameterRefreshFocus(){
+  RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+  HWND field=nullptr;bool inspect=false,observed=false,keptFocus=false,protectedInput=false;int refusal=0;
+  ScreamSeq::PluginParametersWindow tool(app.window,plugin,"Parameter refresh focus",
+    [&](const auto &method,const auto &params){
+      if(method=="plugin.parameters.get"&&inspect){
+        observed=true;
+        keptFocus=GetFocus()==field&&IsWindowEnabled(field);
+        const auto before=restoreText(field);SendMessageW(field,WM_SETTEXT,0,LPARAM(L"Reentrant replacement"));
+        protectedInput=restoreText(field)==before;
+        if(refusal==1){refusal=0;throw ScreamSeq::Api::ApiError(-32002,"Injected busy catalogue read");}
+        auto result=app.documentOperation(method,params);
+        if(refusal==2){refusal=0;app.edit("document.patch",{{"title","Changed during catalogue read"}});}
+        return result;
+      }
+      return app.documentOperation(method,params);
+    },[&]{return std::pair(app.documentId,app.view->session.revision);},
+    [&](const auto &method,const auto &params,const auto &receipt){return app.documentOperationWithOutcome(method,params,receipt);},[]{return true;});
+  tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
+  for(const int id:{4012,3965,3955})for(const int mode:{0,1,2}){
+    field=GetDlgItem(window,id);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);
+    const bool text=id!=3955;if(text)SendMessageW(field,EM_SETSEL,0,1);
+    DWORD first=0,last=0;if(text)SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    const auto raw=restoreText(field);const auto old=tool.snapshot().at("revision");
+    app.edit("document.patch",{{"title","Refresh "+std::to_string(id)+":"+std::to_string(mode)}});
+    inspect=true;observed=keptFocus=protectedInput=false;refusal=mode;SendMessageW(window,WM_TIMER,7,0);inspect=false;
+    restoreCheck(observed&&keptFocus&&protectedInput,"Background parameter read disabled/moved focused control or admitted pumped input");
+    restoreCheck(GetFocus()==field&&IsWindowEnabled(field)&&restoreText(field)==raw,"Parameter read changed focused text or control state");
+    if(text){DWORD a=0,b=0;SendMessageW(field,EM_GETSEL,WPARAM(&a),LPARAM(&b));restoreCheck(a==first&&b==last,"Parameter refresh lost the native caret selection");}
+    if(mode){
+      restoreCheck(tool.snapshot().at("revision")==old&&!tool.snapshot().at("needsReload").get<bool>(),"Transient parameter read rebased fields or permanently required Reload");
+      SendMessageW(window,WM_TIMER,7,0);
+    }
+    restoreCheck(tool.snapshot().at("revision")==app.view->session.revision&&!tool.snapshot().at("dirty").get<bool>(),"Clean parameter refresh did not converge after a read refusal");
+    restoreCheck(!ScreamSeq::NativeInputGate::protectedWindow(field),"Parameter refresh left native input protected");
+  }
+  tool.hide();fixture.close();
+  std::cout<<"PASS parameter automatic refresh: field/search/button focus, caret, protected read, busy and changed-context retry\n";
+}
+
 void applicationGraphParameterInspector(){
   RestoreFixture fixture;auto &app=*fixture.app;app.edit("mixer.enable",RestoreJson::object());const auto plugin=addRestoreGain(app),other=addRestoreGain(app);
   app.openSongRouting();auto *graph=app.songRoutingWindow.get();ScreamSeq::Tests::ownGuiWindow(graph->window());

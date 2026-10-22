@@ -1294,6 +1294,7 @@ int wmain(int argc,wchar_t **argv) {
                     return;
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"parameter-preview") {
+                    timedRestoreCase("parameter refresh focus and retry",applicationParameterRefreshFocus);
                     timedRestoreCase("retained rack parameters and preview lifecycle",applicationGraphParameterInspector);
                     return;
                 }

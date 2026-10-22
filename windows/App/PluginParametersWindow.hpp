@@ -53,7 +53,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;bool sliderEndPending_=false,sliderCancelPending_=false;uint64_t generation_=0;
   std::string previewToken_;uint32_t previewParameter_=0;
-  bool setting_=false,pending_=false,needsReload_=false,takeRefreshPending_=false;HWND pendingFocus_{},navigationFocus_{};
+  bool setting_=false,pending_=false,backgroundRead_=false,needsReload_=false,takeRefreshPending_=false;HWND pendingFocus_{},navigationFocus_{};
   NativeWriteCompletion completion_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,revision_,graph_.empty()?plugin_:target().dump(),generation_,dirty(),pending_,completion_.retained()&&!pending_);
@@ -165,16 +165,30 @@ class PluginParametersWindow final : public NativeToolWindow {
     std::set<uint32_t> ids;for(const auto &p:data){(void)p.at("name").get<std::string>();const auto &id=p.at("id");if(!id.is_number_integer()||id.get<double>()<0||id.get<double>()>UINT32_MAX||!ids.insert(id.get<uint32_t>()).second)throw std::runtime_error("Invalid or duplicate plugin parameter identity");}
     return data;
   }
-  void load(bool completing=false){
+  void load(bool completing=false,bool background=false){
     cancelAutomaticEdit();
     if(!completing&&completion_.retained())throw std::runtime_error("Review the parameter result first");
     if(!completing)cancelPreview();
     const auto context=context_();if(context.first!=document_)throw std::runtime_error("This parameter editor belongs to another song");
+    // A routine read must not disable the focused native control. Protect
+    // reentrant input during the worker wait without changing focus/caret or
+    // presenting a disabled page. Explicit Reload keeps its existing policy.
+    const std::array<HWND,1> roots{window_};std::optional<NativeInputGate> input;
+    if(background)input.emplace(roots);
+    const auto focus=GetFocus();DWORD first=0,last=0;wchar_t kind[24]{};
+    if(background&&owns(focus))GetClassNameW(focus,kind,24);
+    const bool textFocus=!_wcsicmp(kind,L"Edit");
+    if(textFocus)SendMessageW(focus,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    backgroundRead_=background;struct EndRead{bool &value;~EndRead(){value=false;}}endRead{backgroundRead_};
     const auto generation=generation_;pending_=true;layout();
     try{
-      auto data=readParameters();if(context_()!=context||generation_!=generation)throw std::runtime_error("Song or parameter draft changed during read / fields retained");
+      auto data=readParameters();if(context_()!=context||generation_!=generation){
+        if(background)throw Api::ApiError(-32002,"Song changed during parameter refresh / retrying the read");
+        throw std::runtime_error("Song or parameter draft changed during read / fields retained");
+      }
       parameters_=std::move(data);revision_=context.second;needsReload_=takeRefreshPending_=false;sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;++generation_;
       filterParameters(false);status(L"Changes save automatically; sliders save on release. Ctrl+F finds a parameter.");
+      if(textFocus&&GetFocus()==focus)NativeInputGate::present(focus,EM_SETSEL,first,last);
     }catch(...){setting_=pending_=false;layout();throw;}pending_=false;layout();
   }
   void finishResult(){
@@ -290,14 +304,14 @@ class PluginParametersWindow final : public NativeToolWindow {
   }
   void timer(UINT_PTR id)override{
     if(id==8){if(pending_)return;KillTimer(window_,8);if(sliderCancelPending_)cancelSlider();else if(sliderRow_>=0&&(sliderEndPending_||!GetCapture()))finishSlider();return;}
-    if(id!=7||(!visible()&&!takeRefreshPending_)||pending_||dirty()||completion_.retained()||needsReload_||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
-    try{load();}catch(const Api::ApiError &e){if(e.code!=-32002){needsReload_=true;throw;}}catch(...){needsReload_=true;throw;}
+    if(id!=7||(!visible()&&!takeRefreshPending_)||pending_||dirty()||completion_.retained()||needsReload_||NativeInputGate::protectedWindow(window_)||(available_&&!available_())||(!takeRefreshPending_&&context_()==std::pair(document_,revision_)))return;
+    try{load(false,true);}catch(const Api::ApiError &e){if(e.code!=-32002){needsReload_=true;throw;}}catch(...){needsReload_=true;throw;}
     if(!visible()&&!takeRefreshPending_)KillTimer(window_,7);
   }
   void layout()override{
     if(!ready_)return;const auto focus=GetFocus();if(pending_&&!pendingFocus_&&owns(focus))pendingFocus_=focus;
     const auto [w,h]=size();place(heading,12,10,w/2-24,24);place(search,w/2,8,w/2-12,26);place(previous,12,42,64,26);place(parameter,84,42,w-244,260);place(next,w-152,42,64,26);place(close,w-80,42,68,26);
-    const bool ready=!pending_&&!completion_.retained()&&!needsReload_&&!takeRefreshPending_;const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
+    const bool ready=backgroundRead_||(!pending_&&!completion_.retained()&&!needsReload_&&!takeRefreshPending_);const float rowHeight=std::max(48.f,std::min(60.f,(h-168)/float(pageSize)));
     EnableWindow(controls_.at(search),ready);
     for(int i=0;i<pageSize;++i){const auto &r=rows_[i];const auto &f=r.field;const bool visible=r.index>=0;const bool numeric=f.kind==PluginParameterField::Kind::Number;const float y=82+i*rowHeight;
       place(control(i,nameLabel),12,y,178,19,visible);place(control(i,rangeLabel),12,y+20,178,20,visible);
@@ -307,7 +321,7 @@ class PluginParametersWindow final : public NativeToolWindow {
       for(auto part:{slider,value,choices,toggle,apply,less,more})EnableWindow(controls_.at(control(i,part)),ready&&visible&&f.editable()&&(part!=slider||f.maximum>f.minimum));
     }
     place(statusLabel,12,h-82,w-24,38);place(reload,12,h-36,134,26);place(applyAll,w-150,h-36,138,26,dirty()&&!pending_&&automaticEditFailed_);
-    EnableWindow(controls_.at(previous),ready&&page_>0);EnableWindow(controls_.at(next),ready&&page_+1<pages());EnableWindow(controls_.at(parameter),ready);EnableWindow(controls_.at(applyAll),ready&&dirty());EnableWindow(controls_.at(reload),!pending_);set(reload,completion_.retained()?L"Review result":L"Reload values");
+    EnableWindow(controls_.at(previous),ready&&page_>0);EnableWindow(controls_.at(next),ready&&page_+1<pages());EnableWindow(controls_.at(parameter),ready);EnableWindow(controls_.at(applyAll),ready&&dirty());EnableWindow(controls_.at(reload),!pending_||backgroundRead_);set(reload,completion_.retained()?L"Review result":L"Reload values");
     if(!pending_&&pendingFocus_&&IsWindowEnabled(pendingFocus_)){const auto old=std::exchange(pendingFocus_,nullptr);if((!GetFocus()||GetFocus()==window_)&&IsWindowEnabled(old)&&IsWindowVisible(old)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(old);}
   }
 public:

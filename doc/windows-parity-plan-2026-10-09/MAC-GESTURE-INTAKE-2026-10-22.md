@@ -1,5 +1,15 @@
 # Shared capture: Mac AU intake continuation
 
+## Mac Intel terminal result, 22 October
+
+Intel job 119842551391 in run 39784093814 also passed: 134/134 native tests,
+34 named interface groups plus final editor/keyboard checks, recovery/picker,
+private socket, owned AU/VST3 lifecycle, sample library and fixture conformance.
+Its terminal log was inspected; excerpts are in
+`focus-followup/mac-intel-result-excerpts.log`. Both Mac architectures now qualify
+the 1fb prerequisite source within these fixture bounds. Full retained-take
+session/API/UI integration and physical device/realtime qualification remain open.
+
 ## Mac ARM checkpoint, 22 October 13:37 UTC
 
 Source `1fbfebd7346013926b908250390b8dd0b5af31a7` passed Mac ARM job

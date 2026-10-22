@@ -8,6 +8,20 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 13:55 UTC:** Both Mac architectures passed the 1fb checkpoint,
+including all 134 native tests and the scheduled interface/socket/fixture gates.
+Windows x64 CI passed 158 portable/worker and 49 native groups; its audio runner
+has no endpoints. Exact-binary local silent playback passed 11/12 affected cases.
+The remaining recording Undo/Redo idle timeout did not recur in four focused
+diagnostic runs; retain the original failure as unresolved. See
+[scratch/parameter follow-up](SCRATCH-REFRESH-2026-10-22.md).
+The next source batch also removes control disabling from automatic parameter
+reads, preserves caret/focus and retries changed-context reads. It adds a native
+read-boundary regression and richer app timeout diagnostics. Update the still
+unexecuted scratch-refresh freeze to the final commit before qualification; its
+gate stays **14:07:23 UTC**. Run three native groups and nine app cases. No further
+build, package, PR update or main merge has occurred in this continuation.
+
 **22 October 13:37 UTC:** Mac ARM 1fb job119842551604 passed all134 native tests
 and its complete scheduled interface/socket/fixture stages; terminal log
 inspected. Intel and Windows x64 remain running. Scratch correction is backed

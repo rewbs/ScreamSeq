@@ -76,7 +76,8 @@ class SongRoutingTests(unittest.TestCase):
             elif quiet is None:quiet=time.monotonic()
             elif time.monotonic()-quiet>=.1:return
             time.sleep(.02)
-        self.fail(str(self.local()))
+        self.fail(str(dict(expectedRevision=revision, currentDocument=self.doc(), workspace=ws,
+                           routingRefreshDue=refresh_due, parameterRefreshDue=parameter_due)))
     def press(self,identifier):self.idle();self.desktop.send(self.window(),0x111,identifier,self.control(identifier));self.idle()
     def select(self,identifier,index):
         self.idle()
