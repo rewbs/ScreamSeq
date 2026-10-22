@@ -8,6 +8,28 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 16:12UTC integration checkpoint:** PR#6 was merged at
+`0fe8f34008fe6517d7598affc31a4948a2ab14b8`, with exactly the qualified077e tree.
+Both local main and this temporary source branch now include that merge. Mac
+ARM/Intel run39802008354 is terminal success. The recorded Windows CI failure
+and exact-binary local12/12 replay remain explicit evidence, not a green CI claim.
+Main's normal push checkpoint is running: Windows39811540714 and
+Mac39811541170. Latest observed build start16:09:52UTC sets the next earliest
+build checkpoint to **17:09:52UTC**. No local rebuild accompanies it. Inspect
+`bin/mac-gesture-20261022/main-0fe8f3400/ci-checkpoint.json` before the next build;
+`inspect-main-ci.py` refreshes this read-only receipt. The existing ARM64 package
+and foreground077e evidence retain their exact source tree; a fresh main CI
+artifact will receive its own bounded Computer Use check when available.
+
+Later Mac intake/session source remains separate and unbuilt. Direct native
+editing and device refresh now reject a retained parameter take before changing
+music/transport; New uses a fallible bridge instead of allowing a C++ exception
+to cross into Swift. A real-clock, two-provider session lifecycle regression is
+prepared in `mac/Tests/ParameterTakeSessionTests.inc`. It runs only through the
+explicit BlackHole device mode, not the ordinary device-free CI `--ui` pass.
+No success claim for that new test. Live native release, explicit abandonment
+of post-Stop input, full UI/API lifecycle and socket coverage still remain.
+
 **22 October 15:50UTC follow-up:**077e Windows CI built and passed its portable,
 native, vendor and conformance gates;12 distinct app cases failed at playback/
 startup on the runner. All12 passed unchanged locally on the exact downloaded

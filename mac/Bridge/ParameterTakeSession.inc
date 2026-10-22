@@ -57,6 +57,18 @@
   for(size_t n=0;n<rounds;++n)if(_parameterTake->poll(_document->native()))return;
   if(_parameterTake->take().endTime())throw Automation::Error(-32002,"Parameter input drain is incomplete; take retained");
 }
+- (BOOL)captureParameterTake:(NSString *)identity parameter:(NSInteger)parameter value:(double)value timestamp:(uint64_t)timestamp {
+  if(!_parameterTake)throw Automation::Error(-32001,"No retained parameter take");
+  Automation::require(parameter>=0&&uint64_t(parameter)<=UINT32_MAX,"Parameter identity is outside its range");
+  // Capture returns before fallible preview work. A caller must never replay
+  // accepted input merely because its subsequent preview/poll was refused.
+  return _parameterTake->capture(_document->native(),Automation::string(identity,128).UTF8String,
+    uint32_t(parameter),value,timestamp);
+}
+- (RecordedGestureTake::Review)parameterTakeReview {
+  if(!_parameterTake)throw Automation::Error(-32001,"No retained parameter take");
+  return _parameterTake->take().review();
+}
 - (NativeParameterTake::CommitResult)commitParameterTake:(BOOL)acknowledgeLoss {
   if(!_parameterTake)throw Automation::Error(-32001,"No retained parameter take");
   if(!_parameterTake->take().endTime())throw Automation::Error(-32002,"Stop the parameter take before Keep");

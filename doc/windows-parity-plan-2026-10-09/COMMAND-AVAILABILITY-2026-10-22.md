@@ -195,3 +195,17 @@ listing briefly retained an in-progress Intel status despite all steps complete.
 PR#6's description now names077e and this bounded evidence, and is ready for
 review. It contains no later Mac take session/restoration source. Do not trigger
 its merge build before16:09:04UTC.
+
+## Integration at the next checkpoint
+
+At16:09UTC both Mac job statuses were confirmed terminal success. PR#6 was
+merged normally as `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, after the gate,
+with an expected-head guard on077e. Its tree matches077e exactly. Local main
+fast-forwarded cleanly; later unbuilt Mac recording work remains on its temporary
+branch, which now includes main. No unqualified source was added to this merge.
+
+The normal main push starts the coordinated checkpoint: Windows39811540714,
+Mac39811541170. Latest observed build start16:09:52UTC sets the next earliest
+checkpoint to17:09:52UTC. Neither an additional local build nor a CI rerun was
+requested. The read-only main receipts live in
+`bin/mac-gesture-20261022/main-0fe8f3400/ci-checkpoint.json`.

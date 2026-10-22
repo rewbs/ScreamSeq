@@ -25,6 +25,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error;
 - (BOOL)openPath:(NSString *)path error:(NSError **)error;
 - (void)newSong:(BOOL)demo;
+// Fallible native document replacement; retained recordings must be resolved.
+- (BOOL)createSong:(BOOL)demo error:(NSError **)error;
 - (BOOL)savePath:(NSString *)path error:(NSError **)error;
 // A recovery snapshot also preserves an unfinished take, without stopping it.
 - (BOOL)saveRecoveryPath:(NSString *)path error:(NSError **)error;

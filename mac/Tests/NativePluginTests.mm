@@ -398,6 +398,7 @@ static NSDictionary *dictionary(const PluginDescriptor &d) {
     @"isInstrument" : @(d.instrument)
   };
 }
+#include "ParameterTakeSessionTests.inc"
 static void closedInputProtection(const PluginState &state){
   NativePlugin plugin(state,48000),other(state,48000);
   const auto lease=plugin.beginEditorInputBarrier();
@@ -817,6 +818,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
                                              kAudioObjectPropertyElementMain};
           check(AudioObjectGetPropertyData(virtualDevice, &address, 0, nullptr, &size, &frames) == noErr,
                 "virtual device buffer size");
+          parameterTakeSessionLifecycle(gain.descriptor,virtualDevice,frames);
           check([reopened configureDevice:virtualDevice buffer:frames error:&error], "configure virtual output");
           check([reopened showPluginEditor:0 error:&error], "open instrument interface before playback");
           check([reopened playOrder:0 error:&error], "start instrument with interface open");

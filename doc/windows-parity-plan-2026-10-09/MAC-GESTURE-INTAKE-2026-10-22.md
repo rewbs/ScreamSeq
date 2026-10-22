@@ -627,3 +627,52 @@ This is a prerequisite, **not a substitute for the requested final behavior**.
 Release during playback, closed-editor opaque replacement/explicit suffix
 abandonment, and full native controls/API/session qualification remain open.
 Public Mac recording is still the legacy flow; no new lifecycle UI is exposed.
+
+## Following source batch: direct native admission and real session gate — unbuilt
+
+The API guard alone does not protect direct AppKit editing. `TrackerSession.mm`
+now refuses retained-take edits at the native pattern/cell/order/sequence,
+song settings, sample processing/import/settings, instrument import/settings
+and device refresh entry points, before stopping audio or touching the song.
+Previously prepared native history/rack/manual guards remain. Read-only
+inspectors and ordinary live note input remain available. These conservative
+guards apply only while the new internal owner exists; the legacy public
+recording flow remains unchanged.
+
+New Song now has `createSong:error:`. It prepares the new document and identity
+before replacing audio/document state and reports refusal through NSError.
+`main.swift` uses the throwing Swift bridge, so failure does not run the success
+completion that clears the document URL, recovery identity and edited status.
+The old `newSong:` convenience entry remains nonthrowing for existing native
+callers, preserving the old song and surfacing the failure in `pluginWarning`.
+The existing note/sample departure policy is unchanged. Full UI admission and
+departure integration is still required before exposing retained parameter takes.
+
+Internal `captureParameterTake` retains original control timestamps and returns
+acceptance before any fallible preview/poll. `parameterTakeReview` returns a
+detached shared review without consuming input. These remain internal methods,
+not additional advertised API operations.
+
+`mac/Tests/ParameterTakeSessionTests.inc`, included by `native-plugin-tests`,
+adds an actual session/clock/vendor path: two native VST3 fixture providers,
+direct-mutation refusal, original-time control capture, recovery during playback,
+fixed Stop while transport continues, whole-take Keep, completed retry, refusal
+of stopped verification during active playback, stopped native release, exact
+manual/opaque state, one-step Undo/Redo, save/reopen, empty no-op and Discard.
+It uses the existing **explicit** `--ui --loopback-record` path, selects
+BlackHole 2ch and reuses that device's current buffer size. It neither opens a
+default physical output nor changes a system default. Ordinary `--ui` CI does
+not execute this new device case. Initial clock readiness has a bounded retry
+only for the specific pre-arm timing absence; other failures are not retried.
+
+No compilation or execution evidence yet. At the next coherent source checkpoint
+run both Mac architecture builds, the existing session/history/native-host gates,
+and this explicit virtual-device case on a provisioned Mac; a missing device is
+an unmet qualification requirement. New/shared Windows gates from the preceding
+sections also remain necessary. The socket and native take UI are still to be
+connected; this test does not replace their coverage or qualify live release.
+
+PR#6's earlier077e tree is integrated as main0fe8f3400. Its push CI is the current
+hourly checkpoint (Windows39811540714, Mac39811541170). Latest build start
+16:09:52UTC gives **17:09:52UTC** as the earliest following checkpoint. Source
+work and backup pushes on this temporary branch do not dispatch another build.

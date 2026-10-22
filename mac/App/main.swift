@@ -1054,7 +1054,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func createSong(demo: Bool) {
     perform(
-      demo ? "Opening demo…" : "Creating song…", { self.session.newSong(demo) },
+      demo ? "Opening demo…" : "Creating song…", { try self.session.createSong(demo) },
       completion: {
         self.documentURL = nil
         self.recoveryID = UUID().uuidString
