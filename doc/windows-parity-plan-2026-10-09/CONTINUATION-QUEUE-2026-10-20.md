@@ -8,7 +8,7 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**22 October 14:28 UTC:** The 14:07 checkpoint built frozen source
+**22 October 14:25 UTC:** The 14:07 checkpoint built frozen source
 `96b6971e56f0c3f297a713ac7254afad87c46099` once. All 20 independently selected
 app cases passed, including the original ordered recording regression. Native
 departure and parameter-preview groups passed; command-results reached its
@@ -29,6 +29,16 @@ The foreground receipt is diagnostic, not production approval. PR #6 remains
 build is **no earlier than 15:07:58 UTC**. The qualification checkout remains
 clean 96b; backup source is newer. Do not repeat scratch-refresh receipts or
 package/merge the candidate with the failed native aggregate.
+
+The next prepared, parsed, unexecuted scripts are in
+`bin/mac-gesture-20261022/scratch-status/`, frozen at
+`5efc73771a4475504df6196445d316a47ad09e16` and backed up on
+`codex/mac-gesture-intake`. They select three affected native groups (command,
+scratch and departure) plus four scratch app cases. Reuse the 16 unaffected app
+passes and parameter-preview native pass from 96b with their recorded input
+provenance. Fast-forward the clean qualification checkout to the frozen commit
+only when starting that checkpoint. Fresh scratch foreground checks and honest
+performance limits remain required before packaging. The gate stays 15:07:58 UTC.
 
 **22 October 13:55 UTC:** Both Mac architectures passed the 1fb checkpoint,
 including all 134 native tests and the scheduled interface/socket/fixture gates.
