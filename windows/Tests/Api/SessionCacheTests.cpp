@@ -21,6 +21,7 @@ struct CacheHost : SessionHost {
   SessionSnapshot state;
   unsigned calls=0, commits=0, navigations=0;
   int failure=0;
+  std::optional<Tracker::WriteOutcome> failureOutcome;
   bool noOp=false, invalidUtf8=false;
   std::size_t paddingBytes=0;
   CacheHost() {
@@ -41,7 +42,7 @@ struct CacheHost : SessionHost {
   Json documentOperation(const std::string &method,const Json &params) override {
     check(method=="pattern.apply","fixture only implements pattern.apply");
     ++calls;
-    if(failure) throw ApiError(failure,"Injected host rejection before commit");
+    if(failure) throw ApiError(failure,"Injected host refusal",failureOutcome);
     Json changes=Json::array();
     const Json before={{"note",49},{"instrument",1},{"volumeCommand",1},{"volume",32},{"effect",0},{"parameter",0}};
     if(!noOp) for(const auto &cell:params.at("cells")) {
@@ -184,17 +185,24 @@ void failuresAndExactReplay() {
     const auto q=edit(host,"failed"),reply=api.handle(q);
     error(reply,code,"host failure returned");
     check(api.handle(q)==reply,"same failed request did not return its exact reply");
-    const bool busy=code==-32002;
-    usage(api,busy?0:1,busy?0:charge(q,reply));
-    check(host.calls==(busy?2u:1u)&&host.commits==0,"terminal reply repeated host entry, or busy stopped retrying");
+    usage(api,1,charge(q,reply));
+    check(host.calls==1&&host.commits==0,"Unclassified failure repeated host entry");
     host.failure=0;
-    if(busy)check(api.handle(q).contains("result")&&host.calls==3,"busy request cannot recover with its original ID");
-    else {
-      check(api.handle(q)==reply&&host.calls==1,"terminal reply changed after host recovery");
-      auto revised=q;revised["params"]["cells"][0]["note"]=62;
-      error(api.handle(revised),-32600,"corrected failed request reused a retained ID");
-      check(api.handle(edit(host,"fresh-after-failure")).contains("result")&&host.calls==2,"new request ID cannot recover");
-    }
+    check(api.handle(q)==reply&&host.calls==1,"terminal reply changed after host recovery");
+    auto revised=q;revised["params"]["cells"][0]["note"]=62;
+    error(api.handle(revised),-32600,"corrected failed request reused a retained ID");
+    check(api.handle(edit(host,"fresh-after-failure")).contains("result")&&host.calls==2,"new request ID cannot recover");
+  }
+  for(const auto outcome:{Tracker::CommitOutcome::NotCommitted,Tracker::CommitOutcome::NoChange,
+      Tracker::CommitOutcome::Unknown,Tracker::CommitOutcome::Committed}) {
+    CacheHost host;SessionAdapter api(host);host.failure=-32002;host.failureOutcome=Tracker::WriteOutcome{outcome};
+    const auto q=edit(host,"classified-busy"),reply=api.handle(q);
+    const bool retryable=outcome==Tracker::CommitOutcome::NotCommitted;
+    check(api.handle(q)==reply&&host.calls==(retryable?2u:1u),"Classified busy replay entered the wrong path");
+    usage(api,retryable?0:1,retryable?0:charge(q,reply));
+    host.failure=0;
+    if(retryable)check(api.handle(q).contains("result")&&host.calls==3,"Proven pre-write refusal cannot recover with the same ID");
+    else check(api.handle(q)==reply&&host.calls==1,"Terminal classified busy was executed again");
   }
   CacheHost host; SessionAdapter api(host);
   auto q=edit(host,"successful");
@@ -288,7 +296,13 @@ void independentServices() {
   auto read=api.handle(request("sample.library.get",Json::object(),"library-read"));
   check(read["result"]["revision"]=="library:test-library"&&!read["result"].contains("documentId"),"independent envelope polluted with document identity");
   auto q=request("sample.library.roots.set",{{"expectedLibraryRevision","test-library"}},"library-write");
-  host.nested=[&]{error(api.handle(q),-32002,"in-flight independent write entered twice while pumping UI messages");};
+  host.nested=[&]{
+    const auto pending=api.handle(q);error(pending,-32002,"in-flight independent write entered twice while pumping UI messages");
+    check(pending["error"]["data"]==Json({{"writeOutcome","unknown"}}),"In-flight write falsely advertised safe retry");
+    auto different=q;different["params"]["expectedLibraryRevision"]="changed";
+    error(api.handle(different),-32600,"In-flight ID accepted different parameters");
+    error(api.handle(request("document.get",Json::object(),"library-write")),-32600,"Read reused an in-flight write identity");
+  };
   auto reply=api.handle(q);check(reply.contains("result"),"library write incorrectly requires song revision");
   check(api.handle(q)==reply&&host.libraryCalls==2,"independent write replay re-entered the host");
   auto conflict=q;conflict["params"]["expectedLibraryRevision"]="stale";error(api.handle(conflict),-32600,"conflicting independent request ID accepted");

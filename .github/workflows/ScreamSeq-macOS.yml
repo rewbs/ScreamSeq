@@ -130,6 +130,12 @@ jobs:
         run: |
           "$SCREAMSEQ_BUILD_DIR/recovery-tests"
           "$SCREAMSEQ_BUILD_DIR/plugin-picker-tests"
+      - name: Private socket admission and busy replay
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          RESONANCE_BUILD_DIR="$SCREAMSEQ_BUILD_DIR" python -B mac/Tests/test_automation.py --busy-receipts-only 2>&1 | tee screamseq-macos-busy-replay.log
       - name: Owned AU and VST3 editor notification lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash

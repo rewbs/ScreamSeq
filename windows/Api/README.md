@@ -943,7 +943,7 @@ revision as current. `committed` means an effect occurred but completion failed;
 
 The current worker classifies known committed publication failures. The adapter
 classifies completion failures after a returned host write, including invalid
-UTF-8 or a result exceeding the wire bound. An unclassified non-busy exception
+UTF-8 or a result exceeding the wire bound. An unclassified exception, including busy,
 after entering a host write is also `unknown`; the adapter cannot infer rejection
 or advertise its pre-write revision as current. The native application preserves a
 classified worker exception through best-effort view repair. This is not yet
@@ -975,8 +975,11 @@ in-flight responses are outside this retention accounting.
 
 Terminal write-method replies enter the cache, including successful no-ops,
 `dryRun:true` previews, validation/stale errors and classified outcomes. A busy
-`-32002` remains retryable unless the write has a `committed` or `unknown`
-outcome; those outcomes must be reconciled even when the code says busy.
+`-32002` permits another host entry only with an explicit `notCommitted`
+outcome. Unclassified, `noChange`, `committed` and `unknown` busy completions
+remain retained. An in-flight duplicate reports `unknown` without replacing
+the original operation's eventual receipt; different content under that ID is
+rejected immediately, including a read that reuses an active write ID.
 Reads remain fresh and uncached. A retained request's ID, method and
 parameters must match its canonical parsed JSON exactly; key order/whitespace
 are irrelevant, but an integer changed

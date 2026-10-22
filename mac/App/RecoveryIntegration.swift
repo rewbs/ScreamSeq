@@ -48,7 +48,7 @@ extension AppController {
         cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
       return
     }
-    guard !busy, !recoverySaving, !sessionReading else { reply?(AutomationServer.error(-32002, "The document is busy; retry shortly")); return }
+    guard !busy, !recoverySaving, !sessionReading else { reply?(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return }
     if let error = collectRecoveryEdits() {
       recoveryError = error.localizedDescription; updateRecoveryStatus()
       reply?(AutomationServer.error(-32003, error.localizedDescription)); return
@@ -152,7 +152,7 @@ extension AppController {
       return
     }
     guard !busy, !recoverySaving, window.attachedSheet == nil, NSApp.modalWindow == nil else {
-      reply(AutomationServer.error(-32002, "The document is busy; retry shortly")); return
+      reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return
     }
     if let error = collectRecoveryEdits() { reply(AutomationServer.error(-32003, error.localizedDescription)); return }
     guard session.recordingTakeID == nil else {

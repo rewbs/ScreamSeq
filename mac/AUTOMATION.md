@@ -311,14 +311,19 @@ Successful replies contain `result.revision`, `result.data`, and—for document 
 | -32601 | Unknown method |
 | -32602 | Invalid, unknown, out-of-range or oversized parameter |
 | -32001 | Revision conflict: reread the song before preparing another mutation |
-| -32002 | Busy document, modal UI, disabled API or request still running; retry shortly |
+| -32002 | Busy document, modal UI, disabled API or request still running; inspect the outcome before retrying |
 | -32003 | Engine/plugin operation failed, including a file-format limitation |
 
 Every mutation requires the opaque `expectedRevision` returned by a previous read. Native pattern edits, sample/instrument changes, plugin controls, undo/redo, sequence selection and opening a different document invalidate it. A dry run does not reserve the document. If another editor changes the song before commit, the commit fails. UI cursor movement and live playback position are separate from the document revision. Vendor changes that do not report parameter edits retain the plugin host's existing qualification limitations.
 
 Recent small mutation replies are deduplicated by request ID and exact content. Reusing an ID with different content is rejected. The cache retains at most 64 replies with an 8 MiB conservative memory budget; large replies are not cached. Always retain the original revision when retrying: even after cache eviction it prevents reapplying a successful mutation. On connection loss or timeout the outcome can be unknown; reread the document rather than automatically retrying with a fresh revision. Both supplied Python clients retry only complete busy responses explicitly classified `writeOutcome:"notCommitted"`, at most six attempts with bounded backoff and identical serialized request bytes. Unclassified busy, committed/unknown outcomes, stale revisions, malformed replies and transport failures are returned without automatic retry; inspect state before deciding the next action.
 
-The retained replies include terminal validation and stale-request errors.
+The retained replies include terminal validation, stale-request errors and
+busy completions without an explicit `notCommitted` outcome. The app classifies
+document/modal, workspace input, recovery and library-rescan admission refusals
+before any write is dispatched. Those refusals permit a retry with unchanged
+ID/content. An already running request instead reports `unknown`; a different
+payload under its ID is rejected, and the original completion remains authoritative.
 Correcting a rejected submission requires a new request ID; retrying its
 unchanged ID/content returns the original error while retained. Reads remain
 fresh, but must not reuse an ID belonging to a retained mutation reply.
