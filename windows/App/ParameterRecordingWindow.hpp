@@ -4,6 +4,7 @@
 #include "NativeReportList.hpp"
 #include <iomanip>
 #include <sstream>
+#include <map>
 
 namespace ScreamSeq {
 // Retained native presentation for the worker-owned take. This window never
@@ -29,6 +30,7 @@ private:
   static constexpr UINT_PTR listSubclass=0x50525732;
   Callbacks callbacks_;
   std::string document_,targetKey_,error_;
+  std::map<std::pair<std::string,uint32_t>,std::wstring> parameterNames_;
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array();
   NativeWriteCompletion completion_;
   size_t offset_=0,total_=0;uint64_t generation_=0;
@@ -51,7 +53,13 @@ private:
   }
   std::wstring targetName(const Json &target)const {
     const auto plugin=target.at("plugin").get<std::string>();const auto id=target.at("parameter").get<uint32_t>();
-    return pluginName(plugin)+L" / "+(callbacks_.parameterName?callbacks_.parameterName(plugin,id):L"Parameter "+std::to_wstring(id));
+    const auto found=parameterNames_.find({plugin,id});
+    return pluginName(plugin)+L" / "+(found!=parameterNames_.end()?found->second:L"Parameter "+std::to_wstring(id));
+  }
+  void rememberTarget(const Json &target) {
+    if(!callbacks_.parameterName)return;
+    const auto key=std::pair(target.at("plugin").get<std::string>(),target.at("parameter").get<uint32_t>());
+    if(!parameterNames_.contains(key)){auto name=callbacks_.parameterName(key.first,key.second);requireContext();parameterNames_.emplace(key,std::move(name));}
   }
   void updateRack() {
     if(retained()||SendMessageW(controls_.at(scope),CB_GETDROPPEDSTATE,0,0))return;
@@ -73,6 +81,7 @@ private:
     Json identities=Json::array();for(const auto &entry:targets)identities.push_back({{"plugin",entry.at("plugin")},{"parameter",entry.at("parameter")}});
     if(identities==targets_)return;
     if(SendMessageW(controls_.at(target),CB_GETDROPPEDSTATE,0,0))return;
+    for(const auto &entry:identities)rememberTarget(entry);
     targets_=std::move(identities);setting_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{setting_};
     NativeInputGate::present(controls_.at(target),CB_RESETCONTENT,0,0);
@@ -103,7 +112,8 @@ private:
       data=callbacks_.read("automation.recording.events",params);
     }
     total_=data.at(deliveryView()?"retained":"total").get<size_t>();
-    auto rows=data.at("events");if(rows!=rows_){rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);InvalidateRect(controls_.at(events),nullptr,FALSE);}
+    auto rows=data.at("events");if(deliveryView())for(const auto &entry:rows)rememberTarget(entry);
+    if(rows!=rows_){rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);InvalidateRect(controls_.at(events),nullptr,FALSE);}
     set(page,total_?std::to_wstring(offset_+1)+L"–"+std::to_wstring(offset_+rows_.size())+L" of "+std::to_wstring(total_):L"No inputs on this page");
   }
   void refresh() {

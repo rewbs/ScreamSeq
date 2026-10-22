@@ -4,10 +4,11 @@ void applicationParameterRecordingReview() {
     using Json=RestoreJson;using Call=ScreamSeq::Api::CompletedCall;
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);const auto music=songState(app);
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
-    std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0;bool failAfterKeep=false;
+    std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
     callbacks.context=[&]{return std::pair(app.documentId,app.view->session.revision);};
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
+    callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
     callbacks.available=[]{return true;};callbacks.saveRecovery=[&]{++saves;};
     callbacks.reconcile=[&](const Call &call){restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
       "Native review reconciled the wrong completion");++reconciled;};
@@ -51,7 +52,7 @@ void applicationParameterRecordingReview() {
     restoreCheck(tool.snapshot().at("offset")==128&&tool.snapshot().at("events").size()==2&&tool.snapshot().at("events")[1].at("frame").is_null(),
         "Second page hid unmapped events or reused first-page offsets");
     SetFocus(control(9732));const auto focus=GetFocus();SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(GetFocus()==focus&&tool.snapshot().at("offset")==128,"Live recording refresh stole list focus or reset its page");
+    restoreCheck(GetFocus()==focus&&tool.snapshot().at("offset")==128&&nameReads==1,"Live recording refresh stole focus, reset its page or repeatedly queried parameter metadata");
     tool.hide();restoreCheck(take.at("capturing")==true&&writes.size()==1,"Closing review stopped or discarded the recording");tool.show();click(9722);
     restoreCheck(writes.size()==2&&!IsWindowEnabled(control(9723))&&IsWindowEnabled(control(9731)),"Stopped lossy take did not require explicit review");
     click(9726);restoreCheck(saves==1&&writes.size()==2,"Save recovery copy changed the recording take");
