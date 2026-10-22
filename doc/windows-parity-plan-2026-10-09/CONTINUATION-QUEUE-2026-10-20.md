@@ -8,6 +8,22 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 21:54 UTC continuation (supersedes gates below):** PR#7 now contains
+9195204a. Its single local build passed13 native groups and29 actual-app cases,
+with one optional plugin skip. The full F04 composing/recording preservation
+journey passed. Fresh isolated Computer Use confirmed direct recording review
+and visible Gain refusal, but sustained playback invalidated the recording
+timeline through a backwards native presentation projection. The foreground
+receipt is failed; no package/main merge. A follow-on unbuilt batch excludes
+unmapped intervals without retiming input, retains strict shared clock guards,
+adds95-second recording/history coverage, explains failed-context recovery and
+provides Mac parameter-level refusal/review feedback. See the newest
+[intake report](MAC-GESTURE-INTAKE-2026-10-22.md) for exact receipts and files.
+CI39858573202/39858573190 was still building at21:54. **No next build before
+22:36:29 UTC**, after checking later starts and current jobs. Backup-only pushes
+between gates. Mac live restoration, native vendor/device qualification,
+reciprocal edited projects and full A01–A18 journeys remain open.
+
 **22 October 20:51 UTC continuation (supersedes gates below):** frozen337fcfda
 built once;12/13 native registrations passed, with compact Pattern-header bounds
 failing at200% DPI. The separate actual-app diagnostic passed28 with one optional

@@ -160,7 +160,11 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     timeline_->firstHostTime.store(0);timeline_->endHostTime.store(0);
     if(previous)timeline_->discontinuities.fetch_add(1);
     timeline_->generation.store(time.generation,std::memory_order_release);
+    mappedStart_=mappedEnd_=0;
   }
+  // A proven hardware regression is terminal for an owned take, even when
+  // the device continues rendering untimed buffers in its quarantined epoch.
+  if(time.discontinuity)timeline_->absoluteFrames.invalidate();
   if(time.stopped){
     const auto end=timeline_->endHostTime.load();
     if(time.hostTime&&end>time.hostTime)timeline_->endHostTime.store(time.hostTime,std::memory_order_release);
@@ -172,7 +176,15 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     if(offline_&&chain_->latencyChangePending()) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     const auto origin=time.offset(at),end=time.offset(at+count);
-    const bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;
+    bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;
+    // Forward WASAPI device/QPC readings can still project a nonmonotonic
+    // presentation interval. Do not submit that estimate to either musical
+    // clock, clamp it to "now", or invalidate previously valid take coverage.
+    // Render it as an explicit timing hole; later forward coverage keeps its
+    // actual frame origin. Genuine device regressions remain terminal above.
+    if(mapped&&(origin.hostTime<mappedStart_||end.hostTime<=mappedEnd_)) {
+      mapped=false;timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
+    }
     renderer_->recordingTime(mapped?origin.hostTime:0,mapped?double(hostTicksPerSecond)/rate_:0);
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     const auto frame=renderer_->telemetry().frames;
@@ -183,8 +195,10 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     if(mapped){
       if(captureFrames_&&received) {
         const auto musicEnd=time.offset(at+received);
-        if(musicEnd.valid)timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
+        if(musicEnd.valid&&musicEnd.hostTime>mappedEnd_)
+          timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
       }
+      mappedStart_=origin.hostTime;mappedEnd_=end.hostTime;
       if(!timeline_->firstHostTime.load(std::memory_order_relaxed))timeline_->firstHostTime.store(origin.hostTime,std::memory_order_release);
       timeline_->endHostTime.store(end.hostTime,std::memory_order_release);
     }

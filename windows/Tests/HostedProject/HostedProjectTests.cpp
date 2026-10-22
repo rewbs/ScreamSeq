@@ -57,6 +57,52 @@ static void recordingTiming(Tracker::Document &doc,const Project::ProjectState &
   check(!timeline->stopped.load()&&!timeline->locate(origin+1000,7)&&!timeline->locate(origin+1000,8)&&timeline->locate(origin+1001000,8).has_value(),"a pinned take cannot join a new live device stream");
   check(playback.render(audio.data(),4096),"legacy untimed render");
   check(!timeline->locate(origin+1001000,8)&&timeline->generation.load()==0,"offline legacy render explicitly clears hardware origin");
+  // A forward raw device correlation can project behind the preceding buffer.
+  // Preserve valid coverage, but never manufacture musical time for that gap.
+  HostedProjectPlayback jitter(doc,state,48000,{},true),untimed(doc,state,48000,{},true);
+  const auto retained=jitter.recordingTimeline();std::vector<float> reference(audio.size());
+  auto renderCorrelation=[&](unsigned count,uint64_t start){
+    bool mapped=false,plain=false;
+    {AudioAudit::Scope scope;
+      mapped=jitter.render(audio.data(),count,RenderTime{start,9,48000,true});
+      plain=untimed.render(reference.data(),count);}
+    check(mapped&&plain,"correlation fixture renders both paths");
+    check(std::equal(audio.begin(),audio.begin()+count*2,reference.begin(),[](float a,float b){return std::abs(a-b)<1e-6f;}),
+      "unmapped correlations do not alter PCM");
+  };
+  renderCorrelation(480,origin);
+  check(retained->locateFrame(origin+1000,9)==4,"initial absolute frame coverage");
+  renderCorrelation(576,origin-69313); // Observed 6.93ms backwards projection.
+  check(retained->unmappedCorrelations.load()==1&&retained->absoluteFrames.generation()==9,
+    "native projection refusal retains the valid take epoch");
+  check(retained->endHostTime.load()==origin+100000&&retained->locateFrame(origin+1000,9)==4,
+    "refusal leaves prior coverage and bounds exact");
+  renderCorrelation(17,origin+1000); // Start advances; end alone regresses.
+  check(retained->unmappedCorrelations.load()==2,"end-only projection regression is also unmapped");
+  renderCorrelation(480,origin+220000);
+  check(!retained->locateFrame(origin+150000,9)&&!retained->locate(origin+150000,9),
+    "neither absolute nor row time interpolates across the unmapped gap");
+  check(retained->locateFrame(origin+221000,9)==1077,
+    "resumed coverage retains actual frames including rendered timing holes");
+  check(retained->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::None,
+    "strict shared timeline remains healthy without receiving invalid native intervals");
+  {AudioAudit::Scope scope;jitter.render(audio.data(),480,RenderTime{0,10,48000,false,true});}
+  check(retained->absoluteFrames.generation()==0&&
+    retained->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::Invalidated,
+    "proven hardware discontinuity still invalidates the retained absolute timeline");
+  {AudioAudit::Scope scope;jitter.render(audio.data(),480,RenderTime{origin+500000,10,48000,true});}
+  check(!retained->locateFrame(origin+501000,10),"a failed hardware epoch cannot be revived by later estimates");
+  HostedProjectPlayback sliced(doc,state,48000,{},true);
+  const auto slicedClock=sliced.recordingTimeline();
+  {AudioAudit::Scope scope;sliced.render(audio.data(),8193,RenderTime{origin,11,48000,true});}
+  const auto backwardsSlice=RenderTime{origin,11,48000,true}.offset(4096);
+  {AudioAudit::Scope scope;sliced.render(audio.data(),8193,backwardsSlice);}
+  check(slicedClock->unmappedCorrelations.load()==1&&slicedClock->absoluteFrames.generation()==11,
+    "large callbacks reject only the backwards internal slice");
+  const auto resumed=backwardsSlice.offset(4100).hostTime+1;
+  const auto resumedFrame=slicedClock->locateFrame(resumed,11);
+  check(resumedFrame&&*resumedFrame>=12292&&*resumedFrame<=12293,
+    "large callback recovery preserves actual frame origin across its rejected first slice");
   std::cout<<"PASS retained presentation timeline, Stop/restart, 3 rates and 4 callback partitions\n";
 }
 static std::vector<float> audition(Tracker::Document &doc,const Project::ProjectState &state,unsigned rate,unsigned block){

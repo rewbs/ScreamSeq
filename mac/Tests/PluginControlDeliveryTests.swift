@@ -26,6 +26,7 @@ extension InterfaceTests {
     try delivery.enqueue(first, owner: owner); try delivery.enqueue(next, owner: owner)
     try require(calls.isEmpty && delivery.pending && delivery.retained == 2,
       "Input waits without submitting, coalescing or requiring an available document worker")
+    try require(delivery.reviewMessage == nil, "Queued input is not falsely labelled refused")
     let waiting = events(delivery)
     try require(waiting.map { $0["hostTime"] as? String } == ["9007199254740993", "9007199254740994"] &&
       waiting.allSatisfy { $0["state"] as? String == "pending" }, "Queued recovery retains exact host times beyond Double precision")
@@ -45,10 +46,13 @@ extension InterfaceTests {
     replies.removeFirst()(result(owner, accepted: false))
     try require(delivery.needsReview && !delivery.pending && delivery.retained == 1 && events(delivery)[0]["state"] as? String == "refused",
       "Refused input stays reviewable and recoverable with its original payload")
+    try require(delivery.reviewMessage == events(delivery)[0]["error"] as? String,
+      "The parameter editor can show the exact retained refusal without consuming it")
     delivery.submitNext(submit)
     try require(calls.count == 2, "Refused input is not retried as a fresh request")
     try rejected(.differentOwner) { try delivery.release(another) }
     try delivery.release(owner)
+    try require(delivery.reviewMessage == nil, "A verified take release clears obsolete refusal status")
     try delivery.enqueue(first, owner: another); originalReply(result(owner))
     try require(delivery.owner == another && delivery.accepted == 0 && delivery.retained == 1,
       "An old callback after explicit release cannot mutate another take")
@@ -86,6 +90,7 @@ extension InterfaceTests {
       events(bounded).last?["hostTime"] as? String == String(first.timestamp + 1023),
       "Capacity exhaustion reports loss without dropping, replacing or coalescing retained original input")
     let archive = bounded.recovery!
+    try require(bounded.reviewMessage?.contains("overflow") == true, "Queue loss has an actionable editor diagnostic")
     let review = bounded.reviewPage(offset: 10)
     let reviewRows = review["events"] as? [[String: Any]] ?? []
     try require(reviewRows.count == 10 && review["total"] as? Int == 1024 &&
@@ -144,5 +149,29 @@ extension InterfaceTests {
     try require(manual == [0.4] && editor.note.stringValue == "Take stopped; review input" &&
       abs((Double(ordinary.reading.stringValue) ?? -1) - 0.4) < 1e-12,
       "A retained-owner refusal restores the displayed value and never falls back to an ordinary musical edit")
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+      styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; defer { window.close() }
+    window.contentView = editor; window.makeFirstResponder(editor.search)
+    editor.search.stringValue = "Gain"
+    let field = editor.search.currentEditor(); field?.selectedRange = NSRange(location: 1, length: 2)
+    let responder = window.firstResponder, originalCount = original.count, beforeValues = editor.parameterValues as NSArray
+    editor.recordingNeedsReview("Disable this parameter's envelopes before recording gestures")
+    editor.recordingNeedsReview("Disable this parameter's envelopes before recording gestures")
+    window.setContentSize(NSSize(width: 700, height: 500)); editor.layoutSubtreeIfNeeded()
+    let noteBounds = editor.convert(editor.note.bounds, from: editor.note)
+    let reviewBounds = editor.convert(editor.recordingReviewButton.bounds, from: editor.recordingReviewButton)
+    try require(editor.note.stringValue.contains("envelopes") && !editor.recordingReviewButton.isHidden &&
+      window.firstResponder === responder && field?.selectedRange == NSRange(location: 1, length: 2) &&
+      editor.search.stringValue == "Gain" && (editor.parameterValues as NSArray).isEqual(beforeValues) &&
+      original.count == originalCount && manual == [0.4] && noteBounds.minX >= 0 && noteBounds.maxX <= reviewBounds.minX &&
+      reviewBounds.maxX <= editor.bounds.maxX,
+      "Asynchronous recording refusal is visible beside controls without stealing focus, changing text or replaying input")
+    var reviews = 0; editor.onRecordingTake = { reviews += 1 }; editor.recordingReviewButton.performClick(nil)
+    try require(reviews == 1 && original.count == originalCount && manual == [0.4],
+      "Review opens the existing take directly without replaying refused input")
+    editor.recordingNeedsReview(nil)
+    try require(editor.note.stringValue == "Take stopped; review input" && editor.recordingReviewButton.isHidden && window.firstResponder === responder,
+      "Verified release removes only its own notice and preserves field focus")
   }
 }

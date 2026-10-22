@@ -127,6 +127,15 @@ class PluginRecordingTests(unittest.TestCase):
         self.record_keep_history_reopen_and_discard(plugin, project)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
+    def test_sustained_native_recording_keeps_clock_and_history(self):
+        plugin = self.add_gain()
+        project = self.folder / 'sustained-recording-source.screamseq'
+        self.write('document.save', path=str(project))
+        # The foreground failure occurred after the short lifecycle checks had
+        # already passed. Retain real input on both sides of a 95-second hold.
+        self.record_keep_history_reopen_and_discard(plugin, project, sustain_seconds=95)
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
     def test_composed_fixture_records_without_losing_cross_domain_edits(self):
         # Reuse the strict six-domain typed-tree journey rather than substituting
         # a blank song or checking only the final automation count.
@@ -160,8 +169,8 @@ class PluginRecordingTests(unittest.TestCase):
                     'Discard preserves preceding music', 'save/reopen',
                     'exact unrelated project preservation']))
 
-    def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None):
-        self.launch(project)
+    def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0):
+        self.launch(project, seconds=180 if sustain_seconds else 120)
         self.assertTrue(self.read('transport.get')['playing'])
         baseline = self.read('plugin.state.get', plugin=plugin)
         points_before = self.read('automation.get')
@@ -224,10 +233,28 @@ class PluginRecordingTests(unittest.TestCase):
             # worker's empty event list, when a composing journey finds a gap.
             self.fail(str(dict(failure=str(failure), expectedPlugin=plugin,
                                recording=self.read('workspace.get')['parameterRecording'])))
+        if sustain_seconds:
+            until = time.monotonic() + sustain_seconds
+            generation = self.read('transport.get')['recordingClock']['generation']
+            initial_count = captured['eventCount']
+            while time.monotonic() < until:
+                clock = self.read('transport.get')['recordingClock']
+                current = self.take()
+                self.assertEqual(clock['generation'], generation, clock)
+                self.assertEqual(clock['frameTimeline']['generation'], generation, clock)
+                self.assertEqual(clock['frameTimeline']['failure'], 'none', clock)
+                self.assertTrue(current['capturing'] and current['compatible'], current)
+                self.assertEqual(current['eventCount'], initial_count, current)
+                self.assertNotIn('intakeError', current)
+                time.sleep(.5)
+            enter(parameter, '-3.25')
+            self.wait_for(self.take, lambda s: s['eventCount'] > initial_count)
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
         events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
         self.assertTrue(any(e['value'] == -6.5 for e in events['events']))
+        if sustain_seconds:
+            self.assertTrue(any(e['value'] == -3.25 for e in events['events']))
         self.assertTrue(all(int(e['timestamp']) >= int(take['startTime']) for e in events['events']))
         self.recording_button(9722)
         stopped = self.wait_for(self.take, lambda s: s['retained'] and not s['capturing'])

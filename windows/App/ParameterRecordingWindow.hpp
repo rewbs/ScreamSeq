@@ -175,7 +175,9 @@ private:
     if(deliveryView()&&offset_&&offset_>=delivery_.at("retained").get<size_t>())offset_=0;
     loadPage();
     set(summary,retained()?(state_.value("completed",false)?L"Take kept · finish restoring the native controls":capturing()?
-      (state_.value("transportPlaying",true)?L"Recording · playback continues":L"Playback stopped · original input retained for review or discard"):
+      (state_.value("transportPlaying",true)?(state_.value("compatible",false)?L"Recording · playback continues":
+        L"Recording context lost · stop playback, then save recovery or discard"):
+        L"Playback stopped · original input retained for review or discard"):
       state_.value("compatible",false)?L"Stopped take · review before keeping or discarding":L"Take no longer matches the song · save a recovery copy or discard"):
       L"Start playback, then record native controls or plugin editor gestures.");
     const auto counts=L"Captured "+std::to_wstring(state_.value("eventCount",size_t(0)))+L" inputs · "+

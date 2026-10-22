@@ -1732,6 +1732,18 @@ age. They include looping, overlapping preview notes and NNA voices. No voices
 are reported after audio stops; plugin-internal sample/envelope positions are not
 visible to the host. Readers never block the audio callback.
 
+On Windows, `transport.get.recordingClock` describes the device correlation;
+its optional `frameTimeline` describes the retained plugin-recording coverage.
+`frameTimeline.unmappedCorrelations` counts native render slices excluded because
+their projected presentation boundaries did not advance monotonically. It is a
+diagnostic, not a dropped-input count: an original input outside mapped coverage
+remains subject to the recording take's existing unmapped/loss review. No client
+may substitute the current time for that input. A genuine device discontinuity
+still invalidates the retained timeline. `frameTimeline.failure` and its original
+boundary/frame fields report terminal failure separately. These reads change
+neither song history nor the take; zero rejected correlations does not establish
+realtime performance or physical-device timing accuracy.
+
 Application-only `workspace.ruler({mode})` selects `rows`, `beats`, `patternTime`
 or `songTime`; `workspace.get.positionMode` reports the choice. Clicking the
 pattern ruler header cycles these modes. The setting is view state, outside song

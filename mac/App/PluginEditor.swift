@@ -166,6 +166,21 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   // busy/coalescing path. true means that owner retained/handled the input;
   // it is not a claim that the worker already accepted or committed it.
   var onOriginalParameter: ((String, UInt32, Double, UInt64) throws -> Bool)?
+  private var recordingNotice: String?, noteBeforeRecordingNotice: String?
+  func recordingNeedsReview(_ message: String?) {
+    if let message {
+      if recordingNotice == nil { noteBeforeRecordingNotice = note.stringValue }
+      let notice = "Take needs review: \(message)"
+      recordingNotice = notice
+      if note.stringValue != notice { note.stringValue = notice }
+    } else if let previous = recordingNotice {
+      if note.stringValue == previous { note.stringValue = noteBeforeRecordingNotice ?? "" }
+      recordingNotice = nil; noteBeforeRecordingNotice = nil
+    }
+    if recordingReviewButton.isHidden != (recordingNotice == nil) { recordingReviewButton.isHidden = recordingNotice == nil }
+    // Status-only publication: never reload rows or change the field editor,
+    // selection or original values when an asynchronous capture is refused.
+  }
   var parameterInputClock: () -> UInt64 = { mach_absolute_time() }
   var parameterRetryDelay = 0.1, parameterRetryLimit = 30
   private var parameterGeneration: UInt64 = 0
@@ -196,6 +211,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   var savePresetButton: ActionButton!, loadPresetButton: ActionButton!
   var onActivity:(()->Void)?
   var onRecordingTake: (() -> Void)?
+  private(set) var recordingReviewButton: ActionButton!
   var onPatternAutomation: (() -> Void)?
   let rack = PluginRack(frame: .zero)
   var onGesture: ((Bool) -> Void)?, onGraph: ((String) -> Void)?
@@ -234,7 +250,14 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     instrumentActions = stack(.horizontal, [createInstrumentButton!, instrumentsButton!, NSView()], spacing: 8)
     let title = stack(.horizontal, [Theme.label("Plugins", size: 18, weight: .semibold), NSView(),
       ActionButton("Add plugin…", symbol: "plus", prominent: true) { [weak self] in self?.onAdd?() }, more], spacing: 8)
-    let content = stack(.vertical, [title, note, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
+    note.lineBreakMode = .byWordWrapping; note.maximumNumberOfLines = 3
+    note.preferredMaxLayoutWidth = 620
+    note.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    recordingReviewButton = ActionButton("Review take…") { [weak self] in self?.onRecordingTake?() }
+    recordingReviewButton.isHidden = true
+    recordingReviewButton.setAccessibilityLabel("Review plugin automation take")
+    let recordingStatus = stack(.horizontal, [note, recordingReviewButton!], spacing: 8)
+    let content = stack(.vertical, [title, recordingStatus, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 12)
     update(model: PatternModel([:]), values: [])
   }
@@ -370,6 +393,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     parameterValues = plugins.isEmpty ? [] : values
     filterParameters()
     if plugins.isEmpty { note.stringValue = "Add a built-in effect, AU or VST3 to begin." }
+    if let recordingNotice { noteBeforeRecordingNotice = note.stringValue; note.stringValue = recordingNotice }
   }
   func controlTextDidChange(_ notification: Notification) { filterParameters() }
   func showMeters(_ values: [AnyHashable: Any]) { dynamicsMeter.update(values) }

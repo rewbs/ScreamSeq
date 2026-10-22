@@ -35,7 +35,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var pluginRecordingWindow: NSWindow?
   lazy var pluginRecordingInput: PluginRecordingInput = {
     let input = PluginRecordingInput()
-    input.onReady = { [weak self] in self?.schedulePluginControlPump() }
+    input.onReady = { [weak self, weak input] in
+      guard let self, let input else { return }
+      self.pluginEditor.recordingNeedsReview(input.delivery.owner?.document == self.recoveryID ? input.delivery.reviewMessage : nil)
+      self.schedulePluginControlPump()
+    }
     return input
   }()
   var pluginControlPumpScheduled = false, pluginParameterGestureActive = false, pluginManualGestureApplied = false

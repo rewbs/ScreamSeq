@@ -303,6 +303,7 @@ public:
             const auto timeline=preparedPlayback->recordingTimeline();
             const auto failure=timeline->absoluteFrames.failureDetails();
             result.transport["recordingClock"]["frameTimeline"]={{"generation",timeline->absoluteFrames.generation()},
+                {"unmappedCorrelations",timeline->unmappedCorrelations.load()},
                 {"stopped",timeline->absoluteFrames.stopped()},{"failure",Tracker::RecordingFrameTimeline::failureName(failure.reason)},
                 {"start",std::to_string(failure.start)},{"previousStart",std::to_string(failure.previousStart)},
                 {"end",std::to_string(failure.end)},{"previousEnd",std::to_string(failure.previousEnd)},

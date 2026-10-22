@@ -114,7 +114,12 @@ void applicationParameterRecordingReview() {
     restoreCheck(writes.size()==3&&reconciled==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("take").at("retained")==false,
         "Review resent a completed action or retained the old take after receipt reconciliation");
     take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
-      {"transportPlaying",false},{"discardable",true},{"targets",Json::array()},{"sources",Json::array()}};
+      {"transportPlaying",true},{"discardable",false},{"targets",Json::array()},{"sources",Json::array()}};
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&
+      restoreText(control(9734)).find(L"stop playback")!=std::wstring::npos,
+      "Failed live clock still claimed to record or hid the safe recovery action");
+    take["transportPlaying"]=false;take["discardable"]=true;
     SendMessageW(window,WM_TIMER,7,0);
     restoreCheck(IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&
       restoreText(control(9734)).find(L"Playback stopped")!=std::wstring::npos,

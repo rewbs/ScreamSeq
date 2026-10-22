@@ -26,6 +26,7 @@ struct RecordingTimeline {
   std::shared_ptr<const Tracker::RecordingClock> clock;
   Tracker::RecordingFrameTimeline absoluteFrames;
   std::atomic<std::uint64_t> generation{0},firstHostTime{0},endHostTime{0},discontinuities{0};
+  std::atomic<std::uint64_t> unmappedCorrelations{0};
   // True is published after Stop's final bound; a live unmapped gap must not
   // be mistaken for a stopped stream when closing held notes.
   std::atomic<bool> stopped{false};

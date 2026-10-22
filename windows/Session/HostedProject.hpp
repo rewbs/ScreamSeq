@@ -25,6 +25,7 @@ class HostedProjectPlayback final {
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
   std::shared_ptr<RecordingTimeline> timeline_;
   std::uint32_t rate_=0;
+  uint64_t mappedStart_=0,mappedEnd_=0; // Audio owner; accepted native presentation bounds.
   uint64_t nativeUpdateGeneration_=0; // Serialized control owner only.
 public:
   // Owns all preparation until the document's beforeCommit callback publishes

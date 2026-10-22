@@ -1413,3 +1413,104 @@ Discard requires closed editors: safely removing that restriction needs a
 separate host-state/preview-restoration batch, not removal of its guard. Native
 vendor/device checks, Mac real-control recording, reciprocal edited-project
 exchange and the complete A01–A18 composing journeys remain open.
+
+## 22 October 21:35 checkpoint: composing passes; sustained recording fails
+
+Frozen `9195204aaceb59e38ad22007b1bd231d7da93c86` was pushed to PR#7 and
+built once in the clean qualification checkout. Local ARM64 Release started
+21:35:59 UTC and completed21:38:02. Executable SHA256:
+`695e820a0f003bc85c08fb6272cd4c30bb1eebedf403a1982d5bc506b51fc0ba`.
+`bin/mac-gesture-20261022/recording-journey/build.json` and `checks.json`
+are successful, immutable evidence for that candidate. All13 selected native
+groups passed, including the previously failing200% DPI header containment.
+The actual-app selection passed29 cases with one optional installed-Surge-XT
+skip. F04 composing and recording passed the occupied-Gain refusal, Balance
+capture, Keep/Undo/Redo/Discard, exact unrelated typed-tree preservation and
+save/reopen. Do not repeat those recorded runs.
+
+That automated result **does not qualify this candidate for packaging**.
+Fresh Computer Use on isolated silent PID36976 observed the corrected closed
+FX header, Params → Recording, and a visible Gain-envelope refusal beside the
+parameter controls with retained original delivery evidence. No existing Gain
+automation was disabled. During longer playback the absolute recording timeline
+became terminally invalid with `host-start-regression`, while the raw device
+correlation remained valid and playback continued. Stop could not seal that
+take, and the review misleadingly still said Recording. Balance Keep was not
+qualified in this foreground session.
+
+`foreground/gain-refusal.json` preserves the original readback: generation1,
+48kHz, contiguous musical frame4465440, new host start3065724205794 versus
+previous3065724275107, and new end3065724325794 versus previous3065724375107.
+The projection moved backwards6.93ms at its start, with no raw device
+discontinuity reported. This establishes the adapter/shared-clock mismatch; it
+does not establish why the device correlation varied or prove physical timing.
+Microsoft's [IAudioClock::GetPosition contract](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
+distinguishes precise/delayed results and defines the device/QPC correlation.
+The native adapter must not publish a backwards estimate as valid musical time.
+
+Main-dock search accepted `Balance`, Backspace produced `Balanc`, and visible
+Tab/Shift+Tab focus moved between search and parameter selection with text
+retained. Computer Use's accessibility report still named the root window;
+there was no fresh exact native/global focus observer, so these observations
+are not complete focus qualification. Compact More/resize and floating typing
+continuity remain open on this executable. PID36976 exited normally after600s,
+with source fixture and executable hashes unchanged. Its audio report contains
+39 deadline overruns,48kHz/480-frame period, no starvation/device errors or
+processor fault. Performance and temporal flicker remain unqualified.
+`foreground-check.json` records **failed**, so the prepared package script
+refuses it. No production package or main merge was performed.
+
+CI was dispatched only with the same checkpoint: Mac39858573202
+(Intel120103039731, ARM120103040135) and Windows39858573190
+(x64120103039342). At21:54 UTC all three were building. Actual latest build
+start21:36:29 UTC makes **22:36:29 UTC the earliest next checkpoint**, subject
+to later starts and final job inspection. The preceding337fcfda ARM job passed;
+Intel compiled but timed out one cabinet test and the run later canceled;
+Windows compiled but failed its required live suite with no enumerated WASAPI
+device. Those failures/skips are not replaced by local success.
+
+### Follow-on source batch, unbuilt
+
+- `windows/Session/HostedProject.{hpp,cpp}` admits monotonic native presentation
+  intervals to the row and absolute clocks. A backwards projected interval is
+  rendered normally but contributes no timing coverage. Subsequent valid
+  intervals retain their actual frame origins, including frames rendered in
+  the gap. No clamping, retiming, interpolation across holes or relaxation of
+  `editor/RecordingFrameClock.hpp` is introduced. Proven device discontinuities
+  remain terminal for the retained absolute timeline. This is a proposed
+  correction pending executable validation, not a claim that sustained capture
+  is fixed or that device timing is accurate.
+- `PresentationClock.hpp` and `Main.cpp` add the read-only
+  `transport.get.recordingClock.frameTimeline.unmappedCorrelations` diagnostic.
+  It counts excluded render slices, not lost input. Existing take loss and
+  acknowledgement semantics still apply to input outside valid coverage.
+- `HostedProjectTests.cpp` adds deterministic backwards-start/end-only cases,
+  exact prior coverage, explicit row/frame gaps, actual resumed frames, unchanged
+  PCM,4096-frame slicing, and terminal hardware-discontinuity assertions under
+  the existing callback allocation/free audit. No shared-clock assertion changes.
+- `test_plugin_recording.py` adds real native input before and after a95-second
+  recording hold, continuous context/clock checks, and the existing strict Keep,
+  one-step Undo, Redo, Discard and save/reopen journey. The owned process receives
+  a180-second bound; ordinary test processes retain their120-second limit.
+- `ParameterRecordingWindow.hpp` explains that an incompatible live take needs
+  playback stopped before safe discard/recovery. Its native regression retains
+  disabled Keep/Discard until stopped; no lifecycle safety guard is removed.
+- Mac `PluginControlDelivery.swift`, `PluginEditor.swift`, `main.swift` and
+  `PluginControlDeliveryTests.swift` add asynchronous refusal/loss feedback
+  beside parameters and a native **Review take…** action. Status changes retain
+  original input, values, search text, field editor and selection. Tests cover
+  bounded/refused diagnostics, repeated status publication, compact containment,
+  direct review and clearing only the released take's notice. Both Mac builds
+  and native interface tests are still required.
+
+Next validation batch: one build of the candidate and existing targets plus
+`recording-device-tests`;14 native groups (the previous13 plus device-clock
+regressions),31 app cases (previous30 plus sustained capture). Reuse completed
+919 evidence only for unaffected behavior; new clock/UI inputs require the new
+candidate. Fresh isolated Computer Use must include sustained silent playback,
+Gain refusal, Balance Record/Stop/Keep, Params review, compact More, resize and
+exact native focus observations after typing/Tab/Shift+Tab/Backspace. Preserve
+the existing failed foreground receipt. Mac native interface/session gates,
+reciprocal edited-project exchange and device/audio qualification remain before
+merge or complete parity claims. Keep Mac stopped restoration and closed-editor
+opaque Discard guards. Backup-only source pushes between coordinated checkpoints.

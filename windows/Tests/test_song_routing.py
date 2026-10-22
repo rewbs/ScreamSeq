@@ -24,8 +24,8 @@ class SongRoutingTests(unittest.TestCase):
         self.cache.write_text(json.dumps(list(modules.values())))
         self.launch()
 
-    def launch(self,project=None):
-        args=[os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent' if project else '--inspection','--automation','--seconds','120','--vst3-test-cache',str(self.cache)]
+    def launch(self,project=None,seconds=120):
+        args=[os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent' if project else '--inspection','--automation','--seconds',str(seconds),'--vst3-test-cache',str(self.cache)]
         if project:args+=['--project',str(project),'--audio-test-allow-stop']
         self.pid=self.desktop.launch(args);self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
         for _ in range(100):

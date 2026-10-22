@@ -30,6 +30,10 @@ final class PluginControlDelivery {
   var submitted: Bool { entries.contains { $0.state == .submitted } }
   var needsReview: Bool { lost > 0 || entries.contains { $0.state == .refused || $0.state == .unknown } }
   var retained: Int { entries.count }
+  var reviewMessage: String? {
+    if let entry = entries.first(where: { $0.state == .refused || $0.state == .unknown }) { return entry.error }
+    return lost > 0 ? "The original input queue overflowed. Review the retained input and loss count." : nil
+  }
   private static func valid(_ text: String, maximum: Int) -> Bool {
     !text.isEmpty && text.utf8.count <= maximum && !text.contains("\0")
   }
