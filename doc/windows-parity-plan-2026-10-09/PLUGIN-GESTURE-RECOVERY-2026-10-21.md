@@ -941,3 +941,47 @@ completed-take guards remain. The existing native failed-clock worker test now
 asserts that admission state, and the review fixture exercises the matching
 button/identity/close-barrier transition. These assertions join the same pending
 build; no additional build or relaxed failure gate is introduced.
+
+## 22 October 04:55 UTC checkpoint — compiled, startup qualification failed
+
+Frozen candidate: `bcd10d8a8edf0b2e5409c8ef4e7c42f15f3aab25`.
+The one local ARM64 Release build started at 04:55:46 UTC and completed at
+04:59:44 UTC. Executable SHA-256:
+`b6970550f4746d22121e912dbea6d5c46e8ec5b731cfba1b1b774f6c7db3ac78`.
+Receipts: `bin/plugin-control-review-20261022/correction/{build,checks}.json`,
+with `native.log`, `native.xml`, `app.log` and `app-launch.log` alongside them.
+
+Thirteen of 24 native registrations passed, including the recorded-take worker,
+failed-clock discard admission, plugin notifications, VST3, project preservation,
+API and reply-cache checks. Eleven native application registrations failed during
+startup with **Duplicate native menu command**. Eleven of 12 actual-app cases
+could not start; the separate controller/vendor-ownership case passed. No claim
+is made that the public recording workflow passed. The private-desktop wrapper
+also recorded a foreground-preservation failure (before HWND null, afterward an
+unrelated PID); preserve that evidence separately from the deterministic menu
+failure. No foreground Computer Use pass or production package is claimed for
+this executable: it cannot construct its application menu.
+
+Source correction removes the duplicate `parameterRecordingCommand` registration
+from Tools > Automation, retaining Playback > Plugin automation take and the
+separate-window navigator. The uniqueness assertion remains strict. Recovered
+plugin inputs remains under Tools > Automation. Both document-global review
+commands now tolerate playback/cursor movement while the native menu is open;
+the document identity and native focus guards still apply. The existing menu
+fixture now invokes both after cursor movement and requires preserved musical
+state and dock layout. This correction is source-only until the next checkpoint.
+
+Coordinated CI at this source: Mac run `39725114919`, Intel job `119647127828`
+and ARM job `119647128083`; Windows run `39725114915`, x64 job `119647127634`.
+All were compiling at the 05:02 observation. Inspect terminal results and retain
+valid Mac evidence if its relevant source inputs are unchanged by the menu fix.
+Do not restart these jobs. The latest build start was Mac Intel at 04:56:14 UTC,
+so **no next build or build-triggering push before 05:56:14 UTC**.
+
+Next checkpoint must rerun the affected application checks against a rebuilt
+candidate, without weakening any assertions, then inspect the exact executable
+with Computer Use for real navigation, parameter editing/recording and keyboard
+focus. Worker-only passing results are bounded reusable evidence if their inputs
+remain unchanged; they do not substitute for the unexecuted public workflow.
+Packaging and main integration remain gated on qualification. Backup-only branch
+pushes do not trigger the coordinated build workflows.

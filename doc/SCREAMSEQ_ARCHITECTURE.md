@@ -23,7 +23,7 @@ defines detached recovery evidence for pending/refused/unknown delivery in the o
 `screamseqPluginControlRecovery` preservation array. This is never replayable input:
 an uncertain native event may already be present in the worker's gesture archive.
 Native UI queues and worker snapshots remain control-owner work. This source batch
-still awaits qualification and a public capture/review UI; see the
+now includes public native capture/review windows and still awaits qualification; see the
 [plugin recording report](windows-parity-plan-2026-10-09/PLUGIN-GESTURE-RECOVERY-2026-10-21.md).
 
 Native voice positions are published by `Renderer` through bounded atomic snapshots. UI/API readers consume sample frames and volume/pan/pitch envelope ticks without reading live engine channels or blocking audio. `pattern.timeline.get` uses the editor-only `GetLengthTarget.onRow` observer on the document worker to collect first-visit times in one engine walk; never calculate row timing in drawing or from a fixed BPM assumption. The ruler's order occurrence matters when a pattern repeats.

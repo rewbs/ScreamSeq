@@ -52,6 +52,19 @@ void applicationMenuBar(){
         menuChoose(app,navigationPatternCommand);
         restoreCheck(GetFocus()==app.window&&app.workspaceState.focus=="pattern","Pattern menu did not focus the visible tracker");
         restoreCheck(app.position().at("row")==12&&songState(app)==before,"Pattern menu restored an old position or changed music");
+        const auto layout=app.workspaceDockSnapshot().at("configuration");
+        for(const auto id:{parameterRecordingCommand,pluginRecoveryReviewCommand}){
+            SetFocus(app.window);menuBegin(app);next=app.position();next["row"]=next.at("row").get<int>()+1;app.navigate(next);
+            menuChoose(app,id);
+            const bool visible=id==parameterRecordingCommand?app.parameterRecordingWindow&&app.parameterRecordingWindow->visible():
+                app.pluginRecoveryReviewWindow&&app.pluginRecoveryReviewWindow->visible();
+            restoreCheck(visible,"Playback/cursor movement blocked document-global recording review navigation");
+            const auto tool=id==parameterRecordingCommand?app.parameterRecordingWindow->window():app.pluginRecoveryReviewWindow->window();
+            ScreamSeq::Tests::ownGuiWindow(tool);
+            if(id==parameterRecordingCommand)app.parameterRecordingWindow->hide();else app.pluginRecoveryReviewWindow->hide();
+            restoreCheck(app.workspaceDockSnapshot().at("configuration")==layout&&songState(app)==before,
+                "Recording review navigation replaced the dock layout or edited music");
+        }
         SetFocus(app.window);SetCapture(app.window);menuBegin(app);
         const bool capturedDisabled=(menuEntry(GetMenu(app.window),newDocumentCommand).state&MFS_DISABLED)!=0;
         SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);ReleaseCapture();

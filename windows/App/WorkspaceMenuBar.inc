@@ -83,7 +83,7 @@
             {0,L"&Tools",true,false,{
                 {0,L"Pattern",true,false,commands({effectPickerCommand,effectsCommand,notesCommand,graphCommandsCommand,scratchGesturesCommand,patternRenderOptionsCommand,0,positionRulerCommand,patternRowsLargerCommand,patternRowsSmallerCommand})},
                 {0,L"Sound",true,false,commands({sampleBrowseCommand,sampleImportCommand,sampleDetailCommand,sampleRecordCommand,instrumentEnvelopeCommand,instrumentImportCommand,pluginsCommand,pluginBrowse,0,mixerCommand,mixerRouting,graphCommand,graphWorkflowCommand})},
-                {0,L"Automation",true,false,commands({parameterAutomationCommand,absoluteAutomationCommand,parameterActivityCommand,0,parameterRecordingCommand,pluginRecoveryReviewCommand,0,pluginAutomate,pluginActivity,0,curveReference})},
+                {0,L"Automation",true,false,commands({parameterAutomationCommand,absoluteAutomationCommand,parameterActivityCommand,0,pluginRecoveryReviewCommand,0,pluginAutomate,pluginActivity,0,curveReference})},
                 {0,L"Preferences",true,false,commands({audioSettingsCommand,keyboardSettingsCommand,reloadShortcutsCommand})},
                 {0,L"Help",true,false,commands({keyboardHelpCommand,aboutCommand})}}}};
         menuBar=std::make_unique<ScreamSeq::NativeMenuBar>(window,std::move(menus));refreshMenuBar();
@@ -105,7 +105,8 @@
         switch(id){
         case contextPanelCommand:case stopCommand:case exitCommand:case paletteCommand:case layoutsCommand:case audioSettingsCommand:case keyboardSettingsCommand:case reloadShortcutsCommand:
         case composeCommand:case patternCommand:case soundCommand:case connectedWorkspaceCommand:case graphEditingWorkspaceCommand:
-        case navigationPatternCommand:case allEditorsCommand:case navigationWindowsCommand:case mixingGraphPanelCommand:case mixingGraphFloatCommand:return true;
+        case navigationPatternCommand:case allEditorsCommand:case navigationWindowsCommand:case mixingGraphPanelCommand:case mixingGraphFloatCommand:
+        case parameterRecordingCommand:case pluginRecoveryReviewCommand:return true;
         case playbackLoopCommand:return current.at("loop")==menuGuard.at("loop");
         case liveKeysCommand:return current.at("live")==menuGuard.at("live");
         case followCommand:return current.at("position").at("following")==menuGuard.at("position").at("following");

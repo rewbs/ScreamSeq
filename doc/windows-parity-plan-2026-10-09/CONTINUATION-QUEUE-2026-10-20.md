@@ -13,13 +13,16 @@ must not override current source or the active goal.
 is merged and its production navigation package is available; see
 [navigation evidence](NAVIGATION-IMPLEMENTATION-2026-10-21.md). The next working
 batch is native plugin parameter controls, retained gesture recording and detached
-input recovery. Its corrected code is backed up through `24355c4f2`; read the
+input recovery. The candidate `bcd10d8a8` compiled but failed startup qualification; read the
 [current recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) before touching
-its checkpoint. The hourly gate is **2026-10-22 04:55:42 UTC**. The preceding
-Windows compile failure is terminal; both preceding Mac jobs are terminal passes.
-Do not poll/restart them or treat them as qualification of the newer source.
+its checkpoint. The next hourly gate is **2026-10-22 05:56:14 UTC**. The local
+build and check receipts under `bin/plugin-control-review-20261022/correction`
+are terminal and must not be repeated. Its Windows/macOS CI jobs remain separate
+live observations until terminal; do not restart them. The menu source correction
+is unbuilt. Prior Mac passes do not qualify the newly changed recovery adapter.
 
-The immediate queue is: build the clean frozen correction once; inspect bounded
+The immediate queue is: finish source review, freeze the startup correction, then
+build once after the gate; inspect bounded
 native and actual-app results; perform Computer Use on that executable, including
 keyboard focus and silent recording; qualify current x64/Mac adapters and fresh
 reciprocal edited fixtures; package and merge only the qualifying result. Continue
