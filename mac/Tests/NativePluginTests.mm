@@ -250,6 +250,60 @@ static void nativeTakeIntake(const PluginState &state,bool visible=false,bool la
     audio.pluginEditSource(0)==source&&!audio.active(),"Take restoration replaced its owner or retained the transient value");
   if(visible){check(window.visible,"Take preview restoration closed the native editor");[window close];}
 }
+static void nativeTakeExplicitDiscard(const PluginState &state,bool visible=false) {
+  AudioDevice audio;audio.setPlugins({state});
+  const auto epoch=audio.pluginEpoch(),source=audio.pluginEditSource(0).incarnation;
+  const auto parameter=audio.pluginParameters(0).at(0);
+  const std::array<PluginState,1> rack{state};
+  const std::array<RecordedGestureTake::Provider,1> providers{{{state.instanceID,audio.pluginEditSource(0)}}};
+  auto timeline=std::make_shared<RecordingFrameTimeline>();const auto arm=mach_absolute_time();
+  check(timeline->publish(arm,arm+1,0,1,48000,37),"Explicit Discard fixture clock starts");
+  std::string revision="revision";NativeSong native;
+  auto take=std::make_shared<RecordedGestureTake>("explicit-native-discard",revision,arm,timeline,rack,std::span<const ParameterChange>{},providers);
+  NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,{});
+  check(owner.capture(native,state.instanceID,parameter.id,.4,mach_absolute_time()),"Capture input before failed context");
+  NSWindow *window=nil;NSSlider *slider=nil;
+  if(visible) {
+    audio.showPluginEditor(0);
+    for(NSWindow *candidate in NSApp.windows)if(candidate.visible&&[candidate.title isEqualToString:@(state.descriptor.name.c_str())])
+      for(NSView *view in candidate.contentView.subviews)for(NSView *child in view.subviews)
+        if([child isKindOfClass:NSSlider.class]){check(slider==nil,"Explicit Discard editor is ambiguous");window=candidate;slider=(NSSlider *)child;}
+    check(window&&slider,"Explicit Discard native editor did not open");
+    slider.doubleValue=.6;check([slider sendAction:slider.action to:slider.target],"Send recorded native input");
+    const auto end=owner.stop();check(timeline->publish(arm+1,end,1,479,48000,37)&&owner.poll(native),"Drain explicit Discard take prefix");
+    slider.doubleValue=.9;check([slider sendAction:slider.action to:slider.target],"Send native post-Stop suffix");
+    const auto before=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(before&&before->fence.pending==1,"Post-Stop suffix was not retained");
+    bool refused=false;try{owner.abandonStopped(rack);}catch(const std::exception &){refused=true;}
+    const auto after=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(refused&&after&&after->source==before->source&&after->fence.position==before->fence.position&&
+      after->fence.pending==before->fence.pending&&window.visible&&slider.enabled,
+      "Explicit Discard consumed later input or changed an open native editor");
+    [window close];
+  }
+  const auto originalEnd=take->endTime();const auto captured=take->eventCount();
+  revision="changed";timeline->invalidate();
+  bool refused=false;try{owner.stop();}catch(const std::exception &){refused=true;}
+  check(originalEnd?owner.stopCuts().size()==1:refused,"Invalid context unexpectedly accepted a new ordinary Stop cut");
+  // A bad accepted-state set must fail before discarding queued notifications.
+  const auto before=audio.pluginInputBoundary(0,mach_absolute_time());
+  refused=false;try{owner.abandonStopped({});}catch(const std::exception &){refused=true;}
+  const auto after=audio.pluginInputBoundary(0,mach_absolute_time());
+  check(refused&&before&&after&&before->source==after->source&&before->fence.position==after->fence.position&&
+    before->fence.pending==after->fence.pending&&owner.owns(state.instanceID),"Failed baseline verification discarded native input");
+  check(owner.abandonStopped(rack),"Explicit closed-editor Discard could not recover the failed context");
+  const auto empty=audio.pluginInputBoundary(0,mach_absolute_time());
+  check(empty&&empty->fence.pending==0&&empty->source.incarnation==source&&audio.pluginEpoch()==epoch&&!audio.active()&&
+    owner.owns(state.instanceID)&&!take->completed()&&take->eventCount()==captured&&take->endTime()&&
+    (!originalEnd||take->endTime()==originalEnd),"Explicit Discard accepted music, rewrote its Stop cut or replaced a native owner");
+  check(std::abs(audio.pluginParameters(0).at(0).value-parameter.value)<1e-6&&
+    std::abs(*audio.pluginParameters(0).at(0).manualValue-parameter.value)<1e-6,
+    "Explicit Discard left an audible gesture or changed the saved manual baseline");
+  check(owner.abandonStopped(rack),"Explicit Discard could not retry after successful native restoration");
+  audio.setPlugins({state});
+  refused=false;try{owner.abandonStopped(rack);}catch(const std::exception &){refused=true;}
+  check(refused,"Explicit Discard touched a replacement audio host");
+}
 static void nativeTakeGroupedRestoration(const PluginState &first,const PluginState &second) {
   AudioDevice audio;audio.setPlugins({first,second});
   const auto source0=audio.pluginEditSource(0),source1=audio.pluginEditSource(1);
@@ -509,6 +563,8 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       nativeTakeAtomicPublication(saved,closedAU);
       nativeTakeIntake(saved);
       nativeTakeIntake(closedAU);
+      nativeTakeExplicitDiscard(saved);
+      nativeTakeExplicitDiscard(closedAU);
       NativePlugin recalled(saved, 48000);
       check(std::abs(recalled.parameters()[0].value - .3f) < 1e-6, "VST3 processor/controller state recall");
       std::array<float, 1024> buffer;
@@ -798,6 +854,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         stoppedRecordedPublication(saved,true);
         nativeTakeIntake(saved,true);
         nativeTakeIntake(saved,true,false);
+        nativeTakeExplicitDiscard(saved,true);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);

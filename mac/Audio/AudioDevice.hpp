@@ -141,6 +141,7 @@ public:
     if (plugins_)
       plugins_->showEditor(slot);
   }
+  std::vector<size_t> openPluginEditors() const {return plugins_?plugins_->openEditors():std::vector<size_t>{};}
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
   bool popPluginEdit(size_t slot,PluginEdit &event) {return plugins_&&plugins_->popEdit(slot,event);}
   bool popPluginEdit(size_t slot,PluginEdit &event,PluginEditSource &source) {

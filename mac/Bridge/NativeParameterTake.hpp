@@ -269,5 +269,81 @@ public:
     for(const auto &[identity,cut]:stoppedCuts_)owners.push_back({identity,cut.source});
     return restoreRetained(discard,[&]{audio_.restoreStoppedPluginBaselines(hostEpoch_,owners,saved);});
   }
+  // Explicit stopped Discard with every owned editor closed. This abandons
+  // pending native input as well as the take; ordinary Keep/restoration never
+  // rebases its Stop cut or invokes this escape. It can recover a failed clock
+  // or document context, but may not touch a replacement native provider.
+  // A refusal after the bounded discard can leave a consumed prefix: that
+  // input was explicitly abandoned, not accepted or replayed as manual edits.
+  // The caller still retains this owner on every failure, including cleanup.
+  bool abandonStopped(std::span<const PluginState> saved) {
+    Entry entry(entering_);
+    require(!audio_.active(),"Stop playback before explicitly discarding native input");
+    releaseInputBarriers();
+    const auto providers=take_->providers();
+    const auto requireClosed=[&] {
+      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Discard belongs to a replaced or active audio host; take retained");
+      const auto open=audio_.openPluginEditors();
+      for(const auto &provider:providers) {
+        const auto index=slot(provider.plugin);const auto source=audio_.pluginEditSource(index);
+        require(std::find(open.begin(),open.end(),index)==open.end(),"Close every recorded plugin editor before discarding later native input");
+        require(source.incarnation==provider.source.incarnation&&source.dropped>=provider.source.dropped,
+          "Discard belongs to another native notification provider; take retained");
+      }
+      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Audio host changed while preparing explicit Discard");
+    };
+    requireClosed();
+    if(!take_->completed()&&!take_->endTime()) {
+      const auto end=mach_absolute_time();require(end<UINT64_MAX,"Discard time exceeds the native clock range");
+      take_->seal(end+1); // Preserve the original evidence; never accept its failed context.
+    }
+    for(const auto &provider:providers)inputBarriers_.emplace(provider.plugin,PluginEditorInputBarrier{});
+    try {
+      for(auto &[identity,barrier]:inputBarriers_) {
+        const auto acquired=audio_.beginPluginInputBarrier(slot(identity));
+        require(acquired.has_value(),"Native input cannot be protected for explicit Discard");barrier=*acquired;
+      }
+      requireClosed();
+      const auto abandoned=cuts();
+      for(const auto &provider:providers) {
+        const auto &cut=abandoned.at(provider.plugin);
+        require(cut.source.incarnation==provider.source.incarnation&&cut.source.dropped>=provider.source.dropped&&
+          cut.fence.pending<=PluginEditQueue::capacity,"Discard cut belongs to another or unbounded provider");
+      }
+      requireClosed();
+      std::vector<AudioDevice::PluginStateOwner> owners;owners.reserve(abandoned.size());
+      for(const auto &[identity,cut]:abandoned)owners.push_back({identity,cut.source});
+      const auto requireUnchanged=[&](bool drained) {
+        requireClosed();const auto currentCuts=cuts();
+        for(const auto &[identity,before]:abandoned) {
+          const auto &after=currentCuts.at(identity);
+          require(before.source==after.source&&before.fence.position==after.fence.position&&
+            after.fence.pending==(drained?uint64_t(0):before.fence.pending),
+            "Native input changed during explicit Discard; take retained for retry");
+        }
+      };
+      if(!restorePreviewImpl(true)){releaseInputBarriers();return false;}
+      audio_.restoreStoppedPluginBaselines(hostEpoch_,owners,saved);
+      requireUnchanged(false);
+      // Restore and verify the complete group's saved state before abandoning
+      // its notifications. The raw consumer is bounded and never calls a vendor
+      // state serializer, publishes music, or feeds the ordinary manual path.
+      for(const auto &[identity,cut]:abandoned) {
+        bool complete=false;
+        for(size_t n=0;n<=PluginEditQueue::capacity;++n) {
+          PluginEdit event;PluginEditSource source;
+          const auto result=audio_.popPluginInputBefore(slot(identity),cut,event,source);
+          require(source==cut.source,"Discard provider changed during its bounded drain");
+          if(result==PluginEditRead::Complete){complete=true;break;}
+          require(result==PluginEditRead::Event,"Discard input boundary is no longer valid");
+        }
+        require(complete,"Explicit Discard exceeded its fixed native input bound");
+      }
+      requireUnchanged(true);releaseInputBarriers();requireUnchanged(true);
+      return true;
+    } catch(...) {
+      const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
+    }
+  }
 };
 }

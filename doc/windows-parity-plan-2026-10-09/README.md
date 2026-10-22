@@ -1,22 +1,26 @@
 # ScreamSeq Windows parity implementation plan
 
-**Current boundary (21 October Pacific / 22 October UTC):** shared main is
-`4e4862bcc575795bd736fe5edc126f8e873f1d24`, including the qualified navigation
-and flicker work. The separate Windows ARM64 navigation package is recorded in
-[navigation implementation](NAVIGATION-IMPLEMENTATION-2026-10-21.md).
-The plugin controls/recording batch is on draft PR #6. Candidate `bcd10d8a8`
-compiled but Windows startup failed on a duplicate menu command. The prepared
-menu and MIDI chooser corrections await the next coordinated checkpoint, no
-earlier than **2026-10-22 05:56:14 UTC**. Its Mac ARM build passed 134 native tests
-and 35 interface groups, then stopped on a stale API inventory baseline. The
-[reviewed inventory correction](PLUGIN-API-INVENTORY-2026-10-22.md) includes
-additional contract checks and a cheap pre-build gate. Consult the
-[current queue](CONTINUATION-QUEUE-2026-10-20.md) and
-[recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) for candidate identities
-and limits. Original input, Undo/persistence and
-fresh reciprocal fixtures remain release gates. **The overall 117-row parity
-inventory is not complete.** The dated entries below are historical checkpoints,
-not current absence claims or permission to repeat an old build.
+**Current boundary (22 October UTC):** shared main is
+`0fe8f34008fe6517d7598affc31a4948a2ab14b8`, including the qualified navigation,
+flicker, plugin control/recording and command/scratch work from PR#6. Its tree
+matches077e. Both Mac architecture jobs passed. Windows CI retained12 distinct
+playback/startup failures; all12 passed unchanged locally on the exact downloaded
+CI executable with an available endpoint (ARM64 emulation, silent output).
+That bounded replay does not turn the original Windows CI result green.
+
+The separate ARM64 executable is
+`~/Downloads/ScreamSeq-Windows-ARM64-plugin-077e35f29/ScreamSeq.exe`; qualification,
+hash and limitations are in [the command report](COMMAND-AVAILABILITY-2026-10-22.md).
+Main's normal cross-platform push checkpoint is running, with no additional local
+build. The next checkpoint must be no earlier than **2026-10-22 17:09:52 UTC**;
+inspect the exact current run receipts in the [queue](CONTINUATION-QUEUE-2026-10-20.md).
+Later Mac retained-take session/restoration source is backed up on a temporary
+branch and remains unbuilt; the new public Mac lifecycle is not yet connected.
+
+**The overall 117-row parity inventory is not complete.** Original input,
+Undo/persistence, native UI/audio and reciprocal fixtures remain gates. The dated
+entries below are historical checkpoints, not current absence claims or permission
+to repeat an old build. Consult the current queue before resuming implementation.
 
 **Historical executed checkpoint (20 October, `7fb99d0b2`):**
 [recorded take/graph qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md)

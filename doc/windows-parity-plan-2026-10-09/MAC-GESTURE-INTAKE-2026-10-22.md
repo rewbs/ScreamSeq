@@ -676,3 +676,38 @@ PR#6's earlier077e tree is integrated as main0fe8f3400. Its push CI is the curre
 hourly checkpoint (Windows39811540714, Mac39811541170). Latest build start
 16:09:52UTC gives **17:09:52UTC** as the earliest following checkpoint. Source
 work and backup pushes on this temporary branch do not dispatch another build.
+
+## Following source batch: explicit failed-context discard — unbuilt
+
+`NativeParameterTake::abandonStopped` adds a separate, explicit stopped Discard
+path. Every owned native editor must already be closed, and the host and actual
+provider incarnations must still belong to the take. It can seal an otherwise
+unsealable take after a clock/document-context failure without accepting any
+music. It preserves an existing Stop boundary. Ordinary Keep/restoration still
+requires the original fixed cut and never invokes this path implicitly.
+
+The complete group is protected against native editor input. Saved baselines
+are restored and verified before consuming any abandoned notification. The
+discard uses one bounded native cut per provider, checks for intervening input,
+and never routes that input into the legacy manual consumer. Source changes,
+reopened editors, unsupported barriers and opaque-state mismatch retain the
+owner. A failure after an explicitly authorized drain may have consumed a
+prefix of abandoned input; it cannot promise to restore those notifications.
+The owner and its already captured review remain until successful release.
+`discardStoppedParameterTake` resets the session owner only after success.
+
+Prepared native AU/VST3 checks cover changed clock/revision, refusal before
+touching an open editor, a real post-Stop slider suffix, missing saved baseline
+without consuming notifications, successful closed-editor restoration, retry,
+unchanged provider/host identities and refusal of a replaced host. Device-mode
+session checks also cover the explicit release's history/state contract.
+They are unbuilt. The native checks join the existing `native-plugins` and
+owned `--ui` gates on both Mac architectures; the real-session case still
+requires the explicit virtual-device mode described above.
+
+Remaining release work is substantive: hidden state that cannot be reconstructed
+through parameters still refuses, even with an editor closed. A safe opaque
+replacement path must preserve unrelated processors and routing. Live release
+must avoid concurrent VST3 state serialization/zero-frame process calls and
+retain editor usability; a stopped-only escape does not close that requirement.
+Full native controls, seven API contracts and socket qualification remain open.

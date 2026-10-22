@@ -8,6 +8,7 @@
 - (Tracker::RecordedGestureTake::Review)parameterTakeReview;
 - (Tracker::NativeParameterTake::CommitResult)commitParameterTake:(BOOL)acknowledgeLoss;
 - (BOOL)releaseStoppedParameterTake:(BOOL)discard;
+- (BOOL)discardStoppedParameterTake;
 @end
 static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uint32_t device,uint32_t frames) {
   TrackerSession *session=[TrackerSession new];NSError *error=nil;
@@ -125,6 +126,14 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     "Discard changed accepted music or manual state");
   check([session historyUndo:NO error:&error]&&[tree()[@"automation"] isEqual:baseline[@"automation"]],
     "Empty/Discard inserted history above the last kept take");
+  // The explicit closed-editor release is independently callable and retains
+  // the same musical/history contract; normal Keep never chooses it implicitly.
+  start();NSString *beforeExplicit=session.automationRevision;
+  check([session captureParameterTake:identities[0] parameter:7 value:.7 timestamp:mach_absolute_time()],"Capture explicitly discarded session input");
+  [NSThread sleepForTimeInterval:.03];[session stop];
+  check([session discardStoppedParameterTake]&&[session.automationRevision isEqual:beforeExplicit]&&
+    [tree()[@"automation"] isEqual:baseline[@"automation"]]&&[tree()[@"plugins"] isEqual:baseline[@"plugins"]],
+    "Explicit Discard changed the session baseline or music");
   [reopened shutdown];[session shutdown];
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   std::cout<<"PASS real-session multi-target parameter take, direct admission, recovery, one-step Keep/Undo/Redo, stopped verification, save/reopen, empty and Discard\n";

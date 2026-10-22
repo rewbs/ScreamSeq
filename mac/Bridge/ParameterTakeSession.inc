@@ -97,3 +97,8 @@
   if(!_parameterTake->restoreStopped(discard,_plugins))return NO;
   _parameterTake.reset();return YES;
 }
+- (BOOL)discardStoppedParameterTake {
+  if(!_parameterTake)return YES;
+  if(!_parameterTake->abandonStopped(_plugins))return NO;
+  _parameterTake.reset();return YES;
+}
