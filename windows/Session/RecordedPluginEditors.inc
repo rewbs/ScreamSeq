@@ -205,14 +205,15 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
   // A stop cut is not permission to discard later vendor input. Until the
   // session owns a native restoration barrier, new gestures must retain this
   // owner and their queue, rather than disappear in the restoration drain.
-  for(const auto &[identity,cut]:capture.releaseCuts) {
+  const auto requireStoppedInput=[&]{for(const auto &[identity,cut]:capture.releaseCuts) {
     // Explicit stopped discard with a closed editor abandons its transient
     // input as well as the take. Normal completion never takes this escape.
     if(discard&&!editors_.at(identity)->editorOpen())continue;
     const auto current=editors_.at(identity)->editBoundary();
     need(current&&current->source==cut.source&&current->fence.position==cut.fence.position,
       "Plugin received input after Stop; later input and recording protection retained");
-  }
+  }};
+  requireStoppedInput();
   struct Restore {
     std::string identity;
     std::unique_ptr<NativePlugin> baseline;
@@ -228,6 +229,10 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
     item.expected=item.baseline->state();item.catalog=item.baseline->parameters();
     item.open=editors_.at(identity)->editorOpen();prepared.push_back(std::move(item));
   }
+  // Preparing a baseline executes vendor code and may pump its native owner.
+  // Check again before restoring even the audible preview, not just before
+  // preparation. Later input must never enter the owned restoration drain.
+  requireStoppedInput();
   // Queue refusal makes no vendor, history or saved-state change. A failure
   // during later vendor restoration still keeps exclusion and permits retry.
   if(!restorePreview())return false;

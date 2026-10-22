@@ -428,3 +428,18 @@ after the recovery cut, exact raw values/timestamps, no history/manual/Stop or
 preview changes, deferred preview refusal, repeated snapshots, and existing Stop
 boundaries. The prior normal 128-event poll assertion remains intact. These
 changes and tests are unbuilt; use the next combined hourly checkpoint.
+
+## Restoration preparation recheck (source only)
+
+Baseline preparation calls vendor constructors/catalog/state methods and can pump
+native callbacks. Release now rechecks each fixed Stop boundary after that work,
+before invoking the audible restore callback. Later input remains queued and
+ownership remains retained on refusal. This closes the preparation window; the
+exclusive restoration barrier contract is still required for restoration itself.
+
+The real VST3 fixture has a one-shot state-read callback probe. The worker test
+requires the injected later gesture to block two release attempts before audio
+restoration, then verifies explicit closed-editor discard preserves the baseline.
+The arming test's manual value is also corrected to .375: fixture attachment
+already sets .625, so reusing .625 would incorrectly expect a no-op to add history.
+Assertions remain strict. These changes await the next hourly build.

@@ -28,6 +28,8 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   need(module!=nullptr,"Recorded ownership fixture module was not retained");
   const auto gesture=reinterpret_cast<int(*)(double)>(GetProcAddress(module,"ResonanceFixtureGesture"));
   need(gesture!=nullptr,"Recorded ownership fixture gesture export is missing");
+  const auto gestureOnRead=reinterpret_cast<void(*)(double)>(GetProcAddress(module,"ResonanceFixtureGestureOnStateRead"));
+  need(gestureOnRead!=nullptr,"Recorded ownership reentrant state fixture export is missing");
   const auto send=[&](double value){WindowsVST3::pluginMainCall([&]{need(gesture(value)==1,"Owned vendor gesture failed");});};
   const auto refuses=[&](auto work){
     bool rejected=false;try{work();}catch(const std::exception &){rejected=true;}
@@ -233,14 +235,14 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   need(clock->publish(arm4,arm4+1,0,1,48000,41),"Arming guard clock failed");
   const std::array<RecordedGestureTake::Provider,1> providers4{{{id,operations.parameterEditSource(id)}}};
   take=std::make_shared<RecordedGestureTake>("unflushed",revision(),arm4,clock,rack,projectAbsoluteAutomation(project),providers4);
-  send(.625);unsigned armPreviews=0;
+  send(.375);unsigned armPreviews=0; // The fixture's attached baseline is .625.
   refuses([&]{operations.beginRecordedEditors(take,context,[&](auto){++armPreviews;});});
   need(!operations.hasRecordedEditors()&&!armPreviews&&!take->eventCount()&&encoded()==beforeArm&&
     document->historySequence()==beforeArmSequence,"Refused arm consumed input or changed state/history");
   operations.flushEditors(true);
   const auto manualParameters=operations.invoke("plugin.parameters.get",{{"slot",0}});
   const auto pendingManual=std::find_if(manualParameters.begin(),manualParameters.end(),[](const auto &p){return p.at("id")==7;});
-  need(pendingManual!=manualParameters.end()&&pendingManual->at("manualValue")==.625f&&
+  need(pendingManual!=manualParameters.end()&&pendingManual->at("manualValue")==.375f&&
     document->historySequence()==beforeArmSequence+1,"Arming refusal lost the earlier manual gesture or its one history edit");
   operations.history(false,[&](bool redo,bool){if(redo)document->redo();else document->undo();});
   need(encoded()==beforeArm,"Unflushed gesture did not retain exact manual Undo after refused arming");
@@ -276,5 +278,26 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
   operations.sealRecordedEditors();operations.invoke("plugin.editor.close",{{"slot",0}});
   need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==beforeRecovery,
     "Recovery-prefix discard changed the accepted baseline");
+  // Baseline construction/state inspection may execute a nested native pump.
+  // A callback then must refuse release before the audible restore callback.
+  operations.invoke("plugin.editor.open",{{"slot",0}});operations.flushEditors(true);
+  const auto beforeRestore=encoded();const auto beforeRestoreSequence=document->historySequence();
+  clock=std::make_shared<RecordingFrameTimeline>();const auto arm6=ScreamSeq::hostTime100ns();
+  need(clock->publish(arm6,arm6+1,0,1,48000,41),"Restore preparation clock failed");
+  const std::array<RecordedGestureTake::Provider,1> providers6{{{id,operations.parameterEditSource(id)}}};
+  take=std::make_shared<RecordedGestureTake>("restore-input",revision(),arm6,clock,rack,projectAbsoluteAutomation(project),providers6);
+  operations.beginRecordedEditors(take,context,[](auto){});send(.25);operations.pollRecordedEditors();operations.sealRecordedEditors();
+  WindowsVST3::pluginMainCall([&]{gestureOnRead(.875);});
+  unsigned reentrantRestores=0;
+  refuses([&]{operations.releaseRecordedEditors(true,[&]{++reentrantRestores;return true;});});
+  need(!reentrantRestores&&operations.hasRecordedEditors()&&take->eventCount()==1&&encoded()==beforeRestore&&
+    document->historySequence()==beforeRestoreSequence,"Baseline preparation swallowed input or restored audio before refusing");
+  // A second attempt still sees the callback: it was not consumed as host
+  // restoration noise. Only explicitly closing/discarding may abandon it.
+  refuses([&]{operations.releaseRecordedEditors(true,[&]{++reentrantRestores;return true;});});
+  need(!reentrantRestores,"Refused restoration consumed its later native input");
+  operations.invoke("plugin.editor.close",{{"slot",0}});
+  need(operations.releaseRecordedEditors(true,[]{return true;})&&encoded()==beforeRestore,
+    "Explicit discard after nested native input changed the baseline");
   std::cout<<"PASS recovery recorded editor exclusion, guarded arming, fixed Stop cuts, bounded original intake, preview retry, native close/restore, one Undo and persistence\n";
 }
