@@ -275,13 +275,19 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
     // A vendor may emit callbacks independently of ordinary HWND input. Do not
     // classify those as disposable restoration noise: retain the queue/take and
     // require explicit review/Close rather than blindly draining notifications.
-    const auto afterRestore=recordedEditorCuts(capture);
-    for(const auto &item:prepared)if(!discard||item.open) {
-      const auto &before=beforeRestore.at(item.identity),&after=afterRestore.at(item.identity);
-      need(before.source==after.source&&before.fence.position==after.fence.position,
-        "Plugin produced input during restoration; close its editor to discard or retain it for review");
-    }
+    const auto requireUnchangedInput=[&]{
+      const auto afterRestore=recordedEditorCuts(capture);
+      for(const auto &item:prepared)if(!discard||item.open) {
+        const auto &before=beforeRestore.at(item.identity),&after=afterRestore.at(item.identity);
+        need(before.source==after.source&&before.fence.position==after.fence.position,
+          "Plugin produced input during restoration; close its editor to discard or retain it for review");
+      }
+    };
+    requireUnchangedInput();
     endInputBarriers();
+    // Enabling/restoring native focus can itself execute vendor code. Keep its
+    // callbacks with this take too, before returning to ordinary manual intake.
+    requireUnchangedInput();
   }catch(...) {
     const auto failure=std::current_exception();endInputBarriers();std::rethrow_exception(failure);
   }
