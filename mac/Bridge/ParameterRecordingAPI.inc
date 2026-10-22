@@ -54,6 +54,7 @@
           const bool commit=[method isEqual:@"automation.recording.commit"];
           allowed(commit?@[@"take",@"acknowledgeLoss"]:@[@"take"]);requireTake();
           const bool acknowledge=commit&&p[@"acknowledgeLoss"]?boolean(p[@"acknowledgeLoss"]):false;
+          if(!commit&&_parameterTake->take().completed())throw Error(-32002,"This take is already kept; retry Commit to finish native restoration, then use Undo to change the music");
           if(!_parameterTake->take().endTime()&&(commit||self.playing))throw Error(-32002,"Stop the parameter take before committing or discarding it");
           bool changed=false;
           if(commit) {
@@ -61,12 +62,16 @@
             if(!committed.accepted)throw Error(-32002,"Parameter take could not commit; input retained");
             changed=committed.changed;
           }
+          // Retain the successful take's identity/completion when release
+          // removes its owner. On failure, report the current cleanup stage.
           value=summary();value["changed"]=changed;
+          std::string restorationError;
           try {
             const bool released=commit?[self releaseStoppedParameterTake:NO]:[self discardStoppedParameterTake];
             if(released){value["retained"]=false;value["capturing"]=false;value["discardCleanupPending"]=false;}
-            else value["restorationError"]="Native restoration is busy; retry this retained take";
-          }catch(const std::exception &e){value["restorationError"]=e.what();}
+            else restorationError="Native restoration is busy; retry this retained take";
+          }catch(const std::exception &e){restorationError=e.what();}
+          if(!restorationError.empty()) {value=summary();value["changed"]=changed;value["restorationError"]=std::move(restorationError);}
           // Publication remains successful even when release needs stopped
           // transport or native cleanup. completed prevents duplicate history.
         }

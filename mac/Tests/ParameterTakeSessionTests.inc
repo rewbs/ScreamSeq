@@ -172,6 +172,10 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   check([keepAPI[@"changed"] boolValue]&&[keepAPI[@"data"][@"completed"] boolValue]&&
     [keepAPI[@"data"][@"retained"] boolValue]&&keepAPI[@"data"][@"restorationError"]&&session.playing&&
     ![keptAPIRevision isEqual:apiRevision],"Live API Keep lost committed-but-retained outcome");
+  error=nil;
+  check(![session automationMethod:@"automation.recording.discard" params:@{@"take":token,@"expectedRevision":keptAPIRevision} error:&error]&&
+    error.code==-32002&&[session.automationRevision isEqual:keptAPIRevision]&&session.playing,
+    "Discard accepted a kept take or changed music/transport while refusing it");
   api(@"transport.stop",@{},true);
   NSDictionary *releasedAPI=api(@"automation.recording.commit",@{@"take":token},true);
   check(![releasedAPI[@"changed"] boolValue]&&![releasedAPI[@"data"][@"retained"] boolValue]&&

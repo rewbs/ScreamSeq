@@ -552,8 +552,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     operationFailure=(response["error"] as? [String:Any])?["message"] as? String ?? "Graph operation failed"
     status.stringValue=operationFailure!
   }
-  // -32002 is a definite rejection before dispatch, so retrying it cannot
-  // duplicate a write. Keep the captured revision and target: conflicts and
+  // Retry only explicit pre-dispatch rejection. Keep the captured revision and target: conflicts and
   // uncertain transport outcomes must never be silently replayed or rebased.
   func requestGraph(_ method:String,_ params:[String:Any],document:String,attempt:Int=0,
                             completion:@escaping ([String:Any])->Void) {
@@ -561,7 +560,7 @@ final class SignalGraphEditor: NSView, NSSearchFieldDelegate {
     guard let onRequest else{completion(["error":["message":"The graph connection is unavailable"]]);return}
     onRequest(method,params){[weak self] response in
       guard let self else{return}
-      if (response["error"] as? [String:Any])?["code"] as? Int == -32002,attempt<5 {
+      if NativeRequestOutcome.canRetryWrite(response),attempt<5 {
         DispatchQueue.main.asyncAfter(deadline:.now()+0.05*Double(attempt+1)){[weak self] in
           self?.requestGraph(method,params,document:document,attempt:attempt+1,completion:completion)
         }

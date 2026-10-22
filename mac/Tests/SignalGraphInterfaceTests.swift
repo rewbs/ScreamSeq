@@ -366,7 +366,7 @@ extension InterfaceTests {
       if method=="graph.get"{reads+=1;reply(["result":["revision":requestRevision,"data":retryGraph]]);return}
       if method=="graph.song.group.create"{
         writes.append(params)
-        if writes.count<3{reply(["error":["code":-32002,"message":"The document is busy; retry shortly"]])}
+        if writes.count<3{reply(["error":["code":-32002,"message":"The document is busy; retry shortly","data":["writeOutcome":"notCommitted"]]])}
         else{requestRevision="retry-song:2";retryGraph["groups"]=[["id":"n400","parent":"","name":"Group","nodes":["plugin:stable"]]];reply(["result":["revision":requestRevision,"data":["group":"n400"]]])}
       }else{reply(["result":["data":[]]])}
     }
@@ -380,6 +380,16 @@ extension InterfaceTests {
     retrying.onRequest={_,_,reply in failures+=1;reply(["error":["code":-32001,"message":"Song changed"]])}
     retrying.mutate("graph.song.group.create",[:]);RunLoop.current.run(until:Date().addingTimeInterval(0.2))
     try require(failures==1 && !retrying.loading,"A stale revision is never retried as though it were a busy rejection")
+    for outcome in ["unknown","committed","noChange",""] {
+      failures=0
+      retrying.onRequest={_,_,reply in
+        failures+=1;var error:[String:Any]=["code":-32002,"message":"Retained outcome "+outcome]
+        if !outcome.isEmpty{error["data"]=["writeOutcome":outcome]};reply(["error":error])
+      }
+      retrying.mutate("graph.song.group.create",[:]);pumpMainRunLoop(0.2)
+      try require(failures==1 && !retrying.loading && retrying.status.stringValue=="Retained outcome "+outcome,
+        "Uncertain, committed and unclassified busy writes must remain visible and never be replayed")
+    }
     var pendingRead:(([String:Any])->Void)?,queuedWrite:[String:Any]?
     retrying.onRequest={method,params,reply in
       if method=="graph.get"{pendingRead=reply}else{queuedWrite=params;reply(["error":["code":-32001,"message":"Captured revision is stale"]])}
@@ -825,12 +835,17 @@ extension InterfaceTests {
     replies.removeFirst()(["result":["revision":"song:2","data":[:]]])
     waitForWrites(2)
     try require(writes.count==2 && writes[1]["expectedRevision"] as? String=="song:2" && (writes[1]["points"] as? [[String:Any]])?.first?["value"] as? Double==0.5,"A newer edit waits for the in-flight save and uses its accepted revision")
-    replies.removeFirst()(["error":["code":-32002,"message":"busy"]])
+    replies.removeFirst()(["error":["code":-32002,"message":"busy","data":["writeOutcome":"notCommitted"]]])
     waitForWrites(3)
     try require(writes.count==3 && NSDictionary(dictionary:writes[1]).isEqual(to:writes[2]),"A definite busy rejection retries the exact captured target, revision and curve")
     replies.removeFirst()(["error":["code":-32001,"message":"changed elsewhere"]])
     RunLoop.current.run(until:Date().addingTimeInterval(0.16))
     try require(writes.count==3 && editor.hasDraft && editor.canvas.points[0].value==0.5,"A revision conflict retains editable values and never silently rebases or spins")
+    editor.apply();let uncertainCount=writes.count
+    replies.removeFirst()(["error":["code":-32002,"message":"Completion unknown","data":["writeOutcome":"unknown"]]])
+    pumpMainRunLoop(0.2)
+    try require(writes.count==uncertainCount && !editor.loading && editor.hasDraft && editor.canvas.points[0].value==0.5 && editor.status.stringValue=="Completion unknown",
+      "An uncertain curve save keeps the original draft and is never replayed as a busy rejection")
     editor.load();writes=[];replies=[]
     let window=NSWindow(contentRect:editor.frame,styleMask:[.titled],backing:.buffered,defer:false);window.contentView=editor;editor.layoutSubtreeIfNeeded()
     func mouse(_ type:NSEvent.EventType,_ point:NSPoint)->NSEvent {NSEvent.mouseEvent(with:type,location:editor.canvas.convert(point,to:nil),modifierFlags:[],timestamp:0,windowNumber:window.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:1)!}
@@ -1390,8 +1405,9 @@ extension InterfaceTests {
     try require(editor.loading && writes.isEmpty && editor.status.stringValue=="Applying graph change…","A socket release during a graph read queues its intent and replaces the obsolete hover hint")
     holdRead=false;pendingRead?(["result":["revision":"routing:1","data":song]])
     let deadline=Date().addingTimeInterval(1.2)
-    repeat {RunLoop.current.run(until:Date().addingTimeInterval(0.01))}while (writes.count<6 || editor.loading) && Date()<deadline
-    try require(writes.count==6 && !editor.loading && writes.allSatisfy{$0["expectedRevision"] as? String=="routing:1" && $0["plugin"] as? String=="compressor" && $0["input"] as? Int==1 && ($0["sources"] as? [[String:Any]])?.first?["source"] as? String=="n3"},"Queued detector connection retries only its captured source, stable plugin, port and revision")
+    repeat {RunLoop.current.run(until:Date().addingTimeInterval(0.01))}while (writes.isEmpty || editor.loading) && Date()<deadline
+    pumpMainRunLoop(0.2)
+    try require(writes.count==1 && !editor.loading && writes.allSatisfy{$0["expectedRevision"] as? String=="routing:1" && $0["plugin"] as? String=="compressor" && $0["input"] as? Int==1 && ($0["sources"] as? [[String:Any]])?.first?["source"] as? String=="n3"},"An admitted native routing refusal is reported once with its captured source, stable plugin, port and revision")
     try require(editor.status.stringValue==refusal && !editor.songConnections.contains{$0["kind"] as? String=="plugin-input"},"A rejected detector connection exposes the backend reason and preserves existing cables")
     editor.rebuild();try require(editor.status.stringValue==refusal,"Catalogue redraw cannot erase a rejected routing operation")
     editor.update(song);editor.load();try require(editor.status.stringValue==refusal,"Passive projection update and refresh retain the routing refusal")

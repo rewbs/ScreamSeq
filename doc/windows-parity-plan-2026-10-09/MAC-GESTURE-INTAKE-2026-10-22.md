@@ -889,3 +889,30 @@ failures repeat failed launches). Preserve these failures; no skips or weaker
 assertions were added. Both Mac jobs failed the same already-corrected private
 helper call. No CI rerun was dispatched. Next coordinated build remains no
 earlier than 18:11:23 UTC, subject to rechecking actual build starts.
+
+### Completion and client retry correction — source only
+
+The Mac API now refuses Discard of an already-kept take. Commit retries finish
+restoration; musical reversal uses Undo. A failed restoration recomputes the
+summary after cleanup so `discardCleanupPending` describes the current owner.
+The real-session fixture checks that refusing Discard does not change playback,
+revision or the kept take.
+
+The AppKit lifecycle audit also found that graph, graph-envelope, scratch and
+pattern-envelope request helpers treated every -32002 as pre-dispatch busy.
+`NativeRequestOutcome.swift` now requires the existing explicit
+`data.writeOutcome:notCommitted` receipt before retrying a write. Captured
+revision/target/payload stay unchanged; unknown, committed, noChange and missing
+outcomes report their original error and retain the draft. Pattern automation's
+previously unbounded loop is limited to five retries. Read-only parameter and
+port polling retain their existing bounded behavior. Other native clients still
+need a separate admission audit before a blanket retry-safety claim.
+
+Native interface regressions cover accepted busy receipts, unchanged captured
+payload, bounded exhaustion, unknown graph/curve/scratch results and uncertain
+envelope deletion. The detector-routing refusal fixture now requires exactly
+one call, not six repeated attempts at a native precondition failure. It still
+requires unchanged cables and a persistent, readable reason. The interface
+compile command explicitly includes the new helper. These checks are unbuilt;
+run the signal-graph, scratch, and automation-tools groups with the next normal
+Mac interface checkpoint. No standalone compiler invocation was made early.
