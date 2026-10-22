@@ -75,3 +75,42 @@ all new actual-transport vectors and the remaining typed fixture journeys.
 Then run the exact-source Windows → both Macs → Windows extended exchange on
 the retained binaries without rebuilding. Preserve the musician's session,
 and perform the separate Windows foreground/keyboard gate before packaging.
+
+## Retained Apple Silicon result — no build
+
+Run **39728770038**, job **119658717283**, passed at 05:35 UTC using the exact
+Apple Silicon executable above. The full-build and interface-build jobs were
+skipped; only the retained-app job ran. Temporary tooling branch
+`codex/plugin-recovery-retained-review`, commit
+`b208d2845c6206bc0ea0f98510efb4a44e4fa0ca`, starts at the exact compiled CI
+merge source. Its only differences are the inventory, vectors, verifier tests
+and this report. `reuse_native.source_delta` independently accepted that
+tooling-only delta before dispatch. No product change or relaxed source guard
+was used to reuse this binary.
+
+The downloaded artifact `screamseq-retained-macos-15`, ID **12403414294**, matches
+SHA256 `6ac37b25227a6fdadc759220221f2582437683894badcabdf117d99b70a07157`.
+Local root: `bin/plugin-control-review-20261022/ci/mac-arm-retained-review/`.
+Its `retained-result/retained-run.json` and `baseline/report.json` confirm:
+
+- Five F01–F05 original fixture save/reopen checks passed, with unchanged
+  source fixtures, original corpus and executable.
+- **41 API cases** matched the reviewed expectations, with zero document
+  preservation failures and exact history/replay/save checks. The seven
+  Windows-only recording methods remain an explicit unresolved API difference.
+- **21 codec cases** matched the retained baseline and all safety checks.
+- Baseline report SHA256:
+  `1e9073565008e085db01d70f6b7c296ca0d30768d1b8d68ac9c6b7e302031a0b`.
+- API report SHA256:
+  `cd8d6588be6a79b3a0b338e763931a89ef603effb1ede55e58ecf2f603bf4148`.
+- Codec report SHA256:
+  `f931bb9a8a811ead75acf668657cafd6731737663f45a41ff7372e089a1537d9`.
+
+This default retained baseline does **not** run duration defaults, edited
+metadata, composing history or envelope-bank journeys, nor reciprocal exchange.
+Those gates remain open. It also is not Windows foreground qualification.
+Four guard vectors in the next candidate use the valid recovery kind `gestures`
+instead of `gesture`, isolating their intended revision/unknown-key checks;
+that exact vector text still needs the next native run. Earlier outcomes and
+preservation assertions are unchanged. Keep this receipt tied to its recorded
+vector hash rather than claiming execution of subsequently edited test input.

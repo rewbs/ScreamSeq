@@ -479,7 +479,7 @@
       "id": "recovery-get-stale",
       "method": "automation.recovery.get",
       "params": {
-        "kind": "gesture",
+        "kind": "gestures",
         "index": 0
       },
       "expected": {
@@ -493,7 +493,7 @@
       "method": "automation.recovery.get",
       "params": {
         "expectedRevision": "",
-        "kind": "gesture",
+        "kind": "gestures",
         "index": 0
       },
       "expected": {
@@ -506,7 +506,7 @@
       "method": "automation.recovery.get",
       "params": {
         "expectedRevision": false,
-        "kind": "gesture",
+        "kind": "gestures",
         "index": 0
       },
       "expected": {
@@ -518,7 +518,7 @@
       "id": "recovery-get-unknown-field",
       "method": "automation.recovery.get",
       "params": {
-        "kind": "gesture",
+        "kind": "gestures",
         "index": 0,
         "unexpected": true
       },
