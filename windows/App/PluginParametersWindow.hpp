@@ -24,7 +24,7 @@ class PluginParametersWindow final : public NativeToolWindow {
   const char *writeMethod()const{return graph_.empty()?"plugin.parameters.set":"graph.plugin.set";}
   int page_=0,sliderRow_=-1;bool sliderEndPending_=false,sliderCancelPending_=false;uint64_t generation_=0;
   std::string previewToken_;uint32_t previewParameter_=0;
-  bool setting_=false,pending_=false,needsReload_=false;HWND pendingFocus_{};
+  bool setting_=false,pending_=false,needsReload_=false;HWND pendingFocus_{},navigationFocus_{};
   NativeWriteCompletion completion_;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,revision_,graph_.empty()?plugin_:target().dump(),generation_,dirty(),pending_,completion_.retained()&&!pending_);
@@ -190,7 +190,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(notification==BN_CLICKED&&(id==applyAll||(rowControl&&part==apply))){commit();return;}
     if(!rowControl)return;auto &r=rows_[row];const auto &f=r.field;
     if((part==choices&&notification==CBN_SELCHANGE)||((part==toggle||part==less||part==more)&&notification==BN_CLICKED)){
-      if(dirty()){NativeInputGate::present(controls_.at(control(row,choices)),CB_SETCURSEL,WPARAM(f.value),0);throw std::runtime_error("Apply typed values before using switches or steps");}
+      if(dirty()){NativeInputGate::present(controls_.at(control(row,choices)),CB_SETCURSEL,WPARAM(f.value),0);throw std::runtime_error("Correct or discard unsaved values before using switches or steps");}
       if(!f.editable())throw std::runtime_error("Parameter is read only");double candidate=f.value;
       if(part==choices){const auto i=SendMessageW(controls_.at(id),CB_GETCURSEL,0,0);if(i<0||size_t(i)>=f.choices.size())throw std::runtime_error("Choose an available parameter value");candidate=double(i);}
       else if(part==toggle)candidate=f.value==0?1:0;
@@ -206,7 +206,7 @@ class PluginParametersWindow final : public NativeToolWindow {
     if(pending_){if(code==TB_ENDTRACK&&sliderRow_==row){sliderEndPending_=true;SetTimer(window_,8,1,nullptr);}return true;}
     requireReady();auto &r=rows_[row];const auto &f=r.field;
     if(!f.editable()||f.kind!=PluginParameterField::Kind::Number||f.maximum<=f.minimum)return true;
-    if(dirty()&&sliderRow_!=row){NativeInputGate::present(child,TBM_SETPOS,TRUE,int(std::round((f.value-f.minimum)/(f.maximum-f.minimum)*10000)));throw std::runtime_error("Apply typed values before moving a slider");}
+    if(dirty()&&sliderRow_!=row){NativeInputGate::present(child,TBM_SETPOS,TRUE,int(std::round((f.value-f.minimum)/(f.maximum-f.minimum)*10000)));throw std::runtime_error("Correct or discard unsaved values before moving a slider");}
     if(code==TB_ENDTRACK){if(sliderRow_==row)finishSlider();return true;}
     auto candidate=sliderValue(row);
     if(code==TB_LINEUP||code==TB_LINEDOWN){const auto step=f.step>0?f.step:(f.maximum-f.minimum)/100;candidate=std::clamp(f.value+(code==TB_LINEUP?-step:step),f.minimum,f.maximum);}
@@ -251,9 +251,18 @@ public:
     label(heading,wide(name).c_str());label(statusLabel,L"");
     for(int i=0;i<pageSize;++i){label(control(i,nameLabel),L"");label(control(i,rangeLabel),L"");edit(control(i,value),L"",64);combo(control(i,choices));button(control(i,toggle),L"Off");button(control(i,apply),L"Set");button(control(i,less),L"−");button(control(i,more),L"+");
       const auto track=add(control(i,slider),TRACKBAR_CLASSW,L"Parameter",TBS_HORZ|TBS_NOTICKS);NativeInputGate::present(track,TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));NativeInputGate::present(track,TBM_SETLINESIZE,0,100);NativeInputGate::present(track,TBM_SETPAGESIZE,0,1000);}
+    // Dialog navigation follows the visible page/header and row order. Hidden
+    // variants are skipped by USER32; never rebuild controls while typing.
+    const auto order=[&](int id){check(SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,
+      SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order plugin parameter controls");};
+    for(int id:{previous,parameter,next,close})order(id);
+    for(int row=0;row<pageSize;++row)for(auto part:{slider,value,choices,toggle,less,more})order(control(row,part));
+    order(reload);order(applyAll);
+    focusPresentationChanged([this]{const auto focus=GetFocus();if(focus!=window_&&owns(focus))navigationFocus_=focus;});
     finish();load();
   }
-  void show(){NativeToolWindow::show();SetTimer(window_,7,250,nullptr);SetFocus(controls_.at(parameter));}
+  void show(){const auto focus=navigationFocus_;NativeToolWindow::show();SetTimer(window_,7,250,nullptr);
+    SetFocus(focus&&owns(focus)&&IsWindowVisible(focus)&&IsWindowEnabled(focus)?focus:controls_.at(parameter));}
   void hide()override{if(sliderRow_>=0||!previewToken_.empty()){cancelPreview();sliderRow_=-1;sliderEndPending_=sliderCancelPending_=false;if(!completion_.retained()&&!needsReload_){++generation_;presentPage();}}KillTimer(window_,7);KillTimer(window_,8);NativeToolWindow::hide();}
   Json snapshot()const{Json rows=Json::array();for(int i=0;i<pageSize;++i)if(rows_[i].index>=0)rows.push_back({{"index",rows_[i].index},{"id",parameters_[size_t(rows_[i].index)].at("id")},{"value",utf8(field(control(i,value)))},{"dirty",rows_[i].dirty},{"valueControl",control(i,value)},{"sliderControl",control(i,slider)}});
     return {{"visible",visible()},{"plugin",plugin_},{"graph",graph_},{"node",node_},{"document",document_},{"revision",revision_},{"parameters",parameters_},{"selected",parameters_.empty()?-1:page_*pageSize},{"page",page_},{"pages",pages()},{"rows",rows},{"dirty",dirty()},{"pending",pending_},{"completion",completion_.snapshot()},{"report",report_},{"needsReload",needsReload_},{"status",utf8(status_)}};}

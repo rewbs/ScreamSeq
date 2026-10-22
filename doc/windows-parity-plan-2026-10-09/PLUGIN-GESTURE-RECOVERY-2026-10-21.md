@@ -4,8 +4,9 @@ Status: source and regression cases drafted on 21 October 2026 after navigation
 candidate `86538cb42` passed automated qualification. **Not built or executed.**
 The navigation executable does not contain these changes. No Record control,
 public API, timing-parity, Mac execution or complete recording-lifecycle claim.
-The next build may start no earlier than **23:07:42 UTC**, and should combine
-the remaining coherent recording work rather than build this prerequisite alone.
+The initial gate was 23:07:42 UTC. The approved navigation merge subsequently
+started main CI at 23:53:08 UTC; the next batch gate is now **22 October
+00:53:09 UTC**. Build receipts, not this historical timestamp, govern later work.
 
 ## Observed gap and scope
 
@@ -33,7 +34,8 @@ of the lifecycle described in the navigation report.
   live take. A shortened stopped-clock bound clears invalid frames in the copy
   while retaining their raw events; clock-ring eviction does not clear valid
   previously mapped frames. Existing capture/storage limits remain unchanged.
-- `windows/Session/RecordedGestureRecovery.hpp`: native JSON/plist projection.
+- `editor/hosted/RecordedGestureRecovery.hpp`: shared JSON/plist projection
+  and strict detached review decoder; the Windows header is a compatibility include.
   Decimal strings preserve 64-bit time/counter precision; unmapped frames are
   absent, never zero or plist null. Stable identities and baseline rack order
   allow a future review decoder to resolve slots explicitly. No vendor blobs
@@ -55,8 +57,8 @@ preservation paths retain unknown top-level fields; Mac reciprocal execution is
 still required before claiming that compatibility qualified. Module export's
 existing unknown-extension rejection protects these archives from silent loss.
 
-There is intentionally no deserialization into live providers. A future bounded
-review decoder must validate all types/counts/ranges/references and distinguish
+There is intentionally no deserialization into live providers. The shared bounded
+review decoder validates types/counts/ranges/references and distinguishes
 mapped, unmapped and rejected input. It must not reuse host timestamps or
 provider incarnations in a new process, silently accept identity failures, or
 offer a second commit for `completed:true`. Until review/commit/discard UI and
@@ -98,6 +100,82 @@ At the cohesive recording build gate:
    Realtime audits remain necessary for later publication/intake changes; this
    snapshot executes on the worker and never in the audio callback.
 
-Only static diff/whitespace review has run for this source. No build was started
-inside the hourly gate, and none of the navigation candidate's 36 passes is
-evidence that this new recording source compiles or passes.
+## Next candidate: shared recovery, atomic restoration and reachable parameters
+
+Source changes prepared after the navigation merge, still unbuilt:
+
+- `editor/Tests/RecordedGestureRecoveryTests.inc` runs the same decoder on both
+  platforms. It checks exact uint64 strings, original event order, same-frame
+  input, shortened Stop, unknown timestamps, provider-only loss, independence
+  from the live take, completed no-op evidence, invalid metadata and aggregate
+  bounds. Unknown versions/fields refuse review while leaving the original tree
+  untouched. This is not permission to replay recovered timestamps or commit
+  a completed take. Both CMake targets include the existing JSON dependency.
+- `PluginChain::cancelParameterPreviews(span<ParameterPreviewTarget>)` validates
+  and prepares every target before one atomic queue publication. The old
+  single-plugin overload delegates to it. Queue refusal cannot restore a prefix
+  of a multi-plugin take. Accepted manual values remain authoritative. Tests in
+  `ParameterPreviewTests.cpp` cover two-target restoration with one free queue
+  cell, invalid later targets, duplicates, unrelated previews, newer durable
+  input and actual PCM at three rates and three callback partitions. No new
+  allocation or lock is introduced in the audio callback.
+- `edited_metadata.py` adds a detached archive to the existing paired F04
+  preservation oracle. It must remain byte/type-exact through title/graph edits,
+  rack move/remove, Undo/Redo and reopen, including when captured providers no
+  longer exist in the current rack. No expected output is normalized or removed.
+- Windows command 335 opens the existing retained ten-parameter window directly
+  from the Plugins context rail, command palette and Separate windows menu.
+  The rack Editor action retains the VST3 vendor editor; built-ins offer Params.
+  Deferred openings capture the stable plugin target. Opening controls never
+  enables routing, changes musical history or redirects another plugin's draft.
+- Rack Tab order now leads from search to parameter to its numeric/choice/toggle
+  editor. The ten-parameter window follows visible header/row order and retains
+  its last editable focus/caret when raised. Incomplete values remain protected;
+  failure text describes correcting unsaved values instead of requiring Apply.
+  `PluginSearchApplicationTests.inc` and the actual-app
+  `SongRoutingTests.test_rack_parameter_window_without_graph_retains_and_saves`
+  cover reachability, retained owners/drafts, focus, automatic save, Undo/Redo
+  and reopen. This adds no public musical API; existing parameter APIs are used.
+
+### Evidence before building
+
+Computer Use inspected owned PID 40828 running the unchanged `86538cb42` ARM64
+binary with inspection/automation and no hardware audio, around 00:06–00:15 UTC
+on 22 October. It confirmed the built-in rack Editor was disabled, the sidebar
+Plugin editor action only reported that built-ins use the panel, and Tab from
+Gain selection jumped backward to Parameters page. Search typing and arrow-key
+selection worked. The process was closed after inspection. These are baseline
+findings, not qualification of the new source or temporal flicker evidence.
+
+`bin/plugin-take-lifecycle-20261021/archive-baseline/` passed the new paired
+archive preservation oracle against that same retained executable/hash. The
+report pins binary source, executable hash, tool hashes, immutable fixture and
+all edits/results. Its passing scope is Windows opaque preservation; it does not
+qualify the new decoder, new UI or a reciprocal Mac leg.
+
+### Bounded candidate gate
+
+Build once after the gate, from a frozen clean checkout, into a new Release
+directory. Include ScreamSeq, workspace-restore-tests, document-controller-tests,
+recorded-automation-tests, parameter-preview-tests and plugin-edit-notification-tests
+(with native fixture/scanner dependencies). Run shared recorded/preview gates,
+native notification gate, controller recorded-publication/recovery/recording/
+live-parameter/recipe-preview gates, and workspace plugin-search, context-menu,
+menu-bar, parameter-preview and worker-presentation gates. Run the native recovery
+manual fixture on the private desktop and the actual-app direct parameter test,
+retained navigation and parameter-slider smoke checks. Broaden only for new failures.
+
+Then inspect the exact candidate with Computer Use: direct built-in controls,
+Separate windows destination, rack search/parameter/value Tab and Shift+Tab,
+typing/Backspace, slider response and retained field focus on reopening. Preserve
+the musician's process and audio route. No screenshot-only temporal claim.
+
+The shared changes require Mac compilation plus recorded-automation and
+parameter-preview execution before integration. The modified F04 archive must
+also pass reciprocal Mac save/reopen; reusing the Windows preservation leg is
+valid only while its adapter and fixture inputs remain unchanged. A successful
+Windows candidate is not a complete recording-lifecycle or cross-platform pass.
+
+Only static diff/whitespace review and the retained-binary preservation check
+have run so far. None of the navigation candidate's 36 passes establishes that
+this new recording/UI source compiles or passes.

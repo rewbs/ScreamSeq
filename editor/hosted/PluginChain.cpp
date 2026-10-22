@@ -154,12 +154,24 @@ bool PluginChain::hasParameterPreview(size_t slot,uint32_t id) const noexcept {
 }
 bool PluginChain::cancelParameterPreviews(size_t slot,std::span<const uint32_t> ids) {
   if(slot>=rack_.size()||ids.size()>queue_.size())return false;
-  const auto &entry=*rack_[slot];std::vector<ParameterChange> restore;restore.reserve(ids.size());
-  for(const auto id:ids) {
-    const auto p=std::find_if(entry.parameters.begin(),entry.parameters.end(),[&](const auto &p){return p.id==id;});
+  std::vector<ParameterPreviewTarget> targets;targets.reserve(ids.size());
+  for(const auto id:ids)targets.push_back({uint32_t(slot),id});
+  return cancelParameterPreviews(targets);
+}
+bool PluginChain::cancelParameterPreviews(std::span<const ParameterPreviewTarget> targets) {
+  if(targets.size()>queue_.size())return false;
+  std::vector<ParameterChange> restore;restore.reserve(targets.size());
+  std::set<std::pair<uint32_t,uint32_t>> seen;
+  for(const auto &target:targets) {
+    if(target.slot>=rack_.size())return false;
+    const auto &entry=*rack_[target.slot];
+    const auto p=std::find_if(entry.parameters.begin(),entry.parameters.end(),[&](const auto &p){return p.id==target.id;});
     if(p==entry.parameters.end())return false;
-    if(entry.previewed[size_t(p-entry.parameters.begin())])restore.push_back({uint32_t(slot),id,p->value,0});
+    if(seen.emplace(target.slot,target.id).second&&entry.previewed[size_t(p-entry.parameters.begin())])
+      restore.push_back({target.slot,target.id,p->value,0});
   }
+  // All IDs, allocations and the full queue capacity are checked before the
+  // existing atomic publisher clears any preview ownership or queues values.
   return enqueueParameters(restore);
 }
 void PluginChain::beginRenderBlock() noexcept {observation_->listen.begin(position_);activity_->begin(position_);consumeMusicalPlan();applyPending();parameterBlockOpen_=true;}

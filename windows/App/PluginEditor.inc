@@ -56,6 +56,8 @@
         SendMessageW(controls.at(pluginValue),EM_SETLIMITTEXT,64,0);
         controls[pluginValueToggle]=CreateWindowExW(0,L"BUTTON",L"Parameter switch",WS_CHILD|WS_TABSTOP|BS_AUTOCHECKBOX,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(pluginValueToggle)),GetModuleHandleW(nullptr),nullptr);
         if(!controls.at(pluginValueToggle))throw std::runtime_error("Cannot create native parameter switch");
+        ScreamSeq::check(SetWindowPos(controls.at(pluginValue),controls.at(pluginParameter),0,0,0,0,
+            SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order parameter value after its selector");
         for(const int id:{pluginValueChoice,pluginValueToggle})
             ScreamSeq::check(SetWindowPos(controls.at(id),controls.at(pluginValue),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order native parameter fields");
         for(const auto [id,label]:std::initializer_list<std::pair<int,const wchar_t *>>{{pluginParameterSearch,L"Search parameters by name, unit or ID"},{pluginProgramSearch,L"Search factory programs by name or group"}}) {
@@ -324,7 +326,8 @@
         place(pluginInstrument,x,y+195,r.w-424,220,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginNewInstrument,r.x+r.w-188,y+195,108,24,show && instrument && pluginDetailPage==0 && r.h>=228);place(pluginAssign,r.x+r.w-76,y+195,68,24,show && instrument && pluginDetailPage==0 && r.h>=228);
         EnableWindow(controls.at(pluginNewInstrument),instrument);ScreamSeq::NativeControls::text(controls.at(pluginNewInstrument),pendingPluginTriggers.contains(selectedPlugin)?L"Retry assign":L"New trigger");
         for(int id:{pluginBypass,pluginRemove,pluginAssign}) EnableWindow(controls.at(id),selected);
-        EnableWindow(controls.at(pluginEditor),selected && plugin.value("format","")=="VST3");
+        EnableWindow(controls.at(pluginEditor),selected);
+        ScreamSeq::NativeControls::text(controls.at(pluginEditor),plugin.value("format","")=="VST3"?L"Editor…":L"Params…");
         EnableWindow(controls.at(pluginReconnect),selected&&plugin.value("format","")=="VST3");
         EnableWindow(controls.at(pluginUp),selected && slot>0);EnableWindow(controls.at(pluginDown),selected && size_t(slot+1)<listedPlugins.size());
         EnableWindow(controls.at(pluginMove),selected&&listedPlugins.size()>1&&!busy&&!pluginDraft&&!pluginPresetPending);
@@ -370,9 +373,13 @@
         if(chosen>0)movePluginTo(target,size_t(chosen-1));
     }
     bool pluginCommand(int id) {
-        if(id<pluginList || id>pluginMove)return false;
+        if(id<pluginList || id>pluginParametersCommand)return false;
         if(busy){if(id==pluginValueChoice||id==pluginValueToggle)syncPluginDiscreteCandidate();throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");}
         workspaceState.focus="plugins";
+        if(id==pluginParametersCommand){
+            if(selectedPluginSlot()<0)throw std::runtime_error("Select a plugin in the rack first");
+            openGraphPluginParameters(selectedPlugin);return true;
+        }
         if(id==pluginValueChoice||id==pluginValueToggle){pluginDiscreteValue(id);return true;}
         if(id==pluginAutomate||id==pluginActivity) {
             if(!hasPluginParameterTarget())throw std::runtime_error("Select an available plugin parameter first");
@@ -442,7 +449,10 @@
             wchar_t text[66]{};GetWindowTextW(controls.at(pluginValue),text,66);wchar_t *end=nullptr;auto value=wcstod(text,&end);
             if(end==text || *end || !std::isfinite(value))throw std::runtime_error("Enter a finite parameter value");
             edit("plugin.parameters.set",{{"plugin",selectedPlugin},{"values",Json::array({{{"id",selectedParameter},{"value",value}}})}});pluginDraft=false;pluginDetailsRevision.clear();
-        } else if(id==pluginEditor)edit("plugin.editor.open",{{"slot",slot}});
+        } else if(id==pluginEditor) {
+            if(view->session.document.at("nativePlugins")[slot].value("format","")=="VST3")edit("plugin.editor.open",{{"slot",slot}});
+            else openGraphPluginParameters(selectedPlugin);
+        }
         else if(id==pluginBypass)edit("plugin.bypass",{{"slot",slot},{"bypass",!view->session.document.at("nativePlugins")[slot].value("bypass",false)}});
         else if(id==pluginRemove)edit("plugin.remove",{{"slot",slot}});
         else if(id==pluginUp || id==pluginDown)edit("plugin.move",{{"slot",slot},{"direction",id==pluginUp?-1:1}});

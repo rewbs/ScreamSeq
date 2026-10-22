@@ -100,6 +100,36 @@ class SongRoutingTests(unittest.TestCase):
     def start(self):
         self.idle();self.main_command(417);self.idle();state=self.read('workspace.get')
         self.assertTrue(state['songRouting']['visible'],json.dumps(state,ensure_ascii=False))
+    def test_rack_parameter_window_without_graph_retains_and_saves(self):
+        plugin=self.add_gain();self.main_command(316);self.idle()
+        main=self.desktop.hwnd(self.pid);rack=private_desktop.user.GetDlgItem(main,300)
+        slot=next(i for i,p in enumerate(self.doc()['data']['nativePlugins']) if p['instanceID']==plugin)
+        self.desktop.send(rack,0x186,slot);self.desktop.send(main,0x111,300|(1<<16),rack);self.idle()
+        before=self.doc();state=self.read('plugin.state.get',plugin=plugin)
+        self.main_command(304);self.idle()
+        owner=self.window('ScreamSeq.PluginParameters')
+        local=lambda:next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin']==plugin)
+        self.assertTrue(local()['visible']);self.assertLessEqual(len(local()['rows']),10)
+        self.assertFalse(self.local()['visible']);self.assertEqual(self.doc(),before)
+        field=private_desktop.user.GetDlgItem(owner,4012);self.assertTrue(field)
+        text=ctypes.create_unicode_buffer('-.');self.desktop.send(field,0xC,0,ctypes.addressof(text))
+        self.main_command(335);self.idle()
+        self.assertEqual(self.window('ScreamSeq.PluginParameters'),owner)
+        self.assertTrue(local()['dirty']);self.assertEqual(self.doc(),before)
+        observed=ctypes.create_unicode_buffer(64);self.desktop.send(field,0xD,64,ctypes.addressof(observed))
+        self.assertEqual(observed.value,'-.')
+        text=ctypes.create_unicode_buffer('-6.5');self.desktop.send(field,0xC,0,ctypes.addressof(text))
+        deadline=time.monotonic()+8
+        while self.doc()['revision']==before['revision'] and time.monotonic()<deadline:time.sleep(.02)
+        self.idle();after=self.read('plugin.state.get',plugin=plugin)
+        self.assertNotEqual(after,state)
+        self.assertEqual(next(p for p in self.read('plugin.parameters.get',plugin=plugin) if p['id']==1)['manualValue'],-6.5)
+        self.write('history.undo');self.assertEqual(self.read('plugin.state.get',plugin=plugin),state)
+        self.write('history.redo');self.assertEqual(self.read('plugin.state.get',plugin=plugin),after)
+        project=self.folder/'rack-parameter-window.screamseq';self.write('document.save',path=str(project))
+        self.write('document.open',path=str(project),discard=True)
+        self.assertEqual(self.read('plugin.state.get',plugin=plugin),after)
+        self.assertFalse(self.local()['visible'])
     def setup_mixer(self):
         self.write('mixer.enable');b=self.buses();return b[0]['id'],b[1]['id'],b[-1]['id']
     def route(self,kind,source,target,gain=None,input=None,output=None):

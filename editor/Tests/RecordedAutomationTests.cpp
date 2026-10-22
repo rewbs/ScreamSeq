@@ -2,6 +2,7 @@
 #include "editor/hosted/RecordedCapture.hpp"
 #include "editor/hosted/RecordedGestureCapture.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
+#include "editor/hosted/RecordedGestureRecovery.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/RecordingFrameClock.hpp"
 #include <algorithm>
@@ -45,6 +46,7 @@ static void settled(PluginChain &chain,float decibels) {
 }
 #include "RecordedGestureCaptureTests.inc"
 #include "RecordedGestureTakeTests.inc"
+#include "RecordedGestureRecoveryTests.inc"
 static void capturePreparation() {
   for(const uint32_t rate:{44100u,48000u,96000u}) {
     for(const uint64_t frame:std::array<uint64_t,7>{0,1,127,511,uint64_t(rate)-1,uint64_t(rate),uint64_t(rate)*604800})
@@ -134,6 +136,7 @@ int main() {
     capturePreparation();
     recordedGestureCapture();
     recordedGestureTake();
+    recordedGestureRecoveryTests();
     captureBaselineRestoration();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};

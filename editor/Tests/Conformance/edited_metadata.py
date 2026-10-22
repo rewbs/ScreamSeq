@@ -40,6 +40,22 @@ def run(client, output):
                     date=datetime.datetime(2024, 2, 29, 12, 34, 56),
                     uid=plistlib.UID(281474976710657), boolean=True)
     key = "parityEditedOpaque"
+    # Detached plugin input is evidence, not live automation. Its captured rack
+    # order and frames must survive even when the current rack is reordered or
+    # a provider disappears. Reopening must never rearm old host timestamps.
+    gesture_archive = dict(version=1, reviewOnly=True, take="parity-gesture-take",
+        revision="original-process:revision", playbackEpoch="9007199254740993",
+        startTime="1000", stoppedEndTime="1600", completed=False,
+        failure="provider", rejected="18446744073709551615", rack=plugin_ids,
+        baseline=[dict(slot=p[0], parameter=p[1], value=p[2], frame=str(p[3])) for p in original["automation"]],
+        providers=[dict(plugin=plugin_id, incarnation="9007199254740995",
+                        initialDropped="3", dropped="5", drained=False)],
+        targets=[dict(plugin=plugin_id, parameter=1, minimum=-60.0, maximum=12.0,
+            sourceLoss="2", overflow="0", unmapped=2, events=[
+                dict(hostTime="1700", value=-12.0),
+                dict(hostTime="1500", value=-9.0, frame="240"),
+                dict(hostTime="1500", value=-6.0, frame="240"),
+                dict(hostTime="0", value=-3.0)])])
     report = dict(format="screamseq-edited-metadata-v1", passed=False, parityComplete=False,
                   qualificationScope="Paired native edits and exact typed persistence; no reciprocal or foreground claim",
                   sourceSHA256=sha256(original_bytes), toolSHA256=sha256(read_bytes(Path(__file__))),
@@ -48,6 +64,9 @@ def run(client, output):
 
     def extended(tree):
         tree = copy.deepcopy(tree)
+        if "screamseqPluginGestureRecovery" in tree:
+            raise EvidenceError("Plugin gesture probe collides with existing recovered input")
+        tree["screamseqPluginGestureRecovery"] = [copy.deepcopy(gesture_archive)]
         # Inject only into identities that survive in the clean expected tree.
         # This checks deletion without resurrecting data and Undo restoration.
         targets = [("root", tree), ("native", tree["native"])]

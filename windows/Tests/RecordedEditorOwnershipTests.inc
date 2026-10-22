@@ -45,6 +45,9 @@ void recordedEditorOwnershipTests(const std::filesystem::path &scanner,const std
     need(operations.overlayRecordedRecovery(copy)&&Project::serializeNativeProject(*document,copy)==archived,
       "Repeated recovery capture duplicated or changed the same retained take");
     auto reopened=Project::openNativeProjectBytes(archived);
+    const auto &recoveredTake=reopened.state.preserved.at("screamseqPluginGestureRecovery")[0];
+    need(recordedGestureRecovery(readRecordedGestureRecovery(recoveredTake))==recoveredTake,
+      "Native plist reopen changed the shared detached review contract");
     need(Project::encodePlist(reopened.state.preserved.at("screamseqPluginGestureRecovery"))==Project::encodePlist(takes)&&
       Project::encodePlist(reopened.state.preserved.at("plugins"))==Project::encodePlist(project.preserved.at("plugins"))&&
       projectAbsoluteAutomation(reopened.state)==projectAbsoluteAutomation(project),

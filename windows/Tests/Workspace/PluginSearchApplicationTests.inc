@@ -40,6 +40,8 @@ void applicationPluginSearch() {
     app.selectedParameter=1000;app.filterPluginChoices(false);app.setPluginParameterField();app.layoutControls();
     restoreCheck(IsWindowVisible(query)&&IsWindowVisible(selector)&&IsWindowEnabled(selector),"Plugin search fixture did not expose its search/results controls");
     restoreCheck(GetNextDlgTabItem(app.window,query,FALSE)==selector,"Tab order does not lead from parameter search to results");
+    restoreCheck(GetNextDlgTabItem(app.window,selector,FALSE)==value&&GetNextDlgTabItem(app.window,value,TRUE)==selector,
+        "Parameter selector and its value are not adjacent in Tab/Shift+Tab order");
     SetFocus(query);rawDraftText(query,L"NEEDLE");
     restoreCheck(SendMessageW(selector,CB_GETCOUNT,0,0)==2&&app.selectedParameter==1000&&GetFocus()==query,
         "Parameter search did not filter or silently changed the selected target/focus");
@@ -103,6 +105,8 @@ void applicationPluginValueControls() {
     app.selectedPlugin=gain;app.selectedParameter=0;app.restoreLayoutConfiguration(layoutFor(app,"plugins"));app.refreshPluginDetails();app.layoutControls();
     const auto toggle=app.controls.at(pluginValueToggle);
     restoreCheck(app.pluginValueControl()==pluginValueToggle&&IsWindowVisible(toggle)&&!IsWindowVisible(app.controls.at(pluginValue)),"Boolean did not use the native checkbox");
+    restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(pluginParameter),FALSE)==toggle,
+        "Tab from a boolean parameter did not reach its checkbox");
     restoreCheck(ScreamSeq::Tests::accessibleName(toggle)==L"Enabled manual value"&&SendMessageW(toggle,BM_GETCHECK,0,0)==BST_CHECKED,"Boolean lost its label or checked state");
     const auto baseline=app.documentOperation("plugin.state.get",{{"plugin",gain}});
     SetFocus(toggle);restoreCheck(app.key(VK_RETURN),"Enter did not operate the native parameter checkbox");
@@ -121,6 +125,8 @@ void applicationPluginValueControls() {
     app.edit("plugin.add",{{"descriptor",*filter}});const auto plugin=app.view->session.document.at("nativePlugins").back().at("instanceID").get<std::string>();
     app.selectedPlugin=plugin;app.selectedParameter=1;app.refreshPluginDetails();app.layoutControls();
     const auto choices=app.controls.at(pluginValueChoice);
+    restoreCheck(GetNextDlgTabItem(app.window,app.controls.at(pluginParameter),FALSE)==choices,
+        "Tab from an indexed parameter did not reach its choices");
     restoreCheck(app.pluginValueControl()==pluginValueChoice&&IsWindowVisible(choices)&&SendMessageW(choices,CB_GETCOUNT,0,0)==5&&
         ScreamSeq::NativeControls::itemText(choices,3)==L"Notch","Native choices did not expose the effect's names");
     const auto filterBefore=app.documentOperation("plugin.state.get",{{"plugin",plugin}});
@@ -164,5 +170,37 @@ void applicationPluginParameterNavigation() {
     app.selectedPlugin=second;app.refreshPluginDetails();app.pluginCommand(pluginAutomate);
     restoreCheck(app.parameterAutomationWindow->snapshot().at("generation")==draft.at("generation")&&app.parameterAutomationWindow->snapshot().at("fieldDraft")==true,"Returning to the same parameter reloaded its draft");
     restoreCheck(songState(app)==music&&app.position()==cursor,"Parameter navigation changed musical history or moved the editing cursor");
+    // Both the rack button for a built-in and the explicit separate-window
+    // command reach the retained ten-parameter owner without enabling routing.
+    app.selectedPlugin=first;app.refreshPluginDetails();app.layoutControls();
+    restoreCheck(IsWindowEnabled(app.controls.at(pluginEditor))&&app.menuCommandState(pluginParametersCommand).enabled,
+      "Built-in parameter controls remain hidden behind a disabled vendor editor");
+    app.command(pluginEditor);
+    auto *parameters=app.graphPluginParameters.at(first).get();const auto parameterWindow=parameters->window();
+    ScreamSeq::Tests::ownGuiWindow(parameterWindow);
+    restoreCheck(parameters->visible()&&(!app.songRoutingWindow||!app.songRoutingWindow->visible())&&parameters->snapshot().at("plugin")==first,
+      "Rack parameters required the mixing graph or opened another plugin");
+    const auto field=GetDlgItem(parameterWindow,4012),slider=GetDlgItem(parameterWindow,4011);
+    restoreCheck(GetNextDlgTabItem(parameterWindow,slider,FALSE)==field&&GetNextDlgTabItem(parameterWindow,field,TRUE)==slider,
+      "Parameter window slider/value Tab order differs from its visible order");
+    SetFocus(field);rawDraftText(field,L"-.");SendMessageW(field,EM_SETSEL,1,2);
+    const auto parameterDraft=parameters->snapshot();
+    SetFocus(app.window);
+    app.command(pluginParametersCommand);
+    DWORD caretStart=0,caretEnd=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&caretStart),reinterpret_cast<LPARAM>(&caretEnd));
+    restoreCheck(app.graphPluginParameters.at(first).get()==parameters&&parameters->window()==parameterWindow&&
+      parameters->snapshot().at("rows")==parameterDraft.at("rows")&&restoreText(field)==L"-."&&GetFocus()==field&&caretStart==1&&caretEnd==2,
+      "Repeated parameter navigation replaced its window or discarded text, focus or caret");
+    app.selectedPlugin=second;app.command(pluginParametersCommand);
+    restoreCheck(app.graphPluginParameters.size()==2&&app.graphPluginParameters.at(second)->snapshot().at("plugin")==second&&
+      parameters->snapshot().at("plugin")==first&&restoreText(field)==L"-.",
+      "Rack selection redirected an independent parameter draft");
+    app.busy=true;app.selectedPlugin=first;restoreCheck(app.deferView(pluginParametersCommand),"Busy parameter navigation was not retained");
+    app.selectedPlugin=second;app.busy=false;app.drainViews();
+    restoreCheck(app.deferredViews.empty()&&app.status.find(L"target changed")!=std::wstring::npos,
+      "Deferred parameter navigation followed a different selected plugin");
+    restoreCheck(songState(app)==music&&app.position()==cursor,"Opening parameter windows changed music/history/cursor");
     app.selectedPlugin.clear();restoreCheck(!app.menuCommandState(pluginAutomate).enabled&&!app.menuCommandState(pluginActivity).enabled,"Missing rack target remained actionable");
+    restoreCheck(!app.menuCommandState(pluginParametersCommand).enabled&&!app.menuCommandState(pluginEditor).enabled,
+      "Missing rack target left parameter windows actionable");
 }
