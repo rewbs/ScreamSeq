@@ -9,6 +9,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <set>
+#include <type_traits>
 namespace Tracker {
 void validatePluginCapacity(const std::vector<PluginState> &states, size_t mixerBuses) {
   validatePluginAssignments(states);
@@ -592,6 +593,72 @@ std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
     if(failure.reason)result.push_back({i,rack_[i]->baseline.instanceID,failure});
   }
   return result;
+}
+std::unique_ptr<PluginChain::StoppedRepair> PluginChain::prepareStoppedRepair(std::span<const PluginState> saved) {
+  if(parameterBlockOpen_)throw std::logic_error("Finish processing before stopped plugin repair");
+  if(saved.empty()||saved.size()>maximumNativePlugins)throw std::invalid_argument("Invalid stopped plugin repair group");
+  while(read_.load()!=write_.load())applyPending();
+  auto plan=std::make_unique<StoppedRepair>();plan->owner=this;plan->rack=rack_;
+  plan->graphRevision=graphControlRevision_;plan->recordedRevision=recordedRevision_;plan->parameterFence=write_.load();
+  constexpr size_t limit=256u*1024u*1024u;size_t bytes=sizeof(StoppedRepair);
+  const auto budget=[&](size_t amount){if(amount>limit-bytes)throw std::runtime_error("Stopped plugin repair exceeds the combined 256 MB storage budget");bytes+=amount;};
+  if(mixerTransition_){budget(mixerTransition_->stoppedStorageBytes());plan->routing=&mixerTransition_->controlPlan();}
+  budget(instrumentGeneratorStorage_);budget(sampleAdapterStorage_);
+  if(signalGraph_)budget(signalGraph_->storageBytes());if(sampleSignalGraph_)budget(sampleSignalGraph_->storageBytes());
+  // Conservative double-counting of shared graph/rack ownership is intentional:
+  // every old and prepared backend must fit before any native owner is changed.
+  graphControlPlans_.forEachRetained([&](const auto &p){budget(p.preparedStorage);});
+  if(compoundGraphControls_)budget(compoundGraphControls_->preparedStorage);
+  recordedPlans_.forEachRetained([&](const auto &p){budget(sizeof(p)+p.manualBaselines.capacity()*sizeof(ParameterChange));for(const auto &lane:p.lanes)budget(lane.timeline.storageBytes());});
+  for(const auto &entry:retainedRack_){budget(entry->plugin->preparedStorageBytes());if(entry->preset)budget(entry->preset->storageBytes());}
+  plan->items.reserve(saved.size());budget(plan->items.capacity()*sizeof(StoppedRepair::Item));budget(plan->rack.capacity()*sizeof(plan->rack[0]));
+  std::set<std::string> seen;
+  for(const auto &state:saved) {
+    if(state.instanceID.empty()||!seen.insert(state.instanceID).second)throw std::invalid_argument("Duplicate or missing stopped repair identity");
+    const auto found=std::find_if(plan->rack.begin(),plan->rack.end(),[&](const auto &p){return p->baseline.instanceID==state.instanceID;});
+    if(found==plan->rack.end())throw std::invalid_argument("Stopped repair target is not in the current rack");
+    auto entry=*found;
+    if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool v){return v;}))
+      throw std::runtime_error("Restore transient previews before stopped opaque repair");
+    StoppedRepair::Item item;item.entry=entry;item.before=entry->baseline;
+    item.replacement=entry->plugin->prepareStoppedReplacement(state,offline_);item.accepted=item.replacement->canonical;
+    item.parameters=item.replacement->prepared->parameters();item.previewed.resize(item.parameters.size());
+    budget(item.replacement->prepared->preparedStorageBytes());budget(sizeof(NativePlugin::StoppedReplacement));
+    budget(item.before.state.capacity());budget(item.accepted.state.capacity());budget(item.replacement->canonical.state.capacity());
+    budget(item.parameters.capacity()*sizeof(PluginParameter));budget(item.previewed.capacity());
+    for(const auto &p:item.parameters){budget(p.name.capacity());budget(p.unitLabel.capacity());budget(p.choices.capacity()*sizeof(std::string));for(const auto &v:p.choices)budget(v.capacity());}
+    plan->items.push_back(std::move(item));
+  }
+  if(!acceptsStoppedRepair(*plan))throw std::runtime_error("Plugin rack changed during stopped repair preparation");
+  return plan;
+}
+bool PluginChain::acceptsStoppedRepair(const StoppedRepair &plan) const noexcept {
+  if(plan.owner!=this||plan.adopted||plan.items.empty())return false;
+  // Collection can retire vendor objects and execute native teardown. Perform
+  // it before the final rack/input guards, never between those guards and swap.
+  const auto *routing=mixerTransition_&&mixerTransition_->ready()?&mixerTransition_->controlPlan():nullptr;
+  if(mixerTransition_&&!routing)return false;
+  if(parameterBlockOpen_||rack_!=plan.rack||
+     read_.load()!=plan.parameterFence||write_.load()!=plan.parameterFence||
+     graphControlRevision_!=plan.graphRevision||recordedRevision_!=plan.recordedRevision||routing!=plan.routing)return false;
+  for(const auto &item:plan.items)if(!item.replacement||item.entry->baseline!=item.before||
+    std::any_of(item.entry->previewed.begin(),item.entry->previewed.end(),[](bool v){return v;})||
+    !item.entry->plugin->acceptsStoppedReplacement(*item.replacement))return false;
+  return true;
+}
+bool PluginChain::adoptStoppedRepair(StoppedRepair &plan) noexcept {
+  if(!acceptsStoppedRepair(plan))return false;
+  static_assert(std::is_nothrow_swappable_v<PluginState>);
+  // No vendor/native call, allocation or fallible publication after the complete
+  // group guard. Old notification queues remain in the caller-retained plans.
+  // Native adapters must handle their input cuts and lease cleanup explicitly.
+  for(auto &item:plan.items) {
+    item.entry->plugin->commitStoppedReplacement(*item.replacement);
+    std::swap(item.entry->baseline,item.accepted);
+    item.entry->parameters.swap(item.parameters);item.entry->previewed.swap(item.previewed);
+    for(const auto &p:item.entry->parameters)item.entry->plugin->observedBaseline(p.id,p.value);
+  }
+  plan.adopted=true;liveTailRevision_.fetch_add(1,std::memory_order_relaxed);return true;
 }
 std::vector<PluginParameter> PluginChain::parameters(size_t slot) const {
   if(slot>=rack_.size())return {};auto result=rack_[slot]->plugin->parameters();

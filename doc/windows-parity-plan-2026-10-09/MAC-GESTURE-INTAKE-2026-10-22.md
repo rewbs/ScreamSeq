@@ -742,3 +742,24 @@ comparison and the existing host realtime allocation/free/lock audit. These
 are source assertions, not execution evidence. Run them with the next coherent
 both-Mac-architecture/shared-Windows checkpoint; no build was started for this
 source batch. It does not close live release, native take UI or socket coverage.
+
+The following unbuilt group layer, `PluginChain::prepareStoppedRepair`, prepares
+every selected provider before adoption, rejects an outstanding preview, and
+guards the retained rack entries, manual queue fence, graph/recorded revisions
+and settled routing plan. It bounds one complete preparation plus retained host
+storage at 256 MB, conservatively counting shared graph/preset storage again.
+A native owner must retain at most one such preparation; this is not a general
+unbounded draft cache. `MixerTransition::stoppedStorageBytes` collects completed
+transitions and refuses unfinished ones before the final guards. Adoption then
+has no native call or fallible operation between providers. It swaps the complete
+group's backend/manual catalogue and retains old backends and queues in the plan
+for explicit native cleanup. No unrelated rack entry or routing identity changes.
+
+Prepared shared checks cover invalid later targets without a successful prefix,
+intervening writes, retained previews, manual catalogue restoration, unrelated
+providers, stale/double adoption and reopened PCM. A mixed AU/VST3 test adds an
+invalid later AU blob, real hidden-state repair and old-provider lease cleanup.
+These have not run. Session integration still needs a retained repair/cleanup
+receipt so cleanup failure after adoption cannot cause duplicate replacement or
+lose the take; input-cut checks remain the native owner's responsibility. No
+public lifecycle/API changes or live-release claim follow from this layer.

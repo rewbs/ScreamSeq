@@ -109,6 +109,43 @@ static void stoppedVendorReplacement() {
     repair->prepared->editSource()==presetSource&&facade.editSource().incarnation!=presetSource.incarnation,
     "Stopped repair failed behind a previously replaced stable scheduling facade");
 }
+static void stoppedGroupRepair() {
+  PluginChain chain({gain("repair-a"),gain("untouched"),gain("repair-c")},48000,true);
+  const auto accepted=chain.states();const auto middle=chain.editSource(1);
+  const std::array<ParameterChange,2> diverged{{{0,1,-9,0},{2,1,-12,0}}};
+  check(chain.enqueueParameters(diverged),"Prepare grouped repair divergence");chain.applyPending();
+  const auto before=chain.states();const auto first=chain.editSource(0),last=chain.editSource(2);
+  const std::array<PluginState,2> saved{accepted[0],accepted[2]};
+  auto bad=saved;bad[1].instanceID="missing";bool refused=false;
+  try{(void)chain.prepareStoppedRepair(bad);}catch(const std::invalid_argument &){refused=true;}
+  check(refused&&chain.states()==before&&chain.editSource(0)==first&&chain.editSource(2)==last,
+    "Invalid later repair target changed a valid prefix");
+  auto stale=chain.prepareStoppedRepair(saved);
+  const std::array<ParameterChange,1> later{{{1,1,-3,0}}};
+  check(chain.enqueueParameters(later),"Prepare intervening accepted write");chain.applyPending();
+  const auto newer=chain.states();
+  check(!chain.adoptStoppedRepair(*stale)&&chain.states()==newer&&chain.editSource(0)==first&&chain.editSource(2)==last,
+    "Stale grouped repair overwrote an intervening accepted write");
+  const std::array<ParameterChange,1> preview{{{2,1,-24,0}}};
+  check(chain.previewParameters(preview),"Prepare grouped repair transient refusal");chain.applyPending();
+  refused=false;try{(void)chain.prepareStoppedRepair(saved);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&chain.hasParameterPreview(2,1)&&chain.editSource(0)==first,"Opaque group discarded another transient owner");
+  const std::array<uint32_t,1> ids{1};check(chain.cancelParameterPreviews(2,ids),"Restore preview before explicit repair");chain.applyPending();
+  auto plan=chain.prepareStoppedRepair(saved);auto superseded=chain.prepareStoppedRepair(saved);
+  check(chain.states()==newer&&chain.adoptStoppedRepair(*plan)&&plan->adopted,"Adopt complete stopped native group");
+  const auto restored=chain.states();
+  check(restored[0]==accepted[0]&&restored[2]==accepted[2]&&restored[1]==newer[1]&&chain.editSource(1)==middle&&
+    chain.editSource(0).incarnation!=first.incarnation&&chain.editSource(2).incarnation!=last.incarnation,
+    "Group restoration changed an unrelated provider or lost accepted state");
+  check(parameter(chain,0,1).manualValue==0&&parameter(chain,2,1).manualValue==0&&parameter(chain,1,1).manualValue==-3,
+    "Group restoration left stale manual values");
+  check(plan->items[0].replacement->prepared->state()==before[0]&&plan->items[1].replacement->prepared->state()==before[2],
+    "Group restoration retired an old native owner before cleanup");
+  check(!chain.adoptStoppedRepair(*plan)&&!chain.adoptStoppedRepair(*superseded)&&chain.states()==restored,
+    "Old group replayed after native replacement");
+  PluginChain reopened(restored,48000,true);const auto pcm=render(reopened,512,128);
+  check(std::abs(pcm.back()-std::pow(10.f,-3.f/20))<1e-6f,"Reopened grouped repair changed unrelated accepted gain");
+}
 static void refusal(){
   PluginChain chain({gain("preview-a"),gain("preview-b")},48000,true);
   const auto original=chain.states();
@@ -248,6 +285,7 @@ static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
 }
 int main(){try{
   stoppedVendorReplacement();
+  stoppedGroupRepair();
   ownership();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);

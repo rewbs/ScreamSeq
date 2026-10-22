@@ -48,3 +48,39 @@ static void stoppedNativeRepair(const PluginState &saved,bool hiddenAU=false) {
     for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-expected[i])<1e-6f,"Opaque native restoration changed reopened PCM");
   }
 }
+static void stoppedNativeGroupRepair(const PluginState &vst,const PluginState &au) {
+  NativePlugin acceptedAU(au,48000,true);auto hidden=acceptedAU.state();
+  NSData *blob=[NSPropertyListSerialization dataWithPropertyList:@{@"gain":@(acceptedAU.parameters().at(0).value),@"hidden":@(.375f)}
+    format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+  check(blob.length>0,"Prepare grouped hidden-state divergence");
+  const auto bytes=static_cast<const std::byte *>(blob.bytes);hidden.state.assign(bytes,bytes+blob.length);
+  auto unrelated=vst;unrelated.instanceID="unrelated-native-repair-owner";
+  PluginChain chain({vst,hidden,unrelated},48000,true);
+  check(chain.parameter(0,chain.parameters(0).at(0).id,.8f),"Prepare grouped VST3 divergence");chain.applyPending();
+  const auto before=chain.states();const std::array<PluginState,2> saved{vst,acceptedAU.state()};
+  const std::array<PluginEditSource,3> sources{chain.editSource(0),chain.editSource(1),chain.editSource(2)};
+  const auto first=chain.beginEditorInputBarrier(0),second=chain.beginEditorInputBarrier(1);
+  check(first&&second,"Protect complete native opaque repair group");
+  auto invalid=saved;invalid[1].state={std::byte{0xff}};bool refused=false;
+  try{(void)chain.prepareStoppedRepair(invalid);}catch(const std::exception &){refused=true;}
+  check(refused&&chain.states()==before&&chain.editSource(0)==sources[0]&&chain.editSource(1)==sources[1],
+    "Invalid later AU blob restored an earlier VST3 prefix");
+  auto plan=chain.prepareStoppedRepair(saved);
+  const auto expected0=plan->items[0].replacement->canonical,expected1=plan->items[1].replacement->canonical;
+  check(chain.adoptStoppedRepair(*plan),"Adopt whole protected AU/VST3 repair group");
+  const auto restored=chain.states();
+  check(restored[0]==expected0&&restored[1]==expected1&&restored[2]==before[2]&&chain.editSource(2)==sources[2],
+    "Mixed native repair lost hidden state or changed an unrelated provider");
+  check(!chain.endEditorInputBarrier(0,*first)&&!chain.endEditorInputBarrier(1,*second),"Old group leases reached new native providers");
+  check(plan->items[0].replacement->prepared->endEditorInputBarrier(*first)&&
+    plan->items[1].replacement->prepared->endEditorInputBarrier(*second),"Retained mixed native owners lost their cleanup leases");
+  check(plan->items[0].replacement->prepared->state()==before[0]&&plan->items[1].replacement->prepared->state()==before[1],
+    "Group adoption destroyed old native evidence before retirement");
+  PluginChain reopened(restored,48000,true),expected({expected0,expected1,before[2]},48000,true);
+  std::array<float,256> actualPCM,expectedPCM;actualPCM.fill(.2f);expectedPCM.fill(.2f);
+  uint64_t allocations=0,frees=0,locks=0;tracker_audit_begin();
+  const bool rendered=reopened.process(actualPCM.data(),128)&&expected.process(expectedPCM.data(),128);
+  tracker_audit_end(&allocations,&frees,&locks);
+  check(rendered&&!allocations&&!frees&&!locks,"Reprepared mixed native group failed render or host audit");
+  for(size_t i=0;i<actualPCM.size();++i)check(std::abs(actualPCM[i]-expectedPCM[i])<1e-6f,"Reopened mixed native repair changed PCM");
+}

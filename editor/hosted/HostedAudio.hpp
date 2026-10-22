@@ -308,6 +308,10 @@ public:
   std::unique_ptr<StoppedReplacement> prepareStoppedReplacement(const PluginState &,bool offline) const;
   bool acceptsStoppedReplacement(const StoppedReplacement &) const noexcept;
   bool adoptStoppedReplacement(StoppedReplacement &) noexcept;
+private:
+  friend class PluginChain;
+  void commitStoppedReplacement(StoppedReplacement &) noexcept;
+public:
   std::vector<PluginInstrumentAlias> assignments() const;
   double latency() const { return latency_; }
   bool latencyChangePending() const noexcept;
@@ -710,6 +714,28 @@ public:
   // Quiescent control owner only, like states(). Capture one retained provider
   // without serializing unrelated vendors. Native input leases are external.
   PluginState state(size_t slot);
+  // Complete-group stopped repair. Native adapters own quiescence, closed
+  // input leases, input-cut/revision checks and retirement. No audio callback
+  // may resume on this chain after adoption; prepare playback afresh.
+  struct StoppedRepair {
+    struct Item {
+      std::shared_ptr<RackEntry> entry;
+      PluginState before,accepted;
+      std::unique_ptr<NativePlugin::StoppedReplacement> replacement;
+      std::vector<PluginParameter> parameters;
+      std::vector<bool> previewed;
+    };
+    const PluginChain *owner=nullptr;
+    std::vector<std::shared_ptr<RackEntry>> rack;
+    std::vector<Item> items;
+    const MixerTransition::Plan *routing=nullptr;
+    uint64_t graphRevision=0,recordedRevision=0;
+    uint32_t parameterFence=0;
+    bool adopted=false;
+  };
+  std::unique_ptr<StoppedRepair> prepareStoppedRepair(std::span<const PluginState>);
+  bool acceptsStoppedRepair(const StoppedRepair &) const noexcept;
+  bool adoptStoppedRepair(StoppedRepair &) noexcept;
   void applyPending() noexcept;
   std::vector<PluginParameter> parameters(size_t slot) const;
   std::vector<PluginProgram> programs(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->programs() : std::vector<PluginProgram>{}; }

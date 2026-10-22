@@ -230,6 +230,9 @@ bool NativePlugin::acceptsStoppedReplacement(const StoppedReplacement &plan) con
 }
 bool NativePlugin::adoptStoppedReplacement(StoppedReplacement &plan) noexcept {
   if(!acceptsStoppedReplacement(plan))return false;
+  commitStoppedReplacement(plan);return true;
+}
+void NativePlugin::commitStoppedReplacement(StoppedReplacement &plan) noexcept {
   auto &current=*plan.expected;auto &next=*plan.prepared;
   // The backend object's address remains stable, preserving its own native
   // callbacks. Only unique ownership moves; the stable scheduler facade,
@@ -240,7 +243,7 @@ bool NativePlugin::adoptStoppedReplacement(StoppedReplacement &plan) noexcept {
   std::swap(current.editIncarnation_,next.editIncarnation_);
   current.tail_.store(plan.tail,std::memory_order_release);tail_.store(plan.tail,std::memory_order_release);
   presetTailEpoch_.fetch_add(1,std::memory_order_release);
-  plan.adopted=true;return true;
+  plan.adopted=true;
 }
 double NativePlugin::tail() const {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->tail() : tail_.load(std::memory_order_acquire);}
 uint64_t NativePlugin::tailRevision() const noexcept {const auto *p=publishedVendor();return presetTailEpoch_.load(std::memory_order_acquire)+(p->builtin_ ? p->builtin_->tailRevision() : 0);}
