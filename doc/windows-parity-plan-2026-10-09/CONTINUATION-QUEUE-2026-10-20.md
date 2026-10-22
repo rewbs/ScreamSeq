@@ -8,6 +8,20 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:45 UTC:** the next checkpoint also includes the
+[deep recovery-path correction](RECOVERY-PATHS-2026-10-22.md) and the Mac
+plugin-trust contract regression repair. Both are unbuilt. Mac ARM ab5 completed
+133/134 native gates; the sole failure is the obsolete expectation that Save
+drops accepted manual edits on provider failure. Its other native, interface,
+socket and conformance stages passed. Intel is still building.
+Windows x64 ab5 passed 158 portable/worker and 48/49 native UI registrations;
+the scratch focus failure is the pending e986 correction. CI had no audio
+endpoints. Exact retained x64 binary checks locally passed 11/12 device cases;
+the recovery failure passed with a short path, motivating the new correction.
+Keep both original failures and bounded rerun evidence. ARM reciprocal fixture
+exchange passed ten legs without rebuilding; its Windows return is in progress.
+No new build, package or merge has occurred. Gate remains **13:06:48 UTC**.
+
 **22 October 12:27 UTC:** focus correction `e98697fb8` is committed and pushed
 to `codex/mac-gesture-intake` only. Prepared, parsed, unexecuted scripts under
 `bin/mac-gesture-20261022/focus-followup/` freeze its full hash. They permit one

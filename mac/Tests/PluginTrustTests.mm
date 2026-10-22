@@ -3,6 +3,7 @@
 #include "FixtureTrust.hpp"
 #include "../Audio/AudioUnitHost.hpp"
 #include "../Plugins/PluginInventory.hpp"
+#include <cmath>
 #include <iostream>
 #include <mach-o/dyld.h>
 #include <sys/stat.h>
@@ -298,7 +299,9 @@ int main(int argc, const char **argv) {
         check(!imageLoaded(@"Untrusted-Location"), "Approving one location never loads another");
       }
 
-      // A pending manual edit that cannot be committed must not block saving.
+      // Never report a successful Save by dropping an accepted manual edit.
+      // A missing provider retains the edit/history and leaves the existing
+      // file intact; restoring that same trusted bundle permits an exact retry.
       NSString *picked = [pickedFolder stringByAppendingPathComponent:@"Picked.vst3"];
       check([files copyItemAtPath:fixturePath toPath:picked error:nil], "Copy fixture to a chosen location");
       TrackerSession *editing = [TrackerSession new];
@@ -306,15 +309,45 @@ int main(int argc, const char **argv) {
       NSString *first = [folder stringByAppendingPathComponent:@"manual.screamseq"];
       check([editing savePath:first error:&error], "Save baseline");
       NSData *baseline = readProject(first)[@"plugins"][0][@"state"];
+      NSData *baselineFile = [NSData dataWithContentsOfFile:first];
+      auto manualValue=[&]() {
+        for(NSDictionary *parameter in [editing pluginParameters:0])
+          if([parameter[@"id"] intValue]==7)return [parameter[@"manualValue"] doubleValue];
+        throw std::runtime_error("Manual fixture parameter disappeared");
+      };
+      const double originalValue=manualValue();
       check([editing pluginParameter:0 identifier:7 value:.81 record:NO error:&error], "Queue a manual edit");
+      NSString *editedRevision=editing.automationRevision;
+      const BOOL couldUndo=editing.canUndo,couldRedo=editing.canRedo;
       check([files removeItemAtPath:picked error:nil], "Remove the plugin while an edit is pending");
-      check([editing savePath:first error:&error], "Saving succeeds although the edit cannot be committed");
-      // The stopped live instance still supplies its own state; the slot is never emptied.
-      check(baseline.length > 0 && [readProject(first)[@"plugins"][0][@"state"] length] > 0, "Plugin state is retained");
-      bool warned = false;
-      for (NSString *issue in [editing snapshot:0][@"issues"]) warned = warned || [issue containsString:@"manual plugin parameter edit"];
-      check(warned, "The dropped edit is reported");
-      check([editing savePath:first error:&error] && [editing recoveryData:&error] != nil, "The failure is not sticky");
+      for(int attempt=0;attempt<2;++attempt) {
+        error=nil;
+        check(![editing savePath:first error:&error] && [error.localizedDescription containsString:@"All edits retained"],
+              "Save must report retained edits when the provider cannot serialize them");
+        error=nil;
+        check([editing recoveryData:&error]==nil && [error.localizedDescription containsString:@"All edits retained"],
+              "Recovery must not silently omit an accepted manual edit");
+        check([editedRevision isEqual:editing.automationRevision] && editing.canUndo==couldUndo && editing.canRedo==couldRedo &&
+              std::abs(manualValue()-.81)<1e-4 && [baselineFile isEqual:[NSData dataWithContentsOfFile:first]] &&
+              baseline.length>0 && [baseline isEqual:readProject(first)[@"plugins"][0][@"state"]],
+              "Refused Save/recovery must preserve manual input, history, revision and original bytes");
+      }
+      check([files copyItemAtPath:fixturePath toPath:picked error:nil], "Restore the same trusted provider");
+      error=nil;
+      check([editing savePath:first error:&error] && [editing recoveryData:&error]!=nil &&
+            [editedRevision isEqual:editing.automationRevision] && std::abs(manualValue()-.81)<1e-4,
+            "Retry must persist the retained edit without another history mutation");
+      NSData *editedState=readProject(first)[@"plugins"][0][@"state"];
+      check(![editedState isEqual:baseline],"Successful retry must store the accepted parameter, not the old baseline");
+      call(editing,@"history.undo",@{});
+      check(std::abs(manualValue()-originalValue)<1e-4 && [editing savePath:first error:&error] &&
+            [readProject(first)[@"plugins"][0][@"state"] isEqual:baseline],
+            "One Undo after retry restores the exact original opaque state");
+      call(editing,@"history.redo",@{});
+      check([editing savePath:first error:&error] && [editing openPath:first error:&error] &&
+            std::abs(manualValue()-.81)<1e-4 && [readProject(first)[@"plugins"][0][@"state"] isEqual:editedState],
+            "Redo and reopen retain the recovered edit exactly");
+      check(!imageLoaded(@"Untrusted-Location"),"Retry must not authorize another plugin location");
 
       // Objective-C exceptions stop at the API boundary.
       error = nil;

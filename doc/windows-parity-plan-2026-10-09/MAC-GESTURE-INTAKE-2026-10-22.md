@@ -1,5 +1,28 @@
 # Shared capture: Mac AU intake continuation
 
+## Execution update, 22 October 12:45 UTC
+
+The ab5f677c1 Mac ARM job 119813994591 (run 39775712080) completed:
+133/134 native registrations passed, including native-plugins,
+recorded-automation and unified-history with the stopped publication/history
+checks below. Recovery/picker, private socket admission/replay, owned AU/VST3
+editor lifecycle, sample library, all 35 interface groups and fixture/shared
+conformance stages passed. Intel job 119813994178 is still building; no Intel
+result is inferred. Excerpts are under `admission-followup/mac-arm-result-excerpts.log`.
+
+The one failing native test, plugin-trust, still required a failed manual-state
+commit to discard the accepted edit and report Save success. That conflicts with
+the deliberately transactional prerequisite below. Its source assertion is now
+replaced with repeated Save/recovery refusal retaining manual input, exact file
+bytes, revision and history; restoration of the same trusted provider must allow
+retry, exact Undo/Redo and reopen. Trust-location assertions remain intact.
+This correction is **unbuilt**, and the candidate remains failed until it passes.
+
+Windows-to-Mac ARM retained exchange run 39779951063 passed all ten fixture
+legs using this candidate, with native build jobs skipped. The Windows return
+leg was dispatched separately without building. Full Mac retained-take API/UI
+integration is still open; passing prerequisites do not supply those operations.
+
 ## Retained stopped publication, 22 October 11:34 UTC — unbuilt
 
 Current source inspection found another concrete restoration boundary:
