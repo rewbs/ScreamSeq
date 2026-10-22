@@ -1,5 +1,6 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/LatestParameterEdits.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
 #include "VST3Host.hpp"
 #include "PluginMainThread.hpp"
 #include "PluginWindow.hpp"
@@ -422,11 +423,10 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
   // newest published slot), whereas one atomic per parameter can: the editor
   // thread stores, rendering takes the value with a single exchange. A long
   // gesture while the transport is stopped therefore cannot overflow.
-  std::array<PluginEdit,8192> edits{};
+  PluginEditQueue edits;
   std::unique_ptr<LatestParameterEdits> pendingEdits;
   // Invalid or unknown editor values and UI-queue overflow; never a failure.
   std::atomic<uint64_t> droppedEdits{0};
-  std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<bool> failed{false};
   std::atomic<uint64_t> latencySerial{0},acknowledgedLatency{0};
   BORROWED_REF
@@ -454,14 +454,11 @@ struct VST3Plugin::Impl : IComponentHandler, IPlugFrame {
     values[index].store(normalized, std::memory_order_relaxed);
     controllerValues[index] = normalized;
     (void)pendingEdits->publish(size_t(index),normalized);
-    auto w = editWrite.load(std::memory_order_relaxed), r = editRead.load(std::memory_order_acquire);
-    if (w - r >= edits.size()) {
+    if (!edits.push({id,normalized,mach_absolute_time()})) {
       // Only the UI notification is lost; parameters() still reports the value.
       droppedEdits.fetch_add(1, std::memory_order_relaxed);
       return kResultOk;
     }
-    edits[w % edits.size()] = {id,normalized,mach_absolute_time()};
-    editWrite.store(w + 1, std::memory_order_release);
     return kResultOk;
   }
   tresult PLUGIN_API restartComponent(int32 flags) override {
@@ -754,8 +751,7 @@ bool VST3Plugin::popEdit(uint32_t &id, float &value) noexcept {
 }
 bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
   auto &s = *impl_;
-  auto r = s.editRead.load(std::memory_order_relaxed);
-  if (r == s.editWrite.load(std::memory_order_acquire)) {
+  if (!s.edits.pop(event)) {
     if (s.view && s.controller)
       for (size_t i = 0; i < s.metadata.size(); ++i) {
         auto value = s.values[i].load(std::memory_order_relaxed);
@@ -766,10 +762,15 @@ bool VST3Plugin::popEdit(PluginEdit &event) noexcept {
       }
     return false;
   }
-  auto e = s.edits[r % s.edits.size()];
-  s.editRead.store(r + 1, std::memory_order_release);
-  event=e;
   return true;
+}
+PluginEditFence VST3Plugin::editFence() {
+  PluginEditFence fence;
+  pluginMainCall([&]{fence={impl_->edits.fence().position,mach_absolute_time(),impl_->droppedEdits.load(std::memory_order_relaxed)};});
+  return fence;
+}
+PluginEditRead VST3Plugin::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {
+  return impl_->edits.popBefore({fence.position},event);
 }
 void VST3Plugin::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;

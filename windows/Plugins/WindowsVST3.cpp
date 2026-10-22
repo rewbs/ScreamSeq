@@ -1,5 +1,6 @@
 #include "editor/hosted/PluginAudioLayout.hpp"
 #include "editor/hosted/LatestParameterEdits.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
 // Adapted from mac/Audio/VST3Host.mm; shared scheduling/DSP remain in editor/hosted.
 #include "NativeBackend.hpp"
 #include "Module.hpp"
@@ -348,9 +349,8 @@ struct NativeBackend::Impl {
   std::array<std::array<uint16_t, 128>, 16> notes{};
   // Original notifications remain ordered for recording/history. Audible
   // delivery keeps the latest value per prepared parameter, as on macOS.
-  std::array<PluginEdit,8192> edits{};
+  PluginEditQueue edits;
   std::unique_ptr<LatestParameterEdits> pendingEdits;
-  std::atomic<uint32_t> editWrite{0}, editRead{0};
   std::atomic<uint64_t> droppedEdits{0};
   std::atomic<bool> failed{false};
   enum class Failure:uint32_t {None,CallbackThread,EditorQueue,EditorValue,Restart,Resize,EditorException,ControllerParameter,InputParameterCapacity,InputEventCapacity,Process,Block,Transport,AudioEdit,InputOffset,ProcessorException,OutputEventCapacity,OutputParameterCapacity,OutputEventOffset,OutputParameterOffset,OutputParameterValue,ProcessorResult,AuxiliaryNonfinite,MainNonfinite,Latency,ParameterCatalog};
@@ -387,8 +387,7 @@ struct NativeBackend::Impl {
   tresult performEdit(ParamID id, ParamValue value) {
     // A failed instance is about to be dropped: discard, never queue.
     if (failed.load(std::memory_order_acquire)) return kResultFalse;
-    const auto w=editWrite.load(std::memory_order_relaxed),r=editRead.load(std::memory_order_acquire);
-    if(w-r>=edits.size()){
+    if(edits.full()){
       // Keep Windows' original-time input-loss policy until both native manual
       // and recorded owners can reconcile a missing notification explicitly.
       // Audible delivery itself no longer has a second overflowing FIFO.
@@ -406,8 +405,10 @@ struct NativeBackend::Impl {
     const auto time=ScreamSeq::hostTime100ns();
     values[index].store(float(value),std::memory_order_relaxed);controllerValues[index]=float(value);
     (void)pendingEdits->publish(index,float(value));
-    edits[w % edits.size()] = {id,float(value),time};
-    editWrite.store(w + 1, std::memory_order_release);
+    // Same single producer as the full() preflight; consumption only frees space.
+    if(!edits.push({id,float(value),time})){
+      droppedEdits.fetch_add(1,std::memory_order_relaxed);fail(Failure::EditorQueue,id);return kResultFalse;
+    }
     return kResultOk;
   }
   bool refreshParameterPresentation() {
@@ -815,15 +816,17 @@ bool NativeBackend::popEdit(uint32_t &id, float &value) noexcept {
   PluginEdit event;if(!popEdit(event))return false;id=event.id;value=event.value;return true;
 }
 bool NativeBackend::popEdit(PluginEdit &event) noexcept {
-  auto &s = *impl_;
-  auto r = s.editRead.load(std::memory_order_relaxed);
-  if (r == s.editWrite.load(std::memory_order_acquire))return false;
-  auto e = s.edits[r % s.edits.size()];
-  s.editRead.store(r + 1, std::memory_order_release);
-  event=e;
-  return true;
+  return impl_->edits.pop(event);
 }
 uint64_t NativeBackend::droppedEdits() const noexcept {return impl_->droppedEdits.load(std::memory_order_relaxed);}
+std::optional<PluginEditFence> NativeBackend::editFence() {
+  PluginEditFence fence;
+  pluginMainCall([&]{fence={impl_->edits.fence().position,ScreamSeq::hostTime100ns(),impl_->droppedEdits.load(std::memory_order_relaxed)};});
+  return fence;
+}
+PluginEditRead NativeBackend::popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept {
+  return impl_->edits.popBefore({fence.position},event);
+}
 void NativeBackend::transport(const PluginTransport &t) noexcept {
   impl_->transport = t;
 }

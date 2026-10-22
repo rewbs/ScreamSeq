@@ -310,3 +310,39 @@ clicks; do not claim typing, Tab or floating-field continuity verified from thos
 observations. Native focus/caret/Tab assertions passed in the workspace harness;
 fresh Computer Use focus verification remains required. No temporal flicker or
 audio-performance claim is made. Candidate is not packaged or merged.
+
+## Original-time native cuts: next source batch, not yet built
+
+`editor/hosted/PluginEditQueue.hpp` replaces the duplicated Windows/Mac VST3
+8192-notification FIFO with one bounded SPSC implementation. It retains every
+accepted raw value and original timestamp; audible coalescing remains separate.
+Native validation and each platform's exact overflow policy remain unchanged.
+Fixed drain positions prevent later input from extending a Stop drain forever.
+Stale/future bounds refuse without consuming an event; 64-bit publication cursors
+do not become persisted song identities.
+
+`PluginBackend::editFence()` captures position, host time and loss on the actual
+native owner (`pluginMainCall` on Windows STA / Mac main). The shared facade's
+`editBoundary` adds provider incarnation and refuses a changed vendor. Its
+`popEditBefore` rejects another incarnation before touching the FIFO. The Mac
+factory forwards this only for VST3; AU and built-ins explicitly remain unsupported
+at this layer. Ordinary edit polling is unchanged.
+
+`PluginEditQueueTests.inc`, included in the existing recorded-automation target,
+covers fixed cuts with later input, identical/unknown timestamps, invalid bounds,
+exact 8192 capacity over three wraps, callback allocation/lock audit where available,
+and 50,000 overlapping producer/consumer events. Windows `EditNotificationTests`
+and Mac `PluginRobustnessTests` add real-provider boundary checks: native capture,
+pre-cut exact event, retained post-cut event, stale cut and replacement rejection.
+Existing queue-loss, PCM, state, ordering and capture assertions are unchanged.
+
+These are prerequisites for the recording session, not its finished lifecycle.
+A cut does not freeze a vendor, restore its state or decide the fate of later
+gestures. Worker arming/Stop/review/API, standard-control original-time intake,
+AU integration and Mac session adoption remain outstanding. Next session work
+must retain post-cut input during restoration, rather than blindly draining it.
+Do not expose recording controls until those admission paths are complete.
+
+Batch this with the first-candidate corrections at the next hourly build gate.
+No C++ compilation or execution has run for this new source. Main Mac Intel CI
+eventually reported cancelled; ARM64 passed. Neither result validates this batch.

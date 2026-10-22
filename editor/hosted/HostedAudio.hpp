@@ -338,6 +338,8 @@ public:
   bool popEdit(PluginEdit &) noexcept;
   bool popEdit(PluginEdit &,PluginEditSource &) noexcept;
   PluginEditSource editSource() const noexcept;
+  std::optional<PluginEditBoundary> editBoundary();
+  PluginEditRead popEditBefore(const PluginEditBoundary &,PluginEdit &,PluginEditSource &) noexcept;
   uint64_t droppedEdits() const noexcept;
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };

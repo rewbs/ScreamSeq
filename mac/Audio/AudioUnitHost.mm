@@ -127,6 +127,10 @@ public:
   bool popEdit(uint32_t &, float &) noexcept override;
   bool popEdit(PluginEdit &) noexcept override;
   uint64_t droppedEdits() const noexcept override;
+  std::optional<PluginEditFence> editFence() override {return vst_?std::optional<PluginEditFence>(vst_->editFence()):std::nullopt;}
+  PluginEditRead popEditBefore(const PluginEditFence &fence,PluginEdit &event)noexcept override {
+    return vst_?vst_->popEditBefore(fence,event):PluginEditRead::Unsupported;
+  }
   static std::vector<PluginDescriptor> discover();
 };
 namespace {

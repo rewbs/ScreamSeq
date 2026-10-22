@@ -73,6 +73,21 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv); @autoreleas
     std::filesystem::remove(path);
     announce(false);
   }
+  { // A native-owner boundary must leave the next gesture for its next owner.
+    NativePlugin p(effect,48000);
+    check(edit(7,.25)==1,"Pre-boundary Mac gesture failed");
+    const auto boundary=p.editBoundary();
+    check(boundary&&boundary->fence.hostTime&&boundary->source==p.editSource(),"Mac native boundary lost its provider/time");
+    check(edit(7,.75)==1,"Post-boundary Mac gesture failed");
+    PluginEdit event;PluginEditSource source;
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&
+      event.hostTime<=boundary->fence.hostTime&&source==boundary->source,"Mac native boundary changed its original event");
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::Complete,"Mac native boundary consumed newer input");
+    check(p.popEdit(event,source)&&event.value==.75f&&event.hostTime>=boundary->fence.hostTime,"Mac lost post-boundary input");
+    check(p.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,"Mac accepted an already passed boundary");
+    NativePlugin replacement(effect,48000);
+    check(replacement.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,"Mac reused another provider's boundary");
+  }
   { // Editor reports: clamp, ignore, coalesce. None stops rendering.
     VST3Plugin p(effect, 48000, false);
     const auto before=mach_absolute_time();

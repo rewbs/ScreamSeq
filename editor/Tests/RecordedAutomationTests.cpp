@@ -4,6 +4,7 @@
 #include "editor/hosted/RecordedGestureTake.hpp"
 #include "editor/hosted/RecordedGestureRecovery.hpp"
 #include "editor/hosted/LatestParameterEdits.hpp"
+#include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/RecordingFrameClock.hpp"
 #include <algorithm>
@@ -23,6 +24,7 @@ extern "C" void tracker_audit_end(uint64_t *,uint64_t *,uint64_t *);
 using namespace Tracker;
 static void check(bool condition,const char *message){if(!condition)throw std::runtime_error(message);}
 #include "LatestParameterEditsTests.inc"
+#include "PluginEditQueueTests.inc"
 #include "RecordingFrameClockTests.inc"
 static void process(PluginChain &chain,float *pcm,unsigned frames) {
   bool okay;
@@ -140,6 +142,7 @@ int main() {
     recordedGestureTake();
     recordedGestureRecoveryTests();
     latestParameterEditTests();
+    pluginEditQueueTests();
     captureBaselineRestoration();
     for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
       const std::vector<ParameterChange> points={{0,1,-12,0},{0,1,-3,4800},{0,1,-9,9600}};

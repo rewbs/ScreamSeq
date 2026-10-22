@@ -103,4 +103,9 @@ struct PluginEditSource {
   uint64_t incarnation=0,dropped=0;
   bool operator==(const PluginEditSource &)const=default;
 };
+// Native-owner cut of published notifications. Process-local only. The
+// dropped count is sampled at the cut, not at a later worker poll.
+struct PluginEditFence {uint64_t position=0,hostTime=0,dropped=0;};
+struct PluginEditBoundary {PluginEditSource source;PluginEditFence fence;};
+enum class PluginEditRead { Event, Complete, InvalidFence, Unsupported };
 } // namespace Tracker

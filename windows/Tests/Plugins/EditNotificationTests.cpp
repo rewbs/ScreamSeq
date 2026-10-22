@@ -34,6 +34,26 @@ int main(int argc,char **argv){try{
   check(gesture,"Native fixture gesture export");
   auto send=[&](double value){int accepted=-1;WindowsVST3::pluginMainCall([&]{accepted=gesture(value);});return accepted;};
   {
+    NativePlugin plugin(state,48000,true);
+    check(send(.25)==1,"Pre-boundary native gesture failed");
+    const auto boundary=plugin.editBoundary();
+    check(boundary&&boundary->fence.hostTime&&boundary->source==plugin.editSource(),
+      "Native owner did not capture an identified timestamped boundary");
+    check(send(.75)==1,"Post-boundary native gesture failed");
+    PluginEdit event;PluginEditSource source;
+    check(plugin.popEditBefore(*boundary,event,source)==PluginEditRead::Event&&event.id==7&&event.value==.25f&&
+      event.hostTime<=boundary->fence.hostTime&&source==boundary->source,"Native boundary lost its original input/provider");
+    check(plugin.popEditBefore(*boundary,event,source)==PluginEditRead::Complete,
+      "Native boundary consumed a later gesture");
+    check(plugin.popEdit(event,source)&&event.value==.75f&&event.hostTime>=boundary->fence.hostTime,
+      "Later native input was discarded by the recording drain");
+    check(plugin.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,
+      "An already passed native boundary was silently accepted");
+    NativePlugin replacement(state,48000,true);
+    check(replacement.popEditBefore(*boundary,event,source)==PluginEditRead::InvalidFence,
+      "A replaced provider reused another incarnation's recording boundary");
+  }
+  {
     PluginChain chain({state},48000,true);
     const auto originalSource=chain.editSource(0);
     check(originalSource.incarnation&&!originalSource.dropped&&!chain.editSource(1).incarnation,
