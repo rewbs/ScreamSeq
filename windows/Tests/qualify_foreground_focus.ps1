@@ -17,12 +17,17 @@ $executable = [IO.Path]::GetFullPath((Join-Path $build.output 'ScreamSeq.exe'))
 $probe = Join-Path $build.output 'workspace-restore-tests.exe'
 if ((Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $build.executableSHA256) { throw 'Candidate hash changed.' }
 $process = Get-CimInstance Win32_Process -Filter "ProcessId=$QaProcessId"
+$privateMode = $process -and ($process.CommandLine -match '(?:^|\s)--inspection(?:\s|$)' -or
+    ($process.CommandLine -match '(?:^|\s)--audio-test-silent(?:\s|$)' -and
+     $process.CommandLine -match '(?:^|\s)--audio-test-allow-stop(?:\s|$)' -and
+     $process.CommandLine -match '(?:^|\s)--recovery-test-directory(?:\s|$)'))
 if (!$process -or ![string]::Equals($process.ExecutablePath,$executable,[StringComparison]::OrdinalIgnoreCase) -or
-    $process.CommandLine -notmatch '(?:^|\s)--inspection(?:\s|$)' -or $process.CommandLine -notmatch '(?:^|\s)--automation(?:\s|$)') {
-    throw 'Target is not the exact isolated inspection/automation candidate.'
+    !$privateMode -or $process.CommandLine -notmatch '(?:^|\s)--automation(?:\s|$)') {
+    throw 'Target is not the exact isolated inspection or silent-audio automation candidate.'
 }
 $probeHash = (Get-FileHash -LiteralPath $probe -Algorithm SHA256).Hash.ToLowerInvariant()
 $receipt = [ordered]@{status='started';sourceCommit=$build.sourceCommit;executableSHA256=$build.executableSHA256;
+    observerScriptSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant();
     probeSHA256=$probeHash;pid=$QaProcessId;processCreatedAt=$process.CreationDate;mainWindow=$MainWindow;fieldWindow=$FieldWindow;
     startedAtUTC=[DateTimeOffset]::UtcNow.ToString('o');readOnly=$true}
 $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Output -Encoding utf8
