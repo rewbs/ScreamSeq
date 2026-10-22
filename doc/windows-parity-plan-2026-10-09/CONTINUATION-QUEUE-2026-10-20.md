@@ -58,6 +58,25 @@ recorded by the rack workflow, seven new live recording APIs remain Windows-only
 and broader accessibility/device/temporal performance qualification remains open.
 The older chronological entries below do not describe the current branch state.
 
+**Scope/reuse audit, 22 October 06:54 UTC:** Mac
+`mac/App/GraphActionCatalog.swift` explicitly limits pattern/recorded parameter
+sources to song rack processors too. Recipe-copy recording is therefore a shared
+limitation, not evidence of an additional Windows-versus-Mac gap. The newer
+Windows retained-take lifecycle and seven live APIs still need a shared/Mac
+lifecycle decision; do not confuse that convergence task with missing Windows
+record controls. Mac `collectPluginEdits` still consumes id/value and captures at
+poll-time telemetry, whereas the new shared take retains original timestamps.
+AU notifications still use a separate 1,024-entry main-run-loop observer without
+fenced reads; its VST3 adapter already has fenced reads. Porting only the API names
+would not establish equivalent capture/retention behavior.
+
+Do not broaden the retained-binary allowlist to all of `windows/App`: shared
+`editor/Tests/DocumentDepartureTests.cpp` includes its `DocumentDraftRegistry.hpp`,
+and Mac CMake also builds several Windows session/project adapter tests. Exact
+unchanged-input evidence is reusable, but a cross-platform directory name alone
+does not prove unchanged build inputs. The prepared local correction remains
+frozen at `2f8d5b4a1`; this audit is documentation only and does not change it.
+
 **Historical executed boundary: `55d11e131`.** One six-target Windows ARM64 build
 completed at 23:09:35 UTC. Eleven selected CTest registrations and the
 private-desktop vendor-ownership case passed, with one unchanged recipe-test
