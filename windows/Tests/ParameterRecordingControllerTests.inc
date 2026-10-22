@@ -18,9 +18,29 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   const auto gesture=reinterpret_cast<int(*)(double)>(GetProcAddress(module,"ResonanceFixtureGesture"));
   need(gesture!=nullptr,"Parameter recording gesture export missing");
   const auto rejected=[&](auto work){bool refused=false;try{work();}catch(const std::exception &){refused=true;}need(refused,"Parameter recording allowed an unsafe lifecycle operation");};
-  rejected([&]{invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});});
+  const auto refusedStart=[&](const char *message) {
+    const auto revision=c.view()->session.revision;bool classified=false;
+    try{invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});}
+    catch(const Api::ApiError &error){classified=error.code==-32002&&error.outcome&&
+      error.outcome->state==Tracker::CommitOutcome::NotCommitted&&!error.completed&&
+      std::string(error.what()).find(message)!=std::string::npos;}
+    need(classified&&c.view()->session.revision==revision&&
+      call(c,"automation.recording.get",Json::object()).at("retained")==false&&
+      call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+      "Refused recording start retained an uncertain write, take, or changed baseline/history");
+  };
+  refusedStart("Start song playback");
   auto *playback=c.prepare(48000,Json::object(),true,true).get();active=true;
   uint64_t origin=hostTime100ns();std::array<float,8192> pcm{};
+  refusedStart("first timed buffer");
+  // A native device may still report a valid correlation after the musical
+  // frame timeline has rejected a boundary. Do not offer an endless startup
+  // retry, or leave native close/Record protected by a nonexistent take.
+  need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false})&&
+    playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false}),
+    "Rejected-clock fixture failed to render");
+  refusedStart("host-end-regression");
+  active=false;playback=c.prepare(48000,Json::object(),true,true).get();active=true;origin=hostTime100ns();
   const auto renderAhead=[&]{
     const auto limit=hostTime100ns()+1000000;
     for(unsigned n=0;origin<=limit&&n<1024;++n) {

@@ -121,11 +121,20 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     if(params.at("expectedRevision")!=revision())throw Api::ApiError(-32001,"Earlier plugin edits were saved; read the new revision before arming");
     const auto feedback=playbackFeedback();
     if(!feedback.playing||!playback_||playbackDocumentGeneration_!=generation_)
-      throw Api::ApiError(-32002,"Start song playback before recording plugin parameters");
+      throw Api::ApiError(-32002,"Start song playback before recording plugin parameters",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
     auto next=std::make_unique<ParameterRecordingSession>();next->host=playback_.get();
     next->hostGeneration=feedback.generation;next->timeline=playback_->recordingTimeline();
     auto frames=std::shared_ptr<const Tracker::RecordingFrameTimeline>(next->timeline,&next->timeline->absoluteFrames);
-    if(!frames->generation())throw Api::ApiError(-32002,"Playback timing is not available yet; retry after the first timed buffer");
+    if(!frames->generation()) {
+      const auto failure=frames->failureDetails().reason;
+      const auto message=failure==Tracker::RecordingFrameTimeline::Failure::None?
+        std::string("Playback timing is not available yet; retry after the first timed buffer"):
+        std::string("Recording timing was invalidated (")+Tracker::RecordingFrameTimeline::failureName(failure)+
+          "); stop and restart playback before recording";
+      // No take/provider ownership has been published. A successful earlier
+      // manual flush would already have failed the revision guard above.
+      throw Api::ApiError(-32002,message,Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+    }
     std::vector<Tracker::RecordedGestureTake::Provider> sources;
     for(const auto &id:identities)sources.push_back({id,plugins_->parameterEditSource(id)});
     next->take=std::make_shared<Tracker::RecordedGestureTake>(recordingIdentity(),revision(),hostTime100ns(),frames,

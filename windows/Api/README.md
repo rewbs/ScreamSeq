@@ -1667,3 +1667,23 @@ Saved editor preferences now encode V5, adding `locations.mixingGraph`.
 V2–V4 preferences migrate with the graph hidden; omitted editor preferences
 retain current placement. Project/music metadata and plugin state are unchanged.
 Newer workspace preferences are not readable by older Windows binaries.
+
+### Recording clock diagnostics
+
+`transport.get.recordingClock` describes the WASAPI device correlation. Its
+`valid` flag alone does not establish that plugin recording can map musical
+frames. When prepared playback exists, `frameTimeline` separately reports its
+`generation`, `stopped` flag and terminal `failure` (`none`,
+`playback-invalidated`, `host-start-regression`, `host-end-regression`,
+`frame-regression` or `rate-changed`). On boundary failure it retains the first
+rejected and preceding `start`/`end`, `frame`/`previousFrameEnd` and
+`rate`/`previousRate`. Host times and frames are decimal strings; rates are
+numbers. Zero fields mean no boundary diagnosis was retained.
+
+These are read-only diagnostics, not a recovery or timestamp-remapping API.
+Invalid timelines remain invalid; restarting playback prepares a new timeline.
+A start rejected before take ownership because transport is stopped or timing
+is unavailable returns a typed `notCommitted` outcome. The native recording
+window can retry that explicit action or close without protecting a nonexistent
+take. Unknown/post-acceptance outcomes still require their original completion
+receipt and retain their protection.

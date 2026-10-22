@@ -74,6 +74,18 @@ static void recordingFrameClock() {
     check(!broken->publish(fault==0?999:2000,fault==1?1999:3000,
         fault==2?1999:2000,1000,fault==3?44100:48000,1)&&
       !broken->locate(1500,1),"Clock/frame regression or unannounced rate change retained coverage");
+    const auto details=broken->failureDetails();
+    const RecordingFrameTimeline::Failure reasons[]={RecordingFrameTimeline::Failure::HostStartRegression,
+      RecordingFrameTimeline::Failure::HostEndRegression,RecordingFrameTimeline::Failure::FrameRegression,
+      RecordingFrameTimeline::Failure::RateChanged};
+    check(details.reason==reasons[fault]&&details.previousStart==1000&&details.previousEnd==2000&&
+      details.previousFrameEnd==2000&&details.previousRate==48000&&
+      details.start==(fault==0?999u:2000u)&&details.end==(fault==1?1999u:3000u)&&
+      details.frame==(fault==2?1999u:2000u)&&details.rate==(fault==3?44100:48000),
+      "Terminal timing diagnosis lost the first rejected boundary");
+    broken->invalidate();
+    check(!broken->publish(4000,5000,4000,1000,48000,2)&&broken->failureDetails().reason==reasons[fault],
+      "Later failure or generation replaced the original diagnosis or revived timing");
   }
   auto ring=std::make_unique<RecordingFrameClock>();
   for(uint64_t i=0;i<=RecordingFrameClock::capacity;++i)

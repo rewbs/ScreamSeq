@@ -8,6 +8,26 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 09:26 UTC:** the user unlocked the desktop and d699's current
+Computer Use check completed with a **recording failure**, not an access block.
+Typing/Backspace/Tab/Shift+Tab and two exact native focus probes passed. Record
+reported unavailable timing despite valid device correlation and advancing
+playback; its unclassified refusal then protected a nonexistent take and blocked
+normal close. Refresh did not resolve that uncertainty. PID 17072 exited normally
+at its 900-second limit; original F04 unchanged. See the detailed correction
+section in [foreground evidence](PLUGIN-FOREGROUND-2026-10-22.md).
+
+The primary source now fixes typed pre-ownership timing refusal and records the
+first terminal frame-clock boundary for the next diagnosis, with shared, worker
+and native review regressions. **Unbuilt/unqualified.** Do not claim the actual
+clock failure fixed. Preserve d699/qualification receipts and its binary; no
+production package or merge. The next build remains **10:05 UTC** at the earliest.
+The stale mixer-flicker one-shot was paused after confirming its old work already
+completed; no recurring schedule was created. Current d699 Mac ARM has passed
+build/native/recovery gates but failed the provider UI step; the job was still
+running and its log unavailable. Intel and Windows were still building. Inspect
+those existing runs once terminal, without a rebuild.
+
 **22 October 09:07 UTC:** frozen correction `d699a71338147cd1b0ac5596b7b814aa1abd52f3`
 is pushed to PR #6. Its single local ARM64 checkpoint ran 09:00:20–09:04:12;
 all five targets built. Seven native registrations and six actual-app cases

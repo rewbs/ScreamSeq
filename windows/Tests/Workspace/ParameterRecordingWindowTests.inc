@@ -5,7 +5,7 @@ void applicationParameterRecordingReview() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);const auto music=songState(app);
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
-    bool deferKeepReceipt=false,failReconcile=false;
+    bool deferKeepReceipt=false,failReconcile=false,refuseStart=false;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
     std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
@@ -31,6 +31,8 @@ void applicationParameterRecordingReview() {
       restoreCheck(params.at("expectedRevision")==app.view->session.revision,"Recording UI dropped its revision guard");writes.emplace_back(method,params);
       if(method=="automation.recording.start") {
         restoreCheck(params.at("plugins")==Json::array({plugin}),"Recording scope silently selected another plugin");
+        if(refuseStart)throw ScreamSeq::Api::ApiError(-32002,"Playback timing is not available yet",
+          Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         take={{"retained",true},{"capturing",true},{"take","review-owned-take"},{"compatible",true},{"eventCount",130},{"failure",0},
           {"targets",Json::array({{{"plugin",plugin},{"parameter",1},{"unmapped",1},{"overflow",0}}})},{"sources",Json::array()}};
       }else {
@@ -113,4 +115,16 @@ void applicationParameterRecordingReview() {
       writes.size()==submitted&&reconciled==2&&GetFocus()==control(9725),
       "Late matching receipt did not release review exactly once without a repeated write");
     restoreCheck(songState(app)==music,"Native review controls changed unrelated musical state");
+    const auto beforeRefusal=writes.size();refuseStart=true;SetFocus(control(9721));click(9721);
+    restoreCheck(writes.size()==beforeRefusal+1&&!tool.protectsClose()&&
+      tool.snapshot().at("completion").is_null()&&!tool.snapshot().at("take").at("retained").get<bool>()&&
+      IsWindowEnabled(control(9721))&&GetFocus()==control(9721),
+      "Typed start refusal blocked Record/close or lost keyboard focus");
+    click(9725);
+    restoreCheck(writes.size()==beforeRefusal+1&&!tool.protectsClose(),"Review retried a rejected start or protected an absent take");
+    refuseStart=false;click(9721);
+    restoreCheck(writes.size()==beforeRefusal+2&&tool.snapshot().at("take").at("capturing").get<bool>(),
+      "Explicit Record after a pure refusal could not start a fresh take");
+    click(9722);click(9724);
+    restoreCheck(!tool.protectsClose()&&songState(app)==music,"Refusal/retry left native protection or changed music");
 }

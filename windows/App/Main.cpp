@@ -299,6 +299,16 @@ public:
         const auto clock=device.clockStatus();
         result.transport["recordingClock"]={{"valid",clock.valid},{"generation",clock.generation},{"lastHostTime",std::to_string(clock.lastHostTime)},
             {"discontinuities",clock.discontinuities},{"hostTicksPerSecond",ScreamSeq::hostTicksPerSecond}};
+        if(preparedPlayback) {
+            const auto timeline=preparedPlayback->recordingTimeline();
+            const auto failure=timeline->absoluteFrames.failureDetails();
+            result.transport["recordingClock"]["frameTimeline"]={{"generation",timeline->absoluteFrames.generation()},
+                {"stopped",timeline->absoluteFrames.stopped()},{"failure",Tracker::RecordingFrameTimeline::failureName(failure.reason)},
+                {"start",std::to_string(failure.start)},{"previousStart",std::to_string(failure.previousStart)},
+                {"end",std::to_string(failure.end)},{"previousEnd",std::to_string(failure.previousEnd)},
+                {"frame",std::to_string(failure.frame)},{"previousFrameEnd",std::to_string(failure.previousFrameEnd)},
+                {"rate",failure.rate},{"previousRate",failure.previousRate}};
+        }
         auto &positions=result.transport["voicePositions"]=Json::array();
         if(device.running() && renderer) for(const auto &v:renderer->voicePositions())
             positions.push_back({{"channel",v.channel},{"sample",v.sample},{"instrument",v.instrument},

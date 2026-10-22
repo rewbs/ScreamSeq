@@ -101,7 +101,78 @@ The real-provider worker fixture now requires typed refusal for invalid range
 and pre-take timestamps, then retains its existing successful capture, exact
 event count, history, recovery and reopen assertions. This source is unbuilt.
 
-## Next checkpoint
+## Correction foreground check, 22 October 09:09–09:21 UTC
+
+After the user's unlock reply, Computer Use resumed on the already-built
+`d699a71338147cd1b0ac5596b7b814aa1abd52f3` candidate, PID 17072 / main HWND
+12387380. No build was repeated. The earlier access-denied receipt remains
+unchanged; `correction/foreground-observed.json` records this separate result.
+
+Observed passes: the Plugins search retained typed text, Backspace edited it,
+and Tab/Shift+Tab moved away and back. Two read-only native probes independently
+confirmed the exact field HWND, global/native keyboard focus, and text/value/
+selection support (`foreground-focus.json`, `foreground-focus-return.json`).
+Params opened the five Gainer controls with sliders and could be hidden.
+
+**Recording qualification failed.** Record reported “Playback timing is not
+available yet; retry after the first timed buffer.” Read-only snapshots show
+playing/audioActive true, advancing rendered frames, device recordingClock valid
+and no retained take. Stop/Play really created a new playback epoch (1 to 3) and
+device generation (1 to 2), but the UI kept displaying the earlier refusal.
+This does not establish that the replacement timeline also failed, or prove
+three new worker submissions: after an unclassified
+failure the recording window retains its unresolved completion and disables
+Record. Refresh confirmed an empty take but correctly did not infer a completed
+write from empty readback. Main-window Close consequently reopened take review
+and reported that Keep or Discard was required, although neither was enabled.
+
+Source review identifies two separate clocks: the public `recordingClock.valid`
+was the device correlation, whereas arming checks the shared
+`RecordingFrameTimeline::generation`. The latter can terminally reject a host
+boundary, musical frame regression or rate change. This binary does not expose
+which condition occurred. No clock tolerance or assertion has been relaxed,
+and the cause of this live timing failure is **not yet established**.
+
+The owned process exited normally at its 900-second limit. The original F04
+hash is unchanged. Its report records 48 kHz / 480-frame periods, silent output,
+45,520 callbacks in the final stream, 55 deadline overruns, one starvation
+indicator, no device/processor errors, and `sustainedPresentationQualified:false`.
+The counters reset on transport reopen; they are not whole-session totals.
+This is neither a realtime-performance pass nor a temporal-flicker pass.
+Hidden Params after Keep/Discard and the following Record remain unqualified
+on this candidate because recording could not start. No production package.
+
+### Follow-up source, unbuilt
+
+- `windows/Session/ParameterRecordingOperations.inc` classifies stopped or
+  unavailable-clock start rejection as `notCommitted` before take/provider
+  ownership. The preceding manual flush/revision guard is preserved; failures
+  after acceptance are not relabeled. Terminal failure gets an explicit restart
+  message rather than an endless first-buffer retry.
+- `editor/RecordingFrameClock.hpp` retains one immutable failure diagnosis,
+  published through a lock-free atomic flag. Publication/mapping rejection
+  conditions are unchanged. No allocation, log or lock enters the callback.
+- `windows/App/Main.cpp` exposes this diagnosis separately under
+  `transport.get.recordingClock.frameTimeline`. This enables the next live check
+  to distinguish device correlation from musical coverage without guessing.
+- Existing shared clock, real-provider worker and native review fixtures now
+  cover exact failure boundaries, immutable first failure, stopped/untimed/
+  invalidated start refusal, unchanged history/baseline, and explicit retry,
+  close protection and keyboard focus. These additions have not run yet.
+
+Next coordinated checkpoint: **not before 10:05 UTC, 22 October**. Build the
+affected app, workspace, controller, provider and recorded-automation targets
+once; use the correction's seven-native/six-app selection (the new cases are in
+those existing registrations). Recheck stopped Record/refusal/close first, then
+silent F04 playback with immediate and delayed Record. On any timing refusal,
+retain `frameTimeline` before restarting; investigate that measured boundary
+before altering clock rules. Finish the original hidden Params/Keep/Discard
+sequence only when recording works. Preserve earlier passing focus evidence,
+and repeat affected focus interactions on the new executable. Mac shared clock
+and native-provider gates remain required; d699 ARM's provider UI step has
+failed, with its job log not yet downloadable at 09:23. Do not merge/package.
+
+## Previous checkpoint instructions (superseded by the update above)
 
 No new build or build-triggering PR push/merge before **09:00 UTC, 22 October**.
 Batch these corrections with the already-prepared shared raw-rack adapter.
