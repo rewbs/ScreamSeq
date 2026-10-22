@@ -295,12 +295,19 @@ class SongRoutingTests(unittest.TestCase):
         user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
         user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
         self.assertTrue(user.SetWindowPos(owner,None,0,0,round(1040*scale),round(680*scale),0x16))
-        frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));previous=None
-        for identifier in (3822,3839,3840,3841,3815,3820):
+        self.idle();frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));rectangles=[]
+        # The compact graph intentionally wraps its actions onto three rows.
+        # Test actual visible controls and pairwise overlap, not the historical
+        # assumption that every action occupies one horizontal floating toolbar.
+        identifiers=(3846,3847,3815,3801,3839,3821,3816,3817,3818,3840,3841,3845) if self.local()['compact'] else (3822,3839,3840,3841,3815,3847)
+        for identifier in identifiers:
+            self.assertTrue(user.IsWindowVisible(self.control(identifier)),identifier)
             rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect))
             self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right)
-            if previous is not None:self.assertGreaterEqual(rect.left,previous)
-            previous=rect.right
+            self.assertGreaterEqual(rect.top,frame.top);self.assertLessEqual(rect.bottom,frame.bottom)
+            for previous in rectangles:
+                self.assertTrue(rect.right<=previous.left or rect.left>=previous.right or rect.bottom<=previous.top or rect.top>=previous.bottom,(identifier,tuple((r.left,r.top,r.right,r.bottom) for r in (rect,previous))))
+            rectangles.append(rect)
 
     def test_dense_graph_readable_focus_overview_preserve_saved_layout(self):
         first,_,_=self.setup_mixer();plugin=self.add_gain();target='plugin:'+plugin

@@ -10,6 +10,7 @@
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
 #include <cmath>
+#include <bit>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -378,7 +379,10 @@ static void nativeTakeAtomicPublication(const PluginState &first,const PluginSta
     ++calls;check(changed&&candidate.size()==3,"Atomic candidate omitted captured targets or the original point");return false;
   });
   check(!attempt.accepted&&!attempt.changed&&calls==1&&!take->completed()&&
-    !take->target(0).retired()&&!take->target(1).retired()&&RecordedGestureCapture::sameBaseline(points,original),
+    !take->target(0).retired()&&!take->target(1).retired()&&points.size()==original.size()&&
+      std::equal(points.begin(),points.end(),original.begin(),[](const auto &a,const auto &b){
+        return a.slot==b.slot&&a.id==b.id&&a.frame==b.frame&&
+          std::bit_cast<uint32_t>(a.value)==std::bit_cast<uint32_t>(b.value);}),
     "Refused atomic publication retired a prefix or changed saved points");
   attempt=owner.commit(native,rack,points,false,[&](const auto &candidate,bool changed){
     ++calls;check(changed&&candidate.front().slot==original.front().slot&&candidate.front().id==original.front().id&&
