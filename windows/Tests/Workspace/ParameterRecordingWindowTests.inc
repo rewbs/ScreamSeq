@@ -30,7 +30,7 @@ void applicationParameterRecordingReview() {
         take={{"retained",true},{"capturing",true},{"take","review-owned-take"},{"compatible",true},{"eventCount",130},{"failure",0},
           {"targets",Json::array({{{"plugin",plugin},{"parameter",1},{"unmapped",1},{"overflow",0}}})},{"sources",Json::array()}};
       }else {
-        restoreCheck(params.at("take")=="review-owned-take","Recording action targeted a later take");
+        restoreCheck(params.at("take")==take.at("take"),"Recording action targeted a different retained take");
         if(method=="automation.recording.stop")take["capturing"]=false;
         else if(method=="automation.recording.commit"){
           restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");take={{"retained",false},{"capturing",false},{"take",""}};
@@ -73,5 +73,14 @@ void applicationParameterRecordingReview() {
     click(9723);restoreCheck(writes.size()==3,"Retry duplicated an uncertain recording commit");click(9725);
     restoreCheck(writes.size()==3&&reconciled==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("take").at("retained")==false,
         "Review resent a completed action or retained the old take after receipt reconciliation");
+    take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
+      {"transportPlaying",false},{"discardable",true},{"targets",Json::array()},{"sources",Json::array()}};
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&
+      restoreText(control(9734)).find(L"Playback stopped")!=std::wstring::npos,
+      "Stopped transport with a failed Stop cut trapped the retained take behind disabled Discard");
+    click(9724);restoreCheck(writes.size()==4&&writes.back().first=="automation.recording.discard"&&
+      writes.back().second.at("take")=="failed-clock-take"&&!tool.protectsClose(),
+      "Discard of a stopped failed-context take lost its identity or retained a false close barrier");
     restoreCheck(songState(app)==music,"Native review controls changed unrelated musical state");
 }

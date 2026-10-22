@@ -142,7 +142,8 @@ private:
     updateRack();updateTargets();
     if(deliveryView()&&offset_&&offset_>=delivery_.at("retained").get<size_t>())offset_=0;
     loadPage();
-    set(summary,retained()?(state_.value("completed",false)?L"Take kept · finish restoring the native controls":capturing()?L"Recording · playback continues":
+    set(summary,retained()?(state_.value("completed",false)?L"Take kept · finish restoring the native controls":capturing()?
+      (state_.value("transportPlaying",true)?L"Recording · playback continues":L"Playback stopped · original input retained for review or discard"):
       state_.value("compatible",false)?L"Stopped take · review before keeping or discarding":L"Take no longer matches the song · save a recovery copy or discard"):
       L"Start playback, then record native controls or plugin editor gestures.");
     const auto counts=L"Captured "+std::to_wstring(state_.value("eventCount",size_t(0)))+L" inputs · "+
@@ -202,7 +203,7 @@ private:
     EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!rack_.empty());
     EnableWindow(controls_.at(stop),ready&&retained()&&capturing());
     EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&state_.value("compatible",false)&&!delivery_.value("pending",false)&&(!loss()||lossAcknowledged_));
-    EnableWindow(controls_.at(discard),ready&&retained()&&!capturing()&&!state_.value("completed",false)&&!delivery_.value("pending",false));
+    EnableWindow(controls_.at(discard),ready&&retained()&&state_.value("discardable",!capturing())&&!state_.value("completed",false)&&!delivery_.value("pending",false));
     set(keep,state_.value("completed",false)?L"Finish keeping":L"Keep take");
     EnableWindow(controls_.at(acknowledge),ready&&retained()&&!capturing()&&loss());
     EnableWindow(controls_.at(saveCopy),!pending_&&retained());EnableWindow(controls_.at(review),!pending_);

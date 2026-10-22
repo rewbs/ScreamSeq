@@ -99,6 +99,9 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   need(take.at("retained")==true&&take.at("compatible")==false&&take.contains("intakeError"),
     "A changed playback clock lost the retained take or prevented review");
   active=false;playback->chain().applyPending();
+  take=call(c,"automation.recording.get",Json::object());
+  need(take.at("retained")==true&&take.at("transportPlaying")==false&&take.at("discardable")==true,
+    "Stopped failed-clock take did not expose its guarded Discard path to the native review");
   invoke(c,"plugin.editor.close",{{"slot",0}});
   take=invoke(c,"automation.recording.discard",{{"take",failedToken}});
   need(take.at("retained")==false&&c.view()->session.revision==discardRevision&&call(c,"automation.get",Json::object())==recorded,

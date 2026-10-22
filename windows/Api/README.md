@@ -22,6 +22,9 @@ request names remain Windows-specific; Mac retains its native recording path.
   optional `endTime`, playback epoch, target counts and loss. `hostTime` is the
   current Windows QPC clock in 100 ns units (`clock: windows-qpc-100ns`); all
   clock values are decimal strings. Reading an absent take does not arm one.
+  Retained takes also report `transportPlaying` and `discardable`; a clock/context
+  failure may prevent a normal Stop cut, but explicit Discard remains available
+  once transport has actually stopped. Provider restoration can still retain it.
 - `automation.recording.start {expectedRevision, plugins}` arms distinct stable
   rack identities during timed playback. Finish competing takes, manual drafts
   and previews first. It does not change song history.

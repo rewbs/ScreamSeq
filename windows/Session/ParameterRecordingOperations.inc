@@ -80,6 +80,14 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     try{pollParameterRecording();}catch(const std::exception &e){warning=e.what();}
     auto result=parameterRecordingSummary();result["hostTime"]=std::to_string(hostTime100ns());
     result["clock"]="windows-qpc-100ns";
+    if(parameterRecording_) {
+      const bool playing=playbackFeedback().playing;
+      result["transportPlaying"]=playing;
+      // A failed context can prevent a normal Stop cut. The explicit Discard
+      // path can seal original evidence once transport has actually stopped.
+      result["discardable"]=!parameterRecording_->take->completed()&&
+        (parameterRecording_->take->endTime().has_value()||!playing);
+    }
     if(!warning.empty())result["intakeError"]=std::move(warning);return result;
   }
   const bool start=method=="automation.recording.start",stop=method=="automation.recording.stop",

@@ -930,3 +930,14 @@ At approximately 04:47 UTC the older Mac Intel job `119629368438` completed
 successfully, including its socket conformance and interface checks. Together
 with the older ARM result this closes that old Mac checkpoint only. Both Mac
 jobs must execute again for the now-changed shared metadata and native adapter.
+
+Final source review found a trapped-take UI path: a failed clock/context could
+leave `capturing:true` because normal Stop could not seal input, even after
+transport stopped. The worker already supported explicit Discard in that state,
+but the native button required `capturing:false`. Get now exposes authoritative
+`transportPlaying`/`discardable` fields, and the native review labels the stopped
+failed take correctly and enables its guarded Discard path. Pending delivery and
+completed-take guards remain. The existing native failed-clock worker test now
+asserts that admission state, and the review fixture exercises the matching
+button/identity/close-barrier transition. These assertions join the same pending
+build; no additional build or relaxed failure gate is introduced.
