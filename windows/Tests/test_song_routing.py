@@ -56,13 +56,19 @@ class SongRoutingTests(unittest.TestCase):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier) or 0)
     def local(self):return self.read('workspace.get')['songRouting']
     def window(self,class_name='ScreamSeq.SongRouting'):
-        found=[]
+        found=set()
         @private_desktop.callback
         def visit(hwnd,_):
             pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));name=ctypes.create_unicode_buffer(100);private_desktop.user.GetClassNameW(hwnd,name,100)
-            if pid.value==self.pid and name.value==class_name:found.append(hwnd)
+            if pid.value==self.pid and name.value==class_name:found.add(hwnd)
             return True
-        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1);return found[0]
+        private_desktop.user.EnumChildWindows.argtypes=[wintypes.HWND,private_desktop.callback,wintypes.LPARAM]
+        @private_desktop.callback
+        def root(hwnd,_):
+            visit(hwnd,0)
+            private_desktop.user.EnumChildWindows(hwnd,visit,0)
+            return True
+        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,root,0));self.assertEqual(len(found),1);return next(iter(found))
     def control(self,identifier):
         hwnd=private_desktop.user.GetDlgItem(self.window(),identifier);self.assertTrue(hwnd);return hwnd
     def idle(self):
@@ -98,9 +104,15 @@ class SongRoutingTests(unittest.TestCase):
             data.update(privateDesktop=True,foregroundVisualQualified=False)
             (folder/(name+'.json')).write_text(json.dumps(data,indent=2),encoding='utf-8')
     def bus(self,identifier):return next(b for b in self.buses() if b['id']==identifier)
-    def start(self,overview=True):
+    def start(self,overview=True,floating=True):
         self.idle();self.main_command(417);self.idle();state=self.read('workspace.get')
         self.assertTrue(state['songRouting']['visible'],json.dumps(state,ensure_ascii=False))
+        self.assertTrue(state['songRouting']['docked'])
+        # These legacy routing/control fixtures use the full floating inspector.
+        # Navigation now deliberately opens beside Pattern; choose Float explicitly.
+        if floating:
+            self.read('workspace.panel',panel='mixingGraph',placement='float',focus=True);self.idle()
+            self.assertFalse(self.local()['docked'])
         # Cable fixtures intentionally address distant stages at once. Choose
         # the explicit overview, rather than depending on the initial framing.
         if overview:self.desktop.send(self.window(),0x111,3849,0);self.idle()
@@ -293,7 +305,7 @@ class SongRoutingTests(unittest.TestCase):
     def test_dense_graph_readable_focus_overview_preserve_saved_layout(self):
         first,_,_=self.setup_mixer();plugin=self.add_gain();target='plugin:'+plugin
         self.write('graph.layout.set',positions=[dict(node=target,x=100000,y=100000)])
-        before=self.doc();saved=self.read('graph.get',includeState=False);self.start(overview=False)
+        before=self.doc();saved=self.read('graph.get',includeState=False);self.start(overview=False,floating=False)
         def contained(node):
             x,y,w,h=node['rect'];vx,vy,vw,vh=self.local()['canvas']['viewport']
             self.assertGreaterEqual(x,vx-.1);self.assertGreaterEqual(y,vy-.1)
