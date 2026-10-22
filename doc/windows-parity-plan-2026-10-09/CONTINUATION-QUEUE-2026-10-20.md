@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 11:34 UTC:** source `db369e3bd` is committed and pushed on the
+separate backup branch `codex/mac-gesture-intake`. Mac stopped recorded-point
+edits/Clear/history now use the retained processor publication instead of
+replacing the rack. Output callbacks are joined before stopped adoption without
+shortening the presentation clock; host-generation and existing timeline/manual
+fences reject stale plans. New native-provider/editor-retention and exact session
+Clear/Undo/Redo/save/reopen tests are prepared. **Unbuilt**, as are the preceding
+boundary/client/manual-state changes. See [Mac intake](MAC-GESTURE-INTAKE-2026-10-22.md).
+
+The existing 97bd596a4 Mac ARM CI job `119788424801` is terminal success.
+At 11:33:40 UTC Intel `119788425112` was still compiling and Windows x64
+`119788422848` was running portable/worker tests. Do not restart these runs.
+No new build or PR-head push was made; the next coordinated gate remains
+**12:06:17 UTC**. The qualified Downloads package and PR #6 remain at 97bd596a4;
+main remains unchanged. Full Mac retained-take ownership/API/UI, opaque vendor
+restoration and final reciprocal qualification are still open, not implied by
+this stopped-publication correction. Next source work should integrate those
+native ownership boundaries while preserving the already qualified Windows flow.
+
 **22 October 11:21 UTC:** review candidate `97bd596a4` passed its single ARM64
 build, both targeted native registrations and all three actual-app recording
 cases, including the previous hidden-review departure regression. Fresh Computer
