@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 12:07 UTC:** grouped candidate `ab5f677c172a7a286281dec159061b6d88dd3257`
+is pushed to PR #6. The local ARM64 build started at **12:06:43.844 UTC**;
+paired CI runs `39775712080` (Mac) and `39775712016` (Windows) were created at
+12:06:47 UTC. Preserve the next coordinated build gate at **13:06:48 UTC**.
+Inspect `bin/mac-gesture-20261022/admission-followup/build.json` and `checks.json`
+before acting. That directory now freezes ab5f677c1, superseding the unbuilt
+1f2335722 preparation to include scratch autosave admission in the same batch.
+It selects seven native registrations and nine app cases, then requires a fresh
+foreground receipt before packaging. No new pass/package/merge is claimed here.
+
 **22 October 11:59 UTC:** backup source `3eddd0f12` follows `1f2335722` on
 `codex/mac-gesture-intake`. Paired API dispatch now distinguishes explicit
 pre-admission busy refusals from uncertain/committed terminal replies, protects
