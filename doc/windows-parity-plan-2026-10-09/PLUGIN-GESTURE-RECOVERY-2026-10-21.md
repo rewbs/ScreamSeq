@@ -1068,3 +1068,45 @@ public workflows from starting. Both Macs passed native/interface checks and
 failed the stale inventory baseline. A separate retained old Mac ARM run passed
 5 original fixtures, 41 API and 21 codec cases after tooling review; it does not
 cover the current source or the extended edited-fixture reciprocal gate.
+
+### Cooldown investigation: native focus handoff and test scope
+
+An uncompiled, hidden-HWND Python/ctypes contract probe confirmed that an owned
+overlapped tool's `GetParent` is null and the field's `GA_ROOTOWNER` stops at that
+tool, while `GW_OWNER` reaches Main. The same probe then reached the former bridge
+call: Windows returns `E_INVALIDARG` for the OleAcc standard EDIT proxy. The owner
+correction alone would therefore reveal another deterministic failure. Probe
+source/results live beside the checkpoint as `owner-probe.py`/`.json`; the first
+ownership result is retained, while the later bridge attempt ended with the
+explicit HRESULT exception rather than producing a success receipt.
+
+The prepared source now uses an HWND-hosted focus fragment with override-provider
+semantics. It supplies the exact native HWND and defers native Value/Text/selection
+behavior; it does not install a replacement `WM_GETOBJECT` handler on the edit.
+Its subclass caches one provider per control and invalidates/disconnects it before
+native destruction, preventing a retained provider from following a reused HWND.
+The existing exact-HWND assertion now reads the handoff's native-handle property
+instead of trying to unwrap an unsupported MSAA bridge. The external-client
+global-focus equality remains mandatory, with additional Value/Text/selection
+and retirement assertions. **This implementation remains unbuilt and unqualified.**
+
+A second synthetic control probe (`focus-contract-probe.py`/`.json`) runs in a
+separate child on a never-switched private desktop, including an ordinary EDIT
+with no ScreamSeq provider. `ElementFromHandle` returns that exact EDIT with native
+Value and Text patterns, but global `GetFocusedElement` returns the desktop
+(`class #32769`, PID 1728) rather than that child's locally focused field. This
+also happens with the null-root and proposed HWND-handoff variants. Thus this
+environment cannot establish global foreground focus even for the control-only
+baseline. Do not classify that observation as a ScreamSeq focus failure or a pass.
+The synthetic handoff node exposes its exact HWND and Value support, but that
+deprecated core-node probe does not establish the full COM Text/focus contract.
+No test assertion has been disabled on this basis; the real native fixture and
+unlocked Computer Use checks remain outstanding. Earlier generic failure text
+“reported Main” is not proof of the returned HWND without the diagnostic IDs.
+
+At the 06:24 UTC observation, current Mac ARM job `119665473046` is terminal
+success: 134/134 native tests, 35/35 interface groups, and its full requested
+conformance step passed (including the extended editing workloads). Windows x64
+has compiled and is running worker checks; Mac Intel is still building. These
+results belong to `7154b9f323`/identical-tree CI merge `4c40b3e0`; they do not
+qualify the subsequently prepared Windows focus changes. No jobs were restarted.

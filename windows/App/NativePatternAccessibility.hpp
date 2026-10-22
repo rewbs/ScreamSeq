@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <UIAutomation.h>
-#include <oleacc.h>
+#include <commctrl.h>
 #include <atomic>
 #include <cstdint>
 #include <cmath>
@@ -42,6 +42,91 @@ struct Context {
   }
 };
 enum class Kind {window,grid,cell};
+// A focus handoff to a standard HWND, not a replacement edit/combo provider.
+// The HWND host and Windows' native proxy retain text/value/selection patterns.
+// OleAcc's standard-control proxies cannot be wrapped with
+// UiaProviderFromIAccessible (E_INVALIDARG). Only host this fragment on its HWND.
+class NativeFocus final : public IRawElementProviderSimple,public IRawElementProviderFragment,
+  public IRawElementProviderFragmentRoot {
+  static constexpr UINT_PTR subclassID=0x53514643;
+  std::atomic<ULONG> references_{1};std::shared_ptr<Context> context_;HWND window_{};
+  template<typename F> HRESULT safe(F &&function) noexcept {
+    if(GetCurrentThreadId()!=context_->thread)return RPC_E_WRONG_THREAD;
+    if(!context_->alive||!window_)return UIA_E_ELEMENTNOTAVAILABLE;
+    try{return function();}catch(...){return E_FAIL;}
+  }
+  static LRESULT CALLBACK procedure(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data) {
+    if(m==WM_NCDESTROY) {
+      auto *self=reinterpret_cast<NativeFocus *>(data);RemoveWindowSubclass(h,procedure,subclassID);
+      self->window_=nullptr;UiaDisconnectProvider(self);self->Release();
+    }
+    return DefSubclassProc(h,m,w,l);
+  }
+  NativeFocus(std::shared_ptr<Context> context,HWND window):context_(std::move(context)),window_(window){}
+public:
+  static HRESULT acquire(const std::shared_ptr<Context> &context,HWND window,IRawElementProviderFragment **value) {
+    DWORD_PTR data=0;NativeFocus *provider=nullptr;
+    if(GetWindowSubclass(window,procedure,subclassID,&data)) {
+      provider=reinterpret_cast<NativeFocus *>(data);
+      if(provider->context_!=context)return UIA_E_ELEMENTNOTAVAILABLE;
+    }else {
+      provider=new(std::nothrow) NativeFocus(context,window);if(!provider)return E_OUTOFMEMORY;
+      if(!SetWindowSubclass(window,procedure,subclassID,reinterpret_cast<DWORD_PTR>(provider))){provider->Release();return E_FAIL;}
+      // The subclass owns the initial reference until native destruction.
+    }
+    return provider->QueryInterface(IID_PPV_ARGS(value));
+  }
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void **value)override {
+    if(!value)return E_POINTER;*value=nullptr;
+    if(iid==IID_IUnknown||iid==__uuidof(IRawElementProviderSimple))*value=static_cast<IRawElementProviderSimple *>(this);
+    else if(iid==__uuidof(IRawElementProviderFragment))*value=static_cast<IRawElementProviderFragment *>(this);
+    else if(iid==__uuidof(IRawElementProviderFragmentRoot))*value=static_cast<IRawElementProviderFragmentRoot *>(this);
+    if(!*value)return E_NOINTERFACE;AddRef();return S_OK;
+  }
+  ULONG STDMETHODCALLTYPE AddRef()override{return ++references_;}
+  ULONG STDMETHODCALLTYPE Release()override{const auto remaining=--references_;if(!remaining)delete this;return remaining;}
+  HRESULT STDMETHODCALLTYPE get_ProviderOptions(ProviderOptions *value)override {
+    if(!value)return E_POINTER;*value=ProviderOptions(ProviderOptions_ServerSideProvider|ProviderOptions_OverrideProvider|ProviderOptions_UseComThreading);return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID,IUnknown **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([]{return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE GetPropertyValue(PROPERTYID id,VARIANT *value)override {
+    if(!value)return E_POINTER;VariantInit(value);return safe([&]{
+      if(id==UIA_NativeWindowHandlePropertyId){value->vt=VT_I4;value->lVal=HandleToLong(window_);}return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([&]{return UiaHostProviderFromHwnd(window_,value);});
+  }
+  HRESULT STDMETHODCALLTYPE Navigate(NavigateDirection,IRawElementProviderFragment **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([]{return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE GetRuntimeId(SAFEARRAY **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([]{return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE get_BoundingRectangle(UiaRect *value)override {
+    if(!value)return E_POINTER;*value={};return safe([&]()->HRESULT{RECT r{};if(!GetWindowRect(window_,&r))return UIA_E_ELEMENTNOTAVAILABLE;
+      *value={double(r.left),double(r.top),double(r.right-r.left),double(r.bottom-r.top)};return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE GetEmbeddedFragmentRoots(SAFEARRAY **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([]{return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE SetFocus()override {
+    return safe([&]()->HRESULT{if(!IsWindowEnabled(window_))return UIA_E_ELEMENTNOTENABLED;
+      ::SetFocus(window_);return ::GetFocus()==window_?S_OK:E_FAIL;});
+  }
+  HRESULT STDMETHODCALLTYPE get_FragmentRoot(IRawElementProviderFragmentRoot **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([&]{return QueryInterface(IID_PPV_ARGS(value));});
+  }
+  HRESULT STDMETHODCALLTYPE ElementProviderFromPoint(double x,double y,IRawElementProviderFragment **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([&]()->HRESULT{UiaRect r{};const auto result=get_BoundingRectangle(&r);if(FAILED(result))return result;
+      if(std::isfinite(x)&&std::isfinite(y)&&x>=r.left&&y>=r.top&&x<r.left+r.width&&y<r.top+r.height)return QueryInterface(IID_PPV_ARGS(value));return S_OK;});
+  }
+  HRESULT STDMETHODCALLTYPE GetFocus(IRawElementProviderFragment **value)override {
+    if(!value)return E_POINTER;*value=nullptr;return safe([&]()->HRESULT{
+      return ::GetFocus()==window_?QueryInterface(IID_PPV_ARGS(value)):S_OK;});
+  }
+};
 // UIA marshals these STA providers to the owning UI thread (UseComThreading).
 // No worker reads Application, and no provider keeps an Application reference
 // after retirement. Cells are allocated on demand, never once per painted row.
@@ -62,8 +147,8 @@ class Node final : public IRawElementProviderSimple,public IRawElementProviderFr
   Node *make(Kind kind,const Info &info,int row=0,int column=0){return new Node(context_,kind,info,row,column);}
   // The grid shares Main with standard HWND controls and owned inspectors.
   // Returning Main (or no fragment) for their focus conceals the native field
-  // from UIA. Delegate to Windows' MSAA/UIA bridge, preserving its text/value
-  // and selection implementation rather than inventing another edit provider.
+  // from UIA. Hand off to the focused HWND while retaining Windows' native
+  // text/value/selection provider rather than inventing another edit provider.
   HRESULT nativeFragment(HWND window,IRawElementProviderFragment **value)const {
     if(!window||window==context_->window||GetWindowThreadProcessId(window,nullptr)!=context_->thread)return S_OK;
     // NativeToolWindow uses owned WS_OVERLAPPEDWINDOWs. GA_ROOTOWNER walks
@@ -73,13 +158,7 @@ class Node final : public IRawElementProviderSimple,public IRawElementProviderFr
     auto owner=GetAncestor(window,GA_ROOT);
     for(unsigned depth=0;owner&&owner!=context_->window&&depth<64;++depth)owner=GetWindow(owner,GW_OWNER);
     if(owner!=context_->window)return S_OK;
-    IAccessible *accessible=nullptr;
-    auto result=AccessibleObjectFromWindow(window,OBJID_CLIENT,IID_IAccessible,reinterpret_cast<void **>(&accessible));
-    if(FAILED(result)||!accessible)return FAILED(result)?result:S_OK;
-    IRawElementProviderSimple *provider=nullptr;
-    result=UiaProviderFromIAccessible(accessible,CHILDID_SELF,UIA_PFIA_DEFAULT,&provider);accessible->Release();
-    if(FAILED(result)||!provider)return FAILED(result)?result:S_OK;
-    result=provider->QueryInterface(IID_PPV_ARGS(value));provider->Release();return result;
+    return NativeFocus::acquire(context_,window,value);
   }
   static HRESULT string(const std::wstring &text,VARIANT *value) {
     value->vt=VT_BSTR;value->bstrVal=SysAllocStringLen(text.data(),UINT(text.size()));return value->bstrVal?S_OK:E_OUTOFMEMORY;

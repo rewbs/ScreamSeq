@@ -19,6 +19,10 @@ void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
         ScreamSeq::ComPtr<IUIAutomationElement> field;ScreamSeq::check(client->ElementFromHandle(namedField,&field),"Read named native field through UIA bridge");
         BSTR fieldName=nullptr;const auto nameResult=field->get_CurrentName(&fieldName);const bool named=fieldName&&std::wstring_view(fieldName,SysStringLen(fieldName))==L"Song title";
         SysFreeString(fieldName);ScreamSeq::check(nameResult,"Read explicit native UIA Name");restoreCheck(named,"UIA bridge lost the annotated native edit name");
+        ScreamSeq::ComPtr<IUIAutomationValuePattern> originalValue;
+        ScreamSeq::check(field->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&originalValue)),"Read native edit Value pattern before focus handoff");
+        BSTR originalText=nullptr;ScreamSeq::check(originalValue->get_CurrentValue(&originalText),"Read native edit before focus handoff");
+        const std::wstring expectedText=originalText?std::wstring(originalText,SysStringLen(originalText)):L"";SysFreeString(originalText);
         // Query through the external UIA client, not only GetFocus in the app.
         // A custom grid root must not conceal ordinary native field focus.
         ScreamSeq::check(field->SetFocus(),"Focus named native field through UIA");
@@ -34,6 +38,17 @@ void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {
                 <<" foreground="<<GetForegroundWindow()<<" fieldHasFocusResult="<<property<<" fieldHasFocus="<<fieldFocused<<std::endl;
         }
         restoreCheck(reinterpret_cast<HWND>(focusedHandle)==namedField,"UIA reported Main instead of the focused native field");
+        // Handoff must not replace the native edit with a label-only fragment.
+        ScreamSeq::ComPtr<IUIAutomationValuePattern> focusedValue;
+        ScreamSeq::check(focused->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&focusedValue)),"Focused field retained its native Value pattern");
+        BSTR focusedText=nullptr;ScreamSeq::check(focusedValue->get_CurrentValue(&focusedText),"Read focused native edit value");
+        const bool sameValue=focusedText&&std::wstring_view(focusedText,SysStringLen(focusedText))==expectedText;SysFreeString(focusedText);
+        restoreCheck(sameValue,"Focus handoff changed or concealed the native edit value");
+        ScreamSeq::ComPtr<IUIAutomationTextPattern> focusedTextPattern;
+        ScreamSeq::check(focused->GetCurrentPatternAs(UIA_TextPatternId,IID_PPV_ARGS(&focusedTextPattern)),"Focused field retained native Text/selection support");
+        ScreamSeq::ComPtr<IUIAutomationTextRangeArray> selectedText;
+        ScreamSeq::check(focusedTextPattern->GetSelection(&selectedText),"Read focused native text selection");
+        restoreCheck(bool(selectedText),"Focus handoff omitted native text selection");
         ScreamSeq::ComPtr<IUIAutomationGridPattern> pattern;ScreamSeq::check(grid->GetCurrentPatternAs(UIA_GridPatternId,IID_PPV_ARGS(&pattern)),"Read UIA Grid pattern");
         ScreamSeq::ComPtr<IUIAutomationElement> cell;ScreamSeq::check(pattern->GetItem(2,0,&cell),"Read actual UIA pattern cell");
         ScreamSeq::ComPtr<IUIAutomationValuePattern> value;ScreamSeq::check(cell->GetCurrentPatternAs(UIA_ValuePatternId,IID_PPV_ARGS(&value)),"Read cell Value pattern");
@@ -113,13 +128,13 @@ void applicationPatternAccessibility() {
         <<" Main="<<app.window<<std::endl;
     ScreamSeq::check(nativeFocusResult,"Delegate native field focus from the pattern root");
     restoreCheck(bool(nativeFocus),"Pattern root omitted its focused native inspector");
-    auto nativeProvider=accessibleInterface<IRawElementProviderSimple>(nativeFocus.Get());VARIANT nativeChild{};
-    ScreamSeq::ComPtr<IAccessible> nativeAccessible;
-    ScreamSeq::check(UiaIAccessibleFromProvider(nativeProvider.Get(),UIA_IAFP_UNWRAP_BRIDGE,&nativeAccessible,&nativeChild),"Unwrap delegated native focus");
-    HWND nativeHandle{};const auto nativeResult=WindowFromAccessibleObject(nativeAccessible.Get(),&nativeHandle);
-    const bool self=nativeChild.vt==VT_I4&&nativeChild.lVal==CHILDID_SELF;VariantClear(&nativeChild);
-    ScreamSeq::check(nativeResult,"Read bridged native focus HWND");
-    restoreCheck(self&&nativeHandle==songTitle,"Pattern focus bridge returned a different native HWND");
+    auto nativeProvider=accessibleInterface<IRawElementProviderSimple>(nativeFocus.Get());VARIANT nativeHandle{};
+    ScreamSeq::check(nativeProvider->GetPropertyValue(UIA_NativeWindowHandlePropertyId,&nativeHandle),"Read native focus handoff HWND");
+    const bool exactHandle=nativeHandle.vt==VT_I4&&LongToHandle(nativeHandle.lVal)==songTitle;VariantClear(&nativeHandle);
+    restoreCheck(exactHandle,"Pattern focus handoff returned a different native HWND");
+    ScreamSeq::ComPtr<IRawElementProviderSimple> nativeHost;
+    ScreamSeq::check(nativeProvider->get_HostRawElementProvider(&nativeHost),"Get focused field's native HWND host");
+    restoreCheck(bool(nativeHost),"Native focus handoff omitted its HWND host");
     // Same UI thread is insufficient: another top-level window must not be
     // claimed by Main's fragment merely because it owns keyboard focus.
     const auto unrelated=CreateWindowExW(0,L"STATIC",L"Owned unrelated accessibility fixture",
@@ -141,4 +156,6 @@ void applicationPatternAccessibility() {
     ShowWindow(app.window,SW_HIDE);restoreCheck(grid->GetItem(0,0,&invalid)==UIA_E_ELEMENTNOTAVAILABLE,"Hidden pattern accepted a new virtual item");ShowWindow(app.window,SW_SHOWNOACTIVATE);
     fixture.close();text=nullptr;
     restoreCheck(value->get_Value(&text)==UIA_E_ELEMENTNOTAVAILABLE&&!text,"Retired HWND provider accessed its destroyed Application");
+    UiaRect retiredBounds{};restoreCheck(nativeFocus->get_BoundingRectangle(&retiredBounds)==UIA_E_ELEMENTNOTAVAILABLE,
+        "Retired native focus handoff accessed a destroyed or reused HWND");
 }
