@@ -229,12 +229,26 @@ bool AudioDevice::publishLiveRack(std::unique_ptr<LiveRackPlan> &plan) noexcept 
   pluginStates_.swap(plan->states);automation_.swap(plan->automation);return true;
 }
 std::unique_ptr<AudioDevice::LiveRecordedPlan> AudioDevice::prepareRecordedAutomation(const std::vector<ParameterChange> &points,std::span<const ParameterChange> manualBaselines) {
-  if(!active()||!plugins_)throw std::runtime_error("Live recorded automation is unavailable");
-  auto plan=std::make_unique<LiveRecordedPlan>();plan->points=points;plan->hosted=plugins_->prepareRecordedAutomation(points,manualBaselines);return plan;
+  if(!plugins_)throw std::runtime_error("Recorded automation processor is unavailable");
+  if(!active()) {
+    // Do not call stop(): joining an already stopped callback must not shorten
+    // its retained presentation clock (natural output may still be queued).
+    if(unit_)check(AudioOutputUnitStop(unit_),"Cannot join stopped automation processing");
+    plugins_->applyPending();
+  }
+  auto plan=std::make_unique<LiveRecordedPlan>();plan->pluginEpoch=pluginEpoch_;
+  plan->points=points;plan->hosted=plugins_->prepareRecordedAutomation(points,manualBaselines);return plan;
 }
 bool AudioDevice::publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan> plan) {
-  if(!plan||!plugins_||!plugins_->publishRecordedAutomation(std::move(plan->hosted)))return false;
-  automation_.swap(plan->points);return true;
+  // Pointer equality inside the hosted plan is insufficient after a complete
+  // rack replacement: allocator address reuse must not accept an old plan.
+  if(!plan||!plugins_||plan->pluginEpoch!=pluginEpoch_)return false;
+  const bool stopped=!active();
+  if(stopped&&unit_)check(AudioOutputUnitStop(unit_),"Cannot join stopped automation processing");
+  if(!plugins_->publishRecordedAutomation(std::move(plan->hosted)))return false;
+  automation_.swap(plan->points);
+  if(stopped)plugins_->applyPending();
+  return true;
 }
 std::unique_ptr<MixerTransition::Plan> AudioDevice::prepareMixerRouting(const NativeSong &native) {
   if(!active() || !plugins_)return nullptr;

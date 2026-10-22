@@ -75,6 +75,45 @@ static void exactParameterHistory() {
   [NSFileManager.defaultManager removeItemAtPath:copyPath error:nil];
   [NSFileManager.defaultManager removeItemAtPath:path error:nil];[session shutdown];
 }
+static void stoppedRecordedHistory() {
+  using namespace ScreamSeq;
+  TrackerSession *session=[TrackerSession new];[session newSong:YES];NSError *error=nil;
+  auto call=[&](NSString *method,NSDictionary *values)->NSDictionary * {
+    auto params=[values mutableCopy];params[@"expectedRevision"]=session.automationRevision;
+    auto response=[session automationMethod:method params:params error:&error];
+    if(!response)throw std::runtime_error(std::string(method.UTF8String)+": "+error.localizedDescription.UTF8String);
+    return response[@"data"];
+  };
+  auto tree=[&](){NSData *data=[session recoveryData:&error];check(data!=nil,"Serialize stopped recorded history");return NativePropertyTree::decode(data);};
+  NSDictionary *descriptor=nil;for(NSDictionary *p in session.builtInPlugins)
+    if([p[@"classID"] isEqual:@"resonance.gainer.v1"])descriptor=p;
+  check(descriptor&&[session addPlugin:descriptor error:&error]&&[session addPlugin:descriptor error:&error],"Create stopped recording rack");
+  check([session pluginParameter:0 identifier:1 value:-6 record:NO error:&error]&&
+        [session pluginParameter:1 identifier:1 value:-3 record:NO error:&error],"Set independent stopped manual baselines");
+  NSString *identity=[session snapshot:0][@"nativePlugins"][0][@"instanceID"];
+  const auto baseline=tree();
+  call(@"automation.recorded.edit",@{@"plugin":identity,@"parameter":@1,@"frame":@0,@"value":@-18});
+  const auto recorded=tree();
+  check(!session.playing&&recorded["automation"].size()==1&&
+    Project::sameStoredValue(recorded["plugins"],baseline["plugins"]),
+    "Stopped point edit must preserve every opaque manual state");
+  NSString *revision=session.automationRevision;
+  call(@"automation.recorded.clear",@{@"dryRun":@YES});
+  check([revision isEqual:session.automationRevision]&&Project::sameStoredValue(tree(),recorded),"Stopped Clear dry run changed music");
+  check([session clearAutomation:&error]&&!session.playing,"Clear stopped recording without starting output");
+  check(Project::sameStoredValue(tree(),baseline),"Stopped Clear changed unrelated project or manual state");
+  call(@"history.undo",@{});
+  check(Project::sameStoredValue(tree(),recorded),"Stopped Clear Undo must restore exact recorded project");
+  call(@"history.redo",@{});
+  check(Project::sameStoredValue(tree(),baseline),"Stopped Clear Redo must restore exact manual project");
+  revision=session.automationRevision;
+  check([session clearAutomation:&error]&&[revision isEqual:session.automationRevision],"Empty stopped Clear must preserve history");
+  call(@"history.undo",@{});
+  NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".screamseq"]];
+  check([session savePath:path error:&error]&&[session openPath:path error:&error],"Save/reopen stopped recorded history");
+  check(Project::sameStoredValue(tree(),recorded),"Stopped recorded history changed across save/reopen");
+  [NSFileManager.defaultManager removeItemAtPath:path error:nil];[session shutdown];
+}
 static void mixerControlHistory() {
   TrackerSession *session=[TrackerSession new];[session newSong:YES];
   auto call=[&](NSString *method,NSDictionary *values,bool write=false)->NSDictionary * {
@@ -283,6 +322,7 @@ static void liveHistory() {
 int main(int argc,char **argv){@autoreleasepool {try {
   if(argc>1&&std::string(argv[1])=="--device"){liveHistory();return 0;}
   exactParameterHistory();
+  stoppedRecordedHistory();
   mixerControlHistory();
   Tracker::Document document;auto cell=document.cell(0,1,0);cell.note=49;
   document.edit({{0,1,0,{},cell}});auto first=document.historyHead(false);

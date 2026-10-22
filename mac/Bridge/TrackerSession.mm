@@ -1762,14 +1762,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   try {
     if (const auto location = [self rackLocationIssue:states]; !location.empty())
       throw std::runtime_error(location);
-    if(_audio->active()) {
-      if(states==_plugins&&native==_document->native()) {
-        auto prepared=_audio->prepareRecordedAutomation(automation);
-        if(!_audio->publishRecordedAutomation(std::move(prepared)))throw std::runtime_error("Recorded automation publication is busy; playback was preserved");
-      } else {
-        auto prepared=[self prepareLivePlugins:states automation:automation native:native];
-        if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; playback was preserved");
-      }
+    if(_audio->hasPluginChain()&&_pluginError.empty()&&states==_plugins&&native==_document->native()) {
+      auto prepared=_audio->prepareRecordedAutomation(automation);
+      if(!_audio->publishRecordedAutomation(std::move(prepared)))throw std::runtime_error("Recorded automation publication is busy; playback was preserved");
+    } else if(_audio->active()) {
+      auto prepared=[self prepareLivePlugins:states automation:automation native:native];
+      if(!_audio->publishLiveRack(prepared))throw std::runtime_error("Prepared rack publication was rejected; playback was preserved");
     } else _audio->setPlugins(states, automation);
   } catch (const std::exception &e) {
     if (_pluginError.empty() || _audio->active())
@@ -2281,7 +2279,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     // The playing vendor may contain a recorded or modulated effective value.
     // Clear only the timeline, retaining the independent accepted manual state.
     // This also uses the recorded-only live publication and unified Undo path.
-    if(!_audio->active()){[self applyPluginGraph:_plugins automation:{}];return YES;}
+    if(!_audio->hasPluginChain()||!_pluginError.empty()){[self applyPluginGraph:_plugins automation:{}];return YES;}
     if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     // Native/vendor capture can have changed the live control catalogue without
     // changing the independent saved manual state. Restore those targets in the

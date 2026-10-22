@@ -64,9 +64,14 @@ public:
   struct LiveRecordedPlan {
     std::unique_ptr<RecordedAutomationPlan> hosted;
     std::vector<ParameterChange> points;
+    uint64_t pluginEpoch=0;
   };
+  // The same retained processor publication works while playing or stopped.
+  // Stopped adoption first joins the output callback; active() alone does not
+  // establish quiescence after a natural end or processor fault.
   std::unique_ptr<LiveRecordedPlan> prepareRecordedAutomation(const std::vector<ParameterChange> &,std::span<const ParameterChange> manualBaselines={});
   bool publishRecordedAutomation(std::unique_ptr<LiveRecordedPlan>);
+  bool hasPluginChain()const noexcept{return bool(plugins_);}
   bool hasAutomatedState() const {return plugins_&&plugins_->hasAutomatedState();}
   std::vector<PluginProgram> pluginPrograms(size_t slot) const { return plugins_ ? plugins_->programs(slot) : std::vector<PluginProgram>{}; }
   std::vector<PluginAudioBus> pluginBuses(size_t slot) const { return plugins_ ? plugins_->buses(slot) : std::vector<PluginAudioBus>{}; }

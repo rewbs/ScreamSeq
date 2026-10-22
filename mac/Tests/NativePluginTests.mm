@@ -35,6 +35,54 @@ static void check(bool value, const char *message) {
     throw std::runtime_error(message);
 }
 #include "editor/Tests/PluginChainCaptureTests.inc"
+static void stoppedRecordedPublication(const PluginState &state,bool visible=false) {
+  // No device is configured: stopped review must work without opening output.
+  AudioDevice audio;audio.setPlugins({state});
+  const auto epoch=audio.pluginEpoch();
+  const auto source=audio.pluginEditSource(0);
+  const auto original=audio.pluginParameters(0).at(0);
+  const std::vector<ParameterChange> baseline{{0,original.id,original.value,0}};
+  NSWindow *window=nil;
+  if(visible) {
+    audio.showPluginEditor(0);
+    for(NSWindow *candidate in NSApp.windows)
+      if(candidate.visible&&[candidate.title isEqualToString:@(state.descriptor.name.c_str())]) {
+        check(window==nil,"Stopped review editor is ambiguous");window=candidate;
+      }
+    check(window!=nil,"Stopped review editor did not open");
+  }
+  auto unchangedOwner=[&] {
+    check(!audio.active()&&audio.pluginEpoch()==epoch&&audio.pluginEditSource(0)==source,
+      "Stopped recorded publication replaced its native processor");
+    if(visible)check(window.visible,"Stopped recorded publication closed its native editor");
+  };
+  const std::vector<ParameterChange> points{{0,original.id,.6f,0}};
+  auto prepared=audio.prepareRecordedAutomation(points,baseline);
+  check(audio.publishRecordedAutomation(std::move(prepared)),"Publish stopped recorded timeline");
+  unchangedOwner();
+  check(std::abs(*audio.pluginParameters(0).at(0).manualValue-original.value)<1e-6,
+    "Stopped recording baked its effective value into the manual baseline");
+  // Several edits without a UI catalog read must retire/adopt on the stopped
+  // control owner instead of exhausting the unconsumed publication slots.
+  for(int repeat=0;repeat<8;++repeat) {
+    auto next=audio.prepareRecordedAutomation(repeat%2?points:std::vector<ParameterChange>{},baseline);
+    check(audio.publishRecordedAutomation(std::move(next)),"Stopped timeline edits exhausted publication slots");
+    unchangedOwner();
+  }
+  auto staleManual=audio.prepareRecordedAutomation({},baseline);
+  check(audio.pluginParameter(0,original.id,.4f),"Queue intervening accepted manual write");
+  check(!audio.publishRecordedAutomation(std::move(staleManual)),"Stale stopped baseline overwrote a newer manual write");
+  check(std::abs(*audio.pluginParameters(0).at(0).manualValue-.4)<1e-6,"Refused baseline changed the accepted manual value");
+  check(audio.hasAutomatedState(),"Refused stopped Clear discarded the accepted timeline");
+  auto staleTimeline=audio.prepareRecordedAutomation({});
+  auto currentTimeline=audio.prepareRecordedAutomation(points);
+  check(audio.publishRecordedAutomation(std::move(currentTimeline))&&
+        !audio.publishRecordedAutomation(std::move(staleTimeline)),"An older stopped plan replaced a later timeline");
+  auto replaced=audio.prepareRecordedAutomation({},baseline);
+  audio.setPlugins({state});
+  check(audio.pluginEpoch()!=epoch&&!audio.publishRecordedAutomation(std::move(replaced)),
+    "A replaced rack accepted an old recorded plan");
+}
 static void chainInputProtection(const PluginState &state){
   PluginChain chain({state},48000,true);chain.showEditor(0);
   NSSlider *slider=nil;NSWindow *owned=nil;
@@ -183,6 +231,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       check(effect.parameter(7, .3f), "VST3 parameter write");
       auto saved = effect.state();
       check(saved.instanceID == gain.instanceID, "VST3 host state retains plugin instance identity");
+      stoppedRecordedPublication(saved);
       NativePlugin recalled(saved, 48000);
       check(std::abs(recalled.parameters()[0].value - .3f) < 1e-6, "VST3 processor/controller state recall");
       std::array<float, 1024> buffer;
@@ -469,6 +518,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         }
         editorSizeMode(0);dlclose(fixtureModule);
         chainInputProtection(gain);
+        stoppedRecordedPublication(saved,true);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);

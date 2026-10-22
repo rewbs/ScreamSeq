@@ -1,5 +1,48 @@
 # Shared capture: Mac AU intake continuation
 
+## Retained stopped publication, 22 October 11:34 UTC — unbuilt
+
+Current source inspection found another concrete restoration boundary:
+`TrackerSession::restorePluginGraph` used `AudioDevice::setPlugins` whenever
+transport was stopped, including recorded-point edits and their history. Clear
+also took this path. That replaced native processors and closed their editors.
+The live path already had a bounded recorded-timeline publication, but its
+AudioDevice adapter refused stopped use. Retained take review must not change
+provider identities merely to clear or restore a timeline.
+
+`AudioDevice::prepareRecordedAutomation/publishRecordedAutomation` now also
+support stopped processors. Before control-owner adoption they join the output
+callback with `AudioOutputUnitStop`: `active()==false` alone is insufficient
+after natural completion or a processor fault. This join deliberately does not
+call `stop()` or shorten the retained presentation clock. Preparation adopts
+previous pending work so repeated stopped edits cannot exhaust unconsumed
+publication slots. Live adoption remains on the callback. Each plan captures
+`pluginEpoch_`; a replacement rack refuses it before hosted pointer checks,
+including potential allocator address reuse.
+
+The session uses this path only for an available, unchanged rack and unchanged
+native song. Structural/opaque-state changes retain their existing native rack
+path; unresolved plugins retain their fallback. Clear restores explicit saved
+manual baselines in the same publication, then records its existing single Undo.
+No project format or API changes are introduced.
+
+Prepared checks (not executed): `native-plugins` exercises stopped publication
+without opening an audio device, eight consecutive publications, unchanged
+provider/host identity, manual-value exclusion, newer manual-write refusal,
+outdated timeline refusal and replacement-rack refusal. The existing `--ui`
+fixture additionally requires the same native editor to remain visible.
+`unified-history` adds the real session/API stopped point edit, Clear dry run,
+Clear/Undo/Redo/no-op and exact full-tree save/reopen checks with a second
+unrelated processor. The existing live clear/custom-editor and realtime hosted
+tests remain necessary; this source does not establish their new execution.
+
+Full Mac retained-take API/UI integration remains open. In particular, Mac
+custom editors act on the audible vendor, unlike Windows' isolated editor
+provider. Numeric timeline restoration cannot prove restoration of opaque
+program state; input leases and explicit vendor restoration must remain part of
+that integration. This batch fixes the existing stopped path without claiming
+that the seven public lifecycle operations have been ported.
+
 ## Manual-state preservation prerequisite, 22 October 11:01 UTC
 
 Source inspection found that Mac `commitManualParameters` moved and cleared
