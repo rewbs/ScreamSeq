@@ -3,6 +3,7 @@
 #include "windows/Audio/HostClock.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/hosted/RecordedGestureDrain.hpp"
+#include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "RecordedGestureRecovery.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/ParameterBaseline.hpp"

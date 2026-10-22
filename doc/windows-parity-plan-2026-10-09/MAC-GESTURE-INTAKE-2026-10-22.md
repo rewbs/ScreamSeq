@@ -1,5 +1,38 @@
 # Shared capture: Mac AU intake continuation
 
+## Current execution and next source, 22 October 10:43 UTC
+
+The `3cefb9ab9ff0a892586c21442e5c8d78746fbd03` Mac ARM job
+`119763197802` (run `39760505711`) passed its build, all 134 native
+registrations, recovery/picker, owned AU/VST3 notification lifecycle, interface,
+sample-library and requested shared editing/conformance stages. Result excerpts
+are retained in `bin/mac-gesture-20261022/clock-followup/ci/`. Intel Mac and
+Windows x64 were still running. This updates the foundation's execution status;
+it does not implement the missing Mac retained-take session/API/UI.
+
+The next source extracts grouped arm/stop validation to
+`editor/hosted/RecordedGestureBoundary.hpp`, now called by the Windows owner.
+It preflights complete provider membership, incarnation/loss counters, bounded
+pending input and original clock boundaries before mutating any take. Arming
+requires empty queues; Stop permits pending input and reviewable loss but still
+requires the actual fixed-cut drain before Keep. The half-open stop time includes
+the final native clock quantum and rejects overflow. Native owners still capture
+the grouped cuts, recheck context and own their leases/restoration.
+
+Shared regressions cover partial/foreign/extra providers, stale/zero/overflow
+times, source changes, oversized pending counts, nonempty arm, loss, repeat Stop
+and a cut preceding retained input, preserving the entire take on refusal.
+The real Mac VST3 slider test now uses this shared policy and reads its exact
+stop fence rather than an unbounded queue. These changes are **unbuilt** and
+belong after the frozen Windows review candidate `97bd596a4`.
+
+Required next validation: recorded-automation and Windows plugin notification/
+recording worker gates; Mac native-plugin ordinary and `--ui` paths on both
+architectures. Include these targets in one later coordinated checkpoint.
+Do not change the prepared 11:06 review-only freeze to absorb this source.
+No public method, project format, manual baseline, native restoration policy or
+audio callback changes here. The full Mac lifecycle migration below remains open.
+
 **Execution update, 22 October 08:06 UTC:** the AU/input-lease foundation is frozen
 at `352ee334b` in PR #6. Its Windows ARM64 build, seven selected native checks and
 six app cases passed with the import-order follow-up described in the

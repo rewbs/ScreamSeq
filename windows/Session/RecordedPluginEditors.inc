@@ -78,12 +78,8 @@ void PluginOperations::beginRecordedEditors(std::shared_ptr<RecordedGestureTake>
   // Inspect all queues on their native owner, without consuming notifications
   // or reading vendor state. A failed arm leaves those edits for manual capture.
   const auto cuts=recordedEditorCuts(*next);
-  for(const auto &provider:next->take->providers()) {
-      const auto &cut=cuts.at(provider.plugin);
-      need(cut.source==provider.source&&cut.fence.hostTime>=next->take->startTime(),
-        "Recording needs a current native input boundary; earlier input retained");
-      need(cut.fence.pending==0,"Flush earlier manual plugin input before recording; queued input retained");
-  }
+  try{RecordedGestureBoundary::requireFresh(*next->take,cuts);}
+  catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   need(next->context()==current,"Recording context changed while checking native input");
   recordedEditors_=std::move(next);
 }
@@ -96,20 +92,11 @@ uint64_t PluginOperations::sealRecordedEditors() {
   need(context.first==take.revision()&&context.second==take.playbackEpoch(),
     "Recording context changed; input and baseline protection retained");
   auto cuts=recordedEditorCuts(capture);
-  uint64_t end=0;
-  for(const auto &[identity,cut]:cuts)end=std::max(end,cut.fence.hostTime);
-  need(end&&end<UINT64_MAX&&capture.context()==context,
+  need(capture.context()==context,
     "Recording clock or context changed while stopping; input retained");
-  // The timestamp range is half-open; include every event produced in the
-  // clock quantum containing the last cut. Queue positions exclude later ones.
-  ++end;
-  for(const auto &provider:take.providers()) {
-    const auto &cut=cuts.at(provider.plugin);
-    need(cut.source.incarnation==provider.source.incarnation&&
-      cut.source.dropped>=provider.source.dropped,
-      "Recorded notification provider changed while stopping; input retained");
-  }
-  take.seal(end); // Fallible preflight; no queue has been consumed or owner released.
+  uint64_t end;
+  try{end=RecordedGestureBoundary::seal(take,cuts);}
+  catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   capture.releaseCuts.swap(cuts);
   return end;
 }

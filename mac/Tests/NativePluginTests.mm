@@ -5,6 +5,7 @@
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
+#include "editor/hosted/RecordedGestureBoundary.hpp"
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
 #include <cmath>
@@ -409,26 +410,33 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         const auto arm=mach_absolute_time();
         check(recordedClock->publish(arm,arm+1,0,1,48000,19),"Native slider take clock starts");
         RecordedGestureTake recordedTake("mac-slider","revision",arm,recordedClock,recordedRack,{},recordedProviders);
+        const auto armCut=plugin.editBoundary();
+        check(armCut.has_value(),"Native slider has no arm boundary");
+        RecordedGestureBoundary::requireFresh(recordedTake,{{gain.instanceID,*armCut}});
         slider.doubleValue = .72;
         const auto beforeEdit=mach_absolute_time();
         [slider sendAction:slider.action to:slider.target];
         const auto afterEdit=mach_absolute_time();
         // The fixture emits synchronously on this AppKit owner. Seal after the
         // actual action returns, then drain later against retained coverage.
-        const auto release=mach_absolute_time();
+        const auto stopCut=plugin.editBoundary();
+        check(stopCut.has_value(),"Native slider has no stop boundary");
+        const RecordedGestureBoundary::Cuts stopCuts{{gain.instanceID,*stopCut}};
+        const auto release=RecordedGestureBoundary::stopTime(recordedTake,stopCuts);
         check(release>arm+1&&recordedClock->publish(arm+1,release,1,479,48000,19),
           "Native slider take retains presentation coverage");
-        recordedTake.seal(release);recordedClock->close(19,release);
+        check(RecordedGestureBoundary::seal(recordedTake,stopCuts)==release,"Native slider stop boundary changed");
+        recordedClock->close(19,release);
         [NSThread sleepForTimeInterval:.002];
         PluginEdit edit;PluginEditSource source;
-        check(plugin.popEdit(edit,source) && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
+        check(plugin.popEditBefore(*stopCut,edit,source)==PluginEditRead::Event && edit.id == 7 && std::abs(edit.value - .72) < 1e-5, "custom editor parameter callback");
         check(originalSource.incarnation&&source==originalSource&&!source.dropped,"Custom editor notification lost its provider incarnation");
         check(plugin.endEditorInputBarrier(inputLease)&&slider.enabled,"VST3 input release did not restore its slider");
         check(beforeEdit&&edit.hostTime>=beforeEdit&&edit.hostTime<=afterEdit&&plugin.droppedEdits()==0,"Native facade retains custom editor callback time and loss count");
         check(recordedTake.append(gain.instanceID,edit,source,"revision",19,recordedNative,recordedCatalog)==RecordedGestureTake::Intake::Captured,
           "Delayed native slider notification enters its original take after release");
         PluginEdit emptyEdit;
-        check(!plugin.popEdit(emptyEdit,source)&&source==originalSource&&
+        check(plugin.popEditBefore(*stopCut,emptyEdit,source)==PluginEditRead::Complete&&source==originalSource&&
           recordedTake.drained(gain.instanceID,source,"revision",19),"Native slider release drains the paired provider");
         const auto expectedFrame=uint64_t(1.L+static_cast<long double>(edit.hostTime-(arm+1))*479/(release-(arm+1)));
         unsigned publications=0;
