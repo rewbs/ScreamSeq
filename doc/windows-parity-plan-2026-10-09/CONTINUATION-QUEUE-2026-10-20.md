@@ -8,6 +8,41 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**22 October 11:21 UTC:** review candidate `97bd596a4` passed its single ARM64
+build, both targeted native registrations and all three actual-app recording
+cases, including the previous hidden-review departure regression. Fresh Computer
+Use passed stopped refusal/retry, readable/selectable conflict details, Balance
+capture, hidden-Params Keep and subsequent Discard, main-search keyboard input
+and compact review resize. Final saved F04 differed only by the two captured
+Balance automation points; all other root fields/plugin state and original bytes
+were unchanged. [Foreground report](PLUGIN-FOREGROUND-2026-10-22.md) distinguishes
+native keyboard assertions from the helper's floating-window limitations and
+records 47 audio deadline overruns (no realtime or temporal presentation pass).
+
+The verified candidate package is
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-97bd596a4/ScreamSeq.exe`.
+The isolated QA PID 22660 exited normally; never reuse its handles. PR #6 is at
+97bd596a4; main is unchanged. Mac CI `39768081195` (ARM job `119788424801`, Intel
+`119788425112`) and Windows CI `39768081068` (x64 job `119788422848`) were still
+building at 11:21. Inspect existing receipts/artifacts; never restart those jobs.
+Newer boundary/client/manual-state source is backed up separately through
+`afa50697e`; it still needs the next shared checkpoint at/after **12:06:17 UTC**.
+Continue Mac retained-take ownership/preview restoration between checkpoints;
+do not mistake the shared prerequisites for the seven public lifecycle operations.
+
+**22 October 11:06 UTC:** the frozen review source `97bd596a4` was pushed to
+PR #6 and the coordinated local ARM64 checkpoint began at 11:06:16 UTC.
+Receipts: `bin/mac-gesture-20261022/review-followup/`. Do not repeat that build;
+the next coordinated build/CI checkpoint is no earlier than **12:06:17 UTC**.
+At this writing the build is running; no new pass, package or merge is claimed.
+The primary development branch is separately backed up through `afa50697e`.
+It adds transactional manual-state serialization on Mac: provider failures retain
+all accepted deltas and original blobs instead of dropping refused edits during
+Save/recovery/Play. Shared failure/retry and real builtin reopen tests are prepared
+but unbuilt. See the current section in [Mac intake](MAC-GESTURE-INTAKE-2026-10-22.md).
+This source and the earlier boundary/client changes await a later shared gate;
+they are deliberately absent from the frozen review candidate.
+
 **22 October 10:54 UTC:** the `3cefb9ab9` Mac CI run `39760505711`
 is terminal success on ARM (`119763197802`) and Intel (`119763198384`):
 134 native registrations each, owned AU/VST3 lifecycle, interface, recovery,

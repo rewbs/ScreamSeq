@@ -1,5 +1,62 @@
 # Plugin recording: unlocked foreground check and corrections
 
+## Review candidate qualified locally, 22 October 11:21 UTC
+
+Source `97bd596a4ced7f3437c62fa6f8f607156e008dd7`, ARM64 Release executable
+SHA-256 `f93c702322baacb5c883a3e2c99b7f003d90c489473230d4839ccd37577f30f3`.
+The coordinated build ran once, 11:06:16–11:08:05 UTC. Both selected native
+registrations (`workspace-plugin-search-tests`, `workspace-worker-presentation-tests`)
+and all three actual-app `PluginRecordingTests` passed. The latter includes the
+previous hidden-review reopen failure, Keep/history/save/reopen/Discard and strict
+detached recovery review. Earlier unrelated individual passes remain reusable;
+the preceding candidate's failed receipt remains unchanged.
+
+Computer Use drove fresh isolated PID 22660 / main HWND 51515324 with disposable
+F04, silent WASAPI and private recovery. These handles are now dead: the process
+saved its own copy and exited normally. Evidence is under
+`bin/mac-gesture-20261022/review-followup/`, including `foreground-check.json`,
+`foreground/refused-gain.json`, `after-keep.json`, `final-ui.json` and the audio report.
+
+Observed on the new executable:
+
+- Stopped Record gave a clear refusal, retained Record focus and allowed a new
+  take after Play. No recovery protection was left on an absent take.
+- The F04 Gain envelope conflict appeared in full in the readonly details
+  field. Mouse text selection worked. This refusal intentionally gates further
+  native input until review; Stop/Discard released it without losing its evidence.
+- A fresh Balance drag captured two original inputs at 25.9%. Hiding Params
+  before Stop/Keep worked. Another Record/Stop/Discard succeeded without reopening
+  Params. Worker and native review agreed that no take remained afterward.
+- Main-rack search accepted `balance`, Backspace produced `balanc`, Tab moved
+  its visible focus border to the selector, Shift+Tab returned to search, and
+  typing `e` continued there while playback ran. The helper's focus summary
+  still reported Main; input behavior and visible borders establish this bounded
+  keyboard result. No separate PowerShell UI Automation probe was mixed into this turn.
+- The review resized from about 808×643 to 658×529 visible pixels. Controls,
+  details and footer actions remained visible; the table gained a horizontal
+  scrollbar. Initial inner-border drags did not resize; the outer Windows sizing
+  border did. This was a hit-target issue, not a resize defect.
+- Normal close saved only the disposable fixture. A full plist root comparison
+  found **only `automation` changed**: `[0,2,25.899999618530273,9290691]` and
+  `[0,2,25.899999618530273,9291131]`. All other fields, opaque plugin states,
+  stable identities and the original fixture bytes were unchanged.
+
+The passing native keyboard assertions cover table Up/Down, Tab ordering,
+readonly details and retained selection. **Direct foreground floating-window
+keyboard continuity is still unverified**: the helper exposes those windows as
+related UI through Main. This is not reported as an app focus failure or a pass.
+No screenshot establishes temporal flicker. The 609.4-second interactive run
+at 48 kHz / 480 frames had 47 deadline overruns, zero processor/device faults and
+zero starvation indicators. Realtime audit and sustained presentation qualification
+were false. This is a usability-qualified candidate, not performance qualification.
+
+Packaged, with ARM64 scanner/runtime/notices, source manifest, explicit qualification
+limits and verified hashes:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-97bd596a4/ScreamSeq.exe`.
+PR #6 is at this source. New Mac run `39768081195` and Windows run `39768081068`
+remain in progress; no merge or final cross-platform parity qualification is claimed.
+The next coordinated build/CI checkpoint is no earlier than **12:06:17 UTC**.
+
 ## Observed candidate
 
 Source `352ee334b18bbe7bc7c52105946ae7e00867853d`, Windows ARM64 executable
