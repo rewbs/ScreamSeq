@@ -104,6 +104,20 @@ public:
   }
   PluginEditSource pluginEditSource(size_t slot) const noexcept {return plugins_?plugins_->editSource(slot):PluginEditSource{};}
   uint64_t droppedPluginEdits(size_t slot) const noexcept {return plugins_?plugins_->droppedEdits(slot):0;}
+  // Retained-take adapter; caller keeps pluginEpoch/identity guards and must
+  // not mix these raw reads with the legacy manual popPluginEdit consumer.
+  std::optional<PluginEditBoundary> pluginInputBoundary(size_t slot,uint64_t hostOnlyTime=0) {
+    return plugins_?plugins_->editorInputBoundary(slot,hostOnlyTime):std::nullopt;
+  }
+  PluginEditRead popPluginInputBefore(size_t slot,const PluginEditBoundary &boundary,PluginEdit &event,PluginEditSource &source)noexcept {
+    source={};return plugins_?plugins_->popEditorInputBefore(slot,boundary,event,source):PluginEditRead::InvalidFence;
+  }
+  std::optional<PluginEditorInputBarrier> beginPluginInputBarrier(size_t slot) {
+    return plugins_?plugins_->beginEditorInputBarrier(slot):std::nullopt;
+  }
+  bool endPluginInputBarrier(size_t slot,PluginEditorInputBarrier barrier) {
+    return plugins_&&plugins_->endEditorInputBarrier(slot,barrier);
+  }
   double pluginLatency() const { return plugins_ ? plugins_->latency() : 0; }
   NoteActivitySnapshot noteActivity() const {return plugins_?plugins_->noteActivity():NoteActivitySnapshot{};}
   bool graphController(uint8_t cc,uint8_t value) {return plugins_ && plugins_->graphController(cc,value);}

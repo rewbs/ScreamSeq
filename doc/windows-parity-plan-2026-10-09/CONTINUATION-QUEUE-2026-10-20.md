@@ -8,6 +8,34 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Latest checkpoint, 22 October 08:06 UTC:** PR #6 now targets frozen source
+`352ee334b18bbe7bc7c52105946ae7e00867853d`. One five-target Windows ARM64 Release
+build ran 07:57:28–07:58:25 UTC; executable SHA-256 is
+`790029382d5a046d49abc8018c06a372a2cb604b0a9df79fd1ad0911c6001162`.
+Seven selected native registrations passed. The initial actual-app selection
+passed three cases but could not import the recording test module when selected
+first (`client` path depended on test order). The same frozen executable then
+passed only the three previously unexecuted recording cases with an explicit API
+module path. `bin/mac-gesture-20261022/checks-qualified.json` verifies and links
+both original logs: seven native registrations and six app cases in total.
+The import-order source fix is prepared for the next batch; no product assertion
+was changed. No foreground process was launched or production package made.
+
+Mac run `39744191656` (ARM job `119708483967`, Intel `119708484219`) and Windows
+x64 run `39744191667` (job `119708483477`) were confirmed building at 08:04 UTC.
+Poll those exact live handles; never restart on an observation timeout. The next
+build or build-triggering PR push/merge must be **no earlier than 09:00 UTC**.
+The primary branch can accumulate source work, but keep the qualification checkout
+and PR candidate frozen until these checks finish. New source must be backed up
+only to `codex/mac-gesture-intake`, which has no PR-triggered build.
+
+The [API evidence reconciliation](API-EVIDENCE-RECONCILIATION-2026-10-22.md)
+compares the preceding native reports without rerunning them: 39 of 41 selected
+outcomes agree across all three hosts; two retained-take reads remain different.
+It is not current provider/foreground/complete API qualification. The next source
+adapter separates raw rack notification reads from the legacy manual-catalogue
+updates; see [Mac/shared continuation](MAC-GESTURE-INTAKE-2026-10-22.md).
+
 **21 October Pacific / 22 October UTC update:** main is
 `4e4862bcc575795bd736fe5edc126f8e873f1d24`. The approved navigation/flicker batch
 is merged and its production navigation package is available; see

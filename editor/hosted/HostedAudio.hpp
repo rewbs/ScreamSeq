@@ -657,6 +657,14 @@ public:
   bool popEdit(size_t slot,PluginEdit &,PluginEditSource &) noexcept;
   PluginEditSource editSource(size_t slot) const noexcept;
   uint64_t droppedEdits(size_t slot) const noexcept;
+  // Serialized control owner only. Unlike popEdit(), these raw capture reads
+  // never accept a value into the manual catalogue or enqueue a manual write.
+  // The take owner retains input, owns previews/restoration, and guards rack
+  // identity/epoch across calls. Boundaries and leases also guard incarnation.
+  std::optional<PluginEditBoundary> editorInputBoundary(size_t slot,uint64_t hostOnlyTime=0);
+  PluginEditRead popEditorInputBefore(size_t slot,const PluginEditBoundary &,PluginEdit &,PluginEditSource &) noexcept;
+  std::optional<PluginEditorInputBarrier> beginEditorInputBarrier(size_t slot);
+  bool endEditorInputBarrier(size_t slot,PluginEditorInputBarrier);
   bool parameter(uint32_t slot, uint32_t id, float value) noexcept;
   // Single control producer. One release publishes the complete batch, or no
   // values on failure. Caller validates IDs/ranges against its baseline catalog.

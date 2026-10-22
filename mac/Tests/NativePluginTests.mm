@@ -33,6 +33,22 @@ static void check(bool value, const char *message) {
   if (!value)
     throw std::runtime_error(message);
 }
+#include "editor/Tests/PluginChainCaptureTests.inc"
+static void chainInputProtection(const PluginState &state){
+  PluginChain chain({state},48000,true);chain.showEditor(0);
+  NSSlider *slider=nil;NSWindow *owned=nil;
+  for(NSWindow *window in NSApp.windows)if(window.visible&&[window.title isEqualToString:@(state.descriptor.name.c_str())])
+    for(NSView *view in window.contentView.subviews)for(NSView *child in view.subviews)
+      if([child isKindOfClass:NSSlider.class]){check(slider==nil,"Raw chain fixture window is ambiguous");slider=(NSSlider *)child;owned=window;}
+  check(slider!=nil,"Raw chain fixture has no owned native slider");
+  pluginChainCaptureChecks(chain,[&](double value){slider.doubleValue=value;return bool([slider sendAction:slider.action to:slider.target]);},
+    []{return mach_absolute_time();});
+  check(slider.enabled&&owned.visible,"Raw chain protection did not restore the native editor");
+  std::array<float,256> pcm;pcm.fill(1);
+  check(chain.process(pcm.data(),128),"Raw chain fixture failed to render");
+  for(auto value:pcm)check(value==.625f,"Raw chain capture changed latest audible manual delivery");
+  [owned close];
+}
 static std::vector<std::byte> module() {
   auto document = Document::demo();
   auto &song = document->song();
@@ -441,6 +457,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
           plugin.closeEditor();
         }
         editorSizeMode(0);dlclose(fixtureModule);
+        chainInputProtection(gain);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);

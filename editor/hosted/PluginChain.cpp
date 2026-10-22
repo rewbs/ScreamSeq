@@ -697,6 +697,20 @@ PluginEditSource PluginChain::editSource(size_t slot) const noexcept {
 uint64_t PluginChain::droppedEdits(size_t slot) const noexcept {
   return slot<rack_.size()?rack_[slot]->plugin->droppedEdits():0;
 }
+std::optional<PluginEditBoundary> PluginChain::editorInputBoundary(size_t slot,uint64_t hostOnlyTime) {
+  return slot<rack_.size()?rack_[slot]->plugin->editBoundary(hostOnlyTime):std::nullopt;
+}
+PluginEditRead PluginChain::popEditorInputBefore(size_t slot,const PluginEditBoundary &boundary,
+    PluginEdit &event,PluginEditSource &source)noexcept {
+  source={};
+  return slot<rack_.size()?rack_[slot]->plugin->popEditBefore(boundary,event,source):PluginEditRead::InvalidFence;
+}
+std::optional<PluginEditorInputBarrier> PluginChain::beginEditorInputBarrier(size_t slot) {
+  return slot<rack_.size()?rack_[slot]->plugin->beginEditorInputBarrier():std::nullopt;
+}
+bool PluginChain::endEditorInputBarrier(size_t slot,PluginEditorInputBarrier barrier) {
+  return slot<rack_.size()&&rack_[slot]->plugin->endEditorInputBarrier(barrier);
+}
 
 bool PluginChain::graphController(uint8_t cc,uint8_t value) noexcept {if(cc>=128||value>=128)return false;songControllers_[cc].store(value,std::memory_order_relaxed);if(signalGraph_)signalGraph_->controller(cc,value);if(sampleSignalGraph_)sampleSignalGraph_->controller(cc,value);return bool(mixerTransition_)||bool(signalGraph_)||bool(sampleSignalGraph_);}
 std::vector<SignalActivity> PluginChain::graphActivity() const {

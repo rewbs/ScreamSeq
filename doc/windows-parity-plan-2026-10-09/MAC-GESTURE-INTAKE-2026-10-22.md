@@ -1,6 +1,16 @@
 # Shared capture: Mac AU intake continuation
 
-Status: source prepared, **unbuilt and unqualified**. This temporary feature
+**Execution update, 22 October 08:06 UTC:** the AU/input-lease foundation is frozen
+at `352ee334b` in PR #6. Its Windows ARM64 build, seven selected native checks and
+six app cases passed with the import-order follow-up described in the
+[current queue](CONTINUATION-QUEUE-2026-10-20.md). Both Mac CI builds and Windows
+x64 CI remain in progress. No Mac provider pass or foreground UI pass is claimed.
+The next build gate is **09:00 UTC**. The subsequent raw-rack adapter below is
+source-only and is not part of that running candidate.
+
+## Original preparation record (before the 07:57 checkpoint)
+
+Status at preparation: source prepared, **unbuilt and unqualified**. This temporary feature
 branch follows the Windows candidate; it is not a separate platform integration
 branch. Both platforms continue toward shared main. The Windows `313893b9f`
 candidate and its qualification checkout remain unchanged and available for the
@@ -120,3 +130,33 @@ existing shared `RecordedGestureTake`, `RecordedGestureCapture` and recovery
 types. AppKit input ownership and Core Audio/provider adapters remain native;
 no cross-platform UI/audio framework, stable-ID rename, plugin-state rewrite
 or format migration is proposed.
+
+## Following source batch: raw rack reads
+
+Current `PluginChain::popEdit` does more than consume an event: it queues an
+observed manual write, changes the rack's accepted parameter catalogue, clears
+preview flags and updates activity values. Using it for retained-take intake
+would overwrite the independent manual baseline before Keep/Discard. This is
+visible in `editor/hosted/PluginChain.cpp`, not inferred from a progress report.
+
+The prepared `editorInputBoundary`, `popEditorInputBefore`, and native barrier
+forwarders expose the existing provider guards through the shared chain without
+those manual side effects. `mac/Audio/AudioDevice.hpp` forwards them for the future
+session owner. Missing slots return no boundary/lease or InvalidFence with a
+cleared source; provider incarnations guard wrong/stale cuts and lease tokens.
+These are serialized control-owner operations. The future session must retain
+stable identity and pluginEpoch guards, prevent competing legacy consumption,
+own preview/restoration, and handle chain replacement before exposing Record.
+No existing Mac consumer is switched yet and no public API is added.
+
+`editor/Tests/PluginChainCaptureTests.inc` supplies one set of regression assertions
+to actual Windows and Mac VST3 fixtures: protected callback capture, original
+timestamps, fixed-cut suffix retention, foreign/missing/stale boundary rejection,
+unchanged accepted manual value, retryable lease cleanup, and the existing later
+manual drain. Both native tests render the final .625 gain; Windows retains its
+host allocation audit. Mac drives an owned actual NSSlider in the `--ui` check.
+These new tests have not run. The legacy manual path remains unchanged.
+
+The same next batch fixes the recording test module's import order so it can be
+selected independently. A standalone import passed without launching the app;
+the candidate's three recording cases passed through the explicit-path follow-up.

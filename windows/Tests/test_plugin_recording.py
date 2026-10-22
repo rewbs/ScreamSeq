@@ -6,8 +6,8 @@ import time
 import unittest
 
 import private_desktop
-from client import ApiError
 import test_song_routing as routing
+from client import ApiError
 
 
 class PluginRecordingTests(unittest.TestCase):

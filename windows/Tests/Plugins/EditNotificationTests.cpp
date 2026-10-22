@@ -13,6 +13,7 @@
 #include <string>
 using namespace Tracker;
 static void check(bool okay,const char *message){if(!okay)throw std::runtime_error(message);}
+#include "editor/Tests/PluginChainCaptureTests.inc"
 static void beginAudit(){ScreamSeq::AudioAudit::allocations=0;ScreamSeq::AudioAudit::deallocations=0;ScreamSeq::AudioAudit::active=true;}
 static void endAudit(bool okay){
   ScreamSeq::AudioAudit::active=false;
@@ -92,6 +93,13 @@ int main(int argc,char **argv){try{
     for(auto value:pcm)check(value==.375f,"Timestamped drain preserves audible parameter delivery");
     check(send(.625)==1,"Second gesture accepted");uint32_t id=0;float value=0;
     check(chain.popEdit(0,id,value)&&id==7&&value==.625f,"Old facade overload still consumes exact value");
+  }
+  {
+    PluginChain chain({state},48000,true);
+    pluginChainCaptureChecks(chain,[&](double value){return send(value)==1;},[]{return ScreamSeq::hostTime100ns();});
+    std::array<float,256> pcm;pcm.fill(1);
+    beginAudit();const auto okay=chain.process(pcm.data(),128);endAudit(okay);
+    for(auto value:pcm)check(value==.625f,"Separated raw intake changed latest audible manual delivery");
   }
   {
     // Real vendor callbacks enter the shared take before any coalescing.
