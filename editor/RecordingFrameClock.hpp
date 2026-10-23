@@ -209,8 +209,12 @@ public:
     if(generation()!=expectedGeneration) {
       result.status="changed";result.coverage={};return result;
     }
-    const auto first=first_.load(std::memory_order_acquire),end=end_.load(std::memory_order_acquire);
-    if(stopped())result.stopTime=end;
+    const auto first=first_.load(std::memory_order_acquire);
+    // Acquire Stop before reading its final bound. Reading end first could
+    // pair a newly observed Stop with the preceding live presentation end.
+    const bool closed=stopped();
+    const auto end=end_.load(std::memory_order_acquire);
+    if(closed)result.stopTime=end;
     if(result.stopTime&&time>=*result.stopTime)result.status="after-stop";
     else if(!first)result.status="unavailable";
     else if(time<first)result.status="before-start";
