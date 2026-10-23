@@ -38,7 +38,7 @@
       require(!pending_&&!dragging_&&!context_().busy,"Precise-note operation is pending");
       if(id==loadTarget){loadSelection();return;}if(id==reloadCapturedCommand){reloadCaptured();return;}
       require(hasTarget(),"Open a precise-note row first");
-      if(id==list&&notification==LBN_SELCHANGE){const auto next=SendMessageW(controls_.at(list),LB_GETCURSEL,0,0);saveSelected();if(next>=0&&size_t(next)<draft_.size())refresh(draft_[size_t(next)]);}
+      if(id==list&&notification==LBN_SELCHANGE){const auto next=SendMessageW(controls_.at(list),LB_GETCURSEL,0,0);saveSelected();finishQueuedSelection();if(next>=0&&size_t(next)<draft_.size())refresh(draft_[size_t(next)]);}
       else if(id==units&&notification==CBN_SELCHANGE){
         const auto next=selection(units);require(next>=0&&next<2,"Choose units");const auto amount=rowOffset();
         const bool clean=pointRaw().at("offset")==pointBaseline_.at("offset");units_=unsigned(next);
@@ -83,7 +83,7 @@
           if(item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
           require(!collision(item),"Another event already occupies that offset");draft_.push_back(item);++generation_;refresh(item);saveAutomatically();
         }else if(nearest>=0){dragHadAutomaticEdit_=bool(automaticEdit_);cancelAutomaticEdit();refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
-        else refresh(Json(),false);
+        else {finishQueuedSelection();refresh(Json(),false);}
       }else if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto item=draft_[size_t(selected_)];const auto previous=item;
         item["position"]=positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0);if(!(GetKeyState(VK_SHIFT)&0x8000)&&item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
         require(!collision(item,selected_),"Another event occupies that offset");if(item!=previous){draft_[size_t(selected_)]=item;

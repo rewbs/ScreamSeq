@@ -92,6 +92,12 @@
     if(draft_==original_&&pointRaw()==pointBaseline_)return;
     apply(false);
   }
+  void finishQueuedSelection(){
+    if(!automaticEdit_)return;
+    const auto generation=generation_;
+    saveAutomatically();
+    require(generation_==generation,"Newer note input retained before changing selection");
+  }
   void queueSave(){
     const auto document=document_;const auto target=target_;const auto generation=generation_;
     queueAutomaticEdit([this,document,target,generation]{

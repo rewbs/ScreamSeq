@@ -219,3 +219,16 @@ still running at the 06:27:12 UTC inspection. Neither job was restarted.
 The downloaded logs and SHA-256 fingerprints are retained in
 `bin/mac-gesture-20261022/precise-live/completed-ci-logs.json`; recheck the Intel
 result and any later build start before the next checkpoint.
+
+## Source continuation: finish the edited hit before changing selection
+
+An additional source trace found that a queued valid field edit could be stranded
+by selecting a different hit and then entering invalid text before its timer
+fired. Deselecting on blank timeline space had the same issue when preparing the
+next hit's insertion fields. These selection boundaries now finish only an
+existing automatic intent before replacing the selected fields. A failed write
+retains the current selection; input received during the pumped request changes
+the draft generation and also prevents the later selection from overwriting it.
+Native assertions cover both selection paths, exact one-write preservation and
+newer raw input during the save. They join the existing next checkpoint and have
+not yet run. No additional build was started.

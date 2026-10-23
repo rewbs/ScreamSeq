@@ -338,6 +338,30 @@ void cancellingDragRetainsEarlierAutomaticEdit(Owner &owner){
     std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),before)!=f.saved.at("pattern-a").end(),
     "Cancelling a drag lost or duplicated the valid field edit queued before it");
 }
+void selectionFinishesEarlierAutomaticEdit(Owner &owner){
+  for(bool blank:{false,true}){
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    const auto edited=f.tool.snapshot().at("selectedEvent"),plot=f.tool.snapshot().at("timeline");
+    if(blank){
+      mouse(f.tool.window(),WM_LBUTTONDOWN,plot.at("x").get<double>()+plot.at("width").get<double>()*.5,
+        plot.at("y").get<double>()+plot.at("height").get<double>()*.9,MK_LBUTTON);
+      require(f.tool.snapshot().at("selected")==-1,"Blank canvas did not deselect the saved hit");
+    }else {f.page(1);f.select(1);}
+    require(f.writes==1&&f.submissions.size()==1&&std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),edited)!=f.saved.at("pattern-a").end(),
+      "Changing selection stranded the earlier valid field edit");
+    f.field(Tool::velocity,L"unfinished");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+    require(f.writes==1&&f.submissions.size()==1&&text(f.control(Tool::velocity))==L"unfinished",
+      "New invalid selection input replayed or changed the already saved hit");
+  }
+  Fixture newer(owner.window);newer.dock(owner.window);newer.field(Tool::velocity,L"94");newer.page(1);
+  newer.beforeReply=[&](const auto &method,Json &){if(method=="pattern.notes.set"){
+    SetWindowTextW(newer.control(Tool::velocity),L"newer raw");
+  }};
+  SendMessageW(newer.control(Tool::list),LB_SETCURSEL,1,0);
+  SendMessageW(newer.tool.window(),WM_COMMAND,MAKEWPARAM(Tool::list,LBN_SELCHANGE),reinterpret_cast<LPARAM>(newer.control(Tool::list)));
+  require(newer.writes==1&&newer.tool.snapshot().at("selected")==0&&text(newer.control(Tool::velocity))==L"newer raw"&&newer.tool.retainedDraft(),
+    "Selection after a pumped save discarded newer raw input");
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -587,6 +611,7 @@ int wmain(int argc,wchar_t **argv){try{
     cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";
     projectSaveFlushesOnlyQueuedIntent(owner);std::cout<<"PASS project save flushes one queued precise edit without replaying uncertain or invalid input\n";
     cancellingDragRetainsEarlierAutomaticEdit(owner);std::cout<<"PASS cancelled precise drag retains an earlier queued field save exactly once\n";
+    selectionFinishesEarlierAutomaticEdit(owner);std::cout<<"PASS precise selection finishes queued edits and protects newer raw input\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";
