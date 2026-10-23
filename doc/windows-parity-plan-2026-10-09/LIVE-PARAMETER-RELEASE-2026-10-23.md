@@ -770,7 +770,8 @@ fields that have never been accepted explicitly.
 
 The native activity group now exercises a Save pumped inside an observation,
 project-Save draining exactly once, changed raw input refused, a later-row value
-edit, time reorder, deletion and unrelated-point preservation. The actual-app
+edit, preserved native field focus/raw text/selection, time reorder, deletion and
+unrelated-point preservation. The actual-app
 journey checks accepted point values/timestamps and selection, exact other-lane
 preservation, Undo/Redo, continuous playback and save/reopen. It awaits accepted
 state without repeating native input. These new assertions and product changes

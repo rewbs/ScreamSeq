@@ -71,12 +71,16 @@ void run(){
     context.revision="three-points";click(11002);
     const auto itemList=GetDlgItem(window,11007);
     SendMessageW(itemList,LB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));
-    SetWindowTextW(GetDlgItem(window,11016),L"0.75");
+    const auto valueField=GetDlgItem(window,11016);SetActiveWindow(window);SetFocus(valueField);
+    SetWindowTextW(valueField,L"0.75");SendMessageW(valueField,EM_SETSEL,1,3);
     pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11013);};
     SendMessageW(window,WM_TIMER,3,0);pump={};
     require(edits==2&&tool.snapshot().at("fieldDraft")==true&&tool.queuedMusicalEdit(),"Polling submitted an edit reentrantly instead of retaining it");
     tool.flushForProjectSave();SendMessageW(window,WM_TIMER,0x5345,0);
     require(edits==3,"Save clicked during observation was lost or repeated");
+    DWORD first=0,last=0;SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    require(GetFocus()==valueField&&first==1&&last==3&&tool.snapshot().at("rawValue")=="0.75",
+      "Deferred activity Save lost native field focus, raw input or selection");
     require(tool.snapshot().at("selectedPoint")==1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==1&&
       lane==Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.75}},{{"frame",48000},{"value",.25}}}),
       "Activity value edit selected the first row or changed a different point");
