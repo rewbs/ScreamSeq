@@ -8,6 +8,35 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 06:46 UTC continuation (supersedes gates below):** the latest source
+is on `codex/mac-gesture-intake`, backed up to `codex/mac-gesture-next-checkpoint`.
+Resolve the exact next candidate from
+`bin/mac-gesture-20261022/precise-live-correction/freeze.json`; both clean
+checkouts must match it. PR#7 remains f28a6eff8 until the coordinated checkpoint.
+Do not build before **06:59:10 UTC**, and inspect later actual CI starts and
+current jobs before proceeding. No correction build/check receipts exist yet.
+
+The first f28 precise/MIDI candidate failed MSVC C7692 in the MIDI revision
+comparison; that is corrected. Mac ARM job120266634155 passed all134 native
+tests and the interface/transport gates. Mac Intel job120266634403 compiled
+successfully and was still running its remaining steps at06:46; Windows
+job120266633422 failed the same corrected expression. Do not restart these jobs.
+`precise-live-correction/checkpoint.ps1` coordinates the corrected PR push with
+the single local build. The selection is six native registrations and23 actual
+app cases, followed by fresh isolated Computer Use and only then packaging.
+Read the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) for exact source,
+failed evidence, queued-field Save/selection/history checks and current limits.
+
+The c900d2b2e package remains the usable recording candidate, with known audio
+deadline overruns and bounded foreground evidence; it has neither immediate
+MIDI Arm nor the new timeline changes. The four-leg reciprocal exchange passed
+on68c2d177e and applies only to unchanged persistence inputs. Mac native capture
+and review are implemented; live restoration, native vendor/device qualification,
+performance and complete A01–A18 composing/foreground journeys remain open.
+The [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) preserves those receipts.
+No merge follows from partial local or CI evidence. Preserve the musician's
+process/audio route and do not create recurring work.
+
 **22 October 21:54 UTC continuation (supersedes gates below):** PR#7 now contains
 9195204a. Its single local build passed13 native groups and29 actual-app cases,
 with one optional plugin skip. The full F04 composing/recording preservation

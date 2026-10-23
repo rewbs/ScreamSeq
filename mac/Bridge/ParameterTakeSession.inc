@@ -1,6 +1,6 @@
-// Session-owner integration used by the retained-take API. Native Record UI
-// still needs explicit lifecycle wiring; release currently requires stopped
-// playback, and opaque Discard requires closed owned plugin editors.
+// Session-owner integration used by the retained-take API and native Record UI.
+// Release currently requires stopped playback, and opaque Discard requires
+// closed owned plugin editors. Keep these guards until live restoration is qualified.
 - (void)requireNoParameterTake {
   if(_parameterTake)throw Automation::Error(-32002,"Finish or discard the retained parameter take before changing song or plugin state");
 }

@@ -209,7 +209,8 @@ job log records all 134 CTest registrations passing, including `precise-notes`
 (11.11 seconds), `precise-ramps`, `unified-history` and
 `document-history-allocation`. The native interface `precise-notes` group also
 passed. This is evidence for the shared renderer/history inputs at that commit;
-the subsequent correction changes only Windows source/tests and documentation.
+the subsequent correction changes only Windows behavior/tests and documentation
+(the Mac session change corrects a stale lifecycle comment only).
 It is not Windows UI evidence or Mac device/performance qualification.
 
 Windows x64 job 120266633422 failed on the same MIDI C7692 expression already

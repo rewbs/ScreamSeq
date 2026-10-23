@@ -1,6 +1,6 @@
 # ScreamSeq Windows parity implementation plan
 
-**Current boundary (22 October UTC):** shared main is
+**Current boundary (23 October UTC):** shared main remains
 `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, including the qualified navigation,
 flicker, plugin control/recording and command/scratch work from PR#6. Its tree
 matches077e. Both Mac architecture jobs passed. Windows CI retained12 distinct
@@ -8,14 +8,23 @@ playback/startup failures; all12 passed unchanged locally on the exact downloade
 CI executable with an available endpoint (ARM64 emulation, silent output).
 That bounded replay does not turn the original Windows CI result green.
 
-The separate ARM64 executable is
-`~/Downloads/ScreamSeq-Windows-ARM64-plugin-077e35f29/ScreamSeq.exe`; qualification,
-hash and limitations are in [the command report](COMMAND-AVAILABILITY-2026-10-22.md).
-Main's normal cross-platform push checkpoint is running, with no additional local
-build. The next checkpoint must be no earlier than **2026-10-22 17:09:52 UTC**;
-inspect the exact current run receipts in the [queue](CONTINUATION-QUEUE-2026-10-20.md).
-Later Mac retained-take session/restoration source is backed up on a temporary
-branch and remains unbuilt; the new public Mac lifecycle is not yet connected.
+The latest separately packaged ARM64 candidate is
+`~/Downloads/ScreamSeq-Windows-ARM64-plugin-c900d2b2e/ScreamSeq.exe`. Its bounded
+plugin composing/recording, keyboard and packaging evidence is in the
+[intake report](MAC-GESTURE-INTAKE-2026-10-22.md). Mac native recording lifecycle
+and original-input review are now connected in source; stopped restoration and
+closed-editor opaque Discard guards remain. The retained reciprocal exchange
+passed four legs of ten fixture checks on its recorded source. Hardware/vendor,
+audio-performance and complete foreground parity are still open.
+
+The next combined candidate adds immediate MIDI Arm and the requested precise
+timeline double-click, Backspace, playback cursor and automatic live edits,
+including native Save and Undo handoffs. The first Windows compile failed; the
+correction is committed and backed up, but has no successful Windows binary yet.
+See the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) and
+[current queue](CONTINUATION-QUEUE-2026-10-20.md) for frozen source, receipts and
+the hourly gate. Do not execute old checkpoint commands or package this source
+using a previously built executable.
 
 **The overall 117-row parity inventory is not complete.** Original input,
 Undo/persistence, native UI/audio and reciprocal fixtures remain gates. The dated

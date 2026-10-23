@@ -1,5 +1,16 @@
 # Windows continuation
 
+**Current continuation, 23 October 2026:** the entries below are historical.
+The user has resumed Windows/macOS parity, prioritising plugin recording and
+complete composing journeys, with at most one coordinated build checkpoint per
+hour. Use the [current queue](../doc/windows-parity-plan-2026-10-09/CONTINUATION-QUEUE-2026-10-20.md)
+and [precise-note live batch](../doc/windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md)
+before acting on an old pause, absence claim, build command or qualification.
+The new timeline/live-edit changes are source-only pending the corrected
+checkpoint; October 7 precise-note results do not qualify them.
+
+## Historical October 7 stopping point
+
 Stopping point requested by the user: Precise Notes editing parity is qualified;
 resume with the unintegrated Mixer strip proposal only after its recorded source
 review findings are resolved. See [PARITY_HANDOFF.md](PARITY_HANDOFF.md) for the

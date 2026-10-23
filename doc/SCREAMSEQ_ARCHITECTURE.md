@@ -93,6 +93,25 @@ publication. The helper returns a bounded candidate and owns no document, plugin
 history or audio callback. Windows and Mac retain their native publication/state
 and history adapters; extraction does not change the public parameter API.
 
+### Live precise-note publication
+
+`PreciseNoteSchedule` is an immutable control-owner preparation, separate from
+the renderer's runtime cursor and held-voice state. Windows prepares supported
+precise-note changes and their ordinary-cell companions before committing native
+document history. A marker in the ordinary-cell FIFO orders schedule adoption
+against other pattern edits. The callback adopts at a render boundary, seeks the
+current musical position without replaying past onsets, and leaves retirement to
+the producer. Capacity refusal precedes model/history publication. Structural
+edits outside this bounded path retain their existing transport restrictions.
+
+The Windows retained timeline uses this path for automatic edits and live
+Undo/Redo. Native Save and song history finish an existing valid field intent;
+invalid or uncertain drafts are not replayed. Playback telemetry is separate from
+selection/focus. The Mac renderer shares the prepared schedule machinery; this
+does not imply its native session uses the new Windows live-edit admission path.
+Windows qualification of this source batch remains pending in the
+[precise-note report](windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md).
+
 Transient rack slider ownership lives in `editor/ParameterPreviewOwner.hpp`.
 It binds one gesture token to a stable plugin/parameter, document revision and
 native host generation. Windows `ParameterPreviewOperations.inc` and Mac
