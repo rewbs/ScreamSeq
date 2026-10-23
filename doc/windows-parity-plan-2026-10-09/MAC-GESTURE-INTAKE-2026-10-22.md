@@ -2232,3 +2232,68 @@ architectures. Return legs using each Mac artifact and the exact retained Window
 binary were separately accepted at04:55 UTC; `correlated-return-{arm,intel}`
 receipts identify each request. They are not new builds. Inspect each terminal
 result and artifact hashes/reports before claiming reciprocal preservation.
+
+### Recording feedback checkpoint and reciprocal completion (23 October, 05:12 UTC)
+
+The next coordinated checkpoint compiled `c900d2b2e3a8b96bc6b32d72ebd69e0eb70fef4f`
+once locally, starting04:57:47 UTC, with the PR7 push at the same checkpoint.
+Local ARM64 Release build and both targeted native groups passed (workspace
+plugin controls and MIDI recording window, including retained busy Apply).
+All six actual-app cases passed: the composed fixture, sample-layered VST3
+composing/recording journey and four MIDI window cases. Exact lifecycle footer
+assertions passed, as did occupied-envelope protection, recording/history and
+save/reopen assertions. No prior audio-renderer suite was repeated: renderer
+inputs are unchanged from68c2d177e. Receipts are under
+`bin/mac-gesture-20261022/recording-feedback/{build,checks}.json`.
+
+Fresh isolated PID29216, on this exact executable, completed Params → Recording,
+Discard → fresh Record, Balance slider capture, Stop recording and Keep. Two
+inputs were retained with original timestamp3329972293430 and value44.8; no
+loss acknowledgment was required. Stop recording retained playback; Keep
+released the take and enabled Undo. Closing the two review windows visibly
+confirmed the corrected Main footer, `Plugin automation take kept`. API reads
+are retained in `foreground/{discarded,stopped,kept}.json`.
+
+After stopping playback, visible MIDI Arm/Apply and Disarm/Apply succeeded.
+Computer Use exposes this floating window only as related UI; sending Ctrl+Enter
+to Main reactivated Main instead of applying the floating draft. This is **not**
+a fresh live MIDI keyboard pass or evidence that the application dropped the
+command. Native and actual-app keyboard gates passed separately. Docked search
+keyboard continuity was checked live on this executable: `gain`, Tab to the
+parameter selector, Shift+Tab back and Backspace to `gai`, retaining `FOCUS plugins`.
+The owned process closed normally with exit0, the original fixture and binary
+unchanged, and no musician process or audio default changed.
+
+The508.167s foreground session used silent48000Hz/480-frame output and reported
+17 deadline overruns, max service14073.8us, zero device errors/starvation and
+`realtimeAuditPassed=false`. It remains performance-unqualified. No temporal
+flicker, Narrator, fresh200percent DPI or floating-field keyboard claim is made.
+The functional receipt explicitly retains these limits. The separately packaged
+candidate is:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-c900d2b2e/ScreamSeq.exe`
+with SHA256 `df848545b6d6c3aacaa72b562e1f2f18280801b6b899c2d479829acd0861da90`.
+Scanner/runtime/notices/provenance are included; copied hashes and both ARM64
+PE machine identities were verified. No main merge occurred.
+
+The reciprocal preservation exchange is now **verified**, not merely dispatched.
+Run39902478513 passed Windows → Mac ARM and Intel; return runs39902945778 and
+39902967160 passed each edited Mac artifact back through the retained Windows
+application. Four legs each passed ten fixture checks across no-edit, edited,
+metadata, history and envelope-bank reports. The verifier checked GitHub archive
+digests, every report digest, unchanged binary/input records and exact prior
+exchange receipt hashes. Evidence is
+`correlated-boundaries/reciprocal-verification.json` plus the downloaded archives.
+CI compiled merge object9fc716a12cbcdf55d96f01dab488b88589e0b584, whose Git tree
+c95080df090b85b42ce246adc78274ef8f984460 is identical to source68c2d177e; this
+distinction corrects shorthand references to the compiled head above. These
+results apply to that source and to unchanged persistence code, not to unrelated
+native UI or device behavior.
+
+At05:12 UTC the current Windows run39903133025 and Mac run39903133011 are still
+building. Do not restart them. Their latest actual start was04:58:20 UTC, so the
+next build cannot start before05:58:20 UTC, subject to checking later starts and
+avoiding overlapping checkpoints. In particular, do not declare the prior x64
+MIDI failure closed until the new job result is inspected. Required remaining
+integration work includes that Windows gate, native device/vendor qualification,
+Mac guarded restoration and the audio performance investigation. Mac stopped-only
+release and closed-editor opaque Discard guards remain in place.
