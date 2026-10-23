@@ -197,7 +197,7 @@ private:
         bool armOnly=true;for(const auto *key:{"source","channelsCount","quantization","latencyMS"})if(applied.at(key)!=beforeSettings.at(key))armOnly=false;
         settings_=std::move(applied);state_["settings"]=settings_;draftArmed_=settings_.at("armed").get<bool>();
         if(!dirty_)savedFields();
-        else if(armOnly&&baseRevision_==beforeSettings.at("revision"))baseRevision_=settings_.at("revision").get<std::string>();
+        else if(armOnly&&baseRevision_==beforeSettings.at("revision").get<std::string>())baseRevision_=settings_.at("revision").get<std::string>();
       }
       else if(operation==Operation::finish){if(callbacks_.finish)callbacks_.finish(identity);}
       else if(operation==Operation::discard){if(callbacks_.discard)callbacks_.discard(identity);}

@@ -21,7 +21,7 @@
       require(!collision(item,selected_),"Retriggers overlap another hit");copies.push_back(std::move(item));}
     draft_.erase(draft_.begin()+selected_);for(const auto &item:copies)draft_.push_back(item);++generation_;
     toolsBaseline_["repeatCount"]=utf8(field(repeatCount));toolsBaseline_["endVelocity"]=utf8(field(endVelocity));
-    refresh(copies[0]);status(L"Retriggers added / Apply saves them together");
+    refresh(copies[0]);status(L"Saving retriggers as one edit");
   }
   void action(int id,unsigned notification)override{
     if(setting_||id==detailsText)return;

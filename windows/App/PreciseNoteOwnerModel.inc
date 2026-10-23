@@ -203,5 +203,5 @@
     // No automatic second read or write. Request adapter publishes its completed view before return.
     revision_=after.revision;if(!dryRun){events_=std::move(replacement);original_=submitted;moveLegacyEffect_=false;
       if(generation_==generation){pointBaseline_=raw;toolsBaseline_["replaceLegacy"]=replaceLegacy_;}}
-    status(generation_!=generation?L"Newer raw fields retained / Apply to save them":dryRun?L"Valid draft / Check does not play audio or save":L"Precise notes saved / document Undo available");
+    status(generation_!=generation?L"Newer raw fields retained / Save now to review and save":dryRun?L"Valid draft / Check does not play audio or save":L"Precise notes saved / document Undo available");
   }

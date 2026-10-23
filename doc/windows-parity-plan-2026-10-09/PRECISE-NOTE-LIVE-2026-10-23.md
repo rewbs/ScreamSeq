@@ -102,3 +102,35 @@ stage reported 18 failures / one optional skip, involving playback/recording/
 audition on a runner reporting no WASAPI endpoints; the later 39- and 18-case
 stages passed. Preserve these failures as unqualified device evidence. No reruns,
 assertion weakening or new CI dispatch occurred during this inspection.
+
+## First precise candidate: compile failure and correction
+
+Frozen `f28a6eff8c2280a078e5b42b8025cbff6ab3823a` was pushed to PR7 and built
+once at 05:58:40 UTC. `bin/mac-gesture-20261022/precise-live/build.json` and
+`build.log` preserve the attempt. Configuration passed; compilation stopped at
+`MidiRecordingWindow.hpp:200` with MSVC C7692: the preceding immediate-arm
+change compared a `std::string` against a JSON revision. No application hash,
+automated acceptance or fresh foreground qualification was produced. Do not run
+that folder's check/launch/package scripts against an older executable.
+
+The correction explicitly extracts the revision as `std::string`. It also makes
+the remaining precise-editor status text consistent with automatic saves and
+the **Save now** action, and adds two native timer regressions: busy admission
+waits without a submission then saves once with caret retained; an acknowledged
+document commit followed by a failed reply retains the draft and never repeats
+the write. Explicit recapture reconciles that uncertain result. These assertions
+remain unrun and must pass in the next candidate.
+
+The same frozen commit started Mac ARM at 05:58:59, Mac Intel at 05:59:09 and
+Windows x64 at 05:59:10 UTC. Runs 39908756862 / 39908756796 were still running
+at 05:59:43. The next coordinated checkpoint is **not before 06:59:10 UTC**,
+and must inspect `inspect-precise-live-ci.py` for final results and later starts
+before proceeding. Do not restart those jobs or rebuild to bypass the limit.
+
+Use the separate `precise-live-correction` receipts for the corrected source.
+Retain the same five native groups and actual-app selection, with the added
+timer assertions included in the precise-window group. After passing, the
+foreground helper prepares only a disposable, silent row-loop process; verify
+real double-click, Backspace, typing and Tab/Shift+Tab, cursor advancement and
+unchanged transport. Preserve the musician's running c900 package/process.
+The previous usable executable does **not** include these timeline changes.

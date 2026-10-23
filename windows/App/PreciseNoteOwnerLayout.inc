@@ -2,7 +2,7 @@
   bool shortLayout_=false;
   std::wstring displayStatus()const{
     if(!hasTarget())return L"Choose a row / Tools → Load selection";
-    if(!current())return L"Song changed / draft retained / Reload captured before Apply";
+    if(!current())return L"Song changed / draft retained / Reload captured before editing";
     return status_;
   }
   int pageForControl(int id)const{

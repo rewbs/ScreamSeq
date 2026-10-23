@@ -257,6 +257,28 @@ void immediateTimelineAndPlayback(Owner &owner){
   f.tool.playback("other",0,2*256+64,true);require(f.tool.snapshot().at("playbackOffset").is_null(),"Foreign document cursor leaked into retained editor");
   f.tool.playback("doc-a",0,2*256+64,false);require(f.tool.snapshot().at("playbackOffset").is_null(),"Stopped cursor remained visible");
 }
+void automaticAdmissionAndUncertainReply(Owner &owner){
+  const auto tick=[](Fixture &f){SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);};
+  {
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+    f.current.busy=true;tick(f);tick(f);
+    require(f.submissions.empty()&&f.writes==0&&f.tool.retainedDraft(),"Busy admission submitted or discarded a queued precise field edit");
+    f.current.busy=false;tick(f);tick(f);
+    require(f.submissions.size()==1&&f.writes==1&&!f.tool.retainedDraft()&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1},
+      "Deferred precise field edit did not save exactly once with its caret retained");
+  }
+  {
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    // This double commits before its reply fails: automatically retrying it
+    // could duplicate history or overwrite a newer edit in a real session.
+    f.beforeReply=[](const auto &method,Json &){if(method=="pattern.notes.set")throw std::runtime_error("Lost acknowledgement after commit");};
+    tick(f);const auto saved=f.saved;tick(f);tick(f);
+    require(f.submissions.size()==1&&f.writes==1&&f.saved==saved&&f.tool.retainedDraft(),"Uncertain precise write was retried or its draft disappeared");
+    f.beforeReply={};f.tool.reloadCaptured();
+    require(!f.tool.retainedDraft()&&f.tool.snapshot().at("selectedEvent").at("velocity")==94,"Explicit recapture did not reconcile the acknowledged song state");
+  }
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -502,6 +524,7 @@ int wmain(int argc,wchar_t **argv){try{
     pendingNewerRawAndFocus(owner);std::cout<<"PASS precise-note pending newer raw generation and native focus ownership\n";
     nativeTimelineKeysDragAndCancel(owner);std::cout<<"PASS precise-note DPI-scaled timeline drag/cancel and local keyboard ownership\n";
     immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
+    automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";
