@@ -26,6 +26,7 @@ private:
   RecordedGestureBoundary::Cuts stoppedCuts_;
   std::map<std::string,PluginEditorInputBarrier> inputBarriers_;
   std::unique_ptr<AudioDevice::StoppedPluginRepair> stoppedRepair_;
+  std::optional<AudioDevice::PluginPreviewCancellation> processingRestoration_;
   size_t previewedEvents_=0;
   bool entering_=false;
   struct Entry {
@@ -118,7 +119,7 @@ private:
         "Plugin input changed or remains undrained after Stop; input and take retained");
     }
   }
-  bool restorePreviewImpl(bool discard) {
+  std::vector<AudioDevice::ParameterPreviewOwner> restorationTargets(bool discard)const {
     require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
     std::vector<AudioDevice::ParameterPreviewOwner> targets;targets.reserve(take_->targetCount());
     const auto providers=take_->providers();
@@ -128,7 +129,33 @@ private:
       require(provider!=providers.end(),"Parameter target lost its native provider");
       targets.push_back({key.plugin,key.parameter,provider->source.incarnation});
     }
-    return audio_.cancelPluginParameterPreviews(hostEpoch_,targets);
+    return targets;
+  }
+  bool restorePreviewImpl(bool discard) {
+    return audio_.cancelPluginParameterPreviews(hostEpoch_,restorationTargets(discard));
+  }
+  // Leases span one native-owner attempt only. Pending audio work must never
+  // leave a vendor editor disabled while waiting for the next callback.
+  template<class Restore> bool restoreProtected(bool discard,Restore &&restore) {
+    require(!awaitingDiscardCleanup(),"Finish adopted opaque Discard cleanup before ordinary restoration");
+    require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
+    releaseInputBarriers();
+    requireRestorationCut();
+    for(const auto &[identity,catalog]:catalogs_)inputBarriers_.emplace(identity,PluginEditorInputBarrier{});
+    try {
+      for(auto &[identity,barrier]:inputBarriers_) {
+        const auto acquired=audio_.beginPluginInputBarrier(slot(identity));
+        require(acquired.has_value(),"Plugin cannot protect native input during take restoration");barrier=*acquired;
+      }
+      requireRestorationCut();
+      if(!restore()){releaseInputBarriers();return false;}
+      requireRestorationCut();
+      releaseInputBarriers();
+      requireRestorationCut();
+      return true;
+    } catch(...) {
+      const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
+    }
   }
   bool finishStoppedDiscard(std::span<const PluginState> saved) {
     require(awaitingDiscardCleanup(),"No adopted opaque Discard to finish");
@@ -276,28 +303,42 @@ public:
   // editor copy as the Windows adapter does. This method never drops input.
   bool restoreRetained(bool discard,const std::function<void()> &verifyNativeState) {
     Entry entry(entering_);
-    require(!awaitingDiscardCleanup(),"Finish adopted opaque Discard cleanup before ordinary restoration");
     require(bool(verifyNativeState),"Native take restoration needs saved-state verification");
-    require(take_->completed()||(discard&&take_->endTime()),"Keep or explicitly discard a stopped take before restoration");
-    releaseInputBarriers(); // Finish any earlier failed cleanup before reacquiring.
-    requireRestorationCut();
-    // Allocate the complete token map before freezing any native editor.
-    for(const auto &[identity,catalog]:catalogs_)inputBarriers_.emplace(identity,PluginEditorInputBarrier{});
-    try {
-      for(auto &[identity,barrier]:inputBarriers_) {
-        const auto acquired=audio_.beginPluginInputBarrier(slot(identity));
-        require(acquired.has_value(),"Plugin cannot protect native input during take restoration");barrier=*acquired;
-      }
-      requireRestorationCut(); // Vendor calls may pump input while acquiring leases.
-      if(!restorePreviewImpl(discard)){releaseInputBarriers();return false;}
+    return restoreProtected(discard,[&] {
+      if(!restorePreviewImpl(discard))return false;
       verifyNativeState(); // Fallible session work; the take remains recoverable.
-      requireRestorationCut();
-      releaseInputBarriers();
-      requireRestorationCut(); // Re-enabling native input can execute vendor code.
       return true;
-    } catch(...) {
-      const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
-    }
+    });
+  }
+  // Non-blocking prerequisite for live release. Verification MUST be a qualified
+  // non-flushing observation/canonicalization path; ordinary state() is unsafe
+  // here. This does not release ownership or change the original Stop cuts.
+  bool restoreAfterProcessing(bool discard,const std::function<void()> &verifyNativeState) {
+    Entry entry(entering_);
+    require(bool(verifyNativeState),"Native processing restoration needs saved-state verification");
+    using State=PluginChain::PreviewCancellationState;
+    const auto validateReceipt=[&] {
+      const auto state=audio_.pluginPreviewCancellationState(*processingRestoration_);
+      if(state==State::Invalid) {
+        processingRestoration_.reset();
+        throw std::runtime_error("Native controls or provider changed during restoration; take retained for a fresh guarded retry");
+      }
+      return state;
+    };
+    const bool restored=restoreProtected(discard,[&] {
+      if(!processingRestoration_) {
+        auto next=audio_.cancelPluginParameterPreviewsTracked(hostEpoch_,restorationTargets(discard));
+        if(!next)return false;
+        processingRestoration_=std::move(next);
+      }
+      if(validateReceipt()==State::Pending)return false;
+      verifyNativeState();
+      require(validateReceipt()==State::Processed,"Native restoration lost its processing acknowledgement; take retained");
+      return true;
+    });
+    // Releasing a vendor's lease can pump native work as well.
+    if(restored)require(validateReceipt()==State::Processed,"Native controls changed while releasing input protection; take retained");
+    return restored;
   }
   // Safe stopped subset of release. Keep can publish while playing, but this
   // verification must not call a VST3 state() implementation that flushes a

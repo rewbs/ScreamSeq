@@ -108,3 +108,59 @@ actual build starts and completion of preceding jobs.
 The delivered precise-note executable remains
 `~/Downloads/ScreamSeq-Windows-ARM64-precise-cc5553aab/ScreamSeq.exe`, SHA256
 `940df0bfe7263f1d60527a50ec679740674b5b6d2b80fdc05b117654c1f3ba33`.
+
+## Native take integration prepared after the shared receipt
+
+This subsequent source batch adds `AudioDevice::PluginPreviewCancellation`,
+guarded by device identity, host epoch and retained chain identity. Submission
+never joins, drains or starts the device. A stopped device with queued controls
+correctly remains Pending; existing stopped restoration remains its supported
+product path. Invalid identities are rejected before submission.
+
+`NativeParameterTake::restoreAfterProcessing` retains that receipt across native
+owner attempts. It acquires full-group input protection, rechecks the original
+Stop cuts and submits cancellation once. Pending returns without saved-state
+verification and releases native input protection, leaving vendor editors usable.
+A successful processing acknowledgement permits a supplied **non-flushing**
+verification callback. The receipt and fixed cuts are checked around verification
+and again after lease cleanup. An invalid receipt is retired on the control owner
+and reported as a retained-take refusal; a later guarded retry can prepare anew.
+No attempt consumes later native input, rebases a Stop cut or releases the take.
+
+The existing synchronous/stopped restoration and the new method share their
+input-lease acquisition/cleanup implementation. Their external contracts remain
+different: the former's verification callback owns stopped queue/state work,
+whereas the new callback must never use ordinary live vendor `state()`.
+
+Source inspection also found a reentrancy lifetime gap in the new observation
+adapter. Checking an epoch after a vendor callback is too late if that callback
+deleted the chain executing the observation. Mac `AudioDevice` now retains its
+chain through shared ownership on the native control owner. A processing-state
+observation retains the old chain for the call, then rejects changed host/epoch.
+The audio callback only borrows this owner; it performs no shared-pointer copy,
+retirement or reference-count operation. Stopped/play/setPlugins still join
+processing before replacing the active chain. Retained receipts are control-owned
+and must be retired there, never from the callback; they deliberately preserve
+the original providers until the native owner has handled the result.
+
+Additional native tests cover wrong-device/old-epoch receipts, stopped queue
+delivery staying Pending, a vendor state callback replacing the host, fresh-host
+retry, AU and VST3 pending take restoration with no premature verification,
+post-Stop input refusal, and input-lease cleanup while waiting. Empty-take
+verification tests cover success, thrown verification and retry without inventing
+audio work or releasing take ownership. Existing grouped lease, hidden-state,
+native editor, stopped restoration and full session history checks remain.
+
+**Product integration remains intentionally incomplete:** session/API release
+still uses the stopped verifier. Next implement disposable-provider
+canonicalization of non-flushing observations against accepted manual baselines,
+including complete layout/catalogue/hidden-state checks and full-group revision
+revalidation. Then connect the new non-blocking method to native release and
+qualify the actual live journey. AU observation capability still requires its own
+native contract/evidence. Do not call this complete live Keep/Discard parity.
+
+At 10:38 UTC the preceding `cc5553aab` Mac ARM job completed successfully;
+Intel and Windows compilation had passed and their tests were still running.
+Their exact jobs remain `120356129375`, `120356129012`, `120356129861`. Do not
+redispatch them. The earliest next build gate remains 11:02:24 UTC, with fresh
+receipt/actual-start checks required before dispatch.

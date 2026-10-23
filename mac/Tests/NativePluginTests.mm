@@ -216,6 +216,9 @@ static void nativeTakeIntake(const PluginState &state,bool visible=false,bool la
     check(refused&&!verified&&owner.owns(state.instanceID)&&slider.enabled&&
       std::abs(audio.pluginParameters(0).at(0).value-.7f)<1e-6,
       "Restoration consumed a later native suffix, changed preview or left input disabled");
+    refused=false;try{owner.restoreAfterProcessing(true,[&]{verified=true;});}catch(const std::exception &){refused=true;}
+    check(refused&&!verified&&owner.owns(state.instanceID)&&slider.enabled,
+      "Processing restoration consumed later native input or left its editor disabled");
     auto next=std::make_shared<RecordedGestureTake>("refused-native-arm","revision",mach_absolute_time(),timeline,rack,std::span<const ParameterChange>{},providers);
     refused=false;try{NativeParameterTake refusedOwner(audio,next,[&]{return NativeParameterTake::Context{revision,timeline->generation()};},rack,{});}
     catch(const std::exception &){refused=true;}
@@ -236,6 +239,11 @@ static void nativeTakeIntake(const PluginState &state,bool visible=false,bool la
     check(audio.endPluginInputBarrier(0,*lease),"Release explicit fixture cleanup lease");
   } else {
     bool verified=false,protectedEditor=!visible;refused=false;
+    check(!owner.restoreAfterProcessing(true,[&]{verified=true;})&&!verified&&owner.owns(state.instanceID)&&(!visible||slider.enabled),
+      "Pending native cancellation verified state, released ownership or retained an input lease");
+    (void)audio.pluginParameters(0); // Delivers queued values without rendering.
+    check(!owner.restoreAfterProcessing(true,[&]{verified=true;})&&!verified&&owner.owns(state.instanceID)&&(!visible||slider.enabled),
+      "Native take mistook stopped queue delivery for real plugin processing");
     try{owner.restoreRetained(true,[&]{
       verified=true;
       if(visible)protectedEditor=!slider.enabled&&window.visible;
@@ -370,6 +378,25 @@ static void nativeTakeGroupedRestoration(const PluginState &first,const PluginSt
     "Hidden-state verification released a partial take or replaced its providers");
   check(owner.restoreStopped(true,rack),"Stopped native baseline verification could not retry after hidden-state refusal");
   check(owner.owns(first.instanceID)&&take->eventCount()==2,"Native verification silently dropped session ownership or input");
+}
+static void emptyTakeProcessedRestoration(const PluginState &state) {
+  AudioDevice audio;audio.setPlugins({state});
+  const auto arm=mach_absolute_time();auto timeline=std::make_shared<RecordingFrameTimeline>();
+  check(timeline->publish(arm,arm+1,0,1,48000,41),"Prepare empty take restoration clock");
+  const std::array<PluginState,1> rack{state};
+  const std::array<RecordedGestureTake::Provider,1> providers{{{state.instanceID,audio.pluginEditSource(0)}}};
+  auto take=std::make_shared<RecordedGestureTake>("empty-native-take","revision",arm,timeline,rack,std::span<const ParameterChange>{},providers);
+  NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{"revision",timeline->generation()};},rack,{});
+  const auto end=owner.stop();check(timeline->publish(arm+1,end,1,479,48000,41),"Seal empty take restoration clock");
+  NativeSong native;check(owner.poll(native)&&!take->targetCount(),"Empty take unexpectedly acquired musical targets");
+  bool verified=false,refused=false;
+  try{owner.restoreAfterProcessing(true,[&]{verified=true;throw std::runtime_error("Fixture verification failure");});}
+  catch(const std::runtime_error &){refused=true;}
+  check(verified&&refused&&owner.owns(state.instanceID)&&!audio.active(),"Failed empty-take verification released native ownership");
+  const auto lease=audio.beginPluginInputBarrier(0);check(lease&&audio.endPluginInputBarrier(0,*lease),
+    "Failed processing verification retained native input protection");
+  verified=false;check(owner.restoreAfterProcessing(true,[&]{verified=true;})&&verified&&owner.owns(state.instanceID)&&
+    !take->eventCount()&&!audio.active(),"Processed empty take failed retry or silently released ownership");
 }
 static void nativeTakeAtomicPublication(const PluginState &first,const PluginState &second) {
   AudioDevice audio;audio.setPlugins({first,second});
@@ -597,6 +624,8 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       nativeTakeAtomicPublication(saved,closedAU);
       nativeTakeIntake(saved);
       nativeTakeIntake(closedAU);
+      emptyTakeProcessedRestoration(saved);
+      emptyTakeProcessedRestoration(closedAU);
       nativeTakeExplicitDiscard(saved);
       nativeTakeExplicitDiscard(closedAU);
       NativePlugin recalled(saved, 48000);

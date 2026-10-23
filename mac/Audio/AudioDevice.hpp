@@ -17,7 +17,9 @@ class AudioDevice {
   std::shared_ptr<RecordingFrameTimeline> frameTimeline_;
   uint64_t captureGeneration_=0;
   bool captureFrames_=false;
-  std::unique_ptr<PluginChain> plugins_;
+  // Native-owner operations retain this chain across reentrant vendor calls.
+  // The callback borrows it without copying or releasing shared ownership.
+  std::shared_ptr<PluginChain> plugins_;
   uint64_t pluginEpoch_=0;
   std::vector<PluginState> pluginStates_;
   std::vector<size_t> pendingEditors_;
@@ -100,6 +102,17 @@ public:
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
   struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
   struct PluginStateOwner {std::string plugin;PluginEditSource source;};
+  class PluginPreviewCancellation {
+    friend class AudioDevice;
+    const AudioDevice *owner_=nullptr;
+    uint64_t epoch_=0;
+    std::shared_ptr<PluginChain> chain_;
+    PluginChain::ParameterPreviewCancellation hosted_;
+  };
+  // Does not join, drain or start processing. A stopped host with queued work
+  // stays Pending; use the existing stopped restoration path in that case.
+  std::optional<PluginPreviewCancellation> cancelPluginParameterPreviewsTracked(uint64_t,std::span<const ParameterPreviewOwner>);
+  PluginChain::PreviewCancellationState pluginPreviewCancellationState(const PluginPreviewCancellation &) const noexcept;
   // Native owner only; caller protects the retained take/input cuts. Unlike
   // ordinary state(), this never stops/joins audio or drains control queues.
   std::optional<NativePlugin::ProcessingState> pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &);

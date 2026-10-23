@@ -57,6 +57,9 @@ static void changeProcessingObservationOwner(){processingObservationHookOwner->b
 static PluginChain *processingObservationHookChain=nullptr;
 static uint32_t processingObservationHookParameter=0;
 static bool processingObservationQueued=false;
+static AudioDevice *processingObservationDevice=nullptr;
+static const std::vector<PluginState> *processingObservationReplacement=nullptr;
+static void replaceHostDuringProcessingObservation(){processingObservationDevice->setPlugins(*processingObservationReplacement,{},false);}
 static void queueDuringProcessingObservation(){
   processingObservationQueued=processingObservationHookChain->parameter(0,processingObservationHookParameter,.4f);
 }
@@ -73,7 +76,7 @@ static void facadeProcessingStateObservation(const PluginState &saved,const Plug
   check(observed&&observed->source==source&&observed->state==accepted,
     "Facade state observation lost the provider, stable identity, layout or opaque state");
   processingObservationHookOwner=&plugin;
-  struct Reset {decltype(hook) clear;~Reset(){clear(nullptr);processingObservationHookOwner=nullptr;processingObservationHookChain=nullptr;}} reset{hook};
+  struct Reset {decltype(hook) clear;~Reset(){clear(nullptr);processingObservationHookOwner=nullptr;processingObservationHookChain=nullptr;processingObservationDevice=nullptr;processingObservationReplacement=nullptr;}} reset{hook};
   hook(changeProcessingObservationOwner);
   bool refused=false;try{(void)plugin.processingState();}catch(const std::runtime_error &){refused=true;}
   check(refused&&plugin.bypassed()&&plugin.editSource()==source,
@@ -142,4 +145,27 @@ static void facadeProcessingStateObservation(const PluginState &saved,const Plug
     check(refused&&audio.pluginStates()==deviceBaseline&&!audio.active(),
       "Wrong observation epoch, provider or plugin changed native state or transport");
   }
+  const std::array<AudioDevice::ParameterPreviewOwner,1> owned{{{saved.instanceID,parameterID,owner.source.incarnation}}};
+  const auto cleanReceipt=audio.cancelPluginParameterPreviewsTracked(epoch,owned);
+  check(cleanReceipt&&audio.pluginPreviewCancellationState(*cleanReceipt)==CancellationState::Processed&&!audio.active(),
+    "Device clean cancellation invented processing or activated output");
+  check(audio.previewPluginParameters(preview),"Device tracked preview fixture failed");
+  check(audio.pluginPreviewCancellationState(*cleanReceipt)==CancellationState::Invalid,"Device receipt ignored newer input");
+  const auto deviceReceipt=audio.cancelPluginParameterPreviewsTracked(epoch,owned);
+  check(deviceReceipt&&audio.pluginPreviewCancellationState(*deviceReceipt)==CancellationState::Pending&&!audio.active(),
+    "Device receipt acknowledged publication or started an output device");
+  (void)audio.pluginParameters(0); // Stopped host delivery; never actual processing.
+  check(audio.pluginPreviewCancellationState(*deviceReceipt)==CancellationState::Pending,
+    "Device catalogue observation acknowledged queued native processing");
+  AudioDevice otherDevice;otherDevice.setPlugins({saved,au});
+  check(otherDevice.pluginPreviewCancellationState(*deviceReceipt)==CancellationState::Invalid,
+    "Another device adopted a retained native receipt");
+  const std::vector<PluginState> replacement{saved,au};
+  processingObservationDevice=&audio;processingObservationReplacement=&replacement;hook(replaceHostDuringProcessingObservation);
+  refused=false;try{(void)audio.pluginProcessingState(epoch,owner);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&audio.pluginEpoch()!=epoch&&!audio.active()&&audio.pluginStates()==deviceBaseline&&
+    audio.pluginPreviewCancellationState(*deviceReceipt)==CancellationState::Invalid,
+    "Reentrant host replacement used a retired chain, changed the new host, or kept an old receipt valid");
+  const AudioDevice::PluginStateOwner newOwner{saved.instanceID,audio.pluginEditSource(0)};
+  check(audio.pluginProcessingState(audio.pluginEpoch(),newOwner).has_value(),"Fresh replacement host could not be observed");
 }

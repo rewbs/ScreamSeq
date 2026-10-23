@@ -172,7 +172,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
   // flattening its channel inserts onto this raw preview.
   plugins_ = isolatedSample || (pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty())))
                  ? nullptr
-                 : std::make_unique<PluginChain>(pluginStates_, sampleRate_, false, automation_,
+                 : std::make_shared<PluginChain>(pluginStates_, sampleRate_, false, automation_,
                                                  uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
   ++pluginEpoch_;
   if (plugins_)
@@ -211,7 +211,7 @@ void AudioDevice::restoreParameterActivity() {
 void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::vector<ParameterChange> &automation,
                              bool preserveEditors) {
   pendingEditors_ = preserveEditors && plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
-  auto next = states.empty() ? nullptr : std::make_unique<PluginChain>(states, sampleRate_, false, automation);
+  auto next = states.empty() ? nullptr : std::make_shared<PluginChain>(states, sampleRate_, false, automation);
   stop();
   renderer_.reset();
   plugins_ = std::move(next);
@@ -256,18 +256,40 @@ std::vector<PluginState> AudioDevice::pluginStates() {
   return pluginStates_;
 }
 std::optional<NativePlugin::ProcessingState> AudioDevice::pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &owner) {
+  const auto retained=plugins_; // A vendor callback may replace the active host.
   const auto validate=[&]()->size_t {
-    if(!plugins_||pluginEpoch_!=expectedEpoch||owner.plugin.empty()||!owner.source.incarnation)
+    if(!retained||plugins_!=retained||pluginEpoch_!=expectedEpoch||owner.plugin.empty()||!owner.source.incarnation)
       throw std::runtime_error("Processing-state observation belongs to a replaced native host");
     const auto index=pluginSlot(owner.plugin);
     if(!index||plugins_->editSource(*index)!=owner.source)
       throw std::runtime_error("Processing-state observation belongs to another native provider");
     return *index;
   };
-  const auto index=validate();auto observed=plugins_->processingState(index);
+  const auto index=validate();auto observed=retained->processingState(index);
   if(validate()!=index||(observed&&observed->source!=owner.source))
     throw std::runtime_error("Native provider moved during processing-state observation");
   return observed;
+}
+std::optional<AudioDevice::PluginPreviewCancellation> AudioDevice::cancelPluginParameterPreviewsTracked(
+    uint64_t expectedEpoch,std::span<const ParameterPreviewOwner> owners) {
+  if(!plugins_||pluginEpoch_!=expectedEpoch||owners.size()>4096)return std::nullopt;
+  PluginPreviewCancellation receipt;receipt.owner_=this;receipt.epoch_=expectedEpoch;receipt.chain_=plugins_;
+  std::vector<PluginChain::ParameterPreviewTarget> targets;targets.reserve(owners.size());
+  for(const auto &owner:owners) {
+    const auto index=pluginSlot(owner.plugin);
+    if(!index||*index>UINT32_MAX||!owner.provider||receipt.chain_->editSource(*index).incarnation!=owner.provider)
+      return std::nullopt;
+    targets.push_back({uint32_t(*index),owner.parameter});
+  }
+  auto hosted=receipt.chain_->cancelParameterPreviewsTracked(targets);
+  if(!hosted)return std::nullopt;
+  receipt.hosted_=std::move(*hosted);
+  return std::optional<PluginPreviewCancellation>{std::move(receipt)};
+}
+PluginChain::PreviewCancellationState AudioDevice::pluginPreviewCancellationState(const PluginPreviewCancellation &receipt) const noexcept {
+  if(receipt.owner_!=this||receipt.epoch_!=pluginEpoch_||!receipt.chain_||receipt.chain_!=plugins_)
+    return PluginChain::PreviewCancellationState::Invalid;
+  return receipt.chain_->parameterPreviewCancellationState(receipt.hosted_);
 }
 void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
     std::span<const PluginState> saved) {
