@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "PluginParameterField.hpp"
 #include <cwctype>
 
 namespace ScreamSeq {
@@ -65,7 +66,11 @@ private:
     if(dirty_&&!fields_)commit();
   },delay);}
   void changed(){dirty_=true;++generation_;rebuild();status(L"Saving song automation…");if(!dragging_)queueLaneEdit();}
-  void showPoint(){setting_=true;set(pointIndex,selected_);if(selected_>=0&&size_t(selected_)<points_.size()){const auto &p=points_[size_t(selected_)];set(time,p.at("frame").get<double>()/(unit_==0?48000:1));set(value,p.at("value"));}else{set(time,L"0");set(value,target()?target()->at("value"):Json(0));}fields_=false;setting_=false;}
+  void showPoint(){setting_=true;set(pointIndex,selected_);double shownValue=target()?target()->at("value").get<double>():0;
+    if(selected_>=0&&size_t(selected_)<points_.size()){const auto &p=points_[size_t(selected_)];set(time,p.at("frame").get<double>()/(unit_==0?48000:1));shownValue=p.at("value").get<double>();}else set(time,L"0");
+    // Reuse the rack's round-tripping native-scalar formatting. This changes
+    // only generated text; the automatic-edit owner still protects raw input.
+    set(value,wide(PluginParameterField::editableText(shownValue,minimum(),maximum())));fields_=false;setting_=false;}
   void selectParameter(uint32_t id){parameter_=id;points_=Json::array();for(const auto &p:all_)if(p.at("slot")==slot_&&p.at("id")==id)points_.push_back({{"frame",p.at("frame")},{"value",p.at("value")}});std::sort(points_.begin(),points_.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});selected_=points_.empty()?-1:0;dirty_=fields_=false;++generation_;showPoint();fitCurve();const auto p=target();set(targetLabel,p?wide(p->at("name").get<std::string>())+L" · "+wide(p->value("unitLabel",std::string()))+L" · native values "+std::to_wstring(minimum())+L" to "+std::to_wstring(maximum()):L"No parameter");}
   void filter(){auto term=field(search);std::transform(term.begin(),term.end(),term.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});filtered_.clear();int selected=-1;SendMessageW(controls_.at(parameters),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_RESETCONTENT,0,0);for(size_t i=0;i<catalog_.size();++i){auto name=wide(catalog_[i].at("name").get<std::string>()),folded=name;std::transform(folded.begin(),folded.end(),folded.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});if(!term.empty()&&folded.find(term)==std::wstring::npos)continue;if(parameter_&&catalog_[i].at("id")==*parameter_)selected=int(filtered_.size());filtered_.push_back(i);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_SETCURSEL,selected,0);SendMessageW(controls_.at(parameters),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(parameters),nullptr,FALSE);}
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_RESETCONTENT,0,0);for(size_t i=0;i<captured_.plugins.size();++i){const auto name=wide(captured_.plugins[i].at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(captured_.plugins[i].at("instanceID")==pluginID_)choose(plugin,int(i));}setting_=false;filter();}
@@ -117,7 +122,11 @@ private:
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)fitCurve();else if(id==zoomIn||id==zoomOut)canvas_.zoom(id==zoomIn?2:.5,604801);else canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),604801);showRange();rebuild();}
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelected_;++generation_;showPoint();rebuild();ReleaseCapture();}
-  void mouse(UINT m,float x,float y,WPARAM)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_||fields_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
+  void mouse(UINT m,float x,float y,WPARAM)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
+    if((m==WM_LBUTTONDOWN&&hit.contains(x,y))||(m==WM_LBUTTONDBLCLK&&r.contains(x,y))){
+      flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before editing the timeline");
+    }
+    if(fields_)return;
     if(m==WM_LBUTTONDOWN&&hit.contains(x,y)){SetFocus(window_);const auto i=canvas_.hit(x,y);selected_=i<0?-1:int(handles_.at(size_t(i)));showPoint();if(selected_>=0&&writable()){dragBefore_=points_;dragDirty_=dirty_;dragSelected_=selected_;dragging_=true;SetCapture(window_);}rebuild();}
     else if(m==WM_LBUTTONDBLCLK&&r.contains(x,y)&&writable()&&canvas_.hit(x,y)<0){selected_=-1;replacePoint({{"frame",frame(x)},{"value",native(y)}});}
     else if(m==WM_MOUSEMOVE&&dragging_)replacePoint({{"frame",frame(x)},{"value",native(y)}});

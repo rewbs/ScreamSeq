@@ -141,6 +141,24 @@ void applicationAutomaticEdits(){
       SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
     }
     {
+      const auto valueField=GetDlgItem(window,4609),indexField=GetDlgItem(window,4605);
+      SetWindowTextW(indexField,L"0");press(window,4626);
+      const auto clickPoint=[&](size_t index){const auto handle=lane.snapshot().at("handles")[index];const auto scale=GetDpiForWindow(window)/96.;
+        const auto xy=MAKELPARAM(int(std::lround(handle.at("x").get<double>()*scale)),int(std::lround(handle.at("y").get<double>()*scale)));
+        SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,xy);SendMessageW(window,WM_LBUTTONUP,0,xy);};
+      SetFocus(valueField);SetWindowTextW(valueField,L"-9");clickPoint(1);
+      auto expected=late;expected[0]["value"]=-9.;
+      restoreCheck(lane.snapshot().at("selectedPoint")==1&&lane.snapshot().at("points")==expected&&GetFocus()==window&&
+        !lane.snapshot().at("fieldDraft").get<bool>()&&!lane.snapshot().at("dirty").get<bool>(),
+        "A timeline click ignored a valid pending field or selected the wrong point");
+      SetFocus(valueField);SetWindowTextW(valueField,L"invalid");clickPoint(0);
+      restoreCheck(lane.snapshot().at("selectedPoint")==1&&lane.snapshot().at("points")==expected&&
+        restoreText(valueField)==L"invalid"&&GetFocus()==valueField,
+        "Timeline selection bypassed an invalid raw point or stole its field focus");
+      SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);app.edit("history.undo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Clicking after a field edit added history or changed unrelated points");
+    }
+    {
       const auto list=GetDlgItem(window,4603),valueField=GetDlgItem(window,4609),units=GetDlgItem(window,4604);
       const auto catalogue=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
       const auto parameterRow=[&](uint32_t id){const auto it=std::find_if(catalogue.begin(),catalogue.end(),[&](const auto &p){return p.at("id")==id;});
@@ -199,6 +217,26 @@ void applicationAutomaticEdits(){
     press(window,4615);press(window,4619);const auto full=rangeMatches();
     restoreCheck(full.at("startSeconds")==0&&full.at("endSeconds").get<double>()>=604800&&full.at("endSeconds").get<double>()<=604801,
       "Fit clipped a legal song endpoint or escaped the viewport limit");fixture.close();
+  }
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    const auto point=Json::array({{{"frame",7509566},{"value",double(.2f)}}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",point}});app.openAbsoluteAutomation(plugin,1);
+    auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto field=GetDlgItem(window,4609),time=GetDlgItem(window,4608);
+    restoreCheck(restoreText(field)==L"0.2","Recorded point value exposes promoted float noise");
+    const auto revision=app.view->session.revision;const auto baseline=app.documentOperation("automation.get",Json::object());
+    press(window,4610);settle(window);
+    restoreCheck(app.view->session.revision==revision&&app.documentOperation("automation.get",Json::object())==baseline,
+      "Accepting generated recorded-point text changed its scalar, timestamp or history");
+    SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(time);SetWindowTextW(time,L"156.45");settle(window);
+    restoreCheck(lane.snapshot().at("points")[0].at("frame")==7509600&&lane.snapshot().at("points")[0].at("value")==double(.2f),
+      "Editing only recorded time changed the formatted parameter value");
+    SetFocus(field);SetWindowTextW(field,L"-0.30000");SendMessageW(field,EM_SETSEL,2,5);settle(window);
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    restoreCheck(restoreText(field)==L"-0.30000"&&GetFocus()==field&&first==2&&last==5,
+      "Recorded-point formatter rewrote active raw input or its caret");
+    fixture.close();
   }
   {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);

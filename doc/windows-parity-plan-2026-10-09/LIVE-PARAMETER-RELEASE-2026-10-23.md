@@ -650,3 +650,56 @@ the unchanged binary. Before the next build, inspect current CI and actual
 later starts. At 20:07 UTC all three compilation jobs were running. The earliest
 known next checkpoint is **20:53:46 UTC**, subject to later starts or active CI.
 No main merge or package is permitted from these partial receipts.
+
+## 20:20 UTC continuation: automatic recorded-point composing checks
+
+The next source batch additionally flushes an already queued valid field edit
+before a canvas click/double-click. Previously the mouse handler silently
+ignored clicks while a field draft awaited its timer. Rejected or uncertain
+drafts still refuse the new canvas action and retain the field; native tests
+require the clicked point, focus, unchanged other points and exact one-step Undo.
+Generated recorded values reuse `PluginParameterField::editableText`, including
+its strict endpoint handling, so promoted floats display as `0.2` rather than
+`0.20000000298023224`. Active raw input and caret are still protected. New native
+assertions require generated-text no-op, exact frame/scalar preservation when
+editing only time, and unchanged raw spelling/selection after automatic save.
+These product corrections are unbuilt.
+
+A bounded audit of `test_absolute_automation_ui.py` on the unchanged 579 binary
+found obsolete manual-Apply/stop-playback expectations and a retired editor used
+after `document.open`. Initial receipts retain two failures and a geometry pass.
+Corrected seconds/frames/history/reopen and stale/invalid/target-removal journeys
+then passed (17.833 seconds). The updated live journey passed (8.146 seconds):
+automatic field save, exact Undo/Redo and Save all retained active playback,
+the same epoch, advancing frames, zero overruns and no fault; explicit Stop then
+reopen preserved the exact lane and opaque plugin state. This is a short gain
+fixture, not evidence against the dense-song performance failure. The geometry
+journey passed separately in 4.626 seconds after selecting an explicit 0–8 second
+viewport instead of assuming the old unfitted range. Receipts, executable/test
+hashes and live snapshots are in `absolute-journey-audit/`. No build was run.
+
+These tests now assert accepted automatic music instead of transient dirty
+timing. Invalid/stale draft protection, exact unrelated data, no-op/history,
+native controls, sample-frame precision and save/reopen checks remain. Four
+absolute-editor journeys join the existing single-build Windows integration
+stage (116 cases); this does not skip missing-device failures. The next local
+gate is five native groups plus six actual-app cases, followed by fresh Computer
+Use. Reuse the diagnostic passes only for their unchanged inputs; they do not
+qualify the source-only formatter, click, accessible-name or Tab-order changes.
+
+At 20:16 UTC the current Mac ARM and Windows builds had compiled successfully;
+their tests and the Intel build were still running. The next checkpoint remains
+no earlier than 20:53:46 UTC and after fresh confirmation of terminal preceding
+jobs. The exact next source is pinned in `recorded-point-navigation/freeze.json`.
+
+At 20:21 UTC Mac ARM job `120624496235` completed successfully. Its downloaded
+log SHA256 is `23d4a5132689d47729b107f847546134b5118b5952449245a3cdd10f78f7738c`.
+It passed 134 CTests, the full native interface and socket/typed gates. Crucially,
+the log confirms actual `--ui --loopback-record` execution against explicitly
+selected BlackHole 2ch, buffer 512: the real-session multi-target lifecycle
+passed live Keep/Undo/Redo, release/Discard and save/reopen with frames
+5120→9728 and callbacks 10→19. This closes the previous missing-device-execution
+evidence for that ARM fixture, not physical audio, arbitrary vendors or Intel.
+The actual CI merge commit `0ba43dd056eaf41cd6156f8628779fad77fb472c` and reviewed
+head579937203 both have tree `9570dc1a379fb5cf644d7d814eb131c4a5e2575d`, verified
+by fetching and comparing the exact merge. No UI correction after579 is covered.
