@@ -256,3 +256,13 @@ Prepared scripts under `bin/mac-gesture-20261022/saved-state-recovery/` must pin
 the final navigation/recovery commit before dispatch. They require fresh prior
 CI/job evidence, no overlapping checkpoints, and the 12:03:27 UTC earliest gate.
 They have been parsed only; no build or tests have run for this new source.
+
+The cheap API inventory preflight then failed its reviewed schema hash before
+any compilation: the seven live-release descriptions and new optional strict
+`restoreSavedState` property changed the LF-normalized schema. After reviewing
+that exact diff and both native adapters, `doc/api/platform-differences.json`
+now records hash `49068ec822bfdd86e72404df75f08d47f5d707cd9becffdf4aedd99c3966adb6`
+and an explicit source-only review. Method inventories, vector expectations and
+the open live-release qualification status remain unchanged. The original failed
+receipt is `saved-state-recovery/api-preflight.log`; retain it beside the corrected
+preflight result. Updating the reviewed schema is not a runtime parity pass.

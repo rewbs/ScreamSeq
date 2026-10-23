@@ -3,7 +3,8 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "ff70dfa8adaa66fd40efaef89c7787b32cd24bb4cc81e4565916ee02a3b325f2",
+    "sha256": "49068ec822bfdd86e72404df75f08d47f5d707cd9becffdf4aedd99c3966adb6",
+    "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
       "arrangement.copyBlock",
@@ -1079,7 +1080,7 @@
       "id": "API-NATIVE-PARAMETER-TAKE",
       "phase": "P4b/P6a",
       "status": "implemented-pending-qualification-live-release-open",
-      "finding": "Both native sources expose seven retained-take methods and share summary/event paging. The two read/admission vectors now require matching outcomes; this is expected behavior, not passing runtime evidence. Mac native release still requires stopped transport, and native controls plus new-provider cleanup review remain unfinished. Full live lifecycle, socket success, Undo/save/reopen, audio and reciprocal gates remain necessary.",
+      "finding": "Both native sources expose seven retained-take methods and share summary/event paging. Read/admission vectors require matching outcomes without claiming full lifecycle parity. New source integrates guarded Mac VST3 processing verification and explicit completed-take saved-state recovery on both platforms; unsupported or divergent state remains stopped-only. Native controls and original-input recovery are implemented with bounded evidence, but the new release/recovery batch is unqualified. Full real-device lifecycle, socket success, Undo/save/reopen and reciprocal gates remain necessary.",
       "sources": [
         "windows/Session/ParameterRecordingOperations.inc",
         "windows/Session/PluginOperations.cpp",
