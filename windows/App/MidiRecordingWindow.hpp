@@ -2,6 +2,7 @@
 #include "NativeToolWindow.hpp"
 #include "NativeReportList.hpp"
 #include <array>
+#include <optional>
 #include <set>
 
 namespace ScreamSeq {
@@ -30,6 +31,9 @@ private:
   uint64_t draftGeneration_=0;
   bool draftArmed_=false,dirty_=false,loaded_=false,setting_=false,externalBusy_=false,sourceRefresh_=false,resizingColumns_=false;
   Operation operation_=Operation::none;
+  struct PendingSettings {Json params;uint64_t generation;std::string document;};
+  std::optional<PendingSettings> pendingSettings_;
+  static constexpr UINT_PTR settingsTimer=11;
   HWND pendingFocus_{};
   int selected_=-1;
   HIMAGELIST rowHeight_{};
@@ -135,6 +139,7 @@ private:
     if(!take().empty())summary+=L"\nMissing time "+std::to_wstring(missing)+L" / No free column "+std::to_wstring(exhausted)+L" / Overflow "+std::to_wstring(overflow);
     set(takeStatus,summary);
     if(!error_.empty())status_=wide(error_);
+    else if(pendingSettings_)status_=L"Settings queued / waiting for the current operation";
     else if(operation_!=Operation::none)status_=operation_==Operation::finish?L"Stopping and finishing the captured take…":operation_==Operation::discard?L"Discarding the captured take…":operation_==Operation::rescan?L"Looking for MIDI sources…":operation_==Operation::review?L"Reading captured events…":operation_==Operation::apply?L"Applying MIDI settings…":L"Opening the selected target…";
     else if(state_.contains("error")&&state_["error"].is_string()&&!state_["error"].get_ref<const std::string &>().empty())status_=wide(state_["error"]);
     else if(const auto reason=string(recording_,"inputError",512,true);!reason.empty())status_=wide(reason);
@@ -142,7 +147,8 @@ private:
     else status_=L"Finish replaces notes in recorded rows as one Undo. Enter shows a selected event; Escape closes this window.";
     set(statusLabel,status_);requestPaint();
   }
-  void changed(){if(setting_)return;dirty_=true;++draftGeneration_;error_.clear();textStatus();layout();}
+  void cancelPendingSettings(){pendingSettings_.reset();KillTimer(window_,settingsTimer);}
+  void changed(){if(setting_)return;cancelPendingSettings();dirty_=true;++draftGeneration_;error_.clear();textStatus();layout();}
   void installEvents(const Json &next,const std::string &identity){
     const bool same=identity==reviewTake_;const bool first=events_.empty();const auto oldKey=same?selectedKey_:std::string();const auto occurrence=selectedOccurrence_;
     const auto list=controls_.at(events);const auto oldTop=ListView_GetTopIndex(list);events_=next;reviewTake_=identity;selected_=-1;selectedKey_.clear();selectedOccurrence_=0;
@@ -155,8 +161,15 @@ private:
   }
   void begin(Operation operation){
     const bool navigation=operation==Operation::navigate||operation==Operation::sound;
+    // A keyboard Apply can arrive while the host pumps a short worker read.
+    // Retain that one intent, not a later draft or a new document's arm request.
+    if(operation==Operation::apply&&operation_==Operation::none&&unavailable()&&dirty_){
+      if(!pendingSettings_){pendingSettings_=PendingSettings{parameters(),draftGeneration_,state_.value("document",std::string())};SetTimer(window_,settingsTimer,25,nullptr);}
+      error_.clear();textStatus();return;
+    }
     if((unavailable()&&!navigation)||(navigation&&operation_==operation))return;
     if(operation==Operation::apply&&!dirty_)return;
+    if(operation==Operation::apply)cancelPendingSettings();
     const auto identity=take();if((operation==Operation::finish||operation==Operation::discard||operation==Operation::review)&&identity.empty())return;
     if(operation==Operation::finish&&!compatible())return;
     if(operation==Operation::navigate&&(selected_<0||reviewTake_!=identity))return;
@@ -182,8 +195,9 @@ private:
     if((id==columns||id==latency)&&notification==EN_CHANGE){changed();return;}
     if(notification!=BN_CLICKED)return;
     if(id==close){hide();return;}if(id==showEvent){begin(Operation::navigate);return;}if(id==chooseSound){begin(Operation::sound);return;}
+    if(id==apply){begin(Operation::apply);return;}
     if(unavailable())return;
-    if(id==arm){draftArmed_=!draftArmed_;changed();}else if(id==rescan)begin(Operation::rescan);else if(id==apply)begin(Operation::apply);else if(id==revert){savedFields();error_.clear();textStatus();layout();}
+    if(id==arm){draftArmed_=!draftArmed_;changed();}else if(id==rescan)begin(Operation::rescan);else if(id==revert){cancelPendingSettings();savedFields();error_.clear();textStatus();layout();}
     else if(id==finishTake)begin(Operation::finish);else if(id==discardTake)begin(Operation::discard);else if(id==refreshReview)begin(Operation::review);
   }
   bool key(WPARAM value,bool ctrl,bool shift)override{
@@ -198,6 +212,17 @@ private:
     return false;
   }
   void error(const std::exception &error)override{fail(error.what());}
+  void timer(UINT_PTR id)override{
+    if(id!=settingsTimer||!pendingSettings_)return;
+    if(!visible()){cancelPendingSettings();return;}
+    if(unavailable())return;
+    const auto pending=std::move(*pendingSettings_);cancelPendingSettings();
+    if(!dirty_||pending.generation!=draftGeneration_||pending.document!=state_.value("document",std::string())||
+        pending.params.at("expectedMidiRevision")!=settings_.value("revision",std::string())||pending.params!=parameters()){
+      fail("Settings or document changed before queued Apply; review the retained draft and apply again");return;
+    }
+    begin(Operation::apply);
+  }
   void resizeColumns(){
     const auto list=controls_.at(events);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;if(listWidth_>0)columnWidths_[2]=std::max(130.f,columnWidths_[2]+width-listWidth_);else columnWidths_[2]=std::max(130.f,width-columnWidths_[0]-columnWidths_[1]-columnWidths_[3]-columnWidths_[4]-columnWidths_[5]);
@@ -261,12 +286,14 @@ public:
   }
   ~MidiRecordingWindow()override{if(window_)RemoveWindowSubclass(window_,notifications,notificationSubclass);if(controls_.contains(events)){RemoveWindowSubclass(controls_.at(events),listNotifications,listSubclass);ListView_SetImageList(controls_.at(events),nullptr,LVSIL_SMALL);}if(rowHeight_)ImageList_Destroy(rowHeight_);}
   void show(){const auto focus=GetFocus();const bool existing=visible();NativeToolWindow::show();if(existing&&owns(focus))SetFocus(focus);else SetFocus(controls_.at(source));}
+  void hide()override{cancelPendingSettings();NativeToolWindow::hide();}
   void update(const Json &snapshot){
     require(snapshot.is_object(),"Invalid MIDI recording snapshot");auto next=state_;for(auto it=snapshot.begin();it!=snapshot.end();++it)next[it.key()]=it.value();
     if(next.contains("settings"))validateSettings(next["settings"]);if(next.contains("devices"))validateDevices(next["devices"]);if(next.contains("recording"))validateRecording(next["recording"]);
     if(next.contains("busy"))require(next["busy"].is_boolean(),"Invalid recording request state");
     if(next.contains("target")){require(next["target"].is_object(),"Invalid recording target");string(next["target"],"label",16384,true);if(next["target"].contains("firstChannel"))integer(next["target"],"firstChannel",0,127);if(next["target"].contains("availableChannels"))integer(next["target"],"availableChannels",0,128);}
     string(next,"error",16384,true);
+    string(next,"document",200,true);
     if(operation_==Operation::review&&next.contains("recording")&&next["recording"].value("take",std::string())==actionTake_&&take()!=actionTake_)throw std::runtime_error("Recording take changed. Refresh its review again.");
     const bool devicesChanged=next.value("devices",devices_)!=devices_;const bool settingsChanged=!loaded_||!sameSettings(next.value("settings",settings_),settings_);const auto oldTake=take();state_=std::move(next);
     if(state_.contains("settings")){settings_=state_["settings"];loaded_=true;if(settingsChanged&&!dirty_&&operation_!=Operation::apply)savedFields();}
@@ -283,7 +310,7 @@ public:
   void setBusy(bool busy){externalBusy_=busy;textStatus();layout();}
   void fail(std::string error){error_=std::move(error);textStatus();layout();}
   bool retainedDraft()const{return dirty_;}
-  Json snapshot()const{return {{"visible",visible()},{"pending",unavailable()},{"operation",operationName()},{"actionTake",actionTake_},{"dirty",dirty_},{"settings",settings_},{"recording",recording_},{"reviewedCount",events_.size()},{"reviewTake",reviewTake_},{"selectedEvent",selected_>=0?events_[size_t(selected_)]:Json()},
+  Json snapshot()const{return {{"visible",visible()},{"pending",unavailable()||pendingSettings_.has_value()},{"queuedSettings",pendingSettings_.has_value()},{"operation",operationName()},{"actionTake",actionTake_},{"dirty",dirty_},{"settings",settings_},{"recording",recording_},{"reviewedCount",events_.size()},{"reviewTake",reviewTake_},{"selectedEvent",selected_>=0?events_[size_t(selected_)]:Json()},
     {"draft",{{"baseRevision",baseRevision_},{"source",draftSource_},{"armed",draftArmed_},{"channelsCountText",utf8(field(columns))},{"quantization",draftQuantum_},{"latencyMSText",utf8(field(latency))}}},{"status",utf8(status_)},{"error",error_}};}
 };
 }

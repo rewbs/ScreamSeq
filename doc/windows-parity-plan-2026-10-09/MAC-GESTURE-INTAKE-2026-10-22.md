@@ -2201,3 +2201,34 @@ that an older message is absent. This source follow-up is **not included in the
 coherent recording changes; do not spend another full checkpoint just on footer
 text. The MIDI diagnostic change adds failure context without weakening or
 retrying its assertion.
+
+### Retained MIDI settings command (23 October, source follow-up)
+
+Inspection found a concrete dropped-command path in `MidiRecordingWindow`:
+Ctrl+Enter was consumed by `key()` even when `begin(Apply)` immediately returned
+because the host was busy. This is a source defect; it is not yet proof of the
+intermittent x64 CI failure's precise cause. The correction retains one validated
+settings intent while the host is busy, then invokes it once after readiness.
+It preserves the original settings revision, raw-draft generation/values and
+host document identity. New text, Use saved settings, Hide or document/settings
+changes cancel or reject the intent. A submitted callback failure is never
+retried. Pending state and a visible waiting message expose the intent.
+
+`RecordingIntegration.inc` supplies document identity to the native snapshot.
+The UI's existing MIDI API and musical-history paths are unchanged. New native
+cases exercise repeated Ctrl+Enter while busy, exactly one deferred arm/value
+write, new invalid text, settings conflict, replacement document, hide/reopen,
+callback refusal and focus. They must run with the next build; source inspection
+alone does not qualify them. The next bounded checkpoint combines this correction
+with the previously committed plugin lifecycle footer fix. Compile the app,
+workspace fixture and MIDI window fixture once; run their affected native groups,
+the actual composed and sample-layered plugin journeys, and the four MIDI-window
+app cases. Reuse unchanged audio-renderer tests from68c2d177e. Fresh Computer Use
+must verify MIDI Arm/Apply keyboard behavior and plugin Discard→Record→Stop→Keep
+feedback without losing focus. Broaden on any failure; do not hide the x64 issue.
+
+The first no-build exchange run39902478513 completed successfully for both Mac
+architectures. Return legs using each Mac artifact and the exact retained Windows
+binary were separately accepted at04:55 UTC; `correlated-return-{arm,intel}`
+receipts identify each request. They are not new builds. Inspect each terminal
+result and artifact hashes/reports before claiming reciprocal preservation.

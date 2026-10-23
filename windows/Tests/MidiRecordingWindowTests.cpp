@@ -19,7 +19,7 @@ Json devices(){return Json::array({{{"id","device-a"},{"name","Keys"}},{{"id","d
 Json take(std::string id="",unsigned count=0,bool capturing=false,bool compatible=true){return {{"take",id},{"baseRevision","song-1"},{"capturing",capturing},{"compatible",compatible},{"eventCount",count},{"missingTime",0},{"exhaustedVoices",0},{"overflow",0},{"events",Json::array()}};}
 Json event(unsigned row,unsigned note=61){return {{"patternID","p-opaque"},{"track","n-opaque"},{"position",row*65536+123},{"note",note},{"instrument",4},{"velocity",100},{"patternLabel","Verse"},{"trackLabel","CH 2"},{"soundLabel","Piano"}};}
 Json fullTake(std::string id,Json events){auto result=take(id,unsigned(events.size()));result["events"]=std::move(events);return result;}
-Json initial(){return {{"settings",settings()},{"devices",devices()},{"target",{{"label","04 / Piano"},{"firstChannel",1},{"availableChannels",7}}},{"recording",take()},{"playing",false}};}
+Json initial(){return {{"document","owned-song"},{"settings",settings()},{"devices",devices()},{"target",{{"label","04 / Piano"},{"firstChannel",1},{"availableChannels",7}}},{"recording",take()},{"playing",false}};}
 std::wstring text(HWND window){std::wstring result(size_t(GetWindowTextLengthW(window))+1,0);GetWindowTextW(window,result.data(),int(result.size()));result.resize(wcslen(result.c_str()));return result;}
 struct Browser {
   unsigned scans=0,sounds=0;std::vector<Json> applies,navigations;std::vector<std::string> finishes,discards,reviews;
@@ -88,6 +88,36 @@ void callbacksAndKeyboard(Owner &owner){
   browser.onSound=[&]{SetActiveWindow(owner.window);SetFocus(owner.edit);};browser.click(7205);require(browser.sounds==1&&GetFocus()==owner.edit,"Choose sound completion stole the chosen focus");
   tool.workspaceKeys({});tool.show();browser.key(7206,VK_TAB);require(GetFocus()==browser.control(7207),"Tab skipped timing grid");browser.key(7211,VK_F5);require(browser.scans==1,"F5 did not rescan sources");browser.key(7211,VK_ESCAPE);require(!tool.visible(),"Escape did not hide MIDI window");
 }
+void queuedSettings(Owner &owner){
+  Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();SetActiveWindow(tool.window());
+  const auto tick=[&]{SendMessageW(tool.window(),WM_TIMER,11,0);};
+  browser.key(7203,VK_SPACE);browser.edit(7208,L"-4.500");
+  tool.update({{"busy",true}});browser.key(7208,VK_RETURN,true);browser.key(7208,VK_RETURN,true);tick();
+  require(browser.applies.empty()&&tool.snapshot()["queuedSettings"]==true&&tool.snapshot()["pending"]==true,
+    "Busy Ctrl+Enter was lost, duplicated or entered the settings callback");
+  tool.update({{"busy",false}});SetFocus(browser.control(7208));SendMessageW(browser.control(7208),EM_SETSEL,1,3);tick();tick();
+  require(browser.applies.size()==1&&browser.applies[0]["armed"]==true&&browser.applies[0]["latencyMS"]==-4.5&&
+    browser.applies[0]["expectedMidiRevision"]=="m1"&&!tool.retainedDraft()&&!tool.snapshot()["pending"].get<bool>()&&GetFocus()==browser.control(7208),
+    "Queued settings did not publish exactly once with original arm/value/revision and retained focus");
+  // A newer raw edit cancels the earlier intent instead of being silently saved.
+  browser.edit(7208,L"8");tool.setBusy(true);browser.key(7208,VK_RETURN,true);browser.edit(7208,L"-");tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&text(browser.control(7208))==L"-"&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Queued Apply captured a newer invalid draft or erased it");
+  browser.edit(7208,L"9");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.update({{"settings",settings("foreign-settings")}});tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&tool.snapshot()["error"].get<std::string>().find("changed")!=std::string::npos,
+    "Queued Apply silently rebased after another settings write");
+  browser.click(7210);browser.edit(7208,L"10");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.update({{"document","replacement-song"}});tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&text(browser.control(7208))==L"10"&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Queued settings armed a replacement document");
+  browser.click(7210);browser.edit(7208,L"11");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.hide();tool.setBusy(false);tool.show();tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Closing MIDI settings left a delayed invisible arm action");
+  // Once submitted, a callback failure is not permission to retry on a timer.
+  browser.onApply=[](Json)->Json{throw std::runtime_error("Owned settings refusal");};
+  tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.setBusy(false);tick();tick();
+  require(browser.applies.size()==2&&tool.retainedDraft()&&tool.snapshot()["error"]=="Owned settings refusal"&&
+    !tool.snapshot()["pending"].get<bool>(),"Queued settings retried an uncertain callback or lost its retained draft");
+}
 void boundsAndColumns(Owner &owner){
   Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();const auto window=tool.window();const auto dpi=GetDpiForWindow(window);RECT frame{0,0,MulDiv(720,dpi,96),MulDiv(570,dpi,96)};
   require(AdjustWindowRectExForDpi(&frame,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi),"Calculate MIDI minimum frame");require(SetWindowPos(window,nullptr,0,0,frame.right-frame.left,frame.bottom-frame.top,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Resize MIDI window");
@@ -104,4 +134,4 @@ void boundsAndColumns(Owner &owner){
   std::cout<<"MIDI recording minimum 720 x 570 DIPs checked at "<<dpi<<" DPI\n";
 }
 }
-int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMidiRecordingTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;settingsAndFocus(owner);reviewSelection(owner);callbacksAndKeyboard(owner);boundsAndColumns(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned MIDI test windows");});std::cout<<"PASS MIDI recording window: retained drafts/focus, revision guards, take identity, virtual review, keyboard and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}
+int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMidiRecordingTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;settingsAndFocus(owner);reviewSelection(owner);callbacksAndKeyboard(owner);queuedSettings(owner);boundsAndColumns(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned MIDI test windows");});std::cout<<"PASS MIDI recording window: retained drafts/focus, revision guards, take identity, virtual review, queued settings, keyboard and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}
