@@ -111,7 +111,11 @@ class MidiRecordingUITests(unittest.TestCase):
         self.assertEqual(self.desktop.focus(self.window()), self.control(7208))
         self.focus_control(7203); self.desktop.send(self.control(7203), 0x100, 32)
         self.assertTrue(self.state()['dirty']); self.assertFalse(self.read('transport.get')['audioActive'])
-        self.modified_key(self.control(7203), 13, ctrl=True); self.idle(); self.assertTrue(self.settings()['armed'])
+        self.modified_key(self.control(7203), 13, ctrl=True); self.idle()
+        armed_settings = self.settings()
+        if not armed_settings['armed']:
+            self.fail(dict(window=self.state(), settings=armed_settings,
+                           workspaceStatus=self.read('workspace.get')['status']))
         self.desktop.send(self.control(7203), 0x100, 0x74); self.idle()  # F5 rescan.
         self.assertEqual(before, self.doc())
         self.desktop.send(self.control(7203), 0x100, 27); self.assertFalse(self.state()['visible'])

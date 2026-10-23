@@ -330,9 +330,11 @@ class PluginRecordingTests(unittest.TestCase):
             self.recording_button(9722)
             self.recording_button(9724)
             self.assertFalse(self.take()['retained'])
+            self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take discarded')
             self.idle()
             self.recording_button(9721)
             take = self.wait_for(self.take, lambda s: s['retained'] and s['capturing'])
+            self.assertEqual(self.read('workspace.get')['status'], 'Recording original parameter input / Stop the take to review')
 
         enter(parameter, str(first_value))
         try:
@@ -419,7 +421,7 @@ class PluginRecordingTests(unittest.TestCase):
             page = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
             self.assertTrue(all(e['frame'] is not None for e in page['events']), page)
             self.assertTrue(all(t['unmapped'] == 0 and t['overflow'] == 0 for t in stopped['targets']), stopped)
-        self.assertNotEqual(self.read('workspace.get')['status'], 'Recording original parameter input / Stop the take to review')
+        self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take stopped / Keep or Discard to finish')
         self.assertTrue(self.read('transport.get')['playing'])
         self.recording_button(9723)
         try:
@@ -427,7 +429,7 @@ class PluginRecordingTests(unittest.TestCase):
         finally:
             if sustain_seconds:
                 self.trace_recording_clock('after-keep', plugin, parameter)
-        self.assertNotIn('Stop the take to review', self.read('workspace.get')['status'])
+        self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take kept')
         points = self.read('automation.get')
         self.assertGreater(points['total'], points_before['total'])
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)

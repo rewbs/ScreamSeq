@@ -2117,3 +2117,87 @@ exited before their checks. Preserve these failures and qualify the affected
 paths with an available native endpoint; do not turn absent devices into a
 passing playback result. Mac Intel was still in its interface harness at02:01
 UTC. The next checkpoint remains gated by completion and actual build starts.
+
+### Correlated-boundary checkpoint result (23 October, 04:50 UTC)
+
+Compiled source `68c2d177e84d52827b22df30e7f4a2185552eb8d` passed the
+coordinated checkpoint started locally at02:26:21 UTC (last CI build start
+02:26:49). No second build was used for the following checks or package.
+Evidence root: `bin/mac-gesture-20261022/correlated-boundaries/`.
+
+- `build.json`: optimized native ARM64 Release succeeded. Executable SHA256
+  `b6ea2a26f0b55a67b6103a4e9c19a7e7085cafc49a71e2d8e94214fe5437f269`.
+- `checks.json`, `native.xml`, `app.log`: five native groups and seven actual-app
+  cases passed, including the complete cross-domain composing journey, layered
+  sample plus VST3 instrument,25 original slider notifications, sustained95s
+  capture, Keep/Undo/Redo/Discard, saved replay PCM and vendor ownership.
+  These are bounded checks, not a claim that every parity matrix entry passed.
+- Fresh Computer Use PID39884: Params opened Recording; Gain's occupied-envelope
+  refusal appeared in Params and review with exact original timestamp
+  `3240752559625`. Existing Gain automation stayed enabled. After explicit
+  Stop/Discard, a fresh Balance slider take captured two deliveries with zero
+  unmapped/overflow/source loss. Stop recording retained playback; Keep succeeded
+  without acknowledging loss, released the owner and enabled Undo. Readbacks are
+  `foreground/{refused-take,stopped-balance,kept-balance}.json`.
+- The renderer regression now has native and foreground confirmation of the
+  earlier boundary-gap correction. The first Balance original timestamp was
+  `3241916420232`, resolved frame12916636. Neither timestamp rewriting nor a
+  permissive Keep policy was used to obtain that result.
+- Keyboard continuity was split over two owned processes because PID39884's
+ 600s timeout expired during an interrupted agent turn. Fresh PID35612 typed
+  `gain`, Tab selected the parameter control, Shift+Tab returned to search and
+  Backspace produced `gai`. Read-only native/global focus probes passed exactly
+  on control328 after click and Shift+Tab; Value/Text/selection patterns were
+  present. Footer correctly showed `FOCUS plugins`. Native maximize1440x853 and
+  restore1285x760 retained search text and readable controls. Both processes
+  exited0; fixtures and binary remained unchanged. No dead handle was reused.
+- `foreground-check.json` qualifies these functional checks only. The600.056s
+  silent48000Hz/480-frame audio run reported48 deadline overruns, maximum service
+ 13012.6us, zero starvation indicators/device errors and `realtimeAuditPassed`
+  false. Performance remains unqualified. No temporal-flicker, Narrator, fresh
+ 200percent DPI or floating-field typing claim follows from these screenshots.
+
+Both current Mac jobs passed: ARM120205821455 and Intel120205821078 in run
+39889571242. Terminal logs are retained beside the checkpoint. Windows x64
+job120205821061 built successfully and passed native gates, vendor ownership
+and conformance, but its96-case app gate failed19 assertions with one optional
+skip. Playback/recording/audition failures show no WASAPI endpoint (`devices:[]`)
+or their resulting startup/clock failure; duplicated audition teardown failures
+are retained. **One failure is separate:** MIDI settings Ctrl+Enter did not arm
+recording in `test_keyboard_settings_keep_document_and_owned_focus`. The same
+single case passed on the unchanged local candidate in
+`midi-ci-diagnosis/test.log`; that does not clear its x64 CI failure. Next-source
+assertion diagnostics retain settings, draft/pending/error and Main status to
+identify the intermittent refusal. Do not broadly attribute that failure to
+missing audio or retry writes to make it pass.
+
+The passing functional ARM64 candidate is separately packaged at
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-68c2d177e/ScreamSeq.exe`.
+`ReleaseProvenance.json`, `BuildInfo.json` and `TargetedQualification.json`
+retain source/hash and limits. Scanner and application PE machines are ARM64;
+copied executable/runtime/notice hashes were verified. This package is suitable
+for functional evaluation, not a performance-qualified or complete parity release.
+No main merge occurred.
+
+A no-build reciprocal exchange was dispatched at04:50:33 UTC using these exact
+Mac and Windows retained artifacts, both Mac architectures, extended edited
+fixtures. `mac-exchange-dispatch.json` records its one accepted request. Inspect
+its result before any return leg; do not repeat the dispatch or infer success
+from acceptance. Required reciprocal preservation, Windows x64 failure closure,
+native vendor/device and Mac live-restoration qualification remain before merge.
+
+### Source follow-up after the packaged candidate
+
+Foreground review found Main still saying `Plugin automation take discarded`
+after a subsequent successful Params-originated Keep. The take/history state was
+correct. `Application::finishDocumentOperation` previously changed the footer
+only when it matched four hard-coded intermediate messages written by the dock.
+Confirmed Start/Stop/Keep/Discard now publish their own lifecycle feedback across
+all native input sources. Capture/read polling does not overwrite it; ownership
+and loss guards stay intact. The existing actual-app composing fixture now checks
+exact Discard, fresh Record, Stop and Keep messages rather than merely checking
+that an older message is absent. This source follow-up is **not included in the
+68c2d177e package and has not been rebuilt**. Batch its compilation with the next
+coherent recording changes; do not spend another full checkpoint just on footer
+text. The MIDI diagnostic change adds failure context without weakening or
+retrying its assertion.

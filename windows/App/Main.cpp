@@ -746,15 +746,15 @@ public:
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
                 parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
-                if(status==L"Recording original parameter input / Stop the take to review"||
-                   status==L"Plugin automation take stopped / Keep or Discard to finish"||
-                   status==L"Parameter input was lost / take review required"||
-                   status==L"Parameter input needs review / original values and timestamps retained")
-                    status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
+                // The confirmed lifecycle action owns this feedback, regardless
+                // of which native editor supplied input. Params and vendor
+                // editors need not have set the dock's earlier status string.
+                status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
                 for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
             }
-            if(method=="automation.recording.stop"&&!result.value("capturing",false)&&
-               status==L"Recording original parameter input / Stop the take to review")
+            if(method=="automation.recording.start"&&result.value("capturing",false))
+                status=L"Recording original parameter input / Stop the take to review";
+            if(method=="automation.recording.stop"&&result.value("retained",false)&&!result.value("capturing",false))
                 status=L"Plugin automation take stopped / Keep or Discard to finish";
             if(parameterRecordingWindow&&!parameterRecordingWindow->retired())
                 parameterRecordingWindow->observeBoundary(documentId,method,result);
