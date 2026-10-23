@@ -1159,3 +1159,22 @@ BlackHole2ch512 live take lifecycle (frames16384→25600, callbacks32→50).
 The log and completion receipt are retained in `recorded-edit-guard/`.
 Windows and Intel remained active at the22:34:56 observation. No job was restarted,
 and none of this Mac evidence qualifies the new Windows source.
+
+20467 Windows job120676170980 subsequently finished with a failed live-app gate:
+compilation,158 portable/worker tests and53 native groups passed;117 app cases
+reported24 failures and one skip. The failures are21 distinct live-startup
+failures plus three secondary missing-window teardown failures. Its retained
+audio-environment probe returns `audio.devices.get.devices=[]`; both
+AudioEndpointBuilder and Audiosrv were Running after explicit service startup.
+The app binary hash in that probe is
+`3fb979c8971e24a63177b152096abb177c5a7c137fc78279a74a885e8df11604`.
+Do not convert unavailable audio into a pass or infer current Windows UI success.
+
+Evidence is `recorded-edit-guard/windows-ci-classification.json`, completed job
+log SHA256 `01654b36d795ef1459c54b8e2044681e8b5f4185340ade516ccb3899ca6a0f47`
+and downloaded artifact12536447132 SHA256
+`f5df0c519b86f9f8b0e68d70f95cb444edf10f5521d201e3a3de3f7fbd35b553`.
+The classification retains the exact diagnostic payloads and failure counts.
+No app or CI job was rerun for this inspection; Intel job120676171254 remained
+active at the latest read. The hourly gate still requires it to finish and all
+actual build starts to be rechecked.

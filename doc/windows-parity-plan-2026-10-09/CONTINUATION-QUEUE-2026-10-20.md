@@ -8,6 +8,15 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**20467 CI evidence update:** Windows compiled and passed158 portable/worker
+and53 native groups. Its117 app cases retain24 failures/one skip:21 distinct
+live-startup failures plus3 secondary missing-window teardown failures. The
+retained current probe has no audio devices with both Windows audio services
+Running. Keep this CI gate failed. Logs, artifact hashes and exact diagnostics
+are in `recorded-edit-guard/windows-ci-classification.json`; no rerun occurred.
+ARM fully passed; Intel job120676171254 remained active at the latest read.
+New direct Activity edits and recording selection corrections are still unbuilt.
+
 **23 October direct-edit continuation (unbuilt):** Windows Activity now queues
 existing-point value/time edits automatically, preserving original revision and
 frame, raw text/caret, busy admission and uncertain-write guards. New points
