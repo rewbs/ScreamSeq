@@ -14,6 +14,9 @@ static void processingStateObservation(const PluginState &saved,const char *path
   const auto count=calls();const auto fence=plugin.editFence();const auto lost=plugin.droppedEdits();
   check(plugin.processingState()==baseline&&calls()==count,"Clean state observation invoked processing or changed state");
   const double next=parameter.value<.5?.75:.25;
+  // VST3 interpolates endpoints. Hold the accepted value through sample 36
+  // explicitly so the next endpoint is a step at 37, not a block-wide ramp.
+  check(plugin.parameter(parameter.id,parameter.value,36),"Queue held baseline before exact parameter boundary");
   check(plugin.parameter(parameter.id,next,37),"Queue precisely timed parameter before observation");
   for(unsigned n=0;n<3;++n) {
     check(plugin.processingState()==baseline&&calls()==count,
