@@ -63,6 +63,19 @@ void applicationAutomaticEdits(){
     app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",late}});
     app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto baseline=app.documentOperation("automation.get",Json::object());const auto revision=app.view->session.revision;
+    for(const auto [control,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+        {4601,L"Recorded automation plugin"},{4602,L"Search recorded parameters"},{4603,L"Recorded automation parameters"},
+        {4604,L"Point time units"},{4630,L"Recorded timeline snap"},{4605,L"Point index, zero based"},
+        {4608,L"Point time"},{4609,L"Point value, native units"},{4627,L"Visible start, seconds"},{4628,L"Visible end, seconds"},
+        {4606,L"Previous recorded point"},{4607,L"Next recorded point"},{4622,L"Pan recorded timeline left"},
+        {4623,L"Pan recorded timeline right"},{4620,L"Zoom recorded timeline out"},{4621,L"Zoom recorded timeline in"}})
+      restoreCheck(ScreamSeq::Tests::accessibleName(GetDlgItem(window,control))==name,"Recorded editor control lacks a stable native accessible name");
+    const std::vector<int> tabOrder{4601,4616,4617,4618,4625,4602,4603,4622,4620,4619,4621,4623,
+      4627,4628,4629,4630,4605,4626,4606,4607,4604,4608,4609,4610,4611,4612,4615,4631,4632,4613,4633,4624};
+    for(size_t i=0;i<tabOrder.size();++i){const auto control=GetDlgItem(window,tabOrder[i]);
+      restoreCheck(GetNextDlgTabItem(window,control,FALSE)==GetDlgItem(window,tabOrder[(i+1)%tabOrder.size()])&&
+        GetNextDlgTabItem(window,control,TRUE)==GetDlgItem(window,tabOrder[(i+tabOrder.size()-1)%tabOrder.size()]),
+        "Recorded editor native forward/reverse traversal differs from its visible groups");}
     const auto rangeMatches=[&]{const auto state=lane.snapshot();
       restoreCheck(std::abs(std::stod(restoreText(GetDlgItem(window,4627)))-state.at("startSeconds").get<double>())<1e-8&&
         std::abs(std::stod(restoreText(GetDlgItem(window,4628)))-state.at("endSeconds").get<double>())<1e-8,
@@ -100,19 +113,50 @@ void applicationAutomaticEdits(){
       SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
     }
     {
+      // Moving to another point immediately after typing must finish the old
+      // point, preserve the requested destination and add exactly one Undo.
+      const auto valueField=GetDlgItem(window,4609),indexField=GetDlgItem(window,4605);
+      for(const int command:{4626,4606,4607,4611}){
+        const int start=command==4606?1:0;
+        SetWindowTextW(indexField,start?L"1":L"0");press(window,4626);
+        SetFocus(valueField);SetWindowTextW(valueField,L"-9");
+        if(command==4626)SetWindowTextW(indexField,L"1");
+        SetFocus(GetDlgItem(window,command));press(window,command);
+        auto expected=late;expected[size_t(start)]["value"]=-9.;
+        const auto state=lane.snapshot();
+        restoreCheck(state.at("points")==expected&&!state.at("dirty").get<bool>()&&!state.at("fieldDraft").get<bool>()&&
+          state.at("selectedPoint")== (command==4611?-1:command==4606?0:1)&&
+          GetFocus()==GetDlgItem(window,command==4611?4608:command),
+          "Point navigation lost a queued edit, requested destination or native focus");
+        app.edit("history.undo",{{"domain","all"}});press(window,4615);
+        restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Point navigation did not preserve unrelated points and exact one-step Undo");
+      }
+      SetWindowTextW(indexField,L"0");press(window,4626);
+      SetFocus(valueField);SetWindowTextW(valueField,L"invalid");
+      for(const int command:{4626,4606,4607,4611}){
+        SetWindowTextW(indexField,L"1");press(window,command);
+        restoreCheck(lane.snapshot().at("selectedPoint")==0&&restoreText(valueField)==L"invalid"&&
+          app.documentOperation("automation.get",Json::object())==baseline,"Point navigation discarded or retried a rejected raw draft");
+      }
+      SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
+    }
+    {
       const auto list=GetDlgItem(window,4603),valueField=GetDlgItem(window,4609),units=GetDlgItem(window,4604);
-      const auto selectParameter=[&](int row){SetFocus(list);SendMessageW(list,LB_SETCURSEL,row,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4603,LBN_SELCHANGE),LPARAM(list));};
+      const auto catalogue=app.documentOperation("plugin.parameters.get",{{"plugin",plugin}});
+      const auto parameterRow=[&](uint32_t id){const auto it=std::find_if(catalogue.begin(),catalogue.end(),[&](const auto &p){return p.at("id")==id;});
+        restoreCheck(it!=catalogue.end(),"Recorded navigation fixture target is missing from its actual catalogue");return int(it-catalogue.begin());};
+      const auto selectParameter=[&](uint32_t id){SetFocus(list);SendMessageW(list,LB_SETCURSEL,parameterRow(id),0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4603,LBN_SELCHANGE),LPARAM(list));};
       SetFocus(valueField);SetWindowTextW(valueField,L"-9");const auto edited=lane.snapshot().at("selectedPoint").get<int>();
       auto expected=late;expected[size_t(edited)]["value"]=-9.;
-      selectParameter(1);
+      selectParameter(2);
       restoreCheck(lane.snapshot().at("parameter")==2&&!lane.snapshot().at("dirty").get<bool>()&&GetFocus()==list,
         "Parameter navigation did not flush a valid automatic edit or retain its requested target/focus");
-      selectParameter(0);
+      selectParameter(1);
       restoreCheck(lane.snapshot().at("points")==expected,"Parameter navigation lost the latest field edit or changed unrelated points");
       app.edit("history.undo",{{"domain","all"}});press(window,4615);
       restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Navigation-created edit was not exactly one Undo");
-      SetFocus(valueField);SetWindowTextW(valueField,L"invalid");selectParameter(1);
-      restoreCheck(lane.snapshot().at("parameter")==1&&restoreText(valueField)==L"invalid"&&SendMessageW(list,LB_GETCURSEL,0,0)==0&&
+      SetFocus(valueField);SetWindowTextW(valueField,L"invalid");selectParameter(2);
+      restoreCheck(lane.snapshot().at("parameter")==1&&restoreText(valueField)==L"invalid"&&SendMessageW(list,LB_GETCURSEL,0,0)==parameterRow(1)&&
         app.documentOperation("automation.get",Json::object())==baseline,"Parameter navigation dropped invalid raw input or redirected its draft");
       SendMessageW(units,CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4604,CBN_SELCHANGE),LPARAM(units));
       restoreCheck(SendMessageW(units,CB_GETCURSEL,0,0)==0&&restoreText(valueField)==L"invalid"&&
@@ -134,7 +178,7 @@ void applicationAutomaticEdits(){
       app.edit("history.undo",{{"domain","all"}});press(window,4615);
       restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Unit-change flush changed unrelated music or history");
       SetFocus(valueField);SetWindowTextW(valueField,L"-18");app.edit("document.patch",{{"title","External edit before lane navigation"}});
-      const auto staleRevision=app.view->session.revision;selectParameter(1);
+      const auto staleRevision=app.view->session.revision;selectParameter(2);
       restoreCheck(lane.snapshot().at("parameter")==1&&lane.snapshot().at("dirty").get<bool>()&&lane.snapshot().at("stale").get<bool>()&&
         app.view->session.revision==staleRevision&&app.documentOperation("automation.get",Json::object())==baseline,
         "Parameter navigation rebased a stale field edit or redirected its retained draft");

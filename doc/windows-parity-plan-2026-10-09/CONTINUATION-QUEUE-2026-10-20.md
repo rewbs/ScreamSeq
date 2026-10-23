@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 20:10 UTC continuation (supersedes historical gates below):**
+PR7 is at `5799372032e82fda77c048d4a99bc90b1c127bee`. Its one local build passed;
+four/five native groups passed and two separate diagnostic app cases passed.
+The failed command-result test confused a catalogue row with stable parameter
+ID; its correction and further recorded-point navigation/accessibility changes
+are source-only. Fresh QA PID35960 confirmed short-take Fit, zoom, automatic
+drag save and exact Undo during playback, then exited normally. Audio overruns
+and floating-helper keyboard limitations remain; no package or merge. Both Mac
+architectures and Windows return legs passed reciprocal preservation using
+retained binaries without builds. Read the latest section of
+[Live parameter release](LIVE-PARAMETER-RELEASE-2026-10-23.md), which identifies
+the actual CI merge identity and the matching reviewed tree.
+
+Inspect `bin/mac-gesture-20261022/sample-span-navigation/` receipts before any
+action; never repeat its recorded attempt. The next correction belongs in
+`recorded-point-navigation/` once frozen. No build before **20:53:46 UTC**, and
+inspect `inspect-sample-span-ci.py` for later starts and active CI first. Preserve
+the existing usable Downloads `composing-9c5c6ebb1` package and musician session.
+
 **23 October 08:22 UTC continuation (supersedes gates below):** dfe9300ea built
 once at08:00:43 UTC; PR#7 is at that source. Five of six native groups passed;
 the native menu Save focus/caret/queued-edit assertion failed. All24 actual-app

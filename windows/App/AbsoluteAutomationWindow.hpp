@@ -104,9 +104,15 @@ private:
     else if(id==openRack||id==openPattern){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_,id==openPattern);}
     else if(id==undo||id==redo){requireCurrent();require(!draft(),"Finish or discard before using Undo/Redo");const auto token=generation_;pending_=true;layout();try{request_(id==undo?"history.undo":"history.redo",{{"expectedRevision",captured_.revision},{"domain","plugins"}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed during history operation / draft retained");load(false);}catch(...){pending_=false;layout();throw;}}
     else if(id==clearAll){requireCurrent();require(!draft()&&!dragging_,"Finish or discard the current lane draft before clearing all recordings");const auto token=generation_;pending_=true;layout();try{request_("automation.recorded.clear",{{"expectedRevision",captured_.revision}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed while clearing recordings / newer draft retained");load(false);status(L"All recorded automation cleared / Undo restores every lane");}catch(...){pending_=false;layout();throw;}}
-    else if(id==addPoint){require(!fields_,"Set or discard the pending point first");selected_=-1;showPoint();SetFocus(controls_.at(time));}
+    else if(id==addPoint){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point first");selected_=-1;showPoint();SetFocus(controls_.at(time));}
     else if(id==deletePoint||id==clear){require(!fields_,"Set or discard the pending point first");if(id==clear){if(!points_.empty()){points_=Json::array();selected_=-1;changed();}}else if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();}showPoint();}
-    else if(id==selectPoint||id==previous||id==next){require(!fields_,"Set or discard the pending point first");const auto index=id==selectPoint?number(pointIndex):selected_+(id==previous?-1:1);require(index>=0&&index<points_.size()&&index==std::floor(index),"Choose an existing point index");selected_=int(index);showPoint();const double p=position(points_[size_t(selected_)].at("frame"));if(p<canvas_.start||p>canvas_.end){canvas_.pan(p-(canvas_.start+canvas_.end)/2,604801);showRange();}rebuild();}
+    else if(id==selectPoint||id==previous||id==next){
+      // Saving can sort the edited point and repopulate its index field. Keep
+      // an explicitly requested index; relative navigation follows the newly
+      // sorted point. Never navigate past a rejected or uncertain raw draft.
+      const auto requested=id==selectPoint?number(pointIndex):0.;
+      flushAutomaticEdit();require(!draft(),"Finish or discard the pending point first");
+      const auto index=id==selectPoint?requested:selected_+(id==previous?-1:1);require(index>=0&&index<points_.size()&&index==std::floor(index),"Choose an existing point index");selected_=int(index);showPoint();const double p=position(points_[size_t(selected_)].at("frame"));if(p<canvas_.start||p>canvas_.end){canvas_.pan(p-(canvas_.start+canvas_.end)/2,604801);showRange();}rebuild();}
     else if(id==setWindow){const auto first=number(windowStart),last=number(windowEnd);require(first>=0&&last>first&&last<=604801,"Choose an ordered time range within the song automation limit");canvas_.start=first*256;canvas_.end=last*256;rebuild();}
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)fitCurve();else if(id==zoomIn||id==zoomOut)canvas_.zoom(id==zoomIn?2:.5,604801);else canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),604801);showRange();rebuild();}
   }
@@ -153,7 +159,24 @@ public:
     minimumWidth_=1040;minimumHeight_=700;create(L"ScreamSeq.AbsoluteAutomation",L"Song parameter automation",1140,760,true);for(int id:{plugin,units,snap})combo(id);for(int id:{search,pointIndex,time,value,windowStart,windowEnd})edit(id,L"",id==search?128:40);add(parameters,L"LISTBOX",L"Song automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
     for(auto title:{L"Seconds",L"48 kHz frames"})ScreamSeq::NativeInputGate::present(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title));choose(units,0);for(auto title:{L"Snap 10 ms",L"Snap 100 ms",L"Snap 1 second",L"Snap 1 frame"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title));choose(snap,0);
     for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{previous,L"‹"},{next,L"›"},{setPoint,L"Set point"},{addPoint,L"Add point"},{deletePoint,L"Delete point"},{clear,L"Clear lane"},{clearAll,L"Clear all recordings"},{apply,L"Retry changes"},{reload,L"Reload"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{openPattern,L"Pattern curves…"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{close,L"Close"},{fromRack,L"From rack"},{selectPoint,L"Select"},{setWindow,L"Set view"},{undo,L"Undo"},{redo,L"Redo"}})button(id,title);
-    for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Song parameter automation"},{targetLabel,L"Choose a plugin parameter"},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{indexLabel,L"Point index / zero based"},{rangeLabel,L"Seconds"},{unitsLabel,L"Time entry"},{statusLabel,L""},{helpLabel,L""}})label(id,title);set(windowStart,L"0");set(windowEnd,L"8");finish();
+    for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Song parameter automation"},{targetLabel,L"Choose a plugin parameter"},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{indexLabel,L"Point index / zero based"},{rangeLabel,L"Seconds"},{unitsLabel,L"Time entry"},{statusLabel,L""},{helpLabel,L""}})label(id,title);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+      {plugin,L"Recorded automation plugin"},{search,L"Search recorded parameters"},{parameters,L"Recorded automation parameters"},
+      {units,L"Point time units"},{snap,L"Recorded timeline snap"},{pointIndex,L"Point index, zero based"},
+      {time,L"Point time"},{value,L"Point value, native units"},{windowStart,L"Visible start, seconds"},{windowEnd,L"Visible end, seconds"},
+      {previous,L"Previous recorded point"},{next,L"Next recorded point"},{panLeft,L"Pan recorded timeline left"},
+      {panRight,L"Pan recorded timeline right"},{zoomOut,L"Zoom recorded timeline out"},{zoomIn,L"Zoom recorded timeline in"}})
+      accessibleName(id,name);
+    // Native Tab/Shift+Tab follow the visible groups, rather than grouping all
+    // combo boxes and edits by their construction order. Keep standard roles.
+    HWND previousControl=HWND_TOP;
+    for(const auto id:{plugin,lastTouched,openRack,openPattern,fromRack,search,parameters,
+        panLeft,zoomOut,fit,zoomIn,panRight,windowStart,windowEnd,setWindow,snap,
+        pointIndex,selectPoint,previous,next,units,time,value,setPoint,addPoint,deletePoint,
+        apply,reload,undo,redo,clear,clearAll,close}){
+      const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
+    }
+    set(windowStart,L"0");set(windowEnd,L"8");finish();
   }
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||draft();show();if(!retain)load(true,std::move(plugin),parameter);SetFocus(controls_.at(parameters));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {

@@ -569,3 +569,84 @@ failure. Downloaded Windows artifact `12525264408` has SHA256
 Its five fixture save/reopen comparisons and edited metadata, composing-history
 and envelope-bank reports pass, with report hashes checked. This is the Windows
 leg only; it does not establish reciprocal edited-project preservation.
+
+## 20:10 UTC checkpoint: short recorded gestures and remaining limits
+
+Candidate `5799372032e82fda77c048d4a99bc90b1c127bee` compiled once locally
+at 19:53:18 UTC. PR7 was pushed at that coordinated checkpoint. Executable
+SHA256 is `64eac162f9bed177764af8bca71fe80063f861140ee788c74c78b0ce1d589327`.
+Receipts are in `bin/mac-gesture-20261022/sample-span-navigation/`.
+Four of five native groups passed. Command-result failed because the new test
+selected catalogue row 1 while expecting parameter ID 2. The actual Gainer
+catalogue is Enabled (0), Gain (1), Balance (2). The correction resolves rows
+from stable IDs; it retains all target, history, focus, invalid and stale-draft
+assertions. Later assertions in that failed native group were not executed.
+The failed receipt is unchanged. A separate diagnostic app run passed both the
+complete composing/recording journey and native precise-note Save case in
+29.393 seconds. This is diagnostic evidence, not an all-green gate.
+
+Fresh Computer Use on isolated PID 35960 confirmed that Fit separates the
+507-frame take's two handles, zoom out expands the range, Fit restores it,
+dragging saves without Apply and the native Undo button restores the exact
+automation inventory. Three PID-scoped read-only snapshots show increasing
+frames (3535680, 15696384, 16594944), playback epoch 1 throughout and unchanged
+unselected points. The disposable song was saved and the process exited
+normally; its binary was unchanged. Do not reuse its handles. The foreground
+receipt is explicitly **held** and prohibits packaging.
+
+The helper exposes Song automation only as related UI beneath Main. Sending a
+key targeted at Main reactivates Main, even after the floating edit visibly
+has its caret. This run does not qualify floating typing continuity or establish
+an application focus bug. Some freshly emitted child indexes were rejected by
+the helper cache; fresh screenshot coordinates allowed the pointer diagnosis.
+Long binary decimal tails remain an ergonomic follow-up. Neither screenshots
+nor this partial native accessibility tree establish temporal flicker or
+Narrator qualification.
+
+Audio over 395.284 seconds at 48 kHz / 480 frames reported 31 deadline overruns,
+2 starvation indicators, zero device errors and no processor fault.
+`realtimeAuditPassed` and `sustainedPresentationQualified` are false. No broad
+performance pass or new production package follows. The previously usable
+Downloads build remains `ScreamSeq-Windows-ARM64-composing-9c5c6ebb1/ScreamSeq.exe`.
+
+### Reciprocal preservation completed without another build
+
+The retained-app Mac exchange run `40013382403` and Windows return runs
+`40013857540` (ARM input) / `40013869640` (Intel input) all passed. Each native
+architecture/return leg passed no-edit fixtures, edited render/import,
+metadata, composing history and envelope-bank preservation. Downloaded artifact
+digests, exact binaries, input hashes and report hashes are retained in
+`recorded-viewport/reciprocal-exchange.json`.
+
+The actual compiled CI identity is merge commit
+`7a375c3f8779c9f165c6af147671a59bb46cf77c`, whose parents are main
+`0fe8f34008fe6517d7598affc31a4948a2ab14b8` and reviewed head
+`4d1fa80fe952e0df57d158cca654f920a99cc797`. Fetching that exact merge and comparing
+trees verified that both merge and head have tree
+`8a2b8de77053bad1a7eb1c7a21941ce65ab62d13`. This evidence covers unchanged shared
+codec/preservation inputs, not the later native Save/navigation UI changes.
+The preceding Windows app suite remains failed: its services successfully
+started but the actual device catalogue was empty. Do not label CI green or
+weaken live-startup assertions.
+
+### Source continuation awaiting the next checkpoint
+
+`AbsoluteAutomationWindow.hpp` now finishes a queued valid edit before Select,
+Previous, Next or Add point. Explicit point-index navigation captures the
+requested index before save refreshes the fields; relative navigation follows
+the edited point after sorting. Invalid, stale or uncertain drafts cannot be
+discarded by navigation. Standard native controls now have explicit accessible
+names, including distinct previous/next and pan/zoom labels, and native
+Tab/Shift+Tab order follows the visible groups. No shared musical model, public
+API, codec or audio-provider behavior changes.
+
+The existing command-result group adds immediate point navigation, requested
+destination/focus, exact one-step Undo, invalid-input preservation, accessible
+names and forward/reverse native traversal. These corrections are source-only.
+Keep the five native groups and bounded composing/Save app gate; use a fresh
+isolated Computer Use process for the new executable, with honest floating
+keyboard limitations. Do not rerun the preceding diagnostic app cases against
+the unchanged binary. Before the next build, inspect current CI and actual
+later starts. At 20:07 UTC all three compilation jobs were running. The earliest
+known next checkpoint is **20:53:46 UTC**, subject to later starts or active CI.
+No main merge or package is permitted from these partial receipts.
