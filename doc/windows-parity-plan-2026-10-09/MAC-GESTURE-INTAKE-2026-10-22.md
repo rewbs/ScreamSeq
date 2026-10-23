@@ -1924,3 +1924,15 @@ does not retry, skip or change audio defaults. Five fixture-only checks covered
 terminal-child, timeout, live-audio readiness, inspection readiness and failed
 process observation with unavailable diagnostic input. They passed without
 launching ScreamSeq or running a build. Native/application checks remain pending.
+
+The cheap API inventory preflight initially rejected the old reviewed schema
+fingerprint. Exact structural comparison against7c2a6c1e1 confirmed the only
+shared schema delta is the optional boolean `includeTiming` plus its conditional
+explicit page limit of16. The reviewed source fingerprint is now
+`ff70dfa8adaa66fd40efaef89c7787b32cd24bb4cc81e4565916ee02a3b325f2`.
+All six preflight cases then passed; method inventories, expected native
+outcomes and the pending-runtime-qualification status are unchanged. The first
+failed receipt remains. This is not general JSON Schema validation. A final
+source review also corrected the diagnostic reader to acquire Stop before
+loading its final bound, avoiding a newly observed Stop with a stale live end.
+Existing exact-cut and concurrent clock gates remain required after rebuilding.
