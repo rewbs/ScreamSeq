@@ -40,6 +40,7 @@
         const auto focus=GetFocus();
         for(const auto *id:workspaceEditorNames)
             if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->presentationOwns(focus))return id;
+        if(workspaceMainControl(focus))return lowerEditorName();
         return workspaceState.focus;
     }
     std::string workspaceMainCanvasIdentity(HWND=nullptr)const{return lowerEditorName();}

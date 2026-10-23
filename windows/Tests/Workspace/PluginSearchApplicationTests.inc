@@ -125,7 +125,14 @@ void applicationPluginSearch() {
     restoreCheck(app.selectedParameter==1179&&restoreText(value)==L"179","Filtered parameter row was used as an unfiltered catalogue index");
     restoreCheck(SendMessageW(selector,CB_GETCOUNT,0,0)==1,"Choosing a matching parameter retained a stale outside-search row");
     rawDraftText(value,L"-");const auto generation=app.pluginDraftGeneration;const auto target=app.pluginDraftTarget;
+    app.setWorkspaceCanvasFocus("pattern");
     SetFocus(query);rawDraftText(query,L"1000");
+    restoreCheck(app.workspacePresentationFocus()=="plugins"&&app.workspaceSnapshot().at("focus")=="plugins"&&
+        app.workspaceState.focus=="pattern","Native search focus was labelled as the retained pattern canvas or changed canvas intent");
+    SetFocus(app.window);
+    restoreCheck(app.workspacePresentationFocus()=="pattern"&&app.workspaceSnapshot().at("focus")=="pattern",
+        "Returning to Main lost the retained pattern focus intent");
+    SetFocus(query);
     restoreCheck(app.pluginDraft&&app.pluginDraftParameter==1179&&app.pluginDraftGeneration==generation&&app.pluginDraftTarget==target&&restoreText(value)==L"-",
         "Searching erased, rebased or retargeted the raw parameter draft");
     SendMessageW(selector,CB_SETCURSEL,0,0);restoreRejected([&]{app.pluginCommand(pluginParameter);});

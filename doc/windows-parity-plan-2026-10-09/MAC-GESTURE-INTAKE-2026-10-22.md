@@ -2072,3 +2072,48 @@ cross-domain save/reopen assertions. This follows the foreground slider failure;
 the earlier field-entry journey alone did not reproduce it. Its native worker
 fixture now uses the same two-boundary presentation contract. These assertions
 are source-only until the next checkpoint, not a new passing receipt.
+
+A further renderer/capture regression covers the one-callback delay explicitly:
+retain the observed native input, Stop recording before its second boundary,
+render that boundary, resolve to frame952 in the short fixture, and prepare
+loss-free Keep without changing the timestamp. Later callbacks must leave that
+resolved frame unchanged. This exercises the actual native renderer and shared
+capture owner together, rather than only testing interval arithmetic.
+
+The previously unfinished keyboard portion was inspected separately on the
+unchanged a809binary in fresh disposable PID15300. Computer Use clicked dock
+search ID328, typed`gain`, moved to parameter selector ID311 with Tab, returned
+with Shift+Tab and used Backspace to produce`gai`. The visible border/caret and
+field contents followed those actions. Alt+F4 closed only that process with
+exit0; original fixture and binary were unchanged. This is bounded keyboard
+evidence, **not** a reversal of the failed recording qualification. The tool's
+focused-element summary still reported Main; independent global/native focus
+was not measured for PID15300. No floating-field, Narrator, DPI or temporal claim.
+Receipt: `timing-inspection/focus-followup/keyboard-observation.json`.
+
+For the next built candidate, the existing read-only focus probe also accepts
+an observed direct control ID alongside the exact Computer Use root and owned
+PID. It resolves only that root's direct child and retains the same global UIA,
+native focus, Value/Text/selection and ownership assertions. This avoids separate
+ad-hoc handle discovery. It performs no input or activation. Existing HWND-based
+calls remain supported. The source and wrapper syntax are reviewed; the new
+control-ID path requires rebuilt foreground execution.
+
+The same keyboard observation exposed a presentation mismatch: the focused dock
+search retained its text/caret while the footer advertised `FOCUS pattern`.
+`WorkspaceDocking.inc::workspacePresentationFocus` now recognizes Main-owned
+native editor controls through the existing visible-body ownership check.
+Footer, workspace inspection and contextual actions use that single result;
+the retained Main canvas intent and command routing do not change. The native
+plugin-search regression checks search focus, return to the Pattern canvas,
+and preservation of the incomplete parameter draft, target and musical history.
+This correction is source-only until the next checkpoint.
+
+Windows x64 job120185181473 completed with a failed actual-app gate after a
+successful build and native worker/UI tests. Its96-case app run reported18
+failures and one optional skip. Recording launch diagnostics explicitly report
+`devices: []`; transport could not establish WASAPI and audition processes
+exited before their checks. Preserve these failures and qualify the affected
+paths with an available native endpoint; do not turn absent devices into a
+passing playback result. Mac Intel was still in its interface harness at02:01
+UTC. The next checkpoint remains gated by completion and actual build starts.

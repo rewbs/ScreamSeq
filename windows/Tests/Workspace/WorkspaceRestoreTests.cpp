@@ -1213,11 +1213,21 @@ void nativeCompletionRetainsOutcome() {
 
 int wmain(int argc,wchar_t **argv) {
     try {
-        if(argc>1&&std::wstring_view(argv[1])==L"--inspect-foreground-focus") {
-            restoreCheck(argc==5,"Foreground focus observer requires QA PID, Main HWND and field HWND");
+        if(argc>1&&(std::wstring_view(argv[1])==L"--inspect-foreground-focus"||std::wstring_view(argv[1])==L"--inspect-foreground-control-focus")) {
+            restoreCheck(argc==5,"Foreground focus observer requires QA PID, Main HWND and field HWND or control ID");
             const auto number=[](const wchar_t *text){size_t end=0;const auto value=std::stoull(text,&end,0);restoreCheck(end==wcslen(text),"Invalid foreground focus identity");return value;};
             const auto pid=number(argv[2]);restoreCheck(pid>0&&pid<=std::numeric_limits<DWORD>::max(),"Invalid QA PID");
-            inspectForegroundNativeFocus(DWORD(pid),reinterpret_cast<HWND>(uintptr_t(number(argv[3]))),reinterpret_cast<HWND>(uintptr_t(number(argv[4]))));return 0;
+            const auto root=reinterpret_cast<HWND>(uintptr_t(number(argv[3])));const auto target=number(argv[4]);
+            HWND field{};
+            if(std::wstring_view(argv[1])==L"--inspect-foreground-control-focus") {
+                // The ID is observed in Computer Use's accessibility tree.
+                // Resolve only a direct child of that exact returned root;
+                // never activate, traverse other apps or supply input.
+                DWORD owner=0;GetWindowThreadProcessId(root,&owner);restoreCheck(owner==pid,"Focus control root belongs to another process");
+                restoreCheck(target>0&&target<=std::numeric_limits<int>::max(),"Invalid foreground control ID");field=GetDlgItem(root,int(target));
+                restoreCheck(field&&GetParent(field)==root&&GetDlgCtrlID(field)==int(target),"Observed direct control no longer exists");
+            }else field=reinterpret_cast<HWND>(uintptr_t(target));
+            inspectForegroundNativeFocus(DWORD(pid),root,field);return 0;
         }
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqWorkspaceRestore",argc,argv,[] {

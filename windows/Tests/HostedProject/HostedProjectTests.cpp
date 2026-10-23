@@ -1,6 +1,7 @@
 #include "windows/Session/HostedProject.hpp"
 #include "windows/Project/NativeProject.hpp"
 #include "editor/NativeEffects.hpp"
+#include "editor/hosted/RecordedGestureCapture.hpp"
 #include "windows/Audio/RealtimeAudit.hpp"
 #include <new>
 #include <cmath>
@@ -138,6 +139,32 @@ static void recordingTiming(Tracker::Document &doc,const Project::ProjectState &
     {AudioAudit::Scope scope;correlated.render(audio.data(),0,RenderTime{stop,13,rate,false,false,true});}
     check(clock->absoluteFrames.locate(stop-1,13).has_value()&&!clock->absoluteFrames.locate(stop,13)&&
       !clock->absoluteFrames.locate(third+2*duration,13),"Stop cuts published coverage and never finalizes queued pending audio");
+  }
+  {
+    HostedProjectPlayback delayed(doc,state,48000,{},true);
+    const auto clock=delayed.recordingTimeline();
+    constexpr uint64_t start=3201302326615,input=3201302427262,end=3201302428881;
+    const auto renderBoundary=[&](uint64_t timestamp){bool ok=false;
+      {AudioAudit::Scope scope;ok=delayed.render(audio.data(),480,RenderTime{timestamp,17,48000,true,false,false,true});}
+      check(ok,"pending native gesture fixture renders");};
+    renderBoundary(start-100000);renderBoundary(start);
+    const auto rack=projectPluginStates(state);const auto catalog=delayed.chain().parameters(0);
+    const auto before=projectAbsoluteAutomation(state);
+    const std::shared_ptr<const Tracker::RecordingFrameTimeline> absolute(clock,&clock->absoluteFrames);
+    Tracker::RecordedGestureCapture capture({"native-pending","revision",rack.at(0).instanceID,2,17,1,start},
+      absolute,rack,before,doc.native(),catalog,0);
+    check(capture.append({2,38,input},17,1)&&capture.loss().unmapped==1&&capture.events()[0].hostTime==input,
+      "original native input remains pending until its real second boundary");
+    capture.seal(input+1); // Stop recording before the next callback supplies coverage.
+    renderBoundary(end);capture.resolve();
+    check(!capture.loss().any()&&capture.events()[0].frame==952&&capture.events()[0].hostTime==input,
+      "late boundary resolves a stopped take without changing its original timestamp");
+    const auto candidate=capture.prepare("revision",17,1,rack,doc.native(),catalog);
+    check(!candidate.loss().any()&&candidate.changed()&&candidate.points().size()==before.size()+1&&
+      candidate.points().back().id==2&&candidate.points().back().frame==952&&candidate.points().back().value==38,
+      "resolved native input prepares ordinary loss-free Keep at its correlated frame");
+    renderBoundary(end+100000);capture.resolve();
+    check(capture.events()[0].frame==952,"later device correlations never move an already resolved input");
   }
   std::cout<<"PASS retained presentation timeline, Stop/restart, 3 rates and 4 callback partitions\n";
 }

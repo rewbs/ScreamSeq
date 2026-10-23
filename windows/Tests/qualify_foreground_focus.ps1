@@ -4,10 +4,12 @@ param(
     [Parameter(Mandatory=$true)][string]$BuildReceipt,
     [Parameter(Mandatory=$true)][uint32]$QaProcessId,
     [Parameter(Mandatory=$true)][uint64]$MainWindow,
-    [Parameter(Mandatory=$true)][uint64]$FieldWindow,
+    [uint64]$FieldWindow=0,
+    [uint32]$FieldControlId=0,
     [Parameter(Mandatory=$true)][string]$Output
 )
 $ErrorActionPreference = 'Stop'
+if ((!$FieldWindow -and !$FieldControlId) -or ($FieldWindow -and $FieldControlId)) { throw 'Provide one observed field HWND or direct control ID, not both.' }
 if (Test-Path -LiteralPath $Output) { throw 'Focus receipt already exists; preserve it.' }
 $log = "$Output.log"
 if (Test-Path -LiteralPath $log) { throw 'Focus log already exists; preserve it.' }
@@ -28,16 +30,22 @@ if (!$process -or ![string]::Equals($process.ExecutablePath,$executable,[StringC
 $probeHash = (Get-FileHash -LiteralPath $probe -Algorithm SHA256).Hash.ToLowerInvariant()
 $receipt = [ordered]@{status='started';sourceCommit=$build.sourceCommit;executableSHA256=$build.executableSHA256;
     observerScriptSHA256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant();
-    probeSHA256=$probeHash;pid=$QaProcessId;processCreatedAt=$process.CreationDate;mainWindow=$MainWindow;fieldWindow=$FieldWindow;
+    probeSHA256=$probeHash;pid=$QaProcessId;processCreatedAt=$process.CreationDate;mainWindow=$MainWindow;fieldWindow=$FieldWindow;fieldControlId=$FieldControlId;
     startedAtUTC=[DateTimeOffset]::UtcNow.ToString('o');readOnly=$true}
 $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Output -Encoding utf8
 try {
-    & $probe --inspect-foreground-focus $QaProcessId $MainWindow $FieldWindow *> $log
+    if ($FieldControlId) {
+        & $probe --inspect-foreground-control-focus $QaProcessId $MainWindow $FieldControlId *> $log
+    } else {
+        & $probe --inspect-foreground-focus $QaProcessId $MainWindow $FieldWindow *> $log
+    }
     if ($LASTEXITCODE -ne 0) { throw 'Exact global/native UIA focus assertion failed; inspect the retained log.' }
     $observation = Get-Content -LiteralPath $log -Raw | ConvertFrom-Json
     if ($observation.status -ne 'passed' -or !$observation.globalFocusExact -or !$observation.nativeFocusExact -or
         !$observation.valuePattern -or !$observation.textPattern -or !$observation.selection -or !$observation.readOnly -or
-        $observation.pid -ne $QaProcessId -or $observation.root -ne $MainWindow -or $observation.field -ne $FieldWindow) { throw 'Incomplete focus observation.' }
+        $observation.pid -ne $QaProcessId -or $observation.root -ne $MainWindow -or
+        ($FieldWindow -and $observation.field -ne $FieldWindow) -or
+        ($FieldControlId -and ($observation.controlId -ne $FieldControlId -or !$observation.field))) { throw 'Incomplete focus observation.' }
     $after = Get-CimInstance Win32_Process -Filter "ProcessId=$QaProcessId"
     if (!$after -or $after.CreationDate -ne $process.CreationDate -or
         (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $build.executableSHA256 -or

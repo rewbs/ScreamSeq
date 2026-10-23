@@ -37,7 +37,6 @@
         // Native editor focus is otherwise authoritative, including pinned editors.
         if(focus&&!busy&&!recoveryRestoring&&!preparingWorkspaceLayout&&!contextPanelOwns(focus)) {
             auto current=workspacePresentationFocus();
-            if(workspaceMainControl(focus))current=lowerEditorName();
             if(current=="graphLanes")current="graph";
             contextPanelEditor=std::move(current);
         }
