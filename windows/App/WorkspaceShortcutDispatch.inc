@@ -163,10 +163,12 @@
         const auto focus=GetFocus();wchar_t klass[64]{};GetClassNameW(focus,klass,64);
         const bool edit=_wcsicmp(klass,L"Edit")==0||_wcsnicmp(klass,L"RichEdit",8)==0,combo=_wcsicmp(klass,L"ComboBox")==0,list=_wcsicmp(klass,L"ListBox")==0||_wcsicmp(klass,L"SysListView32")==0;
         if(combo&&SendMessageW(focus,CB_GETDROPPEDSTATE,0,0))return true;
-        // The precise Hit list edits the song, but has no native text history.
+        // Musical point lists edit the song, but have no native text history.
         // Let configured Undo/Redo reach the shared history after Backspace.
         // Editable fields and other selectors retain their existing policy.
-        if(list&&preciseNoteWindow&&focus==GetDlgItem(preciseNoteWindow->window(),ScreamSeq::PreciseNoteWindow::list)&&
+        const bool musicalList=(preciseNoteWindow&&focus==GetDlgItem(preciseNoteWindow->window(),ScreamSeq::PreciseNoteWindow::list))||
+            (parameterActivityWindow&&parameterActivityWindow->recordedPointListFocused());
+        if(list&&musicalList&&
             ctrl&&!alt&&(key=='Z'||key=='Y'))return false;
         if(edit||combo||list) {
             // Open selectors and editor-local Escape already took priority.

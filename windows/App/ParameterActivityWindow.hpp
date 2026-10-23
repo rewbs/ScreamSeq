@@ -286,7 +286,7 @@ private:
       if(processorChoice)load(wantedTarget);
       else if(parameterChoice)load(target_,wantedParameter,false,true);
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
-      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Selected point edits save automatically · New, then Add point creates a point · Shared Undo restores edits");}
+      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Edits save automatically · Backspace/Delete: selected list point · New, then Add point · Shared Undo");}
       else if(id==items&&notification==LBN_SELCHANGE){if(pointChoice)selectRecordedPoint(*wantedFrame,samePoint);else{selectedTrace_.reset();requestPaint();}}
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
@@ -308,6 +308,10 @@ private:
   }
   bool key(WPARAM key,bool ctrl,bool shift)override{
     if(ctrl&&key=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
+    if(!ctrl&&!shift&&(key==VK_BACK||key==VK_DELETE)&&page_==2&&GetFocus()==controls_.at(items)){
+      require(!pendingNavigation_,"Wait for the selected point before deleting");
+      if(selected_>=0)action(removePoint,BN_CLICKED);return true;
+    }
     if(key==VK_ESCAPE){hide();return true;}
     if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}
     if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(items):window_);requestPaint();return true;}
@@ -376,6 +380,7 @@ private:
   }
 
 public:
+  bool recordedPointListFocused()const{return page_==2&&GetFocus()==controls_.at(items);}
   bool queuedMusicalEdit()const{return bool(automaticEdit_);}
   void flushForProjectSave(){
     // Finish an already queued typing or explicit Save/Delete intent. Invalid,

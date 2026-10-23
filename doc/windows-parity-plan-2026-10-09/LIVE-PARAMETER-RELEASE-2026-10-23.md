@@ -1424,3 +1424,31 @@ SHA256 is`03b5f2bc3ac89c28a1d81e7efc03aed7b725a7fa1d97568d44468e7178722a34`;
 Intel log SHA256 is`0657720b1ac3c228aa212b45b0eebcd96c650944d5075ecdd0ba60a6147e0c70`.
 No jobs were restarted. The earliest next checkpoint remains23:56:23UTC,
 subject to a fresh later-start inspection. No package or merge is qualified.
+
+### Activity list keyboard continuation (source only)
+
+Backspace/Delete now removes the selected recorded point only when the Recorded
+points list owns focus. Text fields retain native character deletion; Sources
+and Recent changes do not become musical delete targets. A pending point
+navigation must finish first, so a deletion cannot target the previous row.
+During an observation read, deletion uses the existing guarded one-shot action
+queue. No selected row means no edit. The page status exposes the shortcut.
+
+The application shortcut policy now lets configured Undo/Redo reach shared
+history from this musical list, as it already does for precise-note Hits.
+Other selectors and editable text keep their native shortcut policy. The native
+Activity group adds exact list/text deletion, focus, no-selection, Sources-page,
+queued-navigation and polling cases. The actual-app Activity journey adds list
+Backspace with exact unrelated-lane preservation and real queued Ctrl+Z/Y/Z
+before save/reopen. The existing native menu/keyboard group joins the local gate
+to protect precise-list song Undo and text Undo after this dispatcher change:
+**three native groups, two actual-app journeys**, no additional build target.
+Activity's clean-view refresh after external history remains a separate follow-up;
+these new assertions establish song history, not automatic list refresh.
+
+The next disposable QA preparation also selects an explicit one-row silent loop
+so the precise-note cursor stays within its inspected row. This is preparation
+only, before UI checks; it does not qualify sustained full-song performance or
+erase the earlier measured overruns. Fresh foreground review includes list
+Backspace versus text deletion and keyboard history. All new behavior remains
+unbuilt; only syntax/encoding/whitespace checks have run.

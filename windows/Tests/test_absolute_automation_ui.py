@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import time
+import types
 import unittest
 import private_desktop
 import test_parameter_automation_ui as support
@@ -330,6 +331,28 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.assertEqual(state()['rawTime'],'1.25');self.assertEqual(float(state()['rawValue']),-9)
         self.write('history.undo');self.assertEqual(self.read('automation.get'),edited)
         self.write('history.redo');self.assertEqual(self.read('automation.get'),moved)
+        press(11002) # Re-read the current revision after external Undo/Redo.
+        point_list=control(11007)
+        self.desktop.send(point_list,0x201,1,8|(8<<16))
+        self.desktop.send(point_list,0x202,0,8|(8<<16))
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        self.assertEqual(state()['selectedPoint'],0,state())
+        self.desktop.send(point_list,0x100,0x08)
+        deleted=json.loads(json.dumps(moved))
+        deleted['points']=[p for p in deleted['points'] if not (p['id']==1 and p['frame']==24000)]
+        accepted(deleted)
+        self.assertEqual(state()['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        # Use the real app keyboard queue on this owned private desktop. Lists
+        # have no text Undo stack; configured song history must receive Ctrl+Z/Y.
+        import test_workspace_shortcuts as shortcuts
+        keyboard=types.SimpleNamespace(desktop=self.desktop,ready=self.idle)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
+        self.assertEqual(self.read('automation.get'),moved)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Y'),hwnd=point_list,ctrl=True)
+        self.assertEqual(self.read('automation.get'),deleted)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
+        self.assertEqual(self.read('automation.get'),moved)
         destination=self.folder/'activity-edited.screamseq';self.write('document.save',path=str(destination))
         after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive'])
         self.assertEqual(after['playbackEpoch'],transport['playbackEpoch']);self.assertGreater(after['frames'],transport['frames'])

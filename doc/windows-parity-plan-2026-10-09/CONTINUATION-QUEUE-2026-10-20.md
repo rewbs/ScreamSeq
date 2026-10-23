@@ -8,6 +8,14 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Latest bounded gate:** three native groups (Activity, workspace-plugin-search,
+workspace-menu-bar), two actual-app journeys. Activity list Backspace/Delete and
+configured shared Undo/Redo are added, preserving text deletion/native text Undo
+and refusing deletion before a queued point selection finishes. The menu group
+protects precise-list/text shortcuts after the narrow dispatcher change. A
+one-row disposable QA loop makes the precise playback cursor observable; it is
+not a substitute for the sustained full-song workload. Still source-only.
+
 **23:39UTC terminal3408 CI:** Mac ARM fully passed. Intel compiled, passed134
 CTests/interface/socket/typed gates, but failed the real-session recovery input/
 timestamp/frame/ownership assertion. Its aggregate message does not establish

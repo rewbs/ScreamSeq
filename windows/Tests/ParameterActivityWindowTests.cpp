@@ -462,6 +462,9 @@ void run(){
       SetWindowTextW(GetDlgItem(window,11015),L"1.25");
       pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(2);};
       SendMessageW(window,WM_TIMER,3,0);pump={};
+      SetFocus(itemList);SendMessageW(window,WM_KEYDOWN,VK_DELETE,0);
+      require(lane==initial&&edits==before&&tool.snapshot().at("selectedPoint")==1&&tool.queuedMusicalEdit(),
+        "Delete before a deferred selection completed removed the previously selected point");
       SendMessageW(window,WM_TIMER,0x5345,0);context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
       require(lane==initial&&edits==before&&tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==1,
         "Pumped point navigation or debounce reentered the worker or invalidated the queued destination");
@@ -496,6 +499,33 @@ void run(){
       require(lane==expected&&edits==before+4&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==0,
         "Cancelled navigation stranded the newer automatic edit");
       click(11002);
+    }
+    {
+      const auto selectPoint=[&](int row){SendMessageW(itemList,LB_SETCURSEL,row,0);
+        SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
+      const auto before=lane;const auto beforeEdits=edits;
+      selectPoint(1);SetFocus(itemList);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);
+      auto removed=before;removed.erase(removed.begin()+1);
+      require(lane==removed&&edits==beforeEdits+1&&tool.snapshot().at("selectedPoint")==-1&&GetFocus()==itemList,
+        "List Backspace failed to remove only the selected recorded point or lost list focus");
+      SendMessageW(window,WM_KEYDOWN,VK_DELETE,0);
+      require(lane==removed&&edits==beforeEdits+1,"Delete with no selected point removed a different point");
+      selectPoint(0);SetFocus(valueField);SetWindowTextW(valueField,L"0.25");SendMessageW(valueField,EM_SETSEL,4,4);
+      SendMessageW(valueField,WM_KEYDOWN,VK_BACK,0);SendMessageW(valueField,WM_CHAR,VK_BACK,0);
+      require(lane==removed&&edits==beforeEdits+1&&tool.snapshot().at("rawValue")=="0.2"&&
+        tool.snapshot().at("selectedPoint")==0&&GetFocus()==valueField,
+        "Text Backspace deleted music instead of editing the native value field");
+      tool.flushForProjectSave();removed[0]["value"]=.2;
+      require(lane==removed&&edits==beforeEdits+2,"Text Backspace result did not use ordinary automatic point editing");
+      choose(11006,0);SetFocus(itemList);SendMessageW(window,WM_KEYDOWN,VK_DELETE,0);
+      require(lane==removed&&edits==beforeEdits+2,"Sources-list Delete mutated a recorded point");
+      choose(11006,2);selectPoint(0);SetFocus(itemList);
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")SendMessageW(window,WM_KEYDOWN,VK_DELETE,0);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      require(lane==removed&&edits==beforeEdits+2&&tool.queuedMusicalEdit(),"List Delete reentered the live observation read");
+      SendMessageW(window,WM_TIMER,0x5345,0);removed.erase(removed.begin());
+      require(lane==removed&&edits==beforeEdits+3&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==-1,
+        "List Delete received during observation was lost or repeated");click(11002);
     }
     // A real revision change during a read must still reject the snapshot.
     const auto beforeRevisionChange=tool.snapshot();
