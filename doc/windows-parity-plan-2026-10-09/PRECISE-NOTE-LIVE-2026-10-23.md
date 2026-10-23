@@ -407,3 +407,31 @@ client/runtime inspection. The build/test scope remains six groups and24 app
 cases. At07:38:40 UTC c7 Windows and Intel compilation had passed and their tests
 were running; Mac ARM's entire job120286202292 had completed successfully. No
 jobs were restarted, and the earliest next build remains08:00:12 UTC.
+
+## Completed c7 cross-platform checkpoint and CI coverage correction
+
+At07:48:59 UTC both Mac jobs120286202072/120286202292 were terminal success.
+Their retained logs each confirm all134 CTests, the full native interface harness,
+AU/VST3 notification lifecycle, socket admission and typed-fixture/conformance
+steps. `precise-live-correction/completed-ci-logs.json` pins all three job logs
+and SHA-256 values. Mac Intel log hash is
+`f37404d8f2688c755e5658ec0e58d19f39184bd97ff2e25cd9ef1e4c246e649a`;
+ARM is `5ceb47973fbf6f281d723f1f222c91894ef06681fe36c9fcedd6460f2d121c8e`.
+
+Windows job120286202015 compiled and passed158 portable/worker registrations,
+49/50 native editor groups, scratch, vendor ownership and typed pipe fixtures.
+The one native failure is the same unsupported `pattern.get` menu fixture already
+corrected in source. Its integration step ran97 cases with18 failure records
+and one skip:15 distinct cases failed during live-audio startup, with three
+additional teardown failures after missing QA windows. Recording/routing
+diagnostics explicitly returned an empty audio-device catalogue. These are
+failed/unexecuted playback acceptance paths, not green CI or proof of correct
+behavior with a device. Log hash:
+`ff323f304d5c5600b054516c24ca318e3a7342dd3704020e083cd899fa5593d2`.
+
+Inspection also found the workflow only scheduled one precise host case. The
+existing post-build integration step now includes the complete editor, host and
+live classes:16 precise cases, replacing that single case (15 additional cases;
+112 total at this source). No build job, retry or endpoint skip was added. Keep
+the real WASAPI/clock assertions. Local six-group/24-case qualification remains
+the bounded changed-input gate; native x64/device evidence remains separate.
