@@ -41,6 +41,11 @@ extension AppController {
     view.onDeliveryPage = { [weak self] offset in self?.pluginRecordingInput.delivery.reviewPage(offset: offset) ?? [:] }
     view.onDeliveryLoss = { [weak self] in self?.pluginRecordingInput.delivery.lossCensus ?? [:] }
     view.onInputProtected = { [weak self] in self?.pluginRecordingInput.protectsDocument ?? false }
+    view.onRecordedAutomation = { [weak self] plugin, parameter in
+      guard let self, !self.shuttingDown,
+        self.model.nativePlugins.contains(where: { $0["instanceID"] as? String == plugin }) else { return }
+      self.openParameterSource(["kind": "recorded", "plugin": plugin, "parameter": parameter])
+    }
     view.onRequest = { [weak self] method, params, reply in
       guard let self else { reply(AutomationServer.error(-32002, "The application has closed")); return }
       self.handleAutomation(method, params: params, reply: reply)

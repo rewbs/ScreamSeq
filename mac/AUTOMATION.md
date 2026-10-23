@@ -57,6 +57,15 @@ Ordinary **Finish restoration** never selects it implicitly. Failed or pending
 recovery retains the take; inspect current state before explicitly retrying.
 Native input still draining, changed ownership or an uncertain write blocks release.
 
+After confirmed Keep and native release, the Mac review's **Song automation…**
+opens the selected parameter's recorded points in Parameter activity. Selection
+is captured when Keep is chosen, using document/plugin/parameter identities;
+later selection changes during reads or restoration cannot redirect it. The link
+survives ordinary polling, clears for a new take, and refuses another document or
+a removed plugin. An uncertain Keep followed by an empty read does not establish
+a navigation target. Opening recorded points never starts playback or moves the
+pattern editing cursor. Windows provides the equivalent Song automation route.
+
 Optional `includeTiming:true` requires an explicit page `limit` from1 to16.
 The default event projection is unchanged. Each returned row adds `timing`:
 `retained-frame` means its cached frame remains in the evidence and is not beyond

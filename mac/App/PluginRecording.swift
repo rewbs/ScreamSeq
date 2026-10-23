@@ -13,6 +13,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   var onDeliveryPage: ((Int) -> [String: Any])?
   var onDeliveryLoss: (() -> NSDictionary)?
   var onInputProtected: (() -> Bool)?
+  var onRecordedAutomation: ((String, Int) -> Void)?
   let scope = NSPopUpButton()
   let table = NSTableView()
   let reviewMode = NSPopUpButton()
@@ -31,10 +32,17 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   lazy var restoreSaved = ActionButton("Restore saved state") { [weak self] in self?.act(.restoreSavedState) }
   lazy var refresh = ActionButton("Check take", symbol: "arrow.clockwise") { [weak self] in self?.poll(explicit: true) }
   lazy var recovery = ActionButton("Save recovery copy", symbol: "square.and.arrow.down") { [weak self] in self?.saveRecovery() }
+  lazy var openKept = ActionButton("Song automation…") { [weak self] in self?.openKeptAutomation() }
+  struct RecordedTarget: Equatable {
+    let document: String, take: String, plugin: String
+    let parameter: Int
+  }
+  private(set) var keptTarget: RecordedTarget?
   enum Action { case start, stop, keep, discard, stopPlayback, restoreSavedState }
   private struct Intent {
     let action: Action, document: String, revision: String, take: String
     let capturing: Bool, completed: Bool, loss: NSDictionary, params: [String: Any]
+    let target: RecordedTarget?
   }
   private(set) var take = "", revision = "", document = ""
   private(set) var capturing = false, completed = false, retained = false
@@ -82,9 +90,10 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     scope.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
     let content = stack(.vertical, [stack(.horizontal, [heading, NSView(), scope], spacing: 12),
       stack(.horizontal, [record, stop, stopPlayback, NSView(), refresh], spacing: 8), detail,
-      stack(.horizontal, [reviewMode, NSView(), previousInputs, nextInputs], spacing: 8), inputDetail, scroll, acknowledge,
+      stack(.horizontal, [reviewMode, NSView(), openKept, previousInputs, nextInputs], spacing: 8), inputDetail, scroll, acknowledge,
       stack(.horizontal, [discard, restoreSaved, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
     restoreSaved.toolTip = "Restore saved plugin state and abandon later unsaved plugin input. Kept automation and its Undo entry remain. Stop playback and close all recorded plugin editors first."
+    openKept.toolTip = "Open this kept parameter's song-time automation points. This does not start playback or change the pattern editing cursor."
     content.stretchAcrossAxis(); content.fill(self, inset: 16)
     for label in [status, detail, inputDetail] {
       label.lineBreakMode = .byWordWrapping; label.maximumNumberOfLines = 3
@@ -95,6 +104,28 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     updateControls()
   }
   required init?(coder: NSCoder) { fatalError() }
+  private var canOpenKept: Bool {
+    guard let target = keptTarget, onRecordedAutomation != nil, !retained, !pending, !needsReadback,
+      queued == nil, onDocument?() == target.document else { return false }
+    return onPlugins?().contains(where: { $0.id == target.plugin }) == true
+  }
+  func openKeptAutomation() {
+    guard canOpenKept, let target = keptTarget else { return }
+    onRecordedAutomation?(target.plugin, target.parameter)
+  }
+  private func selectedRecordingTarget() -> RecordedTarget? {
+    if let target = keptTarget, completed, target.document == document, target.take == take { return target }
+    let rows = reviewingInputs ? inputRows : targets
+    let selected = rows.indices.contains(table.selectedRow) ? rows[table.selectedRow] : nil
+    let matching = selected.flatMap { row in targets.first(where: {
+      $0["plugin"] as? String == row["plugin"] as? String && $0["parameter"] as? Int == row["parameter"] as? Int
+    }) }
+    guard let row = matching ?? targets.first, let plugin = row["plugin"] as? String, !plugin.isEmpty,
+      let parameter = row["parameter"] as? NSNumber, CFGetTypeID(parameter) != CFBooleanGetTypeID(),
+      parameter.doubleValue >= 0, parameter.doubleValue <= Double(UInt32.max),
+      parameter.doubleValue.rounded(.towardZero) == parameter.doubleValue else { return nil }
+    return RecordedTarget(document: document, take: take, plugin: plugin, parameter: parameter.intValue)
+  }
   @objc func changeReviewMode() {
     let titles = reviewingInputs ? ["Plugin", "Parameter ID", "Value", "Delivery", "Original host time"] :
       ["Plugin", "Parameter ID", "Captured", "Unmapped / overflow", "Source lost"]
@@ -217,6 +248,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     keep.title = completed ? "Finish restoration" : "Keep take"
     refresh.isEnabled = !pending && !polling
     recovery.isEnabled = !pending && !polling && (retained || (onInputProtected?() ?? false))
+    openKept.isHidden = onRecordedAutomation == nil
+    openKept.isEnabled = canOpenKept
     refreshInputPage()
     // Polling does not disable action buttons or invalidate native field focus.
   }
@@ -238,6 +271,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     take = retained ? data["take"] as? String ?? "" : ""
     capturing = retained && data["capturing"] as? Bool == true
     completed = retained && data["completed"] as? Bool == true
+    if let target = keptTarget, target.document != document || (retained && target.take != take) { keptTarget = nil }
     let updated = retained ? data["targets"] as? [[String: Any]] ?? [] : []
     if !(updated as NSArray).isEqual(to: targets) {
       targets = updated; if !reviewingInputs { table.reloadData() }
@@ -274,7 +308,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
         "Recording context lost. Original input is retained; save recovery or discard this take."
     } else if capturing { status.stringValue = "Recording plugin gestures. Closing this window retains the take." }
     else if retained { status.stringValue = hasLoss ? "Some input was lost. Review the counts before keeping this take." : "Take stopped. Keep it as one Undo step, or discard it." }
-    else { status.stringValue = "Start song playback, then Record gestures from plugin windows." }
+    else { status.stringValue = keptTarget == nil ? "Start song playback, then Record gestures from plugin windows." :
+      "Take kept. Open Song automation to edit its recorded points." }
   }
   func poll(explicit: Bool = false) {
     guard !pending, !polling, let onRequest, let currentDocument = onDocument?() else { return }
@@ -338,7 +373,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     if action == .keep { params["acknowledgeLoss"] = acknowledge.state == .on }
     if action == .restoreSavedState { params["restoreSavedState"] = true }
     let intent = Intent(action: action, document: currentDocument, revision: revision, take: take,
-      capturing: capturing, completed: completed, loss: loss, params: params)
+      capturing: capturing, completed: completed, loss: loss, params: params,
+      target: action == .keep || action == .restoreSavedState ? selectedRecordingTarget() : nil)
     pending = true; updateControls()
     if polling { queued = intent } else { submit(intent) }
   }
@@ -369,6 +405,13 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
         self.poll(explicit: true)
       } else if intent.action != .stopPlayback, let read = self.decoded(response) {
         self.accept(read.data, revision: read.revision, document: intent.document)
+        if (intent.action == .keep || intent.action == .restoreSavedState),
+          self.definiteTrue(read.data["completed"]), read.data["take"] as? String == intent.take {
+          self.keptTarget = intent.target
+          if !self.retained, self.keptTarget != nil {
+            self.status.stringValue = "Take kept. Open Song automation to edit its recorded points."
+          }
+        }
         if (intent.action == .keep || intent.action == .discard),
           self.definiteTrue(read.data["retained"]), self.definiteTrue(read.data["restorationPending"]),
           read.data["releaseRequiresStoppedTransport"] as? Bool != true,

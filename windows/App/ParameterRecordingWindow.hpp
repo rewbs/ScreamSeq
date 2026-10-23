@@ -36,7 +36,7 @@ private:
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
   Json keptTarget_,keepCandidate_;
-  struct QueuedAction {std::string document,revision,take,method;Json params,lossEvidence;bool capturing,completed;};
+  struct QueuedAction {std::string document,revision,take,method;Json params,lossEvidence,navigationTarget;bool capturing,completed;};
   std::optional<QueuedAction> queuedAction_;
   bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
@@ -72,9 +72,9 @@ private:
   }
   void rememberKept(const Api::CompletedCall &call) {
     if(call.document!=document_)throw std::runtime_error("Kept automation belongs to another song");
-    if(call.method=="automation.recording.commit"&&!call.result.value("retained",true)){
+    if(call.method=="automation.recording.commit"&&(call.result.value("completed",false)||!call.result.value("retained",true))){
       keptTarget_=keepCandidate_;
-      if(!keptTarget_.is_null())set(summary,L"Take kept · "+targetName(keptTarget_)+L" · Open Song automation to edit its points.");
+      if(!call.result.value("retained",true)&&!keptTarget_.is_null())set(summary,L"Take kept · "+targetName(keptTarget_)+L" · Open Song automation to edit its points.");
     }
     else if(call.method=="automation.recording.start")keptTarget_=Json();
   }
@@ -234,7 +234,14 @@ private:
       }
       method=id==stop?"automation.recording.stop":(id==keep||id==restoreSaved)?"automation.recording.commit":"automation.recording.discard";
     }
-    queuedAction_=QueuedAction{document_,callbacks_.context().second,take(),std::move(method),std::move(params),lossEvidence(),capturing(),state_.value("completed",false)};
+    Json navigationTarget;
+    if(method=="automation.recording.commit") {
+      if(state_.value("completed",false))navigationTarget=keptTarget_;
+      if(navigationTarget.is_null())for(const auto &entry:targets_)if(entry.dump()==targetKey_)navigationTarget=entry;
+      if(navigationTarget.is_null()&&!targets_.empty())navigationTarget=targets_.front();
+    }
+    queuedAction_=QueuedAction{document_,callbacks_.context().second,take(),std::move(method),std::move(params),lossEvidence(),
+      std::move(navigationTarget),capturing(),state_.value("completed",false)};
   }
   void drainAction() {
     if(pending_||!queuedAction_)return;
@@ -252,14 +259,12 @@ private:
       throw std::runtime_error("Recording input loss changed during refresh; review it before keeping the take");
     // Submit once, with the original scope/acknowledgement. Neither uncertain
     // completion nor worker admission failure automatically retries the write.
-    submit(action.method,std::move(action.params));
+    submit(action.method,std::move(action.params),std::move(action.navigationTarget));
   }
-  void submit(const std::string &method,Json params) {
+  void submit(const std::string &method,Json params,Json navigationTarget) {
     requireContext();if(pending_||completion_.retained())throw std::runtime_error("Review the previous recording result first");
     if(method=="automation.recording.commit") {
-      keepCandidate_=Json();
-      for(const auto &entry:targets_)if(entry.dump()==targetKey_)keepCandidate_=entry;
-      if(keepCandidate_.is_null()&&!targets_.empty())keepCandidate_=targets_.front();
+      keepCandidate_=std::move(navigationTarget);
     }
     params["expectedRevision"]=callbacks_.context().second;pending_=true;
     try{completion_.submit(callbacks_.write,method,params,document_,++generation_,params);pending_=false;

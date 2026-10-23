@@ -23,6 +23,49 @@ private final class PluginTakeReplies {
 }
 
 extension InterfaceTests {
+  static func pluginKeptNavigationChecks() throws {
+    let h = PluginTakeReplies(), view = h.view
+    var opened = [(String, Int)]()
+    view.onRecordedAutomation = { opened.append(($0, $1)) }
+    var stopped = h.state(capturing: false)
+    stopped["targets"] = [
+      ["plugin": "plugin-a", "parameter": 7, "eventCount": 2, "unmapped": 0, "overflow": 0],
+      ["plugin": "plugin-b", "parameter": 42, "eventCount": 1, "unmapped": 0, "overflow": 0]] as [[String: Any]]
+    h.load(stopped); view.openKeptAutomation()
+    try require(opened.isEmpty && !view.openKept.isEnabled, "Unkept input is not editable song automation")
+    view.table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+    view.poll(); view.act(.keep)
+    view.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    h.answer(stopped)
+    var kept = stopped; kept["completed"] = true; kept["restorationPending"] = true
+    h.revision = "song-a:1:0"; h.answer(kept)
+    try require(view.keptTarget?.plugin == "plugin-b" && view.keptTarget?.parameter == 42 && !view.openKept.isEnabled,
+      "Queued Keep must retain its selected stable target while native restoration is pending")
+    h.load(kept) // Existing bounded restoration retry preserves the selected target.
+    var released = kept; released["retained"] = false; released["restorationPending"] = false
+    h.answer(released)
+    let writes = h.writes.count
+    try require(view.openKept.isEnabled && !view.openKept.isHidden, "Verified release should expose kept automation navigation")
+    h.load(h.state("")); view.openKeptAutomation()
+    try require(opened.count == 1 && opened[0].0 == "plugin-b" && opened[0].1 == 42 && h.writes.count == writes,
+      "Idle polling or opening the kept lane must not retarget it, replay input or write history")
+    view.onPlugins = { [("plugin-a", "Lead")] }; view.openKeptAutomation()
+    try require(opened.count == 1, "A removed plugin cannot navigate to a reused rack slot")
+    view.onPlugins = { [("plugin-a", "Lead"), ("plugin-b", "Delay")] }
+    h.document = "song-b"; view.openKeptAutomation()
+    try require(opened.count == 1, "Kept automation navigation must not cross documents")
+    h.document = "song-a"; h.load(h.state("new-take")); view.openKeptAutomation()
+    try require(view.keptTarget == nil && opened.count == 1, "Starting another take clears the earlier navigation target")
+
+    let uncertain = PluginTakeReplies(); var uncertainOpened = false
+    uncertain.view.onRecordedAutomation = { _, _ in uncertainOpened = true }
+    uncertain.load(uncertain.state(capturing: false)); uncertain.view.act(.keep)
+    uncertain.replies.removeFirst()(["error": ["code": -32003, "message": "Unknown Keep outcome"]])
+    uncertain.load(uncertain.state(""))
+    uncertain.view.openKeptAutomation()
+    try require(!uncertainOpened && !uncertain.view.openKept.isEnabled && uncertain.view.keptTarget == nil,
+      "An empty read after uncertain Keep does not prove which automation was kept")
+  }
   static func pluginSavedStateRecoveryChecks() throws {
     let h = PluginTakeReplies(), view = h.view
     var state = h.state(capturing: false); state["transportPlaying"] = false
@@ -102,6 +145,7 @@ extension InterfaceTests {
       bounded.view.status.stringValue.contains("still waiting"), "Pending restoration retries must stop at their bounded limit")
   }
   static func pluginRecordingChecks() throws {
+    try pluginKeptNavigationChecks()
     try pluginSavedStateRecoveryChecks()
     try pluginRestorationRetryChecks()
     let h = PluginTakeReplies(), view = h.view
@@ -291,6 +335,7 @@ extension InterfaceTests {
       "Returning to captured parameters retains the shared target summary")
 
     let focusCase = PluginTakeReplies(), focused = focusCase.view
+    focused.onRecordedAutomation = { _, _ in }
     focused.onDelivery = { ["accepted": "2", "unknown": 1, "needsReview": true] }
     focused.onInputProtected = { true }
     focusCase.load(focusCase.state())
@@ -303,7 +348,7 @@ extension InterfaceTests {
     window.setContentSize(NSSize(width: 700, height: 500)); focused.layoutSubtreeIfNeeded()
     try require(focused.scope.frame.width > 0 && focused.keep.frame.width > 0 && focused.status.frame.width <= focused.bounds.width,
       "Compact retained take review keeps scope, actions and wrapped status inside its content")
-    for control in [focused.scope, focused.keep, focused.stop, focused.recovery, focused.reviewMode, focused.inputDetail, focused.status] as [NSView] {
+    for control in [focused.scope, focused.keep, focused.stop, focused.recovery, focused.openKept, focused.reviewMode, focused.inputDetail, focused.status] as [NSView] {
       try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
         "Compact take review cannot clip a native action, scope or status outside the window")
     }

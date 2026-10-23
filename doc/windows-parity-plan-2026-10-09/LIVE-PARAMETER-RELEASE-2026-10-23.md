@@ -211,3 +211,48 @@ At 11:37 UTC, exact candidate `9c5c6ebb1` had compiled on Windows x64 and Mac In
 their jobs were still running tests. Mac ARM remained terminal success. The
 fresh CI receipt confirmed no later build start than 11:03:27 UTC. Do not build
 before 12:03:27 UTC, and recheck live jobs/other checkpoints before dispatch.
+
+## Kept-take navigation and terminal prerequisite CI
+
+`a33b7dca98948e2373e1541cc8fc04134ff085ff` contains explicit recovery and is
+backed up on `codex/mac-gesture-next-checkpoint`. Subsequent source closes a
+confirmed composing-journey gap in Mac `PluginRecordingView`: Windows already
+links a kept take to Song automation; the Mac window had no equivalent callback
+or control. The new **Song automation…** action reuses
+`openParameterSource(kind:recorded)` / `ParameterActivity.inspectRecorded`, which
+opens existing editable song-time points independently of a live processor.
+
+The action captures document, take, stable plugin and parameter when Keep is
+chosen, preserves that target across asynchronous reads and live restoration
+retries, and becomes usable only after a definite matching completed/released
+receipt. Idle polling retains the target. New takes, changed documents, removed
+plugins and unknown Keep outcomes cannot redirect or fabricate navigation.
+Interface assertions cover a second selected target, queued selection changes,
+pending release, no-write navigation, removal/document guards and compact layout
+with both original-input paging and the new action. The existing native recorded
+inspector already covers unloaded stable IDs including UInt32-max parameters;
+this change adds only native presentation/navigation, no new editing/API state.
+This source is unbuilt and its new assertions are not yet run.
+
+Windows `ParameterRecordingWindow` also now captures the navigation target in
+its queued Keep intent, retains it after a successful Keep whose native cleanup
+is pending, and carries it through Finish/explicit recovery. Previously a later
+selection could substitute another parameter at cleanup. The native review
+fixture requires a second selected parameter to survive pending restoration,
+selection of the first parameter and explicit recovery without a music write
+from navigation. Existing uncertain receipt and target/document checks remain.
+
+At 11:47 UTC the exact prerequisite `9c5c6ebb1` jobs were terminal: Mac ARM and
+Intel success; Windows x64 compilation success and overall failure. The saved
+job log `bin/mac-gesture-20261022/processing-restoration/windows-ci-job-120379912183.log`
+shows 158 portable/worker and 50 native passes, successful vendor-ownership and
+conformance steps, but 112 integration cases with 22 failure records and one
+skip. Its actual `audio.devices.get` probe returned `devices:[]`; transport
+checks explicitly report unavailable WASAPI and other live journeys fail app
+readiness. These remain failures, not substituted passes or skipped requirements.
+Both native architectures still need their required real-device evidence.
+
+Prepared scripts under `bin/mac-gesture-20261022/saved-state-recovery/` must pin
+the final navigation/recovery commit before dispatch. They require fresh prior
+CI/job evidence, no overlapping checkpoints, and the 12:03:27 UTC earliest gate.
+They have been parsed only; no build or tests have run for this new source.

@@ -6,6 +6,7 @@ void applicationParameterRecordingReview() {
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
     bool deferKeepReceipt=false,failReconcile=false,refuseStart=false,failAfterPlaybackStop=false;
+    bool deferRestoration=false;
     unsigned playbackReconciled=0;
     Json openedAutomation=Json::array();
     std::function<void()> duringRead;
@@ -56,9 +57,12 @@ void applicationParameterRecordingReview() {
           if(params.value("restoreSavedState",false)) {
             restoreCheck(take.at("completed")==true&&take.at("transportPlaying")==false&&!params.contains("acknowledgeLoss"),
               "Explicit recovery bypassed completed/stopped guards or acknowledged musical loss");
-            take["retained"]=false;take["capturing"]=false;
+            take["retained"]=false;take["capturing"]=false;take.erase("restorationError");
           }else {
-            restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");take={{"retained",false},{"capturing",false},{"take",""}};
+            restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");
+            if(std::exchange(deferRestoration,false)){
+              take["completed"]=true;take["restorationError"]="Owned pending native restoration";
+            }else take={{"retained",false},{"capturing",false},{"take",""}};
           }
         }else if(method=="automation.recording.discard")take={{"retained",false},{"capturing",false},{"take",""}};
         else throw std::runtime_error("Unexpected review write");
@@ -302,7 +306,11 @@ void applicationParameterRecordingReview() {
     take["targets"].push_back({{"plugin",plugin},{"parameter",2},{"unmapped",0},{"overflow",0}});
     SendMessageW(window,WM_TIMER,7,0);
     SendMessageW(control(9728),CB_SETCURSEL,2,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
-    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);click(9723);
+    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);deferRestoration=true;click(9723);
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&!IsWindowEnabled(control(9741)),
+      "Pending native restoration lost the originally kept target or enabled premature navigation");
+    SendMessageW(control(9728),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
+    take["transportPlaying"]=false;click(9725);click(9742);
     restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&IsWindowEnabled(control(9741)),
       "Keep substituted the first parameter for the selected recording target");
     const auto finalWrites=writes.size();click(9741);
