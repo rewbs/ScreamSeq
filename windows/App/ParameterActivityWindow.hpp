@@ -286,7 +286,7 @@ private:
         paintCurveHandle(s,at.x,at.y,true,colors,colors.curve);break;
       }
       s.unclip();
-      s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,colors.text);
+      s.uiText(std::to_wstring(t.begin)+L"â€“"+std::to_wstring(t.end)+L" s Â· "+std::to_wstring(t.low)+L"â€“"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,colors.text);
     }else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,colors.text);
     paintCurveBorder(s,r,GetFocus()==window_,colors);
   }

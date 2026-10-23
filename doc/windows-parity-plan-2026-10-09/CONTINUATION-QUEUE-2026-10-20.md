@@ -8,6 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
+7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
+Fresh Computer Use confirmed precise double-click/Backspace, automatic velocity,
+Save caret and Tab/Shift+Tab. Floating-tool testing remains partial due to helper
+targeting; no complete foreground or production pass. The full350.554-second
+silent composing workload recorded32 overruns; aligned records place elapsed
+delay inside the callback, without identifying DSP versus preemption. Three
+invalid legend punctuation bytes are corrected in source but unbuilt. Preserve
+`recorded-owner-admission` receipts; do not repeat its build/checks or package it.
+PR7 is3408; main is unchanged. Current CI40036686704/40036686763 remains active;
+next checkpoint no earlier than23:56:23UTC after terminal CI/later-start checks.
+Prior20467 Intel also passed completely; prior Windows missing-device failure
+remains a failed gate. See the latest LIVE-PARAMETER-RELEASE section for exact
+hashes, bounded observations and pending work. Entries below are historical.
+
 **20467 CI evidence update:** Windows compiled and passed158 portable/worker
 and53 native groups. Its117 app cases retain24 failures/one skip:21 distinct
 live-startup failures plus3 secondary missing-window teardown failures. The

@@ -1189,3 +1189,78 @@ theme was changed. Reusing the previously tested palette does not establish a
 new live high-contrast or Narrator pass; fresh normal-theme presentation and the
 separate full accessibility gate remain required. No additional build target or
 test registration is introduced.
+
+### 23 October 23:09 UTC: owner-admission checkpoint and fresh foreground evidence
+
+Built `3408dd9b2201f49d95e8e7b0bdbf7309613d7260` once at22:55:54 UTC;
+compilation finished22:58:02. ARM64 executable SHA256:
+`efdb2f9a3d2404dcf5a99b0419b3f0e68ea4b652b3d03271016d4e6bd2272ec7`.
+The clean qualification checkout and binary remained unchanged. PR7 was pushed
+at this coordinated checkpoint. Evidence is in
+`bin/mac-gesture-20261022/recorded-owner-admission/`; do not repeat its
+`build.ps1`, `check.ps1`, or recorded attempts.
+
+All ten selected native groups and all seven actual-app journeys passed. This
+qualifies the previously source-only busy-admission, recording target navigation,
+automatic Activity time/value edits, failure rollback and appearance-state
+assertions within their test scope. Exact Undo/Redo, unrelated project data,
+opaque state, save/reopen, focus and playback continuity assertions were retained.
+The explicit silent WASAPI audit passed:155 callbacks, zero overruns/starvation/
+device faults and zero host C++ allocations/frees in its render-service scope.
+That short empty-render audit does not qualify the full composing workload.
+
+Fresh isolated Computer Use used owned PID29336, silent output and a disposable
+`qa-composing.screamseq`. It exited normally with unchanged binary. Observed:
+
+- Constant Activity trace and native focus border are visible; Close works.
+- Precise timeline double-click inserted a fifth hit; canvas Backspace restored
+  four hits. No Write note action was used.
+- Velocity typing updated the selected handle automatically. Native Ctrl+S
+  retained its visible caret; subsequent text Backspace changed83 to8 without
+  deleting a hit. Tab reached Save now; Shift+Tab returned to velocity.
+- Two read-only API snapshots retained active playback, advanced frames from
+  12376992 to16537248 and preserved the exact automation model. Both native Save
+  operations used the disposable destination.
+
+Foreground evidence is deliberately **partial**. Floating Activity selection
+was not successfully changed: targeting its dropdown through Main reactivated
+Main/cancelled the popup, and a returned floating UIA element was unavailable
+in the helper cache. This is not classified as an application focus defect.
+Docked precise controls remained absent from the helper tree; visible caret and
+native assertions provide bounded focus evidence. Fresh recording selector/Keep
+navigation, recorded-point drag, resize/dock/float and a visible playhead crossing
+were not completed in this session. Earlier evidence may be reused only where
+its inputs are unchanged. No Narrator or temporal-flicker pass is claimed.
+
+The full silent session rendered350.5541666 seconds at48kHz/480 frames with
+1056-frame buffer:32 deadline overruns, zero starvation/device errors/processor
+faults, max callback15.6007ms and max service15.6127ms. The new joined-only
+deadline ring retained all32 failures with no omissions. Each failure exceeded
+both its render budget and service period, with the callback as its largest
+measured phase. Pre/post device-service work was small in these samples. This
+narrows investigation to callback execution or preemption during it; elapsed
+durations are not CPU stacks and do not establish a DSP cause. Report SHA256:
+`1b15d4b96db59a904969b69e5ace0e2f3d0916e6c0b7f35c8a0fd39ed537ed98`.
+`foreground/deadline-analysis.json` validates frame/clock/phase identities.
+Realtime audit and sustained-presentation qualification remain false.
+
+The compiler also exposed three invalid UTF-8 punctuation bytes introduced in
+the Activity legend. They caused visibly concatenated ranges in3408. The source
+correction changes only those bytes to valid UTF-8 en dashes/middle dot; strict
+UTF-8 decoding of all15 changed textual inputs passed. The correction is unbuilt
+and cannot inherit successful visual rendering. No new test or extra build is
+needed before the next coordinated checkpoint. Preserve all failed/limited
+receipts, including `known-source-limit.json` and `foreground-check.json`.
+**No production package or main merge is qualified by this checkpoint.**
+
+Prior20467 Intel CI is now terminal success:134 CTests, full native interface,
+socket/typed gates and BlackHole512 live take lifecycle all passed. Log SHA256:
+`c827fb15927521b22abe664a585c6ec59e4eed49b002619780c6739141283e88`.
+Both prior Macs passed; the prior Windows missing-device gate remains failed.
+Current3408 CI runs40036686704/40036686763 were active at23:07:54;
+ARM compilation passed, Intel and Windows were compiling. Do not restart them.
+The next build is **not before23:56:23 UTC**, subject to rechecking later starts
+and waiting for all preceding jobs to finish. Next steps: collect current CI,
+compile the legend correction at that gate with other coherent source work,
+reuse unchanged passing tests, complete the outstanding foreground journeys,
+and investigate the dense callback using the retained aligned failure evidence.
