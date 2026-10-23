@@ -78,7 +78,7 @@ struct Fixture {
   }
   HWND control(int id)const{const auto window=GetDlgItem(tool.window(),id);require(window,"Missing precise-note control");return window;}
   void click(int id){press(control(id));}
-  void page(int page){click(Tool::pageTimeline+page);}
+  void page(int page){click(std::array<int,4>{Tool::pageTimeline,Tool::pageHit,Tool::pageTools,Tool::pageDetails}.at(size_t(page)));}
   void field(int id,const wchar_t *value){const auto before=tool.operationGuard().at("generation");type(control(id),value);require(tool.operationGuard().at("generation")>before&&tool.retainedDraft(),"Native field edit did not register a retained draft");}
   void choose(int id,int value){require(IsWindowVisible(control(id))&&IsWindowEnabled(control(id)),"Combo is unavailable");SendMessageW(control(id),CB_SETCURSEL,value,0);SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(id)));}
   void select(int value){require(IsWindowVisible(control(Tool::list))&&IsWindowEnabled(control(Tool::list)),"List is unavailable");SendMessageW(control(Tool::list),LB_SETCURSEL,value,0);SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(Tool::list,LBN_SELCHANGE),reinterpret_cast<LPARAM>(control(Tool::list)));require(tool.snapshot().at("selected")==value,"Native list did not select requested event");}
@@ -373,6 +373,45 @@ void historyFinishesQueuedMusic(Owner &owner){
   f.field(Tool::velocity,L"unfinished");f.tool.flushForHistory();
   require(f.submissions.size()==1&&text(f.control(Tool::velocity))==L"unfinished"&&f.tool.retainedDraft(),"History flushed invalid raw input");
 }
+void nativeEdgeHitHandles(Owner &owner){
+  for(const auto &[offset,velocity]:std::array<std::pair<unsigned,unsigned>,4>{{{0,80},{65535,80},{16384,127},{16384,1}}}){
+    Fixture f(owner.window,false);const auto hit=event(0,2,offset,65,velocity);
+    f.saved["pattern-a"]=Json::array({hit,event(1,2,100,72,60)});f.tool.openAt();f.dock(owner.window);
+    const auto plot=f.tool.snapshot(false).at("timeline");
+    const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+    const auto px=offset==0?x-3:offset==65535?x+w+3:x+w*offset/units;
+    const auto py=velocity==127?y-3:velocity==1?y+h+2:y+h*(1-velocity/127.);
+    mouse(f.tool.window(),WM_LBUTTONDOWN,px,py,MK_LBUTTON);
+    require(GetCapture()==f.tool.window()&&f.tool.snapshot().at("dragging"),"Visible edge hit handle could not be grabbed outside plot border");
+    mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.5,y+h*.5,MK_LBUTTON);mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.5);
+    require(f.writes==1&&!f.tool.retainedDraft()&&std::abs(int(f.tool.snapshot().at("selectedEvent").at("position").get<unsigned>()%units)-32768)<=128,
+      "Edge hit drag did not immediately save one timing edit");
+    require(f.saved.at("pattern-a")==Json::array({event(1,2,100,72,60),f.tool.snapshot().at("selectedEvent")}),
+      "Edge drag changed another channel or the exact replacement event set");
+    const auto saved=f.saved;const auto submissions=f.submissions.size();
+    mouse(f.tool.window(),WM_LBUTTONDBLCLK,x-3,y+h*.75);mouse(f.tool.window(),WM_LBUTTONUP,x-3,y+h*.75);
+    require(f.saved==saved&&f.submissions.size()==submissions,"Double-click in empty timeline margin inserted a note");
+  }
+}
+void nativePageTabOrder(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::offset,L"unfinished");
+  const auto before=retained(f.tool.snapshot());
+  const std::array<std::vector<int>,4> bodies={
+    std::vector<int>{Tool::snap,Tool::addHit,Tool::removeHit,Tool::offset,Tool::units,Tool::velocity},
+    std::vector<int>{Tool::list,Tool::pitch,Tool::instrument,Tool::velocity,Tool::localEffect,Tool::parameter,Tool::offset,Tool::units,Tool::snap},
+    std::vector<int>{Tool::replaceRow,Tool::repeatCount,Tool::endVelocity,Tool::fillRow,Tool::loadTarget,Tool::returnPattern,Tool::close},
+    std::vector<int>{Tool::detailsText}};
+  for(int page=0;page<4;++page){f.page(page);std::vector<int> expected{Tool::pageTimeline,Tool::pageHit,Tool::pageTools,Tool::pageDetails};
+    expected.insert(expected.end(),bodies[page].begin(),bodies[page].end());
+    expected.insert(expected.end(),{Tool::applyDraft,Tool::checkDraft,Tool::reloadCapturedCommand});
+    for(size_t i=0;i<expected.size();++i){const auto a=f.control(expected[i]),b=f.control(expected[(i+1)%expected.size()]);
+      require(IsWindowVisible(a)&&IsWindowEnabled(a)&&(GetWindowLongPtrW(a,GWL_STYLE)&WS_TABSTOP),"Tab-order fixture includes unreachable control");
+      focus(a);key(a,VK_TAB);require(GetFocus()==b,"Forward Tab did not follow precise page reading order");
+      key(b,VK_TAB,false,true);require(GetFocus()==a,"Reverse Tab did not return to preceding visible control");
+    }
+    require(retained(f.tool.snapshot())==before&&f.writes==0,"Tab traversal changed retained note input or wrote music");
+  }
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -617,6 +656,8 @@ int wmain(int argc,wchar_t **argv){try{
     requestMergeAndCheckBoundary(owner);std::cout<<"PASS precise-note captured read/merge/write and dry-run boundary\n";
     pendingNewerRawAndFocus(owner);std::cout<<"PASS precise-note pending newer raw generation and native focus ownership\n";
     nativeTimelineKeysDragAndCancel(owner);std::cout<<"PASS precise-note DPI-scaled timeline drag/cancel and local keyboard ownership\n";
+    nativeEdgeHitHandles(owner);std::cout<<"PASS precise-note visible edge handles and empty margin insertion exclusion\n";
+    nativePageTabOrder(owner);std::cout<<"PASS precise-note native forward/reverse Tab in visible reading order\n";
     immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
     automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
     cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";

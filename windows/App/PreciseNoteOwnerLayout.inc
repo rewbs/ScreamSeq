@@ -1,5 +1,6 @@
 // Private class-body include. Design-DIP geometry, not native/pixel qualification.
   bool shortLayout_=false;
+  int tabOrderPage_=-1;
   std::wstring displayStatus()const{
     if(!hasTarget())return L"Choose a row / Tools → Load selection";
     if(!current())return L"Song changed / draft retained / Reload captured before editing";
@@ -55,6 +56,21 @@
       if(id==instrument||id==velocity||id==localEffect||id==parameter||id==fillRow)enabled=enabled&&onset;
       EnableWindow(control,enabled);}
     for(size_t i=0;i<pageIDs.size();++i)NativeControls::active(controls_.at(pageIDs[i]),page_==int(i));
+    if(tabOrderPage_!=page_){
+      // Native dialog traversal follows child Z order. Controls shared between
+      // pages must follow their visible reading order, not creation/ID order.
+      std::vector<int> order(pageIDs.begin(),pageIDs.end());
+      const auto body=page_==0?std::vector<int>{snap,addHit,removeHit,offset,units,velocity}:
+        page_==1?std::vector<int>{list,pitch,instrument,velocity,localEffect,parameter,offset,units,snap}:
+        page_==2?std::vector<int>{replaceRow,repeatCount,endVelocity,fillRow,loadTarget,returnPattern,close}:
+        std::vector<int>{detailsText};
+      order.insert(order.end(),body.begin(),body.end());
+      order.insert(order.end(),{applyDraft,checkDraft,reloadCapturedCommand});
+      HWND previous=HWND_TOP;
+      for(const auto id:order){const auto control=controls_.at(id);
+        SetWindowPos(control,previous,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previous=control;}
+      tabOrderPage_=page_;
+    }
     // Disabling the active field can transiently clear focus. Do not let another
     // owner/layout claim that null focus; restore only if it is still unclaimed.
     if(pending_&&focused&&IsChild(window_,focused)&&!GetFocus())pendingFocus_=focused;

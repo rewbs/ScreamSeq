@@ -8,13 +8,13 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**23 October 06:46 UTC continuation (supersedes gates below):** the latest source
+**23 October 07:24 UTC continuation (supersedes gates below):** the latest source
 is on `codex/mac-gesture-intake`, backed up to `codex/mac-gesture-next-checkpoint`.
 Resolve the exact next candidate from
-`bin/mac-gesture-20261022/precise-live-correction/freeze.json`; both clean
-checkouts must match it. PR#7 remains f28a6eff8 until the coordinated checkpoint.
-Do not build before **06:59:10 UTC**, and inspect later actual CI starts and
-current jobs before proceeding. No correction build/check receipts exist yet.
+`bin/mac-gesture-20261022/precise-live-followup/freeze.json`; both clean
+checkouts must match it. PR#7 remains c7d2fbd78 until the coordinated checkpoint.
+Do not build before **08:00:12 UTC**, and inspect later actual CI starts and
+current jobs before proceeding. Inspect the new folder's receipts first.
 
 The first f28 precise/MIDI candidate failed MSVC C7692 in the MIDI revision
 comparison; that is corrected. Mac ARM job120266634155 passed all134 native
@@ -24,7 +24,16 @@ job120266633422 failed the same corrected expression. Do not restart these jobs.
 At06:52 Intel was confirmed fully passed: all134 CTests, native interface and
 socket/typed-fixture gates. Its downloaded log/hash is retained with the ARM and
 Windows logs. Both Mac passes cover f28's unchanged shared publication code.
-`precise-live-correction/checkpoint.ps1` coordinates the corrected PR push with
+The c7 candidate compiled; five of six native groups and 21 of 23 diagnostic
+actual-app cases passed. Corrections address an unsupported menu-fixture read,
+a retired-HWND fixture assumption and a real native Save focus loss. The fixed
+Python retired-owner case passed alone against c7. Computer Use confirmed core
+live timeline behavior, typing and Tab focus in a disposable silent session.
+Visible edge-hit grabbing and page reading-order Tab now have source corrections
+and native/app assertions, awaiting the same next build. No new package is
+qualified. See the precise-note report for hashes, failed receipts and limits.
+
+`precise-live-followup/checkpoint.ps1` coordinates the corrected PR push with
 the single local build. The selection is six native registrations and23 actual
 app cases, followed by fresh isolated Computer Use and only then packaging.
 Read the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) for exact source,

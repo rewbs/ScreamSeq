@@ -75,15 +75,19 @@
       if(GetCapture()==window_)ReleaseCapture();refresh(item);try{saveAutomatically();}catch(const std::exception &e){error(e);}return;}
     if(!canvasVisible_||!hasTarget()||pending_||context_().busy)return;
     try{
-      if((message==WM_LBUTTONDOWN||message==WM_LBUTTONDBLCLK)&&plot_.contains(x,y)){
+      const bool insidePlot=plot_.contains(x,y);
+      // Edge hits are drawn across the plot border. Let their visible handles
+      // be grabbed from either side; empty margins must never insert a note.
+      const bool insideHandles=x>=plot_.x-6&&x<=plot_.x+plot_.w+6&&y>=plot_.y-6&&y<=plot_.y+plot_.h+6;
+      if((message==WM_LBUTTONDOWN||message==WM_LBUTTONDBLCLK)&&insideHandles){
         SetFocus(window_);saveSelected();int nearest=-1;float distance=144;
         for(size_t i=0;i<draft_.size();++i){const auto [px,py]=point(draft_[i]);const auto d=(px-x)*(px-x)+(py-y)*(py-y);if(d<distance){nearest=int(i);distance=d;}}
-        if(nearest<0&&message==WM_LBUTTONDBLCLK){require(draft_.size()<maximumEvents,"Too many precise notes");
+        if(nearest<0&&message==WM_LBUTTONDBLCLK&&insidePlot){require(draft_.size()<maximumEvents,"Too many precise notes");
           auto item=edited(-1,positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0));
           if(item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
           require(!collision(item),"Another event already occupies that offset");draft_.push_back(item);++generation_;refresh(item);saveAutomatically();
         }else if(nearest>=0){dragHadAutomaticEdit_=bool(automaticEdit_);cancelAutomaticEdit();refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
-        else {finishQueuedSelection();refresh(Json(),false);}
+        else if(insidePlot){finishQueuedSelection();refresh(Json(),false);}
       }else if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto item=draft_[size_t(selected_)];const auto previous=item;
         item["position"]=positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0);if(!(GetKeyState(VK_SHIFT)&0x8000)&&item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
         require(!collision(item,selected_),"Another event occupies that offset");if(item!=previous){draft_[size_t(selected_)]=item;

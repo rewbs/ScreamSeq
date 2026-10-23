@@ -338,3 +338,32 @@ and 23 actual-app cases, including all failed assertions. After passing, repeat
 fresh Computer Use on the new executable, particularly Save focus/caret, and
 complete resize/float/list-key checks before packaging. No main merge follows
 from diagnostic results. The previous package remains c900d2b2e.
+
+## Source continuation: visible hit handles and native Tab order
+
+The left-edge drag observation has a source-level explanation: pointer admission
+required `plot_.contains`, while handles and selected outlines render across that
+border. Pointer grabbing now admits the same six-DIP visible handle margin on
+all four edges, then uses the existing nearest-hit test. Empty margin double
+clicks cannot add notes. Musical position/velocity still clamp to the original
+row bounds; the normal one-save drag completion and shared Undo path remain.
+Native regressions cover start/end offsets and maximum/minimum velocities,
+exact unrelated events and empty-margin exclusion. The actual-app canvas case
+adds an edge drag with exact Undo/Redo assertions.
+
+Computer Use also showed Tab going from Velocity back to Offset because native
+dialog traversal followed control creation order. Each page now sets the native
+child traversal order to its visible top-to-bottom, left-to-right sequence,
+only when changing pages. No synthetic focus navigation replaces Win32 Tab.
+Native tests traverse every visible control forward and backward on all four
+pages while preserving incomplete raw input and prohibiting document writes.
+The fixture page helper now uses the explicit Details command ID instead of
+assuming all page IDs are contiguous.
+
+These source changes join the existing followup freeze and six-group/23-case
+checkpoint; they have not been built or run. No second build occurred this hour.
+At07:23:46 the exact c7 CI jobs were still running; ARM compilation passed at
+07:15:48, while Intel and Windows compilation were still in progress. A transient
+GitHub502 during the prior inspection was recovered by repeating the read-only
+inspection, never by restarting a job. The earliest gate remains08:00:12 UTC,
+subject to fresh job/start inspection.

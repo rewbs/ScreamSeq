@@ -147,6 +147,29 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertEqual(self.editor()['draftCount'], 0)
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [])
 
+        # The visible handle at row start extends outside the plot. Grabbing
+        # that part must edit the same hit, never create an extra event.
+        self.mouse(0x203, x+w*.25, y+h*.5)
+        self.text(364, '0')
+        self.wait_note_saved()
+        edge = self.read('pattern.notes.get', pattern=0)
+        hit = self.editor()['selectedEvent']
+        self.assertEqual(hit['position'], 5*65536)
+        self.mouse(0x201, x-3, y+h*(1-hit['velocity']/127), 1)
+        self.assertTrue(self.editor()['dragging'])
+        self.mouse(0x200, x+w*.5, y+h*.4, 1)
+        self.mouse(0x202, x+w*.5, y+h*.4)
+        moved = self.read('pattern.notes.get', pattern=0)
+        self.assertEqual(len(moved['events']), 1)
+        self.assertAlmostEqual(moved['events'][0]['position'] % 65536, 32768, delta=128)
+        self.assertFalse(self.editor()['retainedDraft'])
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), edge)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), moved)
+        self.mouse(0x203, x-3, y+h*.8)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), moved)
+
     def test_dense_virtual_list_selects_late_hit_without_losing_other_events(self):
         events = [dict(channel=0, position=4*65536+i*12, note=61+i%12, velocity=64) for i in range(5000)]
         self.write('pattern.notes.set', pattern=0, events=events)
