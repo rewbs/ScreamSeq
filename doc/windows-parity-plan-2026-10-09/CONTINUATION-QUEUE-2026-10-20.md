@@ -8,7 +8,27 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**23 October 07:37 UTC continuation (supersedes gates below):** the latest source
+**23 October 08:22 UTC continuation (supersedes gates below):** dfe9300ea built
+once at08:00:43 UTC; PR#7 is at that source. Five of six native groups passed;
+the native menu Save focus/caret/queued-edit assertion failed. All24 actual-app
+cases subsequently passed in a separate diagnostic run. Visible silent QA
+confirmed the four requested precise-note behaviors, edge dragging, text focus,
+Ctrl+S and resize, but found Hit-list Ctrl+Z swallowed by native shortcut policy.
+The pending source correction yields only that list's Ctrl+Z/Y to shared history,
+with real native key regressions; Save's combined assertion now has exact
+diagnostics and all original requirements. No package/merge. QA PID18832 exited
+normally and must not be reused. Read the latest section of
+[the precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
+
+Resolve the next frozen source from `precise-keyboard/freeze.json` once prepared.
+Do not start another coordinated build before **09:01:15 UTC**. Inspect the
+preceding `precise-live-followup/ci-checkpoint.json` freshly and wait for its
+running jobs; at08:22 Mac ARM compiled, Intel/Windows still compiled, tests not
+yet terminal. The previous failed receipts remain authoritative. The unchanged
+shared publication/history/audio evidence can be reused; next validation focuses
+on menu/shortcut dispatch and actual-app composing/focus, followed by fresh UI.
+
+**Earlier 23 October 07:37 UTC checkpoint:** the latest source
 is on `codex/mac-gesture-intake`, backed up to `codex/mac-gesture-next-checkpoint`.
 Resolve the exact next candidate from
 `bin/mac-gesture-20261022/precise-live-followup/freeze.json`; both clean

@@ -446,3 +446,60 @@ reported in0.062 seconds (`startup-exit-diagnostic.json`). The normal branch the
 passed the combined live note/take journey against the existing c7 executable
 in3.587 seconds (`startup-live-diagnostic.log`). This repeat was limited to the
 changed launcher; no build or broad suite was repeated.
+
+## 08:00 UTC checkpoint and foreground findings
+
+Frozen `dfe9300ea1b6729499fd810cf3d560d52c76e34a` built once from
+08:00:43 to 08:02:49 UTC. Executable SHA-256:
+`82db328ccb00fda1027f4edd8d1a461e19f47d23450af0ea03edfe711d56967f`.
+Receipts are in `bin/mac-gesture-20261022/precise-live-followup/`.
+The next coordinated build cannot start before **09:01:15 UTC**, and later
+actual CI starts/current running jobs must be inspected before proceeding.
+
+Five of six native groups passed, including the complete precise-owner group
+(edge hit testing, accessibility names and all-page Tab order), MIDI, live
+document publication, hosted project and history allocation. The native menu
+group failed its combined File Save focus/caret/queued-edit assertion. That
+failure remains open. The assertion is now split into exact focus, selection,
+raw text, retained draft, saved dirty state and selected velocity failures,
+with native status/snapshot diagnostics and explicit starting preconditions.
+No assertion was removed. This diagnostic change requires the next build.
+
+All **24 actual-app cases passed in 34.291 seconds** in the separately retained
+`app-diagnostic-prepared.log`, including native Save and the combined precise
+note/plugin-take chronological history. The first diagnostic runner omitted
+TMPDIR and failed before launching any product process; its log is retained.
+Two bounded diagnostic cases then passed the actual File menu path: live row4
+Save and stopped row0 Save in the bottom dock. These do not erase the failed
+native menu gate or prove its cause.
+
+Computer Use inspected fresh isolated PID18832 with the above executable,
+silent WASAPI output, a disposable built-in demo and a separate saved QA song.
+Observed at 200 percent DPI: double-click inserted a second hit; canvas and Hit
+list Backspace removed their selected hit; the visible playback cursor changed
+position; a hit at the left plot edge was successfully grabbed from its outer
+half and dragged; velocity typing updated the point automatically; Ctrl+S
+retained field focus; subsequent Backspace edited velocity text rather than
+deleting music; Shift+Tab and Tab moved between Units and Velocity; maximize
+and restore retained the precise editor and values. Read-only snapshots retained
+playback epoch3 with increasing frames and no fault. The helper still exposes
+Main rather than the docked field in its accessibility tree; visible caret,
+selection and the independent native assertions are the bounded focus evidence.
+
+**New confirmed failure:** Ctrl+Z from the Hit list did nothing after Backspace.
+The shared native shortcut dispatcher reserved Ctrl+Z/Y for all list controls,
+although this list has no local text history. The pending correction lets only
+this precise Hit list yield those keys to configured document Undo/Redo;
+editable fields keep Windows text Undo. A real native owner regression sends
+Backspace, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z, compares music and focus, and checks
+that Ctrl+Z in the velocity EDIT still changes text without changing the song.
+This correction is **not built yet**. A fresh visible Hit-list keyboard check
+is required after its build; no complete foreground pass is claimed now.
+
+QA PID18832 exited normally with code0; do not reuse its window handles.
+Its 469.789-second report records 48kHz/480-frame silent playback, zero deadline
+overruns, **two starvation indicators**, zero device errors and maximum service
+time5807.2 microseconds. Realtime audit and sustained presentation qualification
+are both false. This is neither a clean performance pass nor temporal flicker
+qualification. The musician's PID39856 and audio defaults were preserved.
+No package or merge was performed from this failed checkpoint.

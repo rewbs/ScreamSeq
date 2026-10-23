@@ -14,17 +14,55 @@ void menuBegin(RestoreApplication &app){SendMessageW(app.window,WM_ENTERMENULOOP
 void menuChoose(RestoreApplication &app,int id){SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);SendMessageW(app.window,WM_COMMAND,ScreamSeq::NativeMenuBar::commandBase+id,0);}
 void applicationMenuBar(){
     {
+        RestoreFixture fixture;auto &app=*fixture.app;
+        app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+        const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+        SendMessageW(GetDlgItem(owner,9201),BM_CLICK,0,0); // Hit page owns list focus.
+        const auto list=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::list);
+        restoreCheck(GetFocus()==list,"Precise Hit page must focus its list");
+        const auto before=app.documentOperation("pattern.notes.get",{{"pattern",0}});
+        const auto pattern=app.view->pattern(0);
+        auto key=[&](WPARAM code,bool ctrl=false,bool shift=false){
+            struct Keys{BYTE saved[256]{};Keys(){restoreCheck(GetKeyboardState(saved)!=FALSE,"Read private Hit-list modifiers");}~Keys(){SetKeyboardState(saved);}}keys;
+            BYTE modifiers[256]{};std::copy(std::begin(keys.saved),std::end(keys.saved),std::begin(modifiers));
+            modifiers[VK_CONTROL]=ctrl?0x80:0;modifiers[VK_SHIFT]=shift?0x80:0;modifiers[VK_MENU]=0;
+            restoreCheck(SetKeyboardState(modifiers)!=FALSE,"Set private Hit-list modifiers");
+            SendMessageW(GetFocus(),WM_KEYDOWN,code,0);
+        };
+        key(VK_BACK);const auto removed=app.documentOperation("pattern.notes.get",{{"pattern",0}});
+        restoreCheck(app.preciseNoteWindow->snapshot().at("draftCount")==0&&GetFocus()==list,"Hit-list Backspace must delete and retain list focus");
+        key('Z',true);
+        restoreCheck(app.documentOperation("pattern.notes.get",{{"pattern",0}})==before&&app.view->pattern(0).cells==pattern.cells&&
+            app.preciseNoteWindow->snapshot().at("draftCount")==1&&GetFocus()==list,"Hit-list Ctrl+Z must undo the deletion through shared history");
+        key('Y',true);
+        restoreCheck(app.documentOperation("pattern.notes.get",{{"pattern",0}})==removed&&app.preciseNoteWindow->snapshot().at("draftCount")==0&&GetFocus()==list,"Hit-list Ctrl+Y must redo the deletion");
+        key('Z',true);key('Z',true,true);
+        restoreCheck(app.documentOperation("pattern.notes.get",{{"pattern",0}})==removed&&GetFocus()==list,"Hit-list Ctrl+Shift+Z must use configured Redo");
+        key('Z',true);
+        const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+        rawDraftText(field,L"-");const auto beforeTextUndo=songState(app);key('Z',true);
+        restoreCheck(restoreText(field)!=L"-"&&songState(app)==beforeTextUndo&&GetFocus()==field,"Velocity Ctrl+Z must remain native text Undo");
+    }
+    {
         RestoreFixture fixture;auto &app=*fixture.app;saveDepartureFixture(fixture);
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
         const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
         const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
         rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+        restoreCheck(GetFocus()==field&&IsWindowVisible(field)&&IsWindowEnabled(field),"Save fixture must begin in the visible enabled velocity field");
+        restoreCheck(app.preciseNoteWindow->queuedMusicalEdit(),"Save fixture must begin with an unsubmitted musical edit");
         menuBegin(app);menuChoose(app,saveCommand);
         DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
-        restoreCheck(GetFocus()==field&&first==1&&last==2&&restoreText(field)==L"94"&&
-            !app.preciseNoteWindow->retainedDraft()&&!app.view->dirty&&
-            app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94,
-            "Native File Save lost precise-note field focus/caret or omitted its queued edit");
+        const auto evidence=RestoreJson{{"focus",reinterpret_cast<uintptr_t>(GetFocus())},{"field",reinterpret_cast<uintptr_t>(field)},
+            {"selection",{first,last}},{"raw",utf8Path(restoreText(field))},{"dirty",app.view->dirty},
+            {"status",utf8Path(app.status)},{"preciseNotes",app.preciseNoteWindow->snapshot()}}.dump();
+        restoreCheck(GetFocus()==field,("Native File Save lost field focus: "+evidence).c_str());
+        restoreCheck(first==1&&last==2,("Native File Save lost text selection: "+evidence).c_str());
+        restoreCheck(restoreText(field)==L"94",("Native File Save changed raw text: "+evidence).c_str());
+        restoreCheck(!app.preciseNoteWindow->retainedDraft(),("Native File Save retained the queued draft: "+evidence).c_str());
+        restoreCheck(!app.view->dirty,("Native File Save did not save the project: "+evidence).c_str());
+        restoreCheck(app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94,
+            ("Native File Save omitted the queued note: "+evidence).c_str());
     }
     {
         RestoreFixture fixture;auto &app=*fixture.app;
