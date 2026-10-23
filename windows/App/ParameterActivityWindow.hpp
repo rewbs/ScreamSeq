@@ -17,6 +17,7 @@ private:
   Request request_;std::function<Context()> context_;std::function<void(const Json &)> inspect_;
   Context captured_;Json targets_=Json::array(),parameters_=Json::array(),sources_=Json::array(),recorded_=Json::array();
   std::deque<Json> points_;std::vector<size_t> listed_;std::string target_,plugin_,token_,sourceRevision_;
+  std::vector<std::wstring> listedText_;std::vector<uint64_t> listedSequences_;int listedPage_=-1;std::string listedToken_;
   std::optional<uint32_t> parameter_;uint64_t cursor_=0,dropped_=0,engine_=0,originalFrame_=0;
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
@@ -39,12 +40,26 @@ private:
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(processors),CB_RESETCONTENT,0,0);int index=-1;for(size_t i=0;i<targets_.size();++i){const auto &t=targets_[i];append(processors,wide(t.at("name"))+L" · "+wide(t.at("key")));if(t.at("key")==target_)index=int(i);}choose(processors,index);
     ScreamSeq::NativeInputGate::present(controls_.at(parameters),CB_RESETCONTENT,0,0);index=-1;for(size_t i=0;i<parameters_.size();++i){const auto &p=parameters_[i];append(parameters,wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string())));if(parameter_&&p.at("id")==*parameter_)index=int(i);}choose(parameters,index);setting_=false;}
   void showFields(){setting_=true;if(selected_>=0&&size_t(selected_)<recorded_.size()){const auto &p=recorded_[size_t(selected_)];originalFrame_=p.at("frame");set(time,double(originalFrame_)/48000);set(value,p.at("value"));}else{originalFrame_=0;set(time,L"0");set(value,L"0");}fields_=false;setting_=false;}
-  void list(){const auto old=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));SendMessageW(controls_.at(items),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(items),LB_RESETCONTENT,0,0);listed_.clear();
-    const auto add=[&](size_t index,const std::wstring &text){listed_.push_back(index);ScreamSeq::NativeInputGate::present(controls_.at(items),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));};
+  void list(){const auto list=controls_.at(items);const auto old=int(SendMessageW(list,LB_GETCURSEL,0,0)),oldTop=int(SendMessageW(list,LB_GETTOPINDEX,0,0));
+    const auto previousSequence=[&](int row)->std::optional<uint64_t>{if(page_==1&&listedPage_==1&&listedToken_==token_&&row>=0&&size_t(row)<listedSequences_.size())return listedSequences_[size_t(row)];return {};};
+    const auto selectedSequence=previousSequence(old),topSequence=previousSequence(oldTop);
+    std::vector<std::wstring> text;std::vector<uint64_t> sequences;listed_.clear();
+    const auto add=[&](size_t index,const std::wstring &row){listed_.push_back(index);text.push_back(row);if(page_==1)sequences.push_back(points_[index].at("sequence").get<uint64_t>());};
     if(page_==0)for(size_t i=0;i<sources_.size();++i)add(i,wide(sources_[i].value("title",std::string()))+(sources_[i].value("enabled",true)?L"":L" · disabled"));
     else if(page_==1){for(size_t i=points_.size()>512?points_.size()-512:0;i<points_.size();++i){const auto &p=points_[i];add(i,std::to_wstring(p.at("seconds").get<double>())+L" s · "+wide(p.at("source").at("kind"))+L" · "+wide(p.at("value").dump())+(p.at("source").at("kind")=="graph-source"?L" normalized contribution":L" native units"));}}
     else for(size_t i=0;i<recorded_.size();++i){const auto &p=recorded_[i];add(i,std::to_wstring(p.at("frame").get<double>()/48000)+L" s · "+wide(p.at("value").dump()));}
-    ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,page_==2?selected_:old,0);SendMessageW(controls_.at(items),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(items),nullptr,FALSE);
+    const auto rowFor=[&](std::optional<uint64_t> sequence){if(sequence){const auto found=std::find(sequences.begin(),sequences.end(),*sequence);if(found!=sequences.end())return int(found-sequences.begin());}return -1;};
+    const auto selected=page_==2?selected_:page_==1?rowFor(selectedSequence):listedPage_==page_?old:-1;
+    const auto top=page_==1?std::max(0,rowFor(topSequence)):listedPage_==page_?oldTop:0;
+    // Repeated observation with no new rows needs no list reset. When rows do
+    // change, retain event identity and scroll; never reinterpret a row number
+    // as a different source after the bounded recent-event page rolls forward.
+    const bool changed=text!=listedText_||page_!=listedPage_;
+    if(changed){SendMessageW(list,WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(list,LB_RESETCONTENT,0,0);
+      for(const auto &row:text)ScreamSeq::NativeInputGate::present(list,LB_ADDSTRING,0,reinterpret_cast<LPARAM>(row.c_str()));}
+    if(changed||old!=selected)ScreamSeq::NativeInputGate::present(list,LB_SETCURSEL,selected,0);
+    if(changed){SendMessageW(list,LB_SETTOPINDEX,top,0);SendMessageW(list,WM_SETREDRAW,TRUE,0);InvalidateRect(list,nullptr,FALSE);}
+    listedText_=std::move(text);listedSequences_=std::move(sequences);listedPage_=page_;listedToken_=token_;
     set(pageLabel,page_==2?std::to_wstring(offset_)+L"–"+std::to_wstring(offset_+recorded_.size())+L" of "+std::to_wstring(total_)+L" recorded points":std::to_wstring(listed_.size())+L" entries");}
   struct RecordedRead {Json points=Json::array();size_t offset=0,total=0;int selected=-1;};
   struct SourcesRead {Json sources=Json::array();std::wstring rule;};
@@ -102,7 +117,7 @@ private:
     require(r.at("token")==token_&&!r.at("target").is_null()&&r.at("target").at("key")==target_&&r.at("parameter")==*parameter_,"Prepared processor or API watch changed / Refresh to observe again");
     const auto cursor=r.at("cursor").get<uint64_t>(),dropped=r.at("dropped").get<uint64_t>();const auto active=r.at("active").get<bool>();auto next=points_;
     require(r.at("points").is_array()&&r.at("points").size()<=2048,"Incomplete parameter activity page");
-    for(const auto &p:r.at("points")){for(const auto *key:{"seconds","value","minimum","maximum"})require(std::isfinite(p.at(key).get<double>()),"Invalid activity value");(void)p.at("pattern");(void)p.at("order");(void)p.at("position");(void)p.at("source").at("kind").get<std::string>();next.push_back(p);}
+    for(const auto &p:r.at("points")){for(const auto *key:{"seconds","value","minimum","maximum"})require(std::isfinite(p.at(key).get<double>()),"Invalid activity value");(void)p.at("sequence").get<uint64_t>();(void)p.at("pattern");(void)p.at("order");(void)p.at("position");(void)p.at("source").at("kind").get<std::string>();next.push_back(p);}
     while(next.size()>8192)next.pop_front();std::optional<SourcesRead> sourceData;if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,std::nullopt);guardRead(c,std::nullopt);
     points_=std::move(next);cursor_=cursor;dropped_=dropped;active_=active;if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}if(page_==1)list();requestPaint();pending_=false;
   }catch(const std::exception &e){pending_=false;frozen_=true;set(freeze,L"Resume");error(e);}}

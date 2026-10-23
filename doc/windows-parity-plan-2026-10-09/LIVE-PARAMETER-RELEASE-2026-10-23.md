@@ -886,3 +886,21 @@ seven app cases. These additions are unbuilt; preserve the original unexecuted
 freeze when updating `recorded-edit-guard/` to the next source commit. No new
 build, private test process, foreground process or CI dispatch ran for this
 continuation.063 CI was authoritatively still compiling at21:12 UTC.
+
+### 21:21 UTC continuation: stable recent-event selection
+
+Current source also rebuilt the Recent changes list on every observation poll
+and restored only its row number. Once the bounded512-row page rolled forward,
+that row could mean another event and Open source would follow the wrong entry.
+The correction retains the displayed event sequence and watch token, remaps
+selection and top visible row after an append, and clears selection when its
+event expires. It leaves unchanged native list content in place. Musical data,
+the8192-point observer bound and512-row display bound remain unchanged.
+
+The existing native Activity group now observes real LB_RESETCONTENT messages
+to require zero list rebuilds for unchanged data; it verifies native focus,
+selection and scroll through a rolling page, retained source navigation,
+expired selection refusing navigation, and exact unchanged lane/revision.
+These assertions are source-only and remain in the same eight-group/seven-case
+checkpoint. ARM063 compiled at21:13:54; its tests and the Intel/Windows jobs
+were still running at21:20:21. No new build was started or old job restarted.

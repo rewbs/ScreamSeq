@@ -12,7 +12,7 @@ void run(){
   {
     ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false;unsigned edits=0;std::string token="1:1";Json navigation;
     Json processor={{"key","song/rack/a"},{"name","Gain copy"},{"plugin","a"},{"graph","n0"},{"node","n0"},{"target","n0"},{"instrument","n0"},{"role",0},{"channel",0},{"bypass",false},{"parameterCount",1}};
-    std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};std::optional<double> constantTrace;
+    std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};std::optional<double> constantTrace;std::optional<Json> incomingPage;
     Json lane=Json::array({{{"frame",24000},{"value",-.5}}});
     auto request=[&](const std::string &method,const Json &p)->Json {
       if(pump)pump(method);if(method==failRead)throw std::runtime_error("Injected read failure");
@@ -25,6 +25,7 @@ void run(){
         {{"sequence",2},{"seconds",.6},{"value",.9},{"minimum",-.9},{"maximum",.9},{"pattern",0},{"order",0},{"position",128},{"source",{{"kind","graph-source"},{"id","n99"}}}},
         {{"sequence",3},{"seconds",.7},{"value",-.25},{"minimum",-.25},{"maximum",-.25},{"pattern",0},{"order",0},{"position",256},{"source",{{"kind","recorded"}}}}}):Json::array()},{"cursor",3},{"dropped",0},{"active",true}};
         if(constantTrace)for(auto &point:result["points"])for(const auto *key:{"value","minimum","maximum"})point[key]=*constantTrace;
+        if(incomingPage){result["points"]=*incomingPage;result["cursor"]=incomingPage->empty()?p.at("after"):incomingPage->back().at("sequence");}
         return result;}
       if(method=="automation.recorded.get")return {{"points",lane},{"offset",0},{"total",lane.size()},{"sampleRate",48000}};
       if(method=="automation.recorded.edit"){require(p.at("expectedRevision")==context.revision,"Stale write reached callback");++edits;const auto original=p.at("frame");lane.erase(std::remove_if(lane.begin(),lane.end(),[&](const auto &v){return v.at("frame")==original;}),lane.end());if(!p.value("remove",false))lane.push_back({{"frame",p.value("newFrame",original)},{"value",p.at("value")}});std::sort(lane.begin(),lane.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});context.revision="r"+std::to_string(edits+2);return {{"wouldChange",true}};}
@@ -52,6 +53,35 @@ void run(){
     }
     constantTrace.reset();click(11004);SendMessageW(window,WM_TIMER,3,0);
     require(lane==traceLane&&context.revision==traceRevision&&edits==0,"Transient trace presentation edited song data");
+    {
+      choose(11006,1);const auto recent=GetDlgItem(window,11007);
+      const auto page=[](uint64_t first,uint64_t last){Json result=Json::array();for(auto sequence=first;sequence<=last;++sequence)
+        result.push_back({{"sequence",sequence},{"seconds",double(sequence)/10},{"value",.5},{"minimum",.5},{"maximum",.5},
+          {"pattern",0},{"order",0},{"position",sequence},{"source",{{"kind","recorded"}}}});return result;};
+      incomingPage=page(4,512);SendMessageW(window,WM_TIMER,3,0);
+      require(SendMessageW(recent,LB_GETCOUNT,0,0)==512,"Recent activity page did not retain its bounded rows");
+      SendMessageW(recent,LB_SETCURSEL,400,0);SendMessageW(recent,LB_SETTOPINDEX,390,0);SetFocus(recent);
+      unsigned resets=0;
+      const SUBCLASSPROC observe=[](HWND h,UINT message,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data)->LRESULT{
+        if(message==LB_RESETCONTENT)++*reinterpret_cast<unsigned *>(data);return DefSubclassProc(h,message,w,l);};
+      require(SetWindowSubclass(recent,observe,0x4154,reinterpret_cast<DWORD_PTR>(&resets))!=FALSE,"Observe native recent-list refresh");
+      struct RemoveObserver{HWND window;SUBCLASSPROC callback;~RemoveObserver(){if(window)RemoveWindowSubclass(window,callback,0x4154);}}observer{recent,observe};
+      incomingPage=Json::array();SendMessageW(window,WM_TIMER,3,0);
+      require(resets==0&&SendMessageW(recent,LB_GETCURSEL,0,0)==400&&SendMessageW(recent,LB_GETTOPINDEX,0,0)==390&&GetFocus()==recent,
+        "Unchanged observation rebuilt the list or lost native selection, scroll or focus");
+      incomingPage=page(513,520);SendMessageW(window,WM_TIMER,3,0);
+      require(SendMessageW(recent,LB_GETCOUNT,0,0)==512&&SendMessageW(recent,LB_GETCURSEL,0,0)==392&&
+        SendMessageW(recent,LB_GETTOPINDEX,0,0)==382&&GetFocus()==recent,
+        "Rolling recent activity redirected the selected event or its scroll position");
+      navigation=nullptr;click(11008);require(navigation.at("kind")=="recorded"&&navigation.at("plugin")=="a","Retained recent selection lost source navigation");
+      incomingPage=page(521,1032);SendMessageW(window,WM_TIMER,3,0);
+      require(SendMessageW(recent,LB_GETCURSEL,0,0)==-1,"An evicted recent event silently selected a different source");
+      navigation=nullptr;click(11008);require(navigation.is_null(),"Evicted activity selection navigated to a replacement event");
+      require(RemoveWindowSubclass(recent,observe,0x4154)!=FALSE,"Release native recent-list observer");
+      observer.window=nullptr;
+      incomingPage.reset();choose(11006,0);click(11004);SendMessageW(window,WM_TIMER,3,0);
+      require(lane==traceLane&&context.revision==traceRevision&&edits==0,"Recent trace navigation changed musical data");
+    }
     SendMessageW(GetDlgItem(window,11007),LB_SETCURSEL,0,0);click(11008);require(navigation.at("kind")=="baseline"&&navigation.at("parameter")==1&&navigation.at("plugin")=="a","Baseline provenance lost watched plugin/parameter");
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
