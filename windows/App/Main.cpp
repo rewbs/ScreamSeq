@@ -677,7 +677,8 @@ public:
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&app.parameterControlDelivery.pending())
                 throw ScreamSeq::Api::ApiError(-32002,"Wait for original parameter input delivery before finishing the take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview()&&
-                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>()))
+                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>())&&
+                !(params.contains("restoreSavedState")&&params.at("restoreSavedState").is_boolean()&&params.at("restoreSavedState").get<bool>()))
                 throw ScreamSeq::Api::ApiError(-32002,"Review original refused or uncertain input and explicitly acknowledge loss before keeping accepted points",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             // Freeze raw native fields through worker admission, baseline
             // restoration and readback. Release musical keys before filtering

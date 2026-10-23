@@ -311,6 +311,11 @@
             "acknowledgeLoss": {
               "type": "boolean",
               "default": false
+            },
+            "restoreSavedState": {
+              "type": "boolean",
+              "default": false,
+              "description": "Explicit recovery only for an already-kept retained take, with playback stopped and every owned plugin editor closed. Restores accepted plugin state and abandons later unsaved native input while preserving kept automation and its Undo entry. Never implicit in ordinary Commit retries."
             }
           },
           "required": [

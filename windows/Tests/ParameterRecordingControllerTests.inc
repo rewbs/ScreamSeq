@@ -65,6 +65,13 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   auto take=invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});
   need(take.at("capturing")==true&&take.at("retained")==true,"Worker did not retain an armed parameter take");
   const auto token=take.at("take");const auto beforeRevision=c.view()->session.revision;
+  for(const auto &flag:Json::array({true,1,"true",nullptr})) {
+    rejected([&]{invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",flag}});});
+    need(c.view()->session.revision==beforeRevision&&
+      call(c,"automation.recording.get",Json::object()).at("completed")==false&&
+      call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+      "Saved-state recovery accepted an unkept take or malformed flag, or changed history/baseline");
+  }
   rejected([&]{invoke(c,"document.patch",{{"title","Must not change"}});});
   rejected([&]{c.prepare(48000,Json::object(),true,true).get();});
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.25)>0,"Parameter recording input failed");});
@@ -129,13 +136,32 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   take=invoke(c,"automation.recording.stop",{{"take",token}});
   need(take.at("capturing")==false&&!take.contains("intakeError"),"Worker Stop failed its fixed native drain");
   const auto stopped=stops;
+  Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.875)>0,"Post-Stop recovery input failed");});
   take=invoke(c,"automation.recording.commit",{{"take",token},{"acknowledgeLoss",false}});
-  need(take.at("completed")==true&&take.at("retained")==false&&take.at("changed")==true&&
-    !take.contains("restorationError")&&stops==stopped&&active,"Worker parameter commit failed or stopped playback");
+  need(take.at("completed")==true&&take.at("retained")==true&&take.at("changed")==true&&
+    take.contains("restorationError")&&stops==stopped&&active,"Worker Keep lost later input, failed to commit or stopped playback");
   const auto recorded=call(c,"automation.get",Json::object());
   need(recorded!=baselineAutomation&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter commit lost points or changed opaque manual state");
+  const auto keptRevision=c.view()->session.revision;
+  rejected([&]{invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});});
+  active=false;playback->chain().applyPending();
+  take=invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});
+  need(take.at("retained")==true&&take.at("changed")==false&&take.contains("restorationError")&&
+    c.view()->session.revision==keptRevision,"Explicit recovery replaced an open editor or changed kept history");
+  invoke(c,"plugin.editor.close",{{"slot",0}});
+  take=invoke(c,"automation.recording.commit",{{"take",token}});
+  need(take.at("retained")==true&&take.at("changed")==false,
+    "Ordinary Finish restoration silently abandoned post-Stop input after closing its editor");
+  take=invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});
+  need(take.at("retained")==false&&take.at("completed")==true&&take.at("changed")==false&&
+    !take.contains("restorationError")&&c.view()->session.revision==keptRevision&&
+    call(c,"automation.get",Json::object())==recorded&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+    "Explicit closed-editor recovery lost kept points/manual state or inserted history");
   rejected([&]{invoke(c,"automation.recording.commit",{{"take",token}});});
+  invoke(c,"plugin.editor.open",{{"slot",0}});call(c,"flushPluginEditors",{{"force",true}});
+  need(c.view()->session.revision==keptRevision,"Reopening restored editor introduced another history edit");
+  active=true; // Resume the existing deterministic test clock, not a new host.
   renderAhead();take=invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});
   const auto discardedToken=take.at("take");const auto discardRevision=c.view()->session.revision;
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.75)>0,"Discard parameter input failed");});

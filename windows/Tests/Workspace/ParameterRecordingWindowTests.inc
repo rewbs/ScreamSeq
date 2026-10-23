@@ -53,7 +53,13 @@ void applicationParameterRecordingReview() {
         restoreCheck(params.at("take")==take.at("take"),"Recording action targeted a different retained take");
         if(method=="automation.recording.stop")take["capturing"]=false;
         else if(method=="automation.recording.commit"){
-          restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");take={{"retained",false},{"capturing",false},{"take",""}};
+          if(params.value("restoreSavedState",false)) {
+            restoreCheck(take.at("completed")==true&&take.at("transportPlaying")==false&&!params.contains("acknowledgeLoss"),
+              "Explicit recovery bypassed completed/stopped guards or acknowledged musical loss");
+            take["retained"]=false;take["capturing"]=false;
+          }else {
+            restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");take={{"retained",false},{"capturing",false},{"take",""}};
+          }
         }else if(method=="automation.recording.discard")take={{"retained",false},{"capturing",false},{"take",""}};
         else throw std::runtime_error("Unexpected review write");
       }
@@ -136,7 +142,7 @@ void applicationParameterRecordingReview() {
     restoreCheck(!tool.snapshot().at("acknowledgeLoss").get<bool>()&&!IsWindowEnabled(control(9723)),"New loss reused acknowledgement of an earlier review");
     SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
     take["completed"]=true;SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(!IsWindowEnabled(control(9724))&&restoreText(control(9723))==L"Finish keeping",
+    restoreCheck(!IsWindowEnabled(control(9724))&&restoreText(control(9723))==L"Finish restoring",
         "Already committed take offered Discard as if it could undo accepted music");
     take["completed"]=false;SendMessageW(window,WM_TIMER,7,0);
     failAfterKeep=true;click(9723);restoreCheck(writes.size()==3&&!tool.snapshot().at("completion").is_null(),"Post-commit error lost its original receipt");
@@ -302,4 +308,30 @@ void applicationParameterRecordingReview() {
     const auto finalWrites=writes.size();click(9741);
     restoreCheck(openedAutomation.back()==Json::array({plugin,2})&&writes.size()==finalWrites&&songState(app)==music,
       "Selected kept automation navigation changed music or used a different target");
+    take={{"take","completed-recovery"},{"retained",true},{"capturing",false},{"completed",true},
+      {"compatible",false},{"transportPlaying",true},{"targets",Json::array()}, {"sources",Json::array()}};
+    click(9725);click(9742);
+    restoreCheck(writes.size()==finalWrites&&!IsWindowEnabled(control(9742))&&IsWindowVisible(control(9742))&&!IsWindowVisible(control(9724))&&
+      IsWindowEnabled(control(9723))&&restoreText(control(9723))==L"Finish restoring"&&!IsWindowEnabled(control(9731)),
+      "Saved-state recovery must replace Discard only for completed takes and refuse active playback");
+    take["transportPlaying"]=false;click(9725);SetFocus(control(9742));
+    restoreCheck(IsWindowEnabled(control(9742)),"Stopped kept take does not expose explicit state recovery");
+    GetClientRect(window,&client);
+    for(int id:{9723,9742,9726}) {
+      RECT bounds{};GetWindowRect(control(id),&bounds);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&bounds),2);
+      restoreCheck(bounds.left>=0&&bounds.top>=0&&bounds.right<=client.right&&bounds.bottom<=client.bottom,
+        "Completed-take recovery action clipped outside native review");
+    }
+    duringRead=[&]{click(9742);take["transportPlaying"]=true;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==finalWrites&&tool.snapshot().at("queuedAction").is_null(),
+      "Queued recovery abandoned input after playback restarted during its read");
+    take["transportPlaying"]=false;click(9725);deferKeepReceipt=true;click(9742);
+    restoreCheck(writes.size()==finalWrites+1&&writes.back().second.at("restoreSavedState")==true&&tool.protectsClose(),
+      "Explicit recovery lost its intent or unresolved completion protection");
+    click(9725);click(9742);SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(writes.size()==finalWrites+1&&tool.protectsClose(),"Uncertain recovery replayed or lost its completion receipt");
+    lateReceipt->publish(lateCompletion);click(9725);
+    restoreCheck(!tool.protectsClose()&&writes.size()==finalWrites+1&&songState(app)==music,
+      "Confirmed recovery changed music, repeated its action or retained stale protection");
 }

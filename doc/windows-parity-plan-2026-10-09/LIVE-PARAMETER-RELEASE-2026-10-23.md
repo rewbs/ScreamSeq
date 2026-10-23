@@ -140,3 +140,74 @@ At 11:29 UTC the exact `9c5c6ebb1` Mac ARM job `120379904644` was terminal
 success. Intel and Windows jobs remained live; no job was restarted. This pass
 qualifies the frozen prerequisite candidate only, not `f4d0fb7a4` or this recovery
 primitive. The next build gate remains 12:03:27 UTC pending fresh job/start checks.
+
+## Explicit completed-take recovery — source prepared, not yet qualified
+
+The next cohesive batch exposes the primitive through both native UIs and
+`automation.recording.commit` with optional strict boolean `restoreSavedState`.
+Default/false preserves normal completion. True requires an already-completed
+retained take, stopped playback/audio and every owned editor closed. It abandons
+later unsaved native input and restores accepted plugin state without changing
+kept automation, song revision or its existing Undo entry. No project format or
+stable identity changes. An unkept take must still use ordinary Keep or Discard.
+
+Concrete ownership and interfaces:
+
+- Mac `ParameterTakeSession.inc` calls the retained owner's stopped whole-group
+  repair, releasing it only after success. `ParameterRecordingAPI.inc` validates
+  the explicit intent before commit/restoration. Windows
+  `ParameterRecordingOperations.inc` guards completed/stopped context, and
+  `RecordedPluginEditors.inc` permits abandoning later input only for explicit
+  recovery with all owned editors closed, rechecking after vendor/lease calls.
+- Mac `PluginRecording.swift` and Windows `ParameterRecordingWindow.hpp` replace
+  completed-take Discard with **Restore saved state**, explain the abandonment,
+  retain recovery-copy access and guard queued actions against changed context.
+  Ordinary Finish restoration never acquires this flag. Explicit recovery does
+  not automatically retry pending or uncertain responses. Windows now labels
+  ordinary cleanup **Finish restoring** and does not request a second musical
+  loss acknowledgement for an already-kept take.
+- The native delivery adapters allow only literal boolean true to send this
+  deliberate recovery past retained refused-input review. Pending delivery,
+  changed loss/ownership and uncertain completion still protect original input;
+  the session remains authoritative for completed/stopped/closed validation.
+- Both API schemas, discovery responses and guides describe the same contract.
+
+New assertions (written, not run): Mac retained UI checks cover action visibility,
+compact containment/focus, exact revision/token/flag, playback restart during a
+read, uncertain/pending no-replay and ordinary retry isolation. Native input
+adapter checks cover false/numeric/string versus literal true without erasing
+evidence. The real-device `ParameterTakeSessionTests.inc` adds malformed/unkept
+and active-completed refusal, then explicit stopped API recovery followed by
+existing exact music/plugin, one Undo/Redo and save/reopen checks.
+
+Windows `ParameterRecordingControllerTests.inc` adds malformed/unkept refusal,
+post-Stop vendor input, Keep while playback continues with a retained cleanup
+error, stopped/open-editor refusal, ordinary retry refusing to abandon later
+input even after Close, then explicit recovery preserving accepted automation,
+opaque baseline and revision. Existing one-step Undo/Redo and native reopen
+remain mandatory. `ParameterControlDeliveryTests.inc` checks strict intent and
+preserved evidence. `ParameterRecordingWindowTests.inc` covers native controls,
+queued-playback rejection, contained actions and uncertain completion/readback.
+Actual-app `test_plugin_recording.py` adds schema discovery and strict recovery
+refusals to the complete composing journey before ordinary Keep. Mac's real
+socket admission case checks discovery too; it does not replace the device test.
+
+Cheap checks so far: JSON parsing of both schemas, Python AST parsing of both
+changed socket/app scripts, and whitespace review. These establish syntax only.
+No compilation, native test, new executable, foreground qualification or main
+merge is claimed for this source batch.
+
+Next checkpoint must include `document-controller-tests` as a build target and
+the isolated `test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard`
+case: that is where the changed real-vendor controller and ownership fixtures
+execute; the ordinary CTest recovery registration is not equivalent. Retain the
+seven previous native groups and 13 app cases, adding this one app-runner case.
+Both Mac architecture builds, changed interface/native groups and the actual
+BlackHole session lifecycle remain required. After passing automated checks,
+inspect recording controls and recovery action layout/focus in a fresh isolated
+QA process. No previous process ID or screenshot qualifies the new controls.
+
+At 11:37 UTC, exact candidate `9c5c6ebb1` had compiled on Windows x64 and Mac Intel;
+their jobs were still running tests. Mac ARM remained terminal success. The
+fresh CI receipt confirmed no later build start than 11:03:27 UTC. Do not build
+before 12:03:27 UTC, and recheck live jobs/other checkpoints before dispatch.

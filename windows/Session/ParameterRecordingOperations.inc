@@ -71,7 +71,7 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   if(!start&&!stop&&!commit&&!discard&&!capture)throw Api::ApiError(-32601,"Unknown parameter recording method");
   keys(params,start?std::initializer_list<const char *>{"expectedRevision","plugins"}:
     capture?std::initializer_list<const char *>{"expectedRevision","take","plugin","parameter","value","timestamp"}:
-    commit?std::initializer_list<const char *>{"expectedRevision","take","acknowledgeLoss"}:
+    commit?std::initializer_list<const char *>{"expectedRevision","take","acknowledgeLoss","restoreSavedState"}:
       std::initializer_list<const char *>{"expectedRevision","take"});
   if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())
     throw Api::ApiError(-32602,"expectedRevision is required");
@@ -155,6 +155,9 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   }
   auto &take=*parameterRecording_->take;
   const bool loss=commit&&flag(params,"acknowledgeLoss");
+  const bool restoreSaved=commit&&flag(params,"restoreSavedState");
+  if(restoreSaved&&(!take.completed()||playbackFeedback().playing||playbackFeedback().audioActive))
+    throw Api::ApiError(-32002,"Restore saved plugin state requires an already-kept take and stopped playback");
   // A changed clock/context may prevent a normal fixed Stop cut. Explicit
   // discard after transport has stopped can seal the retained evidence without
   // accepting its input; the vendor release still requires an empty/open or
@@ -170,7 +173,11 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   }
   Json result=parameterRecordingSummary();result["changed"]=changed;
   try {
-    if(plugins_->releaseRecordedEditors(discard,[this]{return restoreParameterRecordingPreview();})) {
+    if(plugins_->releaseRecordedEditors(discard,[this,restoreSaved]{
+      if(restoreSaved&&(playbackFeedback().playing||playbackFeedback().audioActive))
+        throw Api::ApiError(-32002,"Playback restarted during saved-state recovery; take retained");
+      return restoreParameterRecordingPreview();
+    },restoreSaved)) {
       parameterRecording_.reset();result["retained"]=false;result["capturing"]=false;
     } else result["restorationError"]="Preview restoration is busy; retry this retained take";
   }catch(const std::exception &e){result["restorationError"]=e.what();}

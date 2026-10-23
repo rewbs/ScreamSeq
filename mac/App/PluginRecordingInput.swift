@@ -106,7 +106,8 @@ final class PluginRecordingInput {
         reply(["error": ["code": -32001, "message": "The plugin take changed. Check it before choosing another action.",
           "data": ["writeOutcome": "notCommitted"]]]); return
       }
-      if method == "automation.recording.commit", delivery.needsReview, Self.boolean(params["acknowledgeLoss"]) != true {
+      if method == "automation.recording.commit", delivery.needsReview,
+        Self.boolean(params["acknowledgeLoss"]) != true, Self.boolean(params["restoreSavedState"]) != true {
         reply(Self.refused("Review original refused or uncertain input and acknowledge loss before keeping the accepted points.")); return
       }
     }
@@ -130,7 +131,8 @@ final class PluginRecordingInput {
       boundary = nil; request.reply(Self.refused("The plugin take changed while input was draining. Review it again.")); return
     }
     if request.method == "automation.recording.commit",
-      !request.loss.isEqual(delivery.lossCensus) || (delivery.needsReview && Self.boolean(request.params["acknowledgeLoss"]) != true) {
+      !request.loss.isEqual(delivery.lossCensus) || (delivery.needsReview && Self.boolean(request.params["acknowledgeLoss"]) != true &&
+        Self.boolean(request.params["restoreSavedState"]) != true) {
       boundary = nil; request.reply(Self.refused("Original input needs review before keeping this take.")); return
     }
     request.sent = true; boundary = request

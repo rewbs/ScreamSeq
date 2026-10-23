@@ -37,6 +37,9 @@ def expect_error(code, action):
 
 def parameter_recording_admission(client):
     before=client.call('document.get')
+    recovery=client.call('api.describe')['data']['pluginParameterRecording']['savedStateRecovery']
+    assert recovery['method']=='automation.recording.commit' and recovery['field']=='restoreSavedState'
+    assert all(recovery[k] is True for k in ('requiresCompletedTake','requiresStoppedAudio','requiresClosedEditors'))
     reply=client.call('automation.recording.get')
     state=reply['data']
     assert not reply['changed'] and reply['revision']==before['revision']

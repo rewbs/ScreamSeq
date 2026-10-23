@@ -203,6 +203,9 @@ class SessionAdapter {
         result["revisionGuards"]["automation.recovery.get"]={"expectedRevision"};
         result["pluginRecording"]={{"schema","windows/Api/plugin-recording.schema.json"},{"clock","windows-qpc-100ns"},
           {"timingInspection",{{"field","includeTiming"},{"maximumPage",16},{"readOnly",true}}},
+          {"savedStateRecovery",{{"method","automation.recording.commit"},{"field","restoreSavedState"},
+            {"requiresCompletedTake",true},{"requiresStoppedAudio",true},{"requiresClosedEditors",true},
+            {"semantics","Explicitly abandons later unsaved native input; kept automation, revision and Undo remain unchanged"}}},
           {"scope","Stable rack plugin identities; independent graph recipe copies are not recorded"},
           {"input","Original timestamp and native value; accepted input is never resent after preview failure"},
           {"recovery","Detached read-only archives preserve original clocks and identities; never rearm or replay them"}};

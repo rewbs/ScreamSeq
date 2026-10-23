@@ -221,5 +221,11 @@ void applicationRecordedRackControls() {
     }
     {Application::ParameterRecordingInputLease lease(app,"automation.recording.commit",{{"acknowledgeLoss",true}});
         restoreCheck(app.parameterControlDelivery.snapshot()==evidence,"Loss consent replayed or discarded original input before worker commit");}
+    for(const auto &intent:{RestoreJson(),RestoreJson(false),RestoreJson(1),RestoreJson("true")}) {
+        restoreRejected([&]{Application::ParameterRecordingInputLease lease(app,"automation.recording.commit",{{"restoreSavedState",intent}});});
+    }
+    {Application::ParameterRecordingInputLease lease(app,"automation.recording.commit",{{"restoreSavedState",true}});
+        restoreCheck(app.parameterControlDelivery.snapshot()==evidence,
+          "Explicit saved-state recovery erased original input before completed/stopped worker validation");}
     app.parameterControlDelivery.release();
 }

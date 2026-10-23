@@ -42,10 +42,20 @@ capture order (default 128, maximum 512). Exact timestamp/frame values are
 decimal strings; `frame:null` preserves unmapped or post-playback-Stop evidence.
 Reading does not retime or replay events. `stop {expectedRevision, take}` seals
 capture without stopping song playback. `commit {expectedRevision, take,
-acknowledgeLoss?}` makes one chronological Undo edit for the whole take;
+acknowledgeLoss?, restoreSavedState?}` makes one chronological Undo edit for the whole take;
 acknowledging loss requires an explicit boolean. Empty takes add no history.
 `discard {expectedRevision, take}` abandons input without changing accepted music.
 All writes reject unknown keys, stale revisions and wrong take identities.
+
+For an already-kept retained take, **Restore saved state** sends
+`commit {expectedRevision, take, restoreSavedState:true}`. This explicit recovery
+requires stopped playback/audio and every owned plugin editor closed. It restores
+accepted plugin state and abandons later unsaved native input; the kept automation,
+song revision and chronological Undo entry remain unchanged. An unkept take must
+use ordinary Keep or Discard. The flag is a strict boolean, defaulting to false.
+Ordinary **Finish restoration** never selects it implicitly. Failed or pending
+recovery retains the take; inspect current state before explicitly retrying.
+Native input still draining, changed ownership or an uncertain write blocks release.
 
 Optional `includeTiming:true` requires an explicit page `limit` from1 to16.
 The default event projection is unchanged. Each returned row adds `timing`:

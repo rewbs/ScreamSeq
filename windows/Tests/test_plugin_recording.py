@@ -77,6 +77,10 @@ class PluginRecordingTests(unittest.TestCase):
         description = self.read('api.describe')
         self.assertEqual(description['pluginRecording']['timingInspection'],
                          dict(field='includeTiming', maximumPage=16, readOnly=True))
+        recovery = description['pluginRecording']['savedStateRecovery']
+        self.assertEqual((recovery['method'], recovery['field']), ('automation.recording.commit', 'restoreSavedState'))
+        for condition in ('requiresCompletedTake', 'requiresStoppedAudio', 'requiresClosedEditors'):
+            self.assertIs(recovery[condition], True)
         for method in ('automation.recording.get', 'automation.recording.events',
                        'automation.recovery.list', 'automation.recovery.get'):
             self.assertIn(method, description['reads'])
@@ -429,6 +433,13 @@ class PluginRecordingTests(unittest.TestCase):
             self.assertTrue(all(t['unmapped'] == 0 and t['overflow'] == 0 for t in stopped['targets']), stopped)
         self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take stopped / Keep or Discard to finish')
         self.assertTrue(self.read('transport.get')['playing'])
+        before_refusals = self.doc()
+        for flag, code in ((True, -32002), (1, -32602), ('true', -32602), (None, -32602)):
+            with self.subTest(restoreSavedState=flag), self.assertRaises(ApiError) as raised:
+                self.write('automation.recording.commit', take=take['take'], restoreSavedState=flag)
+            self.assertEqual(raised.exception.code, code)
+            self.assertEqual(self.doc(), before_refusals, 'Refused saved-state recovery changed music/history')
+            self.assertFalse(self.take()['completed'])
         self.recording_button(9723)
         try:
             self.wait_for(self.take, lambda s: not s['retained'])

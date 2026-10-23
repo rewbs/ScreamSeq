@@ -23,6 +23,40 @@ private final class PluginTakeReplies {
 }
 
 extension InterfaceTests {
+  static func pluginSavedStateRecoveryChecks() throws {
+    let h = PluginTakeReplies(), view = h.view
+    var state = h.state(capturing: false); state["transportPlaying"] = false
+    h.load(state); view.act(.restoreSavedState)
+    try require(h.writes.isEmpty && view.restoreSaved.isHidden,
+      "Saved-state recovery cannot keep or discard an unkept take")
+    state["completed"] = true; state["transportPlaying"] = true
+    h.load(state); view.act(.restoreSavedState)
+    try require(h.writes.isEmpty && !view.restoreSaved.isHidden && !view.restoreSaved.isEnabled && view.discard.isHidden,
+      "Completed recovery is distinct from Discard and requires stopped playback")
+    state["transportPlaying"] = false; h.load(state)
+    try require(view.restoreSaved.isEnabled && view.detail.stringValue.contains("abandons later unsaved"),
+      "Completed recovery must expose its input-abandonment consequence")
+    view.act(.restoreSavedState)
+    try require(h.writes.count == 1 && h.writes[0].0 == "automation.recording.commit" &&
+      h.writes[0].1["restoreSavedState"] as? Bool == true && h.writes[0].1["acknowledgeLoss"] == nil &&
+      h.writes[0].1["take"] as? String == "take-a" && h.writes[0].1["expectedRevision"] as? String == h.revision,
+      "Explicit recovery preserves the guarded take without acknowledging new musical loss")
+    state["restorationPending"] = true; h.answer(state); h.load(state)
+    try require(h.writes.count == 1 && view.retained && view.completed,
+      "Explicit saved-state recovery must not automatically repeat after a pending reply")
+    view.poll(); view.act(.restoreSavedState); state["transportPlaying"] = true; h.answer(state)
+    try require(h.writes.count == 1 && !view.pending,
+      "Playback restarting during readback must cancel queued saved-state recovery")
+    state["transportPlaying"] = false; h.load(state); view.act(.restoreSavedState)
+    h.replies.removeFirst()(["error": ["code": -32003, "message": "Unknown recovery completion"]])
+    h.load(state)
+    try require(h.writes.count == 2 && view.retained,
+      "An uncertain saved-state recovery cannot be replayed by polling")
+    view.act(.keep)
+    try require(h.writes.last?.1["restoreSavedState"] == nil,
+      "Ordinary Finish restoration must never inherit explicit saved-state abandonment")
+    h.answer(h.state(""))
+  }
   static func pluginRestorationRetryChecks() throws {
     for keep in [true, false] {
       let h = PluginTakeReplies(), view = h.view
@@ -68,6 +102,7 @@ extension InterfaceTests {
       bounded.view.status.stringValue.contains("still waiting"), "Pending restoration retries must stop at their bounded limit")
   }
   static func pluginRecordingChecks() throws {
+    try pluginSavedStateRecoveryChecks()
     try pluginRestorationRetryChecks()
     let h = PluginTakeReplies(), view = h.view
     h.load(h.state(""))
@@ -295,6 +330,15 @@ extension InterfaceTests {
     for control in [focused.reviewMode, focused.previousInputs, focused.nextInputs, focused.inputDetail, focused.keep] as [NSView] {
       try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
         "Compact original-input review must retain readable controls and details inside its content")
+    }
+    var completedReview = focusCase.state(capturing: false, completed: true)
+    completedReview["transportPlaying"] = false
+    focusCase.load(completedReview); focused.layoutSubtreeIfNeeded()
+    try require(focused.restoreSaved.isEnabled && !focused.restoreSaved.isHidden && focused.discard.isHidden &&
+      window.firstResponder === focused.table, "Completed recovery controls must retain table focus")
+    for control in [focused.restoreSaved, focused.recovery, focused.keep, focused.detail] as [NSView] {
+      try require(focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(control.bounds, from: control)),
+        "Compact completed-take recovery must keep its explicit action and consequences readable")
     }
     window.close()
   }

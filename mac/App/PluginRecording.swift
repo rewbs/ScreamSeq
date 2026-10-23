@@ -28,9 +28,10 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   lazy var stopPlayback = ActionButton("Stop playback") { [weak self] in self?.act(.stopPlayback) }
   lazy var keep = ActionButton("Keep take", prominent: true) { [weak self] in self?.act(.keep) }
   lazy var discard = ActionButton("Discard take") { [weak self] in self?.act(.discard) }
+  lazy var restoreSaved = ActionButton("Restore saved state") { [weak self] in self?.act(.restoreSavedState) }
   lazy var refresh = ActionButton("Check take", symbol: "arrow.clockwise") { [weak self] in self?.poll(explicit: true) }
   lazy var recovery = ActionButton("Save recovery copy", symbol: "square.and.arrow.down") { [weak self] in self?.saveRecovery() }
-  enum Action { case start, stop, keep, discard, stopPlayback }
+  enum Action { case start, stop, keep, discard, stopPlayback, restoreSavedState }
   private struct Intent {
     let action: Action, document: String, revision: String, take: String
     let capturing: Bool, completed: Bool, loss: NSDictionary, params: [String: Any]
@@ -82,7 +83,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     let content = stack(.vertical, [stack(.horizontal, [heading, NSView(), scope], spacing: 12),
       stack(.horizontal, [record, stop, stopPlayback, NSView(), refresh], spacing: 8), detail,
       stack(.horizontal, [reviewMode, NSView(), previousInputs, nextInputs], spacing: 8), inputDetail, scroll, acknowledge,
-      stack(.horizontal, [discard, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
+      stack(.horizontal, [discard, restoreSaved, recovery, NSView(), keep], spacing: 8), status], spacing: 10)
+    restoreSaved.toolTip = "Restore saved plugin state and abandon later unsaved plugin input. Kept automation and its Undo entry remain. Stop playback and close all recorded plugin editors first."
     content.stretchAcrossAxis(); content.fill(self, inset: 16)
     for label in [status, detail, inputDetail] {
       label.lineBreakMode = .byWordWrapping; label.maximumNumberOfLines = 3
@@ -202,6 +204,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     keep.isEnabled = ready && retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on)
     discard.isEnabled = ready && mayDiscard
+    discard.isHidden = completed
+    restoreSaved.isHidden = !completed
+    restoreSaved.isEnabled = ready && retained && completed && !capturing && state["transportPlaying"] as? Bool == false
     // Retain the recovery row after Stop so the next action does not move
     // under the pointer or change the layout while original input is reviewed.
     stopPlayback.isHidden = !playbackRecovery
@@ -252,6 +257,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     let boundary = ((data["failure"] as? NSNumber)?.uint64Value ?? 0) > 0 ? " · input boundary failed" : ""
     detail.stringValue = retained ? "\(count) captured inputs · \(targets.count) parameters · \(rejected) rejected · \(sourceCount) source lost\(boundary). Stop ends this take; song playback continues." :
       "Stop ends this take without stopping song playback. Keep adds one Undo step."
+    if completed {
+      detail.stringValue = "Kept automation remains. Restore saved state abandons later unsaved plugin input; stop playback and close recorded plugin editors first."
+    }
     if let failure = data["restorationError"] as? String ?? data["intakeError"] as? String {
       status.stringValue = failure
     } else if data["restorationPending"] as? Bool == true {
@@ -317,6 +325,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       (completed || !hasLoss || acknowledge.state == .on) else { return }
     case .discard: guard mayDiscard else { return }
     case .stopPlayback: guard needsPlaybackStop else { return }
+    case .restoreSavedState: guard retained && completed && !capturing && state["transportPlaying"] as? Bool == false else { return }
     }
     if !automaticRestoration { restorationRetry = nil }
     var params: [String: Any] = ["expectedRevision": revision]
@@ -327,6 +336,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       params["plugins"] = plugins
     } else if action != .stopPlayback { params["take"] = take }
     if action == .keep { params["acknowledgeLoss"] = acknowledge.state == .on }
+    if action == .restoreSavedState { params["restoreSavedState"] = true }
     let intent = Intent(action: action, document: currentDocument, revision: revision, take: take,
       capturing: capturing, completed: completed, loss: loss, params: params)
     pending = true; updateControls()
@@ -337,12 +347,13 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       take == intent.take, capturing == intent.capturing, completed == intent.completed,
       intent.action != .discard || mayDiscard,
       intent.action != .stopPlayback || needsPlaybackStop,
-      intent.action != .keep || intent.loss.isEqual(loss), let onRequest else {
+      intent.action != .restoreSavedState || (completed && state["transportPlaying"] as? Bool == false),
+      (intent.action != .keep && intent.action != .restoreSavedState) || intent.loss.isEqual(loss), let onRequest else {
       pending = false; status.stringValue = "The take changed before this action. Review it and choose again."; updateControls(); return
     }
     let operation: String
     switch intent.action { case .start: operation = "automation.recording.start"; case .stop: operation = "automation.recording.stop"
-    case .keep: operation = "automation.recording.commit"; case .discard: operation = "automation.recording.discard"
+    case .keep, .restoreSavedState: operation = "automation.recording.commit"; case .discard: operation = "automation.recording.discard"
     case .stopPlayback: operation = "transport.stop" }
     onRequest(operation, intent.params) { [weak self] response in
       guard let self else { return }; self.pending = false

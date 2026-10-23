@@ -112,3 +112,8 @@
   if(!_parameterTake->restoreProcessing(discard,_plugins))return NO;
   _parameterTake.reset();return YES;
 }
+- (BOOL)restoreKeptParameterPluginState {
+  if(!_parameterTake)throw Automation::Error(-32001,"No retained parameter take");
+  if(!_parameterTake->restoreSavedStateStopped(_plugins))return NO;
+  _parameterTake.reset();return YES;
+}

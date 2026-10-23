@@ -48,6 +48,15 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   };
   start();const auto armed=[session parameterTakeReview];NSString *revision=session.automationRevision;
   NSString *retainedID=session.parameterRecordingTakeID;
+  for(id recoveryFlag in @[@YES,@1,@"true",NSNull.null]) {
+    error=nil;
+    check(![session automationMethod:@"automation.recording.commit"
+      params:@{@"expectedRevision":revision,@"take":retainedID,@"restoreSavedState":recoveryFlag} error:&error]&&
+      error.code==([recoveryFlag isEqual:@YES]&&CFGetTypeID((__bridge CFTypeRef)recoveryFlag)==CFBooleanGetTypeID()?-32002:-32602)&&
+      [session.automationRevision isEqual:revision]&&![session parameterTakeReview].completed,
+      "Saved-state recovery accepted an unkept take or malformed boolean, or changed history");
+  }
+  error=nil;
   check([retainedID isEqual:@(armed.token.c_str())]&&session.recordingTakeID==nil,
     "Parameter recovery identity is missing or incorrectly exposed as resumable MIDI");
   NSDictionary *emptyRecovery=tree();
@@ -131,7 +140,18 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   check(refused&&session.playing&&[session parameterTakeReview].completed,
     "Stopped restoration touched an active vendor or lost committed ownership");
   check([session.parameterRecordingTakeID isEqual:retainedID],"Kept-but-unrestored input lost its recovery owner");
-  [session stop];check([session releaseStoppedParameterTake:NO],"Verify stopped native baselines after Keep");
+  error=nil;
+  check(![session automationMethod:@"automation.recording.commit"
+    params:@{@"expectedRevision":committed,@"take":retainedID,@"restoreSavedState":@YES} error:&error]&&
+    error.code==-32002&&[session.automationRevision isEqual:committed]&&session.playing,
+    "Saved-state recovery touched an active completed take");
+  [session stop];error=nil;
+  NSDictionary *repaired=[session automationMethod:@"automation.recording.commit"
+    params:@{@"expectedRevision":committed,@"take":retainedID,@"restoreSavedState":@YES} error:&error];
+  check(repaired&&!error&&![repaired[@"data"][@"retained"] boolValue]&&
+    [repaired[@"data"][@"completed"] boolValue]&&![repaired[@"changed"] boolValue]&&
+    !repaired[@"data"][@"restorationError"]&&[session.automationRevision isEqual:committed],
+    "Explicit saved-state API recovery changed kept music/history or failed to release the stopped take");
   check(session.parameterRecordingTakeID==nil,"Finished restoration retained a stale recovery owner");
   NSDictionary *saved=tree();
   check([saved[@"automation"] count]==2&&[saved[@"plugins"] isEqual:baseline[@"plugins"]]&&

@@ -58,8 +58,11 @@
           value=summary();if(!warning.empty())value["intakeError"]=std::move(warning);
         } else {
           const bool commit=[method isEqual:@"automation.recording.commit"];
-          allowed(commit?@[@"take",@"acknowledgeLoss"]:@[@"take"]);requireTake();
+          allowed(commit?@[@"take",@"acknowledgeLoss",@"restoreSavedState"]:@[@"take"]);requireTake();
           const bool acknowledge=commit&&p[@"acknowledgeLoss"]?boolean(p[@"acknowledgeLoss"]):false;
+          const bool restoreSaved=commit&&p[@"restoreSavedState"]?boolean(p[@"restoreSavedState"]):false;
+          if(restoreSaved&&(!_parameterTake->take().completed()||_audio->active()||self.playing))
+            throw Error(-32002,"Restore saved plugin state requires an already-kept take and stopped playback");
           if(!commit&&_parameterTake->take().completed())throw Error(-32002,"This take is already kept; retry Commit to finish native restoration, then use Undo to change the music");
           if(!_parameterTake->take().endTime()&&(commit||self.playing))throw Error(-32002,"Stop the parameter take before committing or discarding it");
           bool changed=false;
@@ -73,7 +76,7 @@
           value=summary();value["changed"]=changed;
           std::string restorationError;
           try {
-            const bool released=[self releaseParameterTake:!commit];
+            const bool released=restoreSaved?[self restoreKeptParameterPluginState]:[self releaseParameterTake:!commit];
             if(released){value["retained"]=false;value["capturing"]=false;value["discardCleanupPending"]=false;value["restorationPending"]=false;}
             else {
               value=summary();value["changed"]=changed;

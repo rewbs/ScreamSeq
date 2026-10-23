@@ -27,7 +27,7 @@ public:
   };
 private:
   enum:int {scope=9720,start,stop,keep,discard,review,saveCopy,close,target,previous,next,acknowledge,
-    events,heading,summary,help,page,statusLabel,recovered,inputDetails,stopPlayback,openKept};
+    events,heading,summary,help,page,statusLabel,recovered,inputDetails,stopPlayback,openKept,restoreSaved};
   static constexpr UINT_PTR notificationSubclass=0x50525731;
   static constexpr UINT_PTR listSubclass=0x50525732;
   Callbacks callbacks_;
@@ -203,7 +203,8 @@ private:
       L"Start playback, then record native controls or plugin editor gestures.");
     const auto counts=L"Captured "+std::to_wstring(state_.value("eventCount",size_t(0)))+L" inputs · "+
       std::to_wstring(delivery_.value("retained",size_t(0)))+L" delivery results retained · "+std::to_wstring(delivery_.value("lost",uint64_t(0)))+L" native inputs lost";
-    set(help,counts+(loss()?L" · Review loss before keeping accepted points.":L" · Keep take creates one Undo step."));
+    set(help,state_.value("completed",false)?L"Kept automation remains. Restore saved state abandons later unsaved plugin input; stop playback and close recorded plugin editors first.":
+      counts+(loss()?L" · Review loss before keeping accepted points.":L" · Keep take creates one Undo step."));
     if(state_.contains("intakeError"))error_=state_.at("intakeError").get<std::string>();
     set(statusLabel,wide(error_));
     succeeded=true;
@@ -226,7 +227,12 @@ private:
       if(!retained())throw std::runtime_error("No retained recording take");
       params["take"]=take();
       if(id==keep)params["acknowledgeLoss"]=lossAcknowledged_;
-      method=id==stop?"automation.recording.stop":id==keep?"automation.recording.commit":"automation.recording.discard";
+      if(id==restoreSaved) {
+        if(!state_.value("completed",false)||capturing()||!state_.contains("transportPlaying")||state_.at("transportPlaying")!=false)
+          throw std::runtime_error("Keep the take and stop playback before restoring saved plugin state");
+        params["restoreSavedState"]=true;
+      }
+      method=id==stop?"automation.recording.stop":(id==keep||id==restoreSaved)?"automation.recording.commit":"automation.recording.discard";
     }
     queuedAction_=QueuedAction{document_,callbacks_.context().second,take(),std::move(method),std::move(params),lossEvidence(),capturing(),state_.value("completed",false)};
   }
@@ -238,6 +244,8 @@ private:
       throw std::runtime_error("Song or recording changed during refresh; review it before choosing the action again");
     if(action.method=="transport.stop"&&!needsPlaybackStop())
       throw std::runtime_error("Playback changed during refresh; review the retained take before choosing the action again");
+    if(action.params.value("restoreSavedState",false)&&(!state_.value("completed",false)||!state_.contains("transportPlaying")||state_.at("transportPlaying")!=false))
+      throw std::runtime_error("Playback or take changed before saved-state recovery; review it again");
     if(action.method=="automation.recording.discard"&&state_.value("completed",false))
       throw std::runtime_error("This take is already kept. Finish restoring the controls; use Undo to restore the earlier music.");
     if(action.method=="automation.recording.commit"&&action.lossEvidence!=lossEvidence())
@@ -262,7 +270,7 @@ private:
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if(pending_){
-      if(refreshing_&&notification==BN_CLICKED&&(id==start||id==stop||id==keep||id==discard||id==stopPlayback))queueAction(id);
+      if(refreshing_&&notification==BN_CLICKED&&(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved))queueAction(id);
       return;
     }
     if(queuedAction_)return;if(id==close){hide();return;}
@@ -286,7 +294,7 @@ private:
     }
     if(id==previous||id==next){offset_=id==previous?(offset_>=pageSize?offset_-pageSize:0):std::min(total_,offset_+pageSize);refresh();return;}
     if(id==saveCopy){pending_=true;try{callbacks_.saveRecovery();pending_=false;error_="Recovery copy saved";refresh();}catch(...){pending_=false;throw;}return;}
-    if(id==start||id==stop||id==keep||id==discard||id==stopPlayback){queueAction(id);drainAction();}
+    if(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved){queueAction(id);drainAction();}
   }
   bool key(WPARAM key,bool ctrl,bool)override {
     if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(review,BN_CLICKED);return true;}
@@ -309,16 +317,19 @@ private:
     place(help,12,118,w-24,42);place(target,12,168,w-252,240);place(previous,w-232,168,68,26);place(next,w-156,168,68,26);place(close,w-80,168,68,26);
     place(events,12,204,w-24,std::max(80.f,h-416));place(inputDetails,12,h-204,w-24,62);place(page,12,h-134,w-222,22);
     place(openKept,w-202,h-138,190,26,bool(callbacks_.recordedAutomation));EnableWindow(controls_.at(openKept),canOpenKept());
-    place(acknowledge,12,h-108,w-24,24);place(keep,12,h-76,132,28);place(discard,152,h-76,112,28);
-    place(saveCopy,272,h-76,150,28);place(review,w-190,h-76,178,28);place(statusLabel,12,h-40,w-24,32);
+    const bool completed=state_.value("completed",false);
+    place(acknowledge,12,h-108,w-24,24);place(keep,12,h-76,132,28);place(discard,152,h-76,112,28,!completed);
+    place(restoreSaved,152,h-76,150,28,completed);
+    place(saveCopy,completed?310.f:272.f,h-76,completed?138.f:150.f,28);place(review,w-190,h-76,178,28);place(statusLabel,12,h-40,w-24,32);
     const bool ready=!pending_&&!queuedAction_&&!completion_.retained();
     EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!rack_.empty());
     EnableWindow(controls_.at(stop),ready&&retained()&&capturing());
     EnableWindow(controls_.at(stopPlayback),ready&&needsPlaybackStop());
-    EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&state_.value("compatible",false)&&!delivery_.value("pending",false)&&(!loss()||lossAcknowledged_));
+    EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&(completed||state_.value("compatible",false))&&!delivery_.value("pending",false)&&(completed||!loss()||lossAcknowledged_));
     EnableWindow(controls_.at(discard),ready&&retained()&&state_.value("discardable",!capturing())&&!state_.value("completed",false)&&!delivery_.value("pending",false));
-    set(keep,state_.value("completed",false)?L"Finish keeping":L"Keep take");
-    EnableWindow(controls_.at(acknowledge),ready&&retained()&&!capturing()&&loss());
+    EnableWindow(controls_.at(restoreSaved),ready&&retained()&&completed&&!capturing()&&state_.contains("transportPlaying")&&state_.at("transportPlaying")==false&&!delivery_.value("pending",false));
+    set(keep,completed?L"Finish restoring":L"Keep take");
+    EnableWindow(controls_.at(acknowledge),ready&&retained()&&!completed&&!capturing()&&loss());
     EnableWindow(controls_.at(saveCopy),!pending_&&retained());EnableWindow(controls_.at(review),!pending_);
     EnableWindow(controls_.at(previous),!pending_&&offset_>0);EnableWindow(controls_.at(next),!pending_&&offset_+rows_.size()<total_);
   }
@@ -365,7 +376,7 @@ public:
     create(L"ScreamSeq.ParameterRecording",L"Plugin automation recording",820,650);
     combo(scope);combo(target);NativeInputGate::present(controls_.at(target),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Native input delivery"));NativeInputGate::present(controls_.at(target),CB_SETCURSEL,0,0);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{start,L"Record"},{stop,L"Stop recording"},{keep,L"Keep take"},{discard,L"Discard take"},
-      {review,L"Refresh / review (Ctrl+R)"},{saveCopy,L"Save recovery copy"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{recovered,L"Recovered inputs…"},{stopPlayback,L"Stop playback"},{openKept,L"Song automation…"}})button(id,text);
+      {review,L"Refresh / review (Ctrl+R)"},{saveCopy,L"Save recovery copy"},{close,L"Close"},{previous,L"< Prev"},{next,L"Next >"},{recovered,L"Recovered inputs…"},{stopPlayback,L"Stop playback"},{openKept,L"Song automation…"},{restoreSaved,L"Restore saved state"}})button(id,text);
     add(acknowledge,L"BUTTON",L"Keep accepted points despite reported input loss",BS_AUTOCHECKBOX);
     for(int id:{heading,summary,help,page,statusLabel})label(id,id==heading?L"PLUGIN AUTOMATION RECORDING":L"");
     accessibleName(scope,L"Plugins to record");accessibleName(target,L"Recording input target");accessibleName(acknowledge,L"Keep accepted points despite reported input loss");
@@ -379,7 +390,7 @@ public:
     for(int i=0;i<4;++i){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(names[i]);column.cx=MulDiv(i==0?190:i==1?100:220,GetDpiForWindow(list),96);ListView_InsertColumn(list,i,&column);}
     check(SetWindowSubclass(window_,notifications,notificationSubclass,reinterpret_cast<DWORD_PTR>(this))&&
       SetWindowSubclass(list,listNotifications,listSubclass,reinterpret_cast<DWORD_PTR>(this)),"Install parameter recording notifications");
-    for(int id:{scope,start,stop,stopPlayback,recovered,target,previous,next,close,events,inputDetails,openKept,acknowledge,keep,discard,saveCopy,review})
+    for(int id:{scope,start,stop,stopPlayback,recovered,target,previous,next,close,events,inputDetails,openKept,acknowledge,keep,discard,restoreSaved,saveCopy,review})
       check(SetWindowPos(controls_.at(id),HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE),"Order recording controls for keyboard navigation");
     finish();refresh();
   }

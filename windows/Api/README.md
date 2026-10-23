@@ -47,6 +47,13 @@ Native clock units and provider-restoration requirements remain platform-specifi
   A `completed:true, retained:true` result means music was already committed but
   native restoration needs finishing; it must not create a second Undo step.
   A transport/clock failure retains evidence for recovery or explicit Discard.
+  For a completed retained take, explicit `restoreSavedState:true` on Commit
+  restores accepted plugin state and abandons later unsaved native input, while
+  preserving kept automation, revision and Undo. Playback/audio must be stopped
+  and every owned plugin editor closed. This strict boolean defaults to false;
+  ordinary Finish restoration never selects it implicitly. The review exposes
+  **Restore saved state** for this case. Inspect retained failures or uncertain
+  replies before deliberately retrying; pending native delivery still blocks it.
 - `automation.recovery.list {offset?, limit?}` lists detached archive headers
   (default 64, maximum 128). `headerSupported` is not full validation.
   `automation.recovery.get {expectedRevision, kind, index, offset?, limit?}`

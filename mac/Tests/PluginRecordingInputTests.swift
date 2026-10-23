@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 extension InterfaceTests {
   static func pluginRecordingInputChecks() throws {
@@ -80,6 +81,25 @@ extension InterfaceTests {
       "A newly reviewed acknowledgement can finish the exact retained take")
 
     let start = Adapter(); var startReply: [String: Any]?
+    // Only the literal boolean recovery intent may pass retained refused input
+    // to the session's completed/stopped validation. It never replays the input.
+    for flag in [false, 1, "true", true] as [Any] {
+      let repair = Adapter(); repair.observe("automation.recording.get", response: state())
+      _ = try repair.capture(original)
+      repair.pump { _, _, done in done(state(capturing: false, accepted: false)) }
+      var recoveryParams = params; recoveryParams["restoreSavedState"] = flag
+      var recoveryReply: [String: Any]?, recoveryCalls = [String]()
+      repair.request("automation.recording.commit", params: recoveryParams) { recoveryReply = $0 }
+      repair.pump { method, _, done in
+        recoveryCalls.append(method)
+        // The native session remains authoritative for completed/stopped checks.
+        done(["error": ["code": -32002, "message": "Already-kept take required"]])
+      }
+      let explicit = CFGetTypeID(flag as CFTypeRef) == CFBooleanGetTypeID() && (flag as? Bool == true)
+      try require(recoveryCalls == (explicit ? ["automation.recording.commit"] : []) &&
+        recoveryReply?["error"] != nil && repair.delivery.retained == 1,
+        "Recovery intent must be strict, retain refused input and defer lifecycle validation to the session")
+    }
     start.request("automation.recording.start", params: ["expectedRevision": "song-a:4:2", "plugins": ["plugin-a"]]) { startReply = $0 }
     try refused(start, original)
     start.pump { _, _, done in done(["error": ["code": -32003, "message": "Start completion unavailable"]]) }

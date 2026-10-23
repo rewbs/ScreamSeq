@@ -149,7 +149,9 @@ public:
   // accepted baseline can replace the closed provider without a false capture.
   // Post-cut input blocks restoration. Only explicit discard with the editor
   // closed may abandon that later transient input along with the stopped take.
-  bool releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview);
+  // Explicit saved-state recovery preserves a completed take's music while
+  // abandoning later input. Its session caller must also require stopped audio.
+  bool releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview,bool restoreSavedState=false);
   // Worker-only capture completion. The session supplies its current full
   // revision/clock epoch and retains the owners through this call. Normal
   // manual/vendor ingestion, release barriers and recovery belong to that
