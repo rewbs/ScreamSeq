@@ -4,6 +4,7 @@
 #include <cmath>
 #include <mach/mach_time.h>
 #include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/PluginBaselineVerification.hpp"
 namespace Tracker {
 namespace {
 void check(OSStatus status, const char *message) {
@@ -290,6 +291,37 @@ PluginChain::PreviewCancellationState AudioDevice::pluginPreviewCancellationStat
   if(receipt.owner_!=this||receipt.epoch_!=pluginEpoch_||!receipt.chain_||receipt.chain_!=plugins_)
     return PluginChain::PreviewCancellationState::Invalid;
   return receipt.chain_->parameterPreviewCancellationState(receipt.hosted_);
+}
+void AudioDevice::verifyProcessingPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
+    std::span<const PluginState> saved) {
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid processing-state verification group");
+  const auto retained=plugins_;
+  struct Item {PluginStateOwner owner;size_t slot;PluginState accepted;};
+  std::vector<Item> items;items.reserve(owners.size());std::set<std::string> seen;
+  size_t bytes=0;
+  for(const auto &owner:owners) {
+    const auto index=pluginSlot(owner.plugin);
+    const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(!index||baseline==saved.end()||!seen.insert(owner.plugin).second)
+      throw std::invalid_argument("Processing-state verification needs distinct saved provider identities");
+    constexpr size_t budget=256u*1024u*1024u;
+    if(baseline->state.size()>budget-bytes)throw std::runtime_error("Saved verification states exceed the bounded group budget");
+    bytes+=baseline->state.size();items.push_back({owner,*index,*baseline});
+  }
+  const auto validate=[&] {
+    if(!retained||plugins_!=retained||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Processing-state verification belongs to a replaced host; take retained");
+    for(const auto &item:items)if(!item.owner.source.incarnation||pluginSlot(item.owner.plugin)!=item.slot||
+        retained->editSource(item.slot)!=item.owner.source)
+      throw std::runtime_error("Processing-state verification belongs to another provider; take retained");
+  };
+  validate();
+  for(const auto &item:items) {
+    const auto observed=pluginProcessingState(expectedEpoch,item.owner);validate();
+    if(!observed)throw std::runtime_error("This plugin cannot verify state during playback; stop playback with the take retained");
+    verifyPluginParameterBaseline(item.accepted,observed->state,sampleRate_,validate);
+    validate();
+  }
 }
 void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
     std::span<const PluginState> saved) {

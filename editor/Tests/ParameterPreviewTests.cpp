@@ -2,6 +2,7 @@
 #include "editor/ParameterPreviewOwner.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
+#include "editor/hosted/PluginBaselineVerification.hpp"
 #include "soundlib/ModInstrument.h"
 #include <algorithm>
 #include <array>
@@ -320,6 +321,25 @@ static void processingAcknowledgement() {
   check(plugin.process(pcm.data(),128,0)&&plugin.processedControl(31)&&!plugin.processedControl(32),
     "Successful processing failed to distinguish its control serial");
 }
+static void privateBaselineVerification() {
+  NativePlugin baseline(gain("private-baseline"),48000,true);
+  const auto accepted=baseline.state();
+  NativePlugin changed(accepted,48000,true);check(changed.parameter(1,-9),"Prepare private baseline verification difference");
+  const auto observed=changed.state();
+  unsigned guards=0;verifyPluginParameterBaseline(accepted,observed,48000,[&]{++guards;});
+  check(guards>4&&changed.state()==observed&&baseline.state()==accepted,"Private verification changed an original provider or omitted revalidation");
+  auto wrong=observed;wrong.instanceID="another-provider";bool refused=false;
+  try{verifyPluginParameterBaseline(accepted,wrong,48000);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&changed.state()==observed,"Private baseline verification accepted another stable identity");
+  wrong=observed;wrong.midiChannel=2;refused=false;
+  try{verifyPluginParameterBaseline(accepted,wrong,48000);}catch(const std::runtime_error &){refused=true;}
+  check(refused,"Private baseline verification accepted changed musical routing");
+  guards=0;refused=false;
+  try{verifyPluginParameterBaseline(accepted,observed,48000,[&]{if(++guards==3)throw std::runtime_error("Fixture context changed");});}
+  catch(const std::runtime_error &){refused=true;}
+  check(refused&&guards==3&&changed.state()==observed&&baseline.state()==accepted,
+    "Reentrant verification refusal continued vendor work or changed original state");
+}
 static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
   auto doc=Document::demo();
   doc->transaction([&](OpenMPT::CSoundFile &song){
@@ -368,7 +388,7 @@ int main(){try{
   stoppedVendorReplacement();
   stoppedGroupRepair();
   ownership();
-  processingAcknowledgement();cancellationBacklog();
+  processingAcknowledgement();cancellationBacklog();privateBaselineVerification();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})trackedCancellation(rate,block);

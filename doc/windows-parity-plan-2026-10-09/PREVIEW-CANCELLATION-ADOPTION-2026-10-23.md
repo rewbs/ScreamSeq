@@ -164,3 +164,61 @@ Intel and Windows compilation had passed and their tests were still running.
 Their exact jobs remain `120356129375`, `120356129012`, `120356129861`. Do not
 redispatch them. The earliest next build gate remains 11:02:24 UTC, with fresh
 receipt/actual-start checks required before dispatch.
+
+## Disposable baseline comparison prepared before the next checkpoint
+
+`editor/hosted/PluginBaselineVerification.hpp` adds a shared control-owner helper
+that takes state values, never a live plugin pointer. It constructs private
+baseline and observation copies, requires the observed state to survive an exact
+private round trip, and checks persistent identity, routing, resolved physical
+layout and the complete bounded parameter catalogue. Duplicate IDs, invalid
+ranges, changed membership/semantics and non-finite values refuse verification.
+It restores continuous writable values in the copies using the saved baseline;
+bounded queue flushing is confined to those disposable providers. Applying the
+baseline to its own private copy must be byte-for-byte idempotent, and the
+normalized observation must then equal the expected state in full.
+
+Discrete/read-only values and program selectors are not rewritten to manufacture
+a passing comparison. Differences in their serialized state, hidden state, or
+inconsistent component/controller observations remain refusals. Some real plugins
+will therefore still require stopped restoration. Passing a fixture does not
+prove arbitrary vendor state callbacks are coherent or arbitrary parameter
+setters preserve every hidden detail; real-provider capability and live lifecycle
+qualification remain required before widening the release path.
+
+`AudioDevice::verifyProcessingPluginBaselines` captures the bounded saved group
+before vendor work, retains the host and revalidates every stable provider around
+each private construction, state call and parameter write. It uses only the
+qualified non-flushing observation hook on the original provider. Unsupported AU
+observation explicitly refuses; direct AU private-copy tests do **not** imply AU
+live observation support. The outer take still owns cancellation acknowledgement,
+fixed native input cuts, document revision checks and final release.
+
+New shared tests exercise a changed continuous value, exact preservation of both
+original providers, wrong identity/routing and reentrant context refusal. Native
+tests cover AU/VST3 private normalization, hidden state divergence, program-selector
+preservation/refusal, whole-group unsupported AU observation and unchanged original
+input/state/transport. These are source-only until the next checkpoint. The
+session/API still retains its stopped restoration guard; the next product batch
+must connect verified live release with non-blocking retry/status and complete
+Keep/Discard/history/reopen journeys rather than merely adding a new button.
+
+## Completed preceding CI evidence (source cc5553aab)
+
+The retained `kept-navigation/completed-ci.json` and three exact job logs now show:
+
+- Mac ARM and Intel jobs passed, including 134 model/host CTests each, the full
+  native interface harness, owned AU/VST3 notification lifecycle and typed/socket
+  conformance. This qualifies the earlier non-flushing VST3 primitive, not the
+  subsequently committed facade/receipt/comparison work.
+- Windows x64 compilation, 158 portable/worker tests, 50 native tests, vendor
+  ownership and typed/pipe fixtures passed. The merged actual-app suite ran 112
+  cases and retained 22 failure records and one optional skip. Failures are in
+  silent-playback startup/readiness and dependent cleanup checks; the transport
+  cases explicitly report that a WASAPI endpoint is required. No job was rerun
+  and no assertion was weakened. This remains a failed audio execution gate,
+  not Windows live qualification. The local ARM64 passing journey/foreground
+  receipts are separate evidence for their exact executable.
+
+All preceding jobs are terminal. The 11:02:24 UTC minimum next build time still
+applies, and a fresh actual-start inspection must precede the next dispatch.

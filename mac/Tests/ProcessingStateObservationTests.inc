@@ -139,6 +139,16 @@ static void facadeProcessingStateObservation(const PluginState &saved,const Plug
   const auto deviceObservation=audio.pluginProcessingState(epoch,owner);
   check(deviceObservation&&deviceObservation->source==owner.source&&deviceObservation->state==deviceBaseline[0]&&!audio.active(),
     "Device observation lost native identity or started an output device");
+  const std::array<AudioDevice::PluginStateOwner,1> vstOwner{owner};
+  const auto originalCut=audio.pluginInputBoundary(0,mach_absolute_time());
+  audio.verifyProcessingPluginBaselines(epoch,vstOwner,deviceBaseline);
+  const auto verifiedCut=audio.pluginInputBoundary(0,mach_absolute_time());
+  check(originalCut&&verifiedCut&&originalCut->source==verifiedCut->source&&
+    originalCut->fence.position==verifiedCut->fence.position&&originalCut->fence.pending==verifiedCut->fence.pending&&
+    audio.pluginStates()==deviceBaseline&&!audio.active(),"Private native verification changed original input, state or transport");
+  const std::array<AudioDevice::PluginStateOwner,2> mixedOwners{{owner,{au.instanceID,audio.pluginEditSource(1)}}};
+  refused=false;try{audio.verifyProcessingPluginBaselines(epoch,mixedOwners,deviceBaseline);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&audio.pluginStates()==deviceBaseline&&!audio.active(),"Unsupported AU verification flushed state or changed a verified prefix");
   for(unsigned invalid=0;invalid<3;++invalid) {
     auto wrong=owner;if(invalid==1)++wrong.source.incarnation;else if(invalid==2)wrong.plugin="missing-observation-owner";
     refused=false;try{(void)audio.pluginProcessingState(epoch+(invalid==0),wrong);}catch(const std::runtime_error &){refused=true;}
@@ -168,4 +178,45 @@ static void facadeProcessingStateObservation(const PluginState &saved,const Plug
     "Reentrant host replacement used a retired chain, changed the new host, or kept an old receipt valid");
   const AudioDevice::PluginStateOwner newOwner{saved.instanceID,audio.pluginEditSource(0)};
   check(audio.pluginProcessingState(audio.pluginEpoch(),newOwner).has_value(),"Fresh replacement host could not be observed");
+}
+
+static void privateNativeBaselineVerification(const PluginState &saved,const PluginState &au,PluginState programs,const char *path) {
+  NSBundle *bundle=[NSBundle bundleWithPath:@(path)];
+  struct Module {void *value;~Module(){if(value)dlclose(value);}} module{dlopen(bundle.executablePath.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL)};
+  check(module.value!=nullptr,"Load private baseline fixture");
+  const auto selections=reinterpret_cast<int(*)()>(dlsym(module.value,"ResonanceFixtureProgramSelections"));
+  check(selections!=nullptr,"Private verification program counter is missing");
+  for(const auto &state:std::array<PluginState,2>{saved,au}) {
+    NativePlugin baseline(state,48000);const auto accepted=baseline.state();const auto p=baseline.parameters().at(0);
+    NativePlugin changed(accepted,48000);check(changed.parameter(p.id,.625f),"Prepare private native parameter difference");
+    const auto observed=changed.state();
+    verifyPluginParameterBaseline(accepted,observed,48000);
+    check(changed.state()==observed&&baseline.state()==accepted,"Private verification rewrote an original native provider");
+    auto hidden=observed;
+    NSData *data=[NSData dataWithBytes:hidden.state.data() length:hidden.state.size()];
+    NSMutableDictionary *tree=[[NSPropertyListSerialization propertyListWithData:data options:NSPropertyListMutableContainersAndLeaves format:nil error:nil] mutableCopy];
+    check([tree isKindOfClass:NSMutableDictionary.class],"Decode native hidden-state fixture");
+    if(state.descriptor.format=="VST3") {
+      for(NSString *key in @[@"component",@"controller"]) {
+        NSMutableData *part=[tree[key] mutableCopy];check(part.length==8,"Unexpected gain fixture state shape");
+        const float value=.375f;[part replaceBytesInRange:NSMakeRange(4,4) withBytes:&value];tree[key]=part;
+      }
+    } else tree[@"hidden"]=@(.375f);
+    NSData *encoded=[NSPropertyListSerialization dataWithPropertyList:tree format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
+    check(encoded!=nil,"Encode private hidden-state difference");
+    const auto bytes=static_cast<const std::byte *>(encoded.bytes);hidden.state.assign(bytes,bytes+encoded.length);
+    bool refused=false;try{verifyPluginParameterBaseline(accepted,hidden,48000);}catch(const std::runtime_error &){refused=true;}
+    check(refused&&baseline.state()==accepted&&changed.state()==observed,"Private normalization erased a hidden native difference");
+  }
+  programs.instanceID="private-program-verification";
+  NativePlugin baseline(programs,48000);const auto accepted=baseline.state();
+  NativePlugin changed(accepted,48000);check(changed.parameter(7,.625f),"Prepare continuous control in program fixture");
+  const auto observed=changed.state();const auto before=selections();
+  verifyPluginParameterBaseline(accepted,observed,48000);
+  check(selections()==before,"Private normalization re-sent an unchanged program selector");
+  check(changed.parameter(100,.5f),"Prepare program-selector difference");const auto switched=changed.state();
+  const auto afterSelection=selections();bool refused=false;
+  try{verifyPluginParameterBaseline(accepted,switched,48000);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&selections()==afterSelection&&changed.state()==switched,
+    "Private normalization silently reverted a discrete program or changed its original provider");
 }

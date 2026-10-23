@@ -116,6 +116,9 @@ public:
   // Native owner only; caller protects the retained take/input cuts. Unlike
   // ordinary state(), this never stops/joins audio or drains control queues.
   std::optional<NativePlugin::ProcessingState> pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &);
+  // Disposable-provider comparison only. Caller protects input, requires the
+  // cancellation processing receipt and rechecks its document/fixed Stop cuts.
+  void verifyProcessingPluginBaselines(uint64_t,std::span<const PluginStateOwner>,std::span<const PluginState>);
   // Caller holds the full group's native input leases and rechecks its fixed
   // cuts before and after. Never stops an active device or rewrites saved blobs.
   // Refusal/exception retains the take, including after partial vendor restore.

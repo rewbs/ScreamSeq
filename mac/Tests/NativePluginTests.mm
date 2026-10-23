@@ -8,6 +8,7 @@
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
 #include "editor/hosted/RecordedGestureBoundary.hpp"
+#include "editor/hosted/PluginBaselineVerification.hpp"
 #include "soundlib/ModInstrument.h"
 #import <AppKit/AppKit.h>
 #include <algorithm>
@@ -605,6 +606,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       closedInputProtection(gain);
       PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";
       facadeProcessingStateObservation(gain,closedAU,argv[1]);
+      privateNativeBaselineVerification(gain,closedAU,PluginState{descriptors[3]},argv[1]);
       closedInputProtection(closedAU);
       stoppedRecordedPublication(closedAU);
       NativePlugin effect(gain, 48000);
