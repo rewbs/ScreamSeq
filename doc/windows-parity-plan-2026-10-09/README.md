@@ -9,27 +9,30 @@ CI executable with an available endpoint (ARM64 emulation, silent output).
 That bounded replay does not turn the original Windows CI result green.
 
 The latest separately packaged ARM64 candidate is
-`~/Downloads/ScreamSeq-Windows-ARM64-plugin-c900d2b2e/ScreamSeq.exe`. Its bounded
-plugin composing/recording, keyboard and packaging evidence is in the
-[intake report](MAC-GESTURE-INTAKE-2026-10-22.md). Mac native recording lifecycle
-and original-input review are now connected in source; stopped restoration and
-closed-editor opaque Discard guards remain. The retained reciprocal exchange
-passed four legs of ten fixture checks on its recorded source. Hardware/vendor,
-audio-performance and complete foreground parity are still open.
+`~/Downloads/ScreamSeq-Windows-ARM64-composing-9c5c6ebb1/ScreamSeq.exe` (SHA256
+`72f42e436329d9581f886ed1b7dbb70f604886a8b93dddd2577d679f7c88c801`). It contains
+immediate MIDI Arm and the requested precise timeline double-click, selected-hit
+Backspace, playback cursor and automatic live edits, including Save and Undo.
+Its foreground receipt confirms precise editing and a plugin take composing
+journey, with continuous playback. Floating keyboard continuity, temporal
+flicker and broad performance remain unqualified; its audio run had zero deadline
+overruns but one starvation indicator. See the
+[precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
 
-The next combined candidate adds immediate MIDI Arm and the requested precise
-timeline double-click, Backspace, playback cursor and automatic live edits,
-including native Save and Undo handoffs. The second Windows candidate compiled
-and passed five of six native groups; a separate diagnostic app run passed
-21 of23 cases. The failed menu fixture, retired-owner fixture and actual Save
-focus loss have corrections. Edge grabbing, native Tab order and accessible
-labels join the next freeze; a combined note/plugin-recording history journey
-passed against the existing binary. These later changes still need rebuilt
-qualification and fresh foreground checks; no new production package is ready.
-See the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) and
-[current queue](CONTINUATION-QUEUE-2026-10-20.md) for frozen source, receipts and
-the hourly gate. Do not execute old checkpoint commands or package this source
-using a previously built executable.
+Later source improves recorded-point editing, native Save/Close, restoration and
+short-take navigation. PR7 remains separate from main. The latest built579
+candidate passed four of five local native groups; the failed stable-parameter
+fixture and further navigation/accessibility corrections await the next build.
+Its sustained Windows audio check had31 deadline overruns, so it is not a newer
+production package. Mac ARM579 passed the real-device BlackHole live recording
+lifecycle in addition to134 CTests, interface and socket gates; Intel evidence
+was still pending at20:28 UTC. Reciprocal preservation passed both Mac
+architectures and both Windows return legs on the retained4d source. These
+bounded passes do not close arbitrary vendor, device or full foreground parity.
+The [live parameter report](LIVE-PARAMETER-RELEASE-2026-10-23.md) and
+[current queue](CONTINUATION-QUEUE-2026-10-20.md) identify exact hashes, receipts,
+unbuilt corrections and the hourly gate. Do not execute old checkpoint commands
+or package new source using a previously built executable.
 
 **The overall 117-row parity inventory is not complete.** Original input,
 Undo/persistence, native UI/audio and reciprocal fixtures remain gates. The dated

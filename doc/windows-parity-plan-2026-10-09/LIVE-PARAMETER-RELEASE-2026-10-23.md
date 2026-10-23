@@ -703,3 +703,46 @@ evidence for that ARM fixture, not physical audio, arbitrary vendors or Intel.
 The actual CI merge commit `0ba43dd056eaf41cd6156f8628779fad77fb472c` and reviewed
 head579937203 both have tree `9570dc1a379fb5cf644d7d814eb131c4a5e2575d`, verified
 by fetching and comparing the exact merge. No UI correction after579 is covered.
+
+## 20:30 UTC continuation: device diagnostics and completed Windows CI
+
+The application report now includes the device's already-collected maximum
+wake gap, wait timeouts, negotiated buffer/channel counts, shared mode and
+fallback error. Only report serialization changes: no callback instrumentation,
+DSP, device settings, public editing API or thresholds change. Maxima are not
+time-aligned, so they cannot identify the cause of the31 overruns by subtraction.
+The next normal foreground report must parse these fields and retain the existing
+failure counts and false audit/presentation qualifications. This remains unbuilt
+and joins the existing five-group/six-app-case checkpoint, not a separate build.
+
+Windows579 CI job120624496182 is terminal: compilation,158 portable/worker tests,
+scratch checks, vendor ownership and typed/socket gates passed. Native groups
+passed50/51; command-result is the same stable-parameter-row fixture failure
+corrected in the pending source. The112-case app suite recorded22 failures and
+one optional skip. The audio availability probe returned no devices; live
+startup failures and three secondary teardown failures remain recorded. The
+completed log SHA256 is
+`0ce88d11b0af2e8b3a01afa20e68bfdef7ecc980a39732667dd4b9490ffa6af6`.
+Do not relabel CI green or omit these assertions. Intel compiled successfully
+at20:24:58 and its remaining tests were still running at20:28.
+
+The exact retained x64 CI executable (SHA256
+`4791d07e04988392ba62df55610319f79442bb1447a6ddaa3386f8f41f0786f1`)
+passed three unchanged live journeys locally in136.710 seconds: six-domain
+composing/recording, queued precise-field native Save, and the95-second sustained
+recording hold with history/reopen. The process ran on a private desktop under
+ARM64 emulation with an available endpoint and silent output. The outer artifact
+12529143173 digest, nested archive, BuildInfo and executable hashes are verified
+in `sample-span-navigation/ci-x64/verified-identity.json`; `replay.json` records
+the exact CI merge and matching reviewed head. The only changed client files
+were an unselected absolute-editor module and unexecuted C++ native tests.
+No assertions/timeouts changed. This is bounded evidence for three missing-device
+failures, not a full suite replay, native x64 hardware or foreground qualification.
+
+Source review also found Delete point/Clear lane refusing a valid queued field
+before its timer fired. They now finish that edit first, then perform deletion
+through the existing automatic lane commit. A rejected/uncertain draft still
+blocks deletion. New native checks require exact unrelated-lane preservation,
+Undo deletion restoring the edited value, the following Undo restoring the
+original value, and invalid raw input retained without changes. This is part of
+the same pending checkpoint; no extra build/test cycle has run for these edits.

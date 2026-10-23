@@ -1171,6 +1171,11 @@ public:
 			<< ",\"callbackCount\":" << lastAudio.callbackCount << ",\"renderedFrames\":" << lastAudio.framesRendered
 			<< ",\"maxCallbackMicros\":" << lastAudio.maxCallbackNanoseconds / 1000.0
 			<< ",\"maxServiceMicros\":" << lastAudio.maxServiceNanoseconds / 1000.0
+			<< ",\"maxWakeGapMicros\":" << lastAudio.maxWakeGapNanoseconds / 1000.0
+			<< ",\"bufferFrames\":" << lastAudio.bufferFrames << ",\"endpointChannels\":" << lastAudio.endpointChannels
+			<< ",\"mode\":\"" << (lastAudio.mode == ScreamSeq::WasapiDevice::Mode::LowLatencyShared ? "lowLatencyShared" :
+				lastAudio.mode == ScreamSeq::WasapiDevice::Mode::StandardShared ? "standardShared" : "closed") << "\""
+			<< ",\"fallbackError\":" << lastAudio.fallbackError << ",\"waitTimeouts\":" << lastAudio.waitTimeouts
 			<< ",\"deadlineOverruns\":" << lastAudio.deadlineOverruns << ",\"starvationIndicators\":" << lastAudio.starvationIndicators
 			<< ",\"deviceErrors\":" << lastAudio.deviceErrors << ",\"lastError\":" << lastAudio.lastError
 			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"realtimeAuditPassed\":false}}";

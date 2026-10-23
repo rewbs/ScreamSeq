@@ -8,6 +8,18 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 20:35 UTC continuation:** the same unbuilt batch now completes
+valid queued fields before Delete point/Clear lane, with exact two-step history
+and unrelated-lane assertions. The QA report retains existing wake-gap/buffer/
+negotiation telemetry without changing audio processing. Windows579 CI finished:
+158 portable/worker and50/51 native groups passed; the112 app cases recorded22
+failures/one skip with an empty endpoint catalogue. Three unchanged live cases
+passed on the exact retained x64 CI executable locally (private desktop, ARM64
+emulation, available endpoint): composing, native precise Save and95-second
+recording. This does not make CI green. The next five-group/six-app-case build
+remains after20:53:46 UTC and after preceding jobs are terminal. Read the latest
+live-parameter report and frozen receipt; no package or merge is qualified.
+
 **23 October 20:20 UTC continuation:** the unbuilt recorded-point batch also
 flushes fields before canvas clicks and formats generated scalar values without
 float tails. Four actual-app absolute-editor journeys were audited on the

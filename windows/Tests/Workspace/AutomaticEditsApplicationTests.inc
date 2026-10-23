@@ -238,6 +238,33 @@ void applicationAutomaticEdits(){
       "Recorded-point formatter rewrote active raw input or its caret");
     fixture.close();
   }
+  for(const int command:{4612,4613}){
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    const auto points=Json::array({{{"frame",48000},{"value",-6.}},{{"frame",96000},{"value",-3.}}});
+    const auto other=Json::array({{{"frame",24000},{"value",25.}}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",points}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",2},{"points",other}});
+    const auto baseline=app.documentOperation("automation.get",Json::object());
+    app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto field=GetDlgItem(window,4609);
+    SetFocus(field);SetWindowTextW(field,L"-9");press(window,command);settle(window);
+    auto edited=baseline;for(auto &p:edited["points"])if(p.at("id")==1&&p.at("frame")==48000)p["value"]=-9.;
+    auto removed=edited;auto &remaining=removed["points"];
+    remaining.erase(std::remove_if(remaining.begin(),remaining.end(),[&](const auto &p){return p.at("id")==1&&(command==4613||p.at("frame")==48000);}),remaining.end());
+    // Inventory metadata changes with point count; compare exact musical points
+    // and then the complete snapshots at each chronological Undo boundary.
+    restoreCheck(app.documentOperation("automation.get",Json::object()).at("points")==remaining&&
+      !lane.snapshot().at("dirty").get<bool>()&&!lane.snapshot().at("fieldDraft").get<bool>(),
+      "Delete or Clear lane rejected a valid queued field or changed another lane");
+    app.edit("history.undo",{{"domain","all"}});
+    restoreCheck(app.documentOperation("automation.get",Json::object())==edited,"Undo deletion did not restore the accepted field edit and other lane exactly");
+    app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Undo field edit did not restore the original lanes exactly");
+    SetFocus(field);SetWindowTextW(field,L"invalid");press(window,command);settle(window);
+    restoreCheck(restoreText(field)==L"invalid"&&lane.snapshot().at("fieldDraft").get<bool>()&&
+      app.documentOperation("automation.get",Json::object())==baseline,"Delete or Clear lane discarded invalid input or changed accepted music");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);fixture.close();
+  }
   {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
     const auto points=Json::array({{{"frame",48000},{"value",-6.}},{{"frame",96000},{"value",-3.}}});
