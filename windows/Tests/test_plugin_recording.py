@@ -321,8 +321,13 @@ class PluginRecordingTests(unittest.TestCase):
         if conflicting_parameter is not None:
             before_refusal = self.doc()
             enter(conflicting_parameter, '-6.5')
+            # A workspace read may run while the retained window awaits its
+            # parameter-name/page read. Delivery is then current but selected
+            # input details still belong to the preceding presentation. Wait
+            # for the same window refresh to finish, retaining exact assertions
+            # below for original timestamp, refusal and unrelated music.
             review = self.wait_for(lambda: self.read('workspace.get')['parameterRecording'],
-                                   lambda s: s['delivery']['needsReview'])
+                                   lambda s: s['delivery']['needsReview'] and not s['pending'])
             refused = review['delivery']['events']
             self.assertEqual(len(refused), 1)
             self.assertEqual({k: refused[0][k] for k in ('plugin', 'parameter', 'value', 'state')},

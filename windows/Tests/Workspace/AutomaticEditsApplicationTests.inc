@@ -55,5 +55,36 @@ void applicationAutomaticEdits(){
     restoreCheck(points.size()==saved.size()+1&&!lane->snapshot().at("dirty").get<bool>(),"New song automation point needed a second Apply");
     app.edit("history.undo",{{"domain","all"}});restoreCheck(app.documentOperation("automation.get",Json::object()).at("points")==saved,"Automatic song point Undo failed");fixture.close();
   }
-  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits\n";
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    const auto late=Json::array({{{"frame",7509600},{"value",-6.}},{{"frame",7512000},{"value",-3.}}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",late}});
+    app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto baseline=app.documentOperation("automation.get",Json::object());const auto revision=app.view->session.revision;
+    const auto rangeMatches=[&]{const auto state=lane.snapshot();
+      restoreCheck(std::abs(std::stod(restoreText(GetDlgItem(window,4627)))-state.at("startSeconds").get<double>())<1e-8&&
+        std::abs(std::stod(restoreText(GetDlgItem(window,4628)))-state.at("endSeconds").get<double>())<1e-8,
+        "Song automation range fields differ from the displayed viewport");return state;};
+    const auto fitted=rangeMatches();
+    restoreCheck(fitted.at("startSeconds").get<double>()>155&&fitted.at("startSeconds").get<double>()<156.45&&
+      fitted.at("endSeconds").get<double>()>156.5&&fitted.at("endSeconds").get<double>()<158,
+      "A short late recording opened compressed against the entire song's end");
+    restoreCheck(fitted.at("handles").size()==2&&
+      fitted.at("handles")[1].at("x").get<double>()-fitted.at("handles")[0].at("x").get<double>()>20,
+      "Fit does not separate nearby recorded points enough to select them");
+    for(const int command:{4621,4623,4622,4620,4619}){press(window,command);rangeMatches();}
+    SetWindowTextW(GetDlgItem(window,4627),L"150");SetWindowTextW(GetDlgItem(window,4628),L"170");press(window,4629);
+    restoreCheck(rangeMatches().at("startSeconds")==150&&rangeMatches().at("endSeconds")==170,"Explicit recorded viewport was not retained");
+    press(window,4615);restoreCheck(rangeMatches().at("startSeconds")==150&&rangeMatches().at("endSeconds")==170,"Read-only reload lost the retained viewport");
+    press(window,4619);rangeMatches();
+    restoreCheck(app.view->session.revision==revision&&app.documentOperation("automation.get",Json::object())==baseline,
+      "Recorded viewport navigation wrote music or added history");
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array()}});press(window,4615);press(window,4619);
+    restoreCheck(rangeMatches().at("startSeconds")==0&&rangeMatches().at("endSeconds")==8,"Empty lane lost its useful initial range");
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6.}},{{"frame",uint64_t(604800)*48000},{"value",-3.}}})}});
+    press(window,4615);press(window,4619);const auto full=rangeMatches();
+    restoreCheck(full.at("startSeconds")==0&&full.at("endSeconds").get<double>()>=604800&&full.at("endSeconds").get<double>()<=604801,
+      "Fit clipped a legal song endpoint or escaped the viewport limit");fixture.close();
+  }
+  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation\n";
 }

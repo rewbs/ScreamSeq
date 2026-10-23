@@ -266,3 +266,99 @@ and an explicit source-only review. Method inventories, vector expectations and
 the open live-release qualification status remain unchanged. The original failed
 receipt is `saved-state-recovery/api-preflight.log`; retain it beside the corrected
 preflight result. Updating the reviewed schema is not a runtime parity pass.
+
+## 12:03 checkpoint: recovery and composing evidence
+
+Frozen `99d72db3278b8929cb92bf813e988dfbd5c7a5dd` built once locally from
+12:03:59 to 12:07:10 UTC. The candidate executable SHA256 is
+`a041c70cf34e30dd33d3b5dd7b28363090b4af99192ae8eb8f633ac4929a3f63`.
+Receipts are in `bin/mac-gesture-20261022/saved-state-recovery/`; never repeat
+its recorded build or full check invocation.
+
+All seven selected native groups passed. The original actual-app run passed
+13 of 14 cases, including the changed native vendor recovery/controller case.
+The composing case observed `needsReview` during a pending parameter-name/page
+refresh, before its original-input details were presented. Its wait now requires
+`needsReview && !pending`; exact timestamp, reason and music-preservation
+assertions remain unchanged. Only that failed case was rerun against the same
+executable and passed in 24.299 seconds. `checks-corrected.json` records that
+bounded aggregate, hashes the correction/log, and preserves the original failed
+`checks.json`. This is a harness readiness correction, not a second full suite
+or a replacement pass for different product code.
+
+Fresh Computer Use on isolated PID 41920 exercised the 15-plugin composed F04
+fixture. Params opened Recording; an occupied Gain envelope visibly refused
+capture and retained the original timestamp/reason. Stop, Discard, new Record,
+Balance slider, Stop and Keep succeeded during continuous playback epoch 1.
+Song automation opened the kept Balance lane without writing music. Docked
+search typing, Backspace, Tab and Shift+Tab had the expected visible effects.
+Ctrl+S saved the private project; typed project comparison found zero unrelated
+differences. The owned process exited normally. No musician session or audio
+default changed. The exact read-only observations, saved project and audio
+report are retained under `foreground/`.
+
+This candidate is **held from production packaging**. Its 387.2-second silent
+WASAPI run at 48 kHz / 480 frames recorded 37 deadline overruns, one starvation
+indicator, maximum callback 13,102.2 microseconds, zero device errors and zero
+processor faults. Overruns occurred before and after Keep; attribution to one
+operation is unsupported. The preceding 9c5c6ebb1 foreground run used a simpler
+song, so its zero-overrun result is not a controlled regression comparison.
+`realtimeAuditPassed:false` and `sustainedPresentationQualified:false` remain
+explicit. A same-fixture comparison/profile is still required before a clean
+performance claim. The earlier separately packaged precise-note build remains
+available; it has not been overwritten.
+
+The explicit completed-take Restore saved state action still needs foreground
+exercise with an interactive vendor editor. Existing native controller/control
+checks passed, but the old Windows fixture only displayed a static label. The
+attempted floating-window resize did not change bounds, so no compact foreground
+pass is claimed. Computer Use exposes Main as the target for related floaters;
+reactivation on typing is not proof of a product focus defect. Native focus
+assertions remain necessary, and screenshots do not qualify temporal flicker.
+
+At 12:35 UTC, current Mac ARM job 120403715903 was terminal success; Intel
+120403715775 was still building. Windows x64 120403715803 compiled successfully
+at 12:31:23 and was running tests. Runs are 39950565741 and 39950565689. Latest
+actual build start was 12:04:52 UTC: **no next build before 13:04:52 UTC**, and
+refresh CI/other-checkpoint receipts before dispatch. Mac real-device lifecycle,
+reciprocal edited-project preservation and native Windows audio remain required
+before main integration or full parity claims.
+
+## Next coherent source batch: recorded-lane viewport and vendor UI fixture
+
+Source below is unbuilt; new native assertions have not yet run.
+
+- `windows/App/AbsoluteAutomationWindow.hpp`: Fit now frames the selected
+  lane's actual first/last points with padding and a one-second minimum, rather
+  than compressing a short late take into the entire song. Empty lanes retain
+  0..8 seconds and legal endpoints remain bounded. Fit, pan, zoom, wheel,
+  selected-point reveal and same-target reload synchronize the range fields.
+  The old Apply guidance now describes automatic saving with Undo.
+- `windows/Tests/Workspace/AutomaticEditsApplicationTests.inc`: late two-point
+  take, readable handle separation, exact range display, zoom/pan/Fit,
+  explicit range/reload retention, empty/full endpoint ranges, and unchanged
+  music/revision during viewport navigation. Registration:
+  `workspace-command-result-tests` (group `command-results`).
+- `windows/Tests/Plugins/FixtureVST3.cpp`: a real plugin-owned Win32 trackbar
+  sends native mouse/keyboard edits through IComponentHandler with its retained
+  controller. Existing attach notification, stable parameter 7 and lifetime
+  checks remain. This adds no production-provider or DSP behavior.
+- `windows/Tests/Plugins/EditorTests.cpp`: real HWND slider/arrow-key input,
+  original timestamps, no end-track duplicate, actual PCM changes and three
+  close/reopen cycles. Both fixture CMake entry points link common controls;
+  root CMake registers `vst3-editor` / target `vst3-editor-tests` against the
+  current application libraries, avoiding stale imported engine libraries.
+
+Next checkpoint must build ScreamSeq, scanner, fixture, workspace-restore-tests,
+vst3-editor-tests, vst3-native-tests, plugin-edit-notification-tests and
+document-controller-tests together. Select the new `vst3-editor` registration,
+`vst3-native`, `plugin-edit-notification`, workspace command-results,
+source-navigation and parameter-preview groups. Rerun the changed complete
+composing case and actual vendor-recovery case with the newly built fixture.
+Unchanged precise-note/shared-renderer cases may reuse their exact prior inputs
+and receipts; a new fixture hash cannot reuse old vendor evidence. Inspect Fit,
+range fields, target retention and explicit recovery through Computer Use on a
+fresh owned process. Keep all refusal, stopped/closed-editor and original-input
+guards; do not manufacture a successful recovery by removing them. Broaden only
+for a failure or changed dependency. No main merge or new package follows from
+source-only checks.
