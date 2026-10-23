@@ -7,6 +7,7 @@ void applicationParameterRecordingReview() {
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
     bool deferKeepReceipt=false,failReconcile=false,refuseStart=false,failAfterPlaybackStop=false;
     unsigned playbackReconciled=0;
+    Json openedAutomation=Json::array();
     std::function<void()> duringRead;
     std::string contextRevision;
     bool available=true;
@@ -15,8 +16,9 @@ void applicationParameterRecordingReview() {
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
     callbacks.context=[&]{return std::pair(app.documentId,contextRevision.empty()?app.view->session.revision:contextRevision);};
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
-    callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
+    callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&(parameter==1||parameter==2),"Review looked up another parameter name");++nameReads;return parameter==1?L"Gain":L"Balance";};
     callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
+    callbacks.recordedAutomation=[&](const std::string &identity,uint32_t parameter){openedAutomation.push_back({identity,parameter});};
     callbacks.reconcile=[&](const Call &call){if(call.method=="transport.stop"){
       restoreCheck(call.result.at("playing")==false,"Review accepted an invalid playback Stop receipt");++playbackReconciled;return;}
       restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
@@ -29,7 +31,7 @@ void applicationParameterRecordingReview() {
         if(auto hook=std::exchange(duringRead,{}))hook();
         return take;
       }
-      restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&params.at("parameter")==1,
+      restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&(params.at("parameter")==1||params.at("parameter")==2),
         "Review read a different recording take or target");
       Json rows=Json::array();const auto offset=params.at("offset").get<size_t>(),limit=params.at("limit").get<size_t>();
       for(size_t i=offset;i<std::min(size_t(130),offset+limit);++i)rows.push_back({{"timestamp",std::to_string(9007199254740993ull+i)},{"value",double(i)},
@@ -70,6 +72,8 @@ void applicationParameterRecordingReview() {
     SendMessageW(control(9720),CB_SETCURSEL,1,0);click(9721);
     restoreCheck(writes.size()==1&&tool.snapshot().at("take").at("capturing")==true&&IsWindowEnabled(control(9722))&&!IsWindowEnabled(control(9723)),
         "Record did not enter the retained capture state or allowed Keep while capturing");
+    click(9741);restoreCheck(openedAutomation.empty()&&!IsWindowEnabled(control(9741)),
+        "An active take offered committed song automation navigation");
     restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
         "New captured music stayed hidden behind an empty native delivery page");
     restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find("Gain")!=std::string::npos&&
@@ -136,12 +140,21 @@ void applicationParameterRecordingReview() {
         "Already committed take offered Discard as if it could undo accepted music");
     take["completed"]=false;SendMessageW(window,WM_TIMER,7,0);
     failAfterKeep=true;click(9723);restoreCheck(writes.size()==3&&!tool.snapshot().at("completion").is_null(),"Post-commit error lost its original receipt");
+    click(9741);restoreCheck(openedAutomation.empty()&&!IsWindowEnabled(control(9741)),
+        "Unreviewed Keep outcome enabled song automation navigation");
     click(9723);restoreCheck(writes.size()==3,"Retry duplicated an uncertain recording commit");click(9725);
     restoreCheck(writes.size()==3&&reconciled==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("take").at("retained")==false,
         "Review resent a completed action or retained the old take after receipt reconciliation");
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",1}})&&IsWindowEnabled(control(9741)),
+        "Confirmed Keep forgot the selected stable automation target");
+    const auto beforeNavigation=tool.snapshot();click(9741);
+    restoreCheck(openedAutomation==Json::array({Json::array({plugin,1})})&&tool.snapshot()==beforeNavigation&&writes.size()==3&&songState(app)==music,
+        "Opening kept automation replayed input, wrote music or changed recording review");
     take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
       {"transportPlaying",true},{"discardable",false},{"targets",Json::array()},{"sources",Json::array()}};
     SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(tool.snapshot().at("keptTarget").is_null()&&!IsWindowEnabled(control(9741)),
+        "A new external take retained a previous take's navigation shortcut");
     restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&IsWindowEnabled(control(9740))&&IsWindowVisible(control(9740))&&
       restoreText(control(9734)).find(L"stop playback")!=std::wstring::npos,
       "Failed live clock still claimed to record or hid the safe recovery action");
@@ -279,4 +292,14 @@ void applicationParameterRecordingReview() {
     restoreCheck(!tool.protectsClose()&&!tool.visible()&&tool.snapshot().at("take")==finished&&
       writes.size()==boundaryWrites&&GetFocus()==hiddenFocus,
       "Confirmed API Discard retained a hidden departure barrier, repeated a write or stole focus");
+    take={{"retained",false},{"capturing",false},{"take",""}};tool.show();click(9725);click(9721);
+    take["targets"].push_back({{"plugin",plugin},{"parameter",2},{"unmapped",0},{"overflow",0}});
+    SendMessageW(window,WM_TIMER,7,0);
+    SendMessageW(control(9728),CB_SETCURSEL,2,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
+    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);click(9723);
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&IsWindowEnabled(control(9741)),
+      "Keep substituted the first parameter for the selected recording target");
+    const auto finalWrites=writes.size();click(9741);
+    restoreCheck(openedAutomation.back()==Json::array({plugin,2})&&writes.size()==finalWrites&&songState(app)==music,
+      "Selected kept automation navigation changed music or used a different target");
 }

@@ -66,6 +66,11 @@
         callbacks.saveRecovery=[this]{saveRecovery(view->session.revision,true);};
         callbacks.available=[this]{return !busy&&!recoveryRestoring&&!departureInput&&!parameterRecordingInput;};
         callbacks.recoveredInputs=[this]{openPluginRecoveryReview();};
+        callbacks.recordedAutomation=[this](const std::string &plugin,uint32_t parameter){
+            // Use stable source navigation: never replace another lane's retained
+            // draft, silently choose a different plugin, or move the pattern cursor.
+            inspectParameterSource({{"kind","recorded"},{"plugin",plugin},{"parameter",parameter}});
+        };
         parameterRecordingWindow=std::make_unique<ScreamSeq::ParameterRecordingWindow>(window,std::move(callbacks));
         connectSampleCaptureTransport(*parameterRecordingWindow);
     }

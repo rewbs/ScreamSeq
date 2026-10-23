@@ -275,6 +275,9 @@ class PluginRecordingTests(unittest.TestCase):
         first_value, later_value, discard_value = values
         self.launch(project, seconds=180 if sustain_seconds else 120)
         self.assertTrue(self.read('transport.get')['playing'])
+        cursor = self.client.call('context.get')
+        self.client.call('context.set', dict(expectedRevision=cursor['revision'],
+            expectedContext=cursor['data']['contextRevision'], following=False))
         baseline = self.read('plugin.state.get', plugin=plugin)
         points_before = self.read('automation.get')
         revision = self.doc()['revision']
@@ -433,6 +436,22 @@ class PluginRecordingTests(unittest.TestCase):
             if sustain_seconds:
                 self.trace_recording_clock('after-keep', plugin, parameter)
         self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take kept')
+        kept = self.read('workspace.get')['parameterRecording']
+        self.assertEqual(kept['keptTarget'], dict(plugin=plugin, parameter=parameter))
+        self.assertTrue(kept['canOpenKept'])
+        before_navigation = self.doc()
+        before_cursor = self.read('context.get')
+        before_transport = self.read('transport.get')
+        self.recording_button(9741)
+        lane = self.read('workspace.get')['absoluteAutomation']
+        self.assertTrue(lane['visible'])
+        self.assertEqual((lane['plugin'], lane['parameter']), (plugin, parameter))
+        self.assertGreater(lane['pointCount'], 0)
+        self.assertEqual(self.doc(), before_navigation, 'Opening the kept lane must not change music/history')
+        self.assertEqual(self.read('context.get'), before_cursor, 'Opening the kept lane moved the pattern cursor')
+        after_transport = self.read('transport.get')
+        self.assertTrue(after_transport['playing'])
+        self.assertEqual(after_transport['playbackEpoch'], before_transport['playbackEpoch'])
         points = self.read('automation.get')
         self.assertGreater(points['total'], points_before['total'])
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
