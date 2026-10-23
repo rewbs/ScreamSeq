@@ -16,6 +16,7 @@
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
 #include "NativeContextMenu.hpp"
+#include "NativeTextSearch.hpp"
 #include "NativeMenuBar.hpp"
 #include "NativePatternAccessibility.hpp"
 #include "WorkspaceShortcuts.hpp"

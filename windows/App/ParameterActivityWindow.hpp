@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "NativeTextSearch.hpp"
 #include <deque>
 
 namespace ScreamSeq {
@@ -12,7 +13,7 @@ public:
   using Request=std::function<Json(const std::string &,const Json &)>;
 private:
   enum:int {processors=11000,parameters,refresh,freeze,clear,mode,details,items,openSource,openLane,
-    previous,next,newPoint,savePoint,removePoint,time,value,zoomOut,zoomIn,fit,close,
+    previous,next,newPoint,savePoint,removePoint,time,value,zoomOut,zoomIn,fit,close,search,
     title=11100,targetLabel,ruleLabel,statusLabel,timeLabel,valueLabel,pageLabel};
   Request request_;std::function<Context()> context_;std::function<void(const Json &)> inspect_;
   Context captured_;Json targets_=Json::array(),parameters_=Json::array(),sources_=Json::array(),recorded_=Json::array();
@@ -24,16 +25,20 @@ private:
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,polling_=false,frozen_=false,fields_=false,active_=false;
   bool explicitPointAction_=false;
+  std::vector<uint32_t> parameterChoices_;
+  size_t searchMatches_=0;
+  bool searchPending_=false;
   std::function<void()> pendingNavigation_;
   void cancelNavigation(){pendingNavigation_={};KillTimer(window_,4);}
   void deferTargetSelection(int id){
     const auto index=selection(id);if(index<0)return;
     const auto wanted=id==processors?targets_.at(size_t(index)).at("key").get<std::string>():target_;
-    const auto parameter=id==parameters?std::optional<uint32_t>(parameters_.at(size_t(index)).at("id").get<uint32_t>()):parameter_;
+    const auto parameter=id==parameters?selectedParameter():parameter_;
+    if(id==parameters&&!parameter)return;
     const auto c=context_();const auto generation=generation_;
-    pendingNavigation_=[this,wanted,parameter,c,generation]{
+    pendingNavigation_=[this,id,wanted,parameter,c,generation]{
       guardRead(c,generation);require(visible(),"Activity navigation was closed");
-      beginPending();try{load(wanted,parameter);pending_=false;}catch(...){pending_=false;throw;}
+      beginPending();try{load(wanted,parameter,false,id==parameters);pending_=false;}catch(...){pending_=false;throw;}
     };
     SetTimer(window_,4,100,nullptr);
   }
@@ -52,8 +57,36 @@ private:
   int selection(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
   void choose(int id,int i){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_SETCURSEL,i,0);}
   void append(int id,const std::wstring &s){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));}
+  std::optional<uint32_t> selectedParameter()const {
+    const auto row=selection(parameters);
+    if(row<0||size_t(row)>=parameterChoices_.size())return {};
+    return parameterChoices_[size_t(row)];
+  }
+  void filterParameters(){
+    const auto query=field(search);std::vector<uint32_t> ids;std::vector<std::wstring> labels;
+    int selected=-1;searchMatches_=0;
+    for(const auto &p:parameters_){
+      const auto id=p.at("id").get<uint32_t>();const bool current=parameter_&&id==*parameter_;
+      auto label=wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string()))+L" · "+std::to_wstring(id);
+      const bool match=nativeTextSearchMatches(label,query);if(match)++searchMatches_;
+      if(!match&&!current)continue;
+      if(!match)label+=L" [observed; outside search]";
+      if(current)selected=int(ids.size());ids.push_back(id);labels.push_back(std::move(label));
+    }
+    // The query only changes presentation. Keep the observed target visible
+    // even when excluded, and never start a watch or save a retained draft.
+    const auto combo=controls_.at(parameters);const bool wasSetting=setting_;setting_=true;
+    struct Restore{bool &value;bool old;~Restore(){value=old;}}restore{setting_,wasSetting};
+    SendMessageW(combo,WM_SETREDRAW,FALSE,0);
+    ScreamSeq::NativeInputGate::present(combo,CB_RESETCONTENT,0,0);
+    for(const auto &label:labels)append(parameters,label);
+    if(labels.empty())append(parameters,parameters_.empty()?L"No prepared parameters":L"No matching parameters");
+    parameterChoices_=std::move(ids);choose(parameters,selected);
+    SendMessageW(combo,WM_SETREDRAW,TRUE,0);InvalidateRect(combo,nullptr,FALSE);
+    searchPending_=false;KillTimer(window_,5);
+  }
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(processors),CB_RESETCONTENT,0,0);int index=-1;for(size_t i=0;i<targets_.size();++i){const auto &t=targets_[i];append(processors,wide(t.at("name"))+L" · "+wide(t.at("key")));if(t.at("key")==target_)index=int(i);}choose(processors,index);
-    ScreamSeq::NativeInputGate::present(controls_.at(parameters),CB_RESETCONTENT,0,0);index=-1;for(size_t i=0;i<parameters_.size();++i){const auto &p=parameters_[i];append(parameters,wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string())));if(parameter_&&p.at("id")==*parameter_)index=int(i);}choose(parameters,index);setting_=false;}
+    filterParameters();setting_=false;}
   void showFields(){setting_=true;if(selected_>=0&&size_t(selected_)<recorded_.size()){const auto &p=recorded_[size_t(selected_)];originalFrame_=p.at("frame");set(time,double(originalFrame_)/48000);set(value,p.at("value"));}else{originalFrame_=0;set(time,L"0");set(value,L"0");}fields_=false;set(savePoint,selected_>=0?L"Save now":L"Add point");setting_=false;}
   void list(){const auto list=controls_.at(items);const auto old=int(SendMessageW(list,LB_GETCURSEL,0,0)),oldTop=int(SendMessageW(list,LB_GETTOPINDEX,0,0));
     const auto previousSequence=[&](int row)->std::optional<uint64_t>{if(page_==1&&listedPage_==1&&listedToken_==token_&&row>=0&&size_t(row)<listedSequences_.size())return listedSequences_[size_t(row)];return {};};
@@ -187,7 +220,13 @@ private:
     source["plugin"]=plugin_;source["parameter"]=*parameter_;return source;
   }
   void action(int id,unsigned notification)override{
-    if(setting_)return;if(id==close){hide();return;}if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;if(page_==2&&selected_>=0)queuePointEdit(generation_);return;}if(pending_){
+    if(setting_)return;if(id==close){hide();return;}
+    if(id==search&&notification==EN_CHANGE){
+      cancelNavigation();
+      if(pending_){searchPending_=true;SetTimer(window_,5,20,nullptr);}else filterParameters();
+      return;
+    }
+    if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;if(page_==2&&selected_>=0)queuePointEdit(generation_);return;}if(pending_){
       // Polling pumps native messages. Retain one explicit edit instead of
       // silently losing an enabled Save/Delete click during that read. Never
       // queue/replay a second mutation while another mutation is in flight.
@@ -202,7 +241,7 @@ private:
     if(id==freeze&&notification==BN_CLICKED){frozen_=!frozen_;set(freeze,frozen_?L"Resume":L"Freeze");return;}
     beginPending();try{
       if(id==processors&&notification==CBN_SELCHANGE){const auto i=selection(processors);require(i>=0,"Choose a processor");load(targets_.at(size_t(i)).at("key"));}
-      else if(id==parameters&&notification==CBN_SELCHANGE){const auto i=selection(parameters);require(i>=0,"Choose a parameter");load(target_,parameters_.at(size_t(i)).at("id").get<uint32_t>());}
+      else if(id==parameters&&notification==CBN_SELCHANGE){const auto parameter=selectedParameter();require(parameter.has_value(),"Choose a parameter");load(target_,parameter,false,true);}
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
       else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Selected point edits save automatically · New, then Add point creates a point · Shared Undo restores edits");}
       else if(id==items&&notification==LBN_SELCHANGE){if(page_==2){require(!fields_,"Save or Refresh the point fields before selecting another point");selected_=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));showFields();}selectedTrace_.reset();requestPaint();}
@@ -220,10 +259,12 @@ private:
     }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
   void timer(UINT_PTR id)override{
+    if(id==5){if(pending_)return;if(searchPending_)filterParameters();else KillTimer(window_,5);return;}
     if(id==4){if(pending_||context_().busy)return;KillTimer(window_,4);auto navigate=std::exchange(pendingNavigation_,{});if(navigate)navigate();return;}
     if(id==3)poll();
   }
   bool key(WPARAM key,bool ctrl,bool shift)override{
+    if(ctrl&&key=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(key==VK_ESCAPE){hide();return true;}
     if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}
     if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(items):window_);requestPaint();return true;}
@@ -234,7 +275,7 @@ private:
       if(key==VK_LEFT||key==VK_RIGHT)for(size_t i=0;i<t.indices.size();++i)if(selectedTrace_&&points_[t.indices[i]].at("sequence")==*selectedTrace_){at=key==VK_LEFT?(i?i-1:0):std::min(i+1,t.indices.size()-1);break;}
       selectTrace(t.indices[at]);return true;}}
     return false;}
-  void layout()override{const auto [w,h]=size();place(title,18,12,w-36,25);place(processors,18,46,w*.55-22,280);place(parameters,w*.55+4,46,w*.45-22,280);place(targetLabel,18,80,w-36,24);
+  void layout()override{const auto [w,h]=size();place(title,18,12,w-36,25);place(processors,18,46,w*.55-22,280);place(search,w*.55+4,46,w*.45-22,28);place(parameters,w*.55+4,80,w*.45-22,280);place(targetLabel,18,80,w*.55-22,24);
     float x=18;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{refresh,92},{freeze,84},{clear,112},{zoomOut,38},{fit,46},{zoomIn,38}}){place(id,x,112,width,28);x+=width+8;}place(mode,x,112,200,200);plot_={18,156,w-36,std::max(110.f,h-492)};
     const float y=plot_.y+plot_.h+14;place(details,18,y,200,160);place(openSource,226,y,148,28);place(openLane,382,y,172,28);place(pageLabel,566,y+4,w-584,24);place(items,18,y+38,w-36,102);place(ruleLabel,18,y+146,w-36,36);
     const bool recorded=page_==2;place(timeLabel,18,h-131,156,22,recorded);place(valueLabel,188,h-131,156,22,recorded);place(time,18,h-109,156,28,recorded);place(value,188,h-109,156,28,recorded);x=358;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{newPoint,78},{savePoint,106},{removePoint,94},{previous,56},{next,56}}){place(id,x,h-109,width,28,recorded);x+=width+8;}place(close,w-112,h-65,94,28);place(statusLabel,18,h-30,w-36,24);}
@@ -307,18 +348,19 @@ public:
   }
   ParameterActivityWindow(HWND owner,Request request,std::function<Context()> context,std::function<void(const Json &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumClientWidth_=1020;minimumClientHeight_=680;create(L"ScreamSeq.ParameterActivity",L"Parameter activity",1180,790);clampToOwnerWorkArea();for(int id:{processors,parameters,mode,details})combo(id);append(mode,L"Recent seconds");append(mode,L"Latest pattern pass");choose(mode,0);for(auto s:{L"Sources",L"Recent changes",L"Recorded points"})append(details,s);choose(details,0);
+    edit(search,L"",256);SendMessageW(controls_.at(search),EM_SETCUEBANNER,FALSE,reinterpret_cast<LPARAM>(L"Find parameter by name, unit or ID (Ctrl+F)"));
     add(items,L"LISTBOX",L"Parameter activity details",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_HSCROLL);edit(time,L"0",40);edit(value,L"0",40);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{freeze,L"Freeze"},{clear,L"Clear capture"},{openSource,L"Open source"},{openLane,L"Song automation…"},{previous,L"‹"},{next,L"›"},{newPoint,L"New"},{savePoint,L"Save now"},{removePoint,L"Delete"},{zoomOut,L"−"},{zoomIn,L"+"},{fit,L"Fit"},{close,L"Close"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Parameter activity"},{targetLabel,L"Choose a prepared processor copy"},{ruleLabel,L"Observe the final parameter value and the sources that control it."},{statusLabel,L""},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{pageLabel,L""}})label(id,text);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
-        {processors,L"Parameter activity processor copy"},{parameters,L"Parameter activity parameter"},
+        {processors,L"Parameter activity processor copy"},{search,L"Search activity parameters by name, unit or ID"},{parameters,L"Parameter activity parameter"},
         {mode,L"Activity trace time range"},{details,L"Parameter activity details page"},
         {items,L"Parameter sources, changes or recorded points"},{time,L"Recorded point time, seconds"},
         {value,L"Recorded point value, native units"},{previous,L"Previous recorded page"},
         {next,L"Next recorded page"},{zoomOut,L"Zoom activity trace out"},{zoomIn,L"Zoom activity trace in"}})
       accessibleName(id,name);
     HWND previousControl=HWND_TOP;
-    for(const auto id:{processors,parameters,refresh,freeze,clear,zoomOut,fit,zoomIn,mode,
+    for(const auto id:{processors,search,parameters,refresh,freeze,clear,zoomOut,fit,zoomIn,mode,
         details,openSource,openLane,items,time,value,newPoint,savePoint,removePoint,previous,next,close}){
       const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
     }
@@ -333,6 +375,6 @@ public:
     beginPending();try{load(std::move(plugin),parameter,false,true);pending_=false;}catch(...){pending_=false;throw;}
     show();SetFocus(controls_.at(parameters));
   }
-  Json snapshot()const{return {{"visible",visible()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"target",target_},{"plugin",plugin_},{"parameter",parameter_?Json(*parameter_):Json()},{"engine",engine_},{"token",token_},{"cursor",cursor_},{"pointCount",points_.size()},{"sourceCount",sources_.size()},{"targets",targets_},{"parameters",parameters_},{"sources",sources_},{"recorded",recorded_},{"recordedTotal",total_},{"recordedOffset",offset_},{"selectedPoint",selected_},{"fieldDraft",fields_},{"generation",generation_},{"rawTime",utf8(field(time))},{"rawValue",utf8(field(value))},{"pending",pending_},{"frozen",frozen_},{"active",active_},{"stale",!current()},{"dropped",dropped_},{"page",page_},{"traceMode",traceMode_},{"trace",traceSnapshot()},{"seconds",seconds_},{"status",utf8(status_)}};}
+  Json snapshot()const{return {{"visible",visible()},{"document",captured_.document},{"expectedRevision",captured_.revision},{"target",target_},{"plugin",plugin_},{"parameter",parameter_?Json(*parameter_):Json()},{"engine",engine_},{"token",token_},{"cursor",cursor_},{"pointCount",points_.size()},{"sourceCount",sources_.size()},{"targets",targets_},{"parameters",parameters_},{"search",utf8(field(search))},{"searchMatches",searchMatches_},{"parameterChoices",parameterChoices_},{"searchPending",searchPending_},{"sources",sources_},{"recorded",recorded_},{"recordedTotal",total_},{"recordedOffset",offset_},{"selectedPoint",selected_},{"fieldDraft",fields_},{"generation",generation_},{"rawTime",utf8(field(time))},{"rawValue",utf8(field(value))},{"pending",pending_},{"frozen",frozen_},{"active",active_},{"stale",!current()},{"dropped",dropped_},{"page",page_},{"traceMode",traceMode_},{"trace",traceSnapshot()},{"seconds",seconds_},{"status",utf8(status_)}};}
 };
 }

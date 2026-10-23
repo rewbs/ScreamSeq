@@ -10,17 +10,20 @@ void run(){
   auto owner=CreateWindowExW(0,L"STATIC",L"Activity test owner",WS_OVERLAPPEDWINDOW,0,0,1200,850,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
   require(owner!=nullptr,"Create test owner");ShowWindow(owner,SW_SHOW);
   {
-    ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false,twoParameters=false;uint32_t watchedParameter=1;unsigned edits=0;std::string token="1:1";Json navigation;
+    ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false,twoParameters=false,searchCatalogue=false,reverseCatalogue=false;uint32_t watchedParameter=1;unsigned edits=0,watches=0,requests=0;std::string token="1:1";Json navigation;
     Json processor={{"key","song/rack/a"},{"name","Gain copy"},{"plugin","a"},{"graph","n0"},{"node","n0"},{"target","n0"},{"instrument","n0"},{"role",0},{"channel",0},{"bypass",false},{"parameterCount",1}};
     std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};std::optional<double> constantTrace;std::optional<Json> incomingPage;
     Json lane=Json::array({{{"frame",24000},{"value",-.5}}});
     auto request=[&](const std::string &method,const Json &p)->Json {
+      ++requests;
       if(pump)pump(method);if(method==failRead)throw std::runtime_error("Injected read failure");
       if(method=="parameter.activity.targets")return {{"targets",prepared?Json::array({processor}):Json::array()},{"active",prepared},{"engine",prepared?1:0}};
       if(method=="parameter.activity.parameters"){auto parameters=Json::array({{{"id",1},{"name","Gain"},{"min",-1},{"max",1},{"value",0},{"unitLabel","dB"}}});
         if(twoParameters)parameters.push_back({{"id",2},{"name","Balance"},{"min",-1},{"max",1},{"value",0},{"unitLabel","%"}});
+        if(searchCatalogue){parameters.push_back({{"id",42},{"name","Gain"},{"unitLabel","dB"}});parameters.push_back({{"id",9001},{"name","Gain"},{"unitLabel","dB"}});}
+        if(reverseCatalogue)std::reverse(parameters.begin(),parameters.end());
         return {{"target",processor},{"parameters",parameters}};}
-      if(method=="parameter.activity.watch"){require(!p.contains("expectedRevision"),"Watch must be transient");watchedParameter=p.at("parameter");return {{"token",token},{"target",processor},{"parameter",watchedParameter}};}
+      if(method=="parameter.activity.watch"){++watches;require(!p.contains("expectedRevision"),"Watch must be transient");watchedParameter=p.at("parameter");return {{"token",token},{"target",processor},{"parameter",watchedParameter}};}
       if(method=="parameter.activity.sources")return {{"sources",Json::array({{{"kind","baseline"},{"title","Saved manual value"},{"enabled",true}},{{"kind","recorded"},{"title","Recorded automation"},{"plugin","a"},{"parameter",1},{"enabled",true}}})},{"omitted",0},{"rule","Recorded values control the base."}};
       if(method=="parameter.activity.get"){Json result={{"token",token},{"target",processor},{"parameter",watchedParameter},{"points",p.at("after")==0?Json::array({
         {{"sequence",1},{"seconds",.5},{"value",-.5},{"minimum",-.5},{"maximum",-.5},{"pattern",0},{"order",0},{"position",0},{"source",{{"kind","recorded"}}}},
@@ -71,6 +74,82 @@ void run(){
       require(tool.snapshot().at("generation")==beforeClose&&!tool.visible(),"Deferred target reopened a closed activity observer");
       tool.openAt("a",1);
       twoParameters=false;click(11002);
+    }
+    {
+      searchCatalogue=true;twoParameters=true;click(11002);
+      const auto search=GetDlgItem(window,11021);require(search!=nullptr,"Missing Activity search edit");
+      {
+        RECT original{};require(GetWindowRect(window,&original),"Read Activity bounds");
+        const auto dpi=GetDpiForWindow(window);const auto scale=dpi/96.;
+        RECT minimum{0,0,LONG(std::lround(1020*scale)),LONG(std::lround(680*scale))};
+        require(AdjustWindowRectExForDpi(&minimum,DWORD(GetWindowLongPtrW(window,GWL_STYLE)),FALSE,
+          DWORD(GetWindowLongPtrW(window,GWL_EXSTYLE)),dpi),"Compute minimum Activity frame");
+        require(SetWindowPos(window,nullptr,0,0,minimum.right-minimum.left,minimum.bottom-minimum.top,
+          SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Resize Activity to minimum client");
+        RECT client{},query{},selector{},actions{};require(GetClientRect(window,&client)&&GetWindowRect(search,&query)&&
+          GetWindowRect(GetDlgItem(window,11002),&actions),"Read Activity search layout");
+        require(GetWindowRect(GetDlgItem(window,11001),&selector),"Read closed Activity selector");
+        MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&selector),2);
+        MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&query),2);
+        MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&actions),2);
+        require(query.left>=0&&query.right<=client.right&&query.bottom<=selector.top&&selector.bottom<=actions.top,
+          "Activity search or closed parameter selector overlaps or clips at minimum size");
+        require(SetWindowPos(window,nullptr,original.left,original.top,original.right-original.left,original.bottom-original.top,
+          SWP_NOZORDER|SWP_NOACTIVATE),"Restore Activity bounds");
+      }
+      const auto before=tool.snapshot();const auto oldRequests=requests,oldWatches=watches;
+      SetFocus(search);SetWindowTextW(search,L"9001");SendMessageW(search,EM_SETSEL,1,3);
+      DWORD first=0,last=0;SendMessageW(search,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(tool.snapshot().at("parameterChoices")==Json::array({1,9001})&&tool.snapshot().at("searchMatches")==1&&
+        tool.snapshot().at("parameter")==1&&tool.snapshot().at("generation")==before.at("generation")&&
+        tool.snapshot().at("recorded")==before.at("recorded")&&GetFocus()==search&&first==1&&last==3&&
+        requests==oldRequests&&watches==oldWatches&&edits==0,
+        "Activity search touched the watch, song, draft, focus or stable result identities");
+      choose(11001,1);
+      require(tool.snapshot().at("parameter")==9001&&watchedParameter==9001&&watches==oldWatches+1&&
+        tool.snapshot().at("parameterChoices")==Json::array({9001}),"Filtered row was treated as a catalogue index instead of stable ID");
+      reverseCatalogue=true;click(11002);
+      require(tool.snapshot().at("parameter")==9001&&tool.snapshot().at("parameterChoices")==Json::array({9001}),
+        "Catalogue reorder changed the filtered observation target");
+      SetWindowTextW(search,L"bAL");
+      require(tool.snapshot().at("parameterChoices")==Json::array({9001,2})&&tool.snapshot().at("searchMatches")==1&&
+        tool.snapshot().at("parameter")==9001,"Case-insensitive name filtering redirected the observation");
+      context.busy=true;const auto busyRequests=requests;
+      SetWindowTextW(search,L"%");require(tool.snapshot().at("searchMatches")==1&&requests==busyRequests,
+        "Parameter unit filtering was blocked by or reentered the document owner");context.busy=false;
+      SetWindowTextW(search,L"no such parameter");
+      require(tool.snapshot().at("searchMatches")==0&&tool.snapshot().at("parameterChoices")==Json::array({9001})&&
+        tool.snapshot().at("parameter")==9001,"Zero matches silently selected a replacement parameter");
+      std::wstring selectedLabel(256,L'\0');SendMessageW(GetDlgItem(window,11001),CB_GETLBTEXT,0,LPARAM(selectedLabel.data()));
+      require(selectedLabel.find(L"[observed; outside search]")!=std::wstring::npos,"Excluded observed parameter lacks a visible explanation");
+      SetWindowTextW(search,L"");
+      require(tool.snapshot().at("parameterChoices")==Json::array({9001,42,2,1})&&tool.snapshot().at("parameter")==9001,
+        "Clearing search lost duplicate names or changed the stable observation");
+      const auto beforePollWatches=watches;
+      pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+        SetFocus(search);SetWindowTextW(search,L"42");SendMessageW(search,EM_SETSEL,1,2);
+        require(tool.snapshot().at("searchPending")==true&&tool.snapshot().at("parameterChoices")==Json::array({9001,42,2,1}),
+          "Pumped search rebuilt a selector while its observation was pending");
+      }};
+      SendMessageW(window,WM_TIMER,3,0);pump={};SendMessageW(window,WM_TIMER,5,0);
+      SendMessageW(search,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(tool.snapshot().at("searchPending")==false&&tool.snapshot().at("parameterChoices")==Json::array({9001,42})&&
+        tool.snapshot().at("parameter")==9001&&watches==beforePollWatches&&GetFocus()==search&&first==1&&last==2,
+        "Deferred search lost raw input, caret or stable observation after a pumped read");
+      choose(11006,2);SetWindowTextW(GetDlgItem(window,11016),L"unfinished");const auto draft=tool.snapshot();
+      const auto beforeDraftRequests=requests;SetFocus(search);SetWindowTextW(search,L"gain");
+      require(tool.snapshot().at("rawValue")=="unfinished"&&tool.snapshot().at("fieldDraft")==true&&
+        tool.snapshot().at("generation")==draft.at("generation")&&tool.snapshot().at("selectedPoint")==draft.at("selectedPoint")&&
+        requests==beforeDraftRequests&&edits==0,"Search committed or discarded an invalid recorded-point draft");
+      choose(11001,1);require(tool.snapshot().at("parameter")==9001&&tool.snapshot().at("rawValue")=="unfinished",
+        "Explicit filtered selection redirected an unsaved point draft");
+      SetWindowTextW(search,L"");reverseCatalogue=false;searchCatalogue=false;twoParameters=false;click(11002);choose(11006,0);
+      require(tool.snapshot().at("parameter")==1&&edits==0,"Search fixture cleanup did not restore its original observer");
+      // Reuse the same native registration for Ctrl+F and normal native Tab.
+      struct RestoreKeys{BYTE state[256]{};RestoreKeys(){require(GetKeyboardState(state),"Read search keyboard state");}~RestoreKeys(){SetKeyboardState(state);}} restore;
+      BYTE ctrl[256]{};std::copy(std::begin(restore.state),std::end(restore.state),std::begin(ctrl));ctrl[VK_CONTROL]|=0x80;
+      require(SetKeyboardState(ctrl),"Set private Ctrl modifier");SetFocus(GetDlgItem(window,11001));SendMessageW(window,WM_KEYDOWN,'F',0);
+      require(GetFocus()==search,"Activity Ctrl+F did not focus native search");
     }
     SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Live trace did not consume its cursor");SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Trace duplicated an old point");
     const auto trace=tool.snapshot().at("trace");require(trace.at("nativePoints")==2&&trace.at("normalizedContributions")==1&&trace.at("segments")==1&&trace.at("minimum")==-.5&&trace.at("maximum")==-.25,"Normalized graph contribution contaminated final native-unit trace range or segments");
@@ -160,13 +239,13 @@ void run(){
     SendMessageW(GetDlgItem(window,11007),LB_SETCURSEL,0,0);click(11008);require(navigation.at("kind")=="baseline"&&navigation.at("parameter")==1&&navigation.at("plugin")=="a","Baseline provenance lost watched plugin/parameter");
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
-        {11000,L"Parameter activity processor copy"},{11001,L"Parameter activity parameter"},
+        {11000,L"Parameter activity processor copy"},{11021,L"Search activity parameters by name, unit or ID"},{11001,L"Parameter activity parameter"},
         {11005,L"Activity trace time range"},{11006,L"Parameter activity details page"},
         {11007,L"Parameter sources, changes or recorded points"},{11015,L"Recorded point time, seconds"},
         {11016,L"Recorded point value, native units"},{11010,L"Previous recorded page"},
         {11011,L"Next recorded page"},{11017,L"Zoom activity trace out"},{11018,L"Zoom activity trace in"}})
       require(ScreamSeq::Tests::accessibleName(GetDlgItem(window,id))==name,"Activity field lacks its stable native accessible name");
-    const std::vector<int> activityTabs{11000,11001,11002,11003,11004,11017,11019,11018,11005,
+    const std::vector<int> activityTabs{11000,11021,11001,11002,11003,11004,11017,11019,11018,11005,
       11006,11008,11009,11007,11015,11016,11012,11013,11014,11010,11011,11020};
     for(size_t i=0;i<activityTabs.size();++i){const auto control=GetDlgItem(window,activityTabs[i]);
       require(GetNextDlgTabItem(window,control,FALSE)==GetDlgItem(window,activityTabs[(i+1)%activityTabs.size()])&&

@@ -230,7 +230,35 @@ class AbsoluteAutomationUITests(unittest.TestCase):
                 if current==expected and not local['fieldDraft'] and not local['pending']:return
                 time.sleep(.025)
             self.fail(dict(expected=expected,actual=current,activity=local))
-        parameter=next(i for i,p in enumerate(state()['parameters']) if p['id']==1)
+        # Search is presentation-only, including while observation polls. Keep
+        # Enabled visible as the current target until Gain is explicitly chosen.
+        observer=state()
+        self.field(11021,'gAiN',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['search']=='gAiN':break
+            time.sleep(.025)
+        self.assertEqual(filtered['parameterChoices'],[0,1],filtered)
+        self.assertEqual(filtered['searchMatches'],1)
+        self.assertEqual((filtered['parameter'],filtered['token'],filtered['generation']),
+                         (observer['parameter'],observer['token'],observer['generation']))
+        self.assertEqual(self.read('automation.get'),baseline)
+        self.field(11021,'no such parameter',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['searchMatches']==0:break
+            time.sleep(.025)
+        self.assertEqual(filtered['parameterChoices'],[0],filtered)
+        self.assertEqual(filtered['parameter'],0)
+        self.field(11021,'dB',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['search']=='dB':break
+            time.sleep(.025)
+        parameter=filtered['parameterChoices'].index(1)
         choose(11001,parameter)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
@@ -238,6 +266,7 @@ class AbsoluteAutomationUITests(unittest.TestCase):
             if current['parameter']==1 and trace['nativePoints']>=2:break
             time.sleep(.025)
         self.assertEqual(current['parameter'],1,current)
+        self.assertEqual(current['search'],'dB')
         self.assertGreaterEqual(trace['nativePoints'],2,trace)
         px,py=trace['lastPoint'];scale=self.read('workspace.get')['dpi']/96
         self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))

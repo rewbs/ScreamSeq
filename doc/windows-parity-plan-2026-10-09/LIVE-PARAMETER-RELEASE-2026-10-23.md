@@ -1264,3 +1264,46 @@ and waiting for all preceding jobs to finish. Next steps: collect current CI,
 compile the legend correction at that gate with other coherent source work,
 reuse unchanged passing tests, complete the outstanding foreground journeys,
 and investigate the dense callback using the retained aligned failure evidence.
+
+### Activity parameter search continuation (source only)
+
+Current Mac `ParameterActivity.swift` has a search field before its parameter
+selector. Windows Activity lacked it, leaving long plugin parameter catalogues
+laborious to navigate (reference27, live screenshot27/F02; recorded points are
+reference28). Windows now has a native search edit and Ctrl+F shortcut, with
+name/unit/stable-ID matching. Its field sits above the parameter selector in
+the existing header area; the trace and recording controls retain their space.
+Native Tab order is processor, search, parameter, then the existing action groups.
+
+Filtering changes presentation only: it does not start a watch, save a point,
+alter history or change the observed parameter. An excluded current parameter
+remains listed as **observed; outside search**. Duplicate names retain distinct
+stable IDs. Explicit selection resolves the filtered ID and requires that exact
+parameter still exist, rather than silently falling back to another catalogue
+row. Typing during a pumped observation retains the raw query/caret and defers
+selector rebuilding until the read completes. A newer query cancels obsolete
+queued target navigation; invalid recorded fields remain intact. This does not
+change shared musical operations, persistence, API edits or audio processing.
+
+`NativeTextSearch.hpp` extracts the existing docked plugin/program search's
+ordinal case-insensitive matching for reuse by Activity; dock behavior is
+unchanged. It is Windows text presentation logic, so it stays native. The
+existing `parameter-activity-window-tests` group gains stable/non-contiguous ID,
+duplicate name, reorder, case/unit/ID, zero-match, clear, busy owner, pumped read,
+invalid-draft preservation, native names, caret and Ctrl+F/Tab assertions. The
+existing Activity actual-app journey now searches Gain, a missing query and dB
+before explicit selection, then retains exact automatic edit/history/reopen,
+opaque state and playback assertions. No extra registration or app process is
+added to the suite.
+
+Source review, Python syntax and UTF-8 decoding passed; C++ and app checks are
+unbuilt/unexecuted. The next bounded local selection is the Activity and existing
+workspace plugin-search native groups plus the Activity actual-app journey.
+Reuse3408's other unchanged composing, source-navigation, Save, routing and
+hardware-audit evidence; do not rerun all ten groups/seven app cases merely for
+this filter. Current CI must finish and23:56:23UTC/later-start limits still apply.
+Fresh Computer Use must check normal/compact header layout, search typing and
+text Backspace, Ctrl+F, Tab/Shift+Tab, explicit selection and retained observation
+while playback runs. Floating helper limitations remain explicit; native tests
+alone do not establish visible keyboard continuity. Pending recording foreground
+checks and dense audio investigation remain required before release/merge.

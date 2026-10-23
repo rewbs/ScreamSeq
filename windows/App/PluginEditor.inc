@@ -75,10 +75,7 @@
         for(int id=pluginList;id<=pluginActivity;++id) if(!controls.at(id)) throw std::runtime_error("Cannot create native plugin controls");
     }
     static bool pluginSearchMatches(std::wstring_view text,std::wstring_view query) {
-        if(query.empty())return true;
-        for(size_t i=0;i+query.size()<=text.size();++i)
-            if(CompareStringOrdinal(text.data()+i,int(query.size()),query.data(),int(query.size()),TRUE)==CSTR_EQUAL)return true;
-        return false;
+        return ScreamSeq::nativeTextSearchMatches(text,query);
     }
     void filterPluginChoices(bool programs) {
         const int search=programs?pluginProgramSearch:pluginParameterSearch,selector=programs?pluginProgram:pluginParameter;

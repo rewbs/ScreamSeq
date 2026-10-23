@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Next source batch (unbuilt):** Activity now has native parameter search by
+name/unit/stable ID, Ctrl+F and explicit stable selection. Filtering retains the
+current observation and raw recorded draft, including busy/pumped reads; the
+current excluded parameter stays visibly labelled. Native search matching is
+shared with the docked rack/program search. This joins the legend UTF-8 fix.
+Next local checks: Activity and workspace-plugin-search native groups plus the
+existing Activity composing/history/save app journey. Reuse unaffected3408
+checks. No build before23:56:23UTC or while preceding CI is live; inspect later
+actual starts. Full source/test details are in LIVE-PARAMETER-RELEASE.
+
 **23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
 7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
 Fresh Computer Use confirmed precise double-click/Backspace, automatic velocity,
