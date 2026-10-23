@@ -201,3 +201,21 @@ capture can process a flush. Its stopped-only guard and closed-editor opaque
 Discard guard remain necessary and unchanged. Live Mac restoration still needs
 a separately prepared provider handoff and its native audio/device evidence;
 the current Windows composing fixes do not claim that gap is closed.
+
+## Completed CI evidence from the first candidate
+
+The f28a6eff8 Mac ARM job 120266634155 completed successfully. Its downloaded
+job log records all 134 CTest registrations passing, including `precise-notes`
+(11.11 seconds), `precise-ramps`, `unified-history` and
+`document-history-allocation`. The native interface `precise-notes` group also
+passed. This is evidence for the shared renderer/history inputs at that commit;
+the subsequent correction changes only Windows source/tests and documentation.
+It is not Windows UI evidence or Mac device/performance qualification.
+
+Windows x64 job 120266633422 failed on the same MIDI C7692 expression already
+corrected locally, reported by the app, MIDI window test and workspace test
+targets. Its log contains no additional compiler/linker error. Mac Intel was
+still running at the 06:27:12 UTC inspection. Neither job was restarted.
+The downloaded logs and SHA-256 fingerprints are retained in
+`bin/mac-gesture-20261022/precise-live/completed-ci-logs.json`; recheck the Intel
+result and any later build start before the next checkpoint.
