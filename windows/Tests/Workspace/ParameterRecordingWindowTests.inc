@@ -96,10 +96,13 @@ void applicationParameterRecordingReview() {
     // not silently reinterpret its row as input from the new recording.
     ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
     ScreamSeq::NativeReportList::setItemState(control(9732),71,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::ensureVisible(control(9732),71,FALSE);const auto previousTop=ListView_GetTopIndex(control(9732));
+    restoreCheck(previousTop>0,"Recording fixture did not scroll beyond the first original input");
     SetFocus(control(9732));SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==71,"Unchanged take polling replaced the selected original input");
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==71&&ListView_GetTopIndex(control(9732))==previousTop,
+      "Unchanged take polling replaced the selected original input or scroll position");
     take["take"]="replacement-with-identical-page";SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&GetFocus()==control(9732)&&
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&ListView_GetTopIndex(control(9732))==0&&GetFocus()==control(9732)&&
       SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&!tool.snapshot().at("target").get<std::string>().empty()&&
       tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos&&writes.size()==1&&songState(app)==music,
       "New take retained a previous take's row selection or changed musical data");

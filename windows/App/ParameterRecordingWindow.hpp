@@ -188,6 +188,7 @@ private:
       rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);
       NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
       if(selected>=0)NativeReportList::setItemState(list,selected,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      if(first&&selected>=0)NativeReportList::ensureVisible(list,selected,FALSE);
       InvalidateRect(controls_.at(events),nullptr,FALSE);
     }
     selectionDetails();

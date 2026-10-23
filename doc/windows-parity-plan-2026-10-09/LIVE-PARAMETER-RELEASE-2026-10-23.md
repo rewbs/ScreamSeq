@@ -977,7 +977,8 @@ It does not invent a persisted event ID or alter the delivery/recovery format.
 List-state notifications are suppressed only during presentation, so the
 unchanged details text/caret selected for copying is not cleared and rewritten.
 Captured-event pages remain append-only within a take; fresh pages select their
-first input. The existing native recording-review fixture asserts new-take
+first input and scroll it into view; ordinary polls preserve scroll position.
+The existing native recording-review fixture asserts new-take
 identity, identical-row replacement, removed preceding input, outcome changes,
 expired/duplicate inputs, native focus/text selection and exact unchanged song
 and write count. These assertions are **unbuilt**.
@@ -987,3 +988,12 @@ workspace executable and build targets): the next gate is **nine native groups
 / seven actual-app cases**, then fresh Computer Use. This group took4.27 seconds
 on063 Windows CI. Keep every earlier assertion and failed receipt; no new build
 or test was run for this source continuation. The hourly gate is unchanged.
+
+Both063 Mac jobs are now terminal successes. Intel job120651362328 passed134
+CTests, full native interface/socket/typed gates and the actual BlackHole2ch512
+take lifecycle (frames12800→18432, callbacks25→36). Its retained log SHA256 is
+`eefafd899346fb654f10ff4be6114724556213bf13140170e3381ec69406d3b5`.
+Read-only fetch verified CI merge2f04f203 and reviewed063383940 have the exact
+same tree, `99e65b719d47f0cbff527c3d2f25919b66c9de4c`. These passes protect the
+unchanged Mac/shared inputs; Windows live-CI failures and pending UI corrections
+remain separate. No build or old job was restarted.
