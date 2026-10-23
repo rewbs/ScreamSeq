@@ -2054,3 +2054,21 @@ strict. The existing Mac layout/activity/cabinet corrections require their
 next architecture gates; Mac reciprocal edited-project preservation and native
 audio remain required before merge. No next build before02:18:25 UTC, subject
 to later CI starts and completion; no build was run for this source batch yet.
+
+At01:44 UTC, Mac ARM job120185181811 completed successfully:134/134 native
+tests,37/37 native interface groups (including recording and control delivery),
+and its remaining required workflow steps passed. Its log is retained at
+`timing-inspection/job-120185181811.log`; artifact12471834980 retains224files.
+This qualifies that Mac candidate's automated gates, not the unbuilt Windows
+boundary correction or foreground/audio behavior. Intel was still compiling;
+Windows x64 compilation passed and its worker tests were running. No old job
+was restarted.
+
+The next composing fixture also exercises25 native Balance trackbar notifications
+without waiting for the worker after each input. It requires their original
+order/values/count (including no duplicate EndTrack input), no unmapped or
+overflowed event after Stop, and the existing single Keep/Undo/Redo and exact
+cross-domain save/reopen assertions. This follows the foreground slider failure;
+the earlier field-entry journey alone did not reproduce it. Its native worker
+fixture now uses the same two-boundary presentation contract. These assertions
+are source-only until the next checkpoint, not a new passing receipt.

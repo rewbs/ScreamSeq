@@ -15,6 +15,8 @@ from client import ApiError
 
 private_desktop.user.IsWindowVisible.argtypes = [wintypes.HWND]
 private_desktop.user.IsWindowVisible.restype = wintypes.BOOL
+private_desktop.user.IsWindowEnabled.argtypes = [wintypes.HWND]
+private_desktop.user.IsWindowEnabled.restype = wintypes.BOOL
 
 
 class PluginRecordingTests(unittest.TestCase):
@@ -172,7 +174,7 @@ class PluginRecordingTests(unittest.TestCase):
         plugin = before['plugins'][0]['instanceID']
         # F04 intentionally has a Gain envelope. Exercise that refusal first,
         # then record Balance without disabling or replacing existing music.
-        self.record_keep_history_reopen_and_discard(plugin, project, parameter=2, conflicting_parameter=1)
+        self.record_keep_history_reopen_and_discard(plugin, project, parameter=2, conflicting_parameter=1, slider_sweep=True)
         saved = evidence / 'recorded-composing-journey.screamseq'
         self.write('document.save', path=str(saved))
         after = read_project(saved)
@@ -185,7 +187,7 @@ class PluginRecordingTests(unittest.TestCase):
             foregroundVisualQualified=False, source=project.name, saved=saved.name,
             beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
             onlyRecordedAutomationChanged=comparison,
-            checks=['six-domain composing history', 'occupied Gain refusal preserves music', 'native Balance capture',
+            checks=['six-domain composing history', 'occupied Gain refusal preserves music', 'native Balance capture and 25 original slider inputs',
                     'Stop preserves playback', 'Keep is one Undo', 'Redo',
                     'Discard preserves preceding music', 'save/reopen',
                     'exact unrelated project preservation']))
@@ -266,7 +268,7 @@ class PluginRecordingTests(unittest.TestCase):
                     'resample Undo preserves source project with exactly one allocated stable identity']))
 
     def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,
-                                              values=(-6.5, -3.25, -12.25)):
+                                              values=(-6.5, -3.25, -12.25), slider_sweep=False):
         first_value, later_value, discard_value = values
         self.launch(project, seconds=180 if sustain_seconds else 120)
         self.assertTrue(self.read('transport.get')['playing'])
@@ -340,6 +342,25 @@ class PluginRecordingTests(unittest.TestCase):
             # worker's empty event list, when a composing journey finds a gap.
             self.fail(str(dict(failure=str(failure), expectedPlugin=plugin,
                                recording=self.read('workspace.get')['parameterRecording'])))
+        sweep_values = []
+        if slider_sweep:
+            editor = next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin'] == plugin)
+            row = next(r for r in editor['rows'] if r['id'] == parameter)
+            slider = private_desktop.user.GetDlgItem(parameters, row['sliderControl'])
+            self.assertTrue(slider and private_desktop.user.IsWindowVisible(slider))
+            self.assertTrue(private_desktop.user.IsWindowEnabled(slider))
+            # This journey uses F04 Balance (-100..100). Deliver the actual
+            # trackbar notifications without waiting for the document worker
+            # after each input. Every original event must survive that backlog.
+            count_before = captured['eventCount']
+            for position in range(2000, 8001, 250):
+                self.desktop.send(slider, 0x405, 1, position)  # TBM_SETPOS
+                self.desktop.send(parameters, 0x114, 5 | (position << 16), slider)  # TB_THUMBTRACK
+                sweep_values.append(-100 + position / 50)
+                time.sleep(.003)
+            self.desktop.send(parameters, 0x114, 8, slider)  # TB_ENDTRACK must not duplicate an input
+            captured = self.wait_for(self.take, lambda s: s['eventCount'] >= count_before + len(sweep_values))
+            self.assertEqual(captured['eventCount'], count_before + len(sweep_values), captured)
         if sustain_seconds:
             self.trace_recording_clock('first-input', plugin, parameter)
             until = time.monotonic() + sustain_seconds
@@ -381,6 +402,10 @@ class PluginRecordingTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, -32602)
         self.assertEqual(self.doc()['revision'], revision, 'Timing inspection must not change history')
         self.assertTrue(any(e['value'] == first_value for e in events['events']))
+        if sweep_values:
+            self.assertEqual([e['value'] for e in events['events'][-len(sweep_values):]], sweep_values, events)
+            self.assertEqual([int(e['timestamp']) for e in events['events']],
+                             sorted(int(e['timestamp']) for e in events['events']))
         if sustain_seconds:
             self.assertTrue(any(e['value'] == later_value for e in events['events']))
         self.assertTrue(all(int(e['timestamp']) >= int(take['startTime']) for e in events['events']))
@@ -389,6 +414,11 @@ class PluginRecordingTests(unittest.TestCase):
         if sustain_seconds:
             self.trace_recording_clock('stopped-take', plugin, parameter)
         self.assertIsNotNone(stopped['endTime'])
+        if sweep_values:
+            self.trace_recording_clock('stopped-slider-sweep', plugin, parameter)
+            page = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
+            self.assertTrue(all(e['frame'] is not None for e in page['events']), page)
+            self.assertTrue(all(t['unmapped'] == 0 and t['overflow'] == 0 for t in stopped['targets']), stopped)
         self.assertNotEqual(self.read('workspace.get')['status'], 'Recording original parameter input / Stop the take to review')
         self.assertTrue(self.read('transport.get')['playing'])
         self.recording_button(9723)
