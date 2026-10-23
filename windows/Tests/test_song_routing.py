@@ -27,14 +27,47 @@ class SongRoutingTests(unittest.TestCase):
     def launch(self,project=None,seconds=120):
         args=[os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent' if project else '--inspection','--automation','--seconds',str(seconds),'--vst3-test-cache',str(self.cache)]
         if project:args+=['--project',str(project),'--audio-test-allow-stop']
+        preceding_client = getattr(self, 'client', None)
         self.pid=self.desktop.launch(args);self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        owned_process = self.desktop.processes[-1]
+        last_transport = None
+        def failed(reason, exit_code=None):
+            # Preserve the actual failure instead of spending the entire startup
+            # deadline polling an already-exited child. Never restart or skip it.
+            evidence = dict(reason=reason, pid=self.pid, exitCode=exit_code,
+                            args=args, lastTransport=last_transport)
+            if preceding_client is not None:
+                try:
+                    evidence['precedingOwnedAudio'] = preceding_client.call('audio.devices.get')
+                except Exception as error:
+                    evidence['audioDiagnosticError'] = str(error)
+            destination = os.environ.get('SCREAMSEQ_COMPOSING_EVIDENCE_DIR') or os.environ.get('SCREAMSEQ_ROUTING_EVIDENCE_DIR')
+            if destination:
+                folder = Path(destination) / 'startup-failures'
+                try:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    path = folder / (self._testMethodName + '-' + str(self.pid) + '-' + str(time.monotonic_ns()) + '.json')
+                    with path.open('x', encoding='utf-8') as output:
+                        json.dump(evidence, output, indent=2)
+                except OSError as error:
+                    evidence['evidenceWriteError'] = str(error)
+            self.fail(json.dumps(evidence))
         for _ in range(100):
+            wait = private_desktop.kernel.WaitForSingleObject(owned_process.hProcess, 0)
+            if wait == 0:
+                code = wintypes.DWORD()
+                private_desktop.check(private_desktop.kernel.GetExitCodeProcess(owned_process.hProcess, ctypes.byref(code)))
+                failed('Owned routing app exited before readiness', code.value)
+            if wait != 258:
+                failed('Cannot observe owned routing app', wait)
             try:
                 self.doc()
-                if not project or self.read('transport.get')['audioActive']:return
+                if not project:return
+                last_transport = self.read('transport.get')
+                if last_transport['audioActive']:return
             except TransportError:pass
             time.sleep(.1)
-        self.fail('routing app did not start')
+        failed('Owned routing app did not become ready before its startup deadline')
 
     doc=support.GraphMixerAppTests.doc
     def read(self,method,**fields):

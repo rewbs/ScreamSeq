@@ -1904,3 +1904,23 @@ original-input review and keyboard focus on that executable. Reuse unrelated
 unchanged UI and project evidence. Earliest build remains01:15:55 UTC on
 October23, subject to later starts and completion of preceding CI; no additional
 build or CI dispatch occurred while preparing this batch.
+
+### Owned-process startup evidence
+
+The preceding x64 job120165015082 compiled, but its actual-app suite reported
+18 failures among96 cases and one optional skip. The retained artifact12469519980
+confirms both Windows audio services were Running while `audio.devices.get`
+returned an empty device list on that candidate. This is an unavailable native
+audio gate, not a passing recording test. The separate vendor ownership case
+passed. The artifact retains the native app and identity for bounded reuse.
+
+`windows/Tests/test_song_routing.py` now observes its exact owned process handle
+while waiting for readiness. A terminal child fails immediately with its exit
+code; a live but unready child still fails at the existing deadline. Failure
+evidence retains the arguments, last observed transport and, when available,
+device information from the preceding owned inspection process. Composing or
+routing evidence directories receive a uniquely named JSON receipt. The helper
+does not retry, skip or change audio defaults. Five fixture-only checks covered
+terminal-child, timeout, live-audio readiness, inspection readiness and failed
+process observation with unavailable diagnostic input. They passed without
+launching ScreamSeq or running a build. Native/application checks remain pending.
