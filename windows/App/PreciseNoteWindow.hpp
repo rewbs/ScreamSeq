@@ -118,6 +118,14 @@ public:
       {titleLabel,L"Choose a pattern row"},{statusLabel,L""},{pitchLabel,L"Pitch"},{instrumentLabel,L"Instrument"},
       {velocityLabel,L"Velocity"},{offsetLabel,L"Offset"},{unitsLabel,L"Units"},{effectLabel,L"Note-local effect"},
       {parameterLabel,L"Hex"},{repeatLabel,L"Hits (2–64)"},{endLabel,L"End velocity (1–127)"}})label(id,text);
+    // These controls move between pages. Give the native providers stable names
+    // instead of relying on a preceding HWND label or the current numeric value.
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+      {list,L"Precise hits in the captured row"},{pitch,L"Hit pitch"},{instrument,L"Hit instrument"},
+      {velocity,L"Hit velocity"},{offset,L"Hit offset"},{units,L"Hit offset units"},{snap,L"Timeline snap"},
+      {localEffect,L"Note-local effect"},{parameter,L"Note-local effect parameter, hexadecimal"},
+      {repeatCount,L"Fill hit count"},{endVelocity,L"Fill end velocity"},{detailsText,L"Precise note details, read only"}})
+      accessibleName(id,name);
     for(unsigned n=1;n<=122;++n){const auto text=n<=120?L"Note "+std::to_wstring(n):n==121?L"Note off":L"Cut";
       const auto i=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
       ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}

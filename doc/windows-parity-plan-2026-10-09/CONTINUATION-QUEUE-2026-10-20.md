@@ -34,6 +34,8 @@ and native/app assertions, awaiting the same next build. No new package is
 qualified. A new interleaved precise-note / plugin-take history journey passed
 against c7 in 3.294 seconds without a build; it now joins the next gate. See the
 precise-note report for hashes, failed receipts and limits.
+Explicit native accessible labels and provider/raw-text assertions also join
+this source batch; they do not establish Narrator or helper-tree qualification.
 
 `precise-live-followup/checkpoint.ps1` coordinates the corrected PR push with
 the single local build. The selection is six native registrations and24 actual

@@ -390,3 +390,20 @@ diagnostic evidence, not a replacement for the failed candidate's receipts.
 The next frozen checkpoint includes this new case: **six native groups and
 24 actual-app cases**. The source-only Save, edge and Tab corrections still need
 the rebuilt gate and fresh Computer Use. No extra build was run.
+
+## Native accessibility labels
+
+The precise editor now annotates its twelve standard input/list/details controls
+with stable accessible names. Their changing numeric values or child creation
+order must not act as their labels when controls move between pages. This uses
+the existing native property annotation helper, preserving Windows text/value,
+selection and editing behavior. The precise-owner group now queries the native
+accessible provider on every page and checks incomplete raw offset text, the
+standard text role, caret selection, focus and unchanged music.
+
+This correction is source-only until the next checkpoint. It does not claim to
+resolve the earlier Computer Use tree omission or qualify Narrator; those require
+client/runtime inspection. The build/test scope remains six groups and24 app
+cases. At07:38:40 UTC c7 Windows and Intel compilation had passed and their tests
+were running; Mac ARM's entire job120286202292 had completed successfully. No
+jobs were restarted, and the earliest next build remains08:00:12 UTC.

@@ -2,6 +2,7 @@
 // Observable sole-owner tests; the request double is not a document/Undo oracle.
 #include "PreciseNoteWindow.hpp"
 #include "PrivateGuiProcessTest.hpp"
+#include "AccessibleControl.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -85,6 +86,34 @@ struct Fixture {
   void dock(HWND parent,int height=300){tool.dock(parent);tool.dockBounds(0,48,440,float(height));}
   void selectB(){current.selected=Tool::Target{"pattern-b","track-b",1,5,1};++current.selectionGeneration;}
 };
+void namedNativeFields(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);
+  const std::vector<std::pair<int,std::wstring>> names={
+    {Tool::list,L"Precise hits in the captured row"},{Tool::pitch,L"Hit pitch"},{Tool::instrument,L"Hit instrument"},
+    {Tool::velocity,L"Hit velocity"},{Tool::offset,L"Hit offset"},{Tool::units,L"Hit offset units"},{Tool::snap,L"Timeline snap"},
+    {Tool::localEffect,L"Note-local effect"},{Tool::parameter,L"Note-local effect parameter, hexadecimal"},
+    {Tool::repeatCount,L"Fill hit count"},{Tool::endVelocity,L"Fill end velocity"},{Tool::detailsText,L"Precise note details, read only"}};
+  f.field(Tool::offset,L"-");SendMessageW(f.control(Tool::offset),EM_SETSEL,0,1);
+  const auto raw=f.tool.snapshot().at("raw");const auto before=f.saved;
+  for(int page=0;page<4;++page){
+    f.page(page);
+    for(const auto &[id,name]:names)if(IsWindowVisible(f.control(id)))
+      require(ScreamSeq::Tests::accessibleName(f.control(id))==name,"Precise field lost its stable native accessible name");
+  }
+  f.page(0);focus(f.control(Tool::offset));SendMessageW(f.control(Tool::offset),EM_SETSEL,0,1);
+  // A name is only an annotation: raw text, selection and standard edit role
+  // still belong to the Windows provider, including incomplete numeric input.
+  Microsoft::WRL::ComPtr<IAccessible> provider;
+  ScreamSeq::check(AccessibleObjectFromWindow(f.control(Tool::offset),OBJID_CLIENT,IID_PPV_ARGS(&provider)),"Read named precise field provider");
+  VARIANT self{},role{};self.vt=VT_I4;self.lVal=CHILDID_SELF;BSTR value=nullptr;
+  ScreamSeq::check(provider->get_accValue(self,&value),"Read named precise field value");
+  const bool exact=value&&std::wstring_view(value,SysStringLen(value))==L"-";SysFreeString(value);
+  ScreamSeq::check(provider->get_accRole(self,&role),"Read named precise field role");
+  const bool nativeEdit=role.vt==VT_I4&&role.lVal==ROLE_SYSTEM_TEXT;VariantClear(&role);
+  require(exact&&nativeEdit&&caret(f.control(Tool::offset))==std::pair<DWORD,DWORD>{0,1}&&
+    GetFocus()==f.control(Tool::offset)&&f.tool.snapshot().at("raw")==raw&&f.saved==before&&f.writes==0,
+    "Accessible naming changed native text semantics, selection, draft or music");
+}
 void bounds(Fixture &f,std::set<int> *reachable=nullptr){
   RECT client{};GetClientRect(f.tool.window(),&client);std::vector<std::pair<int,RECT>> boxes;
   for(HWND child=GetWindow(f.tool.window(),GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT)){
@@ -648,6 +677,7 @@ int wmain(int argc,wchar_t **argv){try{
   ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqPreciseNoteOwner",argc,argv,[]{
     ScreamSeq::check(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED),"Initialize precise-note fixture COM");struct Com{~Com(){CoUninitialize();}} com;
     Owner owner;
+    namedNativeFields(owner);std::cout<<"PASS precise-note native accessible names, raw values and text semantics\n";
     minimumPages(owner);std::cout<<"PASS precise-note minimum pages, actions and compact diagnostics\n";
     retainedRawCaretAndVirtualList(owner);std::cout<<"PASS precise-note retained HWND, raw text, caret and virtual-list scroll\n";
     hiddenInitializationAndStrictReplies(owner);std::cout<<"PASS precise-note hidden initialization and strict failed/malformed reads\n";
