@@ -10,17 +10,19 @@ void run(){
   auto owner=CreateWindowExW(0,L"STATIC",L"Activity test owner",WS_OVERLAPPEDWINDOW,0,0,1200,850,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
   require(owner!=nullptr,"Create test owner");ShowWindow(owner,SW_SHOW);
   {
-    ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false;unsigned edits=0;std::string token="1:1";Json navigation;
+    ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false,twoParameters=false;uint32_t watchedParameter=1;unsigned edits=0;std::string token="1:1";Json navigation;
     Json processor={{"key","song/rack/a"},{"name","Gain copy"},{"plugin","a"},{"graph","n0"},{"node","n0"},{"target","n0"},{"instrument","n0"},{"role",0},{"channel",0},{"bypass",false},{"parameterCount",1}};
     std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};std::optional<double> constantTrace;std::optional<Json> incomingPage;
     Json lane=Json::array({{{"frame",24000},{"value",-.5}}});
     auto request=[&](const std::string &method,const Json &p)->Json {
       if(pump)pump(method);if(method==failRead)throw std::runtime_error("Injected read failure");
       if(method=="parameter.activity.targets")return {{"targets",prepared?Json::array({processor}):Json::array()},{"active",prepared},{"engine",prepared?1:0}};
-      if(method=="parameter.activity.parameters")return {{"target",processor},{"parameters",Json::array({{{"id",1},{"name","Gain"},{"min",-1},{"max",1},{"value",0},{"unitLabel","dB"}}})}};
-      if(method=="parameter.activity.watch"){require(!p.contains("expectedRevision"),"Watch must be transient");return {{"token",token},{"target",processor},{"parameter",1}};}
+      if(method=="parameter.activity.parameters"){auto parameters=Json::array({{{"id",1},{"name","Gain"},{"min",-1},{"max",1},{"value",0},{"unitLabel","dB"}}});
+        if(twoParameters)parameters.push_back({{"id",2},{"name","Balance"},{"min",-1},{"max",1},{"value",0},{"unitLabel","%"}});
+        return {{"target",processor},{"parameters",parameters}};}
+      if(method=="parameter.activity.watch"){require(!p.contains("expectedRevision"),"Watch must be transient");watchedParameter=p.at("parameter");return {{"token",token},{"target",processor},{"parameter",watchedParameter}};}
       if(method=="parameter.activity.sources")return {{"sources",Json::array({{{"kind","baseline"},{"title","Saved manual value"},{"enabled",true}},{{"kind","recorded"},{"title","Recorded automation"},{"plugin","a"},{"parameter",1},{"enabled",true}}})},{"omitted",0},{"rule","Recorded values control the base."}};
-      if(method=="parameter.activity.get"){Json result={{"token",token},{"target",processor},{"parameter",1},{"points",p.at("after")==0?Json::array({
+      if(method=="parameter.activity.get"){Json result={{"token",token},{"target",processor},{"parameter",watchedParameter},{"points",p.at("after")==0?Json::array({
         {{"sequence",1},{"seconds",.5},{"value",-.5},{"minimum",-.5},{"maximum",-.5},{"pattern",0},{"order",0},{"position",0},{"source",{{"kind","recorded"}}}},
         {{"sequence",2},{"seconds",.6},{"value",.9},{"minimum",-.9},{"maximum",.9},{"pattern",0},{"order",0},{"position",128},{"source",{{"kind","graph-source"},{"id","n99"}}}},
         {{"sequence",3},{"seconds",.7},{"value",-.25},{"minimum",-.25},{"maximum",-.25},{"pattern",0},{"order",0},{"position",256},{"source",{{"kind","recorded"}}}}}):Json::array()},{"cursor",3},{"dropped",0},{"active",true}};
@@ -40,6 +42,36 @@ void run(){
     prepared=true;tool.openSourceAt("a",1);require(tool.snapshot().at("target")=="song/rack/a","Explicit navigation did not capture the prepared processor");
     const auto captured=tool.snapshot();refuses("missing",1);refuses("a",999);
     require(tool.snapshot()==captured,"Explicit activity fell back to a different processor or first parameter");
+    {
+      twoParameters=true;click(11002);
+      const auto generation=tool.snapshot().at("generation").get<uint64_t>();
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")choose(11001,1);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      require(tool.snapshot().at("generation")==generation,"Selector reentered the worker during an observation read");
+      context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
+      require(tool.snapshot().at("generation")==generation,"Deferred activity target bypassed the busy owner");
+      SendMessageW(window,WM_TIMER,4,0);
+      require(tool.snapshot().at("generation")==generation+1&&tool.snapshot().at("parameter")==2&&edits==0,
+        "Pumped parameter selection was lost instead of adopting its stable target after the read");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")choose(11000,0);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};context.revision="navigation-stale";
+      SendMessageW(window,WM_TIMER,4,0);context.revision="r1";
+      require(tool.snapshot().at("generation")==generation+1&&edits==0,"Deferred observer navigation crossed a document revision");
+      click(11002);
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")choose(11001,0);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      SetWindowTextW(GetDlgItem(window,11016),L"unfinished");const auto rawGeneration=tool.snapshot().at("generation");
+      SendMessageW(window,WM_TIMER,4,0);
+      require(tool.snapshot().at("generation")==rawGeneration&&tool.snapshot().at("rawValue")=="unfinished"&&tool.snapshot().at("fieldDraft")==true&&edits==0,
+        "Deferred target selection discarded newer raw point input");
+      click(11002);
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")choose(11001,0);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};const auto beforeClose=tool.snapshot().at("generation");
+      tool.hide();SendMessageW(window,WM_TIMER,4,0);
+      require(tool.snapshot().at("generation")==beforeClose&&!tool.visible(),"Deferred target reopened a closed activity observer");
+      tool.openAt("a",1);
+      twoParameters=false;click(11002);
+    }
     SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Live trace did not consume its cursor");SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Trace duplicated an old point");
     const auto trace=tool.snapshot().at("trace");require(trace.at("nativePoints")==2&&trace.at("normalizedContributions")==1&&trace.at("segments")==1&&trace.at("minimum")==-.5&&trace.at("maximum")==-.25,"Normalized graph contribution contaminated final native-unit trace range or segments");
     const auto traceLane=lane;const auto traceRevision=context.revision;

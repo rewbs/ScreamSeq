@@ -4,6 +4,32 @@ void applicationAutomaticEdits(){
   const auto settle=[](HWND window){SendMessageW(window,WM_TIMER,0x5345,0);};
   const auto press=[](HWND window,int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),LPARAM(GetDlgItem(window,id)));};
   {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",48000},{"value",-6.}}})}});
+    app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto baseline=app.documentOperation("automation.get",Json::object());const auto revision=app.view->session.revision;
+    const auto field=GetDlgItem(window,4609);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);
+    SetWindowTextW(field,L"-9.000");SendMessageW(field,EM_SETSEL,1,3);
+    app.busy=true;settle(window);settle(window);app.busy=false;
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    restoreCheck(app.view->session.revision==revision&&lane.queuedMusicalEdit()&&lane.snapshot().at("fieldDraft").get<bool>()&&
+      restoreText(field)==L"-9.000"&&GetFocus()==field&&first==1&&last==3,
+      "Busy owner consumed a queued recorded edit or changed raw text/focus before admission");
+    settle(window);auto expected=baseline;expected["points"][0]["value"]=-9.;
+    restoreCheck(app.documentOperation("automation.get",Json::object())==expected&&!lane.queuedMusicalEdit(),
+      "Unsent recorded point did not save automatically when its owner became available");
+    settle(window);app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Deferred recorded point created more than one history step");
+    SetWindowTextW(field,L"-12");app.busy=true;settle(window);app.busy=false;
+    // Simulate a newer accepted document while the intent was waiting. It must
+    // fail the existing revision guard, not rebase onto that new document.
+    app.edit("document.patch",{{"title","Newer song"}});const auto newerRevision=app.view->session.revision;settle(window);const auto stale=lane.snapshot();
+    restoreCheck(stale.at("fieldDraft").get<bool>()||stale.at("dirty").get<bool>(),"Stale unsent edit was discarded");
+    restoreCheck(!lane.queuedMusicalEdit()&&restoreText(field)==L"-12"&&app.view->session.revision==newerRevision&&
+      app.documentOperation("automation.get",Json::object())==baseline,"Stale intent was silently retried, rewritten or published");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);fixture.close();
+  }
+  {
     RestoreFixture fixture;auto &app=*fixture.app;app.openSampleDetail();auto *tool=app.sampleDetailWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto before=app.documentOperation("sample.get",{{"sample",1}});const auto pcm=app.documentOperation("sample.pcm.get",{{"sample",1}});
     const auto field=GetDlgItem(window,4857);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);

@@ -29,6 +29,7 @@ void operator delete(void* p, std::size_t, std::align_val_t alignment) noexcept 
 void operator delete[](void* p, std::size_t, std::align_val_t alignment) noexcept { ::operator delete(p, alignment); }
 #endif
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -75,6 +76,27 @@ int main(int argc, char** argv) {
   static_assert(std::is_standard_layout_v<ScreamSeq::WasapiDevice::Stats>);
   ScreamSeq::WasapiDevice device;
   bool ok = require(!device.running(), "new device is stopped");
+  ScreamSeq::DeadlineEvidence evidence;
+  {
+#ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
+    ScreamSeq::AudioAudit::Scope scope;
+#endif
+    for(std::uint64_t i=0;i<40;++i)evidence.record({i+1,i*480,7,10000+i*100,10000000,10000000,
+      100,11000000+i,200,11000300+i,10000000,10000000,480,576,48000});
+  }
+  const auto evidenceSnapshot=evidence.snapshot();
+  ok &= require(evidenceSnapshot.count==32&&evidenceSnapshot.omitted==8,"deadline evidence is bounded without overwriting earliest failures");
+  for(std::size_t i=0;i<evidenceSnapshot.count;++i){const auto &e=evidenceSnapshot.events[i];
+    ok &= require(e.callback==i+1&&e.frameOffset==i*480&&e.callbackNanoseconds==11000000+i&&
+      e.serviceNanoseconds==e.preCallbackNanoseconds+e.callbackNanoseconds+e.postCallbackNanoseconds&&e.frames+e.padding==1056,
+      "deadline record mixes timing, ordinal or frame fields from different callbacks");
+  }
+  evidence.reset();ok &= require(evidence.snapshot().count==0&&evidence.snapshot().omitted==0,"deadline reset retained old stream failures");
+  ScreamSeq::DeadlineEvidence::Snapshot stoppedEvidence;
+  ok &= require(device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count==0,"new stopped device evidence unavailable or fabricated");
+#ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
+  ok &= require(ScreamSeq::AudioAudit::allocations.load()==0&&ScreamSeq::AudioAudit::deallocations.load()==0,"deadline recording allocates or frees in the service scope");
+#endif
   for(const auto &row:std::vector<std::vector<std::uint32_t>>{{0,4,48,448,48},{64,4,48,448,64},{65,4,48,448,68},{512,4,48,448,448},{64,128,256,1024,256},{257,128,256,1024,384},{0,4,49,448,52},{0,0,1,4,0},{0,4,8,4,0},{4,8,1,7,0},{UINT32_MAX,4,4,UINT32_MAX,UINT32_MAX-3}})
     ok &= require(ScreamSeq::sharedPeriod(row[0],row[1],row[2],row[3])==row[4],"legal period rounding, clamping and widened overflow");
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
@@ -111,6 +133,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   const auto negotiated = device.stats();
+  ok &= require(!device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count==0,"unjoined worker evidence exposed before start");
   const auto resolved=device.endpointId();
   auto endpoints=ScreamSeq::WasapiDevice::endpoints();
   ok &= require(!resolved.empty()&&std::any_of(endpoints.begin(),endpoints.end(),[&](const auto &e){return e.id==resolved&&e.isDefault&&!e.name.empty();}),"enumeration identifies the opened default endpoint");
@@ -128,6 +151,7 @@ int main(int argc, char** argv) {
     ok &= require(device.start(), "start is idempotent");
     std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     ok &= require(device.running(), "still running before stop");
+    ok &= require(!device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count==0,"live evidence reader raced the callback owner");
     const auto beginStop = std::chrono::steady_clock::now();
     device.stop(); device.stop();
     const auto stopMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - beginStop).count();
@@ -140,6 +164,14 @@ int main(int argc, char** argv) {
       static_cast<unsigned long long>(after - before), stopMs);
   }
   const auto s = device.stats();
+  ok &= require(device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count+stoppedEvidence.omitted==s.deadlineOverruns,
+    "joined deadline evidence does not account for every counted overrun");
+  for(std::size_t i=0;i<stoppedEvidence.count;++i){const auto &e=stoppedEvidence.events[i];
+    ok &= require(e.callback>0&&e.callback<=s.callbackCount&&e.frameOffset+e.frames<=s.framesRendered&&e.qpcFrequency>0&&
+      e.frames+e.padding==s.bufferFrames&&e.sampleRate==device.sampleRate()&&
+      (e.callbackNanoseconds>e.renderBudgetNanoseconds||e.serviceNanoseconds>e.periodNanoseconds),
+      "actual deadline evidence has invalid identity, clock, buffer or deadline fields");
+  }
   std::printf("callbacks=%llu frames=%llu callback_max_ns=%llu service_max_ns=%llu wake_gap_max_ns=%llu deadline_overruns=%llu starvation_indicators=%llu wait_timeouts=%llu faults=%llu mmcss_error=%u last_hr=0x%08x\n",
     static_cast<unsigned long long>(s.callbackCount), static_cast<unsigned long long>(s.framesRendered),
     static_cast<unsigned long long>(s.maxCallbackNanoseconds), static_cast<unsigned long long>(s.maxServiceNanoseconds),

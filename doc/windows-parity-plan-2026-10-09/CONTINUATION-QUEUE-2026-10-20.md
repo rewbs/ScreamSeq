@@ -8,6 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 22:18 UTC continuation:**20467 built once;9/9 native groups
+passed,5/7 app cases passed. Keep the failed gate: one automatic song-point edit
+was refused while busy; Activity's trace-source fixture expected a recorded lane
+from a baseline event. Fresh silent Computer Use confirmed click-vs-drag/Undo,
+constant trace visibility and precise Save/caret/Tab/Shift+Tab/text Backspace,
+but317.488seconds recorded22 overruns. No package/merge/performance claim.
+Source now retains unsent absolute edits while busy and queues stable Activity
+target selections that arrive during polling, with stale/draft/close guards.
+Bounded stopped-only WASAPI deadline records align timing phases of each failing
+callback without changing thresholds or allocating in audio. Next checkpoint:
+**ten native groups/seven app cases**, plus explicit silent WASAPI audit and
+fresh Computer Use. Gate is **22:55:37 UTC or later actual starts**, with previous
+CI terminal first. See the latest [release report](LIVE-PARAMETER-RELEASE-2026-10-23.md)
+and `recorded-edit-guard` failed/diagnostic receipts; new source is unbuilt.
+
 **23 October recording-review continuation:** the pending batch also retains
 selected original delivery identity as accepted entries leave the queue, clears
 expired/ambiguous selection and resets the catalogue/page on a new take even

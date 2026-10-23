@@ -1028,7 +1028,7 @@ public:
         else parameterActivityWindow->openAt(std::move(plugin),parameter);
     }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
-        if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter,bool pattern){
+        if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins"),busy||(recoveryRestoring&&!departureRefreshing)};},[this](const auto &plugin,uint32_t parameter,bool pattern){
             if(pattern){openParameterAutomation(plugin,parameter);return;}
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("Captured plugin is unavailable");selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         });
@@ -1157,6 +1157,19 @@ public:
 		if(path.empty()) return;
 		lastAudio = device.stats();
 		auto sorted = cpuDraw; std::sort(sorted.begin(), sorted.end());
+        ScreamSeq::DeadlineEvidence::Snapshot deadlines;
+        const bool deadlineAvailable=device.stoppedDeadlineEvidence(deadlines);
+        Json deadlineEvents=Json::array();
+        for(size_t i=0;i<deadlines.count;++i){const auto &e=deadlines.events[i];
+            deadlineEvents.push_back({{"callback",e.callback},{"frameOffset",e.frameOffset},{"generation",e.generation},
+                {"serviceStartTicks",std::to_string(e.serviceStartTicks)},{"qpcFrequency",e.qpcFrequency},
+                {"wakeGapNs",e.wakeGapNanoseconds},{"preCallbackNs",e.preCallbackNanoseconds},
+                {"callbackNs",e.callbackNanoseconds},{"postCallbackNs",e.postCallbackNanoseconds},{"serviceNs",e.serviceNanoseconds},
+                {"renderBudgetNs",e.renderBudgetNanoseconds},{"periodNs",e.periodNanoseconds},
+                {"frames",e.frames},{"padding",e.padding},{"sampleRate",e.sampleRate}});
+        }
+        const Json deadlineReport={{"availableAfterJoin",deadlineAvailable},{"capacity",ScreamSeq::DeadlineEvidence::capacity},
+            {"omitted",deadlines.omitted},{"clock","QPC ticks; timing durations in nanoseconds"},{"events",std::move(deadlineEvents)}};
 		std::ofstream out(path, std::ios::binary);
 		out << std::setprecision(12) << "{\"durationSeconds\":" << seconds << ",\"drawnFrames\":" << cpuDraw.size()
             << ",\"textCacheEntries\":" << surface->textCacheSize() << ",\"textCacheHits\":" << surface->textHits() << ",\"textCacheMisses\":" << surface->textMisses()
@@ -1178,7 +1191,7 @@ public:
 			<< ",\"fallbackError\":" << lastAudio.fallbackError << ",\"waitTimeouts\":" << lastAudio.waitTimeouts
 			<< ",\"deadlineOverruns\":" << lastAudio.deadlineOverruns << ",\"starvationIndicators\":" << lastAudio.starvationIndicators
 			<< ",\"deviceErrors\":" << lastAudio.deviceErrors << ",\"lastError\":" << lastAudio.lastError
-			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"realtimeAuditPassed\":false}}";
+			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"deadlineEvidence\":" << deadlineReport.dump() << ",\"realtimeAuditPassed\":false}}";
 		out.close(); if(!out) throw std::runtime_error("Cannot write application report");
 	}
 };

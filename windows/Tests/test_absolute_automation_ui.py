@@ -192,14 +192,23 @@ class AbsoluteAutomationUITests(unittest.TestCase):
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent activity app did not start')
+        # Device activation precedes publication of prepared processor targets.
+        # Qualify that readiness explicitly; do not reopen a failed observer.
+        deadline=time.monotonic()+10;prepared={}
+        while time.monotonic()<deadline:
+            prepared=self.read('parameter.activity.targets')
+            if prepared['active'] and any(t['plugin']==plugin for t in prepared['targets']):break
+            time.sleep(.025)
+        else:self.fail(dict(reason='prepared activity target did not become ready',prepared=prepared,transport=self.read('transport.get')))
         transport=self.read('transport.get');baseline=self.read('automation.get');opaque=self.read('plugin.state.get',plugin=plugin)
+        self.idle()
         self.desktop.send(self.desktop.hwnd(self.pid),0x111,575)
         kind='ScreamSeq.ParameterActivity';owner=self.window(kind)
         state=lambda:self.read('workspace.get')['parameterActivity']
         control=lambda identifier:self.control(identifier,kind)
         # The untouched Enabled parameter is a constant, active trace. It must
         # remain visible inside the plot, rather than vanish on its clipped edge.
-        self.assertEqual(state()['parameter'],0)
+        self.assertEqual(state()['parameter'],0,state())
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
             trace=state()['trace']
@@ -225,15 +234,32 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         choose(11001,parameter)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
-            trace=state()['trace']
-            if trace['nativePoints']>=2:break
+            current=state();trace=current['trace']
+            if current['parameter']==1 and trace['nativePoints']>=2:break
             time.sleep(.025)
+        self.assertEqual(current['parameter'],1,current)
         self.assertGreaterEqual(trace['nativePoints'],2,trace)
         px,py=trace['lastPoint'];scale=self.read('workspace.get')['dpi']/96
         self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.desktop.send(owner,0x202,0,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.assertTrue(state()['frozen']);self.assertIsNotNone(state()['trace']['selectedSequence'])
         press(11008)
+        # Playback has not reached the recorded points yet. The observed event
+        # is the manual baseline, whose source is the rack (not the lane).
+        linked_workspace=self.read('workspace.get')
+        self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
+        main=self.desktop.hwnd(self.pid)
+        parameter_control=private_desktop.user.GetDlgItem(main,311)
+        parameter_text=ctypes.create_unicode_buffer(256)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))
+            if parameter_text.value=='Gain / dB':break
+            time.sleep(.025)
+        self.assertEqual(parameter_text.value,'Gain / dB')
+        self.assertFalse(linked_workspace['absoluteAutomation']['visible'])
+        self.assertEqual(self.read('automation.get'),baseline)
+        press(11009) # Explicit Song automation destination, independent of source.
         linked=self.read('workspace.get')['absoluteAutomation']
         self.assertTrue(linked['visible'],state())
         self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))

@@ -997,3 +997,96 @@ Read-only fetch verified CI merge2f04f203 and reviewed063383940 have the exact
 same tree, `99e65b719d47f0cbff527c3d2f25919b66c9de4c`. These passes protect the
 unchanged Mac/shared inputs; Windows live-CI failures and pending UI corrections
 remain separate. No build or old job was restarted.
+
+### 21:55 checkpoint: recorded editing, observer navigation and audio diagnosis
+
+Frozen `20467c6eee7081c04b344c96bc8ae15413111a27` built once from
+21:55:08–21:57:09 UTC. Executable SHA256:
+`fb0a340451077995b5411d5d0dcdb287ffa8a8c267eb4670869ec034e9480a49`.
+`bin/mac-gesture-20261022/recorded-edit-guard/` retains the build/check receipts.
+All **nine native groups passed** (138.76 seconds). **Five of seven actual-app
+cases passed**: full composing/recording/history/reopen, precise live Save,
+absolute time/history/reopen, live point editing and mouse/keyboard/zoom.
+The gate remains failed, not superseded by diagnostic runs:
+
+- The stale-draft case's setup left the second automatic point unsaved with
+  `Document worker is busy; no mutation was queued`. Its exact two-point local
+  draft survived, but it needed manual retry. This is a product defect.
+- The Activity case selected a **baseline** trace event but expected recorded
+  automation. The implementation correctly routes baseline provenance to the
+  plugin rack. The fixture now asserts that destination and exact Gain/dB
+  selection, then uses the explicit Song automation action for the lane.
+- Separate, retained diagnostic attempts found two readiness issues in the
+  fixture: audio activation alone does not establish prepared activity targets,
+  and the rack's timer presents the parameter after navigation returns. The
+  fixture now waits for those bounded, explicit conditions and checks the full
+  `Gain / dB` native label. It does not reopen/retry a failed observer. A later
+  diagnostic still retained Enabled, motivating the selector-race correction
+  below; no further run of this unbuilt correction has occurred.
+
+Fresh Computer Use on isolated PID4652 used this exact binary and a disposable,
+silent `qa-composing.screamseq`. It verified recorded-point selection versus
+dragging: clicking changed no accepted automation, deliberate dragging saved,
+and Undo restored the entire original automation snapshot. All five API reads
+retained playback epoch1 and active playback. The constant Enabled trace was
+visible, click froze its selected event, and Open source selected the rack.
+Docked precise velocity retained its visible caret through Ctrl+S, traversed
+Tab/Shift+Tab, and accepted End/Backspace (97→9) and typing7 (9→97) without
+deleting any of its four hits. The QA process exited normally with unchanged
+binary. Evidence: `foreground-diagnostic/foreground.json` and its named API
+snapshots. Main-only helper targeting prevents a floating-keyboard continuity
+claim; UIA still reported the root for docked text, so native focus assertions
+remain necessary. Resize/dock/float was not repeated in this diagnostic.
+
+This is **not a performance pass**: 317.488 seconds at48kHz/480 frames recorded
+22 deadline overruns, zero starvation/device errors, max callback13.332ms,
+service13.354ms and wake gap29.503ms. Both realtime audit and sustained
+presentation flags are false. Screenshots do not qualify temporal flicker.
+No package or merge was made. CI40030164522/40030164525 was still compiling at
+22:08:46; latest observed build start21:55:37 makes the next checkpoint no earlier
+than **22:55:37 UTC**, subject to later starts and all prior jobs becoming terminal.
+
+#### Source continuation awaiting the next build
+
+1. `AbsoluteAutomationWindow` now observes the native owner's busy/recovery
+   admission state before consuming automatic input. It retains an **unsent**
+   edit until idle; it does not catch/retry failed or uncertain writes. Existing
+   revision guards still reject a changed song. The automatic-edit native group
+   adds deterministic busy/release, exact one-step Undo, raw text/caret/focus and
+   newer-document rejection assertions.
+2. `ParameterActivityWindow` previously restored and discarded processor or
+   parameter choices made while its polling read pumped messages. It now keeps
+   the latest stable target/parameter intent and loads it after the owner is
+   idle, guarded by captured document/revision/draft generation. Newer explicit
+   actions cancel the intent; hiding cancels it. Native tests inject selection
+   during observation, busy deferral, changed revision, newer raw input and
+   closing. The app journey explicitly waits for parameter1 before accepting
+   its trace, so Enabled cannot satisfy a Gain navigation check.
+3. `windows/Audio/DeadlineEvidence.hpp` adds32 fixed, first-failure records to
+   WASAPI. Each record aligns callback ordinal/frame offset/stream generation,
+   QPC service start/frequency, wake gap, pre-render/render/post-render/service
+   durations, padding, frame count and both existing deadline budgets. Overflow
+   increments an omitted count without overwriting earlier failures. The audio
+   owner writes plain fixed storage; only a lifecycle-serialized, **joined**
+   reader can copy it. A live or merely faulted-but-unjoined worker refuses the
+   read. No allocation, logging, locks, clocks or serialization were added to
+   the callback; existing clock reads are reused. Overrun thresholds/counters
+   remain unchanged. Main serializes the evidence only in its stopped report.
+   These diagnostics distinguish phases of the same failing callback; they do
+   not yet attribute CPU stacks or establish a performance improvement.
+
+The existing `WasapiDeviceTests.cpp` now covers bounded exact records/reset,
+host C++ allocation/free audit, live/unjoined refusal and joined hardware
+accounting. Its existing executable is added to the main Windows CMake project
+as `wasapi-diagnostic`, avoiding a second standalone build. Next checkpoint:
+the same nine native groups **plus `wasapi-lifecycle`**, the same seven app cases,
+then explicit `wasapi-diagnostic --silence 3 500` on this host, followed by fresh
+Computer Use and an idle silent-app report with aligned deadline evidence.
+Native audio absence/faults remain failures; do not infer hardware success from
+the no-hardware lifecycle group. The audio service audit covers host C++ new/delete,
+not driver/vendor allocations or lock instrumentation. Both native UI changes
+and audio diagnostics are **source-only** until that build/checkpoint passes.
+
+Mac/shared musical model, codecs, plugin state and project/API write semantics
+are unchanged. Prior reciprocal preservation and Mac evidence can be reused
+only for unchanged inputs. New Windows source cannot inherit20467's local passes.

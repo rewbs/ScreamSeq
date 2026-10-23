@@ -23,6 +23,19 @@ private:
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,polling_=false,frozen_=false,fields_=false,active_=false;
+  std::function<void()> pendingNavigation_;
+  void cancelNavigation(){pendingNavigation_={};KillTimer(window_,4);}
+  void deferTargetSelection(int id){
+    const auto index=selection(id);if(index<0)return;
+    const auto wanted=id==processors?targets_.at(size_t(index)).at("key").get<std::string>():target_;
+    const auto parameter=id==parameters?std::optional<uint32_t>(parameters_.at(size_t(index)).at("id").get<uint32_t>()):parameter_;
+    const auto c=context_();const auto generation=generation_;
+    pendingNavigation_=[this,wanted,parameter,c,generation]{
+      guardRead(c,generation);require(visible(),"Activity navigation was closed");
+      beginPending();try{load(wanted,parameter);pending_=false;}catch(...){pending_=false;throw;}
+    };
+    SetTimer(window_,4,100,nullptr);
+  }
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(captured_.document,captured_.revision,Json::array({target_,plugin_,parameter_?Json(*parameter_):Json(),originalFrame_}).dump(),
       generation_,fields_,pending_||bool(automaticEdit_));
@@ -167,7 +180,12 @@ private:
       // silently losing an enabled Save/Delete click during that read. Never
       // queue/replay a second mutation while another mutation is in flight.
       if(polling_&&notification==BN_CLICKED&&(id==savePoint||id==removePoint)&&!automaticEdit_)deferPointAction(id,generation_);
+      // A live observer must not swallow a processor/parameter selection just
+      // because its read pumps messages. Capture stable identities, then load
+      // once the owner is idle; never reinterpret a later catalogue row index.
+      if(polling_&&notification==CBN_SELCHANGE&&(id==processors||id==parameters))deferTargetSelection(id);
       if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
+    cancelNavigation();
     if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint))cancelAutomaticEdit();
     if(id==freeze&&notification==BN_CLICKED){frozen_=!frozen_;set(freeze,frozen_?L"Resume":L"Freeze");return;}
     beginPending();try{
@@ -189,7 +207,10 @@ private:
       pending_=false;
     }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
-  void timer(UINT_PTR id)override{if(id==3)poll();}
+  void timer(UINT_PTR id)override{
+    if(id==4){if(pending_||context_().busy)return;KillTimer(window_,4);auto navigate=std::exchange(pendingNavigation_,{});if(navigate)navigate();return;}
+    if(id==3)poll();
+  }
   bool key(WPARAM key,bool ctrl,bool shift)override{
     if(key==VK_ESCAPE){hide();return true;}
     if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}
@@ -249,6 +270,7 @@ public:
   }
   void flushForHistory(){flushForProjectSave();}
   void hide()override{
+    cancelNavigation();
     if(automaticEdit_)flushForProjectSave();
     NativeToolWindow::hide();
   }
@@ -270,8 +292,9 @@ public:
       const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
     }
     finish();SetTimer(window_,3,100,nullptr);}
-  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||fields_;show();if(!retain){beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
+  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){cancelNavigation();const bool retain=visible()||fields_;show();if(!retain){beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
   void openSourceAt(std::string plugin,uint32_t parameter) {
+    cancelNavigation();
     const auto c=context_();const bool same=captured_.document==c.document&&plugin_==plugin&&parameter_&&*parameter_==parameter;
     require(!pending_&&!c.busy,"Finish the current activity read or document operation first");
     if(same){show();SetFocus(controls_.at(parameters));return;}

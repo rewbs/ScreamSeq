@@ -76,6 +76,7 @@ struct WasapiDevice::Impl {
   std::atomic<std::uint64_t> overruns{0}, starvation{0}, timeouts{0}, faults{0};
   std::atomic<std::uint64_t> clockGeneration{0},clockHostTime{0},clockDiscontinuities{0};
   std::atomic<bool> clockValid{false};
+  DeadlineEvidence deadlineEvidence;
 
   void fail(HRESULT hr) noexcept {
     error.store(static_cast<std::int32_t>(hr));
@@ -85,6 +86,7 @@ struct WasapiDevice::Impl {
     callbackCount = 0; framesRendered = 0; maxCallback = 0; maxService = 0; maxGap = 0;
     overruns = 0; starvation = 0; timeouts = 0; faults = 0;
     error = 0; fallbackError = 0; mmcssError = 0;
+    deadlineEvidence.reset();
   }
   bool eventsValid() const noexcept {
     return stopEvent.value && startEvent.value && readyEvent.value && startedEvent.value;
@@ -231,7 +233,8 @@ struct WasapiDevice::Impl {
       AudioAudit::Scope audit;
 #endif
       const auto serviceStart = ticks();
-      if (lastWake) maximum(maxGap, nanoseconds(serviceStart - lastWake));
+      const auto wakeGapNs=lastWake?nanoseconds(serviceStart-lastWake):0;
+      if (lastWake) maximum(maxGap,wakeGapNs);
       lastWake = serviceStart;
       UINT32 padding = 0;
       hr = client->GetCurrentPadding(&padding);
@@ -254,16 +257,23 @@ struct WasapiDevice::Impl {
       const auto callbackStart = ticks();
       if(timedCallback)timedCallback(context,samples.data(),available,time);
       else callback(context, samples.data(), available);
-      const auto callbackNs = nanoseconds(ticks() - callbackStart);
+      const auto callbackEnd=ticks();
+      const auto callbackNs = nanoseconds(callbackEnd - callbackStart);
       std::memcpy(output, samples.data(), static_cast<std::size_t>(available) * 2 * sizeof(float));
       hr = render->ReleaseBuffer(available, 0);
-      callbackCount.fetch_add(1, std::memory_order_relaxed);
-      framesRendered.fetch_add(available, std::memory_order_relaxed);
+      const auto callbackOrdinal=callbackCount.fetch_add(1, std::memory_order_relaxed)+1;
+      const auto frameOffset=framesRendered.fetch_add(available, std::memory_order_relaxed);
       maximum(maxCallback, callbackNs);
-      const auto serviceNs = nanoseconds(ticks() - serviceStart);
+      const auto serviceEnd=ticks();
+      const auto serviceNs = nanoseconds(serviceEnd - serviceStart);
       maximum(maxService, serviceNs);
-      if (callbackNs > static_cast<std::uint64_t>(available) * 1000000000ULL / hz || serviceNs > periodNs)
+      const auto renderBudgetNs=static_cast<std::uint64_t>(available)*1000000000ULL/hz;
+      if (callbackNs > renderBudgetNs || serviceNs > periodNs){
         overruns.fetch_add(1, std::memory_order_relaxed);
+        deadlineEvidence.record({callbackOrdinal,frameOffset,time.generation,serviceStart,qpcHz,wakeGapNs,
+          nanoseconds(callbackStart-serviceStart),callbackNs,nanoseconds(serviceEnd-callbackEnd),serviceNs,
+          renderBudgetNs,periodNs,available,padding,hz});
+      }
       serviced = true;
       if (FAILED(hr)) { fail(hr);failedStream=true; break; }
       presentation.submitted(available);
@@ -416,5 +426,9 @@ WasapiDevice::Stats WasapiDevice::stats() const noexcept {
     impl_->maxService.load(), impl_->maxGap.load(), impl_->overruns.load(), impl_->starvation.load(),
     impl_->timeouts.load(), impl_->faults.load(), impl_->error.load(), impl_->fallbackError.load(),
     impl_->mmcssError.load(), impl_->bufferFrames.load(), impl_->channels.load(), impl_->mode.load()};
+}
+bool WasapiDevice::stoppedDeadlineEvidence(DeadlineEvidence::Snapshot &result)const noexcept {
+  if(impl_->worker.joinable()){result={};return false;}
+  result=impl_->deadlineEvidence.snapshot();return true;
 }
 } // namespace ScreamSeq

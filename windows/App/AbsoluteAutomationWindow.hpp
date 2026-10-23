@@ -7,7 +7,7 @@ namespace ScreamSeq {
 class AbsoluteAutomationWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
-  struct Context {std::string document,revision,plugin;std::optional<uint32_t> parameter;Json plugins;};
+  struct Context {std::string document,revision,plugin;std::optional<uint32_t> parameter;Json plugins;bool busy=false;};
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   enum:int {plugin=4601,search,parameters,units,pointIndex,previous,next,time,value,setPoint,addPoint,deletePoint,clear,apply,reload,lastTouched,openRack,openPattern,fit,zoomOut,zoomIn,panLeft,panRight,close,fromRack,selectPoint,windowStart,windowEnd,setWindow,snap,undo,redo,clearAll,
@@ -62,7 +62,9 @@ private:
   }
   bool displayControl(int id)const override{return id!=apply||automaticEditFailed_;}
   void queueLaneEdit(UINT delay=600){queueAutomaticEdit([this]{
-    if(pending_||dragging_){queueLaneEdit();return;}
+    // Admission is observed before submitting: keep this unsent intent while
+    // the serial owner is occupied. Never catch/replay an uncertain write.
+    if(pending_||dragging_||context_().busy){queueLaneEdit();return;}
     if(fields_&&selected_>=0)setFields();
     if(dirty_&&!fields_)commit();
   },delay);}
