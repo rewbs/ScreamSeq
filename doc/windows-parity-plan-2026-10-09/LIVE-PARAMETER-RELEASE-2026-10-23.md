@@ -553,6 +553,13 @@ menu-bar group join the bounded local gate because the shell boundary changed:
 five native groups and two actual-app cases, using one build. These additions
 are source-only until that checkpoint.
 
+The same boundary also covers closing Song automation: its generic tool shell
+previously cancelled the debounce and left a valid edit requiring a retry after
+reopening. The native owner now finishes an already queued edit before hiding,
+retains invalid input visibly on failure, and cancels an in-progress drag first.
+The same command-results group verifies close/reopen, exact one-step Undo and
+invalid-input retention; no additional build or test group is needed.
+
 At 19:35 UTC the preceding 4d Mac ARM job passed and Intel remained in tests.
 Windows compiled and passed 158 portable/worker tests, 51 native groups, vendor
 ownership and typed conformance, but its 112-case app run failed 22 cases with

@@ -193,6 +193,15 @@ void applicationAutomaticEdits(){
     app.edit("history.undo",{{"domain","all"}});press(window,4615);
     app.edit("history.undo",{{"domain","all"}});press(window,4615);
     restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Native Save added a musical history entry");
+    SetFocus(field);SetWindowTextW(field,L"-18");lane.hide();
+    restoreCheck(!lane.visible()&&!lane.snapshot().at("dirty").get<bool>()&&lane.snapshot().at("points")[0].at("value")==-18.,
+      "Closing the recorded editor cancelled its latest valid automatic edit");
+    lane.openAt(plugin,1);app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Closing the recorded editor added more than one edit");
+    SetFocus(field);SetWindowTextW(field,L"invalid");restoreRejected([&]{lane.hide();});
+    restoreCheck(lane.visible()&&restoreText(field)==L"invalid"&&app.documentOperation("automation.get",Json::object())==baseline,
+      "Close hid an unresolved automatic failure or changed accepted music");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
     app.documentOperation("document.open",departureOpenRequest(app,path));
     restoreCheck(app.documentOperation("automation.get",Json::object())==saved,"Native Save/reopen omitted the pending recorded point");fixture.close();
   }
