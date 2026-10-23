@@ -5,6 +5,7 @@ benchmark. Native layers have separate independent-stem and callback audits.
 """
 import array
 import base64
+import copy
 import sys
 from pathlib import Path
 
@@ -46,6 +47,9 @@ def run(client, baseline, recorded, output):
         result = write('sample.renderSelection', **params)
         require(result['rate'] == 48000 and result['channels'] == 2 and result['bits'] == 16,
                 'Composing replay changed its canonical PCM format')
+        added = next(sample for sample in read('document.get')['samples'] if sample['index'] == result['sample'])
+        next_id = source['native']['nextID']
+        require(added['id'] == 'n' + str(next_id), 'Rendered sample did not consume the expected single stable identity')
         frames = result['frames']
         require(0 < frames <= 48000 * 20, 'F04 replay exceeds its bounded 20-second evidence window')
         pcm = bytearray()
@@ -68,12 +72,17 @@ def run(client, baseline, recorded, output):
                    pcmSHA256=sha256(pcm), peak=peak,
                    meanSquare=sum(value * value for value in values) / len(values))
         report['renders'].append(row)
-        # Rendering appends a real sample. One Undo must remove that addition
-        # without changing any other musical or retained project field.
+        # Rendering appends one sample identity. Document::undo deliberately
+        # keeps the allocator high-water mark so that ID cannot be reused.
+        # Assert that exact allocation; this is not a general ignore rule.
         write('history.undo')
         restored = output / (name + '-undo.screamseq')
         write('document.save', path=str(restored), overwrite=False)
-        row['undoPreservation'] = differences(source, read_project(restored))
+        expected = copy.deepcopy(source)
+        expected['native']['nextID'] = next_id + 1
+        row['allocatedSampleID'] = added['id']
+        row['expectedNextIDAfterUndo'] = next_id + 1
+        row['undoPreservation'] = differences(expected, read_project(restored))
         require(row['undoPreservation']['equal'], 'Render Undo changed unrelated saved project fields')
         return values, bytes(pcm)
 

@@ -1744,3 +1744,18 @@ The CI composing selection also now receives the already-scanned deterministic
 provider cache before invoking its mandatory layered journey. Missing cache is
 still a failure. The old x64 receipts remain failed and immutable; the changed
 test/setup has no passing execution evidence yet.
+
+Source review before execution corrected the new render oracle's identity
+expectation: `Document::undo` at `editor/TrackerDocument.cpp` preserves
+`max(previous.nextID,current.nextID)`. Each sample-only render must allocate
+exactly the original `nextID`; its Undo must leave exactly `nextID+1` and restore
+every other typed project field. The oracle now asserts the allocated sample's
+actual stable ID and that one predicted allocator change. It does not ignore
+allocator values or accept arbitrary differences. Source input files remain
+byte-exact. This is a correction to new unexecuted acceptance code, not a relaxed
+failed gate or a change to stable-identity behavior.
+
+The sampling guide also now reflects current Windows source: its existing
+`New take limit` selector offers60/300seconds and is locked while a take is
+retained. No duplicate duration feature was implemented based on the stale
+guide's earlier sixty-second-only claim.
