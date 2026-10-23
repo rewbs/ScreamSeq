@@ -174,6 +174,13 @@ void run(){
         "Activity Tab/Shift+Tab does not follow the visible control groups");}
     SetWindowTextW(GetDlgItem(window,11016),L"-0.25");require(tool.snapshot().at("fieldDraft")==true,"Raw value draft not retained");
     SetFocus(GetDlgItem(window,11016));const auto beforeTraceDraft=tool.snapshot();
+    SendMessageW(GetDlgItem(window,11016),EM_SETSEL,1,4);
+    for(const auto message:{WM_SETTINGCHANGE,WM_THEMECHANGED,WM_SYSCOLORCHANGE}){
+      SendMessageW(window,message,0,0);DWORD first=0,last=0;
+      SendMessageW(GetDlgItem(window,11016),EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(tool.snapshot()==beforeTraceDraft&&GetFocus()==GetDlgItem(window,11016)&&first==1&&last==4&&edits==0,
+        "Native appearance refresh changed Activity target, raw point draft, caret or music");
+    }
     const auto tracePoint=beforeTraceDraft.at("trace").at("lastPoint");const auto traceScale=GetDpiForWindow(window)/96.;
     SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(int(std::lround(tracePoint[0].get<double>()*traceScale)),int(std::lround(tracePoint[1].get<double>()*traceScale))));
     require(tool.snapshot().at("rawValue")=="-0.25"&&tool.snapshot().at("fieldDraft")==true&&GetFocus()==GetDlgItem(window,11016)&&

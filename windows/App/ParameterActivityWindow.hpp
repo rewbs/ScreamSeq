@@ -268,9 +268,28 @@ private:
       r.y+2+float(1-std::clamp(fraction,0.,1.))*std::max(0.f,r.h-4)};
   }
   Json traceSnapshot()const {const auto t=trace();Json last=nullptr;if(!t.indices.empty()){const auto &p=points_[t.indices.back()];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());last=Json::array({at.x,at.y});}return {{"nativePoints",t.indices.size()},{"normalizedContributions",t.contributions},{"segments",t.indices.empty()?0:t.indices.size()-1},{"minimum",t.indices.empty()?Json(nullptr):Json(t.low)},{"maximum",t.indices.empty()?Json(nullptr):Json(t.high)},{"begin",t.begin},{"end",t.end},{"plot",Json::array({plot_.x,plot_.y,plot_.w,plot_.h})},{"lastPoint",last},{"coordinateSpace","ownerClientDIP"},{"selectedSequence",selectedTrace_?Json(*selectedTrace_):Json()},{"unit","native parameter units"}};}
-  void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto r=plot_;s.fill(r.x,r.y,r.w,r.h,0x101923);for(int i=0;i<=4;++i)s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3947);
-    const auto t=trace();if(!t.indices.empty()){float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);for(auto i:t.indices){const auto &p=points_[i];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());const float x=at.x,y=at.y;if(previous){s.line(px,py,x,py,0x6edac5,2);s.line(x,py,x,y,0x6edac5,2);}else s.fill(x-2,y-2,4,4,0x6edac5);px=x;py=y;previous=true;}for(auto index:t.indices)if(selectedTrace_&&points_[index].at("sequence")==*selectedTrace_){const auto &p=points_[index];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());s.fill(at.x-3,at.y-3,6,6,0xf3d788);break;}s.unclip();s.uiText(std::to_wstring(t.begin)+L"â€“"+std::to_wstring(t.end)+L" s Â· "+std::to_wstring(t.low)+L"â€“"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,0x93aabd);}
-    else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,0x93aabd);s.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?0x6edac5:0x334757);}
+  void paint(RenderSurface &s)override{
+    NativeToolWindow::paint(s);const auto colors=NativeControls::curveColors();const auto r=plot_;
+    s.fill(r.x,r.y,r.w,r.h,colors.background);
+    for(int i=0;i<=4;++i)s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);
+    const auto t=trace();
+    if(!t.indices.empty()){
+      float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);
+      for(auto i:t.indices){const auto &p=points_[i];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());
+        const float x=at.x,y=at.y;
+        if(previous){s.line(px,py,x,py,colors.curve,2);s.line(x,py,x,y,colors.curve,2);}
+        else s.fill(x-2,y-2,4,4,colors.curve);
+        px=x;py=y;previous=true;
+      }
+      for(auto index:t.indices)if(selectedTrace_&&points_[index].at("sequence")==*selectedTrace_){
+        const auto &p=points_[index];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());
+        paintCurveHandle(s,at.x,at.y,true,colors,colors.curve);break;
+      }
+      s.unclip();
+      s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,colors.text);
+    }else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,colors.text);
+    paintCurveBorder(s,r,GetFocus()==window_,colors);
+  }
 
 public:
   bool queuedMusicalEdit()const{return bool(automaticEdit_);}

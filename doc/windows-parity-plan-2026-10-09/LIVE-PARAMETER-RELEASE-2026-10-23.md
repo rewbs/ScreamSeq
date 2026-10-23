@@ -1178,3 +1178,14 @@ The classification retains the exact diagnostic payloads and failure counts.
 No app or CI job was rerun for this inspection; Intel job120676171254 remained
 active at the latest read. The hourly gate still requires it to finish and all
 actual build starts to be rechecked.
+
+The same unbuilt Activity batch now uses `NativeControls::curveColors` and the
+shared native curve handle/focus border, matching the other Windows automation
+editors. This replaces fixed trace colors with the existing system high-contrast
+palette and preserves selection through size/outline as well as color. Its
+native group now sends all three appearance-change messages and requires exact
+observer/draft/selection state, text caret/focus and unchanged music. No desktop
+theme was changed. Reusing the previously tested palette does not establish a
+new live high-contrast or Narrator pass; fresh normal-theme presentation and the
+separate full accessibility gate remain required. No additional build target or
+test registration is introduced.
