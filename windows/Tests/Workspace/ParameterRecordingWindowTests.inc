@@ -10,6 +10,7 @@ void applicationParameterRecordingReview() {
     unsigned playbackReconciled=0;
     Json openedAutomation=Json::array();
     std::function<void()> duringRead;
+    std::function<void()> duringPageRead;
     std::string contextRevision;
     bool available=true;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
@@ -34,6 +35,7 @@ void applicationParameterRecordingReview() {
       }
       restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&(params.at("parameter")==1||params.at("parameter")==2),
         "Review read a different recording take or target");
+      if(auto hook=std::exchange(duringPageRead,{}))hook();
       Json rows=Json::array();const auto offset=params.at("offset").get<size_t>(),limit=params.at("limit").get<size_t>();
       for(size_t i=offset;i<std::min(size_t(130),offset+limit);++i)rows.push_back({{"timestamp",std::to_string(9007199254740993ull+i)},{"value",double(i)},
         {"frame",i==129?Json():Json(std::to_string(i*48))}});
@@ -345,9 +347,61 @@ void applicationParameterRecordingReview() {
     take={{"retained",false},{"capturing",false},{"take",""}};tool.show();click(9725);click(9721);
     take["targets"].push_back({{"plugin",plugin},{"parameter",2},{"unmapped",0},{"overflow",0}});
     SendMessageW(window,WM_TIMER,7,0);
-    SendMessageW(control(9728),CB_SETCURSEL,2,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
-    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);deferRestoration=true;click(9723);
-    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&!IsWindowEnabled(control(9741)),
+    const auto chooseTarget=[&](int selected){SendMessageW(control(9728),CB_SETCURSEL,selected,0);
+      SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));};
+    const auto gainTarget=Json({{"plugin",plugin},{"parameter",1}}).dump();
+    const auto balanceTarget=Json({{"plugin",plugin},{"parameter",2}}).dump();
+    const auto beforeTargetNavigation=writes.size();SetFocus(control(9728));
+    duringRead=[&]{chooseTarget(2);chooseTarget(0);chooseTarget(2);
+      restoreCheck(tool.snapshot().at("pending")==true&&tool.snapshot().at("target")==gainTarget&&
+        SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,
+        "Pumped target choice reentered a read or mismatched the displayed rows");};
+    SendMessageW(window,WM_TIMER,7,0);available=false;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("queuedTarget")==balanceTarget&&tool.snapshot().at("target")==gainTarget,
+      "Busy owner lost the latest recording target choice");available=true;
+    SendMessageW(window,WM_TIMER,9,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("queuedTarget").is_null()&&tool.snapshot().at("target")==balanceTarget&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==2&&GetFocus()==control(9728)&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Balance")!=std::string::npos&&writes.size()==beforeTargetNavigation,
+      "Deferred target navigation lost identity, details or focus, or wrote music");
+    // The event-page read can pump input too, after the catalogue is loaded.
+    duringPageRead=[&]{chooseTarget(1);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,
+      "Target choice arriving during event pagination was lost");
+    available=false;chooseTarget(2);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget")==balanceTarget,
+      "Another editor's busy read lost recording navigation");available=true;
+    // A later direct choice supersedes the deferred choice, even if its timer
+    // message was already posted before the owner became idle.
+    chooseTarget(0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==""&&tool.snapshot().at("queuedTarget").is_null()&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==0,"Older queued target replaced a newer explicit delivery choice");chooseTarget(1);
+    duringRead=[&]{chooseTarget(2);contextRevision="later-target-revision";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);contextRevision.clear();
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation silently rebased a stale revision");
+    duringRead=[&]{chooseTarget(2);take["take"]="changed-during-target-choice";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation redirected a choice into another take");
+    const auto secondTarget=take["targets"][1];
+    duringRead=[&]{chooseTarget(2);take["targets"].erase(take["targets"].begin()+1);};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation adopted a removed target");
+    take["targets"].push_back(secondTarget);SendMessageW(window,WM_TIMER,7,0);
+    duringRead=[&]{chooseTarget(2);throw std::runtime_error("Owned target refresh failure");};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Failed refresh retained a target navigation intent");
+    duringRead=[&]{chooseTarget(2);click(9727);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(!tool.visible()&&tool.snapshot().at("queuedTarget").is_null()&&writes.size()==beforeTargetNavigation&&songState(app)==music,
+      "Closing review retained navigation, reopened the window or changed music");tool.show();
+    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);deferRestoration=true;
+    duringRead=[&]{chooseTarget(2);click(9723);};SendMessageW(window,WM_TIMER,7,0);
+    SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&
+      tool.snapshot().at("queuedTarget").is_null()&&!IsWindowEnabled(control(9741)),
       "Pending native restoration lost the originally kept target or enabled premature navigation");
     SendMessageW(control(9728),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
     take["transportPlaying"]=false;click(9725);click(9742);

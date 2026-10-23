@@ -1090,3 +1090,32 @@ and audio diagnostics are **source-only** until that build/checkpoint passes.
 Mac/shared musical model, codecs, plugin state and project/API write semantics
 are unchanged. Prior reciprocal preservation and Mac evidence can be reused
 only for unchanged inputs. New Windows source cannot inherit20467's local passes.
+
+#### Recording target navigation continuation (source only)
+
+Review of `ParameterRecordingWindow` found that its target combo could change
+while `automation.recording.get/events` pumped messages, but the pending-action
+branch discarded the notification. The combo could then name a different
+parameter from the retained event page. The window now retains the latest
+stable plugin/parameter choice until the owner is idle, while keeping the
+displayed combo aligned with the current rows. A changed document, revision,
+take or removed target rejects the deferred choice; a newer direct choice,
+failed read or Close cancels it. Close also works during a polling read.
+
+Keep retains the explicitly chosen stable target for its Song automation
+shortcut, including a choice queued earlier in the same refresh. Commit,
+Discard and Start cancel obsolete page navigation after capturing that intent.
+This does not queue/replay a musical write or change recording/history/API
+semantics. The existing lifecycle completion and input-loss guards remain.
+
+The existing recording-review fixture in `workspace-plugin-search-tests` adds
+message-pumped target selection during both summary and event-page reads,
+busy-owner deferral, latest-choice precedence, exact target/details/focus,
+changed revision/take, removed target, read failure and Close assertions. All
+navigation must preserve exact musical data and the write count. It also
+retains the existing Keep/restoration navigation and receipt assertions.
+The next checkpoint still has ten native groups/seven actual-app cases plus
+the explicit silent hardware audit. No extra build or test run was made for
+this continuation. Fresh Computer Use should include the recording target
+selector and Close while polling, alongside Activity navigation, precise
+Save/caret and live recorded-point editing.

@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 22:28 UTC source continuation:** recording-review target choices
+are now retained through pumped reads and busy-owner admission, guarded by
+stable document/revision/take/target identities. New native assertions cover
+latest-choice precedence, detail/focus consistency, stale/removed targets,
+read failures and Close during polling without musical writes. These join the
+same unexecuted `recorded-owner-admission` checkpoint (ten native groups,
+seven app cases, silent WASAPI audit and fresh Computer Use). Resolve its newest
+freeze; no build before22:55:37UTC or while preceding CI is active. The latest
+read-only observation at22:26 found20467 ARM fully passed, Windows compiled
+and testing, and Intel still compiling. No package or merge is qualified.
+
 **23 October 22:18 UTC continuation:**20467 built once;9/9 native groups
 passed,5/7 app cases passed. Keep the failed gate: one automatic song-point edit
 was refused while busy; Activity's trace-source fixture expected a recorded lane
@@ -1307,8 +1318,8 @@ the newer source or a visual review.
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | PR#7 is063383940; compilation passed, five/six native groups passed and seven separate diagnostic app cases passed. The command-result group hit its cumulative90s bound; source splits it without weakening assertions or limits. UI found accidental point movement on click. Precise live gestures are in usable9c5; newer point/Activity corrections remain unbuilt. | Resolve `recorded-edit-guard/freeze.json`. No build before23 October21:54:49UTC or while preceding jobs run; inspect later starts. Require eight native groups, seven app cases and fresh Computer Use. Preserve failed receipts, audio overruns and floating-helper limits; no package/merge from partial evidence. |
-| 2 / L | Native Mac live VST3 take restoration uses processing acknowledgements and non-flushing verification. Both579 Mac architectures passed134 CTests, native interface/socket/typed checks and the actual BlackHole512 live take lifecycle. Windows real-vendor Keep, later-input protection and stopped recovery have bounded foreground evidence. | Reuse579 device evidence for unchanged inputs; inspect current063 ARM/Intel CI. AU still lacks qualified non-flushing observation and retains stopped restoration; divergent opaque state needs explicit stopped, closed-editor recovery. Keep input cuts/ownership and exact history/save checks; do not reimplement the qualified VST3 live path. |
+| 1 / M | PR#7 is20467c6eee: local compilation and9/9 native groups passed;5/7 app cases passed. Source corrections retain busy unsent point edits and Activity/recording target navigation; bounded audio deadline evidence is added. Precise gestures remain in usable9c5. | Resolve `recorded-owner-admission/freeze.json`. No build before23 October22:55:37UTC or while preceding CI runs; inspect later starts. Require10 native groups,7 app cases, explicit silent WASAPI audit and fresh Computer Use. Keep failed receipts and measured overruns; no package/merge from partial evidence. |
+| 2 / L | Native Mac live VST3 take restoration uses processing acknowledgements and non-flushing verification. Both063 Mac architectures passed134 CTests, native interface/socket/typed checks and the actual BlackHole512 live take lifecycle. Windows real-vendor Keep, later-input protection and stopped recovery have bounded foreground evidence. | Reuse063 device evidence for unchanged inputs; inspect20467 CI (ARM terminal success at22:26; Intel still running). AU still lacks qualified non-flushing observation and retains stopped restoration; divergent opaque state needs explicit stopped, closed-editor recovery. Keep input cuts/ownership and exact history/save checks; do not reimplement the qualified VST3 live path. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | The latest retained exchange passed Mac ARM/Intel and both Windows return legs for no-edit, edited render/import, metadata, composing history and envelope-bank preservation. Actual CI merge7a375c3f has the identical tree as reviewed4d1fa80fe. | Reuse `recorded-viewport/reciprocal-exchange.json` only for unchanged codec/persistence inputs. Native Save/field-navigation changes have separate current app gates. Any later codec or native ownership change requires fresh reciprocal edited outputs; retain binary/input/report hashes. |
 | 5 / M–L | Mixer, tracks, graph gestures, sample/plugin layering, automatic fields and capture duration are implemented. F04 six-domain composing plus native recording and sample-layered VST3 recording/PCM journeys have bounded c900 evidence. Precise live editing and interleaved note/take history have newer diagnostic evidence. These do not close all117 rows. | Continue A02–A14/A17 with exact source/input provenance: qualify the changed precise/MIDI path first, then address specific failures found in complete composing journeys. Preserve occupied Gain automation in F04; record Balance for the successful take. Reuse unchanged sample/graph/persistence results rather than rerunning broad suites per UI edit. |

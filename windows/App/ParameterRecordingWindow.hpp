@@ -38,6 +38,8 @@ private:
   Json keptTarget_,keepCandidate_;
   struct QueuedAction {std::string document,revision,take,method;Json params,lossEvidence,navigationTarget;bool capturing,completed;};
   std::optional<QueuedAction> queuedAction_;
+  struct QueuedTarget {std::string document,revision,take,key;};
+  std::optional<QueuedTarget> queuedTarget_;
   bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,presentingRows_=false,lossAcknowledged_=false,targetChosen_=false;
@@ -127,6 +129,35 @@ private:
     if(!selection&&!targetKey_.empty()){targetKey_.clear();offset_=0;}
     NativeInputGate::present(controls_.at(target),CB_SETCURSEL,selection,0);
   }
+  void presentTargetSelection() {
+    int selected=0;for(size_t i=0;i<targets_.size();++i)if(targets_[i].dump()==targetKey_)selected=int(i+1);
+    NativeInputGate::present(controls_.at(target),CB_SETCURSEL,selected,0);
+  }
+  void cancelTargetSelection(){queuedTarget_.reset();KillTimer(window_,9);}
+  void selectTarget() {
+    const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
+    if(selected<0||size_t(selected)>targets_.size())return;
+    const auto key=selected?targets_[size_t(selected-1)].dump():std::string();
+    const bool unavailable=callbacks_.available&&!callbacks_.available();
+    if(pending_||queuedAction_||unavailable){
+      // Reads pump native messages. Keep the displayed target tied to its
+      // current rows until the stable choice can be loaded without reentry.
+      if(!queuedAction_&&(refreshing_||!pending_)){
+        queuedTarget_=QueuedTarget{document_,callbacks_.context().second,take(),key};SetTimer(window_,9,20,nullptr);
+      }
+      presentTargetSelection();return;
+    }
+    cancelTargetSelection();targetChosen_=true;targetKey_=key;offset_=0;refresh();
+  }
+  void drainTargetSelection() {
+    if(pending_||!queuedTarget_)return;
+    auto choice=std::move(*queuedTarget_);queuedTarget_.reset();requireContext();
+    if(!visible())return;
+    if(callbacks_.context()!=std::pair(choice.document,choice.revision)||take()!=choice.take||
+       (!choice.key.empty()&&std::none_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==choice.key;})))
+      throw std::runtime_error("Song or recording target changed during refresh; choose the input target again");
+    targetChosen_=true;targetKey_=std::move(choice.key);offset_=0;presentTargetSelection();refresh();
+  }
   std::wstring cell(size_t row,unsigned column)const {
     if(row>=rows_.size())return {};const auto &value=rows_[row];
     const bool native=value.contains("plugin");
@@ -201,8 +232,9 @@ private:
       self.pending_=self.refreshing_=false;
       // An incomplete refresh cannot authorize a later write. The normal
       // error path presents the read failure; no command has been submitted.
-      if(!succeeded)self.queuedAction_.reset();
+      if(!succeeded){self.queuedAction_.reset();self.cancelTargetSelection();}
       if(self.queuedAction_)SetTimer(self.window_,8,1,nullptr);
+      if(self.queuedTarget_)SetTimer(self.window_,9,1,nullptr);
       self.layout();}}reset{*this,succeeded};
     const auto old=take();auto state=callbacks_.read("automation.recording.get",Json::object());requireContext();
     state_=std::move(state);delivery_=callbacks_.delivery(0,1);
@@ -254,6 +286,9 @@ private:
     Json navigationTarget;
     if(method=="automation.recording.commit") {
       if(state_.value("completed",false))navigationTarget=keptTarget_;
+      if(navigationTarget.is_null()&&queuedTarget_&&!queuedTarget_->key.empty()&&queuedTarget_->take==take()&&
+         callbacks_.context()==std::pair(queuedTarget_->document,queuedTarget_->revision))
+        for(const auto &entry:targets_)if(entry.dump()==queuedTarget_->key)navigationTarget=entry;
       if(navigationTarget.is_null())for(const auto &entry:targets_)if(entry.dump()==targetKey_)navigationTarget=entry;
       if(navigationTarget.is_null()&&!targets_.empty())navigationTarget=targets_.front();
     }
@@ -283,6 +318,10 @@ private:
     if(method=="automation.recording.commit") {
       keepCandidate_=std::move(navigationTarget);
     }
+    // These boundaries can replace/remove the take. Keep already captured its
+    // navigation destination; a delayed page read must not report a stale
+    // selection error after the successful lifecycle result.
+    if(method=="automation.recording.commit"||method=="automation.recording.discard"||method=="automation.recording.start")cancelTargetSelection();
     params["expectedRevision"]=callbacks_.context().second;pending_=true;
     try{completion_.submit(callbacks_.write,method,params,document_,++generation_,params);pending_=false;
       if(!completion_.returned())throw std::runtime_error("Recording result is uncertain; use Refresh / review");
@@ -291,18 +330,18 @@ private:
   }
   void action(int id,unsigned notification)override {
     if(setting_)return;
+    if(id==close&&notification==BN_CLICKED){hide();return;}
+    if(id==target&&notification==CBN_SELCHANGE){selectTarget();return;}
     if(pending_){
       if(refreshing_&&notification==BN_CLICKED&&(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved))queueAction(id);
       return;
     }
-    if(queuedAction_)return;if(id==close){hide();return;}
+    if(queuedAction_)return;
     if(id==openKept&&notification==BN_CLICKED){
       requireContext();if(!canOpenKept())return;
       callbacks_.recordedAutomation(keptTarget_.at("plugin").get<std::string>(),keptTarget_.at("parameter").get<uint32_t>());return;
     }
     if(id==acknowledge&&notification==BN_CLICKED){lossAcknowledged_=SendMessageW(controls_.at(id),BM_GETCHECK,0,0)==BST_CHECKED;layout();return;}
-    if(id==target&&notification==CBN_SELCHANGE){const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
-      if(selected<0||size_t(selected)>targets_.size())return;targetChosen_=true;targetKey_=selected?targets_[size_t(selected-1)].dump():std::string();offset_=0;refresh();return;}
     if(notification!=BN_CLICKED)return;
     if(id==recovered&&callbacks_.recoveredInputs){callbacks_.recoveredInputs();return;}
     if(id==review){
@@ -324,11 +363,15 @@ private:
     if(key==VK_RETURN){wchar_t kind[20]{};GetClassNameW(GetFocus(),kind,20);if(!_wcsicmp(kind,L"Button")){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{
+    if(id==9){
+      if(queuedTarget_&&(pending_||(callbacks_.available&&!callbacks_.available()))){SetTimer(window_,9,20,nullptr);return;}
+      KillTimer(window_,9);drainTargetSelection();return;
+    }
     if(id==8){
       if(queuedAction_&&(pending_||(callbacks_.available&&!callbacks_.available()))){SetTimer(window_,8,20,nullptr);return;}
       KillTimer(window_,8);drainAction();return;
     }
-    if(id==7&&visible()&&!pending_&&!queuedAction_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();
+    if(id==7&&visible()&&!pending_&&!queuedAction_&&!queuedTarget_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();
   }
   void error(const std::exception &error)override{error_=error.what();set(statusLabel,wide(error_));layout();}
   void layout()override {
@@ -418,8 +461,9 @@ public:
   }
   ~ParameterRecordingWindow()override{if(window_)RemoveWindowSubclass(window_,notifications,notificationSubclass);if(controls_.contains(events))RemoveWindowSubclass(controls_.at(events),listNotifications,listSubclass);}
   void show(){const auto focused=GetFocus();NativeToolWindow::show();SetTimer(window_,7,250,nullptr);if(!owns(focused))SetFocus(controls_.at(retained()?target:scope));}
-  void hide()override{KillTimer(window_,7);NativeToolWindow::hide();}
+  void hide()override{KillTimer(window_,7);cancelTargetSelection();NativeToolWindow::hide();}
   Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"queuedAction",queuedAction_?Json(queuedAction_->method):Json()},{"take",state_},{"delivery",delivery_},
+    {"queuedTarget",queuedTarget_?Json(queuedTarget_->key):Json()},
     {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"inputDetails",utf8(field(inputDetails))},
     {"keptTarget",keptTarget_},{"canOpenKept",canOpenKept()},{"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
 };
