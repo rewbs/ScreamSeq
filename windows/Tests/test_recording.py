@@ -190,7 +190,18 @@ class RecordingTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent output required')
     def test_timestamped_chord_api_stop_dry_run_one_undo_reopen_and_native_review(self):
-        self.live(columns=2); before = self.musical(); revision = self.doc()['revision']
+        self.pid, self.client = self.launch(audio=True)
+        self.connect(armed=False, columns=2)
+        self.command(549)
+        arm = private_desktop.user.GetDlgItem(self.tool(), 7203)
+        self.wait(lambda: not self.read('workspace.get')['midiWindow']['pending']
+                  and private_desktop.user.IsWindowEnabled(arm))
+        revision = self.doc()['revision']; before = self.musical()
+        self.tool_command(7203)  # Native Arm starts capture without a second Apply.
+        self.wait_recording(lambda take: take['capturing'])
+        self.assertTrue(self.settings()['armed'])
+        self.assertEqual(self.doc()['revision'], revision); self.assertEqual(self.musical(), before)
+        time.sleep(.08)
         self.inject([0x643c90, 0x644090]); self.wait_recording(lambda take: take['eventCount'] == 2)
         time.sleep(.04); self.inject([0x003c80, 0x004080]); self.wait_recording(lambda take: take['eventCount'] == 4)
         self.write('transport.stop'); take = self.take()

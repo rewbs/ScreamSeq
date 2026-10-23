@@ -2297,3 +2297,48 @@ MIDI failure closed until the new job result is inspected. Required remaining
 integration work includes that Windows gate, native device/vendor qualification,
 Mac guarded restoration and the audio performance investigation. Mac stopped-only
 release and closed-editor opaque Discard guards remain in place.
+
+### Next source batch: immediate native MIDI Arm and composing journey
+
+The foreground MIDI check exposed a misleading interaction: `Record notes: on`
+represented an unapplied draft, while actual capture remained disarmed. The next
+source batch changes this to an immediate `Arm notes` / `Disarm notes` action
+whose label follows acknowledged settings. It deliberately uses accepted settings
+and never applies a draft connection, timing adjustment or channel count as a side
+effect. In particular, an incomplete `-` timing field cannot prevent Disarm.
+The retained fields still have explicit Apply/Ctrl+Enter, and their status explains
+that Arm uses saved values. The successful arm-only settings revision can advance
+an otherwise matching draft's base; a pre-existing settings conflict stays a
+conflict. No API, musical history, storage or audio-callback contract changes.
+
+The same bounded pending-command owner now handles Arm during short worker reads.
+It captures document, settings revision, desired arm state and draft generation;
+repeated requests coalesce, new text/Hide cancel, changed settings/document reject,
+and a submitted callback failure is not retried. Nested callback actions cannot
+reenter. Holding Space/Enter on Arm suppresses repeat toggles; a fresh key press
+remains a new explicit command. The UI never displays a requested arm as accepted.
+
+New native regressions cover immediate Arm/Disarm with an invalid timing field and
+a different draft source, explicit later Apply preserving the chosen arm state,
+reentrant calls, refusal, pre-existing settings conflicts, held activation keys,
+and queued Arm cancellation/identity/failure cases. Existing keyboard assertions
+now require Arm to apply once without Ctrl+Enter; Ctrl+Enter afterward must create
+no second settings write. A new actual-app case checks raw draft retention across
+Arm and Disarm. The timestamped-chord journey now starts capture from native Arm,
+then retains its existing two-track input timing, loss, dry-run, one Undo/Redo and
+save/reopen assertions. No safety assertion was removed to obtain a pass.
+
+Only source review, diff whitespace validation and Python AST parsing have run.
+This batch is **not in the c900d2b2e package and has not been compiled or executed**.
+At the next eligible coordinated checkpoint, build app/scanner and the native MIDI
+window fixture once. Run `midi-recording-window-tests`, all five
+`test_midi_recording_ui.MidiRecordingUITests`, and the actual-app timestamped-chord,
+stopped step-entry and queue-loss/retained-review recording journeys. Reuse the
+c900d2b2e plugin composing and feedback results because those inputs are unchanged.
+Fresh Computer Use must check Arm/Disarm with retained invalid timing, saved-state
+labels, typing/Tab/Shift+Tab/Backspace, and no unexpected playback/history change.
+Retain the known floating-window targeting limit explicitly. Do not compile before
+05:58:20 UTC on23 October or overlap still-running current CI; inspect actual starts
+again first. Mac live vendor restoration remains guarded: source inspection found
+state verification can execute vendor processing, so simply allowing it during
+playback would be unsafe and is not part of this UI batch.

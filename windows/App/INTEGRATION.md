@@ -8,6 +8,15 @@ stopped input performs cursor step entry. Native Stop finishes one document Undo
 while API Stop retains the take. Loss or a stale base retains review. Fixed input
 boundaries prevent queued events from crossing Finish, Discard or song replacement.
 MIDI and keyboard holds share current audition voices without changing Live keys.
+The native Arm/Disarm action immediately uses the accepted settings; it does not
+submit an unfinished timing or connection draft. The button names the next action
+from the acknowledged state. Numeric/source drafts retain an explicit Apply,
+their original settings revision and raw text. A successful arm-only change
+advances that draft's revision only when it matched the preceding accepted
+settings; unrelated conflicts remain visible. Commands arriving during a short
+worker read retain one guarded intent, canceled on new edits, Hide or changed
+document/settings. Submitted failures are not retried. These newest arm-control
+changes await the next hourly native qualification checkpoint.
 See `../Api/recording.schema.json`, `../Api/midi.schema.json` and
 `../RECORDING_PROGRESS.md` for contracts and qualification limits.
 
