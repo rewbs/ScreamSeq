@@ -19,8 +19,13 @@ audio-performance and complete foreground parity are still open.
 
 The next combined candidate adds immediate MIDI Arm and the requested precise
 timeline double-click, Backspace, playback cursor and automatic live edits,
-including native Save and Undo handoffs. The first Windows compile failed; the
-correction is committed and backed up, but has no successful Windows binary yet.
+including native Save and Undo handoffs. The second Windows candidate compiled
+and passed five of six native groups; a separate diagnostic app run passed
+21 of23 cases. The failed menu fixture, retired-owner fixture and actual Save
+focus loss have corrections. Edge grabbing, native Tab order and accessible
+labels join the next freeze; a combined note/plugin-recording history journey
+passed against the existing binary. These later changes still need rebuilt
+qualification and fresh foreground checks; no new production package is ready.
 See the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) and
 [current queue](CONTINUATION-QUEUE-2026-10-20.md) for frozen source, receipts and
 the hourly gate. Do not execute old checkpoint commands or package this source
