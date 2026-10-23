@@ -932,16 +932,27 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         auNotificationLifetime(closedAU.descriptor);
         std::cout << "PASS native AU/VST3 editor attachment, close/reopen, and VST3 custom control-to-audio callback\n";
         if (argc > 3 && std::string(argv[3]) == "--loopback-record") {
+          const auto defaultOutput=[] {
+            AudioDeviceID result=0;UInt32 size=sizeof(result);
+            AudioObjectPropertyAddress address{kAudioHardwarePropertyDefaultOutputDevice,kAudioObjectPropertyScopeGlobal,
+                                               kAudioObjectPropertyElementMain};
+            check(AudioObjectGetPropertyData(kAudioObjectSystemObject,&address,0,nullptr,&size,&result)==noErr,
+                  "Read default output without changing the system route");return result;
+          };
+          const auto originalDefault=defaultOutput();
           uint32_t virtualDevice = 0;
           for (auto &d : Tracker::AudioDevice::devices())
-            if (d.name == "BlackHole 2ch")
+            if (d.name == "BlackHole 2ch") {
+              check(virtualDevice==0,"BlackHole output selection must be unambiguous");
               virtualDevice = d.id;
+            }
           check(virtualDevice != 0, "BlackHole virtual device for custom-interface recording test");
           UInt32 frames = 0, size = sizeof(frames);
           AudioObjectPropertyAddress address{kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal,
                                              kAudioObjectPropertyElementMain};
           check(AudioObjectGetPropertyData(virtualDevice, &address, 0, nullptr, &size, &frames) == noErr,
                 "virtual device buffer size");
+          std::cout<<"DEVICE explicit BlackHole 2ch id="<<virtualDevice<<" bufferFrames="<<frames<<'\n';
           parameterTakeSessionLifecycle(gain.descriptor,virtualDevice,frames);
           check([reopened configureDevice:virtualDevice buffer:frames error:&error], "configure virtual output");
           check([reopened showPluginEditor:0 error:&error], "open instrument interface before playback");
@@ -979,6 +990,10 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
           check([reopened openPath:path error:&error], "reopen custom-interface automation");
           check(std::abs([[reopened pluginParameters:0][0][@"value"] doubleValue] - .27) < 1e-5,
                 "recording preserves initial plugin state");
+          check(defaultOutput()==originalDefault,"Native take lifecycle changed the system default output");
+          UInt32 finalFrames=0;size=sizeof(finalFrames);
+          check(AudioObjectGetPropertyData(virtualDevice,&address,0,nullptr,&size,&finalFrames)==noErr&&finalFrames==frames,
+                "Native take lifecycle changed the virtual device buffer size");
           std::cout << "PASS custom-interface automation recording, initial-state preservation, restart/reopen and "
                        "project persistence via virtual output\n";
         }

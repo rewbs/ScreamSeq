@@ -292,5 +292,7 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     [[session snapshot:0][@"cells"] isEqual:snapshot[@"cells"]],"Live Discard altered accepted plugin state or unrelated music");
   [reopened shutdown];[session shutdown];
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
-  std::cout<<"PASS real-session multi-target parameter take, direct admission, recovery, one-step Keep/Undo/Redo, stopped verification, save/reopen, empty and Discard\n";
+  std::cout<<"PASS real-session multi-target parameter take, direct admission, recovery, one-step live Keep/Undo/Redo, live release/Discard, stopped verification, save/reopen and empty take"
+    <<"; live frames "<<[beforeRelease[@"frames"] unsignedLongLongValue]<<" -> "<<[afterRelease[@"frames"] unsignedLongLongValue]
+    <<", callbacks "<<[beforeRelease[@"callbacks"] unsignedLongLongValue]<<" -> "<<[afterRelease[@"callbacks"] unsignedLongLongValue]<<'\n';
 }

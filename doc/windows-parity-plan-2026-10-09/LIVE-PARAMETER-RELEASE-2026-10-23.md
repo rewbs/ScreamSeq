@@ -463,3 +463,52 @@ validation is triggered by a geometry/default regression, changed shared
 rendering or native provider dependency, or new composing failure. Dense-song
 audio profiling, Mac native-device lifecycle and reciprocal edited-project
 exchange remain open integration requirements; do not relax them to package.
+
+## Cooldown continuation: enable the missing Mac live-device gate
+
+The previous turn made concrete progress: the 4d checkpoint, fresh vendor UI
+recovery evidence and the sample-span correction were completed. The latter is
+committed at `45012bc4530a23cb33bd30c5b7226b382bf779ab`, backed up, and present
+in the clean qualification checkout; it has not been built. Current PR CI still
+tests 4d. At 19:18 UTC, Mac ARM was terminal success, Windows compiled and was
+testing, and Intel was still compiling. The 19:52:42 gate remains provisional
+on completion of those exact runs and any later actual build starts.
+
+Current source adds the previously missing real Core Audio recording gate to
+the existing Mac CI lifecycle invocation, using `--ui --loopback-record`.
+This does not introduce another build or repeat the UI lifecycle command. Both
+architectures will exercise the existing strict real-session multi-target
+Keep/live release/Undo/Redo/save/reopen/Discard assertions rather than stopping
+at the ordinary editor lifecycle. The tests now print actual before/after
+frames and callback counts and check that the explicitly selected virtual
+device is unambiguous, its buffer size is retained and the default output is
+unchanged.
+
+`.github/scripts/prepare-macos-audio.sh` provisions only a disposable
+GitHub-hosted macOS worker. It refuses other environments before any download,
+installation or service action. It downloads the official BlackHole 2ch 0.7.1
+package with pinned SHA256
+`57b540f27a3e29c37e310e01bee0fdfab76733087e47f997ef9dccf851400dcf`,
+checks package signing, installs it and restarts the runner's Core Audio service
+before the native lifecycle process is launched. This never runs on the user's Windows host
+or a musician's Mac and does not set a default route. Device absence and setup
+failure remain failures; there is no fallback to artificial audio or a skip.
+The dependency is a test device, not an application UI/audio framework.
+
+Package version/checksum were reviewed against the
+[Homebrew cask](https://github.com/Homebrew/homebrew-cask/blob/master/Casks/b/blackhole-2ch.rb)
+and [upstream installation guidance](https://github.com/ExistentialAudio/BlackHole#installation-instructions).
+The exact curl download used by CI succeeded locally and matched the pinned
+bytes; no package was installed. Bash syntax and the non-runner refusal passed.
+Evidence is `bin/mac-gesture-20261022/mac-device-preflight/preflight.json`.
+The earlier urllib probe received HTTP 406; curl succeeded. No Mac execution
+or live-device success is claimed before the next checkpoint.
+
+The dense Windows audio investigation remains open. A bounded WPR CPU capture
+attempt failed immediately with `0xc5585011` (unable to enable profiling policy);
+the named session was then confirmed not recording. Its failure receipt is in
+`dense-audio-profile/`. No usable CPU collection agent or WPA exporter was found
+in the installed Build Tools, so no stack attribution was obtained and no speculative DSP change
+was made. This tooling restriction does not block the other parity work. A
+future device-specific profiler or bounded diagnostic instrumentation is needed
+to distinguish DSP cost from scheduling delays; the observed overruns remain.
