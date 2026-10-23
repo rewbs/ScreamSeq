@@ -20,10 +20,10 @@ private:
   std::optional<uint32_t> parameter_;uint64_t cursor_=0,dropped_=0,engine_=0,originalFrame_=0;
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
-  bool setting_=false,pending_=false,frozen_=false,fields_=false,active_=false;
+  bool setting_=false,pending_=false,polling_=false,frozen_=false,fields_=false,active_=false;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(captured_.document,captured_.revision,Json::array({target_,plugin_,parameter_?Json(*parameter_):Json(),originalFrame_}).dump(),
-      generation_,fields_,pending_);
+      generation_,fields_,pending_||bool(automaticEdit_));
   }
   WorkspaceRect plot_{};
   std::map<int,LRESULT> pendingSelections_;
@@ -92,7 +92,8 @@ private:
     choices();list();set(ruleLabel,sourceData.rule);set(targetLabel,target_.empty()?L"Choose a prepared processor copy":wide(target_));
     status(parameter_?L"Live processor observation · recorded points use seconds and native parameter units":L"Start playback to prepare processor copies, then Refresh");
   }
-  void poll(){if(!visible()||pending_||frozen_||!parameter_||context_().busy)return;beginPending();try{
+  void poll(){if(!visible()||pending_||frozen_||!parameter_||context_().busy)return;beginPending();polling_=true;
+    struct Reset{bool &value;~Reset(){value=false;}}reset{polling_};try{
     const auto c=context_();const auto generation=generation_;require(c.document==captured_.document,"Song changed / captured observer retained; Refresh");
     const auto r=request_("parameter.activity.get",{{"after",cursor_},{"limit",2048}});guardRead(c,generation);
     require(r.at("token")==token_&&!r.at("target").is_null()&&r.at("target").at("key")==target_&&r.at("parameter")==*parameter_,"Prepared processor or API watch changed / Refresh to observe again");
@@ -109,7 +110,19 @@ private:
     request_("automation.recorded.edit",p);const auto after=context_();require(after.document==before.document,"Document changed during edit / captured fields retained");
     if(generation!=generation_){status(L"Point saved; newer raw fields retained. Refresh before another edit.");return;}
     auto lane=readRecorded(plugin_,parameter_,offset_,after,generation);auto sourceData=readSources(target_,parameter_,after,generation);guardRead(after,generation);
+    // Row positions change when an edit moves a point through the time-sorted
+    // page. Keep the accepted point, never silently redirect the next edit to
+    // the first row. Deleted points and moves outside this page leave no selection.
+    const auto selected=std::find_if(lane.points.begin(),lane.points.end(),[&](const auto &point){return !remove&&point.at("frame")==frame;});
+    lane.selected=selected==lane.points.end()?-1:int(selected-lane.points.begin());
     captured_=after;adoptRecorded(std::move(lane));sources_=std::move(sourceData.sources);sourceRevision_=after.revision;set(ruleLabel,sourceData.rule);list();++generation_;status(L"Recorded point saved · shared Undo restores the previous lane");
+  }
+  void deferPointAction(int id,uint64_t generation){
+    queueAutomaticEdit([this,id,generation]{
+      require(generation==generation_,"Point fields changed while waiting; review and save the current fields");
+      if(pending_||context_().busy){deferPointAction(id,generation);return;}
+      action(id,BN_CLICKED);
+    },20);
   }
   Json sourceLink(Json source,bool recent)const {
     require(parameter_.has_value(),"Choose a parameter before opening a source");const auto kind=source.value("kind",std::string());
@@ -126,7 +139,13 @@ private:
     source["plugin"]=plugin_;source["parameter"]=*parameter_;return source;
   }
   void action(int id,unsigned notification)override{
-    if(setting_)return;if(id==close){hide();return;}if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;return;}if(pending_){if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
+    if(setting_)return;if(id==close){hide();return;}if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;return;}if(pending_){
+      // Polling pumps native messages. Retain one explicit edit instead of
+      // silently losing an enabled Save/Delete click during that read. Never
+      // queue/replay a second mutation while another mutation is in flight.
+      if(polling_&&notification==BN_CLICKED&&(id==savePoint||id==removePoint)&&!automaticEdit_)deferPointAction(id,generation_);
+      if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
+    if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint))cancelAutomaticEdit();
     if(id==freeze&&notification==BN_CLICKED){frozen_=!frozen_;set(freeze,frozen_?L"Resume":L"Freeze");return;}
     beginPending();try{
       if(id==processors&&notification==CBN_SELCHANGE){const auto i=selection(processors);require(i>=0,"Choose a processor");load(targets_.at(size_t(i)).at("key"));}
@@ -167,6 +186,18 @@ private:
     else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,0x93aabd);s.outline(r.x,r.y,r.w,r.h,0x334757);}
 
 public:
+  bool queuedMusicalEdit()const{return bool(automaticEdit_);}
+  void flushForProjectSave(){
+    // This finishes only an explicit Save/Delete already queued during a read.
+    // Unsubmitted or rejected raw fields are not retried by project Save/history.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_,"Wait for the requested point edit before continuing");
+  }
+  void flushForHistory(){flushForProjectSave();}
+  void hide()override{
+    if(automaticEdit_)flushForProjectSave();
+    NativeToolWindow::hide();
+  }
   ParameterActivityWindow(HWND owner,Request request,std::function<Context()> context,std::function<void(const Json &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumClientWidth_=1020;minimumClientHeight_=680;create(L"ScreamSeq.ParameterActivity",L"Parameter activity",1180,790);clampToOwnerWorkArea();for(int id:{processors,parameters,mode,details})combo(id);append(mode,L"Recent seconds");append(mode,L"Latest pattern pass");choose(mode,0);for(auto s:{L"Sources",L"Recent changes",L"Recorded points"})append(details,s);choose(details,0);
     add(items,L"LISTBOX",L"Parameter activity details",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_HSCROLL);edit(time,L"0",40);edit(value,L"0",40);

@@ -746,3 +746,46 @@ blocks deletion. New native checks require exact unrelated-lane preservation,
 Undo deletion restoring the edited value, the following Undo restoring the
 original value, and invalid raw input retained without changes. This is part of
 the same pending checkpoint; no extra build/test cycle has run for these edits.
+
+## 20:45 UTC continuation: recorded activity selection and read-time input
+
+Current Windows `ParameterActivityWindow::commit` reread the lane and always
+selected its first row. Mac `ParameterActivityEditor.loadRecorded` already
+retains the edited frame identity. Windows now selects the accepted frame after
+value/time edits, including sorting past another point; deletion or a move
+outside the visible page leaves no selection rather than redirecting the next
+edit to another point. This does not change the shared edit API or storage.
+
+A new actual-app journey against the retained579 x64 binary initially found
+the requested value had not been saved. A diagnostic rerun with full activity
+state reached the confirmed first-row selection failure. Both failed receipts
+are retained in `activity-selection/` and `activity-selection-diagnostic/`.
+Source inspection found Save/Delete clicks were silently ignored while the
+observation read pumped native messages. The correction retains one explicit
+point action during observation, then dispatches after that read with the same
+draft generation. It never queues a second mutation from inside a mutation or
+replays a submitted uncertain outcome. Changed fields refuse the deferred edit;
+Save/history/close drain an already requested action without submitting raw
+fields that have never been accepted explicitly.
+
+The native activity group now exercises a Save pumped inside an observation,
+project-Save draining exactly once, changed raw input refused, a later-row value
+edit, time reorder, deletion and unrelated-point preservation. The actual-app
+journey checks accepted point values/timestamps and selection, exact other-lane
+preservation, Undo/Redo, continuous playback and save/reopen. It awaits accepted
+state without repeating native input. These new assertions and product changes
+remain unbuilt. Include `parameter-activity-window-tests` in the existing build:
+the next local gate becomes **six native groups and seven app cases**, and the
+same Windows CI integration step becomes117 cases. Fresh Computer Use must also
+inspect Activity recorded-point selection after editing a later row.
+
+Intel579 job120624496559 is now fully passed:134 CTests, native interface and
+socket/typed checks. Its actual BlackHole2ch512 device lifecycle passed live
+Keep/Undo/Redo/release/Discard and save/reopen (frames16384→19456,
+callbacks32→38). Downloaded log SHA256:
+`ecaaf84ce35ce71a55d4665e6681a09675eb417f0312c63850a500b829204db1`.
+Both Mac architectures therefore cover this required device fixture on the
+tree-identical579 CI merge. AU stopped-only restoration, arbitrary vendors,
+physical hardware and sustained performance remain separate limits. Do not
+repeat either completed Mac job. The next hourly gate is still20:53:46 UTC,
+subject to a fresh check for later starts. No newer package or merge is qualified.

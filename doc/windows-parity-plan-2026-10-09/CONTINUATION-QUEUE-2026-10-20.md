@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 20:45 UTC continuation:** both579 Mac architectures fully passed,
+including the actual BlackHole512 live take lifecycle. Windows Activity still
+reset edited points to row zero and dropped Save/Delete during observation;
+the next batch now includes guarded deferred input and stable-frame selection.
+Two failing baseline receipts are retained. The next local checkpoint is **six
+native groups/seven app cases**, including the native activity target and its
+live selection/history/reopen journey, followed by fresh Computer Use. Resolve
+the newest unexecuted freeze; do not use the previous five/six selection. The
+hourly gate remains20:53:46 UTC; source is not yet built or packaged.
+
 **23 October 20:35 UTC continuation:** the same unbuilt batch now completes
 valid queued fields before Delete point/Clear lane, with exact two-step history
 and unrelated-lane assertions. The QA report retains existing wake-gap/buffer/

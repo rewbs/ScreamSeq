@@ -140,12 +140,14 @@
         ScreamSeq::NativeControls::text(window,title);
     }
     bool queuedMusicalEdit()const{return (preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit())||
-        (absoluteAutomationWindow&&absoluteAutomationWindow->queuedMusicalEdit());}
+        (absoluteAutomationWindow&&absoluteAutomationWindow->queuedMusicalEdit())||
+        (parameterActivityWindow&&parameterActivityWindow->queuedMusicalEdit());}
     bool canUndoSong()const{return view->session.document.value("canUndo",false)||queuedMusicalEdit();}
     bool canRedoSong()const{return view->session.document.value("canRedo",false)&&!queuedMusicalEdit();}
     Json edit(const std::string &method,Json params) {
         if(preciseNoteWindow&&(method=="history.undo"||method=="history.redo"))preciseNoteWindow->flushForHistory();
         if(absoluteAutomationWindow&&(method=="history.undo"||method=="history.redo"))absoluteAutomationWindow->flushForHistory();
+        if(parameterActivityWindow&&(method=="history.undo"||method=="history.redo"))parameterActivityWindow->flushForHistory();
         params["expectedRevision"]=view->session.revision;
         return documentOperation(method,params);
     }
@@ -309,6 +311,7 @@
         if(!protectRecordingTake())return false;
         if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
         if(absoluteAutomationWindow)absoluteAutomationWindow->flushForProjectSave();
+        if(parameterActivityWindow)parameterActivityWindow->flushForProjectSave();
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         const auto document=documentId;auto revision=view->session.revision;auto path=view->path;

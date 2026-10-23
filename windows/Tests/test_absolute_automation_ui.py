@@ -177,5 +177,62 @@ class AbsoluteAutomationUITests(unittest.TestCase):
     def test_vst3_absolute_lane_changes_audio_and_preserves_opaque_state(self):
         descriptor=next(p for p in self.read('plugin.discover',format='VST3') if p['classID']=='5245534F4E414E434546464543540001');self.audio_curve(descriptor,7,'absolute-vst3',[(0,.125),(9600,.75),(24000,.5)])
 
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_activity_recorded_selection_survives_value_time_history_and_reopen(self):
+        plugin=self.add_gain();self.route_master(plugin)
+        points=[dict(frame=24000,value=-12),dict(frame=36000,value=-6),dict(frame=48000,value=-3)]
+        self.write('automation.replaceLane',slot=0,id=1,points=points)
+        self.write('automation.replaceLane',slot=0,id=2,points=[dict(frame=12000,value=25)])
+        source=self.folder/'activity-source.screamseq';self.write('document.save',path=str(source))
+        self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop','--automation','--seconds','120','--project',str(source),'--vst3-test-cache',str(self.cache)])
+        self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        for _ in range(100):
+            try:
+                if self.read('transport.get')['audioActive']:break
+            except TransportError:pass
+            time.sleep(.1)
+        else:self.fail('silent activity app did not start')
+        transport=self.read('transport.get');baseline=self.read('automation.get');opaque=self.read('plugin.state.get',plugin=plugin)
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,575)
+        kind='ScreamSeq.ParameterActivity';owner=self.window(kind)
+        state=lambda:self.read('workspace.get')['parameterActivity']
+        control=lambda identifier:self.control(identifier,kind)
+        def choose(identifier,index):
+            handle=control(identifier);self.desktop.send(handle,0x186 if identifier==11007 else 0x14E,index)
+            self.desktop.send(owner,0x111,identifier|(1<<16),handle)
+        def press(identifier):self.desktop.send(owner,0x111,identifier,control(identifier))
+        def accepted(expected):
+            deadline=time.monotonic()+12
+            while time.monotonic()<deadline:
+                current=self.read('automation.get');local=state()
+                if current==expected and not local['fieldDraft'] and not local['pending']:return
+                time.sleep(.025)
+            self.fail(dict(expected=expected,actual=current,activity=local))
+        parameter=next(i for i,p in enumerate(state()['parameters']) if p['id']==1)
+        choose(11001,parameter);choose(11006,2);choose(11007,1)
+        self.assertEqual(state()['selectedPoint'],1)
+        self.field(11016,-9,kind);press(11013)
+        edited=json.loads(json.dumps(baseline))
+        for point in edited['points']:
+            if point['id']==1 and point['frame']==36000:point['value']=-9
+        accepted(edited);self.assertEqual(state()['selectedPoint'],1,state())
+        self.field(11015,1.25,kind);press(11013)
+        moved=json.loads(json.dumps(edited))
+        for point in moved['points']:
+            if point['id']==1 and point['frame']==36000:point['frame']=60000
+        moved['points'].sort(key=lambda p:p['frame'])
+        accepted(moved)
+        self.assertEqual(state()['selectedPoint'],2);self.assertEqual(state()['recorded'][2],dict(frame=60000,value=-9))
+        self.assertEqual(state()['rawTime'],'1.25');self.assertEqual(float(state()['rawValue']),-9)
+        self.write('history.undo');self.assertEqual(self.read('automation.get'),edited)
+        self.write('history.redo');self.assertEqual(self.read('automation.get'),moved)
+        destination=self.folder/'activity-edited.screamseq';self.write('document.save',path=str(destination))
+        after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive'])
+        self.assertEqual(after['playbackEpoch'],transport['playbackEpoch']);self.assertGreater(after['frames'],transport['frames'])
+        self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
+        self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
+        self.write('transport.stop');self.write('document.open',path=str(destination),discard=True)
+        self.assertEqual(self.read('automation.get'),moved);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
+
 
 if __name__=='__main__':unittest.main()

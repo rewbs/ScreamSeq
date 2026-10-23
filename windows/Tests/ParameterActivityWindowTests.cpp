@@ -24,7 +24,7 @@ void run(){
         {{"sequence",2},{"seconds",.6},{"value",.9},{"minimum",-.9},{"maximum",.9},{"pattern",0},{"order",0},{"position",128},{"source",{{"kind","graph-source"},{"id","n99"}}}},
         {{"sequence",3},{"seconds",.7},{"value",-.25},{"minimum",-.25},{"maximum",-.25},{"pattern",0},{"order",0},{"position",256},{"source",{{"kind","recorded"}}}}}):Json::array()},{"cursor",3},{"dropped",0},{"active",true}};
       if(method=="automation.recorded.get")return {{"points",lane},{"offset",0},{"total",lane.size()},{"sampleRate",48000}};
-      if(method=="automation.recorded.edit"){require(p.at("expectedRevision")==context.revision,"Stale write reached callback");++edits;const auto original=p.at("frame");lane.erase(std::remove_if(lane.begin(),lane.end(),[&](const auto &v){return v.at("frame")==original;}),lane.end());if(!p.value("remove",false))lane.push_back({{"frame",p.value("newFrame",original)},{"value",p.at("value")}});context.revision="r"+std::to_string(edits+2);return {{"wouldChange",true}};}
+      if(method=="automation.recorded.edit"){require(p.at("expectedRevision")==context.revision,"Stale write reached callback");++edits;const auto original=p.at("frame");lane.erase(std::remove_if(lane.begin(),lane.end(),[&](const auto &v){return v.at("frame")==original;}),lane.end());if(!p.value("remove",false))lane.push_back({{"frame",p.value("newFrame",original)},{"value",p.at("value")}});std::sort(lane.begin(),lane.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});context.revision="r"+std::to_string(edits+2);return {{"wouldChange",true}};}
       throw std::runtime_error("Unexpected activity request");
     };
     ScreamSeq::ParameterActivityWindow tool(owner,request,[&]{return context;},[&](const Json &v){navigation=v;});
@@ -66,6 +66,37 @@ void run(){
     SetWindowTextW(GetDlgItem(window,11016),L"0.5");const auto commitRevision=tool.snapshot().at("expectedRevision");
     pump=[&](const std::string &method){if(method=="automation.recorded.edit")SetWindowTextW(GetDlgItem(toolWindow,11016),L"0.625");};click(11013);pump={};
     require(edits==2&&tool.snapshot().at("rawValue")=="0.625"&&tool.snapshot().at("fieldDraft")==true&&tool.snapshot().at("expectedRevision")==commitRevision,"Write completion erased newer raw fields or silently rebased them");
+    click(11002);
+    lane=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.625}},{{"frame",48000},{"value",.25}}});
+    context.revision="three-points";click(11002);
+    const auto itemList=GetDlgItem(window,11007);
+    SendMessageW(itemList,LB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));
+    SetWindowTextW(GetDlgItem(window,11016),L"0.75");
+    pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11013);};
+    SendMessageW(window,WM_TIMER,3,0);pump={};
+    require(edits==2&&tool.snapshot().at("fieldDraft")==true&&tool.queuedMusicalEdit(),"Polling submitted an edit reentrantly instead of retaining it");
+    tool.flushForProjectSave();SendMessageW(window,WM_TIMER,0x5345,0);
+    require(edits==3,"Save clicked during observation was lost or repeated");
+    require(tool.snapshot().at("selectedPoint")==1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==1&&
+      lane==Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.75}},{{"frame",48000},{"value",.25}}}),
+      "Activity value edit selected the first row or changed a different point");
+    SetWindowTextW(GetDlgItem(window,11015),L"1.25");click(11013);
+    require(tool.snapshot().at("selectedPoint")==2&&SendMessageW(itemList,LB_GETCURSEL,0,0)==2&&
+      tool.snapshot().at("rawTime")=="1.25"&&tool.snapshot().at("rawValue")=="0.75"&&
+      lane==Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.25}},{{"frame",60000},{"value",.75}}}),
+      "Activity time edit lost its stable point identity after sorting");
+    click(11014);
+    require(tool.snapshot().at("selectedPoint")==-1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==-1&&
+      lane==Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.25}}}),
+      "Activity deletion redirected selection or removed an unrelated point");
+    SendMessageW(itemList,LB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));
+    const auto beforeDeferred=lane;const auto beforeDeferredEdits=edits;
+    SetWindowTextW(GetDlgItem(window,11016),L"0.125");
+    pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11013);};
+    SendMessageW(window,WM_TIMER,3,0);pump={};
+    SetWindowTextW(GetDlgItem(window,11016),L"0.375");SendMessageW(window,WM_TIMER,0x5345,0);
+    require(edits==beforeDeferredEdits&&lane==beforeDeferred&&tool.snapshot().at("rawValue")=="0.375"&&
+      tool.snapshot().at("fieldDraft")==true,"Deferred Save submitted changed raw input or lost its guarded draft");
     click(11002);
     context.document="other";SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("document")=="song","Changed document silently retargeted observer");
     navigation=nullptr;click(11009);require(navigation.is_null(),"Song automation action crossed a captured document boundary");
