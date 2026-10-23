@@ -1120,6 +1120,22 @@ placement and choose bottom only if hidden. Explicit V4 files use native
 placement rather than a Main `notes` identity. No song format or pattern.notes
 request semantics change.
 
+Timeline double-click inserts a hit; Backspace/Delete removes the selected
+timeline or list hit while text fields keep native deletion. Discrete gestures
+save immediately; valid typed fields save after a 300 ms typing pause. Check is
+a dry run and Save now explicitly flushes/retries a retained edit. A clean
+captured editor refreshes that same stable row after Undo/Redo or another edit,
+including when pinned or focused; unsaved/invalid fields and uncertain writes
+are never automatically rebased. `playbackOffset` is a fraction within the
+captured row, or null when transport is stopped or playing another row.
+
+Windows prepares precise-note schedules and up to 512 companion ordinary-cell
+edits off the audio callback. Their ordered publication and conversion Undo/Redo
+preserve active playback; unavailable capacity or epoch changes reject before
+document mutation. Larger conversions require stopped playback. See the
+[precise-note qualification report](../../doc/windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md)
+for source and execution status; this source contract is not a qualification claim.
+
 The native clipboard publishes Mac's `ScreamSeq Pattern 2` Unicode text format,
 including relative FX and only the referenced stable bindings. It also accepts
 legacy `Resonance Pattern 1` text. `pattern.paste` supports overwrite, merge and
@@ -1134,7 +1150,8 @@ Clipboard source and destination are captured before asynchronous work.
 The application also registers `PluginOperations`. Shared Mac method payloads
 are used for discovery, add/remove/move/bypass, parameters, saved state, buses,
 programs, sound presets and instrument aliases. Musical plugin writes require `expectedRevision`;
-`history.undo`/`history.redo` with `domain:"plugins"` use an independent history.
+`history.undo`/`history.redo` with `domain:"plugins"` use the unified chronological
+history; the domain is a compatibility alias, not a separate stack.
 The native rack uses these same transactions. The complete current inventory is
 in `api.describe`. Browser preferences use their separate library revision.
 

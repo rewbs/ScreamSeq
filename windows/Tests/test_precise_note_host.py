@@ -115,7 +115,7 @@ class PreciseNoteHostTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.open_row(row=4, channel=0)
         self.native_panel(placement='right', pinned=True, focus=True)
         owner = self.note_hwnd()
-        self.text(363, '92')
+        self.text(363, '92x')  # Invalid raw input remains a draft across Follow.
         baseline, song = self.editor(), self.doc()
         self.navigate(row=20, channel=1, following=False)
         state = self.state()

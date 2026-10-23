@@ -346,8 +346,11 @@ remove, duplicate, retrigger, arrow nudges and completed drags save immediately;
 valid field edits save after a 300 ms typing pause. Check validates; Save now
 flushes/retries retained edits. Each save merges untouched pattern events and
 creates one document Undo step. A white playback cursor uses renderer telemetry
-only inside the captured row, independently of editing selection/focus. A stale
-draft stays visible and cannot overwrite newer music. Use target explicitly
+only inside the captured row, independently of editing selection/focus. Clean
+captured rows refresh after history or other edits, retaining their stable target
+even when pinned or focused. Unchanged selected values keep their raw formatting
+and caret; changed values update in place. A stale unsaved draft stays visible
+and cannot overwrite newer music. Use target explicitly
 reloads the notes inspector's pinned/follow target. In-flight completions preserve
 newer fields and navigation focus. The hit list is virtual; dense canvas rows
 draw 256 cached bins plus the selected event. Sparse grid lookup uses binary

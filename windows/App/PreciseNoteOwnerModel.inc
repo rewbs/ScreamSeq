@@ -62,8 +62,10 @@
     std::sort(draft_.begin(),draft_.end(),[](const auto &a,const auto &b){return a.at("position")!=b.at("position")?a.at("position")<b.at("position"):a.at("note")>b.at("note");});
     selected_=-1;density_.fill(0);for(size_t i=0;i<draft_.size();++i){const auto &event=draft_[i];if(event==selected)selected_=int(i);++density_[(event.at("position").get<unsigned>()%unitsPerRow)/256];}
     const auto top=SendMessageW(controls_.at(list),LB_GETTOPINDEX,0,0);
-    SendMessageW(controls_.at(list),LB_SETCOUNT,draft_.size(),0);ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);
-    if(top>=0&&!draft_.empty())ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETTOPINDEX,std::min<size_t>(size_t(top),draft_.size()-1),0);
+    if(SendMessageW(controls_.at(list),LB_GETCOUNT,0,0)!=LRESULT(draft_.size()))SendMessageW(controls_.at(list),LB_SETCOUNT,draft_.size(),0);
+    if(SendMessageW(controls_.at(list),LB_GETCURSEL,0,0)!=selected_)ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);
+    if(top>=0&&!draft_.empty()){const auto nextTop=std::min<size_t>(size_t(top),draft_.size()-1);
+      if(SendMessageW(controls_.at(list),LB_GETTOPINDEX,0,0)!=LRESULT(nextTop))ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETTOPINDEX,nextTop,0);}
     if(fields)loadFields();InvalidateRect(controls_.at(list),nullptr,FALSE);requestPaint();
   }
   bool collision(const Json &item,int except=-1)const{
@@ -153,14 +155,15 @@
   void adopt(Candidate next,Json selectionHint=nullptr){
     cancelAutomaticEdit();
     playbackOffset_.reset();
+    const bool changedEffects=effects_!=next.effects,changedNames=names_!=next.context.noteNames;
     // Candidate parsing and all context/generation guards finish before native fields change.
     target_=std::move(next.target);document_=std::move(next.context.document);revision_=std::move(next.context.revision);names_=std::move(next.context.noteNames);
     insertionInstrument_=next.context.insertionInstrument;rows_=next.rows;rowsPerBeat_=next.rowsPerBeat;events_=std::move(next.events);draft_=std::move(next.draft);effects_=std::move(next.effects);
     moveLegacyEffect_=next.moveLegacyEffect;initialized_=true;
-    {Setting guard(setting_);ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_RESETCONTENT,0,0);
+    {Setting guard(setting_);if(changedEffects){ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_RESETCONTENT,0,0);
       for(const auto &effect:effects_){const auto text=wide(effect.at("displayCode").get<std::string>()+"  "+effect.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-      ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_RESETCONTENT,0,0);for(unsigned n=1;n<=122;++n){const auto value=n<=120?n:n==121?255:254;const auto text=noteName(value);
-        const auto index=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,index,value);}}
+      }if(changedNames){ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_RESETCONTENT,0,0);for(unsigned n=1;n<=122;++n){const auto value=n<=120?n:n==121?255:254;const auto text=noteName(value);
+        const auto index=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,index,value);}}}
     // A successful explicit recapture resets row-conversion intent, but keeps
     // raw retrigger options and their baseline. Invalid option text stays dirty.
     toolsBaseline_["replaceLegacy"]=replaceLegacy_;

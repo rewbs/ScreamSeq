@@ -134,3 +134,36 @@ foreground helper prepares only a disposable, silent row-loop process; verify
 real double-click, Backspace, typing and Tab/Shift+Tab, cursor advancement and
 unchanged transport. Preserve the musician's running c900 package/process.
 The previous usable executable does **not** include these timeline changes.
+
+## Source continuation: editing after Undo without Reload
+
+Source inspection found `followWorkspaceEditors` deliberately skipped pinned or
+focused owners. After immediate saves this left a clean precise editor stale
+following Undo/Redo, and the initial live journey explicitly clicked Reload to
+continue. The next source revision removes that interruption: before cursor
+following, a visible clean precise owner refreshes its **existing stable target**
+when the same document revision changes. Pinning still prevents retargeting to
+another cursor row. Dirty/invalid fields, pending writes, drags, changed documents
+and an open selector prevent the implicit refresh. The read retains the existing
+context/generation guards; it cannot adopt over newer input during a pumped read.
+
+Unchanged selected events keep their raw numeric formatting; changed values
+update with field focus and a clamped caret preserved. Empty rows retain their
+captured insertion sound. Effect/pitch catalogues and unchanged virtual-list
+count/selection/scroll are no longer rebuilt on every refresh. Timeline painting
+uses the existing native curve palette and focus border, including Windows
+contrast colors; release markers are hollow so they differ from onsets by shape
+as well as color. Actual contrast-mode presentation is still unqualified.
+
+Native regression additions cover fixed-target refresh, unchanged formatting,
+caret, changed musical values, editing after refresh, unrelated row preservation,
+invalid drafts, document identity and empty-row sound retention. The actual live
+journey now requires a current editor after Undo/Redo, updated hit counts/values
+and retained field focus **without** Reload between history and the next edit.
+The retained-draft host fixture uses invalid `92x` rather than a valid value that
+now correctly autosaves. Its exact preservation/navigation assertions remain.
+
+At 06:14:30 UTC the original f28 Mac ARM compilation passed; its tests, Mac Intel
+and Windows x64 jobs were still running. No additional build or test ran for this
+continuation; only source review, whitespace validation and Python syntax parsing.
+Include this revision in the existing next checkpoint rather than adding a build.

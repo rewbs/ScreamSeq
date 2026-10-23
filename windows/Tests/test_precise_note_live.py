@@ -56,11 +56,15 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.write('history.undo', domain='all')
         self.assertEqual(self.cells(), before_cells)
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [other])
+        self.assertFalse(self.editor()['stale'])
+        self.assertEqual((self.editor()['row'], self.editor()['channel']), (4, 0))
         continuous()
         self.write('history.redo', domain='all')
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], converted)
+        self.assertFalse(self.editor()['stale'])
+        self.assertEqual(self.editor()['selectedEvent']['velocity'], 96)
+        self.assertEqual(self.desktop.focus(field), field)
         continuous()
-        self.command(9203)  # Reconcile explicit external history with captured row.
 
         positions = set()
         deadline = time.monotonic() + 4
@@ -90,7 +94,10 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         continuous()
         self.write('history.undo', domain='all')
         self.assertIn(inserted, self.read('pattern.notes.get', pattern=0)['events'])
+        self.assertEqual(self.editor()['draftCount'], 2)
         self.write('history.redo', domain='all')
+        self.assertEqual(self.editor()['draftCount'], 1)
+        self.assertFalse(self.editor()['stale'])
         continuous()
         final = self.read('pattern.notes.get', pattern=0)
         final_cells = self.cells()

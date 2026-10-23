@@ -164,6 +164,32 @@ public:
     require(hasTarget()&&!pending_&&!dragging_,"Choose a captured row while the editor is ready");const auto now=context_();
     require(now.document==document_,"Document changed / Load selection to capture the new song");load(now,resolve(now,target_),false);
   }
+  bool refreshCleanCaptured(){
+    // Pin/focus retain the addressed row, not an obsolete version of its music.
+    // Never rebase unsaved text, a drag, or an uncertain submitted operation.
+    if(!visible()||!hasTarget()||retainedDraft())return false;
+    const auto now=context_();if(now.busy||now.document!=document_||now.revision==revision_)return false;
+    for(int id:{pitch,units,snap,localEffect})if(SendMessageW(controls_.at(id),CB_GETDROPPEDSTATE,0,0))return false;
+    const auto previous=selected_>=0?draft_.at(size_t(selected_)):Json();
+    const auto raw=pointRaw();const auto beat=rowsPerBeat_,insertion=insertionInstrument_;const auto focused=GetFocus();
+    const int focusedID=GetDlgCtrlID(focused);DWORD first=0,last=0;
+    const bool edit=owns(focused)&&(focusedID==instrument||focusedID==velocity||focusedID==offset||focusedID==parameter);
+    if(edit)SendMessageW(focused,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    load(now,resolve(now,target_),false);
+    insertionInstrument_=insertion;
+    if(selected_<0){Setting guard(setting_);set(instrument,std::to_wstring(insertion));pointBaseline_=pointRaw();}
+    const auto selected=selected_>=0?draft_.at(size_t(selected_)):Json();
+    if(previous==selected&&beat==rowsPerBeat_){
+      // Unrelated edits need a fresh replacement baseline, not reformatted text.
+      Setting guard(setting_);for(auto [id,key]:std::initializer_list<std::pair<int,const char *>>{
+        {instrument,"instrument"},{velocity,"velocity"},{offset,"offset"},{parameter,"parameter"}})
+        set(id,wide(raw.at(key).get<std::string>()));
+      pointBaseline_=pointRaw();
+    }
+    if(edit&&GetFocus()==focused){const auto length=DWORD(GetWindowTextLengthW(focused));
+      SendMessageW(focused,EM_SETSEL,std::min(first,length),std::min(last,length));}
+    return true;
+  }
   void observeContext(){const auto now=context_();if(now.document==observedDocument_&&now.revision==observedRevision_)return;
     observedDocument_=now.document;observedRevision_=now.revision;layout();requestPaint();}
   void hide()override{cancelDrag();if(automaticEdit_)flushAutomaticEdit();

@@ -69,22 +69,26 @@
     if(focused&&IsChild(window_,focused)&&!IsWindowVisible(focused)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))focusPage();
   }
   void paint(RenderSurface &surface)override{
-    const auto [w,h]=size();surface.fill(0,0,w,h,0x18222d);
-    if(page_==2){surface.uiText(L"Load selection replaces edits after a successful read.",8,174,w-16,0x94a4b4);return;}
+    const auto colors=NativeControls::curveColors();const auto [w,h]=size();
+    surface.fill(0,0,w,h,NativeControls::renderColor(NativeControls::colors(NativeControls::Surface::inspector,colors.contrast).background));
+    if(page_==2){surface.uiText(L"Load selection replaces edits after a successful read.",8,174,w-16,colors.text);return;}
     if(!canvasVisible_)return;
-    const auto r=plot_;constexpr UINT32 accent=0x6edac5,gold=0xdcb971;
+    const auto r=plot_;
     const auto beat=hasTarget()?L"Beat "+std::to_wstring(target_.row/rowsPerBeat_+1)+L" / row "+std::to_wstring(target_.row%rowsPerBeat_+1)+L" of "+std::to_wstring(rowsPerBeat_)+L" / 0–"+decimal(1.0/rowsPerBeat_,5)+L" beat = 1 row":L"Captured row timing";
-    surface.uiText(beat,r.x,80,r.w,0x94a4b4);surface.fill(r.x,r.y,r.w,r.h,0x101820);
-    for(unsigned i=0;i<=4;++i){const auto x=r.x+r.w*i/4;surface.line(x,r.y,x,r.y+r.h,i==0?accent:0x2b3a48);}
-    for(unsigned i=1;i<=3;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x22313f);
+    surface.uiText(beat,r.x,80,r.w,colors.text);surface.fill(r.x,r.y,r.w,r.h,colors.background);
+    for(unsigned i=0;i<=4;++i){const auto x=r.x+r.w*i/4;surface.line(x,r.y,x,r.y+r.h,i==0?colors.curve:colors.grid);}
+    for(unsigned i=1;i<=3;++i)surface.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);
     surface.clip(r.x-6,r.y-6,r.w+12,r.h+12);
-    auto marker=[&](const Json &event,bool selected){const auto [x,y]=point(event);const auto color=selected?gold:event.at("note").get<unsigned>()>=128?0xc398e6:accent;
-      surface.line(x,r.y+r.h,x,y,color);surface.fill(x-3,y-3,6,6,color);if(selected)surface.outline(x-5,y-5,10,10,0xf1e6c9);};
+    auto marker=[&](const Json &event,bool selected){const auto [x,y]=point(event);const bool release=event.at("note").get<unsigned>()>=128;
+      const auto color=selected?colors.selected:release?colors.release:colors.point;
+      surface.line(x,r.y+r.h,x,y,color);
+      if(release)surface.outline(x-3,y-3,6,6,color);else surface.fill(x-3,y-3,6,6,color);
+      if(selected)surface.outline(x-5,y-5,10,10,colors.curve);};
     if(draft_.size()<=512){for(size_t i=0;i<draft_.size();++i)if(int(i)!=selected_)marker(draft_[i],false);}
     else{const auto maximum=*std::max_element(density_.begin(),density_.end());for(size_t i=0;i<density_.size();++i)if(density_[i]){
-      const auto height=r.h*float(density_[i])/std::max(uint32_t(1),maximum);surface.fill(r.x+float(i)*r.w/256,r.y+r.h-height,std::max(1.f,r.w/256),height,0x387a72);}}
+      const auto height=r.h*float(density_[i])/std::max(uint32_t(1),maximum);surface.fill(r.x+float(i)*r.w/256,r.y+r.h-height,std::max(1.f,r.w/256),height,colors.curve);}}
     if(selected_>=0)marker(draft_.at(size_t(selected_)),true);
-    if(playbackOffset_){const auto x=r.x+float(*playbackOffset_)*r.w;surface.fill(x-1,r.y,2,r.h,0xf3f7fa);surface.fill(x-4,r.y,8,4,0xf3f7fa);}
+    if(playbackOffset_){const auto x=r.x+float(*playbackOffset_)*r.w;surface.fill(x-1,r.y,2,r.h,colors.playback);surface.fill(x-4,r.y,8,4,colors.playback);}
     surface.unclip();
-    surface.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?accent:0x334757);surface.uiText(L"127",8,r.y-3,30,0x94a4b4);surface.uiText(L"1",8,r.y+r.h-15,30,0x94a4b4);
+    paintCurveBorder(surface,r,GetFocus()==window_,colors);surface.uiText(L"127",8,r.y-3,30,colors.text);surface.uiText(L"1",8,r.y+r.h-15,30,colors.text);
   }

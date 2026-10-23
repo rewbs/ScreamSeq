@@ -279,6 +279,36 @@ void automaticAdmissionAndUncertainReply(Owner &owner){
     require(!f.tool.retainedDraft()&&f.tool.snapshot().at("selectedEvent").at("velocity")==94,"Explicit recapture did not reconcile the acknowledged song state");
   }
 }
+void cleanCapturedRevisionRefresh(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"093");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  const auto hit=[&](unsigned position)->Json &{auto &events=f.saved.at("pattern-a");
+    const auto found=std::find_if(events.begin(),events.end(),[&](const auto &event){return event.at("channel")==0&&event.at("position")==position;});
+    require(found!=events.end(),"Revision refresh fixture lost its addressed event");return *found;};
+  const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,2);
+  f.selectB(); // Pinned/focused refresh must keep pattern A, row 2.
+  hit(3*units+100)["velocity"]=51;f.current.revision="r"+std::to_string(++f.revision);
+  const auto reads=f.reads,writes=f.writes;
+  require(f.tool.refreshCleanCaptured()&&f.reads==reads+1&&f.writes==writes&&f.tool.capturedCurrent(),"Clean capture did not refresh its replacement baseline without writing");
+  require(text(field)==L"093"&&caret(field)==std::pair<DWORD,DWORD>{1,2}&&GetFocus()==field&&!f.tool.retainedDraft(),"Unrelated revision reformatted the clean focused field or lost its caret");
+  require(f.tool.capturedTarget()->patternID=="pattern-a"&&f.tool.capturedTarget()->row==2,"Revision refresh followed the unrelated pattern cursor");
+  // Undo/Redo changes the selected event's musical value, and its visible field
+  // follows without requiring Reload captured or stealing keyboard ownership.
+  hit(2*units+16384)["velocity"]=71;f.current.revision="r"+std::to_string(++f.revision);
+  require(f.tool.refreshCleanCaptured()&&text(field)==L"71"&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},"Clean history refresh left stale music or lost native field focus");
+  f.field(Tool::velocity,L"72");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(hit(2*units+16384).at("velocity")==72&&hit(3*units+100).at("velocity")==51&&!f.tool.retainedDraft(),"Editing after refresh required reload or overwrote another row");
+  f.field(Tool::velocity,L"72x");const auto retainedDraft=retained(f.tool.snapshot());
+  f.current.revision="r"+std::to_string(++f.revision);const auto draftReads=f.reads;
+  require(!f.tool.refreshCleanCaptured()&&f.reads==draftReads&&retained(f.tool.snapshot())==retainedDraft,"Revision refresh rebased or discarded invalid raw input");
+  f.tool.reloadCaptured();const auto captured=retained(f.tool.snapshot());f.current.document="other-document";
+  require(!f.tool.refreshCleanCaptured()&&retained(f.tool.snapshot())==captured,"Clean captured refresh crossed document identity");
+  Fixture blank(owner.window,false);blank.saved.at("pattern-a")=Json::array();blank.current.insertionInstrument=2;blank.tool.openAt();blank.dock(owner.window);
+  blank.current.insertionInstrument=3;blank.current.revision="r"+std::to_string(++blank.revision);
+  require(blank.tool.refreshCleanCaptured()&&text(blank.control(Tool::instrument))==L"2","Unrelated revision changed the captured empty-row insertion sound");
+  blank.click(Tool::addHit);blank.click(Tool::removeHit);
+  require(text(blank.control(Tool::instrument))==L"2"&&!blank.tool.retainedDraft(),"Removing a hit exposed a later uncaptured sound after refresh");
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -525,6 +555,7 @@ int wmain(int argc,wchar_t **argv){try{
     nativeTimelineKeysDragAndCancel(owner);std::cout<<"PASS precise-note DPI-scaled timeline drag/cancel and local keyboard ownership\n";
     immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
     automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
+    cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";
