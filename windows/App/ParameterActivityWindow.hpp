@@ -48,9 +48,9 @@ private:
     set(pageLabel,page_==2?std::to_wstring(offset_)+L"–"+std::to_wstring(offset_+recorded_.size())+L" of "+std::to_wstring(total_)+L" recorded points":std::to_wstring(listed_.size())+L" entries");}
   struct RecordedRead {Json points=Json::array();size_t offset=0,total=0;int selected=-1;};
   struct SourcesRead {Json sources=Json::array();std::wstring rule;};
-  void guardRead(const Context &c,uint64_t generation)const {
+  void guardRead(const Context &c,std::optional<uint64_t> generation)const {
     const auto now=context_();require(c.document==now.document&&c.revision==now.revision,"Song changed while reading / captured fields retained; Refresh");
-    require(generation==generation_,"Newer point fields retained; Refresh again when ready");
+    require(!generation||*generation==generation_,"Newer point fields retained; Refresh again when ready");
   }
   RecordedRead readRecorded(const std::string &plugin,std::optional<uint32_t> parameter,size_t offset,const Context &c,uint64_t generation) {
     RecordedRead result; if(plugin.empty()||!parameter)return result;
@@ -60,7 +60,7 @@ private:
     for(const auto &p:result.points){(void)p.at("frame").get<uint64_t>();require(std::isfinite(p.at("value").get<double>()),"Invalid recorded value");}
     result.selected=result.points.empty()?-1:0;return result;
   }
-  SourcesRead readSources(const std::string &target,std::optional<uint32_t> parameter,const Context &c,uint64_t generation) {
+  SourcesRead readSources(const std::string &target,std::optional<uint32_t> parameter,const Context &c,std::optional<uint64_t> generation) {
     SourcesRead result;if(!parameter)return result;
     auto r=request_("parameter.activity.sources",{{"target",target},{"parameter",*parameter}});guardRead(c,generation);result.sources=r.at("sources");result.rule=wide(r.at("rule").get<std::string>());
     require(result.sources.is_array(),"Incomplete parameter sources");for(const auto &s:result.sources){(void)s.value("title",std::string());(void)s.value("enabled",true);}return result;
@@ -94,13 +94,16 @@ private:
   }
   void poll(){if(!visible()||pending_||frozen_||!parameter_||context_().busy)return;beginPending();polling_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{polling_};try{
-    const auto c=context_();const auto generation=generation_;require(c.document==captured_.document,"Song changed / captured observer retained; Refresh");
-    const auto r=request_("parameter.activity.get",{{"after",cursor_},{"limit",2048}});guardRead(c,generation);
+    const auto c=context_();require(c.document==captured_.document,"Song changed / captured observer retained; Refresh");
+    // Observation never adopts the recorded lane or its editable fields. Typing
+    // during a pumped read must not freeze the trace. Document/revision/watch
+    // guards still apply; reads which adopt fields retain their generation guard.
+    const auto r=request_("parameter.activity.get",{{"after",cursor_},{"limit",2048}});guardRead(c,std::nullopt);
     require(r.at("token")==token_&&!r.at("target").is_null()&&r.at("target").at("key")==target_&&r.at("parameter")==*parameter_,"Prepared processor or API watch changed / Refresh to observe again");
     const auto cursor=r.at("cursor").get<uint64_t>(),dropped=r.at("dropped").get<uint64_t>();const auto active=r.at("active").get<bool>();auto next=points_;
     require(r.at("points").is_array()&&r.at("points").size()<=2048,"Incomplete parameter activity page");
     for(const auto &p:r.at("points")){for(const auto *key:{"seconds","value","minimum","maximum"})require(std::isfinite(p.at(key).get<double>()),"Invalid activity value");(void)p.at("pattern");(void)p.at("order");(void)p.at("position");(void)p.at("source").at("kind").get<std::string>();next.push_back(p);}
-    while(next.size()>8192)next.pop_front();std::optional<SourcesRead> sourceData;if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,generation);guardRead(c,generation);
+    while(next.size()>8192)next.pop_front();std::optional<SourcesRead> sourceData;if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,std::nullopt);guardRead(c,std::nullopt);
     points_=std::move(next);cursor_=cursor;dropped_=dropped;active_=active;if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}if(page_==1)list();requestPaint();pending_=false;
   }catch(const std::exception &e){pending_=false;frozen_=true;set(freeze,L"Resume");error(e);}}
   void commit(bool remove){

@@ -144,8 +144,19 @@ void applicationAutomaticEdits(){
       const auto valueField=GetDlgItem(window,4609),indexField=GetDlgItem(window,4605);
       SetWindowTextW(indexField,L"0");press(window,4626);
       const auto clickPoint=[&](size_t index){const auto handle=lane.snapshot().at("handles")[index];const auto scale=GetDpiForWindow(window)/96.;
-        const auto xy=MAKELPARAM(int(std::lround(handle.at("x").get<double>()*scale)),int(std::lround(handle.at("y").get<double>()*scale)));
-        SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,xy);SendMessageW(window,WM_LBUTTONUP,0,xy);};
+        const auto x=int(std::lround(handle.at("x").get<double>()*scale)),y=int(std::lround(handle.at("y").get<double>()*scale));
+        const auto xy=MAKELPARAM(x,y);
+        SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,xy);
+        SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,xy);
+        SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,MAKELPARAM(x+1,y-1));
+        SendMessageW(window,WM_MOUSEMOVE,0,MAKELPARAM(x+20,y-20));
+        SendMessageW(window,WM_LBUTTONUP,0,xy);};
+      const auto clickRevision=app.view->session.revision;
+      clickPoint(1);lane.flushForProjectSave();
+      restoreCheck(lane.snapshot().at("selectedPoint")==1&&lane.snapshot().at("points")==late&&
+        app.view->session.revision==clickRevision&&app.documentOperation("automation.get",Json::object())==baseline,
+        "Selecting a recorded point snapped its time/value or added history from stationary/jitter mouse moves");
+      SetWindowTextW(indexField,L"0");press(window,4626);
       SetFocus(valueField);SetWindowTextW(valueField,L"-9");clickPoint(1);
       auto expected=late;expected[0]["value"]=-9.;
       restoreCheck(lane.snapshot().at("selectedPoint")==1&&lane.snapshot().at("points")==expected&&GetFocus()==window&&
@@ -157,6 +168,19 @@ void applicationAutomaticEdits(){
         "Timeline selection bypassed an invalid raw point or stole its field focus");
       SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);app.edit("history.undo",{{"domain","all"}});press(window,4615);
       restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Clicking after a field edit added history or changed unrelated points");
+      const auto handle=lane.snapshot().at("handles")[1];const auto scale=GetDpiForWindow(window)/96.;
+      const auto x=int(std::lround(handle.at("x").get<double>()*scale)),y=int(std::lround(handle.at("y").get<double>()*scale));
+      const auto origin=MAKELPARAM(x,y),destination=MAKELPARAM(x-int(20*scale),y-int(20*scale));
+      SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,origin);SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,destination);
+      restoreCheck(lane.snapshot().at("points")!=late,"Recorded point drag stopped rendering after the native drag threshold");
+      SendMessageW(window,WM_LBUTTONUP,0,destination);lane.flushForProjectSave();
+      const auto dragged=app.documentOperation("automation.get",Json::object());
+      restoreCheck(dragged!=baseline&&!lane.snapshot().at("dirty").get<bool>(),"Recorded drag did not automatically publish its changed point");
+      app.edit("history.undo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Recorded drag did not restore exact unrelated music in one Undo");
+      app.edit("history.redo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==dragged,"Recorded drag Redo did not restore the accepted lane");
+      app.edit("history.undo",{{"domain","all"}});press(window,4615);
     }
     {
       const auto list=GetDlgItem(window,4603),valueField=GetDlgItem(window,4609),units=GetDlgItem(window,4604);

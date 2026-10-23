@@ -102,6 +102,34 @@ void run(){
     require(edits==beforeDeferredEdits&&lane==beforeDeferred&&tool.snapshot().at("rawValue")=="0.375"&&
       tool.snapshot().at("fieldDraft")==true,"Deferred Save submitted changed raw input or lost its guarded draft");
     click(11002);
+    // Observation does not own the point draft. Pumping text through either
+    // observation read must leave its lane, selection, focus and caret intact,
+    // keep consuming the trace, and never make an implicit musical edit.
+    for(const auto *read:{"parameter.activity.get","parameter.activity.sources"}) {
+      const auto beforeTyping=tool.snapshot();const auto beforeTypingLane=lane;const auto beforeTypingEdits=edits;
+      if(std::string_view(read)=="parameter.activity.sources")context.revision="observer-source-refresh";
+      SetActiveWindow(window);SetFocus(valueField);
+      pump=[&](const std::string &method){if(method==read){SetWindowTextW(valueField,L"0.8125");SendMessageW(valueField,EM_SETSEL,2,5);}};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      const auto afterTyping=tool.snapshot();SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(!afterTyping.at("frozen").get<bool>()&&!afterTyping.at("pending").get<bool>()&&
+        afterTyping.at("rawValue")=="0.8125"&&afterTyping.at("fieldDraft")==true&&
+        GetFocus()==valueField&&first==2&&last==5,"Typing during observation froze the trace or lost native text focus/caret");
+      for(const auto *key:{"recorded","selectedPoint","rawTime","expectedRevision","token"})
+        require(afterTyping.at(key)==beforeTyping.at(key),"Observation adopted or redirected a recorded-point draft");
+      require(lane==beforeTypingLane&&edits==beforeTypingEdits&&!tool.queuedMusicalEdit(),"Typing during observation submitted a musical edit");
+      SendMessageW(window,WM_TIMER,3,0);
+      require(!tool.snapshot().at("frozen").get<bool>()&&tool.snapshot().at("cursor")==3&&
+        tool.snapshot().at("pointCount")==3,"Observer did not continue consuming its cursor after typing");
+      click(11002);
+    }
+    // A real revision change during a read must still reject the snapshot.
+    const auto beforeRevisionChange=tool.snapshot();
+    pump=[&](const std::string &method){if(method=="parameter.activity.get")context.revision="changed-during-read";};
+    SendMessageW(window,WM_TIMER,3,0);pump={};
+    require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("cursor")==beforeRevisionChange.at("cursor")&&
+      tool.snapshot().at("recorded")==beforeRevisionChange.at("recorded"),"Observation bypassed its document revision guard");
+    click(11002);
     context.document="other";SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("document")=="song","Changed document silently retargeted observer");
     navigation=nullptr;click(11009);require(navigation.is_null(),"Song automation action crossed a captured document boundary");
     MINMAXINFO limits{};SendMessageW(window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));SetWindowPos(window,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);

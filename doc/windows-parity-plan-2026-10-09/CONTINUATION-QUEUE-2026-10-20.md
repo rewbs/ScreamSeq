@@ -8,6 +8,19 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 21:11 UTC continuation:**063383940 built once and passed five/six
+native groups. All automatic-edit assertions passed inside the remaining
+group, which hit its cumulative90-second private-child limit. Seven separate
+actual-app diagnostic journeys passed. Fresh UI found plain point selection
+snapping the recorded time/value; exact Undo and continued playback were
+observed. Source now separates command/automatic/routing groups without losing
+assertions or changing bounds, adds a native drag threshold, and prevents raw
+typing from freezing Activity observation. Next local gate is **eight groups /
+seven app cases**, then fresh UI. No build before21:54:49 UTC or while current
+CI remains active. Preserve all063 failed/diagnostic receipts; no package or
+merge. QA PID36252 exited normally. Audio still had30 overruns in315.8 seconds;
+read the latest live-parameter report for evidence and limits.
+
 **23 October 20:45 UTC continuation:** both579 Mac architectures fully passed,
 including the actual BlackHole512 live take lifecycle. Windows Activity still
 reset edited points to row zero and dropped Save/Delete during observation;

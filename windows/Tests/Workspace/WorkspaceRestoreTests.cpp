@@ -1292,9 +1292,15 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
                     timedRestoreCase("module export command and captured picker",applicationModuleExport);
-                    timedRestoreCase("automatic field edits",applicationAutomaticEdits);
-                    timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"automatic-edits") {
+                    timedRestoreCase("automatic field edits",applicationAutomaticEdits);
+                    return;
+                }
+                if(length<std::size(group)&&std::wstring_view(group)==L"routing-commands") {
+                    timedRestoreCase("mixing graph usability",applicationMixingGraphUsability);
                     timedRestoreCase("mixer instrument routing",applicationMixerInstrumentRouting);
                     timedRestoreCase("song routing ports",applicationSongRoutingPorts);
                     timedRestoreCase("song routing unknown result",applicationSongRoutingUnknownResult);

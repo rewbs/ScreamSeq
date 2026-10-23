@@ -168,6 +168,12 @@ if(BUILD_TESTING)
     set_tests_properties(workspace-asset-outcome-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=asset-outcomes" TIMEOUT 120)
     add_test(NAME workspace-command-result-tests COMMAND workspace-restore-tests)
+    add_test(NAME workspace-automatic-edit-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-automatic-edit-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=automatic-edits" TIMEOUT 120)
+    add_test(NAME workspace-routing-command-tests COMMAND workspace-restore-tests)
+    set_tests_properties(workspace-routing-command-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts"
+      ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=routing-commands" TIMEOUT 120)
     add_test(NAME workspace-scratch-editor-tests COMMAND workspace-restore-tests)
     set_tests_properties(workspace-scratch-editor-tests PROPERTIES LABELS "workspace;native-ui;private-desktop;receipts;scratch"
       ENVIRONMENT "SCREAMSEQ_WORKSPACE_TEST_GROUP=scratch-editor" TIMEOUT 120)

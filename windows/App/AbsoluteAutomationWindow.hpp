@@ -17,6 +17,7 @@ private:
   Context captured_;std::string pluginID_;std::optional<uint32_t> parameter_;size_t slot_=0;
   Json all_=Json::array(),catalog_=Json::array(),points_=Json::array();std::vector<size_t> filtered_;
   bool setting_=false,pending_=false,dirty_=false,fields_=false,dragging_=false,dragDirty_=false;int selected_=-1,unit_=0,snap_=0,dragSelected_=-1;uint64_t generation_=0;Json dragBefore_;
+  bool dragMoved_=false;float dragX_=0,dragY_=0;
   AutomationCanvas canvas_;struct Segment{AutomationCanvas::Point a,b;};std::vector<Segment> lines_;std::vector<size_t> handles_;
   void require(bool ok,const char *why)const{if(!ok)throw std::runtime_error(why);}
   bool draft()const{return dirty_||fields_;}
@@ -122,14 +123,22 @@ private:
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)fitCurve();else if(id==zoomIn||id==zoomOut)canvas_.zoom(id==zoomIn?2:.5,604801);else canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),604801);showRange();rebuild();}
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelected_;++generation_;showPoint();rebuild();ReleaseCapture();}
-  void mouse(UINT m,float x,float y,WPARAM)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
+  void mouse(UINT m,float x,float y,WPARAM w)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
     if((m==WM_LBUTTONDOWN&&hit.contains(x,y))||(m==WM_LBUTTONDBLCLK&&r.contains(x,y))){
       flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before editing the timeline");
     }
     if(fields_)return;
-    if(m==WM_LBUTTONDOWN&&hit.contains(x,y)){SetFocus(window_);const auto i=canvas_.hit(x,y);selected_=i<0?-1:int(handles_.at(size_t(i)));showPoint();if(selected_>=0&&writable()){dragBefore_=points_;dragDirty_=dirty_;dragSelected_=selected_;dragging_=true;SetCapture(window_);}rebuild();}
+    if(m==WM_LBUTTONDOWN&&hit.contains(x,y)){SetFocus(window_);const auto i=canvas_.hit(x,y);selected_=i<0?-1:int(handles_.at(size_t(i)));showPoint();if(selected_>=0&&writable()){dragBefore_=points_;dragDirty_=dirty_;dragSelected_=selected_;dragX_=x;dragY_=y;dragMoved_=false;dragging_=true;SetCapture(window_);}rebuild();}
     else if(m==WM_LBUTTONDBLCLK&&r.contains(x,y)&&writable()&&canvas_.hit(x,y)<0){selected_=-1;replacePoint({{"frame",frame(x)},{"value",native(y)}});}
-    else if(m==WM_MOUSEMOVE&&dragging_)replacePoint({{"frame",frame(x)},{"value",native(y)}});
+    else if(m==WM_MOUSEMOVE&&dragging_&&(w&MK_LBUTTON)){
+      // Capture can deliver mouse moves at the click position. Selecting a
+      // handle must preserve its exact frame/value instead of snapping to the
+      // rounded pointer pixel. Start editing only outside the native drag box.
+      const auto dpi=GetDpiForWindow(window_);const float scale=96.f/dpi;
+      if(!dragMoved_&&std::abs(x-dragX_)<GetSystemMetricsForDpi(SM_CXDRAG,dpi)*scale&&
+          std::abs(y-dragY_)<GetSystemMetricsForDpi(SM_CYDRAG,dpi)*scale)return;
+      dragMoved_=true;replacePoint({{"frame",frame(x)},{"value",native(y)}});
+    }
   }
   bool wheel(UINT m,float x,float y,WPARAM w)override{if(!canvas_.viewport.contains(x,y)||dragging_)return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w)/120.;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;if(ctrl){if(shift)canvas_.zoomValues(std::pow(1.25,delta));else canvas_.zoom(std::pow(1.25,delta),604801);}else if(shift)canvas_.panValues(delta*(canvas_.valueHigh-canvas_.valueLow)*.1);else canvas_.pan(delta*(m==WM_MOUSEHWHEEL?1:-1)*(canvas_.end-canvas_.start)*.1,604801);showRange();rebuild();return true;}
   bool key(WPARAM k,bool ctrl,bool shift)override{if(k==VK_ESCAPE){if(dragging_)cancelDrag();else if(fields_){++generation_;showPoint();}else hide();return true;}if(k==VK_F6){SetFocus(GetFocus()==window_?controls_.at(parameters):window_);requestPaint();return true;}if(ctrl&&k==VK_RETURN){action(apply,BN_CLICKED);return true;}if(ctrl&&k=='R'){action(reload,BN_CLICKED);return true;}if(k==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id==time||id==value){action(setPoint,BN_CLICKED);return true;}if(id==pointIndex){action(selectPoint,BN_CLICKED);return true;}wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(!_wcsicmp(type,L"Button")){action(id,BN_CLICKED);return true;}}

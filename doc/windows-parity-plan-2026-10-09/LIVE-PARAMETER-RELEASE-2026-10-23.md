@@ -790,3 +790,75 @@ tree-identical579 CI merge. AU stopped-only restoration, arbitrary vendors,
 physical hardware and sustained performance remain separate limits. Do not
 repeat either completed Mac job. The next hourly gate is still20:53:46 UTC,
 subject to a fresh check for later starts. No newer package or merge is qualified.
+
+## 21:11 UTC checkpoint: retained point editing and diagnostic UI
+
+Source `06338394055881fc38069ae9fcd0fd32d0dddb05` was built once locally,
+20:54:19–20:56:19 UTC. Executable SHA256:
+`91c6f33ac27d876f3771e86ed783433990ba029811977a1b601d77c2fd58e2fd`.
+PR7 was advanced at the same checkpoint. The latest actual CI build start was
+20:54:49; no next build before **21:54:49 UTC**, and only after checking later
+starts and completion of the current jobs. Do not repeat this attempt.
+
+Five of six native groups passed: source navigation, scratch editor, parameter
+preview, menu bar and parameter activity. The command-result private child
+exceeded its existing 90-second bound. Inside it, automatic edits passed in
+26.093 seconds (including the new navigation, formatting, Delete/Clear, exact
+history, native names and focus assertions), recovery passed in39.986 seconds,
+and export, graph usability and three routing cases passed. It reached catalogue
+refusal before the cumulative deadline. Preserve `recorded-point-navigation/`
+`checks.json`, `native.log` and `native.xml`: this gate **failed**.
+
+A separate diagnostic run of all seven selected actual-app journeys passed in
+63.939 seconds, using the exact candidate and clean qualification source. Its
+receipt is `app-diagnostic/checks.json`; it does not overwrite the failed native
+gate or qualify a package. In particular, the new Activity journey accepted
+later-row edits and time reordering, retained selection, preserved unrelated
+automation, and passed Undo/Redo, continuous playback and save/reopen.
+
+Fresh Computer Use on owned PID36252 (now exited normally) verified short-take
+Fit, compact generated values, exact visible Undo, and docked precise-note Save
+caret, Tab/Shift+Tab, text Backspace and typing. A click on the second recorded
+handle also revealed a real defect: frame7510073/value0.8 became
+frame7510080/value1.6541353 without an intentional drag. Read-only snapshots
+`after-click.json` and `after-undo.json` establish the edit and exact restoration;
+all snapshots retained playback epoch1 while frames advanced4080096→9157536→
+14081856. Main-targeted helper input could not qualify the floating Activity
+parameter picker or typing continuity. Do not classify that limitation as a
+new application defect. Native Activity focus assertions passed separately.
+
+The 315.800-second silent foreground workload at48kHz/480 frames still reported
+30 deadline overruns, zero starvation/device errors and no processor fault.
+New diagnostic fields parsed correctly: lowLatencyShared, buffer1056 frames,
+two endpoint channels, zero fallback error/wait timeouts, maximum callback
+13.022ms, service13.040ms and wake gap24.440ms. These are independent maxima,
+not time-aligned samples; they do not attribute the stalls. Both realtime audit
+and sustained-presentation flags remain false. No performance/flicker claim,
+production package or merge follows. Foreground evidence is deliberately under
+`foreground-diagnostic/`, with automated/foreground qualification false.
+
+### Source continuation for the next hourly checkpoint
+
+1. Split the oversized native group into command results (export/recovery),
+   automatic edits, and routing commands (graph usability and all routing
+   cases). Every existing assertion remains; private-child90s and CTest120s
+   limits are unchanged. CI labels select all three without another build.
+   The next local selection is **eight native groups / seven app cases**.
+2. Activity observation no longer freezes merely because native text input
+   arrives while a read pumps messages. Observation does not adopt point fields;
+   field-adopting reads retain generation checks, and document/revision/watch
+   guards remain strict for every read. Native tests cover pumped text through
+   both observation/source reads, raw draft, focus/caret, unchanged music,
+   continued cursor consumption and rejection of a revision change mid-read.
+3. Recorded-point canvas selection now waits for movement outside the native
+   DPI-scaled drag box with the left button held before changing music. Native
+   assertions include stationary moves, one-pixel jitter, a move without the
+   button, exact unchanged revision/music, real drag preview/automatic save,
+   and exact one-step Undo/Redo. Fresh Computer Use must repeat a plain click
+   and a deliberate drag on the short507-frame take.
+
+These corrections are source-only. Do not infer their success from the063
+diagnostics. Current CI runs40022802380/40022802381 were still compiling at
+21:07 UTC; inspect final results without restarting them. The prior579 Mac
+device and reciprocal compatibility evidence remains valid for unchanged
+shared code, but does not qualify these Windows UI corrections.
