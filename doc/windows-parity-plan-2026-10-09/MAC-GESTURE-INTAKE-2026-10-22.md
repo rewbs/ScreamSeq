@@ -1936,3 +1936,31 @@ failed receipt remains. This is not general JSON Schema validation. A final
 source review also corrected the diagnostic reader to acquire Stop before
 loading its final bound, avoiding a newly observed Stop with a stale live end.
 Existing exact-cut and concurrent clock gates remain required after rebuilding.
+
+### Next checkpoint and Intel fixture correction
+
+Candidate `a80945ab6baa577806cc701667cc32f0725836b2` started its single local
+checkpoint at01:17:54 UTC on October23 and was pushed to PR7. Corresponding
+Mac/Windows runs are39883199120/39883199090. The latest observed CI build start
+is01:18:25 UTC, so no further checkpoint may begin before02:18:25 UTC; inspect
+later starts and completion first. No production package or main merge follows
+from these pending checks. The dispatcher initially refused before any build
+or push because PowerShell7.6 had converted JSON UTC strings into DateTime
+objects which Parse reinterpreted as local time. The prepared scripts now
+retain date strings explicitly; the UTC gate itself is unchanged.
+
+The preceding Intel job120165015779 finished compilation, passed133/134 native
+tests and failed `cabinet` by its120-second timeout. It also failed two native
+interface groups: the same compact recording-notice overlap as ARM, and the
+parameter-activity clamp assertion. The job reached its60-minute limit during
+conformance; incomplete steps are not passes. The app archive was retained
+before qualification. Do not relax the timeout or restart that job.
+
+The activity fixture consumed over2.8 seconds on Intel. Its final `poll()` can
+therefore issue the legitimate two-second catalogue refresh, but the fixture
+answered every request as if it were a trace read. Source now explicitly
+refreshes the unchanged catalogue and asserts target/parameter/token retention
+and the exact next requested method before delivering contribution samples.
+The existing1.1 clamp-total assertion remains unchanged. This fixture-only
+correction is **after** the frozen candidate and needs the next Mac checkpoint;
+no pass is claimed from source inspection. The cabinet timeout remains open.
