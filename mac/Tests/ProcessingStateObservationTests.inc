@@ -108,6 +108,29 @@ static void facadeProcessingStateObservation(const PluginState &saved,const Plug
   const auto afterQueuedRender=chain.processingState(0);
   check(afterQueuedRender&&afterQueuedRender->state.state!=chainBaseline[0].state,
     "Rejected observation lost the newer parameter before normal processing adopted it");
+  // The host read fence advances before the VST3 process queue consumes a
+  // restore. A receipt must distinguish those boundaries without state().
+  const auto parameterID=processingObservationHookParameter;
+  const std::array<ParameterChange,1> preview{{{0,parameterID,.75f,0}}};
+  check(chain.previewParameters(preview),"Preview native control before tracked cancellation");
+  pcm.fill(.2f);check(chain.process(pcm.data(),64),"Render native preview before cancellation");
+  const auto previewState=chain.processingState(0);
+  check(previewState&&previewState->state.state!=afterQueuedRender->state.state,"Native preview fixture did not change processor state");
+  const std::array<PluginChain::ParameterPreviewTarget,1> targets{{{0,parameterID}}};
+  const auto receipt=chain.cancelParameterPreviewsTracked(targets);
+  using CancellationState=PluginChain::PreviewCancellationState;
+  check(receipt&&chain.parameterPreviewCancellationState(*receipt)==CancellationState::Pending,
+    "Native cancellation acknowledged before host delivery");
+  chain.applyPending();const auto queuedRestore=chain.processingState(0);
+  check(queuedRestore&&queuedRestore->state==previewState->state&&
+    chain.parameterPreviewCancellationState(*receipt)==CancellationState::Pending,
+    "Host queue delivery flushed a restore or acknowledged native processing");
+  uint64_t allocations=0,frees=0,locks=0;pcm.fill(.2f);tracker_audit_begin();
+  const bool restored=chain.process(pcm.data(),64);tracker_audit_end(&allocations,&frees,&locks);
+  const auto restoredState=chain.processingState(0);
+  check(restored&&!allocations&&!frees&&!locks&&restoredState&&restoredState->state==afterQueuedRender->state&&
+    chain.parameterPreviewCancellationState(*receipt)==CancellationState::Processed,
+    "Native cancellation did not acknowledge real processing of the accepted baseline within the host audit");
   AudioDevice audio;audio.setPlugins({saved,au});const auto deviceBaseline=audio.pluginStates();
   const auto epoch=audio.pluginEpoch();const AudioDevice::PluginStateOwner owner{saved.instanceID,audio.pluginEditSource(0)};
   const auto deviceObservation=audio.pluginProcessingState(epoch,owner);

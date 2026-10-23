@@ -239,6 +239,87 @@ static void recipeBlock(PluginChain &chain,Renderer &renderer,float *pcm,unsigne
 #endif
   check(okay,"Recipe preview render failed");
 }
+static void trackedCancellation(unsigned rate,unsigned block) {
+  using Target=PluginChain::ParameterPreviewTarget;
+  using State=PluginChain::PreviewCancellationState;
+  PluginChain chain({gain("tracked-a"),gain("tracked-b"),gain("unrelated")},rate,true);
+  PluginChain other({gain("tracked-a"),gain("tracked-b")},rate,true);
+  const auto original=chain.states();
+  const std::array<Target,3> targets{{{0,1},{1,1},{0,1}}};
+  const auto clean=chain.cancelParameterPreviewsTracked(targets);
+  check(clean&&chain.parameterPreviewCancellationState(*clean)==State::Processed,
+    "Clean cancellation invented pending vendor work");
+  check(other.parameterPreviewCancellationState(*clean)==State::Invalid,
+    "Cancellation receipt crossed a chain owner");
+  const std::array<ParameterChange,3> preview{{{0,1,-6,0},{1,1,-12,0},{2,1,-3,0}}};
+  check(chain.previewParameters(preview),"Tracked preview fixture failed");
+  check(chain.parameterPreviewCancellationState(*clean)==State::Invalid,"New preview left an old receipt valid");
+  render(chain,2048,block);
+  const auto receipt=chain.cancelParameterPreviewsTracked(targets);
+  check(receipt&&chain.parameterPreviewCancellationState(*receipt)==State::Pending,
+    "Queued cancellation was acknowledged before processing");
+  check(!chain.hasParameterPreview(0,1)&&!chain.hasParameterPreview(1,1)&&chain.hasParameterPreview(2,1),
+    "Tracked cancellation changed unrelated preview ownership");
+  chain.applyPending();
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,
+    "Host queue consumption was mistaken for vendor processing");
+  std::array<float,2> empty{1,1};process(chain,empty.data(),0);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,"Empty processing acknowledged cancellation");
+  const auto pcm=render(chain,2048,block);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Processed&&
+    std::abs(pcm.back()-std::pow(10.f,-3.f/20))<1e-6f,"Processed group did not restore accepted PCM");
+  check(chain.states()[0]==original[0]&&chain.states()[1]==original[1],"Tracked cancellation changed accepted saved state");
+  // A clean target can still have an accepted write waiting for the vendor.
+  check(chain.parameter(1,1,-9),"Queue newer accepted baseline");
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Invalid,"New accepted input left receipt valid");
+  const auto accepted=chain.cancelParameterPreviewsTracked(targets);
+  check(accepted&&chain.parameterPreviewCancellationState(*accepted)==State::Pending,"Clean target hid its pending accepted value");
+  chain.applyPending();
+  check(chain.parameterPreviewCancellationState(*accepted)==State::Pending,"Accepted queue delivery acknowledged processing");
+  render(chain,2048,block);
+  check(chain.parameterPreviewCancellationState(*accepted)==State::Processed&&parameter(chain,1,1).manualValue==-9,
+    "Cancellation overwrote a newer accepted baseline");
+  // Invalid later targets and full queues must preserve all preview ownership.
+  check(chain.previewParameters(preview),"Prepare tracked cancellation refusal");render(chain,2048,block);
+  const std::array<Target,2> invalid{{{0,1},{1,999}}};
+  check(!chain.cancelParameterPreviewsTracked(invalid)&&chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),
+    "Invalid later tracked target reset a valid prefix");
+  std::vector<ParameterChange> crowded(4095,{2,1,-3,0});
+  check(chain.enqueueParameters(crowded)&&!chain.cancelParameterPreviewsTracked(targets)&&
+    chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),"Tracked queue refusal partially restored a group");
+  render(chain,2048,block);
+  const auto recovered=chain.cancelParameterPreviewsTracked(targets);check(bool(recovered),"Tracked restore did not recover after queue drain");
+  render(chain,2048,block);check(chain.parameterPreviewCancellationState(*recovered)==State::Processed,"Recovered cancellation never completed");
+  // Retain an opaque receipt across replacement, but never accept it for the
+  // replacement provider merely because the stable document ID is unchanged.
+  auto repair=chain.prepareStoppedRepair(std::span(original.data(),2));
+  check(chain.adoptStoppedRepair(*repair)&&chain.parameterPreviewCancellationState(*recovered)==State::Invalid,
+    "Replaced provider inherited an old processing acknowledgement");
+}
+static void cancellationBacklog() {
+  using State=PluginChain::PreviewCancellationState;
+  PluginChain chain({gain("backlog-a"),gain("backlog-b")},48000,true);
+  const std::array<ParameterChange,1> preview{{{0,1,-12,0}}};
+  check(chain.previewParameters(preview),"Prepare cancellation backlog preview");render(chain,512,128);
+  for(unsigned n=0;n<128;++n)check(chain.parameter(1,1,0),"Prepare separate pending control batches");
+  const std::array<PluginChain::ParameterPreviewTarget,1> targets{{{0,1}}};
+  const auto receipt=chain.cancelParameterPreviewsTracked(targets);check(bool(receipt),"Queue restore behind ordinary traffic");
+  render(chain,128,128);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,"Unconsumed restore was acknowledged by another processor");
+  render(chain,1024,128);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Processed,"Restore was not acknowledged after its own processing");
+}
+static void processingAcknowledgement() {
+  NativePlugin plugin(gain("acknowledgement"),48000,true);
+  std::array<float,256> pcm;pcm.fill(1);
+  check(plugin.parameter(1,-6),"Prepare native acknowledgement control");plugin.queuedControl(31);
+  check(!plugin.processedControl(31),"Native parameter queue acknowledged delivery");
+  check(plugin.process(pcm.data(),0,0)&&!plugin.processedControl(31),"Zero-frame vendor path acknowledged delivery");
+  check(!plugin.process(pcm.data(),4097,0)&&!plugin.processedControl(31),
+    "Rejected vendor processing acknowledged delivery");
+  check(plugin.process(pcm.data(),128,0)&&plugin.processedControl(31)&&!plugin.processedControl(32),
+    "Successful processing failed to distinguish its control serial");
+}
 static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
   auto doc=Document::demo();
   doc->transaction([&](OpenMPT::CSoundFile &song){
@@ -287,8 +368,10 @@ int main(){try{
   stoppedVendorReplacement();
   stoppedGroupRepair();
   ownership();
+  processingAcknowledgement();cancellationBacklog();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})trackedCancellation(rate,block);
   refusal();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})for(bool samples:{false,true})recipePreview(rate,block,samples);
   std::cout<<"PASS transient parameter PCM, manual/opaque state isolation, reopen, current-baseline cancel, atomic refusal and callback audit\n";

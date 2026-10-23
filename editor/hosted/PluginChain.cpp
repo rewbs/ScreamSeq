@@ -128,6 +128,7 @@ bool PluginChain::previewParameters(std::span<const ParameterChange> changes) no
 bool PluginChain::enqueueParameterBatch(std::span<const ParameterChange> changes,bool preview) noexcept {
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
   if(changes.size()>queue_.size() || changes.size()>queue_.size()-(w-r) || failed_.load(std::memory_order_relaxed))return false;
+  if(!changes.empty()&&controlSerial_==UINT64_MAX)return false;
   for(const auto &change:changes)if(change.slot>=rack_.size() || !std::isfinite(change.value) || change.frame)return false;
   if(preview)for(const auto &change:changes) {
     const auto &catalog=rack_[change.slot]->parameters;
@@ -135,9 +136,11 @@ bool PluginChain::enqueueParameterBatch(std::span<const ParameterChange> changes
     if(parameter==catalog.end()||!parameter->writable||!std::isfinite(parameter->min)||!std::isfinite(parameter->max)||
         parameter->min>parameter->max||change.value<parameter->min||change.value>parameter->max)return false;
   }
+  const auto serial=changes.empty()?controlSerial_:++controlSerial_;
   for(size_t i=0;i<changes.size();++i) {
     const auto &change=changes[i];auto &entry=*rack_[change.slot];
-    queue_[(w+uint32_t(i))%queue_.size()]={change,i+1==changes.size(),false,entry.plugin.get(),entry.activity};
+    queue_[(w+uint32_t(i))%queue_.size()]={change,i+1==changes.size(),false,entry.plugin.get(),entry.activity,serial};
+    entry.lastQueuedControlSerial=serial;
     for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==change.id) {
       entry.previewed[n]=preview;
       if(!preview)entry.parameters[n].value=change.value;
@@ -160,20 +163,44 @@ bool PluginChain::cancelParameterPreviews(size_t slot,std::span<const uint32_t> 
   return cancelParameterPreviews(targets);
 }
 bool PluginChain::cancelParameterPreviews(std::span<const ParameterPreviewTarget> targets) {
-  if(targets.size()>queue_.size())return false;
+  return cancelParameterPreviewsTracked(targets).has_value();
+}
+std::optional<PluginChain::ParameterPreviewCancellation> PluginChain::cancelParameterPreviewsTracked(std::span<const ParameterPreviewTarget> targets) {
+  if(targets.size()>queue_.size())return std::nullopt;
+  ParameterPreviewCancellation receipt;receipt.owner_=this;
+  receipt.graphRevision_=graphControlRevision_;receipt.recordedRevision_=recordedRevision_;
+  receipt.providers_.reserve(std::min(targets.size(),rack_.size()));
   std::vector<ParameterChange> restore;restore.reserve(targets.size());
   std::set<std::pair<uint32_t,uint32_t>> seen;
   for(const auto &target:targets) {
-    if(target.slot>=rack_.size())return false;
+    if(target.slot>=rack_.size())return std::nullopt;
     const auto &entry=*rack_[target.slot];
     const auto p=std::find_if(entry.parameters.begin(),entry.parameters.end(),[&](const auto &p){return p.id==target.id;});
-    if(p==entry.parameters.end())return false;
+    if(p==entry.parameters.end())return std::nullopt;
+    if(std::none_of(receipt.providers_.begin(),receipt.providers_.end(),[&](const auto &provider){return provider.slot==target.slot;}))
+      receipt.providers_.push_back({target.slot,rack_[target.slot],entry.plugin,entry.preset,entry.plugin->editSource(),0});
     if(seen.emplace(target.slot,target.id).second&&entry.previewed[size_t(p-entry.parameters.begin())])
       restore.push_back({target.slot,target.id,p->value,0});
   }
   // All IDs, allocations and the full queue capacity are checked before the
   // existing atomic publisher clears any preview ownership or queues values.
-  return enqueueParameters(restore);
+  if(!enqueueParameters(restore))return std::nullopt;
+  receipt.serial_=controlSerial_;
+  for(auto &provider:receipt.providers_)provider.serial=provider.entry->lastQueuedControlSerial;
+  static_assert(std::is_nothrow_move_constructible_v<ParameterPreviewCancellation>);
+  return std::optional<ParameterPreviewCancellation>{std::move(receipt)};
+}
+PluginChain::PreviewCancellationState PluginChain::parameterPreviewCancellationState(const ParameterPreviewCancellation &receipt) const noexcept {
+  if(receipt.owner_!=this||receipt.serial_!=controlSerial_||receipt.graphRevision_!=graphControlRevision_||
+      receipt.recordedRevision_!=recordedRevision_||failed_.load(std::memory_order_acquire))return PreviewCancellationState::Invalid;
+  bool pending=false;
+  for(const auto &provider:receipt.providers_) {
+    if(provider.slot>=rack_.size()||rack_[provider.slot]!=provider.entry||provider.entry->plugin!=provider.plugin||
+        provider.entry->preset!=provider.preset||provider.plugin->editSource()!=provider.source)
+      return PreviewCancellationState::Invalid;
+    if(!provider.plugin->processedControl(provider.serial))pending=true;
+  }
+  return pending?PreviewCancellationState::Pending:PreviewCancellationState::Processed;
 }
 void PluginChain::beginRenderBlock() noexcept {observation_->listen.begin(position_);activity_->begin(position_);consumeMusicalPlan();applyPending();parameterBlockOpen_=true;}
 bool PluginChain::latencyChangePending() const noexcept {
@@ -545,6 +572,7 @@ void PluginChain::applyPending() noexcept {
     else if (!entry.plugin->appliedParameter(change.id,change.value,position_,{}))
       failed_ = true;
     entry.plugin->queuedManual(change.id,r);
+    entry.plugin->queuedControl(entry.serial);
     ++r;++n;
     if(recorded&&!recordedApplied&&r==recorded->parameterFence)adoptRecorded();
     // A timeline follows every complete manual batch preceding its publication,
@@ -767,11 +795,12 @@ bool PluginChain::popEdit(size_t slot,PluginEdit &event,PluginEditSource &source
   source={};
   if(slot>=rack_.size())return false;
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
-  if(w-r==queue_.size()){source=rack_[slot]->plugin->editSource();return false;}
+  if(w-r==queue_.size()||controlSerial_==UINT64_MAX){source=rack_[slot]->plugin->editSource();return false;}
   if(!rack_[slot]->plugin->popEdit(event,source))return false;
   const auto id=event.id;const auto value=event.value;
   auto &entry=*rack_[slot];
-  queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity};write_.store(w+1,std::memory_order_release);
+  const auto serial=++controlSerial_;entry.lastQueuedControlSerial=serial;
+  queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity,serial};write_.store(w+1,std::memory_order_release);
   for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id){entry.parameters[n].value=value;entry.previewed[n]=false;}
   for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==id)p.value=value;
   return true;
