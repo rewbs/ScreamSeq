@@ -1,4 +1,5 @@
 #include "PrivateGuiTest.hpp"
+#include "AccessibleControl.hpp"
 #include "../App/ParameterActivityWindow.hpp"
 #include <iostream>
 
@@ -11,7 +12,7 @@ void run(){
   {
     ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false;unsigned edits=0;std::string token="1:1";Json navigation;
     Json processor={{"key","song/rack/a"},{"name","Gain copy"},{"plugin","a"},{"graph","n0"},{"node","n0"},{"target","n0"},{"instrument","n0"},{"role",0},{"channel",0},{"bypass",false},{"parameterCount",1}};
-    std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};
+    std::function<void(const std::string &)> pump;std::string failRead;HWND toolWindow{};std::optional<double> constantTrace;
     Json lane=Json::array({{{"frame",24000},{"value",-.5}}});
     auto request=[&](const std::string &method,const Json &p)->Json {
       if(pump)pump(method);if(method==failRead)throw std::runtime_error("Injected read failure");
@@ -19,10 +20,12 @@ void run(){
       if(method=="parameter.activity.parameters")return {{"target",processor},{"parameters",Json::array({{{"id",1},{"name","Gain"},{"min",-1},{"max",1},{"value",0},{"unitLabel","dB"}}})}};
       if(method=="parameter.activity.watch"){require(!p.contains("expectedRevision"),"Watch must be transient");return {{"token",token},{"target",processor},{"parameter",1}};}
       if(method=="parameter.activity.sources")return {{"sources",Json::array({{{"kind","baseline"},{"title","Saved manual value"},{"enabled",true}},{{"kind","recorded"},{"title","Recorded automation"},{"plugin","a"},{"parameter",1},{"enabled",true}}})},{"omitted",0},{"rule","Recorded values control the base."}};
-      if(method=="parameter.activity.get")return {{"token",token},{"target",processor},{"parameter",1},{"points",p.at("after")==0?Json::array({
+      if(method=="parameter.activity.get"){Json result={{"token",token},{"target",processor},{"parameter",1},{"points",p.at("after")==0?Json::array({
         {{"sequence",1},{"seconds",.5},{"value",-.5},{"minimum",-.5},{"maximum",-.5},{"pattern",0},{"order",0},{"position",0},{"source",{{"kind","recorded"}}}},
         {{"sequence",2},{"seconds",.6},{"value",.9},{"minimum",-.9},{"maximum",.9},{"pattern",0},{"order",0},{"position",128},{"source",{{"kind","graph-source"},{"id","n99"}}}},
         {{"sequence",3},{"seconds",.7},{"value",-.25},{"minimum",-.25},{"maximum",-.25},{"pattern",0},{"order",0},{"position",256},{"source",{{"kind","recorded"}}}}}):Json::array()},{"cursor",3},{"dropped",0},{"active",true}};
+        if(constantTrace)for(auto &point:result["points"])for(const auto *key:{"value","minimum","maximum"})point[key]=*constantTrace;
+        return result;}
       if(method=="automation.recorded.get")return {{"points",lane},{"offset",0},{"total",lane.size()},{"sampleRate",48000}};
       if(method=="automation.recorded.edit"){require(p.at("expectedRevision")==context.revision,"Stale write reached callback");++edits;const auto original=p.at("frame");lane.erase(std::remove_if(lane.begin(),lane.end(),[&](const auto &v){return v.at("frame")==original;}),lane.end());if(!p.value("remove",false))lane.push_back({{"frame",p.value("newFrame",original)},{"value",p.at("value")}});std::sort(lane.begin(),lane.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});context.revision="r"+std::to_string(edits+2);return {{"wouldChange",true}};}
       throw std::runtime_error("Unexpected activity request");
@@ -38,8 +41,32 @@ void run(){
     require(tool.snapshot()==captured,"Explicit activity fell back to a different processor or first parameter");
     SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Live trace did not consume its cursor");SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("pointCount")==3,"Trace duplicated an old point");
     const auto trace=tool.snapshot().at("trace");require(trace.at("nativePoints")==2&&trace.at("normalizedContributions")==1&&trace.at("segments")==1&&trace.at("minimum")==-.5&&trace.at("maximum")==-.25,"Normalized graph contribution contaminated final native-unit trace range or segments");
+    const auto traceLane=lane;const auto traceRevision=context.revision;
+    for(const double held:{-1.,0.,1.}){
+      constantTrace=held;click(11004);SendMessageW(window,WM_TIMER,3,0);const auto flat=tool.snapshot().at("trace");
+      const auto plot=flat.at("plot"),point=flat.at("lastPoint");
+      require(flat.at("minimum")==held&&flat.at("maximum")==held&&flat.at("segments")==1&&
+        point[0].get<double>()>plot[0].get<double>()&&point[0].get<double>()<plot[0].get<double>()+plot[2].get<double>()&&
+        std::abs(point[1].get<double>()-(plot[1].get<double>()+plot[3].get<double>()/2))<.01,
+        "Constant activity trace is clipped or does not preserve its measured native value");
+    }
+    constantTrace.reset();click(11004);SendMessageW(window,WM_TIMER,3,0);
+    require(lane==traceLane&&context.revision==traceRevision&&edits==0,"Transient trace presentation edited song data");
     SendMessageW(GetDlgItem(window,11007),LB_SETCURSEL,0,0);click(11008);require(navigation.at("kind")=="baseline"&&navigation.at("parameter")==1&&navigation.at("plugin")=="a","Baseline provenance lost watched plugin/parameter");
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+        {11000,L"Parameter activity processor copy"},{11001,L"Parameter activity parameter"},
+        {11005,L"Activity trace time range"},{11006,L"Parameter activity details page"},
+        {11007,L"Parameter sources, changes or recorded points"},{11015,L"Recorded point time, seconds"},
+        {11016,L"Recorded point value, native units"},{11010,L"Previous recorded page"},
+        {11011,L"Next recorded page"},{11017,L"Zoom activity trace out"},{11018,L"Zoom activity trace in"}})
+      require(ScreamSeq::Tests::accessibleName(GetDlgItem(window,id))==name,"Activity field lacks its stable native accessible name");
+    const std::vector<int> activityTabs{11000,11001,11002,11003,11004,11017,11019,11018,11005,
+      11006,11008,11009,11007,11015,11016,11012,11013,11014,11010,11011,11020};
+    for(size_t i=0;i<activityTabs.size();++i){const auto control=GetDlgItem(window,activityTabs[i]);
+      require(GetNextDlgTabItem(window,control,FALSE)==GetDlgItem(window,activityTabs[(i+1)%activityTabs.size()])&&
+        GetNextDlgTabItem(window,control,TRUE)==GetDlgItem(window,activityTabs[(i+activityTabs.size()-1)%activityTabs.size()]),
+        "Activity Tab/Shift+Tab does not follow the visible control groups");}
     SetWindowTextW(GetDlgItem(window,11016),L"-0.25");require(tool.snapshot().at("fieldDraft")==true,"Raw value draft not retained");
     const auto retained=tool.snapshot();refuses("a",2);tool.openSourceAt("a",1);
     require(tool.snapshot()==retained,"Explicit activity navigation erased a recorded-point draft");

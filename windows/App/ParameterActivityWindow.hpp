@@ -183,9 +183,18 @@ private:
     std::erase_if(t.indices,[&](size_t i){return points_[i].at("seconds").get<double>()<t.begin;});if(t.indices.empty())return t;
     t.low=points_[t.indices.front()].at("minimum").get<double>();t.high=points_[t.indices.front()].at("maximum").get<double>();for(auto i:t.indices){const auto &p=points_[i];t.low=std::min({t.low,p.at("minimum").get<double>(),p.at("value").get<double>()});t.high=std::max({t.high,p.at("maximum").get<double>(),p.at("value").get<double>()});}return t;
   }
-  Json traceSnapshot()const {const auto t=trace();return {{"nativePoints",t.indices.size()},{"normalizedContributions",t.contributions},{"segments",t.indices.empty()?0:t.indices.size()-1},{"minimum",t.indices.empty()?Json(nullptr):Json(t.low)},{"maximum",t.indices.empty()?Json(nullptr):Json(t.high)},{"begin",t.begin},{"end",t.end},{"unit","native parameter units"}};}
+  struct TracePoint {float x,y;};
+  TracePoint traceLocation(const Trace &t,double seconds,double value)const {
+    const auto r=plot_;const auto span=std::max(.001,t.end-t.begin);
+    // Keep both extrema inside the stroke clip. A constant parameter belongs
+    // at the centre, not on an invisible bottom border (zero observed range).
+    const auto fraction=t.high>t.low?(value-t.low)/(t.high-t.low):.5;
+    return {r.x+2+float(std::clamp((seconds-t.begin)/span,0.,1.))*std::max(0.f,r.w-4),
+      r.y+2+float(1-std::clamp(fraction,0.,1.))*std::max(0.f,r.h-4)};
+  }
+  Json traceSnapshot()const {const auto t=trace();Json last=nullptr;if(!t.indices.empty()){const auto &p=points_[t.indices.back()];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());last=Json::array({at.x,at.y});}return {{"nativePoints",t.indices.size()},{"normalizedContributions",t.contributions},{"segments",t.indices.empty()?0:t.indices.size()-1},{"minimum",t.indices.empty()?Json(nullptr):Json(t.low)},{"maximum",t.indices.empty()?Json(nullptr):Json(t.high)},{"begin",t.begin},{"end",t.end},{"plot",Json::array({plot_.x,plot_.y,plot_.w,plot_.h})},{"lastPoint",last},{"coordinateSpace","ownerClientDIP"},{"unit","native parameter units"}};}
   void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto r=plot_;s.fill(r.x,r.y,r.w,r.h,0x101923);for(int i=0;i<=4;++i)s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3947);
-    const auto t=trace();if(!t.indices.empty()){const double span=std::max(.001,t.end-t.begin);float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);for(auto i:t.indices){const auto &p=points_[i];const float x=r.x+float((p.at("seconds").get<double>()-t.begin)/span)*r.w,y=r.y+r.h-float((p.at("value").get<double>()-t.low)/std::max(1e-12,t.high-t.low))*r.h;if(previous){s.line(px,py,x,py,0x6edac5,2);s.line(x,py,x,y,0x6edac5,2);}px=x;py=y;previous=true;}s.unclip();s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,0x93aabd);}
+    const auto t=trace();if(!t.indices.empty()){float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);for(auto i:t.indices){const auto &p=points_[i];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());const float x=at.x,y=at.y;if(previous){s.line(px,py,x,py,0x6edac5,2);s.line(x,py,x,y,0x6edac5,2);}else s.fill(x-2,y-2,4,4,0x6edac5);px=x;py=y;previous=true;}s.unclip();s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,0x93aabd);}
     else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,0x93aabd);s.outline(r.x,r.y,r.w,r.h,0x334757);}
 
 public:
@@ -205,7 +214,20 @@ public:
     minimumClientWidth_=1020;minimumClientHeight_=680;create(L"ScreamSeq.ParameterActivity",L"Parameter activity",1180,790);clampToOwnerWorkArea();for(int id:{processors,parameters,mode,details})combo(id);append(mode,L"Recent seconds");append(mode,L"Latest pattern pass");choose(mode,0);for(auto s:{L"Sources",L"Recent changes",L"Recorded points"})append(details,s);choose(details,0);
     add(items,L"LISTBOX",L"Parameter activity details",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_HSCROLL);edit(time,L"0",40);edit(value,L"0",40);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{freeze,L"Freeze"},{clear,L"Clear capture"},{openSource,L"Open source"},{openLane,L"Song automation…"},{previous,L"‹"},{next,L"›"},{newPoint,L"New"},{savePoint,L"Save point"},{removePoint,L"Delete"},{zoomOut,L"−"},{zoomIn,L"+"},{fit,L"Fit"},{close,L"Close"}})button(id,text);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Parameter activity"},{targetLabel,L"Choose a prepared processor copy"},{ruleLabel,L"Observe the final parameter value and the sources that control it."},{statusLabel,L""},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{pageLabel,L""}})label(id,text);finish();SetTimer(window_,3,100,nullptr);}
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Parameter activity"},{targetLabel,L"Choose a prepared processor copy"},{ruleLabel,L"Observe the final parameter value and the sources that control it."},{statusLabel,L""},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{pageLabel,L""}})label(id,text);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+        {processors,L"Parameter activity processor copy"},{parameters,L"Parameter activity parameter"},
+        {mode,L"Activity trace time range"},{details,L"Parameter activity details page"},
+        {items,L"Parameter sources, changes or recorded points"},{time,L"Recorded point time, seconds"},
+        {value,L"Recorded point value, native units"},{previous,L"Previous recorded page"},
+        {next,L"Next recorded page"},{zoomOut,L"Zoom activity trace out"},{zoomIn,L"Zoom activity trace in"}})
+      accessibleName(id,name);
+    HWND previousControl=HWND_TOP;
+    for(const auto id:{processors,parameters,refresh,freeze,clear,zoomOut,fit,zoomIn,mode,
+        details,openSource,openLane,items,time,value,newPoint,savePoint,removePoint,previous,next,close}){
+      const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
+    }
+    finish();SetTimer(window_,3,100,nullptr);}
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||fields_;show();if(!retain){beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
   void openSourceAt(std::string plugin,uint32_t parameter) {
     const auto c=context_();const bool same=captured_.document==c.document&&plugin_==plugin&&parameter_&&*parameter_==parameter;

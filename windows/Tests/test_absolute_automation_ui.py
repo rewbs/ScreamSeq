@@ -197,6 +197,19 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         kind='ScreamSeq.ParameterActivity';owner=self.window(kind)
         state=lambda:self.read('workspace.get')['parameterActivity']
         control=lambda identifier:self.control(identifier,kind)
+        # The untouched Enabled parameter is a constant, active trace. It must
+        # remain visible inside the plot, rather than vanish on its clipped edge.
+        self.assertEqual(state()['parameter'],0)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            trace=state()['trace']
+            if trace['nativePoints']>=2:break
+            time.sleep(.025)
+        self.assertGreaterEqual(trace['nativePoints'],2,trace)
+        self.assertEqual((trace['minimum'],trace['maximum']),(1,1))
+        x,y,width,height=trace['plot'];point_x,point_y=trace['lastPoint']
+        self.assertGreater(point_x,x);self.assertLess(point_x,x+width)
+        self.assertAlmostEqual(point_y,y+height/2,delta=.01)
         def choose(identifier,index):
             handle=control(identifier);self.desktop.send(handle,0x186 if identifier==11007 else 0x14E,index)
             self.desktop.send(owner,0x111,identifier|(1<<16),handle)

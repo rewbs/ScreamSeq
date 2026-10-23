@@ -862,3 +862,27 @@ diagnostics. Current CI runs40022802380/40022802381 were still compiling at
 21:07 UTC; inspect final results without restarting them. The prior579 Mac
 device and reciprocal compatibility evidence remains valid for unchanged
 shared code, but does not qualify these Windows UI corrections.
+
+### 21:18 UTC continuation: visible Activity trace and keyboard access
+
+The same063 foreground session showed an apparently empty Enabled trace while
+its reading reported a constant1. Source confirms that equal observed minimum
+and maximum mapped every point to the clipped bottom border. Mac's trace uses
+the declared parameter range; Windows retains its observed-range presentation
+but now puts a constant value at the vertical centre, keeps extrema two DIPs
+inside the clip, and draws a marker even for the first captured sample. Measured
+values and contribution filtering are unchanged; this is not fabricated activity.
+The transient workspace trace snapshot exposes plot/last-point coordinates in
+owner-client DIPs for exact native and actual-app geometry assertions.
+
+Activity now also has eleven explicit native accessible control names and
+forward/reverse Tab order following its visible groups. Its existing native
+group checks names through Windows' accessible provider, all recorded-page Tab
+stops, constant traces at-1/0/1, exact native values and no musical mutations.
+The existing actual-app Activity journey now requires the initial constant
+Enabled trace to be captured and visibly inside the plot before editing Gain.
+No extra registration or app case: the next checkpoint remains eight groups /
+seven app cases. These additions are unbuilt; preserve the original unexecuted
+freeze when updating `recorded-edit-guard/` to the next source commit. No new
+build, private test process, foreground process or CI dispatch ran for this
+continuation.063 CI was authoritatively still compiling at21:12 UTC.

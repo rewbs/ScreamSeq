@@ -8,6 +8,15 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 21:18 UTC continuation:** the next unbuilt recorded-edit guard
+batch also makes constant Activity traces visible, names eleven native controls
+and orders Tab traversal by the visible groups. Existing native and actual-app
+Activity cases gain exact constant-trace/focus assertions; counts remain eight
+groups/seven cases. Resolve the newest `recorded-edit-guard/freeze.json`; never
+use the archived unexecuted source pin or repeat063. No build before21:54:49UTC,
+subject to later actual starts and terminal current CI. Broader parity and
+performance remain open; this is source progress, not qualification.
+
 **23 October 21:11 UTC continuation:**063383940 built once and passed five/six
 native groups. All automatic-edit assertions passed inside the remaining
 group, which hit its cumulative90-second private-child limit. Seven separate
