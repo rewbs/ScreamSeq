@@ -362,3 +362,104 @@ fresh owned process. Keep all refusal, stopped/closed-editor and original-input
 guards; do not manufacture a successful recovery by removing them. Broaden only
 for a failure or changed dependency. No main merge or new package follows from
 source-only checks.
+
+## 18:52 checkpoint: recorded viewport and real vendor recovery
+
+Frozen `4d1fa80fe952e0df57d158cca654f920a99cc797` built once from
+18:52:14.741 UTC to 18:54:58.169 UTC. Executable SHA256:
+`e2ea6f2b635c9f0daf22435329c51880e18415297ee0e90c80f69bd0c24f950c`.
+Evidence: `bin/mac-gesture-20261022/recorded-viewport/`. All six selected
+native registrations passed in 88.26 seconds, including the rebuilt real VST3
+editor fixture. Both actual-app composing/recovery cases passed in 26.675
+seconds. The qualification checkout remains clean at that source. Do not rerun
+its recorded build or checks against newer sources.
+
+The preceding 99d72db32 CI is terminal: Mac ARM and Intel passed. Windows
+compiled and passed portable/worker, native, editor and vendor ownership gates,
+but its 112-case integration run failed (21 failures, one error, one skip).
+Diagnostics include empty audio-device lists and live-startup failures, including
+a control-window teardown race. Downloaded log hashes are in
+`saved-state-recovery/completed-ci.json`. This remains failed evidence, not an
+optional audio skip or a green cross-platform integration gate.
+
+A controlled, sequential 60-second comparison reused the existing 9c5c6ebb1
+and 99d72db32 binaries with the identical composed F04 song, SHA256
+`07ad2f487ecb8a11e954b19369c22af7d888c01db62522d6b1b6a3df3418370a`,
+at 48 kHz / 480 frames. The baseline had four deadline overruns; the candidate
+had five. Both completed 6,003 callbacks without processor faults, starvation
+or device errors. Maximum callbacks were 10,654 and 12,284.5 microseconds.
+Thus the dense-song issue also exists in the earlier binary; these two samples
+do not establish statistical equivalence or identify its cause. Reports and
+unchanged project/binary checks are in
+`same-song-audio-20261023-corrected-launch/`. The first helper attempt omitted
+the mandatory automation flag and exited before running audio; its failed
+receipt is retained separately. No extra build was used for this comparison.
+
+Fresh Computer Use used two owned processes, both now closed normally:
+
+- PID 15784: kept Balance lane, Fit, zoom and pan with synchronized range
+  fields and continuous playback. The actual two-point take was only 507
+  frames (10.5625 ms) long. The one-second Fit minimum still left its handles
+  8.95 DIP apart: this is a real usability failure missed by the earlier
+  50 ms fixture. Its 140.227-second dense-song run had 17 overruns, no
+  starvation/device errors or processor faults, maximum callback 12,426.2 us.
+- PID 43520: real vendor slider drag plus Right key captured three ordered
+  original timestamped inputs. A later vendor edit after Stop preserved
+  protection after Keep. Restore saved state was disabled during playback and
+  explicitly refused while the vendor editor remained open. After stopping
+  playback and closing only that editor, recovery succeeded, restored visible
+  manual value .625, released protection and retained all three kept points.
+  Song automation opened that exact lane; native Ctrl+S saved the private
+  project. Read-only snapshots prove identical automation and document revision
+  across refusal, recovery, navigation and save. The 467.620-second simple-song
+  run had zero overruns, one starvation indicator, no device errors/faults and
+  maximum callback 4,218.5 us. It is not a clean performance pass.
+
+`recorded-viewport/foreground-check.json` deliberately records `status:held`
+and `productionPackageAllowed:false`. Screenshots do not qualify flicker;
+both audio reports retain `realtimeAuditPassed:false` and
+`sustainedPresentationQualified:false`. No new production package or main
+merge was made. The separately delivered 9c5c6ebb1 precise-note executable
+remains unchanged.
+
+At 19:08 UTC, new CI runs 40006849624 (Mac) and 40006850177 (Windows) were
+still compiling the exact 4d1fa80fe source. Latest actual start was 18:52:42:
+**no next checkpoint before 19:52:42 UTC**, and refresh later starts plus
+completion of these runs before dispatch. Do not overlap another checkpoint.
+
+## Next correction: sample-scale recorded editing
+
+These changes are source-only; the preceding executable does not contain them.
+
+- `AbsoluteAutomationWindow.hpp`: Fit uses the actual multi-point span with
+  padding down to a sample, retaining a useful one-second view for a singleton
+  and 0..8 seconds for an empty lane. Canvas Backspace deletes the selected
+  point through existing automatic edit/history publication; text Backspace
+  remains native text editing.
+- `AutomationCanvas.hpp`: configurable position quantum and minimum zoom span
+  let the absolute-time owner use one 48 kHz frame. Pattern/graph owners retain
+  the existing one-unit mapping and quarter-row zoom defaults. Without this
+  separation, fixing Fit alone still collapses adjacent sample-time points.
+  No shared musical model, DSP, API or project format changes are introduced.
+- `AutomaticEditsApplicationTests.inc`: uses the exact failed foreground
+  timestamps and requires handles to occupy over 80% of the canvas. Covers
+  adjacent samples at song start, late in the song and the legal endpoint,
+  synchronized fields and zoom, native text Backspace, canvas Backspace/Delete,
+  retained focus and exact one-step Undo.
+- `test_plugin_recording.py`: extends the composed recording journey from
+  Keep/navigation into immediate selected-point Backspace, exact Undo/Redo,
+  another Undo restoring the take, then the existing Keep Undo and save/reopen.
+  Playback epoch, continuing frames and unrelated music remain mandatory.
+
+Next bounded local gate: command-results (including the new cases), source
+navigation, parameter-preview and scratch-editor groups because the shared
+native canvas geometry header changed; the extended composed-song app case.
+Reuse the exact 4d vendor fixture/editor and recovery evidence if those inputs
+remain unchanged. Build app/scanner/workspace targets once in an isolated
+output, with all affected CI targets at the same hourly checkpoint. Perform
+fresh Computer Use on the corrected short take: Fit, zoom, pan, canvas versus
+text Backspace, Undo/Redo and keyboard focus while playback continues. Broad
+validation is triggered by a geometry/default regression, changed shared
+rendering or native provider dependency, or new composing failure. Dense-song
+audio profiling, Mac native-device lifecycle and reciprocal edited-project
+exchange remain open integration requirements; do not relax them to package.

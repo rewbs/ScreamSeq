@@ -479,6 +479,36 @@ class PluginRecordingTests(unittest.TestCase):
         points = self.read('automation.get')
         self.assertGreater(points['total'], points_before['total'])
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
+        if sweep_values:
+            # Continue composing directly in the kept lane. Native canvas
+            # deletion must be immediate, reversible and independent of audio.
+            owner = self.window('ScreamSeq.AbsoluteAutomation')
+            if self.desktop.focus(owner) != owner:
+                self.desktop.send(owner, 0x100, 0x75)  # F6: canvas focus.
+            self.assertEqual(self.desktop.focus(owner), owner)
+            self.desktop.send(owner, 0x100, 0x09)  # Select a point with Tab.
+            selected = self.read('workspace.get')['absoluteAutomation']
+            index = selected['selectedPoint']
+            self.assertGreaterEqual(index, 0)
+            remaining = selected['points'][:index] + selected['points'][index + 1:]
+            self.desktop.send(owner, 0x100, 0x08)  # Backspace on the canvas.
+            deleted = self.wait_for(lambda: self.read('workspace.get')['absoluteAutomation'],
+                                    lambda s: not s['dirty'] and s['pointCount'] == selected['pointCount'] - 1)
+            self.assertEqual(deleted['points'], remaining)
+            self.assertEqual(self.desktop.focus(owner), owner)
+            after_delete = self.read('automation.get')
+            self.assertEqual(after_delete['total'], points['total'] - 1)
+            self.write('history.undo')
+            self.assertEqual(self.read('automation.get'), points, 'Canvas Backspace must be exactly one Undo')
+            self.write('history.redo')
+            self.assertEqual(self.read('automation.get'), after_delete)
+            self.write('history.undo')
+            self.assertEqual(self.read('automation.get'), points)
+            continuing = self.read('transport.get')
+            self.assertTrue(continuing['playing'])
+            self.assertFalse(continuing['fault'])
+            self.assertEqual(continuing['playbackEpoch'], before_transport['playbackEpoch'])
+            self.assertGreater(continuing['frames'], before_transport['frames'])
         self.write('history.undo')
         self.assertEqual(self.read('automation.get'), points_before, 'Keep must be exactly one Undo step')
         self.write('history.redo')

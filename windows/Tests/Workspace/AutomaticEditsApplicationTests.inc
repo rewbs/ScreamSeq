@@ -57,7 +57,9 @@ void applicationAutomaticEdits(){
   }
   {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
-    const auto late=Json::array({{{"frame",7509600},{"value",-6.}},{{"frame",7512000},{"value",-3.}}});
+    // Original foreground take timestamps: only 507 frames (10.5625 ms)
+    // apart. A one-second minimum left the two handles less than 9 DIP apart.
+    const auto late=Json::array({{{"frame",7509566},{"value",-6.}},{{"frame",7510073},{"value",-3.}}});
     app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",late}});
     app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto baseline=app.documentOperation("automation.get",Json::object());const auto revision=app.view->session.revision;
@@ -66,11 +68,11 @@ void applicationAutomaticEdits(){
         std::abs(std::stod(restoreText(GetDlgItem(window,4628)))-state.at("endSeconds").get<double>())<1e-8,
         "Song automation range fields differ from the displayed viewport");return state;};
     const auto fitted=rangeMatches();
-    restoreCheck(fitted.at("startSeconds").get<double>()>155&&fitted.at("startSeconds").get<double>()<156.45&&
-      fitted.at("endSeconds").get<double>()>156.5&&fitted.at("endSeconds").get<double>()<158,
+    restoreCheck(fitted.at("startSeconds").get<double>()>156&&fitted.at("startSeconds").get<double>()<7509566./48000&&
+      fitted.at("endSeconds").get<double>()>7510073./48000&&fitted.at("endSeconds").get<double>()-fitted.at("startSeconds").get<double>()<.02,
       "A short late recording opened compressed against the entire song's end");
     restoreCheck(fitted.at("handles").size()==2&&
-      fitted.at("handles")[1].at("x").get<double>()-fitted.at("handles")[0].at("x").get<double>()>20,
+      fitted.at("handles")[1].at("x").get<double>()-fitted.at("handles")[0].at("x").get<double>()>fitted.at("canvas")[2].get<double>()*.8,
       "Fit does not separate nearby recorded points enough to select them");
     for(const int command:{4621,4623,4622,4620,4619}){press(window,command);rangeMatches();}
     SetWindowTextW(GetDlgItem(window,4627),L"150");SetWindowTextW(GetDlgItem(window,4628),L"170");press(window,4629);
@@ -79,6 +81,33 @@ void applicationAutomaticEdits(){
     press(window,4619);rangeMatches();
     restoreCheck(app.view->session.revision==revision&&app.documentOperation("automation.get",Json::object())==baseline,
       "Recorded viewport navigation wrote music or added history");
+    const auto timeField=GetDlgItem(window,4608);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(timeField);
+    SetWindowTextW(timeField,L"invalid");SendMessageW(timeField,EM_SETSEL,7,7);SendMessageW(timeField,WM_CHAR,VK_BACK,0);
+    restoreCheck(GetFocus()==timeField&&restoreText(timeField)==L"invali"&&app.documentOperation("automation.get",Json::object())==baseline,
+      "Song automation text Backspace deleted music or stole field focus");
+    SendMessageW(timeField,WM_KEYDOWN,VK_ESCAPE,0);SetFocus(window);
+    SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    const auto selected=lane.snapshot().at("selectedPoint").get<int>();
+    restoreCheck(selected>=0,"Song automation canvas did not select a point from the keyboard");
+    for(const auto key:{VK_BACK,VK_DELETE}){
+      const auto oldPoints=lane.snapshot().at("points");const auto index=lane.snapshot().at("selectedPoint").get<int>();
+      auto expected=oldPoints;expected.erase(expected.begin()+index);
+      SendMessageW(window,WM_KEYDOWN,key,0);settle(window);
+      restoreCheck(GetFocus()==window&&lane.snapshot().at("points")==expected&&!lane.snapshot().at("dirty").get<bool>(),
+        "Song automation keyboard deletion did not save the selected point with canvas focus retained");
+      app.edit("history.undo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Song automation point deletion did not Undo exactly once");
+      SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    }
+    for(const uint64_t frame:{uint64_t(0),uint64_t(7509566),uint64_t(604800)*48000-1}){
+      app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",frame},{"value",-6.}},{{"frame",frame+1},{"value",-3.}}})}});
+      press(window,4615);press(window,4619);const auto oneFrame=rangeMatches();
+      restoreCheck(oneFrame.at("handles").size()==2&&oneFrame.at("handles")[1].at("x").get<double>()-oneFrame.at("handles")[0].at("x").get<double>()>oneFrame.at("canvas")[2].get<double>()*.8,
+        "Fit collapsed adjacent sample-time automation points");
+      const auto beforeZoom=oneFrame.at("endSeconds").get<double>()-oneFrame.at("startSeconds").get<double>();press(window,4621);const auto zoomed=rangeMatches();
+      const auto afterZoom=zoomed.at("endSeconds").get<double>()-zoomed.at("startSeconds").get<double>();
+      restoreCheck(afterZoom<=beforeZoom+1e-9&&afterZoom>=1./48000-1e-9,"Song-time zoom inherited the pattern quarter-row limit");
+    }
     app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array()}});press(window,4615);press(window,4619);
     restoreCheck(rangeMatches().at("startSeconds")==0&&rangeMatches().at("endSeconds")==8,"Empty lane lost its useful initial range");
     app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",0},{"value",-6.}},{{"frame",uint64_t(604800)*48000},{"value",-3.}}})}});
