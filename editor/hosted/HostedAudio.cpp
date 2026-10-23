@@ -179,15 +179,35 @@ void NativePlugin::observedBaseline(uint32_t id,double value) noexcept {
   if(!activity_ || !activityProcessor_ || activityProcessor_>activity_->processors.size())return;
   for(auto &p:activity_->processors[activityProcessor_-1].parameters)if(p.id==id){p.value=float(value);return;}
 }
-PluginState NativePlugin::state() const {
-  const auto *p=publishedVendor();
-  auto state = p->backend_ ? p->backend_->state() : PluginState{descriptor_};
+void NativePlugin::decorateState(PluginState &state) const {
   state.instanceID = instanceID_;
   state.bypass=bypassed();
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
   state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=audioLayout_;
+}
+PluginState NativePlugin::state() const {
+  const auto *p=publishedVendor();
+  auto state = p->backend_ ? p->backend_->state() : PluginState{descriptor_};
+  decorateState(state);
   if (p->builtin_) state.state = p->builtin_->state();
   return state;
+}
+std::optional<NativePlugin::ProcessingState> NativePlugin::processingState() const {
+  if(!presetSettled_.load(std::memory_order_acquire))
+    throw std::runtime_error("Finish the vendor handoff before observing processing state");
+  const auto *vendor=publishedVendor();
+  if(!vendor->backend_)return {}; // Built-in serialization is not this capability.
+  const auto source=editSource();
+  PluginState before{descriptor_};decorateState(before);
+  auto observed=vendor->backend_->processingState();
+  PluginState after{descriptor_};decorateState(after);
+  if(!presetSettled_.load(std::memory_order_acquire)||publishedVendor()!=vendor||editSource()!=source||before!=after)
+    throw std::runtime_error("Native provider changed during processing-state observation");
+  if(!observed)return {};
+  if(observed->descriptor!=descriptor_||observed->audioLayout!=before.audioLayout)
+    throw std::runtime_error("Native processing-state identity or audio layout changed");
+  decorateState(*observed);
+  return ProcessingState{source,std::move(*observed)};
 }
 std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
   std::vector<PluginInstrumentAlias> result;

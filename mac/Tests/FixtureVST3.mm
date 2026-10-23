@@ -49,6 +49,8 @@ static bool fixtureLargeCatalog=false,fixtureStepped=false;
 static std::atomic<uint64_t> fixtureSingleSampleCalls{0};
 static std::atomic<uint64_t> fixtureProcessCalls{0};
 extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureProcessCalls(){return fixtureProcessCalls.load();}
+static void (*fixtureStateReadHook)()=nullptr;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStateReadHook(void (*hook)()){fixtureStateReadHook=hook;}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStepped(bool enabled){fixtureStepped=enabled;fixtureSingleSampleCalls=0;}
 extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureSingleSampleCalls(){return fixtureSingleSampleCalls.load();}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
@@ -338,6 +340,7 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API getState(IBStream *s) override {
+    const auto hook=fixtureStateReadHook;fixtureStateReadHook=nullptr;if(hook)hook();
     float value = gain;
     if (s->write(&value,4)!=kResultOk) return kResultFalse;
     if (programs && (s->write(programValues.data(),8)!=kResultOk || s->write(unitGains.data(),8)!=kResultOk)) return kResultFalse;

@@ -168,6 +168,12 @@ public:
   std::vector<PluginProgram> programs() const override;
   void loadProgram(const std::string &) override;
   PluginState state() const override;
+  std::optional<PluginState> processingState() const override {
+    // AU ClassInfo threading and snapshot coherence still require their own
+    // qualification. Never inherit the VST3 capability by assuming equivalence.
+    if(!vst_)return {};
+    return vst_->processingState();
+  }
   double latency() const override { return latency_; }
   double tail() const override { return tail_; }
   bool latencyChangePending() const noexcept override { return vst_ && vst_->latencyChangePending(); }

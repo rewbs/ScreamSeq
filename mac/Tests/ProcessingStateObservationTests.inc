@@ -51,3 +51,72 @@ static void processingStateObservation(const PluginState &saved,const char *path
     original.value==.625&&original.hostTime>0&&plugin.popEditBefore(input,original)==PluginEditRead::Complete,
     "State observation lost or duplicated exact original native input");
 }
+
+static NativePlugin *processingObservationHookOwner=nullptr;
+static void changeProcessingObservationOwner(){processingObservationHookOwner->bypass(true);}
+static PluginChain *processingObservationHookChain=nullptr;
+static uint32_t processingObservationHookParameter=0;
+static bool processingObservationQueued=false;
+static void queueDuringProcessingObservation(){
+  processingObservationQueued=processingObservationHookChain->parameter(0,processingObservationHookParameter,.4f);
+}
+static void facadeProcessingStateObservation(const PluginState &saved,const PluginState &au,const char *path) {
+  NSBundle *bundle=[NSBundle bundleWithPath:@(path)];
+  struct Module {void *value;~Module(){if(value)dlclose(value);}} module{
+    dlopen(bundle.executablePath.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL)};
+  check(module.value!=nullptr,"Load facade state-observation fixture");
+  const auto hook=reinterpret_cast<void(*)(void(*)())>(dlsym(module.value,"ResonanceFixtureStateReadHook"));
+  check(hook!=nullptr,"Facade observation reentrancy hook is missing");
+  NativePlugin plugin(saved,48000);const auto accepted=plugin.state();const auto source=plugin.editSource();
+  const auto lease=plugin.beginEditorInputBarrier();check(lease.has_value(),"Protect native state-observation input");
+  const auto observed=plugin.processingState();
+  check(observed&&observed->source==source&&observed->state==accepted,
+    "Facade state observation lost the provider, stable identity, layout or opaque state");
+  processingObservationHookOwner=&plugin;
+  struct Reset {decltype(hook) clear;~Reset(){clear(nullptr);processingObservationHookOwner=nullptr;processingObservationHookChain=nullptr;}} reset{hook};
+  hook(changeProcessingObservationOwner);
+  bool refused=false;try{(void)plugin.processingState();}catch(const std::runtime_error &){refused=true;}
+  check(refused&&plugin.bypassed()&&plugin.editSource()==source,
+    "State observation combined old vendor state with reentrant facade metadata or undid a newer edit");
+  plugin.bypass(false);
+  const auto retry=plugin.processingState();
+  check(retry&&retry->source==source&&retry->state==accepted&&plugin.endEditorInputBarrier(*lease),
+    "Rejected observation lost native input ownership or could not retry");
+  NativePlugin unsupportedAU(au,48000);const auto beforeAU=unsupportedAU.state();
+  check(!unsupportedAU.processingState()&&unsupportedAU.state()==beforeAU,
+    "Unsupported AU observation silently fell back to ordinary state serialization");
+  PluginState builtin{NativePlugin::builtins().at(0)};builtin.instanceID="unsupported-builtin-observation";
+  NativePlugin unsupportedBuiltin(builtin,48000);const auto beforeBuiltin=unsupportedBuiltin.state();
+  check(!unsupportedBuiltin.processingState()&&unsupportedBuiltin.state()==beforeBuiltin,
+    "Unsupported built-in observation silently adopted an unqualified capability");
+  PluginChain chain({saved,au},48000);
+  const auto chainBaseline=chain.states();const auto chainSource=chain.editSource(0);
+  chain.beginRenderBlock(); // Ordinary state() explicitly refuses an open block.
+  const auto rackObservation=chain.processingState(0);
+  check(rackObservation&&rackObservation->source==chainSource&&rackObservation->state==chainBaseline[0]&&
+    !chain.processingState(1),"Processing observation drained or rejected the current render block, or assumed AU support");
+  std::array<float,128> pcm;pcm.fill(.2f);check(chain.process(pcm.data(),64),"Finish the observed native rack block");
+  processingObservationHookChain=&chain;processingObservationHookParameter=plugin.parameters().at(0).id;
+  processingObservationQueued=false;hook(queueDuringProcessingObservation);
+  refused=false;try{(void)chain.processingState(0);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&processingObservationQueued&&chain.editSource(0)==chainSource,
+    "Rack observation accepted a snapshot across reentrant queued controls or discarded the new edit");
+  const auto queuedObservation=chain.processingState(0);
+  check(queuedObservation&&queuedObservation->state==chainBaseline[0],
+    "Retrying rack observation flushed the newer queued control early");
+  pcm.fill(.2f);check(chain.process(pcm.data(),64),"Render the retained reentrant control");
+  const auto afterQueuedRender=chain.processingState(0);
+  check(afterQueuedRender&&afterQueuedRender->state.state!=chainBaseline[0].state,
+    "Rejected observation lost the newer parameter before normal processing adopted it");
+  AudioDevice audio;audio.setPlugins({saved,au});const auto deviceBaseline=audio.pluginStates();
+  const auto epoch=audio.pluginEpoch();const AudioDevice::PluginStateOwner owner{saved.instanceID,audio.pluginEditSource(0)};
+  const auto deviceObservation=audio.pluginProcessingState(epoch,owner);
+  check(deviceObservation&&deviceObservation->source==owner.source&&deviceObservation->state==deviceBaseline[0]&&!audio.active(),
+    "Device observation lost native identity or started an output device");
+  for(unsigned invalid=0;invalid<3;++invalid) {
+    auto wrong=owner;if(invalid==1)++wrong.source.incarnation;else if(invalid==2)wrong.plugin="missing-observation-owner";
+    refused=false;try{(void)audio.pluginProcessingState(epoch+(invalid==0),wrong);}catch(const std::runtime_error &){refused=true;}
+    check(refused&&audio.pluginStates()==deviceBaseline&&!audio.active(),
+      "Wrong observation epoch, provider or plugin changed native state or transport");
+  }
+}

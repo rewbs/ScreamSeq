@@ -577,6 +577,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       synth.instrument = 1;
       closedInputProtection(gain);
       PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";
+      facadeProcessingStateObservation(gain,closedAU,argv[1]);
       closedInputProtection(closedAU);
       stoppedRecordedPublication(closedAU);
       NativePlugin effect(gain, 48000);

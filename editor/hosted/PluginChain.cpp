@@ -586,6 +586,18 @@ PluginState PluginChain::state(size_t slot) {
   state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
   return state;
 }
+std::optional<NativePlugin::ProcessingState> PluginChain::processingState(size_t slot) const {
+  if(slot>=rack_.size())throw std::out_of_range("Processing-state target no longer exists");
+  const auto entry=rack_[slot];const auto plugin=entry->plugin;const auto preset=entry->preset;
+  const auto source=plugin->editSource();
+  const auto revision=recordedRevision_,graphRevision=graphControlRevision_;
+  const auto fence=write_.load(std::memory_order_acquire);
+  auto observed=plugin->processingState();
+  if(slot>=rack_.size()||rack_[slot]!=entry||entry->plugin!=plugin||entry->preset!=preset||plugin->editSource()!=source||
+     recordedRevision_!=revision||graphControlRevision_!=graphRevision||write_.load(std::memory_order_acquire)!=fence)
+    throw std::runtime_error("Rack or queued controls changed during processing-state observation");
+  return observed;
+}
 std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
   std::vector<PluginFailureEntry> result;
   for(size_t i=0;i<rack_.size();++i) {

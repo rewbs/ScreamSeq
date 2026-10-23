@@ -100,6 +100,9 @@ public:
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
   struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
   struct PluginStateOwner {std::string plugin;PluginEditSource source;};
+  // Native owner only; caller protects the retained take/input cuts. Unlike
+  // ordinary state(), this never stops/joins audio or drains control queues.
+  std::optional<NativePlugin::ProcessingState> pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &);
   // Caller holds the full group's native input leases and rechecks its fixed
   // cuts before and after. Never stops an active device or rewrites saved blobs.
   // Refusal/exception retains the take, including after partial vendor restore.

@@ -170,6 +170,7 @@ class NativePlugin {
   std::atomic<double> tail_{0};
   PluginDescriptor descriptor_;
   std::string instanceID_;
+  void decorateState(PluginState &) const;
   uint32_t assignedInstrument_ = 0, midiChannel_ = 1;
   std::vector<PluginInstrumentAlias> aliases_;
   PluginTransport transport_;
@@ -289,6 +290,11 @@ public:
   void loadProgram(const std::string &id); // Control-thread only, on a stopped/prepared instance.
   std::optional<EffectMeters> meters() const noexcept {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->meters() : std::nullopt;}
   PluginState state() const;
+  struct ProcessingState {PluginEditSource source;PluginState state;};
+  // Control owner only, with provider lifetime/input protected by the caller.
+  // Rejects a fading or replaced vendor and changed facade metadata. It neither
+  // drains queued parameters nor establishes an original-input cut by itself.
+  std::optional<ProcessingState> processingState() const;
   // Quiescent native-owner repair, never an audio callback or live preset.
   // The native adapter must protect/close editor input and drain accepted work.
   // It also guards input cuts, document/rack revision and storage for the whole
@@ -714,6 +720,9 @@ public:
   // Quiescent control owner only, like states(). Capture one retained provider
   // without serializing unrelated vendors. Native input leases are external.
   PluginState state(size_t slot);
+  // Retains the entry and preset while a provider pumps native callbacks.
+  // Observation never reads/drains audio-owned queues or corrects previews.
+  std::optional<NativePlugin::ProcessingState> processingState(size_t slot) const;
   // Complete-group stopped repair. Native adapters own quiescence, closed
   // input leases, input-cut/revision checks and retirement. No audio callback
   // may resume on this chain after adoption; prepare playback afresh.

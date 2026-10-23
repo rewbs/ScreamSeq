@@ -62,3 +62,41 @@ extra shared renderer suite: these files do not compile into Windows.
 
 No new build, package, CI dispatch or main merge was performed while preparing
 this primitive. The hourly gate remains authoritative.
+
+## Follow-on provider and ownership adapter (source only)
+
+This later batch is deliberately outside the `cc5553aab` frozen checkpoint.
+It adds `PluginBackend::processingState()` as an optional capability with no
+fallback to ordinary serialization. The Mac adapter opts in only for VST3;
+AU, built-ins and the Windows provider remain explicitly unsupported here.
+That does not change their existing recording or save behavior.
+
+`NativePlugin::processingState()` returns the original provider source together
+with the observed state, preserving the same facade metadata used by ordinary
+save. It refuses a vendor handoff, changed provider, reentrant metadata edit,
+descriptor mismatch or physical-layout mismatch. `PluginChain` retains the rack
+entry and prepared preset through native callbacks and verifies the slot owner,
+recorded and graph revisions, provider source and queued-control write fence.
+It does not inspect the audio-owned open-block flag or drain pending controls.
+The Mac `AudioDevice` adapter additionally guards host epoch and stable plugin
+identity before and after the observation. These are control-owner calls: the
+caller must retain the device/chain and protect original input. None establishes
+an input cut, canonical save, coherent component/controller snapshot or proof of
+audio adoption by itself.
+
+The native fixture now supplies a one-shot state callback to exercise reentrancy.
+New source assertions cover exact identity/metadata, refusal of a bypass edit
+without undoing that edit, retry with the original input lease, explicit AU and
+built-in refusal, observation inside an open render block, rejection of a newly
+queued control without flushing or losing it, and wrong device epoch/provider/
+plugin refusal without activating audio. The original process-call and exact
+sample-offset assertions remain in the earlier primitive checkpoint.
+
+Validation for this follow-on batch: both Mac architecture native-plugin gates,
+shared host tests and Windows compilation of the shared facade are required at
+the next coordinated checkpoint. Source review and `git diff --check` are not
+runtime qualification. Ordinary serialization only delegates its existing
+metadata assignments to a helper; persistence bytes and API/schema are unchanged.
+The future live-release consumer still requires cancellation-adoption evidence,
+private canonicalization, full-group input/revision validation and reciprocal
+save/reopen checks before changing any stopped-transport safety guard.

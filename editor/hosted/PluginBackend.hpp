@@ -30,6 +30,13 @@ public:
   virtual std::vector<PluginProgram> programs() const = 0;
   virtual void loadProgram(const std::string &id) = 0;
   virtual PluginState state() const = 0;
+  // Optional control-owner observation permitted concurrently with processing.
+  // Never implement this by calling state() unless that path is independently
+  // non-flushing: no process(), parameter publication, activation or queue reads.
+  // The caller retains the provider and guards its input boundary. Returned
+  // component/controller state need not be atomic or include pending audio input.
+  // Unsupported providers explicitly refuse; there is no stopped-state fallback.
+  virtual std::optional<PluginState> processingState() const {return {};}
   virtual double latency() const = 0;
   virtual double tail() const = 0;
   virtual bool latencyChangePending() const noexcept { return false; }

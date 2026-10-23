@@ -255,6 +255,20 @@ std::vector<PluginState> AudioDevice::pluginStates() {
     pluginStates_ = plugins_->states();
   return pluginStates_;
 }
+std::optional<NativePlugin::ProcessingState> AudioDevice::pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &owner) {
+  const auto validate=[&]()->size_t {
+    if(!plugins_||pluginEpoch_!=expectedEpoch||owner.plugin.empty()||!owner.source.incarnation)
+      throw std::runtime_error("Processing-state observation belongs to a replaced native host");
+    const auto index=pluginSlot(owner.plugin);
+    if(!index||plugins_->editSource(*index)!=owner.source)
+      throw std::runtime_error("Processing-state observation belongs to another native provider");
+    return *index;
+  };
+  const auto index=validate();auto observed=plugins_->processingState(index);
+  if(validate()!=index||(observed&&observed->source!=owner.source))
+    throw std::runtime_error("Native provider moved during processing-state observation");
+  return observed;
+}
 void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
     std::span<const PluginState> saved) {
   const auto validate=[&] {
