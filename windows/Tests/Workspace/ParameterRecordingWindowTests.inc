@@ -91,6 +91,18 @@ void applicationParameterRecordingReview() {
       (GetWindowLongPtrW(control(9739),GWL_STYLE)&ES_READONLY)&&
       GetNextDlgTabItem(window,control(9732),FALSE)==control(9739),
       "Recording details are not readable, read-only or adjacent to the list in Tab order");
+    // The same target and identical-looking rows in another take are a new
+    // page. Ordinary polling retains the current event; take replacement must
+    // not silently reinterpret its row as input from the new recording.
+    ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::setItemState(control(9732),71,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    SetFocus(control(9732));SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==71,"Unchanged take polling replaced the selected original input");
+    take["take"]="replacement-with-identical-page";SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&GetFocus()==control(9732)&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&!tool.snapshot().at("target").get<std::string>().empty()&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos&&writes.size()==1&&songState(app)==music,
+      "New take retained a previous take's row selection or changed musical data");
     const std::string refusal="Disable this parameter's pattern automation before recording absolute automation. The original input remains available for review.";
     // Use the live producer's wire shape, not a hand-written recovery archive:
     // the two intentionally have different timestamp field names.
@@ -120,6 +132,31 @@ void applicationParameterRecordingReview() {
     restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos&&
       tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740994")!=std::string::npos,
       "Arrow-key selection did not update the complete recording input details");
+    const auto originalDelivery=delivery;const auto originalDetails=tool.snapshot().at("inputDetails");
+    SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
+    delivery["events"].erase(delivery["events"].begin());delivery["retained"]=1;
+    SendMessageW(window,WM_TIMER,7,0);
+    DWORD keptFirst=0,keptLast=0;SendMessageW(control(9739),EM_GETSEL,WPARAM(&keptFirst),LPARAM(&keptLast));
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&tool.snapshot().at("inputDetails")==originalDetails&&
+      GetFocus()==control(9739)&&keptFirst==2&&keptLast==9,"Delivery reconciliation redirected selected input or reset details selected for copying");
+    delivery["events"][0]["state"]="refused";delivery["events"][0]["error"]="Later confirmed refusal";
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Later confirmed refusal")!=std::string::npos,
+      "Delivery outcome update discarded the original selected input");
+    delivery["events"]=Json::array({originalDelivery.at("events")[0]});SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Select an input")!=std::string::npos,
+      "Expired delivery selection silently moved to another original input");
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1,"Polling silently reselected an expired input");
+    ScreamSeq::NativeReportList::setItemState(control(9732),0,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    delivery["events"].push_back(delivery["events"][0]);delivery["retained"]=2;SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1,"Ambiguous duplicate original inputs fabricated stable selection");
+    delivery=originalDelivery;SendMessageW(window,WM_TIMER,7,0);
+    ScreamSeq::NativeReportList::setItemState(control(9732),1,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    restoreCheck(writes.size()==1&&songState(app)==music,"Delivery selection maintenance wrote or replayed musical input");
+    SetFocus(control(9732));
     SendMessageW(control(9732),WM_KEYDOWN,VK_UP,0);
     SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
     SendMessageW(window,WM_TIMER,7,0);restoreCheck(tool.snapshot().at("target")=="",

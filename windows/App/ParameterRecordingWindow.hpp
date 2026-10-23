@@ -31,7 +31,7 @@ private:
   static constexpr UINT_PTR notificationSubclass=0x50525731;
   static constexpr UINT_PTR listSubclass=0x50525732;
   Callbacks callbacks_;
-  std::string document_,targetKey_,error_,displayedTarget_;
+  std::string document_,targetKey_,error_,displayedTarget_,displayedTake_,targetCatalogueTake_;
   std::map<std::pair<std::string,uint32_t>,std::wstring> parameterNames_;
   Json state_={{"retained",false}},delivery_=Json::object(),rack_=Json::array(),rows_=Json::array(),targets_=Json::array(),lossEvidence_;
   NativeWriteCompletion completion_;
@@ -40,7 +40,7 @@ private:
   std::optional<QueuedAction> queuedAction_;
   bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
-  bool pending_=false,setting_=false,lossAcknowledged_=false,targetChosen_=false;
+  bool pending_=false,setting_=false,presentingRows_=false,lossAcknowledged_=false,targetChosen_=false;
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(document_,state_.value("baseRevision",callbacks_.context().second),take(),generation_,
       retained(),pending_||queuedAction_.has_value(),completion_.retained()&&!pending_);
@@ -110,14 +110,14 @@ private:
     // Counts grow while playing. Rebuild only if identities changed, preserving
     // the native popup, selection and focus through ordinary recording polls.
     Json identities=Json::array();for(const auto &entry:targets)identities.push_back({{"plugin",entry.at("plugin")},{"parameter",entry.at("parameter")}});
-    if(identities==targets_)return;
+    if(identities==targets_&&targetCatalogueTake_==take())return;
     if(SendMessageW(controls_.at(target),CB_GETDROPPEDSTATE,0,0))return;
     for(const auto &entry:identities)rememberTarget(entry);
     // A healthy take should immediately show captured music, rather than an
     // empty delivery-error page. Respect an explicit target/delivery choice.
     if(!targetChosen_&&targetKey_.empty()&&!identities.empty()&&!delivery_.value("needsReview",false))
       targetKey_=identities.front().dump();
-    targets_=std::move(identities);setting_=true;
+    targets_=std::move(identities);targetCatalogueTake_=take();setting_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{setting_};
     NativeInputGate::present(controls_.at(target),CB_RESETCONTENT,0,0);
     NativeInputGate::present(controls_.at(target),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Native input delivery"));
@@ -165,13 +165,29 @@ private:
     }
     total_=data.at(deliveryView()?"retained":"total").get<size_t>();
     auto rows=data.at("events");if(deliveryView())for(const auto &entry:rows)rememberTarget(entry);
-    const bool pageChanged=displayedTarget_!=targetKey_||displayedOffset_!=offset_;
-    displayedTarget_=targetKey_;displayedOffset_=offset_;
+    const bool pageChanged=displayedTake_!=take()||displayedTarget_!=targetKey_||displayedOffset_!=offset_;
+    displayedTake_=take();displayedTarget_=targetKey_;displayedOffset_=offset_;
     if(rows!=rows_||pageChanged){
+      presentingRows_=true;struct PresentRows{bool &value;~PresentRows(){value=false;}}present{presentingRows_};
+      const auto list=controls_.at(events);
+      int selected=ListView_GetNextItem(list,-1,LVNI_SELECTED);
+      const bool first=pageChanged||rows_.empty();
+      if(first)selected=rows.empty()?-1:0;
+      else if(deliveryView()&&selected>=0&&size_t(selected)<rows_.size()) {
+        // Accepted deliveries leave this queue. Row numbers are not identities:
+        // keep the original input through removal/status changes, or clear an
+        // expired/ambiguous selection rather than display a different input.
+        const auto identity=[](Json event){event.erase("state");event.erase("error");return event;};
+        const auto wanted=identity(rows_[size_t(selected)]);
+        const auto oldCount=std::count_if(rows_.begin(),rows_.end(),[&](const auto &event){return identity(event)==wanted;});
+        int found=-1;unsigned matches=0;
+        for(size_t i=0;i<rows.size();++i)if(identity(rows[i])==wanted){found=int(i);++matches;}
+        selected=oldCount==1&&matches==1?found:-1;
+      }
+      if(selected>=0&&size_t(selected)>=rows.size())selected=-1;
       rows_=std::move(rows);NativeReportList::setItemCount(controls_.at(events),int(rows_.size()),LVSICF_NOSCROLL|LVSICF_NOINVALIDATEALL);
-      if(pageChanged)NativeReportList::setItemState(controls_.at(events),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
-      if(!rows_.empty()&&ListView_GetNextItem(controls_.at(events),-1,LVNI_SELECTED)<0)
-        NativeReportList::setItemState(controls_.at(events),0,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      NativeReportList::setItemState(list,-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+      if(selected>=0)NativeReportList::setItemState(list,selected,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
       InvalidateRect(controls_.at(events),nullptr,FALSE);
     }
     selectionDetails();
@@ -341,7 +357,7 @@ private:
   LRESULT notify(NMHDR *header) {
     if(header->hwndFrom!=controls_.at(events))return 0;
     if(header->code==LVN_GETDISPINFOW){auto &info=*reinterpret_cast<NMLVDISPINFOW *>(header);if((info.item.mask&LVIF_TEXT)&&info.item.pszText&&info.item.cchTextMax>0){const auto value=info.item.iItem>=0?cell(size_t(info.item.iItem),unsigned(info.item.iSubItem)):std::wstring();lstrcpynW(info.item.pszText,value.c_str(),info.item.cchTextMax);}return 0;}
-    if(header->code==LVN_ITEMCHANGED||header->code==NM_CLICK){selectionDetails();return 0;}
+    if(header->code==LVN_ITEMCHANGED||header->code==NM_CLICK){if(!presentingRows_)selectionDetails();return 0;}
     if(header->code==NM_CUSTOMDRAW)return NativeReportList::customDraw(*reinterpret_cast<NMLVCUSTOMDRAW *>(header),[this](size_t row,unsigned column){return cell(row,column);});return 0;
   }
   static LRESULT CALLBACK notifications(HWND window,UINT message,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data) {

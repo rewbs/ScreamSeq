@@ -8,6 +8,15 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October recording-review continuation:** the pending batch also retains
+selected original delivery identity as accepted entries leave the queue, clears
+expired/ambiguous selection and resets the catalogue/page on a new take even
+with identical parameters. Native copy selection/focus and unchanged music are
+asserted in the existing recording-review fixture. Add its plugin-search group:
+the next local checkpoint is now **nine native groups/seven app cases**, with
+unchanged build targets and the21:54:49UTC gate. Resolve the newest unexecuted
+freeze. No qualification claim follows from this source-only change.
+
 **23 October 21:33 UTC continuation:** the unbuilt Activity batch now also
 supports click-to-freeze trace inspection, Left/Right/Home/End, Enter to open
 the captured source and F6 to/from native details. Existing tests cover draft

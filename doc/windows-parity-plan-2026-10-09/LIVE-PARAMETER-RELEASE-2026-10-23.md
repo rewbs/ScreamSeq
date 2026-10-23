@@ -959,3 +959,31 @@ The local063 cumulative group timeout remains separate failed evidence even
 though the same group completed on CI. Its source split retains all assertions
 and bounds. Intel was still running at the read-only collection; do not restart
 either job. The next local8/7 selection and fresh foreground gate remain required.
+
+### Recording-review continuation: retained original input identity
+
+Source inspection found two related review faults in
+`windows/App/ParameterRecordingWindow.hpp`. Accepted native deliveries leave
+the retained queue, but its list kept a numeric row selection; a following
+input could silently replace the selected original input. Also, a new take
+with the same plugin/parameter catalogue could skip target rebuilding and
+retain the preceding take's list selection or display a delivery page behind
+the old parameter choice.
+
+The native view now keys its target catalogue and displayed page by take,
+preserves a uniquely matching original delivery through removal and status
+changes, and clears selection when the original input expires or is ambiguous.
+It does not invent a persisted event ID or alter the delivery/recovery format.
+List-state notifications are suppressed only during presentation, so the
+unchanged details text/caret selected for copying is not cleared and rewritten.
+Captured-event pages remain append-only within a take; fresh pages select their
+first input. The existing native recording-review fixture asserts new-take
+identity, identical-row replacement, removed preceding input, outcome changes,
+expired/duplicate inputs, native focus/text selection and exact unchanged song
+and write count. These assertions are **unbuilt**.
+
+Add `workspace-plugin-search-tests` to the existing bounded selection (same
+workspace executable and build targets): the next gate is **nine native groups
+/ seven actual-app cases**, then fresh Computer Use. This group took4.27 seconds
+on063 Windows CI. Keep every earlier assertion and failed receipt; no new build
+or test was run for this source continuation. The hourly gate is unchanged.
