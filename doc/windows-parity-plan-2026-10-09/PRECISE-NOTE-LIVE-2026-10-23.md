@@ -167,3 +167,37 @@ At 06:14:30 UTC the original f28 Mac ARM compilation passed; its tests, Mac Inte
 and Windows x64 jobs were still running. No additional build or test ran for this
 continuation; only source review, whitespace validation and Python syntax parsing.
 Include this revision in the existing next checkpoint rather than adding a build.
+
+## Source continuation: Save and canceled drag preserve queued input
+
+`Application::saveFile` previously captured the save revision without finishing
+a precise-note field's 300 ms automatic edit. A fast Ctrl+S could therefore save
+the previous value; a Save As dialog could allow the timer to change that revision
+and reject the later file write. Native Save now flushes an existing precise-note
+automatic intent before plugin collection and before capturing its save revision.
+A pending/dragging owner or still-busy admission blocks that save attempt. Invalid
+raw fields and failed/uncertain writes have no automatic intent and are never
+replayed by Save. Other retained-draft/save policies and the `document.save` API
+remain unchanged; the API still saves the already accepted document model.
+
+Starting a timeline drag also canceled any earlier field timer. Escape restored
+the pre-drag values but stranded that earlier valid edit. The drag now records
+whether an automatic intent existed; canceling resumes only that prior intent
+against the retained target/new generation. Completing the drag still commits
+one combined edit. A drag with no earlier automatic edit gains no new write.
+
+Native owner regressions cover timer-free Save flushing, exact one-write/caret
+retention, invalid raw values, busy admission, uncertain acknowledgements and
+Escape after a queued field edit. A second actual silent-playback journey invokes
+the native Save command immediately after typing, checks the latest note value,
+unchanged playback epoch, retained focus, no revision change on repeated Save,
+unrelated event preservation and exact saved-file reopening. The bounded next
+checkpoint remains five native groups and now selects **22 actual-app cases**.
+These source additions have only whitespace and Python syntax inspection so far.
+
+Mac lifecycle source was also rechecked: `restoreStoppedPluginBaselines` queries
+the live vendor's opaque state after restoring scalar baselines, and VST3 state
+capture can process a flush. Its stopped-only guard and closed-editor opaque
+Discard guard remain necessary and unchanged. Live Mac restoration still needs
+a separately prepared provider handoff and its native audio/device evidence;
+the current Windows composing fixes do not claim that gap is closed.

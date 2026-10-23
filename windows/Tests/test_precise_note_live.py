@@ -109,6 +109,38 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertEqual(self.read('pattern.notes.get', pattern=0), final)
         self.assertEqual(self.cells(), final_cells)
 
+    def test_native_save_includes_latest_precise_field_without_stopping_playback(self):
+        path = self.folder / 'native-save-precise.screamseq'
+        other = dict(channel=2, position=8*65536+123, note=71, instrument=2, velocity=87)
+        self.write('pattern.notes.set', pattern=0, events=[other])
+        self.write('document.save', path=str(path))
+        self.open_row(row=4)
+        self.native_panel(pinned=True, focus=True)
+        self.write('transport.play', pattern=0, startRow=4, endRow=5, cursorRow=4, loop=True)
+        before = self.read('transport.get')
+        field = self.text(363, '96')
+        # Native Save, deliberately without waiting for the typing debounce.
+        # The deterministic owner test separately proves timer-free admission;
+        # this checks the actual shell command and saved file while playing.
+        self.main_command(120)
+        self.assertFalse(self.editor()['retainedDraft'])
+        self.assertEqual(self.desktop.focus(field), field)
+        self.assertEqual(self.field_text(field), '96')
+        notes = self.read('pattern.notes.get', pattern=0)
+        self.assertEqual(next(e['velocity'] for e in notes['events'] if e['channel'] == 0), 96)
+        self.assertEqual([e for e in notes['events'] if e['channel'] == 2], [other])
+        revision = self.doc()['revision']
+        self.main_command(120)
+        self.assertEqual(self.doc()['revision'], revision)
+        current = self.read('transport.get')
+        self.assertTrue(current['playing'])
+        self.assertFalse(current['fault'])
+        self.assertEqual(current['playbackEpoch'], before['playbackEpoch'])
+        self.assertGreaterEqual(current['frames'], before['frames'])
+        self.write('transport.stop')
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+
 
 if __name__ == '__main__':
     unittest.main()

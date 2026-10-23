@@ -72,7 +72,7 @@ private:
   uint64_t generation_=0;
   unsigned rows_=0,rowsPerBeat_=4,units_=0,snap_=0;
   int selected_=-1,page_=0,dragSelection_=-1;
-  bool initialized_=false,setting_=false,pending_=false,dragging_=false;
+  bool initialized_=false,setting_=false,pending_=false,dragging_=false,dragHadAutomaticEdit_=false;
   bool replaceLegacy_=true,moveLegacyEffect_=false,canvasVisible_=false;
   HWND pendingFocus_{};
   WorkspaceRect plot_{};
@@ -194,6 +194,13 @@ public:
     observedDocument_=now.document;observedRevision_=now.revision;layout();requestPaint();}
   void hide()override{cancelDrag();if(automaticEdit_)flushAutomaticEdit();
     require(!automaticEdit_,"Wait for the pending note edit before closing");NativeToolWindow::hide();}
+  void flushForProjectSave(){
+    // Native Save must include a valid edit still inside its typing debounce.
+    // No timer means no automatic intent: never retry a failed/uncertain write
+    // or silently turn an invalid raw draft into a different musical value.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending precise-note edit before saving the project");
+  }
   bool dispatchLegacyAction(int id){
     if(!((id>=addHit&&id<=fillRow)||(id>=reloadCapturedCommand&&id<=close)))return false;
     action(id,BN_CLICKED);layout();requestPaint();return true;

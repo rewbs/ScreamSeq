@@ -301,6 +301,7 @@
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
+        if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         const auto document=documentId;auto revision=view->session.revision;auto path=view->path;

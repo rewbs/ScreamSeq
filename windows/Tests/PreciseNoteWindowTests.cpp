@@ -309,6 +309,35 @@ void cleanCapturedRevisionRefresh(Owner &owner){
   blank.click(Tool::addHit);blank.click(Tool::removeHit);
   require(text(blank.control(Tool::instrument))==L"2"&&!blank.tool.retainedDraft(),"Removing a hit exposed a later uncaptured sound after refresh");
 }
+void projectSaveFlushesOnlyQueuedIntent(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+  const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+  f.tool.flushForProjectSave();f.tool.flushForProjectSave();
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.retainedDraft()&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1},"Native project save failed to flush one valid queued edit with focus intact");
+  f.field(Tool::offset,L"1/");f.tool.flushForProjectSave();
+  require(f.writes==1&&text(f.control(Tool::offset))==L"1/"&&f.tool.retainedDraft(),"Project save normalized or published invalid raw input");
+  f.tool.reloadCaptured();f.field(Tool::velocity,L"95");f.current.busy=true;
+  rejected([&]{f.tool.flushForProjectSave();},"Project save proceeded while the automatic edit still awaited worker admission");
+  require(f.submissions.size()==1&&f.tool.retainedDraft(),"Busy project save submitted or lost a precise draft");
+  f.current.busy=false;f.beforeReply=[](const auto &method,Json &){if(method=="pattern.notes.set")throw std::runtime_error("Uncertain save flush acknowledgement");};
+  rejected([&]{f.tool.flushForProjectSave();},"Uncertain flush outcome did not stop the project save");
+  const auto submitted=f.submissions.size();f.tool.flushForProjectSave();
+  require(submitted==2&&f.submissions.size()==submitted&&f.tool.retainedDraft(),"Later project save replayed an uncertain field write");
+}
+void cancellingDragRetainsEarlierAutomaticEdit(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+  const auto before=f.tool.snapshot().at("selectedEvent"),plot=f.tool.snapshot().at("timeline");
+  const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.25,y+h*(1-94./127),MK_LBUTTON);
+  mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.5,y+h*.5,MK_LBUTTON);
+  require(f.tool.snapshot().at("selectedEvent")!=before,"Cancelled drag fixture did not move its hit");
+  key(f.tool.window(),VK_ESCAPE);
+  require(f.writes==0&&f.tool.snapshot().at("selectedEvent")==before&&GetCapture()!=f.tool.window(),"Escape failed to cancel just the drag");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.retainedDraft()&&
+    std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),before)!=f.saved.at("pattern-a").end(),
+    "Cancelling a drag lost or duplicated the valid field edit queued before it");
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -556,6 +585,8 @@ int wmain(int argc,wchar_t **argv){try{
     immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
     automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
     cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";
+    projectSaveFlushesOnlyQueuedIntent(owner);std::cout<<"PASS project save flushes one queued precise edit without replaying uncertain or invalid input\n";
+    cancellingDragRetainsEarlierAutomaticEdit(owner);std::cout<<"PASS cancelled precise drag retains an earlier queued field save exactly once\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";

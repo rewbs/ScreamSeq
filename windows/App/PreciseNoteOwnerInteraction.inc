@@ -63,13 +63,15 @@
   std::pair<float,float> point(const Json &event)const{return {plot_.x+float(event.at("position").get<unsigned>()%unitsPerRow)/unitsPerRow*plot_.w,
     plot_.y+(1-float(event.at("velocity").get<unsigned>())/127)*plot_.h};}
   void cancelDrag(){
-    if(!dragging_)return;dragging_=false;draft_=std::move(dragBefore_);dragBefore_=Json::array();++generation_;
+    if(!dragging_)return;const bool resumeAutomatic=std::exchange(dragHadAutomaticEdit_,false);
+    dragging_=false;draft_=std::move(dragBefore_);dragBefore_=Json::array();++generation_;
     if(GetCapture()==window_)ReleaseCapture();refresh(dragSelection_>=0&&size_t(dragSelection_)<draft_.size()?draft_[size_t(dragSelection_)]:Json());status(L"Timing drag cancelled");
+    if(resumeAutomatic)queueSave();
   }
   void deactivate()override{cancelDrag();}
   void mouse(UINT message,float x,float y,WPARAM)override{
     if(message==WM_CAPTURECHANGED){if(dragging_)cancelDrag();return;}
-    if(message==WM_LBUTTONUP&&dragging_){dragging_=false;const auto item=selected_>=0?draft_[size_t(selected_)]:Json();dragBefore_=Json::array();
+    if(message==WM_LBUTTONUP&&dragging_){dragging_=false;dragHadAutomaticEdit_=false;const auto item=selected_>=0?draft_[size_t(selected_)]:Json();dragBefore_=Json::array();
       if(GetCapture()==window_)ReleaseCapture();refresh(item);try{saveAutomatically();}catch(const std::exception &e){error(e);}return;}
     if(!canvasVisible_||!hasTarget()||pending_||context_().busy)return;
     try{
@@ -80,7 +82,7 @@
           auto item=edited(-1,positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0));
           if(item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
           require(!collision(item),"Another event already occupies that offset");draft_.push_back(item);++generation_;refresh(item);saveAutomatically();
-        }else if(nearest>=0){cancelAutomaticEdit();refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
+        }else if(nearest>=0){dragHadAutomaticEdit_=bool(automaticEdit_);cancelAutomaticEdit();refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
         else refresh(Json(),false);
       }else if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto item=draft_[size_t(selected_)];const auto previous=item;
         item["position"]=positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0);if(!(GetKeyState(VK_SHIFT)&0x8000)&&item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);

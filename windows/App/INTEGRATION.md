@@ -344,7 +344,10 @@ inserts at the clicked position even on a populated row. Backspace/Delete remove
 the selected timeline/list hit; native text fields keep text deletion. Insert,
 remove, duplicate, retrigger, arrow nudges and completed drags save immediately;
 valid field edits save after a 300 ms typing pause. Check validates; Save now
-flushes/retries retained edits. Each save merges untouched pattern events and
+flushes/retries retained edits. Native project Save finishes an already queued
+valid precise field edit first; it never retries an uncertain field write.
+Canceling a drag resumes an earlier queued field edit without keeping the drag.
+Each save merges untouched pattern events and
 creates one document Undo step. A white playback cursor uses renderer telemetry
 only inside the captured row, independently of editing selection/focus. Clean
 captured rows refresh after history or other edits, retaining their stable target
