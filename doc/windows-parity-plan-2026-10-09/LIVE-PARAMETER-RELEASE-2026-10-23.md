@@ -943,3 +943,19 @@ The retained log SHA256 is
 Windows/Intel tests were still active at21:32:06. This is Mac evidence for the
 earlier candidate, not qualification of the pending Windows corrections. No
 build, test process, package, main merge or CI restart ran for this continuation.
+
+### 21:36 UTC: terminal Windows063 CI
+
+Job120651362736 compiled and passed158/158 portable/worker registrations,
+51/51 native editor groups, vendor ownership and typed/pipe conformance. The
+117-case integration step failed24 assertions across21 distinct live-startup
+cases (three additional teardown failures) and recorded one skip. Routing
+readiness diagnostics report `precedingOwnedAudio.data.devices: []`; the other
+failures require an active WASAPI clock or report a terminated owned child.
+This supports the endpoint limitation but does not turn those failures into
+passes or qualify the complete live suite. The exact retained log SHA256 is
+`7750da328f0ceafbd96fa7269330c4b71cff67737c2848d6929783ef16aae5d8`.
+The local063 cumulative group timeout remains separate failed evidence even
+though the same group completed on CI. Its source split retains all assertions
+and bounds. Intel was still running at the read-only collection; do not restart
+either job. The next local8/7 selection and fresh foreground gate remain required.
