@@ -1964,3 +1964,8 @@ and the exact next requested method before delivering contribution samples.
 The existing1.1 clamp-total assertion remains unchanged. This fixture-only
 correction is **after** the frozen candidate and needs the next Mac checkpoint;
 no pass is claimed from source inspection. The cabinet timeout remains open.
+Its next-source test now flushes named phase starts and elapsed completion times
+around the seven existing groups, outside realtime audits. All workloads,
+independent numerical assertions and the120-second CTest timeout are retained.
+This will distinguish a slow phase from a hang without repeated whole-suite
+runs or an unsupported timeout increase; it does not fix or qualify that failure.
