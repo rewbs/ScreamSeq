@@ -42,7 +42,8 @@ def parameter_recording_admission(client):
     assert not reply['changed'] and reply['revision']==before['revision']
     assert state['retained'] is False and state['capturing'] is False and state['take']==''
     assert state['clock']=='mach-absolute-time' and isinstance(state['hostTime'],str) and int(state['hostTime'])>0
-    assert state['timebaseNumerator']>0 and state['timebaseDenominator']>0 and state['releaseRequiresStoppedTransport'] is True
+    assert state['timebaseNumerator']>0 and state['timebaseDenominator']>0
+    assert state['releaseRequiresStoppedTransport'] is False, 'An empty take owns no unsupported provider'
     expect_error(-32602,lambda:client.call('automation.recording.get',{'unknown':1}))
     expect_error(-32001,lambda:client.call('automation.recording.start',{'expectedRevision':'stale','plugins':[]}))
     for plugins in ([],True,['missing'],['missing','missing']):

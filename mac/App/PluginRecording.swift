@@ -1,4 +1,5 @@
 import AppKit
+import CoreFoundation
 
 /// Native presentation of the shared retained-take API. A lifecycle click is
 /// captured once, including its document, revision and loss acknowledgement.
@@ -39,6 +40,16 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   private(set) var polling = false, pending = false, needsReadback = false
   private(set) var targets = [[String: Any]]()
   private var state = [String: Any](), queued: Intent?, timer: Timer?
+  private struct RestorationRetry {
+    let action: Action, document: String, revision: String, take: String, loss: NSDictionary
+    let acknowledged: Bool
+    var remaining = 8
+  }
+  private var restorationRetry: RestorationRetry?
+  private func definiteTrue(_ value: Any?) -> Bool {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+    return number.boolValue
+  }
   private var displayedDeliveryLoss = NSDictionary()
   private var generation: UInt64 = 0
   private(set) var inputRows = [[String: Any]](), inputOffset = 0, inputTotal = 0
@@ -243,8 +254,12 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       "Stop ends this take without stopping song playback. Keep adds one Undo step."
     if let failure = data["restorationError"] as? String ?? data["intakeError"] as? String {
       status.stringValue = failure
+    } else if data["restorationPending"] as? Bool == true {
+      status.stringValue = "Waiting for the plugins to process restoration. Song playback continues."
     } else if completed {
-      status.stringValue = "The take is kept. Stop song playback, then finish native restoration; this adds no second Undo step."
+      status.stringValue = data["releaseRequiresStoppedTransport"] as? Bool == true ?
+        "The take is kept. Stop song playback, then finish native restoration; this adds no second Undo step." :
+        "The take is kept. Finish native restoration; this adds no second Undo step. Stop playback if the plugin cannot be verified live."
     } else if retained && state["compatible"] as? Bool != true {
       status.stringValue = state["transportPlaying"] as? Bool == true ?
         "Recording context lost. Stop playback, then save recovery or discard the retained take." :
@@ -261,10 +276,12 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       guard let self, self.generation == requestGeneration else { return }
       self.polling = false
       guard self.onDocument?() == currentDocument else {
+        self.restorationRetry = nil
         self.queued = nil; self.pending = false; self.revision = ""
         self.status.stringValue = "The song changed. Check its current take before recording."; self.updateControls(); return
       }
       guard let read = self.decoded(response) else {
+        self.restorationRetry = nil
         self.queued = nil; self.pending = false
         self.status.stringValue = (response["error"] as? [String: Any])?["message"] as? String ?? "Cannot read the retained take. Check again."
         self.updateControls(); return
@@ -272,10 +289,26 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
       self.accept(read.data, revision: read.revision, document: currentDocument)
       if explicit { self.needsReadback = false }
       if let intent = self.queued { self.queued = nil; self.submit(intent) }
+      else { self.retryRestorationIfReady() }
       self.updateControls()
     }
   }
-  func act(_ action: Action) {
+  private func retryRestorationIfReady() {
+    guard var retry = restorationRetry, !pending, !polling, !needsReadback else { return }
+    guard retry.document == document, onDocument?() == document, retry.take == take,
+      retry.revision == revision, retry.loss.isEqual(loss), retained, !capturing,
+      retry.action != .keep || retry.acknowledged == (acknowledge.state == .on) else {
+      restorationRetry = nil; return
+    }
+    guard retry.remaining > 0 else {
+      restorationRetry = nil
+      status.stringValue = "Restoration is still waiting. Stop playback or check the take before finishing it."
+      return
+    }
+    retry.remaining -= 1; restorationRetry = retry
+    act(retry.action, automaticRestoration: true)
+  }
+  func act(_ action: Action, automaticRestoration: Bool = false) {
     guard !pending, !needsReadback, !revision.isEmpty, let currentDocument = onDocument?(), currentDocument == document else { return }
     switch action {
     case .start: guard !retained, !(onInputProtected?() ?? false) else { return }
@@ -285,6 +318,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     case .discard: guard mayDiscard else { return }
     case .stopPlayback: guard needsPlaybackStop else { return }
     }
+    if !automaticRestoration { restorationRetry = nil }
     var params: [String: Any] = ["expectedRevision": revision]
     if action == .start {
       let selected = scope.selectedItem?.representedObject as? String
@@ -313,6 +347,7 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     onRequest(operation, intent.params) { [weak self] response in
       guard let self else { return }; self.pending = false
       guard self.onDocument?() == intent.document else {
+        self.restorationRetry = nil
         self.needsReadback = true; self.status.stringValue = "The song changed while this action completed. Check the current take."; self.updateControls(); return
       }
       if intent.action == .stopPlayback, let result = response["result"] as? [String: Any],
@@ -323,7 +358,20 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
         self.poll(explicit: true)
       } else if intent.action != .stopPlayback, let read = self.decoded(response) {
         self.accept(read.data, revision: read.revision, document: intent.document)
+        if (intent.action == .keep || intent.action == .discard),
+          self.definiteTrue(read.data["retained"]), self.definiteTrue(read.data["restorationPending"]),
+          read.data["releaseRequiresStoppedTransport"] as? Bool != true,
+          read.data["restorationError"] == nil, self.take == intent.take {
+          // Only a definite successful lifecycle response grants these bounded
+          // retries. A read, busy/error or uncertain completion never does.
+          if self.restorationRetry == nil {
+            self.restorationRetry = RestorationRetry(action: intent.action, document: intent.document,
+              revision: read.revision, take: intent.take, loss: self.loss,
+              acknowledged: intent.params["acknowledgeLoss"] as? Bool == true)
+          }
+        } else { self.restorationRetry = nil }
       } else {
+        self.restorationRetry = nil
         // No automatic replay, including after a transport/error reply. An
         // explicit read observes the serial session after this completion.
         self.needsReadback = true

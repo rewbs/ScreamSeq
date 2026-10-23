@@ -23013,7 +23013,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23103,7 +23103,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23155,7 +23155,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23224,7 +23224,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23270,7 +23270,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23320,7 +23320,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     },
     {
       "type": "object",
@@ -23366,7 +23366,7 @@
         "params"
       ],
       "additionalProperties": false,
-      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing; Keep can commit while native release remains retained and requires stopped transport. Retry with the current revision and same take; never replay accepted input. Explicit opaque Discard requires closed owned editors."
+      "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
     }
   ],
   "$defs": {

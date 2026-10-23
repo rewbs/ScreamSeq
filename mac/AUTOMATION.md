@@ -67,16 +67,28 @@ repair a gap. Inspection does not consume queues, resolve frames, change loss,
 acknowledge missing input or mutate the document/recovery evidence. Capture
 original timing diagnostics before the ring expires when investigating failure.
 
-**Mac release currently requires stopped transport.** A live Keep can succeed
-musically while returning `completed:true`, `retained:true` and a
-`restorationError`. Preserve that take; stop transport explicitly, reread its
-revision and retry Commit. Completed takes never publish history twice.
+**Mac VST3 release can verify during playback.** Keep/Discard first restore the
+current accepted controls and wait for every owned processor to render that
+publication. A definite successful response with `restorationPending:true`
+retains the take while processing catches up. Retry the same lifecycle operation
+with the current revision and same take; do not replay captured inputs. The native
+window performs at most eight such retries after successful readbacks. It never
+retries an unknown/error outcome automatically. Completed takes never publish
+history twice.
+
+Live verification uses non-flushing observations and disposable providers. It
+rejects inconsistent state round trips, changed identities/layouts/catalogues,
+hidden or discrete state differences and changed original input. AU observation
+is not yet supported in this path. A live Keep can therefore still return
+`completed:true`, `retained:true` and `restorationError`. Preserve that take; stop
+transport explicitly, reread its revision and retry Commit. No release is inferred
+from queue submission alone, and a pending attempt leaves native editors usable.
 Explicit opaque Discard additionally requires all owned native editors closed.
 Neither operation silently stops playback or drops ownership after a failed
 cleanup. `discardCleanupPending` identifies an adopted opaque repair whose
 original queues/backends remain retained. New input on a repaired provider is
-preserved and refuses release; a dedicated review flow for that case and live
-native restoration remain unfinished. Generic native rack controls now send
+preserved and refuses release; a dedicated review flow for that case and AU live
+restoration remain unfinished. Generic native rack controls now send
 original values and timestamps through the retained-take owner. Its native review
 provides Record, Stop recording, Keep, Discard and original-input pages.
 

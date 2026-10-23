@@ -27,6 +27,7 @@ private:
   std::map<std::string,PluginEditorInputBarrier> inputBarriers_;
   std::unique_ptr<AudioDevice::StoppedPluginRepair> stoppedRepair_;
   std::optional<AudioDevice::PluginPreviewCancellation> processingRestoration_;
+  std::optional<Context> processingRestorationContext_;
   size_t previewedEvents_=0;
   bool entering_=false;
   struct Entry {
@@ -202,6 +203,9 @@ public:
   }
   const RecordedGestureTake &take()const noexcept{return *take_;}
   bool awaitingDiscardCleanup()const noexcept{return stoppedRepair_&&stoppedRepair_->adopted();}
+  bool processingRestorationPending()const noexcept {
+    return processingRestoration_&&audio_.pluginPreviewCancellationState(*processingRestoration_)==PluginChain::PreviewCancellationState::Pending;
+  }
   bool compatible()const {
     if(take_->completed())return true;
     try{(void)current();}catch(const std::exception &){return false;}
@@ -349,6 +353,32 @@ public:
     std::vector<AudioDevice::PluginStateOwner> owners;owners.reserve(catalogs_.size());
     for(const auto &[identity,cut]:stoppedCuts_)owners.push_back({identity,cut.source});
     return restoreRetained(discard,[&]{audio_.restoreStoppedPluginBaselines(hostEpoch_,owners,saved);});
+  }
+  bool restoreProcessing(bool discard,std::span<const PluginState> saved) {
+    const auto before=context_();
+    require(audio_.pluginEpoch()==hostEpoch_&&before.second==take_->playbackEpoch(),
+      "Native restoration playback owner changed; take retained");
+    require(take_->completed()||before.first==take_->revision(),"Native restoration document changed; take retained");
+    if(!processingRestorationContext_)processingRestorationContext_=before;
+    require(*processingRestorationContext_==before,"Native restoration context changed during its pending processing; take retained");
+    std::vector<AudioDevice::PluginStateOwner> owners;owners.reserve(stoppedCuts_.size());
+    std::vector<PluginState> baselines;baselines.reserve(stoppedCuts_.size());size_t bytes=0;
+    for(const auto &[identity,cut]:stoppedCuts_) {
+      const auto found=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==identity;});
+      require(found!=saved.end(),"Native restoration baseline is missing; take retained");
+      constexpr size_t limit=256u*1024u*1024u;
+      require(found->state.size()<=limit-bytes,"Native restoration baseline group exceeds its budget; take retained");
+      bytes+=found->state.size();owners.push_back({identity,cut.source});baselines.push_back(*found);
+    }
+    const auto validate=[&] {
+      require(audio_.pluginEpoch()==hostEpoch_&&context_()==before,
+        "Native restoration context changed during verification; take retained");
+    };
+    validate();
+    const bool restored=restoreAfterProcessing(discard,[&] {
+      validate();audio_.verifyProcessingPluginBaselines(hostEpoch_,owners,baselines);validate();
+    });
+    validate();return restored;
   }
   // Explicit stopped Discard with every owned editor closed. This abandons
   // pending native input as well as the take; ordinary Keep/restoration never

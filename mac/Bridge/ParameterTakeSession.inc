@@ -1,6 +1,7 @@
 // Session-owner integration used by the retained-take API and native Record UI.
-// Release currently requires stopped playback, and opaque Discard requires
-// closed owned plugin editors. Keep these guards until live restoration is qualified.
+// Live release uses processing acknowledgements and non-flushing verification.
+// Unsupported/changed native state retains the take for the stopped path;
+// explicit opaque Discard still requires closed owned plugin editors.
 - (void)requireNoParameterTake {
   if(_parameterTake)throw Automation::Error(-32002,"Finish or discard the retained parameter take before changing song or plugin state");
 }
@@ -100,5 +101,14 @@
 - (BOOL)discardStoppedParameterTake {
   if(!_parameterTake)return YES;
   if(!_parameterTake->abandonStopped(_plugins))return NO;
+  _parameterTake.reset();return YES;
+}
+- (BOOL)releaseParameterTake:(BOOL)discard {
+  if(!_parameterTake)return YES;
+  if(!_audio->active())return discard?[self discardStoppedParameterTake]:[self releaseStoppedParameterTake:NO];
+  // This keeps original input protected while a submitted cancellation waits
+  // for real processing. No sleep, transport Stop or second history edit.
+  [self pollParameterTake:YES];
+  if(!_parameterTake->restoreProcessing(discard,_plugins))return NO;
   _parameterTake.reset();return YES;
 }

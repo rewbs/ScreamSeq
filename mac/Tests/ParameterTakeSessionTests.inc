@@ -8,6 +8,7 @@
 - (Tracker::RecordedGestureTake::Review)parameterTakeReview;
 - (Tracker::NativeParameterTake::CommitResult)commitParameterTake:(BOOL)acknowledgeLoss;
 - (BOOL)releaseStoppedParameterTake:(BOOL)discard;
+- (BOOL)releaseParameterTake:(BOOL)discard;
 - (BOOL)discardStoppedParameterTake;
 @end
 static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uint32_t device,uint32_t frames) {
@@ -219,27 +220,56 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
         [session.automationRevision isEqual:apiRevision],"Invalid Mac timing inspection changed history or passed admission");
     }
   }
+  NSDictionary *beforeRelease=api(@"transport.get",@{})[@"data"];
   NSDictionary *keepAPI=api(@"automation.recording.commit",@{@"take":token,@"acknowledgeLoss":@NO},true);
   NSString *keptAPIRevision=session.automationRevision;
   check([keepAPI[@"changed"] boolValue]&&[keepAPI[@"data"][@"completed"] boolValue]&&
-    [keepAPI[@"data"][@"retained"] boolValue]&&keepAPI[@"data"][@"restorationError"]&&session.playing&&
-    ![keptAPIRevision isEqual:apiRevision],"Live API Keep lost committed-but-retained outcome");
-  error=nil;
-  check(![session automationMethod:@"automation.recording.discard" params:@{@"take":token,@"expectedRevision":keptAPIRevision} error:&error]&&
-    error.code==-32002&&[session.automationRevision isEqual:keptAPIRevision]&&session.playing,
-    "Discard accepted a kept take or changed music/transport while refusing it");
-  api(@"transport.stop",@{},true);
-  NSDictionary *releasedAPI=api(@"automation.recording.commit",@{@"take":token},true);
-  check(![releasedAPI[@"changed"] boolValue]&&![releasedAPI[@"data"][@"retained"] boolValue]&&
-    [session.automationRevision isEqual:keptAPIRevision],"API restoration retry published duplicate history or lost completion");
+    !keepAPI[@"data"][@"restorationError"]&&session.playing&&![keptAPIRevision isEqual:apiRevision],
+    "Live API Keep failed to commit without an opaque-state restoration error");
+  if([keepAPI[@"data"][@"retained"] boolValue]) {
+    check([keepAPI[@"data"][@"restorationPending"] boolValue],"Kept VST3 take retained without a processing receipt");
+    error=nil;
+    check(![session automationMethod:@"automation.recording.discard" params:@{@"take":token,@"expectedRevision":keptAPIRevision} error:&error]&&
+      error.code==-32002&&[session.automationRevision isEqual:keptAPIRevision]&&session.playing,
+      "Discard accepted a kept take or changed music/transport while refusing it");
+  }
+  const auto finishLive=[&](NSString *method,NSDictionary *initial,NSString *identity,NSString *expectedRevision) {
+    NSDictionary *reply=initial;
+    for(unsigned attempt=0;[reply[@"data"][@"retained"] boolValue];++attempt) {
+      check(attempt<200&&[reply[@"data"][@"restorationPending"] boolValue]&&!reply[@"data"][@"restorationError"]&&session.playing,
+        "Live native release failed, stopped playback or exceeded bounded processing retries");
+      [NSThread sleepForTimeInterval:.01];reply=api(method,@{@"take":identity},true);
+      check(![reply[@"changed"] boolValue]&&[session.automationRevision isEqual:expectedRevision],
+        "Live restoration retry changed chronological history");
+    }
+    check(session.parameterRecordingTakeID==nil&&session.playing,"Live release lost playback or retained a stale input owner");
+  };
+  finishLive(@"automation.recording.commit",keepAPI,token,keptAPIRevision);
+  [NSThread sleepForTimeInterval:.02];NSDictionary *afterRelease=api(@"transport.get",@{})[@"data"];
+  check([afterRelease[@"audioActive"] boolValue]&&![afterRelease[@"pluginFailure"] boolValue]&&![afterRelease[@"fault"] boolValue]&&
+    [afterRelease[@"frames"] unsignedLongLongValue]>[beforeRelease[@"frames"] unsignedLongLongValue]&&
+    [afterRelease[@"callbacks"] unsignedLongLongValue]>[beforeRelease[@"callbacks"] unsignedLongLongValue]&&
+    [afterRelease[@"region"] isEqual:beforeRelease[@"region"]],"Native Keep/release interrupted transport progress or its playback region");
   NSDictionary *apiSaved=tree();
   check([apiSaved[@"automation"] count]==2&&[apiSaved[@"plugins"] isEqual:baseline[@"plugins"]],"API Keep changed accepted plugin state");
-  check([session historyUndo:NO error:&error]&&[tree()[@"automation"] isEqual:baseline[@"automation"]],"API take was not one Undo edit");
-  check([session historyUndo:YES error:&error]&&[tree()[@"automation"] isEqual:apiSaved[@"automation"]],"API take Redo changed input");
+  check([session historyUndo:NO error:&error]&&session.playing&&[tree()[@"automation"] isEqual:baseline[@"automation"]],"API take was not one live Undo edit");
+  check([session historyUndo:YES error:&error]&&session.playing&&[tree()[@"automation"] isEqual:apiSaved[@"automation"]],"API take live Redo changed input");
   check([session savePath:path error:&error]&&[reopened openPath:path error:&error],"Save/reopen API-created native take");
   NSDictionary *apiReopened=[NSPropertyListSerialization propertyListWithData:reopened.serializedData options:0 format:nil error:nil];
   check([apiReopened[@"automation"] isEqual:apiSaved[@"automation"]]&&[apiReopened[@"plugins"] isEqual:baseline[@"plugins"]],
     "API take persistence changed frames, plugin state or stable identities");
+  NSDictionary *discardArm=api(@"automation.recording.start",@{@"plugins":identities},true);
+  NSString *discardToken=discardArm[@"data"][@"take"],*discardRevision=session.automationRevision;
+  NSString *discardStamp=api(@"automation.recording.get",@{})[@"data"][@"hostTime"];
+  check([api(@"automation.recording.capture",@{@"take":discardToken,@"plugin":identities[0],@"parameter":@7,
+    @"value":@.85,@"timestamp":discardStamp},true)[@"data"][@"accepted"] boolValue],"Capture live API Discard input");
+  [NSThread sleepForTimeInterval:.03];api(@"automation.recording.stop",@{@"take":discardToken},true);
+  NSDictionary *discardAPI=api(@"automation.recording.discard",@{@"take":discardToken},true);
+  check(![discardAPI[@"changed"] boolValue]&&[session.automationRevision isEqual:discardRevision],"Live Discard changed the accepted revision");
+  finishLive(@"automation.recording.discard",discardAPI,discardToken,discardRevision);
+  NSDictionary *discarded=tree();
+  check([discarded[@"automation"] isEqual:apiSaved[@"automation"]]&&[discarded[@"plugins"] isEqual:apiSaved[@"plugins"]]&&
+    [[session snapshot:0][@"cells"] isEqual:snapshot[@"cells"]],"Live Discard altered accepted plugin state or unrelated music");
   [reopened shutdown];[session shutdown];
   [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
   std::cout<<"PASS real-session multi-target parameter take, direct admission, recovery, one-step Keep/Undo/Redo, stopped verification, save/reopen, empty and Discard\n";

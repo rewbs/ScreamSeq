@@ -23,7 +23,52 @@ private final class PluginTakeReplies {
 }
 
 extension InterfaceTests {
+  static func pluginRestorationRetryChecks() throws {
+    for keep in [true, false] {
+      let h = PluginTakeReplies(), view = h.view
+      h.load(h.state(capturing: false)); view.act(keep ? .keep : .discard)
+      h.revision = keep ? "song-a:1:0" : h.revision
+      var waiting = h.state(capturing: false, completed: keep)
+      waiting["restorationPending"] = true; waiting["releaseRequiresStoppedTransport"] = false
+      h.answer(waiting)
+      try require(h.writes.count == 1 && !view.pending && view.retained,
+        "A definite pending restoration waits for the next poll rather than recursively submitting")
+      h.load(waiting)
+      try require(h.writes.count == 2 && h.writes.last?.0 == (keep ? "automation.recording.commit" : "automation.recording.discard") &&
+        h.writes.last?.1["take"] as? String == "take-a" && h.writes.last?.1["expectedRevision"] as? String == h.revision,
+        "Restoration retry preserves its authorized action, take and post-Keep revision")
+      h.answer(h.state(""));h.load(h.state(""))
+      try require(h.writes.count == 2 && !view.retained, "A successful restoration cannot repeat its action")
+    }
+    for refusal in ["unknown", "numeric", "stopped", "changed-take", "changed-revision", "changed-loss", "read-error"] {
+      let h = PluginTakeReplies(), view = h.view
+      h.load(h.state(capturing: false));view.act(.keep)
+      var waiting = h.state(capturing: false, completed: true);waiting["restorationPending"] = true
+      if refusal == "unknown" { h.replies.removeFirst()(["error": ["code": -32002, "message": "Unknown completion"]]) }
+      else {
+        if refusal == "numeric" { waiting["restorationPending"] = 1 }
+        if refusal == "stopped" { waiting["releaseRequiresStoppedTransport"] = true }
+        h.answer(waiting)
+      }
+      if refusal == "changed-take" { waiting["take"] = "new-take" }
+      if refusal == "changed-revision" { h.revision = "song-a:9:0" }
+      if refusal == "changed-loss" { waiting["rejected"] = 1 }
+      if refusal == "read-error" {
+        view.poll();h.replies.removeFirst()(["error": ["code": -32002, "message": "Read unavailable"]])
+      }
+      h.load(waiting)
+      try require(h.writes.count == 1, "Restoration must not auto-replay after \(refusal)")
+    }
+    let bounded = PluginTakeReplies();bounded.load(bounded.state(capturing: false));bounded.view.act(.keep)
+    var waiting = bounded.state(capturing: false, completed: true);waiting["restorationPending"] = true
+    bounded.answer(waiting)
+    for _ in 0..<8 { bounded.load(waiting);bounded.answer(waiting) }
+    bounded.load(waiting)
+    try require(bounded.writes.count == 9 && bounded.view.retained && !bounded.view.pending &&
+      bounded.view.status.stringValue.contains("still waiting"), "Pending restoration retries must stop at their bounded limit")
+  }
   static func pluginRecordingChecks() throws {
+    try pluginRestorationRetryChecks()
     let h = PluginTakeReplies(), view = h.view
     h.load(h.state(""))
     try require(view.record.isEnabled && !view.stop.isEnabled && !view.keep.isEnabled && h.writes.isEmpty,

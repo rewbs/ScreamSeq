@@ -8,8 +8,14 @@
           value["transportPlaying"]=bool(self.playing);
           value["discardable"]=!take.completed()&&(take.endTime().has_value()||!self.playing);
           value["discardCleanupPending"]=_parameterTake->awaitingDiscardCleanup();
+          value["restorationPending"]=_parameterTake->processingRestorationPending();
         }
-        value["releaseRequiresStoppedTransport"]=true;
+        bool requiresStopped=false;
+        if(_parameterTake)for(const auto &provider:_parameterTake->take().providers()) {
+          const auto saved=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &state){return state.instanceID==provider.plugin;});
+          if(saved==_plugins.end()||saved->descriptor.format!="VST3")requiresStopped=true;
+        }
+        value["releaseRequiresStoppedTransport"]=requiresStopped;
         return value;
       };
       const auto requireTake=[&] {
@@ -67,9 +73,12 @@
           value=summary();value["changed"]=changed;
           std::string restorationError;
           try {
-            const bool released=commit?[self releaseStoppedParameterTake:NO]:[self discardStoppedParameterTake];
-            if(released){value["retained"]=false;value["capturing"]=false;value["discardCleanupPending"]=false;}
-            else restorationError="Native restoration is busy; retry this retained take";
+            const bool released=[self releaseParameterTake:!commit];
+            if(released){value["retained"]=false;value["capturing"]=false;value["discardCleanupPending"]=false;value["restorationPending"]=false;}
+            else {
+              value=summary();value["changed"]=changed;
+              if(!value.value("restorationPending",false))restorationError="Native restoration is busy; retry this retained take";
+            }
           }catch(const std::exception &e){restorationError=e.what();}
           if(!restorationError.empty()) {value=summary();value["changed"]=changed;value["restorationError"]=std::move(restorationError);}
           // Publication remains successful even when release needs stopped
