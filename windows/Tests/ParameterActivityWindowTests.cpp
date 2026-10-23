@@ -453,6 +453,50 @@ void run(){
         !tool.queuedMusicalEdit(),"Navigation silently rebased or hid newer input pumped during the original write");
       click(11002);
     }
+    {
+      const auto selectPoint=[&](int row){SendMessageW(itemList,LB_SETCURSEL,row,0);
+        SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
+      lane=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.625}},{{"frame",48000},{"value",.25}}});
+      context.revision="pumped-point-navigation";click(11002);selectPoint(1);
+      const auto before=edits;const auto initial=lane;
+      SetWindowTextW(GetDlgItem(window,11015),L"1.25");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(2);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      SendMessageW(window,WM_TIMER,0x5345,0);context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
+      require(lane==initial&&edits==before&&tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==1,
+        "Pumped point navigation or debounce reentered the worker or invalidated the queued destination");
+      SendMessageW(window,WM_TIMER,4,0);SendMessageW(window,WM_TIMER,0x5345,0);
+      auto expected=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.25}},{{"frame",60000},{"value",.625}}});
+      require(lane==expected&&edits==before+1&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("selectedPoint")==1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==1,
+        "Debounce-first pumped selection failed to save once and resolve the clicked frame after sorting");
+      SetWindowTextW(GetDlgItem(window,11015),L"1.5");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(0);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      SendMessageW(window,WM_TIMER,4,0);SendMessageW(window,WM_TIMER,0x5345,0);
+      expected=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",60000},{"value",.625}},{{"frame",72000},{"value",.25}}});
+      require(lane==expected&&edits==before+2&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==0,
+        "Navigation-first timer ordering lost the edit or selected a different point");
+      twoParameters=true;click(11002);SetWindowTextW(valueField,L"0.125");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")choose(11001,1);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};SendMessageW(window,WM_TIMER,0x5345,0);
+      require(lane==expected&&edits==before+2&&tool.snapshot().at("parameter")==1,
+        "Debounce raced the guarded parameter navigation");
+      SendMessageW(window,WM_TIMER,4,0);expected[0]["value"]=.125;
+      require(lane==expected&&edits==before+3&&!tool.queuedMusicalEdit()&&tool.snapshot().at("parameter")==2,
+        "Pumped parameter navigation lost its valid original point edit or stable target");
+      choose(11001,0);twoParameters=false;click(11002);
+      SetWindowTextW(valueField,L"0.25");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(1);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};SetWindowTextW(valueField,L"0.375");
+      SendMessageW(window,WM_TIMER,4,0);
+      require(lane==expected&&edits==before+3&&tool.snapshot().at("selectedPoint")==0&&tool.snapshot().at("rawValue")=="0.375",
+        "Deferred selection adopted a newer draft generation");
+      SendMessageW(window,WM_TIMER,0x5345,0);expected[0]["value"]=.375;
+      require(lane==expected&&edits==before+4&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==0,
+        "Cancelled navigation stranded the newer automatic edit");
+      click(11002);
+    }
     // A real revision change during a read must still reject the snapshot.
     const auto beforeRevisionChange=tool.snapshot();
     pump=[&](const std::string &method){if(method=="parameter.activity.get")context.revision="changed-during-read";};

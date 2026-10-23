@@ -302,11 +302,30 @@ class AbsoluteAutomationUITests(unittest.TestCase):
             if point['id']==1 and point['frame']==36000:point['value']=-9
         accepted(edited);self.assertEqual(state()['selectedPoint'],1,state())
         self.field(11015,1.25,kind)
+        # Leave the edited point immediately, without Save or a debounce wait.
+        # The first point retains its identity on either side of the reorder;
+        # the native fixture also exercises a clicked row whose index changes.
+        choose(11007,0)
         moved=json.loads(json.dumps(edited))
         for point in moved['points']:
             if point['id']==1 and point['frame']==36000:point['frame']=60000
         moved['points'].sort(key=lambda p:p['frame'])
         accepted(moved)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            navigated=state()
+            if navigated['selectedPoint']==0 and not navigated['pending']:break
+            time.sleep(.025)
+        self.assertEqual(navigated['selectedPoint'],0,navigated)
+        self.assertEqual(navigated['recorded'][0],dict(frame=24000,value=-12))
+        self.assertEqual(float(navigated['rawTime']),.5)
+        self.assertEqual(float(navigated['rawValue']),-12)
+        choose(11007,2)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            navigated=state()
+            if navigated['selectedPoint']==2 and not navigated['pending']:break
+            time.sleep(.025)
         self.assertEqual(state()['selectedPoint'],2);self.assertEqual(state()['recorded'][2],dict(frame=60000,value=-9))
         self.assertEqual(state()['rawTime'],'1.25');self.assertEqual(float(state()['rawValue']),-9)
         self.write('history.undo');self.assertEqual(self.read('automation.get'),edited)

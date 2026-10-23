@@ -1368,7 +1368,22 @@ The existing Activity native group adds exact three-point reorder/selection,
 same-point identity, invalid text/caret, busy admission, uncertain completion,
 New versus explicit Add, parameter selection and newer-input assertions. It
 retains all previous failure, draft, live observation and search assertions.
-This does not claim to defer point-row clicks received inside an observation
-read; that existing busy-selection limitation remains. The two-group/two-app
-checkpoint scope is unchanged, with fresh foreground selection immediately
-after typing added to the UI checklist. No new build or runtime test has run.
+The continuation also retains point-row clicks received inside an observation
+read. The existing navigation timer captures the document/revision, field
+generation and point frame. While that navigation is queued, the debounce timer
+leaves its original edit unsent; the guarded navigation drain removes its own
+intent before flushing the edit. This prevents timer ordering from invalidating
+the queued destination with the edit's own revision. The same ordering applies
+to queued parameter/processor changes. New typing invalidates old navigation,
+but remains eligible for its own original-target automatic edit. Close and
+explicit subsequent navigation still cancel obsolete destinations.
+
+Native assertions exercise both timer orders, busy admission, exact moved-point
+selection, parameter selection, newer-input cancellation and completion of the
+newer automatic edit. The existing actual-app Activity journey now leaves the
+point immediately after typing its new time, checks the destination's exact
+fields, then returns to the moved point before the unchanged Undo/Redo and
+save/reopen checks. The two-group/two-app checkpoint scope is unchanged, with
+fresh foreground selection immediately after typing added to the UI checklist.
+Python syntax, UTF-8 decoding and whitespace checks passed. No new build or
+runtime test has run.

@@ -38,7 +38,28 @@ private:
     const auto c=context_();const auto generation=generation_;
     pendingNavigation_=[this,id,wanted,parameter,c,generation]{
       guardRead(c,generation);require(visible(),"Activity navigation was closed");
+      finishPointEditForNavigation();
       beginPending();try{load(wanted,parameter,false,id==parameters);pending_=false;}catch(...){pending_=false;throw;}
+    };
+    SetTimer(window_,4,100,nullptr);
+  }
+  void finishPointEditForNavigation(){
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!fields_,"Finish or Refresh the retained point fields before navigating");
+  }
+  void selectRecordedPoint(uint64_t frame,bool samePoint){
+    if(!samePoint){const auto found=std::find_if(recorded_.begin(),recorded_.end(),[&](const auto &p){return p.at("frame")==frame;});
+      require(found!=recorded_.end(),"The chosen point is no longer on this page; choose it again");selected_=int(found-recorded_.begin());}
+    showFields();list();selectedTrace_.reset();requestPaint();
+  }
+  void deferPointSelection(){
+    const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));
+    if(i<0||size_t(i)>=recorded_.size())return;
+    const auto frame=recorded_[size_t(i)].at("frame").get<uint64_t>();const bool samePoint=i==selected_;
+    const auto c=context_();const auto generation=generation_;
+    pendingNavigation_=[this,frame,samePoint,c,generation]{
+      guardRead(c,generation);require(visible()&&page_==2,"Recorded point navigation was closed");
+      finishPointEditForNavigation();selectRecordedPoint(frame,samePoint);
     };
     SetTimer(window_,4,100,nullptr);
   }
@@ -201,7 +222,10 @@ private:
     if(explicitPointAction_)return;
     queueAutomaticEdit([this,generation]{
       require(generation==generation_,"Point selection or fields changed; review the retained fields");
-      if(pending_||context_().busy){queuePointEdit(generation);return;}
+      // Navigation owns the ordering when its selection arrived inside a read.
+      // Its drain removes that intent before flushing this original edit. This
+      // avoids a debounce timer invalidating the navigation's revision guard.
+      if(pending_||context_().busy||pendingNavigation_){queuePointEdit(generation);return;}
       if(fields_)action(savePoint,BN_CLICKED);
     });
   }
@@ -235,6 +259,7 @@ private:
       // because its read pumps messages. Capture stable identities, then load
       // once the owner is idle; never reinterpret a later catalogue row index.
       if(polling_&&notification==CBN_SELCHANGE&&(id==processors||id==parameters))deferTargetSelection(id);
+      if(polling_&&notification==LBN_SELCHANGE&&id==items&&page_==2)deferPointSelection();
       if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
     cancelNavigation();
     if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint)){cancelAutomaticEdit();explicitPointAction_=false;}
@@ -256,16 +281,13 @@ private:
         wantedFrame=recorded_[size_t(i)].at("frame").get<uint64_t>();samePoint=i==selected_;}
       const bool pointNavigation=processorChoice||parameterChoice||pointChoice||
         (notification==BN_CLICKED&&(id==previous||id==next||id==newPoint));
-      if(pointNavigation&&automaticEdit_)flushAutomaticEdit();
-      if(pointNavigation)require(!automaticEdit_&&!fields_,"Finish or Refresh the retained point fields before navigating");
+      if(pointNavigation)finishPointEditForNavigation();
       beginPending();
       if(processorChoice)load(wantedTarget);
       else if(parameterChoice)load(target_,wantedParameter,false,true);
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
       else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Selected point edits save automatically · New, then Add point creates a point · Shared Undo restores edits");}
-      else if(id==items&&notification==LBN_SELCHANGE){if(pointChoice){if(!samePoint){const auto found=std::find_if(recorded_.begin(),recorded_.end(),[&](const auto &p){return p.at("frame")==*wantedFrame;});
-          require(found!=recorded_.end(),"The chosen point is no longer on this page; choose it again");selected_=int(found-recorded_.begin());}
-        showFields();list();}selectedTrace_.reset();requestPaint();}
+      else if(id==items&&notification==LBN_SELCHANGE){if(pointChoice)selectRecordedPoint(*wantedFrame,samePoint);else{selectedTrace_.reset();requestPaint();}}
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
         else if(id==clear){watch(true);list();requestPaint();}

@@ -29,8 +29,12 @@ native groups plus **two app journeys**, not the earlier search-only one case.
 Idle Activity navigation now flushes an already queued valid point edit first,
 capturing stable destinations before any time-based reordering. The native group
 adds exact point selection, invalid/busy/uncertain/newer-input guards and explicit
-New/Add behavior. This is source-only in the same bounded checkpoint; point-row
-clicks pumped inside an observation read remain an explicit follow-up.
+New/Add behavior. Point-row clicks pumped inside an observation read now retain
+their stable destination; the navigation drain orders the already queued edit
+before selecting it, regardless of debounce timer order. Native assertions cover
+both orders and newer-input guards. The existing Activity app journey now leaves
+a time edit immediately, checks exact destination fields and returns before its
+history/reopen checks. This remains source-only in the same bounded checkpoint.
 
 **23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
 7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
