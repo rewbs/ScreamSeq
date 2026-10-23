@@ -26,6 +26,7 @@ class HostedProjectPlayback final {
   std::shared_ptr<RecordingTimeline> timeline_;
   std::uint32_t rate_=0;
   uint64_t mappedStart_=0,mappedEnd_=0; // Audio owner; accepted native presentation bounds.
+  PresentedFrameIntervals presentedFrames_; // Two correlated WASAPI boundaries per interval.
   uint64_t nativeUpdateGeneration_=0; // Serialized control owner only.
 public:
   // Owns all preparation until the document's beforeCommit callback publishes

@@ -103,6 +103,42 @@ static void recordingTiming(Tracker::Document &doc,const Project::ProjectState &
   const auto resumedFrame=slicedClock->locateFrame(resumed,11);
   check(resumedFrame&&*resumedFrame>=12292&&*resumedFrame<=12293,
     "large callback recovery preserves actual frame origin across its rejected first slice");
+  // Exercise the native WASAPI boundary contract through the actual renderer,
+  // including its internal slices. Absolute plugin frames wait for the next
+  // correlation; exact nominal-clock callers above retain their own contract.
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u,8193u}) {
+    HostedProjectPlayback correlated(doc,state,rate,{},true),plain(doc,state,rate,{},true);
+    const auto clock=correlated.recordingTimeline();
+    const auto duration=uint64_t(block)*10000000/rate;
+    const auto boundary=[&](uint64_t start){return RenderTime{start,13,rate,true,false,false,true};};
+    auto renderBoth=[&](RenderTime time) {
+      bool a=false,b=false;
+      {AudioAudit::Scope scope;a=correlated.render(audio.data(),block,time);b=plain.render(reference.data(),block);}
+      check(a&&b,"correlated playback renders");
+      check(std::equal(audio.begin(),audio.begin()+block*2,reference.begin(),[](float a,float b){return std::abs(a-b)<1e-6f;}),
+        "delayed frame correlation changes neither audio nor callback partition");
+    };
+    renderBoth(boundary(origin));
+    check(clock->absoluteFrames.generation()==0,"unconfirmed first boundary publishes no estimated absolute interval");
+    const auto second=origin+duration+2266;
+    renderBoth(boundary(second));
+    const auto input=origin+duration+647;
+    const auto expected=uint64_t(static_cast<long double>(input-origin)*block/(second-origin)*48000/rate);
+    check(clock->locateFrame(input,13)==expected,"input in observed nominal-duration gap maps to its actual rendered interval");
+    check(!clock->absoluteFrames.locate(second,13),"current pending boundary has no invented future coverage");
+    const auto third=second+duration;
+    auto unavailable=boundary(third);unavailable.valid=false;renderBoth(unavailable);
+    renderBoth(boundary(third+duration));
+    check(!clock->absoluteFrames.locate(second+1,13)&&!clock->absoluteFrames.locate(third+1,13),
+      "actual host leaves missing-correlation buffers unmapped");
+    renderBoth(boundary(third+2*duration));
+    check(clock->absoluteFrames.locate(third+duration,13)==uint64_t(3)*block*48000/rate,
+      "resumed absolute coverage includes frames rendered during timing holes");
+    const auto stop=third+duration+duration/2;
+    {AudioAudit::Scope scope;correlated.render(audio.data(),0,RenderTime{stop,13,rate,false,false,true});}
+    check(clock->absoluteFrames.locate(stop-1,13).has_value()&&!clock->absoluteFrames.locate(stop,13)&&
+      !clock->absoluteFrames.locate(third+2*duration,13),"Stop cuts published coverage and never finalizes queued pending audio");
+  }
   std::cout<<"PASS retained presentation timeline, Stop/restart, 3 rates and 4 callback partitions\n";
 }
 static std::vector<float> audition(Tracker::Document &doc,const Project::ProjectState &state,unsigned rate,unsigned block){

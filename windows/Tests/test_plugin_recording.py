@@ -316,6 +316,9 @@ class PluginRecordingTests(unittest.TestCase):
             self.assertEqual({k: refused[0][k] for k in ('plugin', 'parameter', 'value', 'state')},
                              dict(plugin=plugin, parameter=conflicting_parameter, value=-6.5, state='refused'))
             self.assertIn('envelopes', refused[0]['error'])
+            self.assertGreater(int(refused[0]['timestamp']), 0)
+            self.assertIn('Original host time: ' + refused[0]['timestamp'], review['inputDetails'])
+            self.assertIn(refused[0]['error'], review['inputDetails'])
             self.wait_for(lambda: next(p for p in self.read('workspace.get')['graphPluginParameters'] if p['plugin'] == plugin),
                           lambda p: 'envelopes' in p['status'])
             self.assertEqual(self.take()['eventCount'], 0)

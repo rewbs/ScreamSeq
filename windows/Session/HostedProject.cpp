@@ -146,6 +146,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
   // clear the renderer origin: offline rendering cannot reuse a hardware time.
   renderer_->recordingTime(0,0);
   if(failed()) {
+    presentedFrames_.reset();
     // The final device notification still carries its original generation.
     // It must never revive the timing invalidated by a processor failure.
     timeline_->generation.store(0,std::memory_order_release);
@@ -166,12 +167,20 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
   // the device continues rendering untimed buffers in its quarantined epoch.
   if(time.discontinuity)timeline_->absoluteFrames.invalidate();
   if(time.stopped){
+    presentedFrames_.reset(); // Never extrapolate the unconfirmed queued tail at Stop.
     const auto end=timeline_->endHostTime.load();
     if(time.hostTime&&end>time.hostTime)timeline_->endHostTime.store(time.hostTime,std::memory_order_release);
     timeline_->stopped.store(true,std::memory_order_release);
     timeline_->absoluteFrames.close(time.generation,time.hostTime);
     return true;
   }
+  const auto callbackFrame=renderer_->telemetry().frames;
+  auto frameTime=time;if(time.sampleRate!=rate_)frameTime.valid=false;
+  const auto presented=presentedFrames_.begin(frameTime,callbackFrame);
+  if(presentedFrames_.rejected())timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
+  if(captureFrames_&&presented)timeline_->absoluteFrames.publish(presented->start,presented->end,
+    presented->frame,presented->frames,presented->rate,presented->generation);
+  uint32_t callbackReceived=0;
   for(uint32_t at=0;at<frames;) {
     if(offline_&&chain_->latencyChangePending()) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
@@ -183,17 +192,19 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     // Render it as an explicit timing hole; later forward coverage keeps its
     // actual frame origin. Genuine device regressions remain terminal above.
     if(mapped&&(origin.hostTime<mappedStart_||end.hostTime<=mappedEnd_)) {
-      mapped=false;timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
+      mapped=false;
+      if(!presentedFrames_.rejected())timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
     }
     renderer_->recordingTime(mapped?origin.hostTime:0,mapped?double(hostTicksPerSecond)/rate_:0);
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     const auto frame=renderer_->telemetry().frames;
     const auto received=renderer_->render(buffer,count);
+    callbackReceived+=received;
     // A notification inside the last slice must also fail an offline render;
     // there may be no next callback in which to detect its stale compensation.
     if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
     if(mapped){
-      if(captureFrames_&&received) {
+      if(captureFrames_&&received&&!time.correlatedBoundary) {
         const auto musicEnd=time.offset(at+received);
         if(musicEnd.valid&&musicEnd.hostTime>mappedEnd_)
           timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
@@ -204,6 +215,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     }
     at+=count;
   }
+  presentedFrames_.rendered(callbackFrame,callbackReceived,frames);
   return true;
 }
 }

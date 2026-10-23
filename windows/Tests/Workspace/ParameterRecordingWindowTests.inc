@@ -78,10 +78,26 @@ void applicationParameterRecordingReview() {
       GetNextDlgTabItem(window,control(9732),FALSE)==control(9739),
       "Recording details are not readable, read-only or adjacent to the list in Tab order");
     const std::string refusal="Disable this parameter's pattern automation before recording absolute automation. The original input remains available for review.";
-    delivery["events"]=Json::array({{{"plugin",plugin},{"parameter",1},{"value",-6.5},{"hostTime","9007199254740993"},
-      {"state","refused"},{"error",refusal}},{{"plugin",plugin},{"parameter",1},{"value",-12.5},{"hostTime","9007199254740994"},
-      {"state","unknown"},{"error","Original delivery is uncertain; inspect current state before retrying."}}});
-    delivery["retained"]=2;delivery["needsReview"]=true;
+    // Use the live producer's wire shape, not a hand-written recovery archive:
+    // the two intentionally have different timestamp field names.
+    ScreamSeq::ParameterControlDelivery originalInput;
+    const auto retainFailure=[&](double value,uint64_t timestamp,bool refused) {
+      bool caught=false;
+      try {
+        originalInput.enqueue({app.documentId,app.view->session.revision,take.at("take").get<std::string>(),plugin,1,value,timestamp},
+          [&](const Json &,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &)->std::future<Call> {
+            if(refused)throw ScreamSeq::Api::ApiError(-32002,refusal,Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            throw std::runtime_error("Original delivery is uncertain; inspect current state before retrying.");
+          });
+      }catch(const ScreamSeq::Api::ApiError &){caught=true;restoreCheck(refused,"Unknown submission became a known refusal");}
+       catch(const std::runtime_error &){caught=true;restoreCheck(!refused,"Known refusal lost its outcome");}
+      restoreCheck(caught,"Original input fixture unexpectedly accepted a failed submission");
+    };
+    retainFailure(-6.5,9007199254740993ull,true);retainFailure(-12.5,9007199254740994ull,false);
+    delivery=originalInput.snapshot();
+    restoreCheck(delivery.at("retained")==2&&delivery.at("needsReview")==true&&
+      delivery.at("events")[0].at("state")=="refused"&&delivery.at("events")[1].at("state")=="unknown",
+      "Original input fixture did not retain both delivery outcomes");
     SendMessageW(control(9728),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
     restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos&&
       tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos,

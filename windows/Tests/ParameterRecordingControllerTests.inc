@@ -56,7 +56,7 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   const auto renderAhead=[&]{
     const auto limit=hostTime100ns()+1000000;
     for(unsigned n=0;origin<=limit&&n<1024;++n) {
-      need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false}),"Parameter recording timed render failed");
+      need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false,true}),"Parameter recording timed render failed");
       origin+=uint64_t(4096)*hostTicksPerSecond/48000;
     }
     need(origin>limit,"Parameter recording fixture could not cover its clock");

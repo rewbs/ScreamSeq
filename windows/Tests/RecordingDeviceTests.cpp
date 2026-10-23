@@ -29,7 +29,7 @@ static void presentation(){
     clock.reset(rate,rate,frames,7);
     check(!clock.buffer(0,100000000,100000000,true).valid,"startup zero remains unmapped");
     auto first=clock.buffer(frames/2,100050000,100050010,true);
-    check(first.valid&&first.generation==7&&first.hostTime>=100099800&&first.hostTime<=100100200,"primed silence belongs before first rendered frame");
+    check(first.valid&&first.correlatedBoundary&&first.generation==7&&first.hostTime>=100099800&&first.hostTime<=100100200,"primed silence belongs before first rendered frame");
     check(first.offset(8193).hostTime==first.hostTime+std::uint64_t(8193)*10000000/rate,"large callback slice offset uses presentation origin");
     clock.submitted(frames);
     auto next=clock.buffer(frames,100100000,100100000,true);
@@ -49,6 +49,56 @@ static void presentation(){
   RenderTime maximum{UINT64_MAX-10,1,48000,true};
   check(!maximum.offset(1).valid,"host-time offset rejects overflow");
   const auto before=hostTime100ns(),after=hostTime100ns();check(before&&after>=before,"advertised QPC clock monotonic");
+}
+static void presentedIntervals(){
+  auto timeline=std::make_unique<Tracker::RecordingFrameTimeline>();
+  PresentedFrameIntervals intervals;
+  const auto boundary=[](uint64_t time,uint64_t generation=7,unsigned rate=48000){return RenderTime{time,generation,rate,true,false,false,true};};
+  // Retained foreground evidence: consecutive 480-frame buffers had a 226.6us
+  // gap when each estimated its end using nominal rate. The second correlation
+  // is the actual next submitted boundary; no synthetic gap fill is permitted.
+  constexpr uint64_t start=3201302326615,end=3201302428881,input=3201302427262,frame=13742208;
+  {AudioAudit::Scope scope;
+    check(!intervals.begin(boundary(start),frame),"one correlation cannot finalize a buffer");
+    intervals.rendered(frame,480,480);
+    const auto complete=intervals.begin(boundary(end),frame+480);
+    check(complete&&complete->start==start&&complete->end==end&&complete->frame==frame&&complete->frames==480,
+      "consecutive observed boundaries retain their exact original times and frames");
+    check(timeline->publish(complete->start,complete->end,complete->frame,complete->frames,complete->rate,complete->generation),"publish finalized correlation");
+    check(timeline->locate(input,7)==13742680&&!timeline->locate(end,7),"observed input maps within its rendered buffer, next boundary remains pending");
+    intervals.rendered(frame+480,480,480);
+    auto missing=boundary(end+100000);missing.valid=false;
+    check(!intervals.begin(missing,frame+960),"missing device correlation cannot close a pending interval");
+    intervals.rendered(frame+960,480,480);
+    check(!intervals.begin(boundary(end+200000),frame+1440),"do not bridge the buffer with missing correlation");
+    intervals.rendered(frame+1440,480,480);
+    check(!intervals.begin(boundary(end+150000),frame+1920)&&intervals.rejected(),"backwards projection remains a timing hole");
+    intervals.rendered(frame+1920,480,480);
+    check(!intervals.begin(boundary(end+300000),frame+2400),"do not bridge a rejected projection");
+    intervals.rendered(frame+2400,480,480);
+    check(!intervals.begin(boundary(end+400000),frame+3000),"noncontiguous rendered frames cannot be interpolated");
+    intervals.rendered(frame+3000,480,480);
+    check(!intervals.begin(boundary(end+500000,8),frame+3480),"restart cannot finalize the preceding stream");
+    intervals.rendered(frame+3480,480,480);
+    auto stopped=boundary(end+600000,8);stopped.stopped=true;
+    check(!intervals.begin(stopped,frame+3960),"Stop cannot fabricate a final presentation boundary");
+    intervals.rendered(frame+3960,480,480);
+    check(!intervals.begin(boundary(end+700000,8),frame+4440),"stopped pending buffer is not retained");
+  }
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned frames:{17u,128u,4096u,8193u}){
+    PresentedFrameIntervals clock;
+    constexpr uint64_t large=9007199254740993ull;
+    const auto end=large+uint64_t(frames)*10000000/rate+2266;
+    AudioAudit::Scope scope;
+    check(!clock.begin(boundary(large,9,rate),1000),"large exact timestamp begins pending interval");clock.rendered(1000,frames,frames);
+    const auto complete=clock.begin(boundary(end,9,rate),1000+frames);
+    check(complete&&complete->start==large&&complete->end==end&&complete->frames==frames&&complete->rate==rate,
+      "rates and callback partitions retain both exact boundaries");
+    clock.rendered(1000+frames,frames/2,frames);
+    const auto tail=clock.begin(boundary(end+100000,9,rate),1000+frames+frames/2);
+    check(tail&&tail->frames==frames/2&&tail->end==end+uint64_t(100000)* (frames/2)/frames,
+      "short final music owns only its portion of the device interval");
+  }
 }
 static void input(){
   auto queue=std::make_unique<MidiInputBuffer>();
@@ -119,7 +169,7 @@ int main(){try{
   {AudioAudit::Scope scope;auto *positive=::operator new(8);::operator delete(positive);}
   check(AudioAudit::allocations.load()==1&&AudioAudit::deallocations.load()==1,"allocation audit positive control");
   AudioAudit::allocations=0;AudioAudit::deallocations=0;
-  presentation();input();concurrent();boundary();
+  presentation();presentedIntervals();input();concurrent();boundary();
   check(!AudioAudit::allocations.load()&&!AudioAudit::deallocations.load(),"clock/input callback C++ allocation and free audit");
   std::cout<<"PASS presentation origin, startup/restart/discontinuity, MIDI timestamp/overflow/generation/concurrency; no hardware opened; C++ allocation/free audit (not driver internals or direct malloc/locks)\n";return 0;
 }catch(const std::exception &error){std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}}

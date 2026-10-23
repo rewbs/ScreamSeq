@@ -1969,3 +1969,88 @@ around the seven existing groups, outside realtime audits. All workloads,
 independent numerical assertions and the120-second CTest timeout are retained.
 This will distinguish a slow phase from a hang without repeated whole-suite
 runs or an unsupported timeout increase; it does not fix or qualify that failure.
+
+### Correlated-boundary diagnosis and next source batch (October23)
+
+Candidate `a80945ab6baa577806cc701667cc32f0725836b2` completed the local build
+at01:21:31 UTC. Its executable SHA256 is
+`acbf7cbe91edcc7fca884e292169de861d7ddd6f9d44c03b6331ee71da49e40e`.
+All four selected native groups and seven actual-app cases passed, including
+the95-second recording, composed-song preservation, rendered saved replay and
+vendor ownership case. Immutable receipts are under
+`bin/mac-gesture-20261022/timing-inspection/`. Do not repeat those checks or
+turn their pass into a foreground qualification claim.
+
+**Fresh Computer Use failed recording qualification.** Owned silent QA PID42240
+ran for600seconds and exited normally. Params opened Recording; changing Gain
+correctly refused capture because F04 already enables its envelope. After
+explicitly stopping/discarding that refused take and rearming, a native Balance
+slider drag retained two inputs but left one unmapped. Recording and playback
+were stopped with loss unacknowledged. No Keep, package or merge followed.
+`foreground-check.json` records failure, and `foreground/balance-input.json`
+retains the exact original API observations:
+
+- Unmapped input host timestamp: `3201302427262`.
+- Before: `[3201302326615,3201302426615)`, device frame13742208,480frames.
+- After: `[3201302428881,3201302528881)`, device frame13742688,480frames.
+- Gap:2266 ×100ns =226.6microseconds between **consecutive** rendered frames.
+- The stream reported no discontinuity, no absolute-timeline failure and no
+  rejected native correlation. The nominal-duration endpoints caused the hole.
+
+The final audio report recorded33deadline overruns, one starvation indicator,
+48kHz/480-frame periods and maximum callback17617.7microseconds. This is not
+performance, temporal-flicker or native-audio qualification. Keyboard continuity
+on this candidate was not qualified. Process/fixture/binary identities remained
+unchanged; PID42240 is closed and must not be reused.
+
+The same foreground run exposed a separate UI defect: live refused input
+timestamp`3200164840145` displayed as “Unavailable”. Live delivery uses
+`timestamp`; only detached recovery archives use`hostTime`. The native review
+now reads the live field. Its native regression creates refused/unknown inputs
+through `ParameterControlDelivery` and consumes that owner's real snapshot,
+retaining exact >2^53 timestamps, keyboard selection, read-only text and focus
+assertions. The composing refusal case also requires its actual original
+timestamp and complete reason in `inputDetails`. Recovery storage is unchanged.
+
+**Proposed clock correction, implemented in source but not yet built:**
+`windows/Audio/PresentationClock.hpp` marks WASAPI readings as correlated
+first-frame boundaries. `PresentedFrameIntervals` retains one successfully
+rendered buffer and finalizes it only when the next contiguous buffer supplies
+the second correlation. `windows/Session/HostedProject.cpp` publishes that
+interval to the existing shared absolute frame timeline. Published intervals
+are immutable; original event timestamps are never changed. The shared reader
+does not bridge holes. Missing/inaccurate readings, regressing boundaries,
+noncontiguous frames, stream changes and Stop drop the unconfirmed interval.
+Short music tails cover only their rendered fraction. No callback allocation,
+lock, API/history change or project-format migration is introduced.
+
+This uses the existing native submitted-frame/QPC correlation at both endpoints,
+not a guarantee that a vendor device clock is perfect. The Windows contract is
+documented by [IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition):
+position and its QPC reading are correlated, and inaccurate readings return
+S_FALSE. The existing accuracy/startup/regression checks remain. Finalization
+adds one callback of publication delay; retained plugin inputs already support
+later resolution. Stop never invents coverage for a pending tail.
+
+Scope is deliberately the plugin absolute-frame timeline. The existing
+row-position/MIDI clock still uses nominal per-buffer musical segments; it is
+not newly qualified or claimed fixed by this batch. Explicit nominal timing
+callers retain their existing test/offline contract. Mac correlation and shared
+clock-reader semantics are unchanged. A later row-clock unification must
+preserve precise-note positions and held-note Stop behavior rather than
+round-trip them through quantized canonical plugin frames.
+
+Next checkpoint must build `recording-device-tests` as well as the current
+app/workspace/worker/hosted-audio targets. Its native gates must include the
+observed timestamps and expected frame13742680, >2^53 timestamps, missing
+correlation and regression holes, restart, Stop, short tails,44.1/48/96kHz,
+17/128/4096/8193-frame callbacks and realtime allocation/free audits. Actual
+hosted rendering compares PCM against unchanged untimed playback. Repeat the
+bounded actual-app composing/recording lifecycle because timing inputs changed,
+including refused Gain, Balance Keep/Undo/Redo/Discard and exact save/reopen.
+Fresh Computer Use must check a native Balance drag with every input mapped,
+the original-time display and keyboard focus. Keep assertions/loss admission
+strict. The existing Mac layout/activity/cabinet corrections require their
+next architecture gates; Mac reciprocal edited-project preservation and native
+audio remain required before merge. No next build before02:18:25 UTC, subject
+to later CI starts and completion; no build was run for this source batch yet.
