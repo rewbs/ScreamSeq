@@ -76,12 +76,14 @@ extension InterfaceTests {
       "Stopping playback reads the take and never automatically discards original input")
     var stoppedFailure = failedState; stoppedFailure["transportPlaying"] = false; stoppedFailure["discardable"] = true
     failedClock.answer(stoppedFailure)
-    try require(failedView.capturing && failedView.discard.isEnabled && !failedView.keep.isEnabled && failedView.stopPlayback.isHidden,
+    try require(failedView.capturing && failedView.discard.isEnabled && !failedView.keep.isEnabled &&
+      !failedView.stopPlayback.isHidden && !failedView.stopPlayback.isEnabled,
       "The API's stopped failed-clock Discard remains available when the normal recording cut could not finish")
     failedView.act(.discard)
     try require(failedClock.writes.count == 2 && failedClock.writes.last?.0 == "automation.recording.discard" &&
       failedClock.writes.last?.1["take"] as? String == "take-a", "Recovery Discard preserves the original take identity")
     failedClock.answer(failedClock.state(""))
+    try require(failedView.stopPlayback.isHidden, "Only verified take release removes its playback recovery action")
 
     for change in ["take", "transport", "discardable"] {
       let stale = PluginTakeReplies(), v = stale.view
@@ -230,6 +232,13 @@ extension InterfaceTests {
     try require(!focused.stopPlayback.isHidden && focused.stopPlayback.isEnabled &&
       focused.bounds.insetBy(dx: -1, dy: -1).contains(focused.convert(focused.stopPlayback.bounds, from: focused.stopPlayback)),
       "Compact stopped take exposes playback Stop for native restoration without clipping")
+    let recoveryBounds = focused.convert(focused.stopPlayback.bounds, from: focused.stopPlayback)
+    stoppedReview["transportPlaying"] = false
+    focusCase.load(stoppedReview); focused.layoutSubtreeIfNeeded()
+    try require(!focused.stopPlayback.isHidden && !focused.stopPlayback.isEnabled &&
+      focused.convert(focused.stopPlayback.bounds, from: focused.stopPlayback) == recoveryBounds &&
+      window.firstResponder === focused.table && focused.table.selectedRow == 0,
+      "Successful playback Stop preserves compact recovery geometry and unrelated table focus until take release")
     focused.onDeliveryPage = reviewed.onDeliveryPage
     focused.reviewMode.selectItem(at: 1); focused.changeReviewMode()
     focused.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)

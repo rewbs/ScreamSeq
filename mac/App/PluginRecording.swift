@@ -163,9 +163,11 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
   private var mayDiscard: Bool {
     retained && !completed && (!capturing || state["discardable"] as? Bool == true)
   }
+  private var playbackRecovery: Bool {
+    retained && (!capturing || state["compatible"] as? Bool != true)
+  }
   private var needsPlaybackStop: Bool {
-    retained && state["transportPlaying"] as? Bool == true &&
-      (!capturing || state["compatible"] as? Bool != true)
+    playbackRecovery && state["transportPlaying"] as? Bool == true
   }
   private func decoded(_ response: [String: Any]) -> (revision: String, data: [String: Any])? {
     guard let result = response["result"] as? [String: Any], let revision = result["revision"] as? String, !revision.isEmpty,
@@ -189,7 +191,9 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     keep.isEnabled = ready && retained && !capturing && (completed || state["compatible"] as? Bool == true) &&
       (completed || !hasLoss || acknowledge.state == .on)
     discard.isEnabled = ready && mayDiscard
-    stopPlayback.isHidden = !needsPlaybackStop
+    // Retain the recovery row after Stop so the next action does not move
+    // under the pointer or change the layout while original input is reviewed.
+    stopPlayback.isHidden = !playbackRecovery
     stopPlayback.isEnabled = ready && needsPlaybackStop
     scope.isEnabled = !pending && !retained && !needsReadback
     acknowledge.isHidden = !retained || !hasLoss || completed

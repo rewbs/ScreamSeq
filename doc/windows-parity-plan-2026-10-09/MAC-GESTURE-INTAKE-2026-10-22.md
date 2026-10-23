@@ -1769,3 +1769,10 @@ saved projects, typed comparisons and PCM replay reports when those stages run.
 Partial artifacts remain diagnostic evidence, never a passing receipt. This
 supports diagnosis and subsequent reciprocal edited-project checks without
 rebuilding or repeating a completed native run. Execution remains pending.
+
+Mac recovery layout now retains its explicit Stop playback button, disabled after
+transport stops, until verified take release. Previously hiding it on the Stop
+readback shifted the action row while original input remained under review.
+The native compact-window regression requires unchanged button bounds, table
+focus/selection, disabled Stop and removal only after release. This is an unbuilt
+presentation correction; it does not change transport admission or take semantics.
