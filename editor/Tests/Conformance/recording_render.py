@@ -5,7 +5,6 @@ benchmark. Native layers have separate independent-stem and callback audits.
 """
 import array
 import base64
-import copy
 import sys
 from pathlib import Path
 
@@ -78,8 +77,10 @@ def run(client, baseline, recorded, output):
         write('history.undo')
         restored = output / (name + '-undo.screamseq')
         write('document.save', path=str(restored), overwrite=False)
-        expected = copy.deepcopy(source)
-        expected['native']['nextID'] = next_id + 1
+        # The strict plist reader returns dictionaries which reject replacing
+        # an existing key (to catch duplicates on disk). Build new expectation
+        # dictionaries rather than mutating that read-only parsed reference.
+        expected = dict(source, native=dict(source['native'], nextID=next_id + 1))
         row['allocatedSampleID'] = added['id']
         row['expectedNextIDAfterUndo'] = next_id + 1
         row['undoPreservation'] = differences(expected, read_project(restored))

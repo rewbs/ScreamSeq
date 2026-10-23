@@ -1,5 +1,6 @@
 """Plugin recording through the real PID pipe and native controls on an owned desktop."""
 import ctypes
+import json
 import os
 import plistlib
 from pathlib import Path
@@ -41,6 +42,24 @@ class PluginRecordingTests(unittest.TestCase):
 
     def take(self):
         return self.read('automation.recording.get')
+
+    def trace_recording_clock(self, stage, plugin, parameter):
+        """Retain original event/clock evidence before disposable sessions close.
+
+        Diagnostics only: never resolve, acknowledge or drop an unmapped input.
+        Reads are sequential snapshots, not an atomic view of the audio thread.
+        """
+        root = Path(os.environ.get('SCREAMSEQ_COMPOSING_EVIDENCE_DIR', self.folder / 'composing-evidence'))
+        folder = root / 'recording-clock'
+        folder.mkdir(parents=True, exist_ok=True)
+        state = self.take()
+        observation = dict(stage=stage, monotonicNS=str(time.monotonic_ns()),
+                           recording=state, transport=self.read('transport.get'))
+        if state['retained']:
+            observation['events'] = self.read('automation.recording.events', take=state['take'],
+                                               plugin=plugin, parameter=parameter)
+        with (folder / (self._testMethodName + '.jsonl')).open('a', encoding='utf-8') as output:
+            output.write(json.dumps(observation, sort_keys=True) + '\n')
 
     def recording_button(self, identifier):
         self.idle()
@@ -267,7 +286,13 @@ class PluginRecordingTests(unittest.TestCase):
         slot = next(i for i, p in enumerate(self.doc()['data']['nativePlugins']) if p['instanceID'] == plugin)
         self.desktop.send(rack, 0x186, slot)
         self.desktop.send(main, 0x111, 300 | (1 << 16), rack)
-        self.main_command(304)
+        # The rack's Editor button (304) opens a VST3 vendor editor, while
+        # built-ins use it for Params. The explicit Parameter controls command
+        # opens this native ten-row editor for either plugin format.
+        self.main_command(335)
+        self.wait_for(lambda: self.read('workspace.get'),
+                      lambda s: any(p.get('visible') and p.get('plugin') == plugin
+                                    for p in s['graphPluginParameters']) and not s['pendingViewCommands'])
         parameters = self.window('ScreamSeq.PluginParameters')
         def enter(identifier, value):
             self.idle()
@@ -311,7 +336,9 @@ class PluginRecordingTests(unittest.TestCase):
             self.fail(str(dict(failure=str(failure), expectedPlugin=plugin,
                                recording=self.read('workspace.get')['parameterRecording'])))
         if sustain_seconds:
+            self.trace_recording_clock('first-input', plugin, parameter)
             until = time.monotonic() + sustain_seconds
+            next_trace = time.monotonic() + 5
             generation = self.read('transport.get')['recordingClock']['generation']
             initial_count = captured['eventCount']
             while time.monotonic() < until:
@@ -323,9 +350,14 @@ class PluginRecordingTests(unittest.TestCase):
                 self.assertTrue(current['capturing'] and current['compatible'], current)
                 self.assertEqual(current['eventCount'], initial_count, current)
                 self.assertNotIn('intakeError', current)
+                if time.monotonic() >= next_trace:
+                    self.trace_recording_clock('sustained-hold', plugin, parameter)
+                    next_trace = time.monotonic() + 5
                 time.sleep(.5)
+            self.trace_recording_clock('before-second-input', plugin, parameter)
             enter(parameter, str(later_value))
             self.wait_for(self.take, lambda s: s['eventCount'] > initial_count)
+            self.trace_recording_clock('second-input', plugin, parameter)
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
         events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
@@ -335,11 +367,17 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertTrue(all(int(e['timestamp']) >= int(take['startTime']) for e in events['events']))
         self.recording_button(9722)
         stopped = self.wait_for(self.take, lambda s: s['retained'] and not s['capturing'])
+        if sustain_seconds:
+            self.trace_recording_clock('stopped-take', plugin, parameter)
         self.assertIsNotNone(stopped['endTime'])
         self.assertNotEqual(self.read('workspace.get')['status'], 'Recording original parameter input / Stop the take to review')
         self.assertTrue(self.read('transport.get')['playing'])
         self.recording_button(9723)
-        self.wait_for(self.take, lambda s: not s['retained'])
+        try:
+            self.wait_for(self.take, lambda s: not s['retained'])
+        finally:
+            if sustain_seconds:
+                self.trace_recording_clock('after-keep', plugin, parameter)
         self.assertNotIn('Stop the take to review', self.read('workspace.get')['status'])
         points = self.read('automation.get')
         self.assertGreater(points['total'], points_before['total'])

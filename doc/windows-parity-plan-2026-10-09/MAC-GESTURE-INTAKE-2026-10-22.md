@@ -1776,3 +1776,82 @@ readback shifted the action row while original input remained under review.
 The native compact-window regression requires unchanged button bounds, table
 focus/selection, disabled Stop and removal only after release. This is an unbuilt
 presentation correction; it does not change transport admission or take semantics.
+
+### October 23 recovery checkpoint and composing replay evidence
+
+Frozen `7c2a6c1e1affb19d73af0e6b65b501e3d42c96af` built locally at
+00:15:29–00:18:13 UTC. The ARM64 executable SHA256 is
+`3a801c342559063748df3fe7e4fde202746ed7a3434dd7a38e426bf0001db959`.
+PR7 was advanced at the same checkpoint. Receipts are under
+`bin/mac-gesture-20261022/recovery-journey/`; neither `build.ps1` nor
+`check.ps1` may be repeated. The three selected native groups passed. The
+seven actual-app cases produced five passes and two failures:
+
+* The sample-layered VST3 journey used command304, which opens a vendor editor
+  for VST3. Built-ins use that command for native Params, so the shared fixture
+  accidentally depended on plugin format. Product command335 is the explicit
+  native Parameter controls action. The corrected fixture uses it and waits
+  for the visible editor to match the selected stable plugin identity.
+* The 95-second recording retained two original inputs, one unmapped. Keep
+  correctly refused unacknowledged loss. This remains an intermittent open
+  defect; a later passing diagnostic run does not erase this failure. No
+  timestamp clamp, automatic loss acknowledgement or weakened Keep assertion
+  was introduced.
+
+The new test-only diagnostic attempt reused the exact binary at00:33:19 UTC;
+`corrected-test-diagnosis/receipt.json` pins both executable and test hashes.
+It did not rebuild or rerun the preceding check receipt. The corrected layered
+journey passed instrument/sample preservation, group routing history, native
+VST3 input, Keep/Undo/Redo, playback Stop/Discard and exact saved-project
+preservation before reaching the new replay oracle. That oracle initially
+failed while changing its **expected tree**, not while parsing a saved file:
+`UniqueDictionary` intentionally refuses replacing an existing key. The saved
+render-Undo project independently passed the strict reader and exact comparison.
+The helper now constructs new expectation dictionaries with precisely
+`nextID + 1`; it still requires every other typed field to match.
+
+`saved-replay-diagnosis/receipt.json` records the corrected oracle against the
+retained before/recorded projects in a fresh isolated process. All three
+370120-frame,48kHz stereo16 renders passed: recording changed11641 unsaturated
+sample values by more than2 units (maximum difference27); freshly reopened
+recorded PCM was byte-exact. Each render Undo preserved every project field
+except the one predicted allocator advance. Original input hashes were
+unchanged. This is pattern-local replay evidence; it does not replace native
+device, independent-layer, Mac reciprocal or performance qualification.
+
+The instrumented 95-second case passed in the diagnostic attempt. Both original
+timestamps mapped, Keep was one Undo, and history/Discard/reopen passed. New
+`recording-clock/*.jsonl` files retain take summaries, exact event timestamps
+and frames, and transport clock statistics before/after input, every five
+seconds during the hold, at Stop and after Keep. Reads are sequential, not
+atomic audio snapshots. The original failed run lacked this detail; its cause
+is still unproven. The trace is retained by the existing CI composing-artifact
+path and must be examined if the loss recurs. Do not rerun repeatedly until
+green or describe the passing diagnostic as a timing fix.
+
+Fresh Computer Use on owned PID11740 independently opened native Params for
+the bundled synth, moved its Gain slider, recorded two original inputs, stopped
+recording while playback continued, explicitly stopped playback, inspected
+exact timestamp details and kept the take. Playback Stop remained disabled
+in place until release. Native read-only focus probes passed for timestamp
+details and dock search. Typing `Gain`, Backspace to `Gai`, and Tab/Shift+Tab
+returned native/global focus to search. The intervening Tab destination was
+not independently asserted because the accessibility tree was unavailable.
+`diagnostic-foreground/observations.json` is deliberately **not** a qualification
+receipt. This600-second process exited normally; do not reuse its handles.
+At48kHz/480frames it recorded21 deadline overruns and no device/processor
+failure. Neither performance nor temporal flicker is qualified by this run.
+
+At00:37 UTC, Mac ARM CI compiled successfully; required tests, Intel and Windows
+CI were still running. Exact runs39877034587/39877034497 and jobs are recorded
+by `inspect-recovery-journey-ci.py`. The latest observed build start was
+00:15:55 UTC: **no next build before01:15:55 UTC**, and later starts/unfinished
+checkpoints must be inspected first. No package or main merge was made from
+these partial results. The previous usable cc6da0bd3 package remains unchanged.
+
+Next source work should use the new diagnostic evidence to resolve intermittent
+input mapping without fabricating coverage, inspect the new Mac strict focus/
+recovery gates, and finish reciprocal edited-project replay. Reuse the passing
+unchanged product/native receipts and saved replay artifacts. A single coherent
+next checkpoint should cover any resulting product changes and the corrected
+composing fixture; unrelated full suites need not be repeated.
