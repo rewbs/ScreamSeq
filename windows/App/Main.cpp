@@ -1126,6 +1126,7 @@ public:
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();
 		auto playback = renderer ? renderer->telemetry() : Tracker::Telemetry{};
+        if(preciseNoteWindow)preciseNoteWindow->playback(documentId,playback.pattern,playback.patternPosition,device.running()&&!auditionOnly);
         if((instrumentEnvelopeWindow&&instrumentEnvelopeWindow->visible())||(sampleDetailWindow&&sampleDetailWindow->visible())) {
             const auto voices=device.running()&&renderer?renderer->voicePositions():std::vector<Tracker::VoicePosition>{};
             if(instrumentEnvelopeWindow)instrumentEnvelopeWindow->playback(documentId,view->session.document.at("instruments"),voices);

@@ -510,13 +510,13 @@ void DocumentController::validateAssetCandidate(const Tracker::Document &candida
 PlaybackFeedback DocumentController::playbackFeedback() {
   PlaybackFeedback result;if(playbackHooks_.feedback)onMain([&]{result=playbackHooks_.feedback();});return result;
 }
-std::function<void()> DocumentController::prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next) {
+std::function<void()> DocumentController::prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells) {
   const auto feedback=playbackFeedback();
   if(!feedback.playing&&!feedback.audioActive)return [this]{onMain(stop_);};
   auto *owner=playback_.get();
   if(!owner||playbackDocumentGeneration_!=generation_||!playbackHooks_.publishNativeUpdate)throw Api::ApiError(-32002,"Stop playback and preview notes for this edit; active playback has been preserved");
   std::shared_ptr<HostedProjectPlayback::PreparedNativeUpdate> prepared;
-  try{prepared=owner->prepareNativeUpdate(before,next);}
+  try{prepared=owner->prepareNativeUpdate(before,next,cells);}
   catch(const Api::ApiError &){throw;}
   catch(const std::exception &e){throw Api::ApiError(-32002,std::string("Native update preparation failed; playback was preserved: ")+e.what());}
   if(!prepared)throw Api::ApiError(-32002,"This edit needs stopped playback; active playback has been preserved");
@@ -794,6 +794,16 @@ Json DocumentController::operation(const std::string &method,Json params) {
         if(!edits.empty())onMain([this,edits]{edits_(edits);});
         return;
       }
+      // Precise notes and ordinary-row conversion share one prepared boundary,
+      // including Undo/Redo. Other structural history keeps its existing path.
+      auto notesOnly=document_->native();notesOnly.preciseNotes=candidate.preciseNotes;
+      if(!structural&&notesOnly==candidate&&candidate.preciseNotes!=document_->native().preciseNotes) {
+        const auto cells=document_->historyCells(redo);
+        auto publish=prepareNativeUpdate(document_->native(),candidate,cells);
+        if(redo)document_->redo(publish,true);else document_->undo(publish,true);
+        for(const auto &cell:cells)changedPatterns_.insert(cell.pattern);
+        return;
+      }
       DocumentOperations operations(*document_,[this]{onMain(stop_);},
         [this](const auto &edits){for(const auto &e:edits)changedPatterns_.insert(e.pattern);onMain([this,edits]{edits_(edits);});},
         [this](auto &candidate){validateDocumentCandidate(candidate);},[this](const auto &candidate){validateNativeCandidate(candidate);},
@@ -865,6 +875,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     hooks.prepareNativeUpdate=[this](const auto &before,const auto &next){return prepareNativeUpdate(before,next);};
     hooks.validateCandidate=[&](const Tracker::NativeSong &next){const auto before=patternViewBytes(document_->native())+graphViewBytes(document_->native()),after=patternViewBytes(next)+graphViewBytes(next);if(after>before&&(after-before>maxCacheBytes_||view_->cacheBytes>maxCacheBytes_-(after-before)))throw Api::ApiError(-32602,"Pattern edit needs more document view cache headroom");};
     hooks.prepareScratchPublication=[this](const Tracker::NativeSong &next){return prepareNativePublication(next);};
+    hooks.preparePrecisePublication=[this](const auto &next,const auto &cells){return prepareNativeUpdate(document_->native(),next,cells);};
     PatternOperations operations(*document_,[this]{onMain(stop_);},std::move(hooks));result=operations.invoke(method,params);
     if(write&&method=="scratch.gestures.clone"&&params.contains("target")&&!params.value("dryRun",false))changedPatterns_.insert(params.at("target").at("pattern").get<unsigned>());
     if(write&&!method.starts_with("automation.")&&!method.starts_with("scratch.")){if(method=="pattern.transform")scanPatterns_=true;else changedPatterns_.insert(params.at("pattern").get<unsigned>());}

@@ -97,7 +97,10 @@ Json PatternOperations::invoke(const std::string &method,const Json &input){
     }
     if(p.contains("clearRows"))for(const auto &e:array(p.at("clearRows"),8192)){keys(e,{"row","channel"});clearCell(uint16_t(integer(field(e,"row"),0,rows-1)),uint16_t(integer(field(e,"channel"),0,song.GetNumChannels()-1)));}
     replacePreciseNotesForPattern(next.preciseNotes,pattern,std::move(replacement));try{next.validate(song);document_.validateEdits(edits);}catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
-    const bool changed=next!=document_.native()||std::any_of(edits.begin(),edits.end(),[&](const auto &e){return document_.cell(e.pattern,e.row,e.channel)!=e.after;});if(host_.validateCandidate)host_.validateCandidate(next);if(changed&&!dry){if(stop_)stop_();document_.editNative(std::move(next),edits);}
+    const bool changed=next!=document_.native()||std::any_of(edits.begin(),edits.end(),[&](const auto &e){return document_.cell(e.pattern,e.row,e.channel)!=e.after;});if(host_.validateCandidate)host_.validateCandidate(next);if(changed&&!dry){
+      auto publish=host_.preparePrecisePublication?host_.preparePrecisePublication(next,edits):stop_;
+      document_.editNative(std::move(next),edits,publish);
+    }
     return {{"dryRun",dry},{"wouldChange",changed},{"events",p.at("events").size()},{"clearedRows",cells.size()}};
   }
   need(method=="pattern.performance.set"||method=="pattern.effects.set"||method=="pattern.effect.set","Unknown pattern operation");keys(p,{"pattern","columns","bindings","removeBindings","commands","dryRun"});auto &performance=next.performance;std::set<uint16_t> changedBindings;

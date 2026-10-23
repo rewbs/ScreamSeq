@@ -76,6 +76,7 @@ private:
   bool replaceLegacy_=true,moveLegacyEffect_=false,canvasVisible_=false;
   HWND pendingFocus_{};
   WorkspaceRect plot_{};
+  std::optional<double> playbackOffset_;
 
   static void require(bool ok,const char *message){if(!ok)throw std::runtime_error(message);}
   static bool sameIdentity(const Target &a,const Target &b){return a.patternID==b.patternID&&a.trackID==b.trackID&&a.row==b.row;}
@@ -109,7 +110,7 @@ public:
     for(int id:{pitch,units,snap,localEffect})combo(id);
     for(int id:{instrument,velocity,offset,parameter,repeatCount,endVelocity})edit(id,L"",32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
-      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Write note"},
+      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Save now"},
       {loadTarget,L"Load selection"},{replaceRow,L"Replace row note: on"},{fillRow,L"Fill to row end"},
       {pageTimeline,L"Timeline"},{pageHit,L"Hit"},{pageTools,L"Tools"},{pageDetails,L"Details"},{reloadCapturedCommand,L"Reload captured"},
       {returnPattern,L"Return to pattern"},{close,L"Close"}})button(id,text);
@@ -133,6 +134,14 @@ public:
       dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_,pending_);
   }
   bool pending()const noexcept{return pending_;}
+  void playback(const std::string &document,unsigned pattern,double position,bool playing){
+    std::optional<double> next;
+    if(playing&&hasTarget()&&document==document_&&pattern==target_.pattern&&std::isfinite(position)&&
+       position>=double(target_.row)*256&&position<double(target_.row+1)*256)
+      next=(position-double(target_.row)*256)/256;
+    if(next==playbackOffset_)return;playbackOffset_=next;
+    if(visible()&&canvasVisible_)requestPaint();
+  }
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}
   void initializeHidden(std::optional<Target> target={}){
@@ -157,7 +166,8 @@ public:
   }
   void observeContext(){const auto now=context_();if(now.document==observedDocument_&&now.revision==observedRevision_)return;
     observedDocument_=now.document;observedRevision_=now.revision;layout();requestPaint();}
-  void hide()override{cancelDrag();NativeToolWindow::hide();}
+  void hide()override{cancelDrag();if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_,"Wait for the pending note edit before closing");NativeToolWindow::hide();}
   bool dispatchLegacyAction(int id){
     if(!((id>=addHit&&id<=fillRow)||(id>=reloadCapturedCommand&&id<=close)))return false;
     action(id,BN_CLICKED);layout();requestPaint();return true;
@@ -175,6 +185,7 @@ public:
       {"draftCount",draft_.size()},{"selectedEvent",selected_>=0?draft_.at(size_t(selected_)):Json()},
       {"page",std::array<const char *,4>{"timeline","hit","tools","details"}[size_t(page_)]},{"rowsPerBeat",rowsPerBeat_},
       {"timeline",{{"x",plot_.x},{"y",plot_.y},{"width",plot_.w},{"height",plot_.h}}},{"canvasVisible",canvasVisible_},
+      {"playbackOffset",playbackOffset_?Json(*playbackOffset_):Json()},
       {"details",utf8(details())},{"selectedHitSummary",selected_>=0?hitSummary(draft_.at(size_t(selected_))):Json::array()},
       {"raw",pointRaw()},{"tools",toolsRaw()},{"controls",bounds},{"status",utf8(displayStatus())}});if(includeDraft)result["draft"]=draft_;return result;
   }

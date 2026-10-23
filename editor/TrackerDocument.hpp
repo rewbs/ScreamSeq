@@ -177,7 +177,7 @@ public:
 	bool valid(int pattern, int row, int channel) const;
 	std::vector<Edit> edit(const std::vector<Edit> &edits);
 	void validateEdits(const std::vector<Edit> &edits) const;
-	bool editNative(NativeSong metadata, const std::vector<Edit> &edits = {});
+	bool editNative(NativeSong metadata, const std::vector<Edit> &edits = {}, const std::function<void()> &beforeCommit = {});
 	// Private state projection for admission checks; nullptr if history is empty.
 	// Reuses the pending operation without consuming live history. The returned
 	// document retains only that entry, not the live document's history stacks.
@@ -185,9 +185,18 @@ public:
     // A native-only history entry may publish an external prepared plan after
     // every allocation succeeds, before changing native data/history/revision.
     // The callback must not mutate this Document. Refusal leaves both histories
-    // intact. Cell/sample/structure entries reject a callback before invoking it.
-    std::vector<Edit> undo(const std::function<void()> &beforeCommit = {});
-    std::vector<Edit> redo(const std::function<void()> &beforeCommit = {});
+    // intact. Cell entries require explicit cellsPrepared; sample/structure
+    // entries always reject a callback before invoking it.
+    std::vector<Edit> undo(const std::function<void()> &beforeCommit = {}, bool cellsPrepared = false);
+    std::vector<Edit> redo(const std::function<void()> &beforeCommit = {}, bool cellsPrepared = false);
+    // Only use cellsPrepared when the callback publishes these cells atomically
+    // with the native schedule. Structure/sample entries remain ineligible.
+    std::vector<Edit> historyCells(bool redo) const {
+      const auto &history=redo?redo_:undo_;if(history.empty())return {};
+      auto cells=history.back().cells;
+      if(!redo){std::reverse(cells.begin(),cells.end());for(auto &cell:cells)std::swap(cell.before,cell.after);}
+      return cells;
+    }
 	bool canUndo() const { return !undo_.empty(); }
 	bool canRedo() const { return !redo_.empty(); }
 	bool historyNativeOnly(bool redo) const noexcept {
@@ -297,6 +306,11 @@ struct ColumnMuteFrame {
   std::array<bool, 192> muted{};
   uint16_t columns = 0;
 };
+struct PreciseNoteUpdate {
+  PreciseNoteSchedule schedule;
+  std::vector<Edit> cells;
+  PreciseNoteUpdate(const NativeSong &native,const std::vector<Edit> &edits):schedule(native),cells(edits) {}
+};
 class Renderer
 {
  // Atomics make bounded snapshot retries race-free even if a consumer is delayed.
@@ -316,6 +330,7 @@ class Renderer
 	bool regionStarted_ = false;
 	uint32_t regionLastRow_ = UINT32_MAX;
 	std::unique_ptr<PreciseNoteRuntime> preciseNotes_;
+  RealtimePlan<PreciseNoteUpdate> preciseNoteUpdates_;
 	std::unique_ptr<RecordNudgeRuntime> recordNudges_;
 	std::unique_ptr<ScratchRuntime> scratches_;
 	std::unique_ptr<NativePatternRuntime> nativePatterns_;
@@ -353,6 +368,7 @@ public:
 	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); scratches_=std::make_unique<ScratchRuntime>(native); nativePatterns_=std::make_unique<NativePatternRuntime>(native,*song_); native.prepareEffects(*song_); }
 	std::unique_ptr<ScratchGestureLibrary> prepareScratchUpdate(const NativeSong &native) const { return ScratchRuntime::prepareUpdate(native); }
 	bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &update) noexcept { return scratches_ && scratches_->publishUpdate(update); }
+  bool publishPreciseNoteUpdate(std::unique_ptr<PreciseNoteUpdate> &update) noexcept;
 	void recordingTime(uint64_t hostTime,double ticksPerSample) noexcept { renderHostTime_=hostTime;hostTicksPerSample_=ticksPerSample; }
 	const RecordingClock &recordingClock() const { return *recordingClock_; }
 	std::shared_ptr<const RecordingClock> recordingClockSnapshot() const noexcept { return recordingClock_; }

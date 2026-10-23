@@ -32,8 +32,8 @@ public:
   // Owns all preparation until the document's beforeCommit callback publishes
   // it. Rendering never owns this wrapper and no live Document is retained.
   struct PreparedNativeUpdate {
-    enum class Kind { GraphControls, Routing, Scratch, ColumnMutes };
-    Kind kind() const noexcept {return columnMutes_?Kind::ColumnMutes:scratch_?Kind::Scratch:controls_?Kind::GraphControls:Kind::Routing;}
+    enum class Kind { GraphControls, Routing, Scratch, ColumnMutes, PreciseNotes };
+    Kind kind() const noexcept {return preciseNotes_?Kind::PreciseNotes:columnMutes_?Kind::ColumnMutes:scratch_?Kind::Scratch:controls_?Kind::GraphControls:Kind::Routing;}
   private:
     friend class HostedProjectPlayback;
     HostedProjectPlayback *owner_=nullptr;
@@ -42,6 +42,7 @@ public:
     std::unique_ptr<Tracker::GraphControlPlan> controls_;
     std::unique_ptr<Tracker::ScratchGestureLibrary> scratch_;
     std::unique_ptr<Tracker::ColumnMuteFrame> columnMutes_;
+    std::unique_ptr<Tracker::PreciseNoteUpdate> preciseNotes_;
     std::unique_ptr<Tracker::MixerTransition::Plan> routing_;
   };
   HostedProjectPlayback(Tracker::Document &,const Project::ProjectState &,uint32_t rate,
@@ -58,7 +59,7 @@ public:
   // live edit; the caller preserves active playback and asks for a stopped edit.
   // Graph topology/physical port/latency changes retain the shared restrictions.
   std::unique_ptr<PreparedNativeUpdate> prepareNativeUpdate(
-    const Tracker::NativeSong &before,const Tracker::NativeSong &next);
+    const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells = {});
   // Invoke only after the host rechecks the same playback identity/generation.
   // A refusal publishes nothing and must abort the enclosing document commit.
   bool publishNativeUpdate(PreparedNativeUpdate &);

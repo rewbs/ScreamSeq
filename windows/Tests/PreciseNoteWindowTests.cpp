@@ -226,6 +226,37 @@ void pendingNewerRawAndFocus(Owner &owner){
     f.beforeReply={};f.click(Tool::applyDraft);require(f.submissions.size()==2&&f.writes==2&&f.tool.snapshot().at("selectedEvent").at("velocity")==111&&!f.tool.retainedDraft(),"Explicit next Apply did not save the retained newer raw value");
   }
 }
+void immediateTimelineAndPlayback(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);
+  const auto plot=f.tool.snapshot().at("timeline");
+  const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+  const auto before=f.saved.at("pattern-a");
+  // Complete native double-click sequence in a populated row. The first
+  // empty-space click must not validate a new event at the old occupied offset.
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.5,y+h*.6,MK_LBUTTON);
+  mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.6);
+  mouse(f.tool.window(),WM_LBUTTONDBLCLK,x+w*.5,y+h*.6,MK_LBUTTON);
+  mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.6);
+  require(f.writes==1&&f.saved.at("pattern-a").size()==before.size()+1&&!f.tool.retainedDraft(),"Populated-row double click did not publish exactly one hit");
+  key(f.tool.window(),VK_BACK);
+  require(f.writes==2&&f.saved.at("pattern-a").size()==before.size()&&std::all_of(before.begin(),before.end(),[&](const auto &e){return std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),e)!=f.saved.at("pattern-a").end();}),"Backspace did not delete only the inserted hit immediately");
+  f.page(1);f.select(0);const auto old=f.saved.at("pattern-a");
+  focus(f.control(Tool::list));key(f.control(Tool::list),VK_BACK);
+  require(f.writes==3&&f.saved.at("pattern-a").size()+1==old.size(),"Hit list Backspace did not publish deletion");
+  f.page(0);f.field(Tool::velocity,L"93");const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes==4&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1}&&!f.tool.retainedDraft(),"Debounced valid field edit lost focus/caret or required Apply");
+  const auto count=f.tool.snapshot().at("draftCount");key(field,VK_BACK);
+  require(f.tool.snapshot().at("draftCount")==count,"Text Backspace deleted a musical hit");
+  f.field(Tool::offset,L"1/");const auto saved=f.saved;SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.saved==saved&&text(f.control(Tool::offset))==L"1/","Incomplete fraction escaped the retained raw draft");
+  const auto retainedBefore=retained(f.tool.snapshot());const auto focused=GetFocus();
+  f.tool.playback("doc-a",0,2*256+64,true);
+  require(f.tool.snapshot().at("playbackOffset")==.25&&retained(f.tool.snapshot())==retainedBefore&&GetFocus()==focused,"Playback cursor altered editing focus/selection or used wrong units");
+  f.tool.playback("doc-a",0,3*256,true);require(f.tool.snapshot().at("playbackOffset").is_null(),"Cursor leaked into a different row");
+  f.tool.playback("other",0,2*256+64,true);require(f.tool.snapshot().at("playbackOffset").is_null(),"Foreign document cursor leaked into retained editor");
+  f.tool.playback("doc-a",0,2*256+64,false);require(f.tool.snapshot().at("playbackOffset").is_null(),"Stopped cursor remained visible");
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -239,8 +270,9 @@ void nativeTimelineKeysDragAndCancel(Owner &owner){
   key(f.tool.window(),VK_RIGHT,false,false,true);require(f.tool.snapshot().at("selectedEvent").at("position").get<unsigned>()==nudged.at("position").get<unsigned>()+1,"Alt nudge did not use one precise unit");
   // Invalid raw input must not be overwritten by a later canvas arrow.
   f.field(Tool::offset,L"unfinished");const auto invalid=retained(f.tool.snapshot());focus(f.tool.window());key(f.tool.window(),VK_RIGHT);require(retained(f.tool.snapshot())==invalid&&text(f.control(Tool::offset))==L"unfinished","Canvas arrow clamped/replaced invalid raw timing");
-  f.tool.reloadCaptured();mouse(f.tool.window(),WM_LBUTTONDBLCLK,x+w*.25,y+h*.25);initial=f.tool.snapshot().at("selectedEvent");f.choose(Tool::snap,1);
-  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.25,y+h*(1-initial.at("velocity").get<double>()/127),MK_LBUTTON);
+  f.tool.reloadCaptured();initial=f.tool.snapshot().at("selectedEvent");f.choose(Tool::snap,1);
+  require(f.tool.snapshot().at("snap")==1,"Snap selector failed before the drag");
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*(initial.at("position").get<unsigned>()%units)/units,y+h*(1-initial.at("velocity").get<double>()/127),MK_LBUTTON);
   {Keys modifiers(false,true,false);mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.75,y+h*.8,MK_LBUTTON|MK_SHIFT);}
   mouse(f.tool.window(),WM_LBUTTONUP,x+w*.75,y+h*.8);const auto shifted=f.tool.snapshot().at("selectedEvent");
   require(shifted.at("position")==2*units+49152&&shifted.at("velocity")==initial.at("velocity")&&GetCapture()!=f.tool.window(),"Snapped Shift-drag lost exact grid or velocity lock");
@@ -251,7 +283,7 @@ void nativeTimelineKeysDragAndCancel(Owner &owner){
   require(caret(f.control(Tool::offset))==std::pair<DWORD,DWORD>{1,1}&&retained(f.tool.snapshot())==editState,"Native Edit arrow was consumed as musical timing input");
   key(f.control(Tool::offset),VK_F6);require(f.tool.snapshot(false).at("page")=="timeline"&&GetFocus()==f.tool.window(),"LocalF6 did not restore Timeline canvas");
   key(f.tool.window(),'D',true);require(f.tool.snapshot().at("draftCount")==2,"Canvas duplicate did not stage another hit");key(f.tool.window(),VK_DELETE);require(f.tool.snapshot().at("draftCount")==1,"Canvas Delete did not remove only selected hit");
-  require(f.submissions.empty()&&f.current.revision=="r0"&&f.saved.at("pattern-a").empty(),"Local gestures saved musical data before Apply");
+  require(f.writes>=5&&f.saved.at("pattern-a")==f.tool.snapshot().at("draft")&&!f.tool.retainedDraft(),"Timeline gestures did not save immediately without Apply");
   key(f.tool.window(),VK_ESCAPE);require(f.returns==1,"Idle Escape did not invoke Return exactly once");
 }
 void focusedButtonEnterRunsItsOwnAction(Owner &owner){
@@ -271,6 +303,8 @@ void focusedButtonEnterRunsItsOwnAction(Owner &owner){
       require(f.submissions.size()==1&&f.submissions[0].at("dryRun")==false&&f.writes==1&&f.tool.capturedCurrent(),"Focused Apply Enter did not submit exactly one save");
       const auto &events=f.saved.at("pattern-a");const auto savedHit=std::find_if(events.begin(),events.end(),[](const auto &e){return e.at("channel")==0&&e.at("position")==2*units+16384;});
       require(savedHit!=events.end()&&savedHit->at("velocity")==90,"Focused Apply Enter saved the wrong row value");
+    }else if(id==Tool::addHit||id==Tool::removeHit||id==Tool::fillRow||id==Tool::close){
+      require(f.submissions.size()==1&&f.writes==1&&f.tool.capturedCurrent(),"Musical button Enter did not save its own edit exactly once");
     }else{
       require(f.saved==saved&&f.writes==0&&f.current.revision=="r0","Enter on a non-Apply button saved music");
       if(id==Tool::checkDraft)require(f.submissions.size()==1&&f.submissions[0].at("dryRun")==true,"Focused Check Enter was not exactly one dry run");
@@ -362,7 +396,7 @@ void selectedSoundSeed(Owner &owner){
     require(f.tool.snapshot().at("raw").at("instrument")=="2"&&f.tool.snapshot().at("draftCount")==0,"An empty row did not freeze the sound selected before its read");
     f.beforeReply={};f.tool.observeContext();require(text(f.control(Tool::instrument))==L"2","A later sound choice rewrote the captured empty-row fields");
     f.page(0);f.click(Tool::addHit);require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Add used a later sound or ordinary empty-cell zero");
-    f.click(Tool::checkDraft);require(f.writes==0&&f.saved.at("pattern-a").empty()&&f.submissions.back().at("dryRun")==true,"Sound seeding/Check saved music");
+    const auto inserted=f.saved.at("pattern-a");f.click(Tool::checkDraft);require(f.writes==1&&f.saved.at("pattern-a")==inserted&&f.submissions.back().at("dryRun")==true,"Check changed the automatically saved insertion");
     f.click(Tool::applyDraft);require(f.writes==1&&f.saved.at("pattern-a")[0].at("instrument")==2,"Apply did not save exactly the captured sound");
     f.tool.reloadCaptured();require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Reload replaced an existing precise event with the current sound");
     // Only a subsequent explicit capture of a truly empty row adopts sound 3.
@@ -467,6 +501,7 @@ int wmain(int argc,wchar_t **argv){try{
     requestMergeAndCheckBoundary(owner);std::cout<<"PASS precise-note captured read/merge/write and dry-run boundary\n";
     pendingNewerRawAndFocus(owner);std::cout<<"PASS precise-note pending newer raw generation and native focus ownership\n";
     nativeTimelineKeysDragAndCancel(owner);std::cout<<"PASS precise-note DPI-scaled timeline drag/cancel and local keyboard ownership\n";
+    immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";

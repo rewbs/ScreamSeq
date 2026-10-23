@@ -83,6 +83,8 @@
     if(draft_.size()<=512){for(size_t i=0;i<draft_.size();++i)if(int(i)!=selected_)marker(draft_[i],false);}
     else{const auto maximum=*std::max_element(density_.begin(),density_.end());for(size_t i=0;i<density_.size();++i)if(density_[i]){
       const auto height=r.h*float(density_[i])/std::max(uint32_t(1),maximum);surface.fill(r.x+float(i)*r.w/256,r.y+r.h-height,std::max(1.f,r.w/256),height,0x387a72);}}
-    if(selected_>=0)marker(draft_.at(size_t(selected_)),true);surface.unclip();
+    if(selected_>=0)marker(draft_.at(size_t(selected_)),true);
+    if(playbackOffset_){const auto x=r.x+float(*playbackOffset_)*r.w;surface.fill(x-1,r.y,2,r.h,0xf3f7fa);surface.fill(x-4,r.y,8,4,0xf3f7fa);}
+    surface.unclip();
     surface.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?accent:0x334757);surface.uiText(L"127",8,r.y-3,30,0x94a4b4);surface.uiText(L"1",8,r.y+r.h-15,30,0x94a4b4);
   }

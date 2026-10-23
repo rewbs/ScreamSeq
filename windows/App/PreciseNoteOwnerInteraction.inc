@@ -43,13 +43,13 @@
         const auto next=selection(units);require(next>=0&&next<2,"Choose units");const auto amount=rowOffset();
         const bool clean=pointRaw().at("offset")==pointBaseline_.at("offset");units_=unsigned(next);
         {Setting guard(setting_);set(offset,offsetText(std::min(65535u,unsigned(std::lround(amount*unitsPerRow)))));}
-        if(clean)pointBaseline_["offset"]=utf8(field(offset));++generation_;
-      }else if(id==snap&&notification==CBN_SELCHANGE){const auto next=selection(snap);require(next>=0&&next<4,"Choose snap");snap_=unsigned(next);++generation_;}
+        if(clean)pointBaseline_["offset"]=utf8(field(offset));++generation_;queueSave();
+      }else if(id==snap&&notification==CBN_SELCHANGE){const auto next=selection(snap);require(next>=0&&next<4,"Choose snap");snap_=unsigned(next);++generation_;queueSave();}
       else if(id==localEffect&&notification==CBN_SELCHANGE){const auto next=selection(localEffect);require(next>=0&&size_t(next)<effects_.size(),"Choose a local effect");
         wchar_t hex[8]{};swprintf_s(hex,L"%02X",effects_[size_t(next)].at("suggestedParameter").get<unsigned>());{Setting guard(setting_);set(parameter,hex);}fieldChanged();}
       else if(id==pitch&&notification==CBN_SELCHANGE)fieldChanged();
       else if(id==replaceRow){replaceLegacy_=!replaceLegacy_;++generation_;}
-      else if(id==addHit)duplicate();else if(id==removeHit)remove();else if(id==fillRow)retrigger();
+      else if(id==addHit){duplicate();saveAutomatically();}else if(id==removeHit){remove();saveAutomatically();}else if(id==fillRow){retrigger();saveAutomatically();}
       else if(id==applyDraft||id==checkDraft)apply(id==checkDraft);
     }catch(const std::exception &e){if(id==list)ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);if(id==units)selection(units,int(units_));error(e);}
   }
@@ -70,17 +70,18 @@
   void mouse(UINT message,float x,float y,WPARAM)override{
     if(message==WM_CAPTURECHANGED){if(dragging_)cancelDrag();return;}
     if(message==WM_LBUTTONUP&&dragging_){dragging_=false;const auto item=selected_>=0?draft_[size_t(selected_)]:Json();dragBefore_=Json::array();
-      if(GetCapture()==window_)ReleaseCapture();refresh(item);status(L"Timing draft / Apply saves all hits together");return;}
+      if(GetCapture()==window_)ReleaseCapture();refresh(item);try{saveAutomatically();}catch(const std::exception &e){error(e);}return;}
     if(!canvasVisible_||!hasTarget()||pending_||context_().busy)return;
     try{
       if((message==WM_LBUTTONDOWN||message==WM_LBUTTONDBLCLK)&&plot_.contains(x,y)){
         SetFocus(window_);saveSelected();int nearest=-1;float distance=144;
         for(size_t i=0;i<draft_.size();++i){const auto [px,py]=point(draft_[i]);const auto d=(px-x)*(px-x)+(py-y)*(py-y);if(d<distance){nearest=int(i);distance=d;}}
-        if(nearest<0&&message==WM_LBUTTONDBLCLK){require(draft_.size()<maximumEvents,"Too many precise notes");auto item=selected_>=0?draft_[size_t(selected_)]:edited(-1);
-          item["position"]=positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0);if(item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
-          require(!collision(item),"Another event already occupies that offset");draft_.push_back(item);++generation_;refresh(item);status(L"Hit added / Apply saves the draft");
-        }else if(nearest>=0){refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
-        else refresh();
+        if(nearest<0&&message==WM_LBUTTONDBLCLK){require(draft_.size()<maximumEvents,"Too many precise notes");
+          auto item=edited(-1,positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0));
+          if(item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
+          require(!collision(item),"Another event already occupies that offset");draft_.push_back(item);++generation_;refresh(item);saveAutomatically();
+        }else if(nearest>=0){cancelAutomaticEdit();refresh(draft_[size_t(nearest)]);dragBefore_=draft_;dragSelection_=selected_;dragging_=true;SetCapture(window_);}
+        else refresh(Json(),false);
       }else if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto item=draft_[size_t(selected_)];const auto previous=item;
         item["position"]=positionAt(x,(GetKeyState(VK_MENU)&0x8000)!=0);if(!(GetKeyState(VK_SHIFT)&0x8000)&&item.at("note").get<unsigned>()<128)item["velocity"]=velocityAt(y);
         require(!collision(item,selected_),"Another event occupies that offset");if(item!=previous){draft_[size_t(selected_)]=item;
@@ -103,9 +104,10 @@
     if(id==detailsText&&key==VK_RETURN&&!ctrl)return false;
     if(key==VK_RETURN&&!alt&&id!=pitch&&id!=units&&id!=snap&&id!=localEffect){action(applyDraft,BN_CLICKED);layout();return true;}
     if(ctrl&&!alt&&key=='D'&&(focused==window_||focused==controls_.at(list))){action(addHit,BN_CLICKED);layout();return true;}
+    if(!ctrl&&!alt&&(key==VK_DELETE||key==VK_BACK)&&((focused==window_&&canvasVisible_)||focused==controls_.at(list))&&hasTarget()){
+      action(removeHit,BN_CLICKED);layout();return true;}
     if(focused!=window_||!canvasVisible_||!hasTarget())return false;
     if(!ctrl&&!alt&&key==VK_TAB){page_=1;layout();focusPage();return true;}
-    if(!ctrl&&!alt&&key==VK_DELETE){action(removeHit,BN_CLICKED);layout();return true;}
     if(ctrl||pending_||context_().busy||selected_<0||key<VK_LEFT||key>VK_DOWN)return false;
     // Clicking a canvas can focus it before invalid field parsing rejects the
     // click. A subsequent arrow must not silently replace those raw fields.
@@ -114,7 +116,7 @@
       item["position"]=target_.row*unitsPerRow+unsigned(std::clamp(offset+(key==VK_LEFT?-step:step),0,65535));}
     else if(item.at("note").get<unsigned>()<128)item["velocity"]=std::clamp(item.at("velocity").get<int>()+(key==VK_UP?1:-1)*(shift?8:1),1,127);
     if(collision(item,selected_)){status(L"Another event occupies that offset");return true;}
-    draft_[size_t(selected_)]=item;++generation_;refresh(item);status(L"Timing draft / Apply saves all hits together");return true;
+    draft_[size_t(selected_)]=item;++generation_;refresh(item);try{saveAutomatically();}catch(const std::exception &e){error(e);}return true;
   }
   void drawControl(const DRAWITEMSTRUCT &item)override{
     if(item.CtlType==ODT_BUTTON&&pageIndex(int(item.CtlID))>=0){

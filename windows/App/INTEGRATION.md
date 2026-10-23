@@ -339,14 +339,28 @@ Validated topology changes stop/join playback before committing. This is not
 live structural graph replacement.
 
 The precise-note dock keeps a captured row draft with row/beat offsets, snap,
-velocity, note-local effects, off/cut, duplicates and retriggers. Check validates;
-Apply merges untouched pattern events and creates one document Undo step. A stale
+velocity, note-local effects, off/cut, duplicates and retriggers. Double-click
+inserts at the clicked position even on a populated row. Backspace/Delete removes
+the selected timeline/list hit; native text fields keep text deletion. Insert,
+remove, duplicate, retrigger, arrow nudges and completed drags save immediately;
+valid field edits save after a 300 ms typing pause. Check validates; Save now
+flushes/retries retained edits. Each save merges untouched pattern events and
+creates one document Undo step. A white playback cursor uses renderer telemetry
+only inside the captured row, independently of editing selection/focus. A stale
 draft stays visible and cannot overwrite newer music. Use target explicitly
 reloads the notes inspector's pinned/follow target. In-flight completions preserve
 newer fields and navigation focus. The hit list is virtual; dense canvas rows
 draw 256 cached bins plus the selected event. Sparse grid lookup uses binary
 search and displays a precise-hit marker. Delete on a note with precise hits
 clears that row's note events and ordinary note fields together, preserving FX.
+Precise-row edits use prepared shared schedules with up to 512 companion cell
+edits per live publication. A bounded FIFO adopts the schedule and ordinary-row
+conversion together at a render boundary; history admission precedes publication.
+Queue/epoch rejection preserves playback and music. Precise conversion Undo/Redo
+uses the same path. Past onsets wait for a later pass; changing a schedule does
+not restart held voices. Large API conversions beyond the live bound require
+stopped playback. Qualification is tracked in
+`../../doc/windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md`.
 
 Pattern clipboard text matches Mac's Pattern 2 payload and legacy Pattern 1
 import. Stable parameter bindings remap by target, and pasted FX expand the

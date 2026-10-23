@@ -29,6 +29,15 @@ user.EnumChildWindows.argtypes = [w.HWND, private_desktop.callback, w.LPARAM]
 
 
 class PreciseNoteNativeMixin:
+    def wait_note_saved(self):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            state = self.note_idle()['preciseNotes']
+            if not state['retainedDraft']:
+                return state
+            time.sleep(.02)
+        self.fail(str(state))
+
     @staticmethod
     def note_identifier(identifier):
         return 360 <= identifier <= 377 or 9200 <= identifier <= 9205

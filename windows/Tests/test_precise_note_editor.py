@@ -12,7 +12,7 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
     cells = support.PatternPerformanceTests.cells
     navigate = support.PatternPerformanceTests.navigate
 
-    def test_retrigger_draft_local_fx_check_one_undo_and_reopen(self):
+    def test_retrigger_immediate_local_fx_check_one_undo_and_reopen(self):
         local = next(e for e in self.read('pattern.notes.get', pattern=0)['effects'] if e['command'])
         self.write('pattern.apply', cells=[dict(pattern=0, row=4, channel=0, note=65, instrument=1,
             volumeCommand=1, volume=50, effect=local['command'], parameter=local['suggestedParameter'])])
@@ -24,13 +24,15 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertEqual(self.doc(), before)
         self.text(364, '1/8')  # Musical fraction: half a row at four rows per beat.
         self.text(363, '100')
+        self.wait_note_saved()
+        before_fill, fill_cells = self.read('pattern.notes.get', pattern=0), self.cells()
         self.text(376, '3')
         self.text(377, '40')
         self.command(375)
         self.assertEqual(self.editor()['draftCount'], 3)
+        after_fill = self.doc()
         self.command(371)
-        self.assertEqual(self.doc(), before)
-        self.command(372)
+        self.assertEqual(self.doc(), after_fill)
         result = self.read('pattern.notes.get', pattern=0)
         notes = [e for e in result['events'] if e['channel'] == 0]
         self.assertEqual([e['position'] % 65536 for e in notes], [32768, 43690, 54613])
@@ -43,8 +45,8 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.command(372)
         self.assertEqual(self.doc(), saved)
         self.write('history.undo', domain='document')
-        self.assertEqual(self.cells(), old_cells)
-        self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], unrelated)
+        self.assertEqual(self.cells(), fill_cells)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), before_fill)
         self.write('history.redo', domain='document')
         path = self.folder / 'precise-native.screamseq'
         self.write('document.save', path=str(path))
@@ -54,15 +56,16 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
     def test_stale_draft_and_pinned_target_survive_navigation_and_rack(self):
         self.write('pattern.notes.set', pattern=0, events=[dict(channel=0, position=4*65536, note=65)])
         self.open_row()
-        self.text(363, '92')
+        self.text(363, '92x')  # Invalid raw fields remain captured across navigation.
         self.native_panel(pinned=True)  # Pin the independent editable row owner.
         self.navigate(row=10, channel=1)
         self.command(316)  # Rack and return must preserve the captured row draft.
         self.command(107)
         self.assertEqual((self.editor()['row'], self.editor()['channel']), (4, 0))
-        self.assertEqual(self.editor()['selectedEvent']['velocity'], 92)
+        self.assertEqual(self.editor()['raw']['velocity'], '92x')
         self.write('pattern.apply', cells=[dict(pattern=0, row=20, channel=1, note=60)])
         before = self.doc()
+        self.text(363, '92')  # Valid text cannot rebase a stale captured row.
         self.command(372)
         self.assertEqual(self.doc(), before)
         self.assertTrue(self.editor()['stale'])
@@ -86,6 +89,7 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.combo(365, 0)
         self.assertEqual(self.editor()['selectedEvent']['position'] % 65536, 12288)
         self.combo(365, 1)
+        self.wait_note_saved()
         before_invalid = self.doc()
         for raw in ('1/0', '1//8', '/8', '1/', 'nan', 'inf', '1e309', '1/-8', '1/1'):
             with self.subTest(offset=raw):
@@ -120,11 +124,13 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         plot = self.editor()['timeline']
         x, y, w, h = (plot[k] for k in ('x', 'y', 'width', 'height'))
         before = self.doc()
-        self.mouse(0x203, x+w*.25, y+h*.25)  # Double click adds a draft hit.
+        self.mouse(0x203, x+w*.25, y+h*.25)  # Double click commits a hit.
         initial = self.editor()['selectedEvent']
         self.assertEqual(self.editor()['draftCount'], 1)
         self.assertAlmostEqual(initial['position'] % 65536, 16384, delta=128)
         self.assertAlmostEqual(initial['velocity'], 95, delta=2)
+        inserted = self.doc()
+        self.assertNotEqual(inserted['revision'], before['revision'])
         xx = x+w*(initial['position'] % 65536)/65536
         yy = y+h*(1-initial['velocity']/127)
         self.mouse(0x201, xx, max(y+1, yy), 1)
@@ -132,15 +138,13 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertGreater(self.editor()['selectedEvent']['position'], initial['position'])
         self.key(0x1B)
         self.assertEqual(self.editor()['selectedEvent'], initial)
-        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.doc(), inserted)
         self.key(0x27)
         self.assertEqual(self.editor()['selectedEvent']['position'], initial['position']+256)
-        self.command(372)
         self.assertEqual(len(self.read('pattern.notes.get', pattern=0)['events']), 1)
         self.focus_canvas()  # Delete must target the canvas after the native Apply action.
-        self.key(0x2E)
+        self.key(0x08)
         self.assertEqual(self.editor()['draftCount'], 0)
-        self.command(372)
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], [])
 
     def test_dense_virtual_list_selects_late_hit_without_losing_other_events(self):
@@ -265,8 +269,10 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertEqual(self.editor()['raw']['instrument'], str(wanted['index']))
         self.command(369)
         self.assertEqual(self.editor()['selectedEvent']['instrument'], wanted['index'])
+        inserted = self.doc()
+        self.assertNotEqual(inserted['revision'], before['revision'])
         self.command(371)
-        self.assertEqual(self.doc(), before)
+        self.assertEqual(self.doc(), inserted)
         self.command(372)
         captured = self.read('pattern.notes.get', pattern=0)['events']
         hit = next(e for e in captured if e['channel'] == 0 and e['position'] == 5*65536)
