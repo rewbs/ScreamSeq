@@ -435,3 +435,14 @@ live classes:16 precise cases, replacing that single case (15 additional cases;
 112 total at this source). No build job, retry or endpoint skip was added. Keep
 the real WASAPI/clock assertions. Local six-group/24-case qualification remains
 the bounded changed-input gate; native x64/device evidence remains separate.
+
+The shared actual-app recording launcher now checks its owned process handle
+before each readiness read. A terminal startup refusal fails immediately with
+PID, exit code, arguments and the last workspace/transport observations; it
+never restarts or skips the case. A still-live process retains the same20-second
+readiness deadline and mandatory clock assertion. The terminal branch was
+exercised with an owned Python child rejecting the product arguments: exit2 was
+reported in0.062 seconds (`startup-exit-diagnostic.json`). The normal branch then
+passed the combined live note/take journey against the existing c7 executable
+in3.587 seconds (`startup-live-diagnostic.log`). This repeat was limited to the
+changed launcher; no build or broad suite was repeated.

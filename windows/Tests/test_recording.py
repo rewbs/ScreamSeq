@@ -1,6 +1,7 @@
 """Actual MIDI/recording application path on owned never-switched desktops."""
 import ctypes
 from ctypes import wintypes
+import json
 import os
 from pathlib import Path
 import sys
@@ -26,15 +27,30 @@ class RecordingTests(unittest.TestCase):
         if audio: args += ['--audio-test-allow-stop']
         pid = self.desktop.launch(args)
         client = Client(r'\\.\pipe\ScreamSeq.Api.' + str(pid), timeout=20)
+        process = self.desktop.processes[-1]
+        last_workspace = last_transport = None
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
+            # Startup refusal (for example no WASAPI endpoint) is terminal.
+            # Keep the failure instead of polling a dead process for 20 seconds.
+            wait = private_desktop.kernel.WaitForSingleObject(process.hProcess, 0)
+            if wait == 0:
+                code = wintypes.DWORD()
+                private_desktop.check(private_desktop.kernel.GetExitCodeProcess(process.hProcess, ctypes.byref(code)))
+                self.fail(json.dumps(dict(reason='Owned recording app exited before readiness', pid=pid,
+                    exitCode=code.value, args=args, workspace=last_workspace, transport=last_transport)))
+            self.assertEqual(wait, 258, 'Cannot observe the owned recording process')
             try:
                 client.call('document.get')
-                if not client.call('workspace.get')['data']['documentBusy'] and (not audio or client.call('transport.get')['data']['recordingClock']['valid']):
+                last_workspace = client.call('workspace.get')['data']
+                if audio:
+                    last_transport = client.call('transport.get')['data']
+                if not last_workspace['documentBusy'] and (not audio or last_transport['recordingClock']['valid']):
                     return pid, client
             except TransportError: pass
             time.sleep(.03)
-        self.fail('recording fixture did not reach a valid playback clock')
+        self.fail(json.dumps(dict(reason='Recording fixture did not reach readiness before its deadline',
+            pid=pid, args=args, workspace=last_workspace, transport=last_transport)))
 
     def doc(self): return self.client.call('document.get')
     def read(self, method, **params): return self.client.call(method, params)['data']
