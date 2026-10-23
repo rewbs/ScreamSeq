@@ -54,6 +54,40 @@ void run(){
     constantTrace.reset();click(11004);SendMessageW(window,WM_TIMER,3,0);
     require(lane==traceLane&&context.revision==traceRevision&&edits==0,"Transient trace presentation edited song data");
     {
+      const auto p=tool.snapshot().at("trace").at("lastPoint");const auto scale=GetDpiForWindow(window)/96.;
+      const auto at=MAKELPARAM(int(std::lround(p[0].get<double>()*scale)),int(std::lround(p[1].get<double>()*scale)));
+      incomingPage=Json::array({{{"sequence",4},{"seconds",.8},{"value",.75},{"minimum",.75},{"maximum",.75},
+        {"pattern",0},{"order",0},{"position",300},{"source",{{"kind","recorded"}}}}});
+      pump=[&](const std::string &method){if(method=="parameter.activity.get"){SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,at);SendMessageW(window,WM_LBUTTONUP,0,at);}};
+      SendMessageW(window,WM_TIMER,3,0);pump={};incomingPage.reset();
+      require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("trace").at("selectedSequence")==3&&GetFocus()==window,
+        "Trace click did not freeze and select the observed native-value event");
+      require(tool.snapshot().at("cursor")==3&&tool.snapshot().at("pointCount")==3&&!tool.snapshot().at("pending").get<bool>(),
+        "Pumped observation replaced the displayed trace after its click froze the view");
+      SendMessageW(window,WM_KEYDOWN,VK_LEFT,0);
+      require(tool.snapshot().at("trace").at("selectedSequence")==1,"Trace keyboard navigation selected a normalized contribution or wrong neighbour");
+      SendMessageW(window,WM_KEYDOWN,VK_RIGHT,0);require(tool.snapshot().at("trace").at("selectedSequence")==3,"Trace Right lost the next native event");
+      SendMessageW(window,WM_KEYDOWN,VK_HOME,0);require(tool.snapshot().at("trace").at("selectedSequence")==1,"Trace Home lost the first event");
+      SendMessageW(window,WM_KEYDOWN,VK_END,0);require(tool.snapshot().at("trace").at("selectedSequence")==3,"Trace End lost the last event");
+      navigation=nullptr;SendMessageW(window,WM_KEYDOWN,VK_RETURN,0);
+      require(navigation.at("kind")=="recorded"&&navigation.at("plugin")=="a"&&navigation.at("parameter")==1,"Trace Enter lost its stable source/plugin/parameter");
+      SendMessageW(window,WM_KEYDOWN,VK_F6,0);require(GetFocus()==GetDlgItem(window,11007),"Trace F6 did not enter native details");
+      SendMessageW(window,WM_KEYDOWN,VK_F6,0);require(GetFocus()==window,"Trace F6 did not return to the plot");
+      context.revision="changed-after-trace";navigation=nullptr;SendMessageW(window,WM_KEYDOWN,VK_RETURN,0);
+      require(navigation.is_null()&&tool.snapshot().at("trace").at("selectedSequence")==3,"Trace source navigation crossed a captured revision boundary");
+      context.revision=traceRevision;click(11002);SendMessageW(window,WM_TIMER,3,0);
+      require(tool.snapshot().at("trace").at("selectedSequence").is_null()&&lane==traceLane&&edits==0,"Trace selection refresh wrote music or retained a previous watch selection");
+      context.revision="source-read-revision";
+      incomingPage=Json::array({{{"sequence",4},{"seconds",.8},{"value",.75},{"minimum",.75},{"maximum",.75},
+        {"pattern",0},{"order",0},{"position",300},{"source",{{"kind","recorded"}}}}});
+      pump=[&](const std::string &method){if(method=="parameter.activity.sources")SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,at);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};incomingPage.reset();
+      require(tool.snapshot().at("frozen")==true&&tool.snapshot().at("trace").at("selectedSequence")==3&&
+        tool.snapshot().at("cursor")==3&&tool.snapshot().at("pointCount")==3&&!tool.snapshot().at("pending").get<bool>(),
+        "Pumped source read replaced the trace after selection froze it");
+      context.revision=traceRevision;click(11002);SendMessageW(window,WM_TIMER,3,0);
+    }
+    {
       choose(11006,1);const auto recent=GetDlgItem(window,11007);
       const auto page=[](uint64_t first,uint64_t last){Json result=Json::array();for(auto sequence=first;sequence<=last;++sequence)
         result.push_back({{"sequence",sequence},{"seconds",double(sequence)/10},{"value",.5},{"minimum",.5},{"maximum",.5},
@@ -98,6 +132,11 @@ void run(){
         GetNextDlgTabItem(window,control,TRUE)==GetDlgItem(window,activityTabs[(i+activityTabs.size()-1)%activityTabs.size()]),
         "Activity Tab/Shift+Tab does not follow the visible control groups");}
     SetWindowTextW(GetDlgItem(window,11016),L"-0.25");require(tool.snapshot().at("fieldDraft")==true,"Raw value draft not retained");
+    SetFocus(GetDlgItem(window,11016));const auto beforeTraceDraft=tool.snapshot();
+    const auto tracePoint=beforeTraceDraft.at("trace").at("lastPoint");const auto traceScale=GetDpiForWindow(window)/96.;
+    SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(int(std::lround(tracePoint[0].get<double>()*traceScale)),int(std::lround(tracePoint[1].get<double>()*traceScale))));
+    require(tool.snapshot().at("rawValue")=="-0.25"&&tool.snapshot().at("fieldDraft")==true&&GetFocus()==GetDlgItem(window,11016)&&
+      tool.snapshot().at("trace").at("selectedSequence").is_null(),"Trace click discarded or hid a recorded field draft");
     const auto retained=tool.snapshot();refuses("a",2);tool.openSourceAt("a",1);
     require(tool.snapshot()==retained,"Explicit activity navigation erased a recorded-point draft");
     context.revision="r2";click(11013);require(edits==0&&tool.snapshot().at("fieldDraft")==true,"Stale recorded fields were committed or discarded");

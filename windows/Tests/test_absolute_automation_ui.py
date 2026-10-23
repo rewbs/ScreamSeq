@@ -222,7 +222,24 @@ class AbsoluteAutomationUITests(unittest.TestCase):
                 time.sleep(.025)
             self.fail(dict(expected=expected,actual=current,activity=local))
         parameter=next(i for i,p in enumerate(state()['parameters']) if p['id']==1)
-        choose(11001,parameter);choose(11006,2);choose(11007,1)
+        choose(11001,parameter)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            trace=state()['trace']
+            if trace['nativePoints']>=2:break
+            time.sleep(.025)
+        self.assertGreaterEqual(trace['nativePoints'],2,trace)
+        px,py=trace['lastPoint'];scale=self.read('workspace.get')['dpi']/96
+        self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
+        self.desktop.send(owner,0x202,0,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
+        self.assertTrue(state()['frozen']);self.assertIsNotNone(state()['trace']['selectedSequence'])
+        press(11008)
+        linked=self.read('workspace.get')['absoluteAutomation']
+        self.assertTrue(linked['visible'],state())
+        self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+        self.assertEqual(self.read('automation.get'),baseline)
+        self.press(4624);press(11002)
+        choose(11006,2);choose(11007,1)
         self.assertEqual(state()['selectedPoint'],1)
         self.field(11016,-9,kind);press(11013)
         edited=json.loads(json.dumps(baseline))

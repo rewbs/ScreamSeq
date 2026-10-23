@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October 21:33 UTC continuation:** the unbuilt Activity batch now also
+supports click-to-freeze trace inspection, Left/Right/Home/End, Enter to open
+the captured source and F6 to/from native details. Existing tests cover draft
+retention, both pumped-read races, stale-source refusal and exact unchanged
+music; the existing app journey checks the real linked Gain editor. Counts
+remain8/7.063 ARM fully passed134 CTests, interface/socket/typed and the actual
+BlackHole512 live take lifecycle; Windows/Intel were still testing at21:32.
+Resolve the latest unexecuted `recorded-edit-guard/freeze.json`, keep the
+21:54:49UTC gate and inspect later starts. Source is not qualified or packaged.
+
 **23 October 21:21 UTC continuation:** Activity Recent changes now retains
 event sequence/watch identity and scroll through its rolling512-row page,
 clears expired selection and avoids resetting unchanged list content. The

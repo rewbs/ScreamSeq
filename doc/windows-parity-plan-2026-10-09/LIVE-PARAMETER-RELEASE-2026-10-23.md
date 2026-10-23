@@ -904,3 +904,39 @@ expired selection refusing navigation, and exact unchanged lane/revision.
 These assertions are source-only and remain in the same eight-group/seven-case
 checkpoint. ARM063 compiled at21:13:54; its tests and the Intel/Windows jobs
 were still running at21:20:21. No new build was started or old job restarted.
+
+### 21:33 UTC continuation: inspect a trace and reach its source
+
+Current Mac `ParameterTraceView.swift::mouseDown` selects the nearest observed
+sample; `ParameterActivity.swift::trace.onSelect` freezes that view and retains
+its source for navigation. Windows previously drew the trace without a mouse
+handler. `ParameterActivityWindow.hpp` now selects a native-value event by its
+stable sequence, freezes the displayed capture, marks the selected event and
+shows its time/value/source. Left/Right and Home/End inspect visible events;
+Enter uses the existing guarded source-navigation path. F6 moves between the
+trace and the native details list. Normalized graph contributions remain
+excluded from this native-unit plot. This changes observation/navigation only,
+not the shared API, musical history, DSP or saved project representation.
+
+A raw recorded-point draft refuses trace selection without losing focus or
+text. A changed document/revision refuses source navigation. Selection during
+either pumped observation or source read preserves the exact displayed points
+and cursor until Resume. Hit testing uses the same inset as drawing. Target
+refresh clears selection, while explicit list selection chooses the list source.
+The existing native Activity group asserts these boundaries, exact unchanged
+music, keyboard traversal and source identity. Its existing actual-app journey
+now also clicks Gain's trace and requires the linked absolute editor to show
+that exact plugin/parameter without changing any lane. All these new assertions
+are **unbuilt**; the checkpoint remains eight native groups/seven app cases.
+Fresh Computer Use must check trace selection/keyboard/source navigation in
+addition to plain recorded-point click versus deliberate drag and Save focus.
+
+Read-only063 ARM CI inspection confirms134/134 CTests, the full native interface
+and socket/typed gates, and the actual BlackHole2ch512-frame live take lifecycle:
+frames16384→19456, callbacks32→38. Exact job120651361907 built the CI merge
+`2f04f203b023a559bd31d579fc7873c45bc8ed5f` of063 into main0fe8f34.
+The retained log SHA256 is
+`7dc9539cae217aff4c32ec912c63f9470b7243bc47b14b5c2b5ddc30eb9fc975`.
+Windows/Intel tests were still active at21:32:06. This is Mac evidence for the
+earlier candidate, not qualification of the pending Windows corrections. No
+build, test process, package, main merge or CI restart ran for this continuation.

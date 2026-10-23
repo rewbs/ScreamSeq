@@ -18,6 +18,7 @@ private:
   Context captured_;Json targets_=Json::array(),parameters_=Json::array(),sources_=Json::array(),recorded_=Json::array();
   std::deque<Json> points_;std::vector<size_t> listed_;std::string target_,plugin_,token_,sourceRevision_;
   std::vector<std::wstring> listedText_;std::vector<uint64_t> listedSequences_;int listedPage_=-1;std::string listedToken_;
+  std::optional<uint64_t> selectedTrace_;
   std::optional<uint32_t> parameter_;uint64_t cursor_=0,dropped_=0,engine_=0,originalFrame_=0;
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
@@ -88,7 +89,7 @@ private:
   void recorded(size_t offset) {const auto c=context_();const auto generation=generation_;auto r=readRecorded(plugin_,parameter_,offset,c,generation);guardRead(c,generation);captured_=c;adoptRecorded(std::move(r));}
   void recorded(){recorded(offset_);}
   void sources(){const auto c=context_();const auto generation=generation_;auto r=readSources(target_,parameter_,c,generation);guardRead(c,generation);sources_=std::move(r.sources);sourceRevision_=c.revision;set(ruleLabel,r.rule);}
-  void watch(bool clearCapture){require(parameter_.has_value(),"Choose a prepared processor and parameter");const auto c=context_();auto token=readWatch(target_,*parameter_,clearCapture,c,generation_);token_=std::move(token);cursor_=dropped_=0;points_.clear();}
+  void watch(bool clearCapture){require(parameter_.has_value(),"Choose a prepared processor and parameter");const auto c=context_();auto token=readWatch(target_,*parameter_,clearCapture,c,generation_);token_=std::move(token);cursor_=dropped_=0;points_.clear();selectedTrace_.reset();}
   void load(std::string wanted={},std::optional<uint32_t> parameter={},bool explicitRefresh=false,bool strictTarget=false){
     require(!fields_||explicitRefresh,"Save or Refresh the recorded-point draft before changing target");const auto c=context_();const auto generation=generation_;require(captured_.document.empty()||captured_.document==c.document||explicitRefresh,"Captured song is unavailable / Refresh");
     auto r=request_("parameter.activity.targets",Json::object());guardRead(c,generation);auto targets=r.at("targets");require(targets.is_array(),"Incomplete prepared processor list");const auto engine=r.at("engine").get<uint64_t>();const auto active=r.at("active").get<bool>();
@@ -103,9 +104,9 @@ private:
     // Starting the transient watch is last: all document reads are staged first.
     if(selected)token=readWatch(target,*selected,false,c,generation);guardRead(c,generation);
     targets_=std::move(targets);parameters_=std::move(catalog);target_=std::move(target);plugin_=std::move(plugin);parameter_=selected;engine_=engine;active_=active;captured_=c;
-    token_=std::move(token);cursor_=dropped_=0;points_.clear();sources_=std::move(sourceData.sources);sourceRevision_=c.revision;adoptRecorded(std::move(lane));++generation_;
+    token_=std::move(token);cursor_=dropped_=0;points_.clear();selectedTrace_.reset();sources_=std::move(sourceData.sources);sourceRevision_=c.revision;adoptRecorded(std::move(lane));++generation_;
     choices();list();set(ruleLabel,sourceData.rule);set(targetLabel,target_.empty()?L"Choose a prepared processor copy":wide(target_));
-    status(parameter_?L"Live processor observation · recorded points use seconds and native parameter units":L"Start playback to prepare processor copies, then Refresh");
+    status(parameter_?L"Live observation · click trace to inspect · F6 focuses trace · Enter opens source":L"Start playback to prepare processor copies, then Refresh");
   }
   void poll(){if(!visible()||pending_||frozen_||!parameter_||context_().busy)return;beginPending();polling_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{polling_};try{
@@ -114,11 +115,15 @@ private:
     // during a pumped read must not freeze the trace. Document/revision/watch
     // guards still apply; reads which adopt fields retain their generation guard.
     const auto r=request_("parameter.activity.get",{{"after",cursor_},{"limit",2048}});guardRead(c,std::nullopt);
+    // A click can freeze the currently displayed trace while this read pumps
+    // native messages. Keep that exact view/cursor; Resume can consume later data.
+    if(frozen_){pending_=false;return;}
     require(r.at("token")==token_&&!r.at("target").is_null()&&r.at("target").at("key")==target_&&r.at("parameter")==*parameter_,"Prepared processor or API watch changed / Refresh to observe again");
     const auto cursor=r.at("cursor").get<uint64_t>(),dropped=r.at("dropped").get<uint64_t>();const auto active=r.at("active").get<bool>();auto next=points_;
     require(r.at("points").is_array()&&r.at("points").size()<=2048,"Incomplete parameter activity page");
     for(const auto &p:r.at("points")){for(const auto *key:{"seconds","value","minimum","maximum"})require(std::isfinite(p.at(key).get<double>()),"Invalid activity value");(void)p.at("sequence").get<uint64_t>();(void)p.at("pattern");(void)p.at("order");(void)p.at("position");(void)p.at("source").at("kind").get<std::string>();next.push_back(p);}
     while(next.size()>8192)next.pop_front();std::optional<SourcesRead> sourceData;if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,std::nullopt);guardRead(c,std::nullopt);
+    if(frozen_){pending_=false;return;}
     points_=std::move(next);cursor_=cursor;dropped_=dropped;active_=active;if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}if(page_==1)list();requestPaint();pending_=false;
   }catch(const std::exception &e){pending_=false;frozen_=true;set(freeze,L"Resume");error(e);}}
   void commit(bool remove){
@@ -169,13 +174,13 @@ private:
       if(id==processors&&notification==CBN_SELCHANGE){const auto i=selection(processors);require(i>=0,"Choose a processor");load(targets_.at(size_t(i)).at("key"));}
       else if(id==parameters&&notification==CBN_SELCHANGE){const auto i=selection(parameters);require(i>=0,"Choose a parameter");load(target_,parameters_.at(size_t(i)).at("id").get<uint32_t>());}
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
-      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));if(page_==2&&!fields_)recorded();list();layout();}
-      else if(id==items&&notification==LBN_SELCHANGE&&page_==2){require(!fields_,"Save or Refresh the point fields before selecting another point");selected_=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));showFields();}
+      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();}
+      else if(id==items&&notification==LBN_SELCHANGE){if(page_==2){require(!fields_,"Save or Refresh the point fields before selecting another point");selected_=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));showFields();}selectedTrace_.reset();requestPaint();}
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
         else if(id==clear){watch(true);list();requestPaint();}
         else if(id==openLane){require(current(),"Song changed / Refresh before navigating captured sources");require(parameter_&&!plugin_.empty(),"Choose a rack plugin parameter");inspect_({{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}});}
-        else if(id==openSource){require(current(),"Song changed / Refresh before navigating captured sources");const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));require(i>=0&&size_t(i)<listed_.size(),"Select a source or recent change");if(page_==0)inspect_(sourceLink(sources_.at(listed_[size_t(i)]),false));else if(page_==1)inspect_(sourceLink(points_.at(listed_[size_t(i)]).at("source"),true));else inspect_({{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}});}
+        else if(id==openSource){require(current(),"Song changed / Refresh before navigating captured sources");if(selectedTrace_){const auto *point=traceSelection();require(point!=nullptr,"The selected trace event has expired; select a current source");inspect_(sourceLink(point->at("source"),true));}else{const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));require(i>=0&&size_t(i)<listed_.size(),"Select a source, recent change or trace point");if(page_==0)inspect_(sourceLink(sources_.at(listed_[size_t(i)]),false));else if(page_==1)inspect_(sourceLink(points_.at(listed_[size_t(i)]).at("source"),true));else inspect_({{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}});}}
         else if(id==previous||id==next){require(!fields_,"Save or Refresh before changing recorded pages");const auto wanted=id==previous?(offset_>=512?offset_-512:0):std::min(offset_+512,total_?((total_-1)/512)*512:0);recorded(wanted);list();}
         else if(id==newPoint){require(!fields_,"Save or Refresh the current point first");selected_=-1;showFields();list();SetFocus(controls_.at(time));}
         else if(id==savePoint||id==removePoint)commit(id==removePoint);
@@ -185,12 +190,29 @@ private:
     }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
   void timer(UINT_PTR id)override{if(id==3)poll();}
-  bool key(WPARAM key,bool ctrl,bool)override{if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}if(key==VK_RETURN&&(GetFocus()==controls_.at(time)||GetFocus()==controls_.at(value))){action(savePoint,BN_CLICKED);return true;}return false;}
+  bool key(WPARAM key,bool ctrl,bool)override{if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(items):window_);requestPaint();return true;}if(key==VK_RETURN&&(GetFocus()==controls_.at(time)||GetFocus()==controls_.at(value))){action(savePoint,BN_CLICKED);return true;}
+    if(GetFocus()==window_&&!ctrl&&!pending_){if(key==VK_RETURN&&selectedTrace_){action(openSource,BN_CLICKED);return true;}if(key==VK_LEFT||key==VK_RIGHT||key==VK_HOME||key==VK_END){
+      const auto t=trace();if(t.indices.empty())return true;size_t at=key==VK_LEFT||key==VK_END?t.indices.size()-1:0;
+      if(key==VK_LEFT||key==VK_RIGHT)for(size_t i=0;i<t.indices.size();++i)if(selectedTrace_&&points_[t.indices[i]].at("sequence")==*selectedTrace_){at=key==VK_LEFT?(i?i-1:0):std::min(i+1,t.indices.size()-1);break;}
+      selectTrace(t.indices[at]);return true;}}
+    return false;}
   void layout()override{const auto [w,h]=size();place(title,18,12,w-36,25);place(processors,18,46,w*.55-22,280);place(parameters,w*.55+4,46,w*.45-22,280);place(targetLabel,18,80,w-36,24);
     float x=18;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{refresh,92},{freeze,84},{clear,112},{zoomOut,38},{fit,46},{zoomIn,38}}){place(id,x,112,width,28);x+=width+8;}place(mode,x,112,200,200);plot_={18,156,w-36,std::max(110.f,h-492)};
     const float y=plot_.y+plot_.h+14;place(details,18,y,200,160);place(openSource,226,y,148,28);place(openLane,382,y,172,28);place(pageLabel,566,y+4,w-584,24);place(items,18,y+38,w-36,102);place(ruleLabel,18,y+146,w-36,36);
     const bool recorded=page_==2;place(timeLabel,18,h-131,156,22,recorded);place(valueLabel,188,h-131,156,22,recorded);place(time,18,h-109,156,28,recorded);place(value,188,h-109,156,28,recorded);x=358;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{newPoint,78},{savePoint,106},{removePoint,94},{previous,56},{next,56}}){place(id,x,h-109,width,28,recorded);x+=width+8;}place(close,w-112,h-65,94,28);place(statusLabel,18,h-30,w-36,24);}
   struct Trace {std::vector<size_t> indices;size_t contributions=0;double begin=0,end=0,low=0,high=0;};
+  const Json *traceSelection()const {if(selectedTrace_)for(const auto &point:points_)if(point.at("sequence")==*selectedTrace_)return &point;return nullptr;}
+  void selectTrace(size_t index){
+    require(!fields_,"Save or Refresh the recorded-point draft before inspecting the trace");
+    const auto &point=points_.at(index);selectedTrace_=point.at("sequence").get<uint64_t>();frozen_=true;set(freeze,L"Resume");
+    status(L"Frozen · "+std::to_wstring(point.at("seconds").get<double>())+L" s · "+wide(point.at("value").dump())+L" · "+wide(point.at("source").at("kind"))+L" · Enter: source · Left/Right: neighbours");requestPaint();
+  }
+  void mouse(UINT message,float x,float y,WPARAM)override{
+    if(message!=WM_LBUTTONDOWN||(pending_&&!polling_)||!plot_.contains(x,y))return;
+    const auto t=trace();if(t.indices.empty())return;const auto seconds=t.begin+std::clamp((x-plot_.x-2)/std::max(1.f,plot_.w-4),0.f,1.f)*(t.end-t.begin);
+    const auto nearest=std::min_element(t.indices.begin(),t.indices.end(),[&](size_t a,size_t b){return std::abs(points_[a].at("seconds").get<double>()-seconds)<std::abs(points_[b].at("seconds").get<double>()-seconds);});
+    selectTrace(*nearest);SetFocus(window_);
+  }
   Trace trace()const {
     Trace t;for(size_t i=0;i<points_.size();++i){if(points_[i].at("source").at("kind")=="graph-source"){++t.contributions;continue;}t.indices.push_back(i);}if(t.indices.empty())return t;
     if(traceMode_==1){size_t first=t.indices.size()-1;const auto &last=points_[t.indices.back()];while(first){const auto &previous=points_[t.indices[first-1]],&next=points_[t.indices[first]];if(previous.at("pattern")!=last.at("pattern")||previous.at("order")!=last.at("order")||previous.at("position")>next.at("position"))break;--first;}t.indices.erase(t.indices.begin(),t.indices.begin()+first);}
@@ -207,10 +229,10 @@ private:
     return {r.x+2+float(std::clamp((seconds-t.begin)/span,0.,1.))*std::max(0.f,r.w-4),
       r.y+2+float(1-std::clamp(fraction,0.,1.))*std::max(0.f,r.h-4)};
   }
-  Json traceSnapshot()const {const auto t=trace();Json last=nullptr;if(!t.indices.empty()){const auto &p=points_[t.indices.back()];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());last=Json::array({at.x,at.y});}return {{"nativePoints",t.indices.size()},{"normalizedContributions",t.contributions},{"segments",t.indices.empty()?0:t.indices.size()-1},{"minimum",t.indices.empty()?Json(nullptr):Json(t.low)},{"maximum",t.indices.empty()?Json(nullptr):Json(t.high)},{"begin",t.begin},{"end",t.end},{"plot",Json::array({plot_.x,plot_.y,plot_.w,plot_.h})},{"lastPoint",last},{"coordinateSpace","ownerClientDIP"},{"unit","native parameter units"}};}
+  Json traceSnapshot()const {const auto t=trace();Json last=nullptr;if(!t.indices.empty()){const auto &p=points_[t.indices.back()];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());last=Json::array({at.x,at.y});}return {{"nativePoints",t.indices.size()},{"normalizedContributions",t.contributions},{"segments",t.indices.empty()?0:t.indices.size()-1},{"minimum",t.indices.empty()?Json(nullptr):Json(t.low)},{"maximum",t.indices.empty()?Json(nullptr):Json(t.high)},{"begin",t.begin},{"end",t.end},{"plot",Json::array({plot_.x,plot_.y,plot_.w,plot_.h})},{"lastPoint",last},{"coordinateSpace","ownerClientDIP"},{"selectedSequence",selectedTrace_?Json(*selectedTrace_):Json()},{"unit","native parameter units"}};}
   void paint(RenderSurface &s)override{const auto [w,h]=size();s.fill(0,0,w,h,0x18222d);const auto r=plot_;s.fill(r.x,r.y,r.w,r.h,0x101923);for(int i=0;i<=4;++i)s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,0x2a3947);
-    const auto t=trace();if(!t.indices.empty()){float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);for(auto i:t.indices){const auto &p=points_[i];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());const float x=at.x,y=at.y;if(previous){s.line(px,py,x,py,0x6edac5,2);s.line(x,py,x,y,0x6edac5,2);}else s.fill(x-2,y-2,4,4,0x6edac5);px=x;py=y;previous=true;}s.unclip();s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,0x93aabd);}
-    else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,0x93aabd);s.outline(r.x,r.y,r.w,r.h,0x334757);}
+    const auto t=trace();if(!t.indices.empty()){float px=0,py=0;bool previous=false;s.clip(r.x,r.y,r.w,r.h);for(auto i:t.indices){const auto &p=points_[i];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());const float x=at.x,y=at.y;if(previous){s.line(px,py,x,py,0x6edac5,2);s.line(x,py,x,y,0x6edac5,2);}else s.fill(x-2,y-2,4,4,0x6edac5);px=x;py=y;previous=true;}for(auto index:t.indices)if(selectedTrace_&&points_[index].at("sequence")==*selectedTrace_){const auto &p=points_[index];const auto at=traceLocation(t,p.at("seconds").get<double>(),p.at("value").get<double>());s.fill(at.x-3,at.y-3,6,6,0xf3d788);break;}s.unclip();s.uiText(std::to_wstring(t.begin)+L"–"+std::to_wstring(t.end)+L" s · "+std::to_wstring(t.low)+L"–"+std::to_wstring(t.high)+L" native units",r.x+8,r.y+6,r.w-16,0x93aabd);}
+    else s.uiText(L"Play the song to capture final parameter values",r.x+12,r.y+12,r.w-24,0x93aabd);s.outline(r.x,r.y,r.w,r.h,GetFocus()==window_?0x6edac5:0x334757);}
 
 public:
   bool queuedMusicalEdit()const{return bool(automaticEdit_);}
