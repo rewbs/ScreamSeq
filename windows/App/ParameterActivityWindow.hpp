@@ -239,12 +239,33 @@ private:
     cancelNavigation();
     if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint)){cancelAutomaticEdit();explicitPointAction_=false;}
     if(id==freeze&&notification==BN_CLICKED){frozen_=!frozen_;set(freeze,frozen_?L"Resume":L"Freeze");return;}
-    beginPending();try{
-      if(id==processors&&notification==CBN_SELCHANGE){const auto i=selection(processors);require(i>=0,"Choose a processor");load(targets_.at(size_t(i)).at("key"));}
-      else if(id==parameters&&notification==CBN_SELCHANGE){const auto parameter=selectedParameter();require(parameter.has_value(),"Choose a parameter");load(target_,parameter,false,true);}
+    try{
+      // Finish an already requested edit before idle navigation. Capture stable
+      // destinations first: saving a time edit can reorder the point list, and
+      // saving refreshes the parameter selector. Never turn an invalid/new or
+      // previously uncertain draft into an implicit retry.
+      std::string wantedTarget;std::optional<uint32_t> wantedParameter;
+      std::optional<uint64_t> wantedFrame;bool samePoint=false;
+      const bool processorChoice=id==processors&&notification==CBN_SELCHANGE;
+      const bool parameterChoice=id==parameters&&notification==CBN_SELCHANGE;
+      const bool pointChoice=id==items&&notification==LBN_SELCHANGE&&page_==2;
+      if(processorChoice){const auto i=selection(processors);require(i>=0,"Choose a processor");wantedTarget=targets_.at(size_t(i)).at("key");}
+      if(parameterChoice){wantedParameter=selectedParameter();require(wantedParameter.has_value(),"Choose a parameter");}
+      if(pointChoice){const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));
+        require(i>=0&&size_t(i)<recorded_.size(),"Choose a recorded point");
+        wantedFrame=recorded_[size_t(i)].at("frame").get<uint64_t>();samePoint=i==selected_;}
+      const bool pointNavigation=processorChoice||parameterChoice||pointChoice||
+        (notification==BN_CLICKED&&(id==previous||id==next||id==newPoint));
+      if(pointNavigation&&automaticEdit_)flushAutomaticEdit();
+      if(pointNavigation)require(!automaticEdit_&&!fields_,"Finish or Refresh the retained point fields before navigating");
+      beginPending();
+      if(processorChoice)load(wantedTarget);
+      else if(parameterChoice)load(target_,wantedParameter,false,true);
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
       else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Selected point edits save automatically · New, then Add point creates a point · Shared Undo restores edits");}
-      else if(id==items&&notification==LBN_SELCHANGE){if(page_==2){require(!fields_,"Save or Refresh the point fields before selecting another point");selected_=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));showFields();}selectedTrace_.reset();requestPaint();}
+      else if(id==items&&notification==LBN_SELCHANGE){if(pointChoice){if(!samePoint){const auto found=std::find_if(recorded_.begin(),recorded_.end(),[&](const auto &p){return p.at("frame")==*wantedFrame;});
+          require(found!=recorded_.end(),"The chosen point is no longer on this page; choose it again");selected_=int(found-recorded_.begin());}
+        showFields();list();}selectedTrace_.reset();requestPaint();}
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
         else if(id==clear){watch(true);list();requestPaint();}

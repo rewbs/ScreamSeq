@@ -1344,3 +1344,31 @@ test has yet run. Fresh foreground review must include next/previous pages and
 Ctrl+Page Up/Down alongside search/retained focus and outstanding recording
 navigation. The23:56:23UTC lower bound, terminal preceding CI and later-start
 checks still apply. Source changes do not inherit3408's functional pass.
+
+### Activity navigation after automatic editing (source only)
+
+Inspection found an additional composing interruption: selecting another
+recorded point, parameter, processor, page or New immediately after typing
+refused navigation until the automatic-edit debounce had elapsed. Idle
+navigation now finishes only the already queued edit before navigating. The
+destination is captured before that write: parameter and processor identities
+remain stable, and a clicked point is resolved by its original frame after a
+time edit sorts the page. Clicking the edited point itself follows its accepted
+new frame. This reuses the guarded shared recorded-edit operation and history;
+there is no new musical operation or serialization format.
+
+Invalid, stale, new-point and previously uncertain drafts still require explicit
+resolution. A busy worker retains its unsent edit and current selection; a later
+idle selection can finish it. New input pumped during the original write is not
+silently rebased onto its resulting revision. A failed post-write read cannot
+cause another selection or project Save to replay that write. These restrictions
+protect music rather than reinstate an Apply step for ordinary valid input.
+
+The existing Activity native group adds exact three-point reorder/selection,
+same-point identity, invalid text/caret, busy admission, uncertain completion,
+New versus explicit Add, parameter selection and newer-input assertions. It
+retains all previous failure, draft, live observation and search assertions.
+This does not claim to defer point-row clicks received inside an observation
+read; that existing busy-selection limitation remains. The two-group/two-app
+checkpoint scope is unchanged, with fresh foreground selection immediately
+after typing added to the UI checklist. No new build or runtime test has run.

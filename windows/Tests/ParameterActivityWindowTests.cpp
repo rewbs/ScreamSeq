@@ -386,6 +386,73 @@ void run(){
       require(lane==expected&&edits==beforeInvalidEdits+2&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==-1,
         "New-point fields created a partial point before explicit Add");click(11002);
     }
+    {
+      // Selecting a different row before debounce finishes saves the original
+      // point once, then resolves the clicked frame in the sorted fresh page.
+      const auto selectPoint=[&](int row){SendMessageW(itemList,LB_SETCURSEL,row,0);
+        SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
+      const auto initial=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.625}},{{"frame",48000},{"value",.25}}});
+      lane=initial;context.revision="idle-navigation";click(11002);selectPoint(1);
+      const auto before=edits;
+      SetWindowTextW(GetDlgItem(window,11015),L"1.25");selectPoint(2);
+      const auto moved=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.25}},{{"frame",60000},{"value",.625}}});
+      require(lane==moved&&edits==before+1&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("selectedPoint")==1&&std::stod(tool.snapshot().at("rawTime").get<std::string>())==1&&
+        SendMessageW(itemList,LB_GETCURSEL,0,0)==1,
+        "Immediate row navigation lost the pending edit or selected the reordered index instead of its frame");
+      SetWindowTextW(GetDlgItem(window,11015),L"1.5");selectPoint(1);
+      auto movedAgain=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",60000},{"value",.625}},{{"frame",72000},{"value",.25}}});
+      require(lane==movedAgain&&edits==before+2&&tool.snapshot().at("selectedPoint")==2&&
+        SendMessageW(itemList,LB_GETCURSEL,0,0)==2,
+        "Selecting the edited row before debounce lost its accepted moved identity");
+      // Invalid input blocks navigation without losing its text/caret. Once
+      // consumed, that failed intent is not replayed by another selection.
+      SetFocus(valueField);SetWindowTextW(valueField,L"-");SendMessageW(valueField,EM_SETSEL,1,1);
+      selectPoint(0);selectPoint(1);SendMessageW(window,WM_TIMER,0x5345,0);
+      SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(lane==movedAgain&&edits==before+2&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("selectedPoint")==2&&tool.snapshot().at("rawValue")=="-"&&
+        GetFocus()==valueField&&first==1&&last==1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==2,
+        "Invalid point navigation submitted, retried or discarded retained input/selection");
+      SetWindowTextW(valueField,L"0.5");context.busy=true;selectPoint(0);context.busy=false;
+      require(lane==movedAgain&&edits==before+2&&tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==2,
+        "Navigation bypassed the busy owner or lost its unsent automatic edit");
+      selectPoint(0);movedAgain[2]["value"]=.5;
+      require(lane==movedAgain&&edits==before+3&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==0,
+        "Idle retry did not finish the original busy edit and choose the requested point exactly once");
+      // A write that succeeds but whose following read fails is uncertain from
+      // the editor's perspective. Navigation must retain, never resend it.
+      SetWindowTextW(valueField,L"0.375");failRead="automation.recorded.get";selectPoint(1);failRead.clear();
+      auto accepted=movedAgain;accepted[0]["value"]=.375;const auto uncertain=tool.snapshot();
+      selectPoint(1);tool.flushForProjectSave();
+      require(lane==accepted&&edits==before+4&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("selectedPoint")==uncertain.at("selectedPoint")&&
+        tool.snapshot().at("rawValue")=="0.375"&&tool.snapshot().at("fieldDraft")==true,
+        "Post-write read failure navigated or silently replayed an uncertain point edit");
+      click(11002);
+      SetWindowTextW(valueField,L"0.25");click(11012);accepted[0]["value"]=.25;
+      require(lane==accepted&&edits==before+5&&tool.snapshot().at("selectedPoint")==-1&&
+        !tool.snapshot().at("fieldDraft").get<bool>()&&!tool.queuedMusicalEdit(),
+        "New point did not finish the existing requested edit first");
+      SetWindowTextW(valueField,L"0.875");selectPoint(0);
+      require(lane==accepted&&edits==before+5&&tool.snapshot().at("selectedPoint")==-1&&
+        tool.snapshot().at("rawValue")=="0.875"&&tool.snapshot().at("fieldDraft")==true,
+        "Navigation implicitly added or erased an unfinished new point");click(11002);
+      twoParameters=true;click(11002);SetWindowTextW(valueField,L"0.125");choose(11001,1);
+      accepted[0]["value"]=.125;
+      require(lane==accepted&&edits==before+6&&tool.snapshot().at("parameter")==2&&
+        !tool.queuedMusicalEdit()&&!tool.snapshot().at("fieldDraft").get<bool>(),
+        "Parameter navigation failed to finish the old point before adopting the explicit stable target");
+      choose(11001,0);twoParameters=false;click(11002);
+      SetWindowTextW(valueField,L"0.25");
+      pump=[&](const std::string &method){if(method=="automation.recorded.edit")SetWindowTextW(valueField,L"0.875");};
+      selectPoint(1);pump={};accepted[0]["value"]=.25;
+      SendMessageW(window,WM_TIMER,0x5345,0);
+      require(lane==accepted&&edits==before+7&&tool.snapshot().at("selectedPoint")==0&&
+        tool.snapshot().at("rawValue")=="0.875"&&tool.snapshot().at("fieldDraft")==true&&
+        !tool.queuedMusicalEdit(),"Navigation silently rebased or hid newer input pumped during the original write");
+      click(11002);
+    }
     // A real revision change during a read must still reject the snapshot.
     const auto beforeRevisionChange=tool.snapshot();
     pump=[&](const std::string &method){if(method=="parameter.activity.get")context.revision="changed-during-read";};

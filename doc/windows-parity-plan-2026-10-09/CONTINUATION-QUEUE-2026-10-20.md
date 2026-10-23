@@ -26,6 +26,12 @@ stale/Close paths without musical writes. The full composing journey now capture
 API archive before Keep/history/reopen. The pending local gate is therefore two
 native groups plus **two app journeys**, not the earlier search-only one case.
 
+Idle Activity navigation now flushes an already queued valid point edit first,
+capturing stable destinations before any time-based reordering. The native group
+adds exact point selection, invalid/busy/uncertain/newer-input guards and explicit
+New/Add behavior. This is source-only in the same bounded checkpoint; point-row
+clicks pumped inside an observation read remain an explicit follow-up.
+
 **23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
 7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
 Fresh Computer Use confirmed precise double-click/Backspace, automatic velocity,
