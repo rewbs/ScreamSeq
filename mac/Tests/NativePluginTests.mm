@@ -3,6 +3,7 @@
 #include "FixtureTrust.hpp"
 #include "../Audio/AudioExport.hpp"
 #include "../Audio/AudioUnitHost.hpp"
+#include "../Audio/VST3Host.hpp"
 #import "../Bridge/TrackerSession.h"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecordedGestureTake.hpp"
@@ -39,6 +40,7 @@ static void check(bool value, const char *message) {
 }
 #include "editor/Tests/PluginChainCaptureTests.inc"
 #include "StoppedPluginRepairTests.inc"
+#include "ProcessingStateObservationTests.inc"
 static void stoppedRecordedPublication(const PluginState &state,bool visible=false) {
   // No device is configured: stopped review must work without opening output.
   AudioDevice audio;audio.setPlugins({state});
@@ -571,6 +573,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       check(descriptors.size() == 4, "VST3 effect and instrument discovery");
       PluginState gain{descriptors[0]}, synth{descriptors[1]};
       gain.instanceID = "test-gain-instance";
+      processingStateObservation(gain,argv[1]);
       synth.instrument = 1;
       closedInputProtection(gain);
       PluginState closedAU{registerFixtureAUs().at(0)};closedAU.instanceID="closed-au-input-lease";

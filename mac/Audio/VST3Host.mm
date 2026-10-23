@@ -926,16 +926,24 @@ void VST3Plugin::loadProgram(const std::string &id) {
   });
 }
 PluginState VST3Plugin::state() const {
+  return captureState(true);
+}
+PluginState VST3Plugin::processingState() const {
+  return captureState(false);
+}
+PluginState VST3Plugin::captureState(bool flushPending) const {
   PluginState result{impl_->descriptor};
   pluginMainCall([&] {
     auto &s = *impl_;
     Stream component, controller;
-    while (s.changes.count || s.editsPending()) {
+    // Only stopped/private serialization owns these processing queues. The
+    // observation path must not even inspect their audio-owned non-atomics.
+    while (flushPending && (s.changes.count || s.editsPending())) {
       std::array<float, 2> empty{};
       if (!const_cast<VST3Plugin *>(this)->process(empty.data(), 0, 0))
         throw std::runtime_error("Cannot flush VST3 parameter state");
     }
-    if (s.controller)
+    if (flushPending && s.controller)
       for (size_t i = 0; i < s.metadata.size(); ++i) {
         const auto value = s.values[i].load();
         // Re-sending an unchanged program selector can reset edited controls.

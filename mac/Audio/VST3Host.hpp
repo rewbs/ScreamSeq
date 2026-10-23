@@ -6,6 +6,7 @@ namespace Tracker {
 class VST3Plugin {
   struct Impl;
   std::unique_ptr<Impl> impl_;
+  PluginState captureState(bool flushPending) const;
 
 public:
   VST3Plugin(const PluginState &, double rate, bool offline);
@@ -23,6 +24,11 @@ public:
   std::vector<PluginProgram> programs() const;
   void loadProgram(const std::string &id);
   PluginState state() const;
+  // UI-owner observation while processing. Never flushes parameters, calls
+  // process(), synchronizes controller values or consumes original input.
+  // Component/controller snapshots are not one atomic musical state. Pending
+  // audio input may be absent; this is not canonical save or take restoration.
+  PluginState processingState() const;
   double latency() const;
   bool latencyChangePending() const noexcept;
   std::optional<PluginLatencySnapshot> pendingLatency();
