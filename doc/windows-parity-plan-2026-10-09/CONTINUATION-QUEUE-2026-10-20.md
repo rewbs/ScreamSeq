@@ -8,6 +8,19 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23 October direct-edit continuation (unbuilt):** Windows Activity now queues
+existing-point value/time edits automatically, preserving original revision and
+frame, raw text/caret, busy admission and uncertain-write guards. New points
+retain explicit Add; Save now is optional for existing points. The current
+seven-case app gate now requires its Activity journey to pass without Save clicks,
+with exact history/reopen and continued playback assertions. Recording target
+read failures also restore their still-current old page/selector and selection.
+Resolve the newest `recorded-owner-admission` freeze; the10-group/7-case gate and
+22:55:37UTC lower bound remain, subject to terminal preceding CI/later starts.
+20467 ARM's retained log proves134 CTests, interface/socket/typed and actual
+BlackHole512 take lifecycle passed; Windows/Intel were active at22:34:56.
+No source-only change inherits that pass or qualifies a new package/merge.
+
 **23 October 22:28 UTC source continuation:** recording-review target choices
 are now retained through pumped reads and busy-owner admission, guarded by
 stable document/revision/take/target identities. New native assertions cover

@@ -134,6 +134,21 @@ private:
     NativeInputGate::present(controls_.at(target),CB_SETCURSEL,selected,0);
   }
   void cancelTargetSelection(){queuedTarget_.reset();KillTimer(window_,9);}
+  void changeTarget(std::string key) {
+    const auto previousKey=targetKey_;const auto previousOffset=offset_;const auto previousChosen=targetChosen_;
+    targetChosen_=true;targetKey_=std::move(key);offset_=0;
+    try{refresh();presentTargetSelection();}
+    catch(...){
+      // Failed reads retain the old event page. If its take/catalogue is still
+      // current, restore its selector too; do not relabel those old inputs as
+      // belonging to the attempted target or reset their selected row/caret.
+      if(displayedTake_==take()&&displayedTarget_==previousKey&&displayedOffset_==previousOffset&&
+         (previousKey.empty()||std::any_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==previousKey;}))){
+        targetKey_=previousKey;offset_=previousOffset;targetChosen_=previousChosen;presentTargetSelection();
+      }
+      throw;
+    }
+  }
   void selectTarget() {
     const auto selected=SendMessageW(controls_.at(target),CB_GETCURSEL,0,0);
     if(selected<0||size_t(selected)>targets_.size())return;
@@ -147,7 +162,7 @@ private:
       }
       presentTargetSelection();return;
     }
-    cancelTargetSelection();targetChosen_=true;targetKey_=key;offset_=0;refresh();
+    cancelTargetSelection();changeTarget(key);
   }
   void drainTargetSelection() {
     if(pending_||!queuedTarget_)return;
@@ -156,7 +171,7 @@ private:
     if(callbacks_.context()!=std::pair(choice.document,choice.revision)||take()!=choice.take||
        (!choice.key.empty()&&std::none_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==choice.key;})))
       throw std::runtime_error("Song or recording target changed during refresh; choose the input target again");
-    targetChosen_=true;targetKey_=std::move(choice.key);offset_=0;presentTargetSelection();refresh();
+    changeTarget(std::move(choice.key));
   }
   std::wstring cell(size_t row,unsigned column)const {
     if(row>=rows_.size())return {};const auto &value=rows_[row];

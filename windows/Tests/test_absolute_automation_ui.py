@@ -267,12 +267,12 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.press(4624);press(11002)
         choose(11006,2);choose(11007,1)
         self.assertEqual(state()['selectedPoint'],1)
-        self.field(11016,-9,kind);press(11013)
+        self.field(11016,-9,kind) # Existing points apply automatically; no Save click.
         edited=json.loads(json.dumps(baseline))
         for point in edited['points']:
             if point['id']==1 and point['frame']==36000:point['value']=-9
         accepted(edited);self.assertEqual(state()['selectedPoint'],1,state())
-        self.field(11015,1.25,kind);press(11013)
+        self.field(11015,1.25,kind)
         moved=json.loads(json.dumps(edited))
         for point in moved['points']:
             if point['id']==1 and point['frame']==36000:point['frame']=60000

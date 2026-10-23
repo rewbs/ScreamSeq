@@ -352,6 +352,20 @@ void applicationParameterRecordingReview() {
     const auto gainTarget=Json({{"plugin",plugin},{"parameter",1}}).dump();
     const auto balanceTarget=Json({{"plugin",plugin},{"parameter",2}}).dump();
     const auto beforeTargetNavigation=writes.size();SetFocus(control(9728));
+    const auto beforeFailedTarget=tool.snapshot();
+    ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::setItemState(control(9732),17,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    const auto beforeFailedDetails=tool.snapshot().at("inputDetails");
+    duringRead=[] {throw std::runtime_error("Owned target summary read failure");};chooseTarget(2);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&
+      tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
+      ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
+      "Failed target summary read relabelled old input or discarded selected details/focus");
+    duringPageRead=[] {throw std::runtime_error("Owned target event read failure");};chooseTarget(2);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&
+      tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
+      ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
+      "Failed target page read relabelled old input or discarded selected details/focus");
     duringRead=[&]{chooseTarget(2);chooseTarget(0);chooseTarget(2);
       restoreCheck(tool.snapshot().at("pending")==true&&tool.snapshot().at("target")==gainTarget&&
         SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,

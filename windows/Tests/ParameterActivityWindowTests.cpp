@@ -241,24 +241,64 @@ void run(){
     click(11002);
     // Observation does not own the point draft. Pumping text through either
     // observation read must leave its lane, selection, focus and caret intact,
-    // keep consuming the trace, and never make an implicit musical edit.
+    // keep consuming the trace, and never submit a musical write reentrantly.
+    // The explicit typing intent saves later, once idle and still current.
     for(const auto *read:{"parameter.activity.get","parameter.activity.sources"}) {
       const auto beforeTyping=tool.snapshot();const auto beforeTypingLane=lane;const auto beforeTypingEdits=edits;
+      const std::string rawTyped=std::string_view(read)=="parameter.activity.get"?"0.8125":"0.6875";
+      const std::wstring typed(rawTyped.begin(),rawTyped.end());
       if(std::string_view(read)=="parameter.activity.sources")context.revision="observer-source-refresh";
       SetActiveWindow(window);SetFocus(valueField);
-      pump=[&](const std::string &method){if(method==read){SetWindowTextW(valueField,L"0.8125");SendMessageW(valueField,EM_SETSEL,2,5);}};
+      pump=[&](const std::string &method){if(method==read){SetWindowTextW(valueField,typed.c_str());SendMessageW(valueField,EM_SETSEL,2,5);}};
       SendMessageW(window,WM_TIMER,3,0);pump={};
       const auto afterTyping=tool.snapshot();SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
       require(!afterTyping.at("frozen").get<bool>()&&!afterTyping.at("pending").get<bool>()&&
-        afterTyping.at("rawValue")=="0.8125"&&afterTyping.at("fieldDraft")==true&&
+        afterTyping.at("rawValue")==rawTyped&&afterTyping.at("fieldDraft")==true&&
         GetFocus()==valueField&&first==2&&last==5,"Typing during observation froze the trace or lost native text focus/caret");
       for(const auto *key:{"recorded","selectedPoint","rawTime","expectedRevision","token"})
         require(afterTyping.at(key)==beforeTyping.at(key),"Observation adopted or redirected a recorded-point draft");
-      require(lane==beforeTypingLane&&edits==beforeTypingEdits&&!tool.queuedMusicalEdit(),"Typing during observation submitted a musical edit");
+      require(lane==beforeTypingLane&&edits==beforeTypingEdits&&tool.queuedMusicalEdit(),"Typing during observation submitted reentrantly or lost its deferred edit");
       SendMessageW(window,WM_TIMER,3,0);
       require(!tool.snapshot().at("frozen").get<bool>()&&tool.snapshot().at("cursor")==3&&
         tool.snapshot().at("pointCount")==3,"Observer did not continue consuming its cursor after typing");
+      context.busy=true;SendMessageW(window,WM_TIMER,0x5345,0);context.busy=false;
+      require(lane==beforeTypingLane&&edits==beforeTypingEdits&&tool.queuedMusicalEdit(),
+        "Automatic activity edit was lost or submitted while the owner was busy");
+      SendMessageW(window,WM_TIMER,0x5345,0);SendMessageW(window,WM_TIMER,0x5345,0);
+      if(std::string_view(read)=="parameter.activity.get"){
+        auto expected=beforeTypingLane;expected[0]["value"]=.8125;
+        require(lane==expected&&edits==beforeTypingEdits+1&&!tool.queuedMusicalEdit()&&
+          !tool.snapshot().at("fieldDraft").get<bool>()&&tool.snapshot().at("selectedPoint")==0,
+          "Automatic activity edit did not save exactly once at the selected point");
+      }else require(lane==beforeTypingLane&&edits==beforeTypingEdits&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("fieldDraft")==true,"Automatic activity edit silently rebased stale raw fields");
+      SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(GetFocus()==valueField&&first==2&&last==5&&tool.snapshot().at("rawValue")==rawTyped,
+        "Automatic activity completion lost typing focus, raw formatting or caret");
       click(11002);
+    }
+    {
+      const auto beforeInvalid=lane;const auto beforeInvalidEdits=edits;
+      SetWindowTextW(valueField,L"-");SendMessageW(valueField,EM_SETSEL,1,1);
+      SendMessageW(window,WM_TIMER,0x5345,0);tool.flushForProjectSave();SendMessageW(window,WM_TIMER,0x5345,0);
+      require(lane==beforeInvalid&&edits==beforeInvalidEdits&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("rawValue")=="-"&&tool.snapshot().at("fieldDraft")==true,
+        "Invalid automatic point input was discarded, submitted or retried by project Save");
+      SetWindowTextW(valueField,L"0.25");SetWindowTextW(valueField,L"0.5");
+      tool.flushForProjectSave();
+      auto expected=beforeInvalid;expected[0]["value"]=.5;
+      require(lane==expected&&edits==beforeInvalidEdits+1&&!tool.queuedMusicalEdit(),
+        "Latest valid point typing was not coalesced into one project-Save edit");
+      SetWindowTextW(valueField,L"0.625");choose(11006,0);context.busy=true;
+      SendMessageW(window,WM_TIMER,0x5345,0);context.busy=false;
+      require(lane==expected&&tool.queuedMusicalEdit(),"Switching to sources lost an unsent busy point edit");
+      tool.flushForProjectSave();expected[0]["value"]=.625;
+      require(lane==expected&&edits==beforeInvalidEdits+2&&!tool.queuedMusicalEdit(),
+        "Hidden recorded fields did not finish their original queued edit exactly once");choose(11006,2);
+      click(11012);SetWindowTextW(GetDlgItem(window,11015),L"2");SetWindowTextW(valueField,L"0.75");
+      SendMessageW(window,WM_TIMER,0x5345,0);
+      require(lane==expected&&edits==beforeInvalidEdits+2&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==-1,
+        "New-point fields created a partial point before explicit Add");click(11002);
     }
     // A real revision change during a read must still reject the snapshot.
     const auto beforeRevisionChange=tool.snapshot();

@@ -23,6 +23,7 @@ private:
   uint64_t generation_=0;
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,polling_=false,frozen_=false,fields_=false,active_=false;
+  bool explicitPointAction_=false;
   std::function<void()> pendingNavigation_;
   void cancelNavigation(){pendingNavigation_={};KillTimer(window_,4);}
   void deferTargetSelection(int id){
@@ -53,7 +54,7 @@ private:
   void append(int id,const std::wstring &s){ScreamSeq::NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));}
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(processors),CB_RESETCONTENT,0,0);int index=-1;for(size_t i=0;i<targets_.size();++i){const auto &t=targets_[i];append(processors,wide(t.at("name"))+L" · "+wide(t.at("key")));if(t.at("key")==target_)index=int(i);}choose(processors,index);
     ScreamSeq::NativeInputGate::present(controls_.at(parameters),CB_RESETCONTENT,0,0);index=-1;for(size_t i=0;i<parameters_.size();++i){const auto &p=parameters_[i];append(parameters,wide(p.at("name"))+L" · "+wide(p.value("unitLabel",std::string())));if(parameter_&&p.at("id")==*parameter_)index=int(i);}choose(parameters,index);setting_=false;}
-  void showFields(){setting_=true;if(selected_>=0&&size_t(selected_)<recorded_.size()){const auto &p=recorded_[size_t(selected_)];originalFrame_=p.at("frame");set(time,double(originalFrame_)/48000);set(value,p.at("value"));}else{originalFrame_=0;set(time,L"0");set(value,L"0");}fields_=false;setting_=false;}
+  void showFields(){setting_=true;if(selected_>=0&&size_t(selected_)<recorded_.size()){const auto &p=recorded_[size_t(selected_)];originalFrame_=p.at("frame");set(time,double(originalFrame_)/48000);set(value,p.at("value"));}else{originalFrame_=0;set(time,L"0");set(value,L"0");}fields_=false;set(savePoint,selected_>=0?L"Save now":L"Add point");setting_=false;}
   void list(){const auto list=controls_.at(items);const auto old=int(SendMessageW(list,LB_GETCURSEL,0,0)),oldTop=int(SendMessageW(list,LB_GETTOPINDEX,0,0));
     const auto previousSequence=[&](int row)->std::optional<uint64_t>{if(page_==1&&listedPage_==1&&listedToken_==token_&&row>=0&&size_t(row)<listedSequences_.size())return listedSequences_[size_t(row)];return {};};
     const auto selectedSequence=previousSequence(old),topSequence=previousSequence(oldTop);
@@ -154,11 +155,22 @@ private:
     captured_=after;adoptRecorded(std::move(lane));sources_=std::move(sourceData.sources);sourceRevision_=after.revision;set(ruleLabel,sourceData.rule);list();++generation_;status(L"Recorded point saved · shared Undo restores the previous lane");
   }
   void deferPointAction(int id,uint64_t generation){
+    explicitPointAction_=true;
     queueAutomaticEdit([this,id,generation]{
+      if(generation!=generation_)explicitPointAction_=false;
       require(generation==generation_,"Point fields changed while waiting; review and save the current fields");
       if(pending_||context_().busy){deferPointAction(id,generation);return;}
+      explicitPointAction_=false;
       action(id,BN_CLICKED);
     },20);
+  }
+  void queuePointEdit(uint64_t generation){
+    if(explicitPointAction_)return;
+    queueAutomaticEdit([this,generation]{
+      require(generation==generation_,"Point selection or fields changed; review the retained fields");
+      if(pending_||context_().busy){queuePointEdit(generation);return;}
+      if(fields_)action(savePoint,BN_CLICKED);
+    });
   }
   Json sourceLink(Json source,bool recent)const {
     require(parameter_.has_value(),"Choose a parameter before opening a source");const auto kind=source.value("kind",std::string());
@@ -175,24 +187,24 @@ private:
     source["plugin"]=plugin_;source["parameter"]=*parameter_;return source;
   }
   void action(int id,unsigned notification)override{
-    if(setting_)return;if(id==close){hide();return;}if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;return;}if(pending_){
+    if(setting_)return;if(id==close){hide();return;}if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;if(page_==2&&selected_>=0)queuePointEdit(generation_);return;}if(pending_){
       // Polling pumps native messages. Retain one explicit edit instead of
       // silently losing an enabled Save/Delete click during that read. Never
       // queue/replay a second mutation while another mutation is in flight.
-      if(polling_&&notification==BN_CLICKED&&(id==savePoint||id==removePoint)&&!automaticEdit_)deferPointAction(id,generation_);
+      if(polling_&&notification==BN_CLICKED&&(id==savePoint||id==removePoint)&&!explicitPointAction_){cancelAutomaticEdit();deferPointAction(id,generation_);}
       // A live observer must not swallow a processor/parameter selection just
       // because its read pumps messages. Capture stable identities, then load
       // once the owner is idle; never reinterpret a later catalogue row index.
       if(polling_&&notification==CBN_SELCHANGE&&(id==processors||id==parameters))deferTargetSelection(id);
       if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
     cancelNavigation();
-    if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint))cancelAutomaticEdit();
+    if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint)){cancelAutomaticEdit();explicitPointAction_=false;}
     if(id==freeze&&notification==BN_CLICKED){frozen_=!frozen_;set(freeze,frozen_?L"Resume":L"Freeze");return;}
     beginPending();try{
       if(id==processors&&notification==CBN_SELCHANGE){const auto i=selection(processors);require(i>=0,"Choose a processor");load(targets_.at(size_t(i)).at("key"));}
       else if(id==parameters&&notification==CBN_SELCHANGE){const auto i=selection(parameters);require(i>=0,"Choose a parameter");load(target_,parameters_.at(size_t(i)).at("id").get<uint32_t>());}
       else if(id==mode&&notification==CBN_SELCHANGE){traceMode_=std::max(0,selection(mode));requestPaint();}
-      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();}
+      else if(id==details&&notification==CBN_SELCHANGE){page_=std::max(0,selection(details));selectedTrace_.reset();if(page_==2&&!fields_)recorded();list();layout();if(page_==2)status(L"Selected point edits save automatically · New, then Add point creates a point · Shared Undo restores edits");}
       else if(id==items&&notification==LBN_SELCHANGE){if(page_==2){require(!fields_,"Save or Refresh the point fields before selecting another point");selected_=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));showFields();}selectedTrace_.reset();requestPaint();}
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
@@ -263,8 +275,8 @@ private:
 public:
   bool queuedMusicalEdit()const{return bool(automaticEdit_);}
   void flushForProjectSave(){
-    // This finishes only an explicit Save/Delete already queued during a read.
-    // Unsubmitted or rejected raw fields are not retried by project Save/history.
+    // Finish an already queued typing or explicit Save/Delete intent. Invalid,
+    // rejected or uncertain fields are never retried by project Save/history.
     if(automaticEdit_)flushAutomaticEdit();
     require(!automaticEdit_&&!pending_,"Wait for the requested point edit before continuing");
   }
@@ -277,7 +289,7 @@ public:
   ParameterActivityWindow(HWND owner,Request request,std::function<Context()> context,std::function<void(const Json &)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     minimumClientWidth_=1020;minimumClientHeight_=680;create(L"ScreamSeq.ParameterActivity",L"Parameter activity",1180,790);clampToOwnerWorkArea();for(int id:{processors,parameters,mode,details})combo(id);append(mode,L"Recent seconds");append(mode,L"Latest pattern pass");choose(mode,0);for(auto s:{L"Sources",L"Recent changes",L"Recorded points"})append(details,s);choose(details,0);
     add(items,L"LISTBOX",L"Parameter activity details",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL|WS_HSCROLL);edit(time,L"0",40);edit(value,L"0",40);
-    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{freeze,L"Freeze"},{clear,L"Clear capture"},{openSource,L"Open source"},{openLane,L"Song automation…"},{previous,L"‹"},{next,L"›"},{newPoint,L"New"},{savePoint,L"Save point"},{removePoint,L"Delete"},{zoomOut,L"−"},{zoomIn,L"+"},{fit,L"Fit"},{close,L"Close"}})button(id,text);
+    for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{refresh,L"Refresh"},{freeze,L"Freeze"},{clear,L"Clear capture"},{openSource,L"Open source"},{openLane,L"Song automation…"},{previous,L"‹"},{next,L"›"},{newPoint,L"New"},{savePoint,L"Save now"},{removePoint,L"Delete"},{zoomOut,L"−"},{zoomIn,L"+"},{fit,L"Fit"},{close,L"Close"}})button(id,text);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{title,L"Parameter activity"},{targetLabel,L"Choose a prepared processor copy"},{ruleLabel,L"Observe the final parameter value and the sources that control it."},{statusLabel,L""},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{pageLabel,L""}})label(id,text);
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
         {processors,L"Parameter activity processor copy"},{parameters,L"Parameter activity parameter"},

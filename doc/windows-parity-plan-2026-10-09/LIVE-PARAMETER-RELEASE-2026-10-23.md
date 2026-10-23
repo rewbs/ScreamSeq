@@ -1119,3 +1119,43 @@ the explicit silent hardware audit. No extra build or test run was made for
 this continuation. Fresh Computer Use should include the recording target
 selector and Close while polling, alongside Activity navigation, precise
 Save/caret and live recorded-point editing.
+
+#### Direct Activity edits and failed-target presentation (source only)
+
+Current Mac `ParameterActivity.swift` supports direct recorded table edits via
+`automation.recorded.edit`; the Windows Activity form still required Save point.
+Windows now queues edits to an existing selected point after a short typing
+pause, coalesces successive input and waits for the owner to become idle. The
+existing captured revision, selected frame, generation, atomic API, shared Undo
+and persistence path remain authoritative. Read-only observation cannot submit
+the edit reentrantly. New point fields still require **Add point** so incomplete
+time/value entry cannot create accidental points; existing points offer
+**Save now** as an immediate alternative. The page explains automatic editing.
+
+An explicit Save/Delete queued during observation retains its original generation
+and cannot be replaced by newer typing. Invalid, stale, rejected or uncertain
+automatic input remains raw and is not retried by project Save or history.
+Newer text arriving during a write is not silently rebased. Switching the details
+page does not drop an already queued edit when another editor owns the worker.
+The native fixture preserves all reentrant-read, exact-lane, invalid/raw/caret,
+stale and explicit-intent assertions; it additionally requires exactly one
+automatic write after idle, no write on stale/invalid input, coalescing, hidden
+page completion and no partial New-point creation. The existing actual-app
+Activity journey now edits value and time **without clicking Save**, retaining
+its exact unrelated-lane, stable selection, Undo/Redo, opaque plugin state,
+continued playback and save/reopen assertions. Counts remain ten native groups
+and seven app cases. These behavioral changes are not yet built or executed.
+
+Recording review also restores the previous selector when loading a new target
+fails and its old take/page is still current, retaining exact rows, selected
+input, details and focus. Native failures are injected separately into the
+summary and event-page reads. This closes the failure path where a new label
+could appear above old inputs; it does not fabricate successful reads.
+
+The preceding20467 Mac ARM job120676170951 is terminal success. Its downloaded
+log SHA256 is `c91fe169cd4164d7cc4d67628f82c9dc7d4895c3270ded2044810a1f4b7e6ef6`:
+134 CTests, native interface and socket/typed contracts passed, plus the actual
+BlackHole2ch512 live take lifecycle (frames16384→25600, callbacks32→50).
+The log and completion receipt are retained in `recorded-edit-guard/`.
+Windows and Intel remained active at the22:34:56 observation. No job was restarted,
+and none of this Mac evidence qualifies the new Windows source.
