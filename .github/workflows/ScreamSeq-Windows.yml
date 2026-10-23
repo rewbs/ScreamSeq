@@ -105,6 +105,9 @@ jobs:
           # The full composing journey uses the mandatory scanned VST3 synth,
           # not an optional installed vendor. Reuse the worker gate's cache.
           $env:SCREAMSEQ_TEST_PROVIDER_CACHE = (Resolve-Path bin/windows-ci/plugin-edit-cache.json).Path
+          # Keep the original/recorded projects and PCM after test cleanup,
+          # including partial journeys when a required assertion fails.
+          $env:SCREAMSEQ_COMPOSING_EVIDENCE_DIR = Join-Path $env:GITHUB_WORKSPACE 'bin/windows-ci/recording-composing'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
           # The hosted Server image may leave both native audio services stopped.
@@ -226,6 +229,8 @@ jobs:
             bin/windows-ci/test-schedule.json
             bin/windows-ci/audio-services.json
             bin/windows-ci/audio-environment/**
+            bin/windows-ci/recording-composing/**
+            bin/windows-ci/recording-composing-layered-instrument/**
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

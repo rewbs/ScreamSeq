@@ -242,7 +242,7 @@ class PluginRecordingTests(unittest.TestCase):
                     'native VST3 parameter capture', 'Stop preserves playback', 'Keep is one Undo',
                     'Redo', 'Discard', 'opaque state and aliases retained', 'exact save/reopen preservation',
                     'recorded automation changes unsaturated PCM', 'reopened playback PCM exact',
-                    'resample Undo preserves complete source project']))
+                    'resample Undo preserves source project with exactly one allocated stable identity']))
 
     def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,
                                               values=(-6.5, -3.25, -12.25)):

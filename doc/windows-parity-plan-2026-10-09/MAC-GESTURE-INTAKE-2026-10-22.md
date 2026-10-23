@@ -1759,3 +1759,13 @@ The sampling guide also now reflects current Windows source: its existing
 `New take limit` selector offers60/300seconds and is locked while a take is
 retained. No duplicate duration feature was implemented based on the stale
 guide's earlier sixty-second-only claim.
+
+### Retained composing evidence for the next checkpoint
+
+Windows CI now sets `SCREAMSEQ_COMPOSING_EVIDENCE_DIR` to a workspace path
+outside each disposable test session. Its always-run artifact step retains both
+the built-in composing journey and the sample-layered VST3 journey, including
+saved projects, typed comparisons and PCM replay reports when those stages run.
+Partial artifacts remain diagnostic evidence, never a passing receipt. This
+supports diagnosis and subsequent reciprocal edited-project checks without
+rebuilding or repeating a completed native run. Execution remains pending.
