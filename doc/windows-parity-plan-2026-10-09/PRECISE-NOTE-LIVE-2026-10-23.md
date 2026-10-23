@@ -232,3 +232,29 @@ the draft generation and also prevents the later selection from overwriting it.
 Native assertions cover both selection paths, exact one-write preservation and
 newer raw input during the save. They join the existing next checkpoint and have
 not yet run. No additional build was started.
+
+## Source continuation: native Undo includes the queued note edit
+
+Native song Undo/Redo now finishes any queued precise-note automatic intent
+before taking the current document revision. This prevents rapid Undo from
+undoing older music while leaving the just-entered value stale. Text-field Undo
+still goes through the native Edit control. Failed/uncertain writes are not
+replayed, and invalid raw text remains retained under the existing draft policy.
+Song menus, context menus and the rack's unified-history buttons account for a
+queued musical edit: the first edit can already be undone, and a new edit
+supersedes the old Redo branch. Presentation-only snap changes do not advertise
+an Undo step. External `history.undo/redo` API semantics are unchanged.
+
+The owner regression covers timer-free flushing and no replay. An actual native
+menu test starts with empty history, undoes the first queued edit and redoes it,
+checking exact ordinary cells and precise events. A third actual-app silent
+playback journey checks native Undo/Redo, current editor state, transport epoch,
+continued frames, no delayed timer replay and save/reopen. The next single build
+also includes `workspace-restore-tests`; the bounded selection is now **six native
+groups** (adding `workspace-menu-bar-tests`) and **23 actual-app cases**. Source
+review, whitespace inspection and Python syntax parsing have run; these new
+behavioral assertions are still unexecuted.
+
+The read-only CI observation at 06:37:47 UTC found Mac Intel compilation passed
+at 06:36:56; its remaining job steps were still running. This does not supersede
+the fresh CI inspection required at the 06:59:10 UTC earliest build gate.

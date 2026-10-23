@@ -139,7 +139,10 @@
         if(presentationBusy()) title+=L" [Document worker busy]";
         ScreamSeq::NativeControls::text(window,title);
     }
+    bool canUndoSong()const{return view->session.document.value("canUndo",false)||(preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit());}
+    bool canRedoSong()const{return view->session.document.value("canRedo",false)&&!(preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit());}
     Json edit(const std::string &method,Json params) {
+        if(preciseNoteWindow&&(method=="history.undo"||method=="history.redo"))preciseNoteWindow->flushForHistory();
         params["expectedRevision"]=view->session.revision;
         return documentOperation(method,params);
     }

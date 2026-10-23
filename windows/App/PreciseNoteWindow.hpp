@@ -201,6 +201,13 @@ public:
     if(automaticEdit_)flushAutomaticEdit();
     require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending precise-note edit before saving the project");
   }
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&draft_!=original_;}
+  void flushForHistory(){
+    // A song-level Undo must undo the value the musician just entered, even
+    // inside the typing debounce. Local Windows text Undo bypasses this path.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending precise-note edit before changing history");
+  }
   bool dispatchLegacyAction(int id){
     if(!((id>=addHit&&id<=fillRow)||(id>=reloadCapturedCommand&&id<=close)))return false;
     action(id,BN_CLICKED);layout();requestPaint();return true;

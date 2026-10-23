@@ -109,6 +109,38 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertEqual(self.read('pattern.notes.get', pattern=0), final)
         self.assertEqual(self.cells(), final_cells)
 
+    def test_native_undo_includes_queued_field_and_preserves_live_playback(self):
+        self.open_row(row=4)
+        self.native_panel(pinned=True, focus=True)
+        before_notes, before_cells = self.read('pattern.notes.get', pattern=0), self.cells()
+        self.write('transport.play', pattern=0, startRow=4, endRow=5, cursorRow=4, loop=True)
+        before_transport = self.read('transport.get')
+        self.text(363, '96')
+        self.focus_canvas()  # Song Undo, rather than native Edit text Undo.
+        self.main_command(122)
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), before_notes)
+        self.assertEqual(self.cells(), before_cells)
+        self.assertFalse(self.editor()['stale'])
+        self.assertFalse(self.editor()['retainedDraft'])
+        self.main_command(123)
+        notes = self.read('pattern.notes.get', pattern=0)
+        self.assertEqual(next(e['velocity'] for e in notes['events']
+                              if e['channel'] == 0 and e['position']//65536 == 4), 96)
+        self.assertEqual(self.editor()['selectedEvent']['velocity'], 96)
+        revision = self.doc()['revision']
+        time.sleep(.35)  # The consumed field timer must not replay after history.
+        self.assertEqual(self.doc()['revision'], revision)
+        current = self.read('transport.get')
+        self.assertTrue(current['playing'])
+        self.assertFalse(current['fault'])
+        self.assertEqual(current['playbackEpoch'], before_transport['playbackEpoch'])
+        self.assertGreater(current['frames'], before_transport['frames'])
+        self.write('transport.stop')
+        path = self.folder / 'precise-live-native-history.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+
     def test_native_save_includes_latest_precise_field_without_stopping_playback(self):
         path = self.folder / 'native-save-precise.screamseq'
         other = dict(channel=2, position=8*65536+123, note=71, instrument=2, velocity=87)

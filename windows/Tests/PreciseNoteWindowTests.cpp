@@ -362,6 +362,17 @@ void selectionFinishesEarlierAutomaticEdit(Owner &owner){
   require(newer.writes==1&&newer.tool.snapshot().at("selected")==0&&text(newer.control(Tool::velocity))==L"newer raw"&&newer.tool.retainedDraft(),
     "Selection after a pumped save discarded newer raw input");
 }
+void historyFinishesQueuedMusic(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);require(!f.tool.queuedMusicalEdit(),"Clean notes advertised an Undo candidate");
+  f.choose(Tool::snap,1);require(!f.tool.queuedMusicalEdit(),"Presentation-only snap advertised a musical Undo candidate");
+  f.field(Tool::velocity,L"94");require(f.tool.queuedMusicalEdit(),"Queued velocity did not advertise a musical Undo candidate");
+  focus(f.tool.window());f.tool.flushForHistory();
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.queuedMusicalEdit()&&!f.tool.retainedDraft()&&GetFocus()==f.tool.window(),
+    "History failed to publish the queued edit once without moving canvas focus");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);require(f.submissions.size()==1,"History flush left a timer that repeated the note edit");
+  f.field(Tool::velocity,L"unfinished");f.tool.flushForHistory();
+  require(f.submissions.size()==1&&text(f.control(Tool::velocity))==L"unfinished"&&f.tool.retainedDraft(),"History flushed invalid raw input");
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -612,6 +623,7 @@ int wmain(int argc,wchar_t **argv){try{
     projectSaveFlushesOnlyQueuedIntent(owner);std::cout<<"PASS project save flushes one queued precise edit without replaying uncertain or invalid input\n";
     cancellingDragRetainsEarlierAutomaticEdit(owner);std::cout<<"PASS cancelled precise drag retains an earlier queued field save exactly once\n";
     selectionFinishesEarlierAutomaticEdit(owner);std::cout<<"PASS precise selection finishes queued edits and protects newer raw input\n";
+    historyFinishesQueuedMusic(owner);std::cout<<"PASS precise song history finishes queued music without replaying invalid input\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";
