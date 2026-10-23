@@ -504,6 +504,34 @@ class PluginRecordingTests(unittest.TestCase):
             self.assertEqual(self.read('automation.get'), after_delete)
             self.write('history.undo')
             self.assertEqual(self.read('automation.get'), points)
+            # Native Save must include a field still inside its debounce while
+            # the existing transport continues. Use a separate disposable save.
+            pending_path = self.folder / 'native-pending-recorded-point.screamseq'
+            self.write('document.save', path=str(pending_path))
+            self.desktop.send(owner, 0x111, 4615, private_desktop.user.GetDlgItem(owner, 4615))
+            selected = self.read('workspace.get')['absoluteAutomation']
+            field = private_desktop.user.GetDlgItem(owner, 4609)
+            self.assertTrue(field and private_desktop.user.IsWindowVisible(field))
+            self.desktop.send(field, 0x201, 1, 4 | (4 << 16))
+            self.desktop.send(field, 0x202, 0, 4 | (4 << 16))
+            self.assertEqual(self.desktop.focus(field), field)
+            value = .125 if selected['points'][selected['selectedPoint']]['value'] != .125 else .375
+            text = ctypes.create_unicode_buffer(str(value))
+            self.desktop.send(field, 0xB1, 0, -1)
+            self.desktop.send(field, 0xC2, 1, ctypes.addressof(text))
+            self.desktop.send(field, 0xB1, 1, 3)
+            selection = self.desktop.send(field, 0xB0)
+            self.main_command(120)
+            saved_lane = self.read('workspace.get')['absoluteAutomation']
+            expected_lane = [dict(p) for p in selected['points']]
+            expected_lane[selected['selectedPoint']]['value'] = value
+            self.assertEqual(saved_lane['points'], expected_lane)
+            self.assertFalse(saved_lane['dirty'] or saved_lane['fieldDraft'])
+            self.assertEqual(self.desktop.focus(field), field)
+            self.assertEqual(self.desktop.send(field, 0xB0), selection)
+            self.assertTrue(pending_path.is_file())
+            self.write('history.undo')
+            self.assertEqual(self.read('automation.get'), points, 'Native Save must add no musical history step')
             continuing = self.read('transport.get')
             self.assertTrue(continuing['playing'])
             self.assertFalse(continuing['fault'])

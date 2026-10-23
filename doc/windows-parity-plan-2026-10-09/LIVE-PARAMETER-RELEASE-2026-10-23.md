@@ -532,3 +532,33 @@ the source correction are unbuilt. Add rapid typing followed by parameter/unit
 navigation and Undo to the next foreground checklist. The bounded four-native,
 one-composing-app local gate stays the same; the Mac live-device CI addition
 joins the same coordinated checkpoint, not a separate build.
+
+## Same-batch continuation: native Save and song history include queued lane edits
+
+Source inspection found that the shell flushed queued precise-note edits for
+native Save/history, but did not do so for the absolute Song automation editor.
+The next candidate finishes an already queued recorded-point edit before native
+Save and song-level Undo/Redo. Redo availability accounts for the new edit that
+would replace its branch. It does not replay failed or uncertain automatic
+writes: a repeated Save saves accepted music while retaining the rejected raw
+draft, and song history refuses an unresolved lane draft. No shared API, project
+format or audio-provider change is introduced.
+
+The command-results native group now asserts immediate Save, exact field text,
+caret/focus, one-step Undo/Redo, invalid-input refusal, no retry, and reopened
+saved points. The existing complete composing app case adds a native Save of a
+fresh point value during playback, exact unrelated-point preservation, text
+selection/focus and Undo. The existing precise-note native Save app case and
+menu-bar group join the bounded local gate because the shell boundary changed:
+five native groups and two actual-app cases, using one build. These additions
+are source-only until that checkpoint.
+
+At 19:35 UTC the preceding 4d Mac ARM job passed and Intel remained in tests.
+Windows compiled and passed 158 portable/worker tests, 51 native groups, vendor
+ownership and typed conformance, but its 112-case app run failed 22 cases with
+one optional skip; live startup reports show no audio endpoints. Preserve that
+failure. Downloaded Windows artifact `12525264408` has SHA256
+`f8258e61dccad2b9bbe4271537924610c9ef8b7957932c308c5ae1afc9d53b36`.
+Its five fixture save/reopen comparisons and edited metadata, composing-history
+and envelope-bank reports pass, with report hashes checked. This is the Windows
+leg only; it does not establish reciprocal edited-project preservation.

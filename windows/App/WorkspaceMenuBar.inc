@@ -57,7 +57,7 @@
         }else{
             if(focusedEdit&&!(focus==window&&(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()||workspaceMainCanvasFocused("samples"))))refuse(L"Focus a text field, pattern or sample selection first");
             if((localUndo||id==pluginUndo)&&!canUndoSong())refuse(L"No song edit to undo");
-            if((localRedo||id==pluginRedo)&&!canRedoSong())refuse(preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit()?L"The new note edit replaces Redo history":L"No song edit to redo");
+            if((localRedo||id==pluginRedo)&&!canRedoSong())refuse(queuedMusicalEdit()?L"The new edit replaces Redo history":L"No song edit to redo");
         }
         if(id>=selectChannelCommand&&id<=selectRowCommand&&!(focus==window&&workspaceState.focus=="pattern"&&trackerWorkspaceVisible()))refuse(L"Focus the pattern first");
         if(id==patternRowsLargerCommand&&rowHeight>=34)refuse(L"Pattern rows are already at their largest size");

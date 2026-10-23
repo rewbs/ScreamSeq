@@ -131,6 +131,17 @@ private:
   }
   void paint(RenderSurface &s)override{NativeToolWindow::paint(s);const auto colors=NativeControls::curveColors();const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,colors.background);s.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i){const auto y=r.y+i*r.h/4;s.line(r.x,y,r.x+r.w,y,colors.grid);}const auto step=std::pow(10.,std::floor(std::log10(std::max(1./48000,(canvas_.end-canvas_.start)/256/8))));for(double t=std::ceil(canvas_.start/256/step)*step;t<=canvas_.end/256;t+=step){const auto x=canvas_.screen(t*256,0).x;s.line(x,r.y,x,r.y+r.h,colors.grid);}for(const auto &line:lines_)s.line(line.a.x,line.a.y,line.b.x,line.b.y,colors.curve,2);for(size_t i=0;i<canvas_.handles.size();++i){const auto p=canvas_.handles[i];paintCurveHandle(s,p.x,p.y,int(handles_[i])==selected_,colors,colors.curve);}s.unclip();paintCurveBorder(s,r,GetFocus()==window_,colors);wchar_t text[160]{};swprintf_s(text,L"Seconds %.4f–%.4f · native values %.4f–%.4f",canvas_.start/256,canvas_.end/256,minimum()+canvas_.valueLow*(maximum()-minimum()),minimum()+canvas_.valueHigh*(maximum()-minimum()));s.uiText(text,r.x,r.y-22,r.w,colors.text);}
 public:
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&(dirty_||(fields_&&selected_>=0));}
+  void flushForProjectSave(){
+    // Finish only an already queued intent. Never retry a rejected or uncertain
+    // write merely because Save was pressed again; its raw draft stays visible.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending song automation edit before saving the project");
+  }
+  void flushForHistory(){
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_&&!draft(),"Finish or discard the pending song automation point before changing history");
+  }
   AbsoluteAutomationWindow(HWND owner,Request request,std::function<Context()> context,std::function<void(const std::string &,uint32_t,bool)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
     canvas_.positionQuantum=canvas_.minimumZoomSpan=256./48000;
     minimumWidth_=1040;minimumHeight_=700;create(L"ScreamSeq.AbsoluteAutomation",L"Song parameter automation",1140,760,true);for(int id:{plugin,units,snap})combo(id);for(int id:{search,pointIndex,time,value,windowStart,windowEnd})edit(id,L"",id==search?128:40);add(parameters,L"LISTBOX",L"Song automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);

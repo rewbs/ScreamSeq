@@ -156,5 +156,45 @@ void applicationAutomaticEdits(){
     restoreCheck(full.at("startSeconds")==0&&full.at("endSeconds").get<double>()>=604800&&full.at("endSeconds").get<double>()<=604801,
       "Fit clipped a legal song endpoint or escaped the viewport limit");fixture.close();
   }
-  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation\n";
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    const auto points=Json::array({{{"frame",48000},{"value",-6.}},{{"frame",96000},{"value",-3.}}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",points}});
+    const auto path=saveDepartureFixture(fixture);app.openAbsoluteAutomation(plugin,1);
+    auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto field=GetDlgItem(window,4609);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);
+    const auto baseline=app.documentOperation("automation.get",Json::object());
+    SetWindowTextW(field,L"-9");SendMessageW(field,EM_SETSEL,1,2);
+    restoreCheck(app.queuedMusicalEdit()&&!app.canRedoSong(),"Queued recorded point was absent from native history availability");
+    restoreCheck(app.saveFile(),"Native Save did not finish the queued recorded point");
+    const auto saved=app.documentOperation("automation.get",Json::object());
+    auto expected=points;expected[0]["value"]=-9.;
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    restoreCheck(lane.snapshot().at("points")==expected&&!lane.snapshot().at("dirty").get<bool>()&&!app.view->dirty&&
+      GetFocus()==field&&first==1&&last==2&&restoreText(field)==L"-9",
+      "Native Save lost the latest recorded value, raw text, selection or focus");
+    const auto savedBytes=ScreamSeq::Project::readProjectBytes(path);
+    SetWindowTextW(field,L"invalid");const auto revision=app.view->session.revision;
+    restoreRejected([&]{app.saveFile();});
+    restoreCheck(app.view->session.revision==revision&&app.documentOperation("automation.get",Json::object())==saved&&
+      ScreamSeq::Project::readProjectBytes(path)==savedBytes&&restoreText(field)==L"invalid",
+      "Invalid pending recorded value changed the saved song or discarded its raw draft");
+    restoreRejected([&]{app.edit("history.undo",{{"domain","all"}});});
+    restoreCheck(app.view->session.revision==revision&&restoreText(field)==L"invalid","Song Undo bypassed an invalid recorded draft");
+    // Repeated Save may save accepted music, but cannot resubmit the failed edit.
+    restoreCheck(app.saveFile()&&app.view->session.revision==revision&&restoreText(field)==L"invalid",
+      "Repeated Save retried a rejected recorded edit");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
+    SetWindowTextW(field,L"-12");app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==saved&&app.canRedoSong(),
+      "Song Undo did not undo exactly the latest queued recorded edit");
+    app.edit("history.redo",{{"domain","all"}});press(window,4615);
+    restoreCheck(lane.snapshot().at("points")[0].at("value")==-12.,"Song Redo did not restore the automatically flushed recorded point");
+    app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Native Save added a musical history entry");
+    app.documentOperation("document.open",departureOpenRequest(app,path));
+    restoreCheck(app.documentOperation("automation.get",Json::object())==saved,"Native Save/reopen omitted the pending recorded point");fixture.close();
+  }
+  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history\n";
 }
