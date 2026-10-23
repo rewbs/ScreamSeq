@@ -580,3 +580,45 @@ bounded functional evidence, not temporal-flicker or general performance proof.
 No production package or merge was made: the corrected native menu gate must
 pass first. The foreground receipt is explicitly diagnostic and cannot qualify
 the failed automated candidate for packaging.
+
+## 10:01 UTC checkpoint — usable precise-note build
+
+Frozen `cc5553aaba5fb9025069ef19b2705032aa06d3be` compiled once from
+10:01:56.095 to 10:03:48.384 UTC. Executable SHA-256:
+`940df0bfe7263f1d60527a50ec679740674b5b6d2b80fdc05b117654c1f3ba33`.
+Evidence: `bin/mac-gesture-20261022/kept-navigation/`.
+
+All four native groups passed, including the previously blocked menu/text Undo
+and Save assertions. All seven precise host/live app cases passed. The additional
+kept-recording journey initially compared `context.get.playback.row` as part of
+the editing cursor and failed because playback advanced. The corrected Python
+test compares every other context field exactly and additionally requires moving
+frames, the same playback epoch/region and active playback. That one case then
+passed on the same executable; no rebuild or repetition of the seven passes was
+needed. Original `checks.json` and `app.log` remain failures. The composite
+`qualified-checks.json` names the separate corrected-case receipt and test source
+`d5a23986ff3a10ad60b8d2d747dcf48796fdf0c7`; it does not claim that source was built.
+
+Fresh Computer Use on isolated PID43732 at 200 percent DPI confirmed insertion
+by double-click, Backspace deletion, Ctrl+Z restoration, the moving white cursor,
+automatic Velocity edits `75` → `92` → `9`, local text deletion, Shift+Tab/Tab
+between Units and Velocity, and Ctrl+S retaining the caret. Read-only snapshots
+retained epoch3 with increasing frames, two hits and Velocity9, without a fault.
+No Write note or Save now action was used. The later recording phase separately
+prepared a Gainer fixture and passed Keep → Song automation navigation; see its
+report. The process saved the disposable song and exited normally with code0.
+
+The 475.240-second process report records 48kHz/480-frame silent output, no audio
+deadline overrun, starvation indicator or device error, and maximum service time
+4656.8 microseconds. Realtime audit and sustained presentation qualification are
+false. Docked focus evidence combines actual text/caret/keyboard observations
+with native assertions; the helper reports Main. This is functional qualification,
+not a temporal-flicker, screen-reader or general performance claim.
+
+A separate optimized ARM64 Release package is available at:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-precise-cc5553aab/ScreamSeq.exe`.
+Scanner, runtime, notices, source manifest, qualification receipts and verified
+copied hashes accompany it. It does not include the later shared observation
+adapter. PR7 was pushed at the coordinated checkpoint; no main merge occurred.
+CI's latest observed build start is 10:02:24 UTC, making the next checkpoint no
+earlier than 11:02:24 UTC, subject to checking subsequent actual starts.
