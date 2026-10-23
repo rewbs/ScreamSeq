@@ -190,7 +190,12 @@ private:
     }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
   void timer(UINT_PTR id)override{if(id==3)poll();}
-  bool key(WPARAM key,bool ctrl,bool)override{if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(items):window_);requestPaint();return true;}if(key==VK_RETURN&&(GetFocus()==controls_.at(time)||GetFocus()==controls_.at(value))){action(savePoint,BN_CLICKED);return true;}
+  bool key(WPARAM key,bool ctrl,bool shift)override{
+    if(key==VK_ESCAPE){hide();return true;}
+    if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}
+    if(key==VK_F6){SetFocus(GetFocus()==window_?controls_.at(items):window_);requestPaint();return true;}
+    if(key==VK_TAB&&!ctrl&&GetFocus()==window_){SetFocus(controls_.at(shift?mode:details));return true;}
+    if(key==VK_RETURN&&(GetFocus()==controls_.at(time)||GetFocus()==controls_.at(value))){action(savePoint,BN_CLICKED);return true;}
     if(GetFocus()==window_&&!ctrl&&!pending_){if(key==VK_RETURN&&selectedTrace_){action(openSource,BN_CLICKED);return true;}if(key==VK_LEFT||key==VK_RIGHT||key==VK_HOME||key==VK_END){
       const auto t=trace();if(t.indices.empty())return true;size_t at=key==VK_LEFT||key==VK_END?t.indices.size()-1:0;
       if(key==VK_LEFT||key==VK_RIGHT)for(size_t i=0;i<t.indices.size();++i)if(selectedTrace_&&points_[t.indices[i]].at("sequence")==*selectedTrace_){at=key==VK_LEFT?(i?i-1:0):std::min(i+1,t.indices.size()-1);break;}

@@ -930,6 +930,9 @@ that exact plugin/parameter without changing any lane. All these new assertions
 are **unbuilt**; the checkpoint remains eight native groups/seven app cases.
 Fresh Computer Use must check trace selection/keyboard/source navigation in
 addition to plain recorded-point click versus deliberate drag and Save focus.
+The trace also explicitly handles Tab/Shift+Tab to the following details group
+or preceding time-range control; a custom canvas must not trap ordinary Tab.
+Native assertions exercise both directions and F6 through actual child controls.
 
 Read-only063 ARM CI inspection confirms134/134 CTests, the full native interface
 and socket/typed gates, and the actual BlackHole2ch512-frame live take lifecycle:

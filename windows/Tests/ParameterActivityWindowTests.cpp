@@ -73,6 +73,15 @@ void run(){
       require(navigation.at("kind")=="recorded"&&navigation.at("plugin")=="a"&&navigation.at("parameter")==1,"Trace Enter lost its stable source/plugin/parameter");
       SendMessageW(window,WM_KEYDOWN,VK_F6,0);require(GetFocus()==GetDlgItem(window,11007),"Trace F6 did not enter native details");
       SendMessageW(window,WM_KEYDOWN,VK_F6,0);require(GetFocus()==window,"Trace F6 did not return to the plot");
+      SendMessageW(window,WM_KEYDOWN,VK_TAB,0);require(GetFocus()==GetDlgItem(window,11006),"Trace Tab trapped focus instead of entering the next visible control group");
+      SendMessageW(GetFocus(),WM_KEYDOWN,VK_F6,0);require(GetFocus()==window,"Details F6 did not return to the plot");
+      {
+        struct RestoreKeys{BYTE state[256]{};RestoreKeys(){require(GetKeyboardState(state),"Read private keyboard state");}~RestoreKeys(){SetKeyboardState(state);}} restore;
+        BYTE shifted[256]{};std::copy(std::begin(restore.state),std::end(restore.state),std::begin(shifted));shifted[VK_SHIFT]|=0x80;
+        require(SetKeyboardState(shifted),"Set private Shift modifier");SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+        require(GetFocus()==GetDlgItem(window,11005),"Trace Shift+Tab did not return to its time-range control");
+      }
+      SendMessageW(GetFocus(),WM_KEYDOWN,VK_F6,0);
       context.revision="changed-after-trace";navigation=nullptr;SendMessageW(window,WM_KEYDOWN,VK_RETURN,0);
       require(navigation.is_null()&&tool.snapshot().at("trace").at("selectedSequence")==3,"Trace source navigation crossed a captured revision boundary");
       context.revision=traceRevision;click(11002);SendMessageW(window,WM_TIMER,3,0);
