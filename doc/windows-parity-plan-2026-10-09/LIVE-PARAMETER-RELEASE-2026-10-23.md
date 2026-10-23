@@ -512,3 +512,23 @@ in the installed Build Tools, so no stack attribution was obtained and no specul
 was made. This tooling restriction does not block the other parity work. A
 future device-specific profiler or bounded diagnostic instrumentation is needed
 to distinguish DSP cost from scheduling delays; the observed overruns remain.
+
+## Further source correction: pending recorded-point navigation
+
+Source review found that the plugin selector already flushed pending automatic
+edits, but the recorded parameter list and time-unit selector did not. They
+rejected a valid pending edit until its debounce elapsed. Undo behaved similarly;
+From rack could cancel the timer and replace a pending draft. The new correction
+flushes queued valid edits before parameter/unit changes, Undo/Redo, From rack
+and last-touched navigation. A requested parameter is captured by stable ID
+before save refreshes the list, and revalidated afterwards. Invalid raw input
+and stale revisions still refuse navigation; no silent rebase or retry is added.
+
+The command-results native group now covers rapid parameter change with exact
+unrelated-point preservation and one-step Undo, units/focus retention, immediate
+Undo of a pending field edit, invalid text retention for each affected action,
+and an external document edit during the pending draft. These assertions and
+the source correction are unbuilt. Add rapid typing followed by parameter/unit
+navigation and Undo to the next foreground checklist. The bounded four-native,
+one-composing-app local gate stays the same; the Mac live-device CI addition
+joins the same coordinated checkpoint, not a separate build.

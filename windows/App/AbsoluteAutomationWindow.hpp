@@ -87,8 +87,19 @@ private:
   void touch(){require(!draft(),"Finish or discard the draft before using another target");const auto t=request_("automation.target.get",Json::object()).at("target");require(!t.is_null()&&t.value("available",false),"No available last-touched parameter");load(true,t.at("plugin"),t.at("parameter").get<uint32_t>());}
   void action(int id,unsigned n)override{
     if(setting_)return;if(id==close){if(dragging_)cancelDrag();hide();return;}if(id==search&&n==EN_CHANGE){filter();return;}if((id==time||id==value)&&n==EN_CHANGE){fields_=true;++generation_;if(selected_>=0)queueLaneEdit();return;}if(pending_)return;
-    if(n==CBN_SELCHANGE){if(id==plugin){const auto wanted=selection(plugin);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(plugin,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard before changing plugin");}const int i=selection(plugin);try{if(i>=0)load(false,captured_.plugins.at(size_t(i)).at("instanceID"));}catch(...){choices();throw;}return;}if(id==units){if(fields_){choose(units,unit_);throw std::runtime_error("Set or discard point fields before changing time units");}unit_=std::clamp(selection(units),0,1);showPoint();return;}if(id==snap){snap_=std::clamp(selection(snap),0,3);return;}}
-    if(id==parameters&&n==LBN_SELCHANGE){if(draft()){filter();throw std::runtime_error("Finish or discard before changing parameter");}const auto i=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(i>=0&&size_t(i)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(i)]).at("id"));filter();}return;}if(n!=BN_CLICKED)return;
+    if(n==CBN_SELCHANGE){if(id==plugin){const auto wanted=selection(plugin);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(plugin,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard before changing plugin");}const int i=selection(plugin);try{if(i>=0)load(false,captured_.plugins.at(size_t(i)).at("instanceID"));}catch(...){choices();throw;}return;}if(id==units){const auto wanted=std::clamp(selection(units),0,1);try{flushAutomaticEdit();require(!fields_,"Set or discard point fields before changing time units");}catch(...){choose(units,unit_);throw;}unit_=wanted;choose(units,unit_);showPoint();return;}if(id==snap){snap_=std::clamp(selection(snap),0,3);return;}}
+    if(id==parameters&&n==LBN_SELCHANGE){
+      const auto i=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);
+      if(i<0||size_t(i)>=filtered_.size())return;
+      // Saving refreshes the catalogue/list. Retain the clicked stable ID, not
+      // its old filtered row, across that refresh and any pumped worker calls.
+      const auto wanted=catalog_.at(filtered_[size_t(i)]).at("id").get<uint32_t>();
+      try{flushAutomaticEdit();require(!draft(),"Finish or discard before changing parameter");requireCurrent();
+        require(std::any_of(catalog_.begin(),catalog_.end(),[&](const auto &p){return p.at("id")==wanted;}),"Selected parameter is no longer available");
+        selectParameter(wanted);filter();
+      }catch(...){filter();throw;}return;
+    }if(n!=BN_CLICKED)return;
+    if(id==fromRack||id==lastTouched||id==undo||id==redo){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before continuing");}
     if(id==apply)commit();else if(id==reload)load(false);else if(id==fromRack)load(true);else if(id==lastTouched)touch();else if(id==setPoint)setFields();
     else if(id==openRack||id==openPattern){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_,id==openPattern);}
     else if(id==undo||id==redo){requireCurrent();require(!draft(),"Finish or discard before using Undo/Redo");const auto token=generation_;pending_=true;layout();try{request_(id==undo?"history.undo":"history.redo",{{"expectedRevision",captured_.revision},{"domain","plugins"}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed during history operation / draft retained");load(false);}catch(...){pending_=false;layout();throw;}}

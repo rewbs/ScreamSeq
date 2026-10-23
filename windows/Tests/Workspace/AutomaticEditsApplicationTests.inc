@@ -99,6 +99,47 @@ void applicationAutomaticEdits(){
       restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Song automation point deletion did not Undo exactly once");
       SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
     }
+    {
+      const auto list=GetDlgItem(window,4603),valueField=GetDlgItem(window,4609),units=GetDlgItem(window,4604);
+      const auto selectParameter=[&](int row){SetFocus(list);SendMessageW(list,LB_SETCURSEL,row,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4603,LBN_SELCHANGE),LPARAM(list));};
+      SetFocus(valueField);SetWindowTextW(valueField,L"-9");const auto edited=lane.snapshot().at("selectedPoint").get<int>();
+      auto expected=late;expected[size_t(edited)]["value"]=-9.;
+      selectParameter(1);
+      restoreCheck(lane.snapshot().at("parameter")==2&&!lane.snapshot().at("dirty").get<bool>()&&GetFocus()==list,
+        "Parameter navigation did not flush a valid automatic edit or retain its requested target/focus");
+      selectParameter(0);
+      restoreCheck(lane.snapshot().at("points")==expected,"Parameter navigation lost the latest field edit or changed unrelated points");
+      app.edit("history.undo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Navigation-created edit was not exactly one Undo");
+      SetFocus(valueField);SetWindowTextW(valueField,L"invalid");selectParameter(1);
+      restoreCheck(lane.snapshot().at("parameter")==1&&restoreText(valueField)==L"invalid"&&SendMessageW(list,LB_GETCURSEL,0,0)==0&&
+        app.documentOperation("automation.get",Json::object())==baseline,"Parameter navigation dropped invalid raw input or redirected its draft");
+      SendMessageW(units,CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4604,CBN_SELCHANGE),LPARAM(units));
+      restoreCheck(SendMessageW(units,CB_GETCURSEL,0,0)==0&&restoreText(valueField)==L"invalid"&&
+        app.documentOperation("automation.get",Json::object())==baseline,"Unit navigation accepted invalid raw point fields");
+      for(const int command:{4625,4616,4631}){
+        press(window,command);
+        restoreCheck(lane.snapshot().at("parameter")==1&&restoreText(valueField)==L"invalid"&&
+          app.documentOperation("automation.get",Json::object())==baseline,"Target navigation or Undo discarded invalid pending input");
+      }
+      SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);
+      SetFocus(valueField);SetWindowTextW(valueField,L"-12");press(window,4631);
+      restoreCheck(!lane.snapshot().at("dirty").get<bool>()&&app.documentOperation("automation.get",Json::object())==baseline,
+        "Immediate Undo rejected or failed to undo the pending automatic field edit");
+      SetFocus(valueField);SetWindowTextW(valueField,L"-15");SetFocus(units);SendMessageW(units,CB_SETCURSEL,1,0);
+      SendMessageW(window,WM_COMMAND,MAKEWPARAM(4604,CBN_SELCHANGE),LPARAM(units));
+      restoreCheck(SendMessageW(units,CB_GETCURSEL,0,0)==1&&!lane.snapshot().at("dirty").get<bool>()&&GetFocus()==units&&
+        std::stod(restoreText(timeField))==lane.snapshot().at("points")[size_t(lane.snapshot().at("selectedPoint").get<int>())].at("frame").get<double>(),
+        "Unit change lost its requested format or failed to flush the latest valid point");
+      app.edit("history.undo",{{"domain","all"}});press(window,4615);
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Unit-change flush changed unrelated music or history");
+      SetFocus(valueField);SetWindowTextW(valueField,L"-18");app.edit("document.patch",{{"title","External edit before lane navigation"}});
+      const auto staleRevision=app.view->session.revision;selectParameter(1);
+      restoreCheck(lane.snapshot().at("parameter")==1&&lane.snapshot().at("dirty").get<bool>()&&lane.snapshot().at("stale").get<bool>()&&
+        app.view->session.revision==staleRevision&&app.documentOperation("automation.get",Json::object())==baseline,
+        "Parameter navigation rebased a stale field edit or redirected its retained draft");
+      press(window,4615);
+    }
     for(const uint64_t frame:{uint64_t(0),uint64_t(7509566),uint64_t(604800)*48000-1}){
       app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",frame},{"value",-6.}},{{"frame",frame+1},{"value",-3.}}})}});
       press(window,4615);press(window,4619);const auto oneFrame=rangeMatches();
