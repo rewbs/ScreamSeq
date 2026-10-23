@@ -14,18 +14,34 @@ void menuBegin(RestoreApplication &app){SendMessageW(app.window,WM_ENTERMENULOOP
 void menuChoose(RestoreApplication &app,int id){SendMessageW(app.window,WM_EXITMENULOOP,FALSE,0);SendMessageW(app.window,WM_COMMAND,ScreamSeq::NativeMenuBar::commandBase+id,0);}
 void applicationMenuBar(){
     {
+        RestoreFixture fixture;auto &app=*fixture.app;saveDepartureFixture(fixture);
+        app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+        const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+        const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+        rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+        menuBegin(app);menuChoose(app,saveCommand);
+        DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+        restoreCheck(GetFocus()==field&&first==1&&last==2&&restoreText(field)==L"94"&&
+            !app.preciseNoteWindow->retainedDraft()&&!app.view->dirty&&
+            app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94,
+            "Native File Save lost precise-note field focus/caret or omitted its queued edit");
+    }
+    {
         RestoreFixture fixture;auto &app=*fixture.app;
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
         const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
         const auto beforeNotes=app.documentOperation("pattern.notes.get",{{"pattern",0}});
-        const auto beforeCells=app.documentOperation("pattern.get",{{"pattern",0},{"rowCount",app.patternRows()}}).at("cells");
+        // pattern.get is served by the API snapshot adapter, not the worker's
+        // documentOperation dispatcher. Compare the same immutable source here.
+        const auto beforePattern=app.view->pattern(0);
         restoreCheck(!app.view->session.document.value("canUndo",false),"Queued-note menu fixture needs empty document history");
         rawDraftText(GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity),L"94");SetFocus(owner);
         restoreCheck(app.preciseNoteWindow->queuedMusicalEdit()&&app.canUndoSong()&&!app.canRedoSong(),"Queued note did not expose shared Undo availability");
         menuBegin(app);restoreCheck(!(menuEntry(GetMenu(app.window),undoCommand).state&MFS_DISABLED),"Edit menu disabled Undo for the first queued note edit");
         menuChoose(app,undoCommand);
         restoreCheck(app.documentOperation("pattern.notes.get",{{"pattern",0}})==beforeNotes&&
-            app.documentOperation("pattern.get",{{"pattern",0},{"rowCount",app.patternRows()}}).at("cells")==beforeCells&&
+            app.view->pattern(0).cells==beforePattern.cells&&app.view->pattern(0).rows==beforePattern.rows&&
+            app.view->pattern(0).channels==beforePattern.channels&&
             !app.preciseNoteWindow->retainedDraft()&&app.view->session.document.value("canRedo",false),
             "Native menu Undo did not finish and undo the latest queued precise note");
         SetFocus(owner);menuBegin(app);menuChoose(app,redoCommand);

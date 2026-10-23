@@ -2,6 +2,15 @@
 
 ## Scope and evidence status
 
+**Latest checkpoint:** the c7d2fbd78 Windows build passed, but its gate did not:
+five of six native groups and 21 of 23 diagnostic actual-app cases passed.
+The native menu fixture used an unsupported dispatcher read; one app fixture
+tried to reuse an editor retired by document replacement. The real product
+failure is Save moving keyboard focus back to Main. All three are corrected
+in source below; Save and the native menu changes await the next build.
+Computer Use confirmed the requested core timeline interaction on c7d2fbd78
+in an isolated silent session. **No package or merge is qualified yet.**
+
 User request: double-click insertion, selected-hit Backspace, visible playback
 cursor, immediate edits without Write note or interrupted playback. This takes
 priority within the ongoing Windows/macOS parity work. Includes the preceding
@@ -267,3 +276,65 @@ native precise-notes interface group and socket/typed-fixture gates. Its log
 SHA-256 is `04c69d364535e1001099d4d3e6256194696a38f14fd080f598b2d84936c2e7b3`.
 Both Mac architecture jobs therefore pass for f28's shared publication inputs.
 This does not qualify the later Windows-only corrections or hardware performance.
+
+## Second candidate: compiled, failed gate, bounded UI evidence
+
+Source `c7d2fbd786a8616964e59b648db0d0d21dc43164` compiled once from
+06:59:32.7446645 to 07:02:25.4896574 UTC. The ARM64 Release executable hash is
+`8b9e29733ae126eb3161e14ca620420436e31a832d3af1cf2b081a9f32dda34a`.
+Receipts remain in `bin/mac-gesture-20261022/precise-live-correction/`.
+
+- `checks.json` / `native.log`: five of six groups passed, including the precise
+  owner, MIDI owner, live document controller, hosted-project PCM/allocation and
+  history-allocation gates. `workspace-menu-bar-tests` failed because the newly
+  added fixture called `pattern.get` through `documentOperation`; that read is
+  served by the immutable API snapshot adapter. Its source correction compares
+  the complete copied pattern cells, rows and channels, and the precise events.
+- The gate stopped before app checks. A separate **diagnostic** execution of
+  those previously unrun cases passed 21/23 (`diagnostic-app.json`, appExit 1).
+  The complete live composing journey and native live Undo/Redo passed. No
+  failed receipt was replaced or interpreted as qualification.
+- The selected sample/instrument fixture assumed its old owner survived
+  `document.open`. Successful replacement intentionally retires document-scoped
+  HWNDs. The corrected fixture asserts retirement and uses the native opening
+  command for row 6; exact identity/history/save/reopen assertions remain.
+  This corrected Python case alone passed against the same compiled binary
+  in 1.995 seconds (`fixture-correction.log`), without another build.
+- The live native Save case found a real focus loss. `WorkspaceView.inc` called
+  `SetFocus(window)` after Save. Save/Save As now finish their normal layout and
+  return without navigating away. The live test retains a selected text range,
+  and the native File-menu fixture now checks queued-note flushing, saved state,
+  unchanged text, field focus and caret selection. These assertions still need
+  rebuilt execution; the failed Save receipt is retained.
+
+Computer Use diagnostic process **42688** used the disposable built-in demo and
+silent WASAPI playback; it exited normally with code 0. The musician's PID39856
+and its c900d2b2e Downloads executable were untouched. At 200 percent DPI,
+observed actions confirmed populated-row double click, selected-hit Backspace,
+velocity typing, text Backspace, Tab/Shift+Tab, interior drag and Ctrl+Z. The
+cursor was visible at different positions. Eight API snapshots confirm accepted
+edits, clean current editor state, advancing frames and unchanged playback epoch
+3. `diagnostic-summary.json` records observations, hashes and limitations.
+
+The initial helper image showed the musician's window despite QA metadata;
+the QA window was explicitly activated and its title/content verified before
+any input. Docked precise child controls were absent from the helper's UIA tree;
+focus evidence used visible caret/selection plus native assertions. A first
+attempt to drag the left-edge marker made no change; the interior marker drag
+succeeded. Edge hit tolerance remains an ergonomic follow-up, not a qualified
+claim. No fresh resize/float/list-Backspace or corrected Save UI result is claimed.
+
+The diagnostic audio report covers 250.837 seconds at 48 kHz / 480 frames:
+zero deadline overruns, starvation indicators or device errors; maximum callback
+3957.8 microseconds. It explicitly reports `realtimeAuditPassed:false` and
+`sustainedPresentationQualified:false`; this is bounded functional evidence,
+not realtime/performance or temporal-flicker qualification.
+
+The next attempt uses **`precise-live-followup/`**, separate receipts and a new
+frozen source. Earliest start is **2026-10-23 08:00:12 UTC**, based on the current
+Windows CI build start at 07:00:12. Inspect the current CI completion and any
+later starts first, never overlap another checkpoint. Keep the six native groups
+and 23 actual-app cases, including all failed assertions. After passing, repeat
+fresh Computer Use on the new executable, particularly Save focus/caret, and
+complete resize/float/list-key checks before packaging. No main merge follows
+from diagnostic results. The previous package remains c900d2b2e.

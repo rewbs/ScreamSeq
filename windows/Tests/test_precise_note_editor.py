@@ -284,6 +284,9 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.write('document.save', path=str(path))
         self.write('document.open', path=str(path))
         self.assertEqual(self.read('pattern.notes.get', pattern=0)['events'], captured)
+        # Successful document replacement retires document-scoped native owners.
+        # Reopen through the shell rather than sending Reload to a dead HWND.
+        self.assertEqual(self.note_windows(), [])
 
         # Switch module representation: selected instrument identity must win,
         # never the coincidentally numbered sample from the preceding phase.
@@ -296,8 +299,7 @@ class PreciseNoteEditorTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertFalse(chosen['sample'])
         self.assertEqual(chosen['id'], next(i['id'] for i in self.doc()['data']['instruments']
                                            if i['index'] == instrument))
-        self.navigate(row=6, channel=0)
-        self.command(373)  # Explicit new capture adopts the new document/sound.
+        self.open_row(row=6, channel=0)
         self.assertEqual(self.editor()['raw']['instrument'], str(instrument))
         before_events = self.read('pattern.notes.get', pattern=0)['events']
         self.command(369)

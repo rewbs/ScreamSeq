@@ -151,6 +151,8 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.write('transport.play', pattern=0, startRow=4, endRow=5, cursorRow=4, loop=True)
         before = self.read('transport.get')
         field = self.text(363, '96')
+        self.desktop.send(field, 0xB1, 1, 2)  # Keep a real text selection across Save.
+        selection = self.desktop.send(field, 0xB0)
         # Native Save, deliberately without waiting for the typing debounce.
         # The deterministic owner test separately proves timer-free admission;
         # this checks the actual shell command and saved file while playing.
@@ -158,6 +160,7 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.assertFalse(self.editor()['retainedDraft'])
         self.assertEqual(self.desktop.focus(field), field)
         self.assertEqual(self.field_text(field), '96')
+        self.assertEqual(self.desktop.send(field, 0xB0), selection)
         notes = self.read('pattern.notes.get', pattern=0)
         self.assertEqual(next(e['velocity'] for e in notes['events'] if e['channel'] == 0), 96)
         self.assertEqual([e for e in notes['events'] if e['channel'] == 2], [other])
