@@ -529,3 +529,54 @@ evidence without a build; see [the audio report](LAYERED-COMPOSING-AUDIO-2026-10
 The next keyboard checkpoint retains two native groups and seven actual-app
 cases. Its rendering inputs are unchanged, so the new offline layer evidence
 does not need another render merely because the shortcut dispatcher is rebuilt.
+
+## 09:01 UTC keyboard checkpoint and fresh foreground check
+
+Frozen `173ba8bf96477922b2f7ae76aaffbba8e4292ce2` compiled once from
+09:01:33.736 to 09:03:24.938 UTC. Executable SHA-256:
+`649dca711422e6a67cddb86f64bb483a4bb6844e0f47c02eb9893077f7c1e0ad`.
+Receipts are in `bin/mac-gesture-20261022/precise-keyboard/`. No CI was triggered;
+the backup branch was pushed. The next build is forbidden before
+**10:01:33.7362309 UTC**, subject to inspecting any later actual build starts.
+
+The precise-note native group passed. The menu group reached and passed the new
+Hit-list Backspace, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z assertions, then failed its
+native Velocity text Undo assertion. Its Save assertions were not reached, so
+the compact setup correction remains unconfirmed by that group. The failed
+native receipt is retained. Separately, all seven actual-app host/live cases
+passed in 13.713 seconds, including Save and chronological note/plugin history.
+
+The keyboard fixture sent only WM_KEYDOWN. Native EDIT text Undo consumes the
+translated Ctrl+Z character. The pending test correction uses TranslateMessage
+and DispatchMessage, then dispatches the resulting character, matching the
+production message pump. All assertions remain. This test correction still
+requires a build; diagnostic results do not replace that gate.
+
+Computer Use inspected fresh owned PID31296 at 200 percent DPI on the exact
+candidate, using silent playback and a disposable demo/song. Observed:
+
+- Hit-list Backspace removed the hit; Ctrl+Z restored it, Ctrl+Y removed it,
+  and Ctrl+Z restored it again.
+- In Velocity, replacing `75` with incomplete `-` showed a validation message;
+  native Ctrl+Z restored `75`, leaving one hit. Typing `97` updated the hit
+  automatically. Ctrl+S retained the caret; Backspace changed `97` to `9`
+  rather than deleting the hit. Tab moved to the effect control and Shift+Tab
+  returned to Velocity.
+- Timeline double-click added a second hit at approximately 0.125118 beat and
+  velocity 64. Backspace removed that selected hit. The white playback cursor
+  changed position throughout. No Write note or Save now action was needed.
+- Read-only initial, after-add and final snapshots retained playback epoch 3,
+  increasing frames, active playback and no fault; no stop/restart was used.
+
+The helper reports Main as the accessibility focus owner. Visible caret and
+selection, the consequences of actual keyboard input, and native assertions
+are the bounded focus evidence; no screen-reader qualification is claimed.
+PID31296 was saved and closed normally with exit 0. Its 402.889-second report
+records 48 kHz / 480-frame silent output, zero deadline overruns, starvation
+indicators and device errors; maximum service time 3656.2 microseconds.
+Realtime audit and sustained presentation qualification remain false. This is
+bounded functional evidence, not temporal-flicker or general performance proof.
+
+No production package or merge was made: the corrected native menu gate must
+pass first. The foreground receipt is explicitly diagnostic and cannot qualify
+the failed automated candidate for packaging.

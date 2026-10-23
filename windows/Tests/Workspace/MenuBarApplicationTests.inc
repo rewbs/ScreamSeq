@@ -28,7 +28,14 @@ void applicationMenuBar(){
             BYTE modifiers[256]{};std::copy(std::begin(keys.saved),std::end(keys.saved),std::begin(modifiers));
             modifiers[VK_CONTROL]=ctrl?0x80:0;modifiers[VK_SHIFT]=shift?0x80:0;modifiers[VK_MENU]=0;
             restoreCheck(SetKeyboardState(modifiers)!=FALSE,"Set private Hit-list modifiers");
-            SendMessageW(GetFocus(),WM_KEYDOWN,code,0);
+            // Match the app message pump: EDIT consumes translated Ctrl+Z
+            // (WM_CHAR 26), while an editor-handled chord suppresses that char.
+            // Direct WM_KEYDOWN alone does not exercise Windows text Undo.
+            MSG message{};message.hwnd=GetFocus();message.message=WM_KEYDOWN;message.wParam=code;
+            message.lParam=1|(LPARAM(MapVirtualKeyW(UINT(code),MAPVK_VK_TO_VSC))<<16);
+            TranslateMessage(&message);DispatchMessageW(&message);
+            MSG character{};
+            while(PeekMessageW(&character,message.hwnd,WM_CHAR,WM_DEADCHAR,PM_REMOVE))DispatchMessageW(&character);
         };
         key(VK_BACK);const auto removed=app.documentOperation("pattern.notes.get",{{"pattern",0}});
         restoreCheck(app.preciseNoteWindow->snapshot().at("draftCount")==0&&GetFocus()==list,"Hit-list Backspace must delete and retain list focus");
