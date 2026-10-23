@@ -21,6 +21,9 @@ comparison; that is corrected. Mac ARM job120266634155 passed all134 native
 tests and the interface/transport gates. Mac Intel job120266634403 compiled
 successfully and was still running its remaining steps at06:46; Windows
 job120266633422 failed the same corrected expression. Do not restart these jobs.
+At06:52 Intel was confirmed fully passed: all134 CTests, native interface and
+socket/typed-fixture gates. Its downloaded log/hash is retained with the ARM and
+Windows logs. Both Mac passes cover f28's unchanged shared publication code.
 `precise-live-correction/checkpoint.ps1` coordinates the corrected PR push with
 the single local build. The selection is six native registrations and23 actual
 app cases, followed by fresh isolated Computer Use and only then packaging.

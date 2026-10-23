@@ -259,3 +259,11 @@ behavioral assertions are still unexecuted.
 The read-only CI observation at 06:37:47 UTC found Mac Intel compilation passed
 at 06:36:56; its remaining job steps were still running. This does not supersede
 the fresh CI inspection required at the 06:59:10 UTC earliest build gate.
+
+At 06:52:29 UTC the same Intel job was confirmed **completed successfully**.
+The retained log records all134 CTests passing, including `precise-notes`
+(12.78 seconds), `unified-history` and `document-history-allocation`, plus the
+native precise-notes interface group and socket/typed-fixture gates. Its log
+SHA-256 is `04c69d364535e1001099d4d3e6256194696a38f14fd080f598b2d84936c2e7b3`.
+Both Mac architecture jobs therefore pass for f28's shared publication inputs.
+This does not qualify the later Windows-only corrections or hardware performance.
