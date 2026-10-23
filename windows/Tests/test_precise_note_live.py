@@ -141,6 +141,91 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
         self.write('document.open', path=str(path))
         self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
 
+    def test_live_notes_and_plugin_take_share_chronological_history(self):
+        # Native note input and public original-time capture meet at the same
+        # document history. Native slider delivery has its own recording gate;
+        # this journey checks their composition rather than duplicating it.
+        gain = next(p for p in self.read('plugin.discover', format='Built-in') if 'Gain' in p['name'])
+        self.write('plugin.add', descriptor=gain)
+        plugin = self.doc()['data']['nativePlugins'][-1]['instanceID']
+        baseline = self.read('plugin.state.get', plugin=plugin)
+        other = dict(channel=2, position=8*65536+123, note=71, instrument=2, velocity=87)
+        self.write('pattern.notes.set', pattern=0, events=[other])
+        before_cells = self.cells()
+        before_notes = self.read('pattern.notes.get', pattern=0)
+        before_automation = self.read('automation.get')
+        self.open_row(row=4)
+        self.native_panel(pinned=True, focus=True)
+        self.write('transport.play', pattern=0, startRow=4, endRow=5, cursorRow=4, loop=True)
+        transport = self.read('transport.get')
+
+        def continuous():
+            current = self.read('transport.get')
+            self.assertTrue(current['playing'])
+            self.assertFalse(current['fault'])
+            self.assertEqual(current['playbackEpoch'], transport['playbackEpoch'])
+            self.assertGreaterEqual(current['frames'], transport['frames'])
+            self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
+            self.assertEqual([e for e in self.read('pattern.notes.get', pattern=0)['events']
+                              if e['channel'] == 2], [other])
+            self.assertFalse(self.editor()['stale'])
+            self.assertFalse(self.editor()['retainedDraft'])
+
+        field = self.text(363, '96')
+        self.wait_note_saved()
+        first_notes, converted_cells = self.read('pattern.notes.get', pattern=0), self.cells()
+        continuous()
+        take = self.write('automation.recording.start', plugins=[plugin])
+        clock = self.read('automation.recording.get')
+        captured = self.write('automation.recording.capture', take=take['take'], plugin=plugin,
+                              parameter=2, value=25, timestamp=clock['hostTime'])
+        self.assertTrue(captured['accepted'], captured)
+        self.write('automation.recording.stop', take=take['take'])
+        kept = self.write('automation.recording.commit', take=take['take'])
+        self.assertTrue(kept['changed'], kept)
+        self.assertFalse(kept['retained'], kept)
+        recorded = self.read('automation.get')
+        self.assertGreater(recorded['total'], before_automation['total'])
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), first_notes)
+        self.assertEqual(self.cells(), converted_cells)
+        self.assertEqual(self.desktop.focus(field), field)
+        self.assertEqual(self.field_text(field), '96')
+        continuous()
+
+        self.text(363, '97')
+        self.wait_note_saved()
+        final_notes = self.read('pattern.notes.get', pattern=0)
+        self.assertNotEqual(final_notes, first_notes)
+        self.assertEqual(self.cells(), converted_cells)
+        self.assertEqual(self.read('automation.get'), recorded)
+        continuous()
+        # One step per accepted action: later note, Keep, earlier conversion.
+        for notes, cells, automation in ((first_notes, converted_cells, recorded),
+                                          (first_notes, converted_cells, before_automation),
+                                          (before_notes, before_cells, before_automation)):
+            self.write('history.undo', domain='all')
+            self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+            self.assertEqual(self.cells(), cells)
+            self.assertEqual(self.read('automation.get'), automation)
+            continuous()
+        for notes, automation in ((first_notes, before_automation),
+                                  (first_notes, recorded), (final_notes, recorded)):
+            self.write('history.redo', domain='all')
+            self.assertEqual(self.read('pattern.notes.get', pattern=0), notes)
+            self.assertEqual(self.cells(), converted_cells)
+            self.assertEqual(self.read('automation.get'), automation)
+            continuous()
+        self.assertEqual(self.desktop.focus(field), field)
+        self.assertEqual(self.field_text(field), '97')
+        self.write('transport.stop')
+        path = self.folder / 'precise-plugin-history.screamseq'
+        self.write('document.save', path=str(path))
+        self.write('document.open', path=str(path))
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), final_notes)
+        self.assertEqual(self.cells(), converted_cells)
+        self.assertEqual(self.read('automation.get'), recorded)
+        self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
+
     def test_native_save_includes_latest_precise_field_without_stopping_playback(self):
         path = self.folder / 'native-save-precise.screamseq'
         other = dict(channel=2, position=8*65536+123, note=71, instrument=2, velocity=87)

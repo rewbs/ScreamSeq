@@ -367,3 +367,26 @@ At07:23:46 the exact c7 CI jobs were still running; ARM compilation passed at
 GitHub502 during the prior inspection was recovered by repeating the read-only
 inspection, never by restarting a job. The earliest gate remains08:00:12 UTC,
 subject to fresh job/start inspection.
+
+## Cross-domain chronological history continuation
+
+`test_precise_note_live.py` now includes a fourth live journey: convert an
+ordinary note through the native velocity field while looping, capture and Keep
+a built-in Balance take through the public original-time API, then edit the
+native note again. Three Undo steps and three Redo steps must cross those actions
+in exact chronological order while playback keeps its epoch. The complete cell
+array, precise-event collection, automation collection, unrelated channel and
+plugin state are checked at each boundary. The pinned note editor must refresh
+cleanly without losing field focus; save/reopen must preserve both kinds of music.
+Existing native-slider tests remain the input-delivery gate; this test does not
+claim another native-slider or foreground qualification.
+
+The new journey passed once against the unchanged c7 executable in 3.294 seconds
+on its own disposable private desktop. Evidence is
+`precise-live-correction/history-diagnostic.log` and `history-diagnostic.json`.
+The initial runner invocation rejected a relative log path before launching;
+the corrected absolute-path invocation is the sole execution. This is bounded
+diagnostic evidence, not a replacement for the failed candidate's receipts.
+The next frozen checkpoint includes this new case: **six native groups and
+24 actual-app cases**. The source-only Save, edge and Tab corrections still need
+the rebuilt gate and fresh Computer Use. No extra build was run.

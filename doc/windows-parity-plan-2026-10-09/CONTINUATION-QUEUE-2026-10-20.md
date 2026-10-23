@@ -8,7 +8,7 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**23 October 07:24 UTC continuation (supersedes gates below):** the latest source
+**23 October 07:37 UTC continuation (supersedes gates below):** the latest source
 is on `codex/mac-gesture-intake`, backed up to `codex/mac-gesture-next-checkpoint`.
 Resolve the exact next candidate from
 `bin/mac-gesture-20261022/precise-live-followup/freeze.json`; both clean
@@ -31,10 +31,12 @@ Python retired-owner case passed alone against c7. Computer Use confirmed core
 live timeline behavior, typing and Tab focus in a disposable silent session.
 Visible edge-hit grabbing and page reading-order Tab now have source corrections
 and native/app assertions, awaiting the same next build. No new package is
-qualified. See the precise-note report for hashes, failed receipts and limits.
+qualified. A new interleaved precise-note / plugin-take history journey passed
+against c7 in 3.294 seconds without a build; it now joins the next gate. See the
+precise-note report for hashes, failed receipts and limits.
 
 `precise-live-followup/checkpoint.ps1` coordinates the corrected PR push with
-the single local build. The selection is six native registrations and23 actual
+the single local build. The selection is six native registrations and24 actual
 app cases, followed by fresh isolated Computer Use and only then packaging.
 Read the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) for exact source,
 failed evidence, queued-field Save/selection/history checks and current limits.
