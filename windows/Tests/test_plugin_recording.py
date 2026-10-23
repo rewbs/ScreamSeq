@@ -57,7 +57,7 @@ class PluginRecordingTests(unittest.TestCase):
                            recording=state, transport=self.read('transport.get'))
         if state['retained']:
             observation['events'] = self.read('automation.recording.events', take=state['take'],
-                                               plugin=plugin, parameter=parameter)
+                                               plugin=plugin, parameter=parameter, limit=16, includeTiming=True)
         with (folder / (self._testMethodName + '.jsonl')).open('a', encoding='utf-8') as output:
             output.write(json.dumps(observation, sort_keys=True) + '\n')
 
@@ -73,6 +73,8 @@ class PluginRecordingTests(unittest.TestCase):
         before = self.doc()
         layout = self.read('workspace.get')['editorDock']['configuration']
         description = self.read('api.describe')
+        self.assertEqual(description['pluginRecording']['timingInspection'],
+                         dict(field='includeTiming', maximumPage=16, readOnly=True))
         for method in ('automation.recording.get', 'automation.recording.events',
                        'automation.recovery.list', 'automation.recovery.get'):
             self.assertIn(method, description['reads'])
@@ -361,6 +363,20 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
         events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
+        inspected = self.read('automation.recording.events', take=take['take'], plugin=plugin,
+                              parameter=parameter, limit=16, includeTiming=True)
+        self.assertEqual(inspected['total'], events['total'])
+        for original, observed in zip(events['events'], inspected['events']):
+            self.assertEqual({k: observed[k] for k in ('timestamp', 'value')},
+                             {k: original[k] for k in ('timestamp', 'value')})
+            if original['frame'] is not None:
+                self.assertEqual(observed['frame'], original['frame'])
+                self.assertEqual(observed['timing']['status'], 'retained-frame')
+        for fields in (dict(includeTiming=1, limit=1), dict(includeTiming=True, limit=17)):
+            with self.subTest(fields=fields), self.assertRaises(ApiError) as raised:
+                self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter, **fields)
+            self.assertEqual(raised.exception.code, -32602)
+        self.assertEqual(self.doc()['revision'], revision, 'Timing inspection must not change history')
         self.assertTrue(any(e['value'] == first_value for e in events['events']))
         if sustain_seconds:
             self.assertTrue(any(e['value'] == later_value for e in events['events']))

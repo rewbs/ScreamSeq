@@ -2,6 +2,9 @@ static void parameterRecordingAPIAdmission(TrackerSession *session,NSString *ide
   NSError *error=nil;NSString *revision=session.automationRevision;NSData *baseline=session.serializedData;
   NSDictionary *description=[session automationMethod:@"api.describe" params:@{} error:&error];
   NSArray *methods=description[@"data"][@"pluginParameterRecording"][@"methods"];
+  require([description[@"data"][@"pluginParameterRecording"][@"timingInspection"]
+    isEqual:@{@"field":@"includeTiming",@"maximumPage":@16,@"readOnly":@YES}],
+    "Mac discovery omitted the bounded read-only timing option");
   for(NSString *name in @[@"get",@"events",@"start",@"capture",@"stop",@"commit",@"discard"])
     require([methods containsObject:[@"automation.recording." stringByAppendingString:name]],"Mac API omitted retained recording method");
   NSDictionary *empty=[session automationMethod:@"automation.recording.get" params:@{} error:&error];

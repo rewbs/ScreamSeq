@@ -40,14 +40,15 @@ bool DocumentController::restoreParameterRecordingPreview() {
 Json DocumentController::parameterRecordingOperation(const std::string &method,const Json &params) {
   if(!params.is_object())throw Api::ApiError(-32602,"Parameter recording expects an object");
   if(method=="automation.recording.events") {
-    keys(params,{"take","plugin","parameter","offset","limit"});
+    keys(params,{"take","plugin","parameter","offset","limit","includeTiming"});
     if(!parameterRecording_||recordingText(params.at("take"),80)!=parameterRecording_->take->token())
       throw Api::ApiError(-32001,"Parameter take changed; read automation.recording.get");
     const auto plugin=recordingText(params.at("plugin"),128);
     const auto parameter=uint32_t(recordingInteger(params.at("parameter"),0,UINT32_MAX));
     const auto offset=recordingInteger(params.value("offset",Json(0)),0,SIZE_MAX);
     const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);
-    try{return Tracker::recordedGestureEvents(*parameterRecording_->take,plugin,parameter,size_t(offset),size_t(limit));}
+    const bool timing=flag(params,"includeTiming");
+    try{return Tracker::recordedGestureEvents(*parameterRecording_->take,plugin,parameter,size_t(offset),size_t(limit),timing);}
     catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   }
   if(method=="automation.recording.get") {

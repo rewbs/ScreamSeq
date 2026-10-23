@@ -45,9 +45,23 @@ static void recordingFrameClock() {
   check(timeline->publish(3000,4000,50000,1000,48000,10),"Timeline after gap rejected");
   check(timeline->locate(1500,10)==48500&&timeline->locate(3500,10)==50500&&
     !timeline->locate(2500,10),"Delayed lookup lost its origin or filled a timing gap");
+  const auto gap=timeline->inspect(2500,10);
+  check(std::string(gap.status)=="gap"&&gap.coverage.before&&gap.coverage.after&&!gap.coverage.covering&&
+    gap.coverage.before->start==1000&&gap.coverage.before->end==2000&&gap.coverage.before->frame==48000&&
+    gap.coverage.after->start==3000&&gap.coverage.after->end==4000&&gap.coverage.after->frame==50000&&
+    gap.coverage.after->frames==1000&&gap.coverage.after->rate==48000&&!timeline->locate(2500,10),
+    "Read-only timing diagnosis filled a gap or lost exact neighbouring intervals");
+  check(std::string(timeline->inspect(0,10).status)=="missing-timestamp"&&
+    std::string(timeline->inspect(999,10).status)=="before-start"&&
+    std::string(timeline->inspect(4000,10).status)=="pending"&&
+    std::string(timeline->inspect(1500,10).status)=="covered"&&
+    std::string(timeline->inspect(1500,11).status)=="unavailable",
+    "Timing inspection confused unknown, future, covered or wrong-generation input");
   timeline->close(10,3600);
   check(timeline->stopped()&&timeline->locate(3599,10)==50599&&!timeline->locate(3600,10),
     "Stop did not preserve earlier queued events and trim its exclusive bound");
+  check(std::string(timeline->inspect(3600,10).status)=="after-stop"&&
+    std::string(timeline->inspect(3599,10).status)=="covered","Inspection ignored the exact playback Stop cut");
   check(!timeline->publish(4000,5000,51000,1000,48000,10),"Stopped generation resumed");
   check(timeline->publish(5000,6000,0,1000,48000,11)&&
     !timeline->locate(1500,10)&&timeline->locate(5500,11)==500,
@@ -55,6 +69,9 @@ static void recordingFrameClock() {
   check(!timeline->publish(6000,7000,1000,1000,48000,10)&&
     timeline->locate(5500,11)==500,"Retired generation replaced the current one");
   timeline->invalidate();
+  check(std::string(timeline->inspect(5500,11).status)=="unavailable"&&
+    timeline->inspect(5500,11).failure==RecordingFrameTimeline::Failure::Invalidated&&
+    !timeline->inspect(5500,11).coverage.covering,"Invalidated timeline exposed usable diagnostic coverage");
   check(!timeline->generation()&&!timeline->locate(5500,11)&&
     !timeline->publish(6000,7000,1000,1000,48000,11)&&
     !timeline->publish(6000,7000,1000,1000,48000,12),
@@ -93,6 +110,14 @@ static void recordingFrameClock() {
   check(!ring->locate(1,1)&&ring->locate(17,1)==16&&
     ring->locate(1+RecordingFrameClock::capacity*16,1)==RecordingFrameClock::capacity*16,
     "Ring eviction fabricated old time or discarded retained coverage");
+  const auto expired=ring->inspect(1,1);
+  check(!expired.before&&!expired.covering&&expired.after&&expired.after->start==17,
+    "Ring diagnosis invented an expired interval");
+  auto evictedTimeline=std::make_unique<RecordingFrameTimeline>();
+  for(uint64_t i=0;i<=RecordingFrameClock::capacity;++i)
+    check(evictedTimeline->publish(1+i*16,17+i*16,i*16,16,48000,1),"Inspection eviction fixture");
+  check(std::string(evictedTimeline->inspect(1,1).status)=="expired"&&
+    std::string(evictedTimeline->inspect(17,1).status)=="covered","Timeline confused expired input with future coverage");
 
   // Overwrite all slots repeatedly while a control reader is delayed. Every
   // nonempty answer must be exact; an overwritten interval may be unavailable.
@@ -110,6 +135,12 @@ static void recordingFrameClock() {
     const auto index=latest.load(std::memory_order_acquire);
     const auto value=ring->locate(8+index*16,1);
     if(value&&*value!=7+index*16)bad.store(true);
+    if(i%64==0) {
+      const auto coverage=ring->inspect(8+index*16,1);
+      for(const auto &part:{coverage.before,coverage.after,coverage.covering})if(part&&
+        (part->start!=part->frame+1||part->end!=part->start+16||part->frames!=16||part->rate!=48000||part->generation!=1))
+        bad.store(true);
+    }
   }
   writer.join();
   check(!bad.load(),"Concurrent ring overwrite returned a torn frame");

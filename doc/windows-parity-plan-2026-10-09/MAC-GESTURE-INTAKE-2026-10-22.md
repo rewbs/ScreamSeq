@@ -1855,3 +1855,52 @@ recovery gates, and finish reciprocal edited-project replay. Reuse the passing
 unchanged product/native receipts and saved replay artifacts. A single coherent
 next checkpoint should cover any resulting product changes and the corrected
 composing fixture; unrelated full suites need not be repeated.
+
+### Shared timing diagnosis and confirmed Mac compact-layout correction
+
+New source adds optional `includeTiming:true` to `automation.recording.events`
+on both native adapters. It requires an explicit page limit of1–16; default
+pages remain byte-for-value equivalent in shape. API discovery, both request
+schemas and guides describe the option. `editor/RecordingFrameClock.hpp` shares
+the version-checked atomic slot read between mapping and inspection. Inspection
+returns only actual published neighbouring intervals, bounded by the4096-slot
+ring; it cannot bridge gaps or resolve input. `RecordedGestureRead.hpp` presents
+exact decimal host times/device frame origins and distinguishes retained frames,
+observed gaps, pending/expired coverage, Stop cuts and invalidated generations.
+The clock remains fixed-storage and its publisher is unchanged. Observations
+are not an atomic snapshot of a running stream and do not authorize Keep.
+
+New shared tests cover exact >2^53 timestamps, holes, Stop cuts, ring eviction,
+concurrent overwrite, unavailable generations, non-mutating delayed coverage
+inspection and later ordinary owner resolution. Windows worker and Mac native
+session tests require the same projection, strict boolean/page admission and
+unchanged history. The actual Windows composing lifecycle and95-second trace
+exercise it through the application API. This is diagnostic capability, **not
+a claimed correction for the intermittent missing mapping**. It enables the
+next failing event to identify its surrounding real intervals before eviction.
+
+The terminal Mac ARM job120165015496 at7c2a6c1e1 compiled and passed its
+plugin-recording interface group and exact API preservation baseline. Its sole
+reported interface failure was now specific: at700×500 the recording message
+ended atx440 while Review began atx439. Earlier focus/text/selection/no-replay
+assertions passed. `mac/App/PluginEditor.swift` now gives the native Review
+button required horizontal hugging/compression resistance and16-point stack
+spacing to accommodate AppKit alignment-rect/bezel overhang. The message takes
+the remaining wrapping width. The original no-overlap assertion remains, with
+additional520/900/700-width checks for containment and exact retained search
+focus/selection. Rebuilt Mac execution is required; there is no local Mac UI
+qualification from this source inspection.
+
+Python AST and JSON syntax checks pass; `git diff --check` passes. A full local
+JSON Schema validator was unavailable (`jsonschema` is not bundled), so no
+schema-validation pass is claimed. All new native assertions remain unbuilt.
+At the next coordinated checkpoint include `recorded-automation-tests` and
+`hosted-project-tests` alongside the native workspace/audio targets and the
+bounded actual-app recording/composing cases. The shared clock reader change
+requires its rate/partition, concurrent overwrite and realtime allocation/free
+gates. Mac must rerun native session/API plus recording/control-delivery UI
+gates on both architectures. Fresh Windows Computer Use must inspect recording,
+original-input review and keyboard focus on that executable. Reuse unrelated
+unchanged UI and project evidence. Earliest build remains01:15:55 UTC on
+October23, subject to later starts and completion of preceding CI; no additional
+build or CI dispatch occurred while preparing this batch.

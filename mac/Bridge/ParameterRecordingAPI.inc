@@ -26,10 +26,10 @@
           value["timebaseNumerator"]=timebase.numer;value["timebaseDenominator"]=timebase.denom;
           if(!warning.empty())value["intakeError"]=std::move(warning);
         } else if([method isEqual:@"automation.recording.events"]) {
-          allowed(@[@"take",@"plugin",@"parameter",@"offset",@"limit"]);requireTake();
+          allowed(@[@"take",@"plugin",@"parameter",@"offset",@"limit",@"includeTiming"]);requireTake();
           value=Tracker::recordedGestureEvents(_parameterTake->take(),string(p[@"plugin"],128).UTF8String,
             uint32_t(integer(p[@"parameter"],0,UINT32_MAX)),size_t(integer(p[@"offset"]?:@0,0,SIZE_MAX)),
-            size_t(integer(p[@"limit"]?:@128,1,512)));
+            size_t(integer(p[@"limit"]?:@128,1,512)),p[@"includeTiming"]?boolean(p[@"includeTiming"]):false);
         } else if([method isEqual:@"automation.recording.start"]) {
           allowed(@[@"plugins"]);
           [self startParameterTake:array(p[@"plugins"],maximumNativePlugins) expectedRevision:p[@"expectedRevision"]];

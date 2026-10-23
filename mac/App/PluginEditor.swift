@@ -256,7 +256,12 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     recordingReviewButton = ActionButton("Review take…") { [weak self] in self?.onRecordingTake?() }
     recordingReviewButton.isHidden = true
     recordingReviewButton.setAccessibilityLabel("Review plugin automation take")
-    let recordingStatus = stack(.horizontal, [note, recordingReviewButton!], spacing: 8)
+    recordingReviewButton.setContentHuggingPriority(.required, for: .horizontal)
+    recordingReviewButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+    // AppKit stacks separate alignment rects, not the full label/button frames.
+    // Leave room for the native bezel overhang and let the message wrap instead
+    // of stretching Review into the remaining width of a compact editor.
+    let recordingStatus = stack(.horizontal, [note, recordingReviewButton!], spacing: 16)
     let content = stack(.vertical, [title, recordingStatus, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 12)
     update(model: PatternModel([:]), values: [])

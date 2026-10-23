@@ -202,6 +202,7 @@ class SessionAdapter {
       if(std::find(result["reads"].begin(),result["reads"].end(),"automation.recovery.get")!=result["reads"].end()) {
         result["revisionGuards"]["automation.recovery.get"]={"expectedRevision"};
         result["pluginRecording"]={{"schema","windows/Api/plugin-recording.schema.json"},{"clock","windows-qpc-100ns"},
+          {"timingInspection",{{"field","includeTiming"},{"maximumPage",16},{"readOnly",true}}},
           {"scope","Stable rack plugin identities; independent graph recipe copies are not recorded"},
           {"input","Original timestamp and native value; accepted input is never resent after preview failure"},
           {"recovery","Detached read-only archives preserve original clocks and identities; never rearm or replay them"}};

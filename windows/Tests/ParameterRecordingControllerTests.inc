@@ -95,6 +95,16 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
     first.at("events")[0].at("timestamp")==std::to_string(controlTime)&&first.at("events")[0].at("value")==.75&&
     second.at("events")[0].at("value")==.25&&!first.at("events")[0].at("frame").is_null(),
     "Paginated take review lost original event time, value or mapped frame");
+  const Json timingRequest={{"take",token},{"plugin",id},{"parameter",7},{"limit",1},{"includeTiming",true}};
+  auto inspected=call(c,"automation.recording.events",timingRequest);
+  need(inspected.at("events")[0].at("timing").at("status")=="retained-frame",
+    "Worker omitted the shared read-only timing projection");
+  inspected["events"][0].erase("timing");
+  need(inspected==first&&c.view()->session.revision==beforeRevision,"Timing inspection changed event/history");
+  auto invalidTiming=timingRequest;invalidTiming["includeTiming"]=1;
+  rejected([&]{call(c,"automation.recording.events",invalidTiming);});
+  invalidTiming=timingRequest;invalidTiming["limit"]=17;
+  rejected([&]{call(c,"automation.recording.events",invalidTiming);});
   const auto recovery=recoveryCapture(c);
   need(recovery->hasRecording&&recovery->needsProtection,"Worker parameter take was omitted from recovery");
   const Json delivery={{"version",1},{"reviewOnly",true},{"document",c.view()->session.documentId},{"revision",beforeRevision},

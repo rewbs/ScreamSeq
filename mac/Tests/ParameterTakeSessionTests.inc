@@ -205,6 +205,19 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     NSDictionary *page=api(@"automation.recording.events",@{@"take":token,@"plugin":identities[index],@"parameter":@7,@"limit":@1})[@"data"];
     check([page[@"total"] unsignedIntegerValue]==1&&[page[@"events"][0][@"timestamp"] isEqual:timestamps[index]]&&
       [page[@"events"][0][@"frame"] isKindOfClass:NSString.class],"API event paging lost original timestamps or frame mapping");
+    NSDictionary *inspection=api(@"automation.recording.events",@{@"take":token,@"plugin":identities[index],
+      @"parameter":@7,@"limit":@1,@"includeTiming":@YES})[@"data"];
+    NSMutableDictionary *original=[inspection[@"events"][0] mutableCopy];
+    check([original[@"timing"][@"status"] isEqual:@"retained-frame"],"Mac API omitted shared timing inspection");
+    [original removeObjectForKey:@"timing"];
+    check([original isEqual:page[@"events"][0]]&&[session.automationRevision isEqual:apiRevision],
+      "Mac timing read changed original input or document history");
+    for(NSDictionary *invalid in @[@{@"includeTiming":@1,@"limit":@1},@{@"includeTiming":@YES,@"limit":@17}]) {
+      NSMutableDictionary *request=[@{@"take":token,@"plugin":identities[index],@"parameter":@7} mutableCopy];
+      [request addEntriesFromDictionary:invalid];error=nil;
+      check(![session automationMethod:@"automation.recording.events" params:request error:&error]&&error.code==-32602&&
+        [session.automationRevision isEqual:apiRevision],"Invalid Mac timing inspection changed history or passed admission");
+    }
   }
   NSDictionary *keepAPI=api(@"automation.recording.commit",@{@"take":token,@"acknowledgeLoss":@NO},true);
   NSString *keptAPIRevision=session.automationRevision;

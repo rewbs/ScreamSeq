@@ -179,6 +179,16 @@ extension InterfaceTests {
       "Asynchronous recording refusal must not alter values or replay musical input")
     try require(noteBounds.minX >= 0 && noteBounds.maxX <= reviewBounds.minX && reviewBounds.maxX <= editor.bounds.maxX,
       "Compact recording feedback must not overlap or leave its editor: note=\(noteBounds), review=\(reviewBounds), editor=\(editor.bounds)")
+    for width in [CGFloat(520), 900, 700] {
+      window.setContentSize(NSSize(width: width, height: 500)); editor.layoutSubtreeIfNeeded()
+      let message = editor.convert(editor.note.bounds, from: editor.note)
+      let action = editor.convert(editor.recordingReviewButton.bounds, from: editor.recordingReviewButton)
+      try require(message.minX >= 0 && message.maxX <= action.minX && action.maxX <= editor.bounds.maxX &&
+        message.minY >= 0 && message.maxY <= editor.bounds.maxY && action.minY >= 0 && action.maxY <= editor.bounds.maxY,
+        "Resized recording feedback overlaps or leaves its editor: note=\(message), review=\(action), editor=\(editor.bounds)")
+      try require(window.firstResponder === responder && field.selectedRange == NSRange(location: 1, length: 2) &&
+        editor.search.stringValue == "Gain", "Resizing the retained notice must preserve native search focus, text and selection")
+    }
     var reviews = 0; editor.onRecordingTake = { reviews += 1 }; editor.recordingReviewButton.performClick(nil)
     try require(reviews == 1 && original.count == originalCount && manual == [0.4],
       "Review opens the existing take directly without replaying refused input")

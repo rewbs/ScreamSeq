@@ -37,7 +37,7 @@ time. Get reports `hostTime`, `timebaseNumerator` and `timebaseDenominator` for
 clock conversion. Windows uses its own explicitly named QPC clock. The musical
 recording timeline is 48 kHz on both platforms.
 
-`events {take, plugin, parameter, offset?, limit?}` pages original input in
+`events {take, plugin, parameter, offset?, limit?, includeTiming?}` pages original input in
 capture order (default 128, maximum 512). Exact timestamp/frame values are
 decimal strings; `frame:null` preserves unmapped or post-playback-Stop evidence.
 Reading does not retime or replay events. `stop {expectedRevision, take}` seals
@@ -46,6 +46,26 @@ acknowledgeLoss?}` makes one chronological Undo edit for the whole take;
 acknowledging loss requires an explicit boolean. Empty takes add no history.
 `discard {expectedRevision, take}` abandons input without changing accepted music.
 All writes reject unknown keys, stale revisions and wrong take identities.
+
+Optional `includeTiming:true` requires an explicit page `limit` from1 to16.
+The default event projection is unchanged. Each returned row adds `timing`:
+`retained-frame` means its cached frame remains in the evidence and is not beyond
+the playback Stop cut; no clock scan is needed. This does not certify the take's
+current context or authorize Keep, which still checks the retained summary.
+Otherwise inspection reports `covered` (coverage is now observable but the read
+does not resolve the input), `gap` (between observed intervals), `pending`
+(beyond observed coverage), `expired` (older than retained ring coverage),
+`before-start`, `after-stop`, `missing-timestamp`, `unavailable` or `changed`.
+Unmapped rows also report exact decimal `generation`/`expectedGeneration`, nullable
+exclusive `stopTime`, the timeline `failure`, and nullable `before`, `after`, `covering` intervals. Each
+interval contains exact decimal `startTime`, exclusive `endTime`, `deviceFrame`,
+numeric `frames` and device `rate`. Host units follow the platform clock above;
+device frames are not the event's canonical48kHz frame. These bounded observations
+are not one atomic snapshot while audio advances. In particular, `pending` is
+not a promise of future coverage, and neighbours must never be interpolated to
+repair a gap. Inspection does not consume queues, resolve frames, change loss,
+acknowledge missing input or mutate the document/recovery evidence. Capture
+original timing diagnostics before the ring expires when investigating failure.
 
 **Mac release currently requires stopped transport.** A live Keep can succeed
 musically while returning `completed:true`, `retained:true` and a

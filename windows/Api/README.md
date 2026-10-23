@@ -15,8 +15,8 @@ Closing the review window only hides it. A retained take protects song departure
 [plugin-recording.schema.json](plugin-recording.schema.json) specifies the
 Windows adapter; use `api.describe` before calling it. The underlying take,
 musical timing, history and persisted automation are shared. The detached recovery
-reads are also exposed by the Mac adapter. The seven new live recording lifecycle
-request names remain Windows-specific; Mac retains its native recording path.
+reads and live recording lifecycle methods are also exposed by the Mac adapter.
+Native clock units and provider-restoration requirements remain platform-specific.
 
 - `automation.recording.get {}` returns the retained take, original `startTime`,
   optional `endTime`, playback epoch, target counts and loss. `hostTime` is the
@@ -32,9 +32,14 @@ request names remain Windows-specific; Mac retains its native recording path.
   value, timestamp}` submits original native input once. Use the same host clock
   at the actual input event; never replace its time with a retry time. A returned
   `accepted:true` remains accepted if `intakeError` reports preview failure.
-- `automation.recording.events {take, plugin, parameter, offset?, limit?}` pages
+- `automation.recording.events {take, plugin, parameter, offset?, limit?, includeTiming?}` pages
   original values/timestamps and mapped frame strings at 48 kHz; `frame:null`
   means timing is unavailable. Default page size is 128, maximum 512.
+  For diagnosis, `includeTiming:true` requires an explicit `limit` of at most16.
+  Each row adds read-only `timing`: an existing valid mapping reports
+  `retained-frame`; an unmapped input reports observed coverage and exact nearest
+  interval bounds. See the shared [timing contract](../../mac/AUTOMATION.md#plugin-parameter-recording).
+  This inspection never maps a point, acknowledges loss or changes history.
 - `automation.recording.stop`, `.commit` and `.discard` require
   `{expectedRevision, take}`. Stop seals input. Commit additionally accepts
   `acknowledgeLoss:true` after reviewing refused/unmapped/lost input. Pending

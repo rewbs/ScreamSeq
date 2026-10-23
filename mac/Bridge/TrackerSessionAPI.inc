@@ -153,6 +153,7 @@
         @"version" : @1,
         @"pluginParameterRecording" : @{@"methods":@[@"automation.recording.get",@"automation.recording.events",@"automation.recording.start",@"automation.recording.capture",@"automation.recording.stop",@"automation.recording.commit",@"automation.recording.discard"],
           @"clock":@"mach-absolute-time",@"sampleRate":@48000,@"releaseRequiresStoppedTransport":@YES,
+          @"timingInspection":@{@"field":@"includeTiming",@"maximumPage":@16,@"readOnly":@YES},
           @"semantics":@"Original-time multi-plugin takes use one chronological Keep edit. Stop seals capture without stopping playback. completed:true with retained:true means music was committed but native restoration still needs retry; do not replay input or create a new take. Mac release currently requires stopped transport, and explicit opaque Discard requires every owned native editor closed. Recovery evidence remains detached and never replays."},
         @"pluginInputRecovery" : @{@"methods":@[@"automation.recovery.list",@"automation.recovery.get"],
           @"expectedRevision":@"Get requires the current song revision before selecting a detached archive by kind/index",

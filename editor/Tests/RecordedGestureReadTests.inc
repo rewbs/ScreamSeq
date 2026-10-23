@@ -23,13 +23,46 @@ static void recordedGestureReadTests() {
     stopped.at("events")[0].at("timestamp")==std::to_string(origin+60)&&stopped.at("events")[0].at("value")==-12,
     "Event at playback Stop boundary acquired a mapped frame or lost raw evidence");
   check(recordedGestureEvents(take,rack[0].instanceID,1,2,1).at("events").empty(),"End page must be empty");
+  const auto detailed=recordedGestureEvents(take,rack[0].instanceID,1,0,16,true);
+  check(!page.at("events")[0].contains("timing")&&
+    detailed.at("events")[0].at("timing").at("status")=="retained-frame"&&
+    detailed.at("events")[1].at("timing").at("status")=="after-stop"&&
+    detailed.at("events")[1].at("timing").at("stopTime")==std::to_string(origin+60)&&
+    detailed.at("events")[1].at("timing").at("covering").at("startTime")==std::to_string(origin)&&
+    detailed.at("events")[1].at("frame").is_null(),
+    "Optional timing evidence changed the default page, rounded time, or remapped stopped input");
   const auto rejects=[&](auto &&work){bool refused=false;try{work();}catch(const std::invalid_argument &){refused=true;}check(refused,"Invalid shared take page accepted");};
   rejects([&]{recordedGestureEvents(take,rack[0].instanceID,1,SIZE_MAX,512);});
   rejects([&]{recordedGestureEvents(take,rack[0].instanceID,1,0,0);});
   rejects([&]{recordedGestureEvents(take,rack[0].instanceID,1,0,513);});
+  rejects([&]{recordedGestureEvents(take,rack[0].instanceID,1,0,17,true);});
   rejects([&]{recordedGestureEvents(take,"missing",1);});
   rejects([&]{recordedGestureEvents(take,rack[0].instanceID,UINT32_MAX);});
   check(take.target(0).events()[1].frame==288&&recordedGestureRecovery(take.review())==before,
     "Read projection changed original mapped frames or retained take evidence");
   check(recordedGestureSummary(nullptr)==nlohmann::json({{"take",""},{"capturing",false},{"retained",false}}),"Empty take summary changed contract");
+
+  auto gaps=std::make_shared<RecordingFrameTimeline>();
+  check(gaps->publish(origin,origin+100,0,480,48000,8)&&
+    gaps->publish(origin+200,origin+300,960,480,48000,8),"Gap read fixture");
+  RecordedGestureTake missing("gap-take","revision",origin,gaps,rack,{},providers);
+  check(missing.append(rack[0].instanceID,{1,-9,origin+150},{9,2},"revision",8,document.native(),catalog)==RecordedGestureTake::Intake::Captured,
+    "Unmapped input was not retained");
+  const auto raw=recordedGestureRecovery(missing.review());
+  const auto diagnosis=recordedGestureEvents(missing,rack[0].instanceID,1,0,16,true).at("events")[0];
+  check(diagnosis.at("frame").is_null()&&diagnosis.at("timing").at("status")=="gap"&&
+    diagnosis.at("timing").at("before").at("endTime")==std::to_string(origin+100)&&
+    diagnosis.at("timing").at("after").at("startTime")==std::to_string(origin+200)&&
+    missing.target(0).loss().unmapped==1&&recordedGestureRecovery(missing.review())==raw,
+    "Timing inspection altered raw input/loss or fabricated a frame between exact boundaries");
+  check(missing.append(rack[0].instanceID,{1,-12,origin+350},{9,2},"revision",8,document.native(),catalog)==RecordedGestureTake::Intake::Captured&&
+    gaps->publish(origin+300,origin+400,1440,480,48000,8),"Delayed-coverage inspection fixture");
+  const auto beforeCoverageRead=recordedGestureRecovery(missing.review());
+  const auto available=recordedGestureEvents(missing,rack[0].instanceID,1,1,1,true).at("events")[0];
+  check(available.at("frame").is_null()&&available.at("timing").at("status")=="covered"&&
+    missing.target(0).loss().unmapped==2&&recordedGestureRecovery(missing.review())==beforeCoverageRead,
+    "Diagnostic read resolved delayed input or acknowledged its loss without an owner poll");
+  check(missing.observeProvider(rack[0].instanceID,{9,2},"revision",8)&&
+    missing.target(0).loss().unmapped==1&&missing.target(0).events()[1].frame==1680,
+    "Normal owner poll no longer resolves delayed coverage after diagnosis");
 }
