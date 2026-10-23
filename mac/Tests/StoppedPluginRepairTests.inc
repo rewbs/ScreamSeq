@@ -114,7 +114,7 @@ static void stoppedNativeDeviceRepair(const PluginState &vst,const PluginState &
   check(!audio.adoptStoppedPluginRepair(*stale)&&audio.pluginStates()==saved,"Stopped repair adopted against a replacement host");
 }
 
-static void nativeTakeOpaqueDiscard(const PluginState &vst,const PluginState &au) {
+static void nativeTakeOpaqueDiscard(const PluginState &vst,const PluginState &au,bool kept=false,bool visible=false) {
   NativePlugin acceptedAU(au,48000,true);auto hidden=acceptedAU.state();
   NSData *blob=[NSPropertyListSerialization dataWithPropertyList:@{@"gain":@(acceptedAU.parameters().at(0).value),@"hidden":@(.375f)}
     format:NSPropertyListBinaryFormat_v1_0 options:0 error:nil];
@@ -125,7 +125,7 @@ static void nativeTakeOpaqueDiscard(const PluginState &vst,const PluginState &au
   const std::vector<PluginState> saved{vst,acceptedAU.state(),unrelated};
   const auto parameter=audio.pluginParameters(0).at(0);
   check(audio.pluginParameter(0,parameter.id,.8f),"Diverge first vendor before opaque Discard");
-  const auto before=audio.pluginStates();const auto epoch=audio.pluginEpoch();
+  auto before=audio.pluginStates();const auto epoch=audio.pluginEpoch();
   const std::array<PluginEditSource,3> sources{audio.pluginEditSource(0),audio.pluginEditSource(1),audio.pluginEditSource(2)};
   const std::array<RecordedGestureTake::Provider,2> providers{{{vst.instanceID,sources[0]},{au.instanceID,sources[1]}}};
   const auto arm=mach_absolute_time();auto timeline=std::make_shared<RecordingFrameTimeline>();
@@ -134,21 +134,67 @@ static void nativeTakeOpaqueDiscard(const PluginState &vst,const PluginState &au
   NativeParameterTake owner(audio,take,[&]{return NativeParameterTake::Context{"revision",timeline->generation()};},saved,{});
   NativeSong native;check(owner.capture(native,vst.instanceID,parameter.id,.4,mach_absolute_time()),"Capture opaque take evidence");
   const auto end=owner.stop();
+  std::vector<ParameterChange> music;unsigned publications=0;
+  bool premature=false;try{owner.restoreSavedStateStopped(saved);}catch(const std::exception &){premature=true;}
+  check(premature&&!take->completed()&&take->eventCount()==1&&audio.pluginStates()==before,
+    "Saved-state recovery accepted an unkept take or changed its provider");
+  if(kept) {
+    check(timeline->publish(arm+1,end,1,479,48000,43)&&owner.poll(native),"Map stopped input before recovery Keep");
+    const auto result=owner.commit(native,saved,music,false,[&](const auto &candidate,bool changed) {
+      check(changed,"Recovery fixture must Keep actual musical input");music=candidate;++publications;return true;
+    });
+    check(result.accepted&&result.changed&&take->completed()&&publications==1&&music.size()==1,
+      "Opaque recovery fixture did not Keep its recorded music exactly once");
+    // Model the real recovery entry: ordinary completion has cancelled its
+    // audible preview, but opaque verification still refuses the owner.
+    bool verificationRefused=false;
+    try{owner.restoreRetained(false,[]{throw std::runtime_error("Hidden fixture state needs explicit recovery");});}
+    catch(const std::exception &){verificationRefused=true;}
+    check(verificationRefused&&take->completed(),"Failed verification lost the completed take");
+    before=audio.pluginStates();bool refused=false;
+    try{owner.abandonStopped(saved);}catch(const std::exception &){refused=true;}
+    check(refused&&audio.pluginStates()==before&&take->completed(),"Discard accepted already-kept music");
+  }
+  const auto recorded=music;
+  const auto restore=[&](std::span<const PluginState> states){return kept?owner.restoreSavedStateStopped(states):owner.abandonStopped(states);};
+  if(visible) {
+    audio.showPluginEditor(0);NSWindow *owned=nil;
+    for(NSWindow *window in NSApp.windows)if(window.visible&&[window.title isEqualToString:@(vst.descriptor.name.c_str())]) {
+      check(owned==nil,"Kept-state recovery editor is ambiguous");owned=window;
+    }
+    check(owned!=nil,"Kept-state recovery fixture editor did not open");
+    const auto cut=audio.pluginInputBoundary(0,mach_absolute_time());bool refused=false;
+    try{restore(saved);}catch(const std::exception &){refused=true;}
+    const auto retained=audio.pluginInputBoundary(0,mach_absolute_time());
+    check(refused&&owned.visible&&audio.pluginStates()==before&&cut&&retained&&
+      cut->source==retained->source&&cut->fence.position==retained->fence.position&&cut->fence.pending==retained->fence.pending&&
+      take->completed()==kept&&publications==(kept?1u:0u),
+      "Explicit recovery replaced an open editor, changed music or consumed native input");
+    [owned close];
+  }
   auto invalid=saved;invalid[1].state={std::byte{0xff}};bool refused=false;
-  try{owner.abandonStopped(invalid);}catch(const std::exception &){refused=true;}
+  try{restore(invalid);}catch(const std::exception &){refused=true;}
   check(refused&&!owner.awaitingDiscardCleanup()&&audio.pluginStates()==before&&
     audio.pluginEditSource(0)==sources[0]&&audio.pluginEditSource(1)==sources[1]&&take->eventCount()==1,
     "Bad later opaque baseline published a first-provider prefix or discarded take evidence");
-  check(owner.abandonStopped(saved)&&owner.awaitingDiscardCleanup(),"Closed-editor Discard could not restore hidden AU state");
+  check(restore(saved)&&owner.awaitingDiscardCleanup(),"Explicit closed-editor repair could not restore hidden AU state");
   const auto restored=audio.pluginStates();const auto new0=audio.pluginEditSource(0),new1=audio.pluginEditSource(1);
   check(restored[0]==saved[0]&&restored[1]==saved[1]&&restored[2]==before[2]&&
     new0.incarnation!=sources[0].incarnation&&new1.incarnation!=sources[1].incarnation&&audio.pluginEditSource(2)==sources[2]&&
-    !audio.active()&&audio.pluginEpoch()==epoch&&take->endTime()==end&&take->eventCount()==1&&!take->completed(),
+    !audio.active()&&audio.pluginEpoch()==epoch&&take->endTime()==end&&take->eventCount()==1&&take->completed()==kept,
     "Opaque Discard changed unrelated state, accepted music, lost evidence or reused a provider");
-  check(owner.abandonStopped(saved)&&audio.pluginEditSource(0)==new0&&audio.pluginEditSource(1)==new1,
+  check(restore(saved)&&audio.pluginEditSource(0)==new0&&audio.pluginEditSource(1)==new1,
     "Opaque Discard retry rebuilt its already repaired group");
   refused=false;try{owner.capture(native,vst.instanceID,parameter.id,.2,mach_absolute_time());}catch(const std::exception &){refused=true;}
   check(refused&&take->eventCount()==1,"Old take accepted input from its replacement provider");
+  check(publications==(kept?1u:0u)&&music.size()==recorded.size()&&
+    std::equal(music.begin(),music.end(),recorded.begin(),[](const auto &a,const auto &b){
+      return a.slot==b.slot&&a.id==b.id&&a.frame==b.frame&&std::bit_cast<uint32_t>(a.value)==std::bit_cast<uint32_t>(b.value);
+    }),"Native state recovery changed kept automation or published another musical edit");
+  if(kept) {
+    const auto retry=owner.commit(native,saved,music,false,[&](const auto &,bool){++publications;return false;});
+    check(retry.accepted&&!retry.changed&&publications==1,"Repair allowed completed Keep to publish twice");
+  }
   PluginChain reopened(restored,48000,true),expected(saved,48000,true);
   std::array<float,256> actualPCM,expectedPCM;actualPCM.fill(.2f);expectedPCM.fill(.2f);
   uint64_t allocations=0,frees=0,locks=0;tracker_audit_begin();

@@ -101,3 +101,42 @@ needs a separately designed saved-plugin-state recovery action which preserves
 the already-kept automation and history; do not relabel that action Discard or
 relax native ownership/input cuts. Real vendor callback behavior is not proven by
 the fixture. These are remaining parity work, not completed features.
+
+## Kept-state recovery primitive prepared between checkpoints
+
+After `f4d0fb7a4`, `NativeParameterTake::restoreSavedStateStopped` separates
+explicit recovery of a completed take from `abandonStopped`. Discard now rejects
+completed takes even for a direct native caller. Both operations share one private
+stopped state-repair implementation and its retained, whole-group adoption receipt.
+The new completed-take entry preserves the take's completion, original event
+evidence and Stop cut. It does not unretire captured input, publish automation,
+change chronological history, or implicitly release the session's take owner.
+It requires stopped audio and closed owned editors and explicitly abandons later
+native input only as part of successful whole-group replacement.
+
+`StoppedPluginRepairTests.inc` now exercises both unkept Discard and completed
+Keep against real mixed AU/VST3 hidden-state divergence. It checks refusal of the
+wrong lifecycle action, a malformed later baseline leaving all provider states
+and input evidence intact, exact unrelated provider preservation, one completed
+musical publication, no second Keep publication, retry without vendor replacement,
+and reopened fixture PCM with the host realtime audit. The visible native fixture
+also requires open-editor refusal before recovery. The setup models the actual
+recovery entry after ordinary preview cancellation has succeeded but opaque
+verification has refused; it does not claim that failed opaque preparation rolls
+back an earlier accepted cancellation.
+
+These additions are **source only**. API/native UI exposure remains the next step:
+an explicit Restore saved plugin state action for completed takes, guarded by the
+current document/revision/take, with wording that later unsaved plugin input is
+abandoned while kept automation remains. Normal Finish restoration must never
+silently choose this action. Keep existing recovery-copy access, stopped transport
+and closed-editor requirements. Windows already repairs closed isolated editor
+copies on ordinary completion, but post-Stop input still requires deliberate
+abandonment; any public recovery option must have consistent semantics on both
+platforms and strict type validation, rather than being accepted silently on one.
+Add native/API/full-session history and reopen checks before calling it delivered.
+
+At 11:29 UTC the exact `9c5c6ebb1` Mac ARM job `120379904644` was terminal
+success. Intel and Windows jobs remained live; no job was restarted. This pass
+qualifies the frozen prerequisite candidate only, not `f4d0fb7a4` or this recovery
+primitive. The next build gate remains 12:03:27 UTC pending fresh job/start checks.

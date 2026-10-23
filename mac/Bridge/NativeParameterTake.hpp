@@ -158,29 +158,29 @@ private:
       const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
     }
   }
-  bool finishStoppedDiscard(std::span<const PluginState> saved) {
-    require(awaitingDiscardCleanup(),"No adopted opaque Discard to finish");
+  bool finishStoppedStateRepair(std::span<const PluginState> saved) {
+    require(awaitingDiscardCleanup(),"No adopted plugin state repair to finish");
     // Never send an old input token to the replacement slot. Successful prefix
     // cleanup is erased; a later failure retains every remaining old backend.
     releaseInputBarriers();
-    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Opaque Discard belongs to a replaced or active host; take retained");
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Plugin state repair belongs to a replaced or active host; take retained");
     const auto open=audio_.openPluginEditors();
-    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed during Discard cleanup; take retained");
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed during plugin state cleanup; take retained");
     const auto &items=stoppedRepair_->hosted->items;
     require(items.size()==stoppedRepair_->replacementCuts.size(),"Incomplete native repair receipt");
     for(size_t n=0;n<items.size();++n) {
       require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed during repaired-provider observation; take retained");
       const auto &expected=items[n].requested;
       const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==expected.instanceID;});
-      require(baseline!=saved.end()&&*baseline==expected,"Accepted plugin state changed after opaque Discard; take retained");
+      require(baseline!=saved.end()&&*baseline==expected,"Accepted plugin state changed after native repair; take retained");
       const auto index=slot(expected.instanceID);
-      require(std::find(open.begin(),open.end(),index)==open.end(),"Close repaired plugin editors before finishing Discard");
+      require(std::find(open.begin(),open.end(),index)==open.end(),"Close repaired plugin editors before finishing state restoration");
       const auto now=audio_.pluginInputBoundary(index,mach_absolute_time());
       const auto &cut=stoppedRepair_->replacementCuts[n];
       require(now&&now->source==cut.source&&now->fence.position==cut.fence.position&&!now->fence.pending,
         "Repaired provider received new input; original take retained without consuming it");
     }
-    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed while finishing Discard; take retained");
+    require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Host changed while finishing plugin state restoration; take retained");
     return true;
   }
 public:
@@ -388,22 +388,34 @@ public:
   // the old backends/queues after adoption until native lease cleanup finishes.
   // The caller retains this owner on every failure, including cleanup retries.
   bool abandonStopped(std::span<const PluginState> saved) {
+    require(!take_->completed(),"This take is already kept; restore saved plugin state without discarding its music");
+    return repairStoppedState(saved);
+  }
+  // Explicit recovery after Keep. The caller must make abandoning later native
+  // input clear; this does not undo recorded automation or create new history.
+  // It is never selected automatically by normal Keep/restoration retries.
+  bool restoreSavedStateStopped(std::span<const PluginState> saved) {
+    require(take_->completed(),"Keep the take before restoring saved plugin state; use Discard for an unkept take");
+    return repairStoppedState(saved);
+  }
+private:
+  bool repairStoppedState(std::span<const PluginState> saved) {
     Entry entry(entering_);
-    if(awaitingDiscardCleanup())return finishStoppedDiscard(saved);
-    require(!audio_.active(),"Stop playback before explicitly discarding native input");
+    if(awaitingDiscardCleanup())return finishStoppedStateRepair(saved);
+    require(!audio_.active(),"Stop playback before replacing native plugin state");
     releaseInputBarriers();
     stoppedRepair_.reset(); // A refused preparation never became audible.
     const auto providers=take_->providers();
     const auto requireClosed=[&] {
-      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Discard belongs to a replaced or active audio host; take retained");
+      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Plugin state repair belongs to a replaced or active audio host; take retained");
       const auto open=audio_.openPluginEditors();
       for(const auto &provider:providers) {
         const auto index=slot(provider.plugin);const auto source=audio_.pluginEditSource(index);
-        require(std::find(open.begin(),open.end(),index)==open.end(),"Close every recorded plugin editor before discarding later native input");
+        require(std::find(open.begin(),open.end(),index)==open.end(),"Close every recorded plugin editor before replacing its state and abandoning later input");
         require(source.incarnation==provider.source.incarnation&&source.dropped>=provider.source.dropped,
-          "Discard belongs to another native notification provider; take retained");
+          "State repair belongs to another native notification provider; take retained");
       }
-      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Audio host changed while preparing explicit Discard");
+      require(!audio_.active()&&audio_.pluginEpoch()==hostEpoch_,"Audio host changed while preparing explicit state repair");
     };
     requireClosed();
     if(!take_->completed()&&!take_->endTime()) {
@@ -414,7 +426,7 @@ public:
     try {
       for(auto &[identity,barrier]:inputBarriers_) {
         const auto acquired=audio_.beginPluginInputBarrier(slot(identity));
-        require(acquired.has_value(),"Native input cannot be protected for explicit Discard");barrier=*acquired;
+        require(acquired.has_value(),"Native input cannot be protected for explicit state repair");barrier=*acquired;
       }
       requireClosed();
       const auto abandoned=cuts();
@@ -432,7 +444,7 @@ public:
           const auto &after=currentCuts.at(identity);
           require(before.source==after.source&&before.fence.position==after.fence.position&&
             after.fence.pending==before.fence.pending,
-            "Native input changed during explicit Discard; take retained for retry");
+            "Native input changed during explicit state repair; take retained for retry");
         }
       };
       if(!restorePreviewImpl(true)){releaseInputBarriers();return false;}
@@ -441,8 +453,8 @@ public:
       // Whole-group adoption moves the original notification queues into this
       // retained receipt. They are explicitly abandoned, never replayed or
       // consumed through a replacement provider. No musical history is added.
-      require(audio_.adoptStoppedPluginRepair(*stoppedRepair_),"Native opaque Discard became stale before adoption; take retained");
-      return finishStoppedDiscard(saved);
+      require(audio_.adoptStoppedPluginRepair(*stoppedRepair_),"Native state repair became stale before adoption; take retained");
+      return finishStoppedStateRepair(saved);
     } catch(...) {
       const auto failure=std::current_exception();releaseInputBarriers();std::rethrow_exception(failure);
     }

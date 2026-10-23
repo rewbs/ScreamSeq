@@ -620,6 +620,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
       stoppedNativeGroupRepair(saved,closedAU);
       stoppedNativeDeviceRepair(saved,closedAU);
       nativeTakeOpaqueDiscard(saved,closedAU);
+      nativeTakeOpaqueDiscard(saved,closedAU,true);
       stoppedRecordedPublication(saved);
       stoppedTakePreviewRestoration(saved,closedAU);
       nativeTakeGroupedRestoration(saved,closedAU);
@@ -920,6 +921,7 @@ int main(int argc, char **argv) { trustFixtureArguments(argc, argv);
         nativeTakeIntake(saved,true);
         nativeTakeIntake(saved,true,false);
         nativeTakeExplicitDiscard(saved,true);
+        nativeTakeOpaqueDiscard(saved,closedAU,true,true);
         PluginState auView{
             {kAudioUnitType_Effect, kAudioUnitSubType_LowPassFilter, kAudioUnitManufacturer_Apple, "Apple AULowpass"}};
         NativePlugin apple(auView, 48000);
