@@ -252,11 +252,13 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertTrue(comparison['equal'], comparison)
         self.assertNotEqual(before['automation'], after['automation'])
         from recording_render import run as render_recording
-        replay = render_recording(self.client, project, saved, evidence / 'audio-replay')
+        replay = render_recording(self.client, project, saved, evidence / 'audio-replay',
+                                  layered_instrument=1, layered_plugin=plugin)
         self.assertTrue(replay['passed'], replay)
+        self.assertTrue(replay['independentLayersQualified'], replay)
         write_json(evidence / 'recording-journey.json', dict(
             passed=True, parityComplete=False, silentNativePlayback=True,
-            foregroundVisualQualified=False, layeredPCMQualified=False,
+            foregroundVisualQualified=False, layeredPCMQualified=True,
             recordedReplayPCM=replay,
             plugin=plugin, classID=descriptor['classID'], instrument=1, midiChannel=3,
             source=project.name, saved=saved.name, beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
@@ -265,6 +267,7 @@ class PluginRecordingTests(unittest.TestCase):
                     'native VST3 parameter capture', 'Stop preserves playback', 'Keep is one Undo',
                     'Redo', 'Discard', 'opaque state and aliases retained', 'exact save/reopen preservation',
                     'recorded automation changes unsaturated PCM', 'reopened playback PCM exact',
+                    'sample and plugin each contribute with and without the other layer',
                     'resample Undo preserves source project with exactly one allocated stable identity']))
 
     def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,

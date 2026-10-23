@@ -1,7 +1,8 @@
 """Bounded actual-API PCM evidence for the deterministic F04/VST3 journey.
 
 This is a pattern-local 48 kHz render, not a device, latency or vendor capacity
-benchmark. Native layers have separate independent-stem and callback audits.
+benchmark. Optional layer comparisons use an explicitly bypassed effect-rack
+derivative; native callback allocation audits remain separate.
 """
 import array
 import base64
@@ -12,7 +13,7 @@ from native_roundtrip import write_json
 from project_tree import EvidenceError, differences, read_bytes, read_project, sha256
 
 
-def run(client, baseline, recorded, output):
+def run(client, baseline, recorded, output, *, layered_instrument=None, layered_plugin=None):
     baseline, recorded, output = Path(baseline), Path(recorded), Path(output)
     output.mkdir(exist_ok=False)
     immutable = {p: sha256(read_bytes(p)) for p in (baseline, recorded)}
@@ -106,6 +107,78 @@ def run(client, baseline, recorded, output):
                 'Saved parameter recording did not change audible replay')
         require(after_pcm == reopened_pcm, 'Reopening changed the exact recorded replay PCM')
         report['reopenedPCMExact'] = True
+        if layered_instrument is not None or layered_plugin is not None:
+            require(isinstance(layered_instrument, int) and not isinstance(layered_instrument, bool) and
+                    layered_instrument > 0 and isinstance(layered_plugin, str) and layered_plugin,
+                    'Layer evidence needs an explicit instrument slot and stable plugin identity')
+            write('document.open', path=str(recorded), discard=True)
+            instrument = read('instrument.get', instrument=layered_instrument)
+            assignment = read('plugin.instruments.get', plugin=layered_plugin)
+            opaque = read('plugin.state.get', plugin=layered_plugin)
+            require(any(instrument['mapping']), 'Layer evidence requires an existing sample keymap')
+            require(len(assignment['assignments']) == 1 and
+                    assignment['assignments'][0]['instrument'] == layered_instrument,
+                    'Layer evidence requires exactly one explicit plugin assignment')
+            # This deterministic VST3 fixture emits DC while notes are held.
+            # F04 deliberately contains DC removal and a gate. Their suppression
+            # of an isolated DC stem is not proof of missing instrument input.
+            # Keep the original processed recording/reopen check above; isolate
+            # source contributions in a separately saved, explicitly bypassed
+            # rack derivative. Exact typed comparison permits only those flags.
+            bypassed = []
+            for entry in recorded_tree['plugins']:
+                if not entry['isInstrument'] and not entry['bypass']:
+                    write('plugin.bypass', plugin=entry['instanceID'], bypass=True)
+                    bypassed.append(entry['instanceID'])
+            layer_source = output / 'layer-source.screamseq'
+            write('document.save', path=str(layer_source), overwrite=False)
+            expected = dict(recorded_tree, plugins=[dict(p, bypass=True) if p['instanceID'] in bypassed else p
+                                                   for p in recorded_tree['plugins']])
+            report['layerSource'] = dict(file=layer_source.name, bypassedPlugins=bypassed,
+                reason='Constant-DC fixture source isolation before downstream DC removal and gating',
+                preservation=differences(expected, read_project(layer_source)))
+            require(report['layerSource']['preservation']['equal'],
+                    'Layer-source preparation changed more than the declared effect bypass flags')
+            immutable[layer_source] = sha256(read_bytes(layer_source))
+            report['sourceSHA256'][layer_source.name] = immutable[layer_source]
+            both_values, _ = render(layer_source, 'both-layers')
+            layers = {'both-layers': both_values}
+            # Compare four versions of the same song. Other tracks, routing and
+            # recorded automation stay intact. Do not assume a linear sum through
+            # the common graph or count saturated PCM as audible contribution.
+            for name, sample, plugin in (('sample-layer', True, False),
+                                         ('plugin-layer', False, True),
+                                         ('neither-layer', False, False)):
+                write('document.open', path=str(layer_source), discard=True)
+                if not sample:
+                    write('instrument.patch', instrument=layered_instrument,
+                          values=dict(mapping=[0] * len(instrument['mapping'])))
+                if not plugin:
+                    write('instrument.plugin.set', instrument=layered_instrument, plugin='')
+                expected_instrument = dict(instrument, mapping=instrument['mapping'] if sample else
+                                           [0] * len(instrument['mapping']))
+                require(read('instrument.get', instrument=layered_instrument) == expected_instrument,
+                        'Layer isolation changed unrelated instrument settings')
+                require(read('plugin.state.get', plugin=layered_plugin) == opaque,
+                        'Layer isolation changed opaque plugin state')
+                path = output / (name + '.screamseq')
+                write('document.save', path=str(path), overwrite=False)
+                immutable[path] = sha256(read_bytes(path))
+                report['sourceSHA256'][path.name] = immutable[path]
+                layers[name], _ = render(path, name)
+            comparisons = []
+            report['layerContributions'] = comparisons
+            for present, absent in (('both-layers', 'sample-layer'), ('both-layers', 'plugin-layer'),
+                                    ('sample-layer', 'neither-layer'), ('plugin-layer', 'neither-layer')):
+                a, b = layers[present], layers[absent]
+                require(len(a) == len(b), 'Removing one layer changed render duration')
+                delta = [abs(x - y) for x, y in zip(a, b) if abs(x) < 32767 and abs(y) < 32767]
+                result = dict(present=present, absent=absent, peak=max(delta, default=0),
+                              changedUnsaturatedSamples=sum(value > 2 for value in delta))
+                comparisons.append(result)
+                require(result['changedUnsaturatedSamples'] >= 64,
+                        present + ' versus ' + absent + ': missing audible layer contribution')
+            report['independentLayersQualified'] = True
         write('document.open', path=str(recorded), discard=True)
         report['passed'] = True
         return report

@@ -16,6 +16,7 @@ void applicationMenuBar(){
     {
         RestoreFixture fixture;auto &app=*fixture.app;
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+        app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
         const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
         SendMessageW(GetDlgItem(owner,9201),BM_CLICK,0,0); // Hit page owns list focus.
         const auto list=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::list);
@@ -46,6 +47,10 @@ void applicationMenuBar(){
     {
         RestoreFixture fixture;auto &app=*fixture.app;saveDepartureFixture(fixture);
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+        // The fixture root is sized in pixels. At 200% DPI this is a compact
+        // tabbed workspace: restoring a placement does not select its tab.
+        // Enter the actual editor before sending text or capturing File Save.
+        app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
         const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
         const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
         rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
@@ -67,6 +72,7 @@ void applicationMenuBar(){
     {
         RestoreFixture fixture;auto &app=*fixture.app;
         app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+        app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
         const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
         const auto beforeNotes=app.documentOperation("pattern.notes.get",{{"pattern",0}});
         // pattern.get is served by the API snapshot adapter, not the worker's

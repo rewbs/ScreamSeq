@@ -503,3 +503,29 @@ time5807.2 microseconds. Realtime audit and sustained presentation qualification
 are both false. This is neither a clean performance pass nor temporal flicker
 qualification. The musician's PID39856 and audio defaults were preserved.
 No package or merge was performed from this failed checkpoint.
+
+## Subsequent CI and compact menu-fixture preparation
+
+The exact dfe jobs have finished. Mac ARM120308061400 and Intel120308061761
+passed134 CTests each, all37 native interface groups and their socket/typed
+gates. Windows120308061320 compiled and passed158 portable/worker registrations
+and all50 native editor groups, including the menu Save fixture at96percent DPI.
+Its112-case integration step failed with22 failure records and one skip;
+the four new precise-live cases exited during audio startup, before their
+assertions, and the retained diagnostics show no audio endpoint. These remain
+failures, not qualified playback. Full logs and hashes are retained in
+`precise-live-followup/completed-ci-logs.json`.
+
+The menu fixture's root is1400x1000 physical pixels. At200percent DPI its
+workspace is compact, and `layoutFor("notes")` preserves the Pattern compact
+selection. Restoring a panel location does not reveal its compact tab. The
+pending test correction enters Notes using the production `workspaceEditorRequest`
+before native input in the three precise menu cases. Every focus, text selection,
+raw value, queued-edit, saved-dirty and music assertion remains. This setup
+correction still requires rebuilt confirmation; do not erase the previous failure.
+
+The independent layered composing PCM question now has additional bounded
+evidence without a build; see [the audio report](LAYERED-COMPOSING-AUDIO-2026-10-23.md).
+The next keyboard checkpoint retains two native groups and seven actual-app
+cases. Its rendering inputs are unchanged, so the new offline layer evidence
+does not need another render merely because the shortcut dispatcher is rebuilt.
