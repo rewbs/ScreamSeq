@@ -18,6 +18,14 @@ existing Activity composing/history/save app journey. Reuse unaffected3408
 checks. No build before23:56:23UTC or while preceding CI is live; inspect later
 actual starts. Full source/test details are in LIVE-PARAMETER-RELEASE.
 
+The same batch now includes recording review paging: bounded page intent survives
+pumped/busy reads; failures restore the old offset/total and selected details;
+Ctrl+Page Up/Down navigates pages. Native regressions cover failure/keyboard/
+stale/Close paths without musical writes. The full composing journey now captures
+144 original slider inputs and checks both native review pages against the exact
+API archive before Keep/history/reopen. The pending local gate is therefore two
+native groups plus **two app journeys**, not the earlier search-only one case.
+
 **23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
 7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
 Fresh Computer Use confirmed precise double-click/Backspace, automatic velocity,

@@ -366,6 +366,53 @@ void applicationParameterRecordingReview() {
       tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
       ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
       "Failed target page read relabelled old input or discarded selected details/focus");
+    // A long take crosses native review pages. Polls may pump these clicks just
+    // like target selection; failed reads must retain the displayed page and
+    // its exact original input, including text selected for copying.
+    SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
+    const auto pageBefore=tool.snapshot();
+    for(const bool eventPage:{false,true}){
+      if(eventPage)duringPageRead=[] {throw std::runtime_error("Owned next-page event read failure");};
+      else duringRead=[] {throw std::runtime_error("Owned next-page summary failure");};
+      click(9730);DWORD first=0,last=0;SendMessageW(control(9739),EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("total")==130&&
+        tool.snapshot().at("events")==pageBefore.at("events")&&tool.snapshot().at("inputDetails")==pageBefore.at("inputDetails")&&
+        ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9739)&&first==2&&last==9&&
+        !IsWindowEnabled(control(9729))&&IsWindowEnabled(control(9730)),
+        "Failed recording page navigation advanced metadata, changed selected input/caret or disabled the retry direction");
+    }
+    duringRead=[&]{click(9730);restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset")==128,
+      "Next page reentered summary polling or lost its bounded destination");};
+    SendMessageW(window,WM_TIMER,7,0);available=false;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset")==128,
+      "Recording page navigation bypassed a busy document owner");available=true;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==128&&tool.snapshot().at("events").size()==2&&
+      tool.snapshot().at("queuedTarget").is_null()&&tool.snapshot().at("target")==gainTarget&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254741121")!=std::string::npos&&
+      GetFocus()==control(9739)&&IsWindowEnabled(control(9729))&&!IsWindowEnabled(control(9730)),
+      "Deferred next page lost its original timestamps, target, focus or page boundary");
+    click(9730);restoreCheck(tool.snapshot().at("offset")==128&&tool.snapshot().at("events").size()==2,
+      "Next at the final page selected an empty page");
+    {
+      struct RestoreKeys{BYTE state[256]{};RestoreKeys(){restoreCheck(GetKeyboardState(state),"Read private page keyboard state");}~RestoreKeys(){SetKeyboardState(state);}} restore;
+      BYTE ctrl[256]{};std::copy(std::begin(restore.state),std::end(restore.state),std::begin(ctrl));ctrl[VK_CONTROL]|=0x80;
+      restoreCheck(SetKeyboardState(ctrl),"Set private Ctrl modifier");
+      SendMessageW(window,WM_KEYDOWN,VK_PRIOR,0);restoreCheck(tool.snapshot().at("offset")==0,"Ctrl+Page Up did not review previous inputs");
+      SendMessageW(window,WM_KEYDOWN,VK_NEXT,0);restoreCheck(tool.snapshot().at("offset")==128,"Ctrl+Page Down did not review next inputs");
+    }
+    duringPageRead=[&]{click(9729);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("events").size()==128,
+      "Previous page arriving during the event read was lost");
+    duringRead=[&]{click(9730);click(9730);click(9729);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null(),
+      "Rapid review page clicks did not preserve their bounded latest destination");
+    available=false;click(9730);contextRevision="page-navigation-stale";available=true;SendMessageW(window,WM_TIMER,9,0);contextRevision.clear();
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null(),
+      "Page navigation crossed its captured revision");
+    duringRead=[&]{click(9730);click(9727);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(!tool.visible()&&tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null()&&
+      writes.size()==beforeTargetNavigation&&songState(app)==music,"Closed review adopted a pending page or page navigation changed music");
+    tool.show();SetFocus(control(9728));
     duringRead=[&]{chooseTarget(2);chooseTarget(0);chooseTarget(2);
       restoreCheck(tool.snapshot().at("pending")==true&&tool.snapshot().at("target")==gainTarget&&
         SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,

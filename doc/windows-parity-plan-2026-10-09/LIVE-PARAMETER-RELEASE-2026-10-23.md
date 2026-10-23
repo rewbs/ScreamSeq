@@ -1307,3 +1307,40 @@ text Backspace, Ctrl+F, Tab/Shift+Tab, explicit selection and retained observati
 while playback runs. Floating helper limitations remain explicit; native tests
 alone do not establish visible keyboard continuity. Pending recording foreground
 checks and dense audio investigation remain required before release/merge.
+
+### Recording review page navigation continuation (source only)
+
+Source inspection found the recording window's page buttons still lost clicks
+during pumped reads, unlike its recently corrected target selector. Direct
+Next/Previous also assigned the requested offset before a read; failure could
+leave old inputs labelled by a new offset and enable the wrong page direction.
+The existing guarded navigation record now includes its bounded page offset.
+Clicks during summary/event reads or another owner's busy operation retain the
+latest destination without reentry. Explicit page navigation refers to the
+currently displayed stable target; a subsequent target choice supersedes it.
+Take/document/revision changes, failed reads and Close cancel the queued read.
+Failed direct navigation restores the previous offset/total along with the
+previous target, selected original input and details/caret. Next on the final
+page stays there. Ctrl+Page Up/Down and accessible button names expose the native
+page controls from the keyboard. Keep/Discard/input delivery semantics are
+unchanged; no musical write is queued by paging.
+
+The existing workspace-plugin-search fixture now checks both summary and event
+read failures, exact old page/details/selection/caret, busy deferral, original
+timestamps on page2, final-page bounds, forward/reverse keyboard paging,
+message-pumped Previous, rapid bounded Next/Previous, stale revision and Close.
+All navigation must preserve exact song state and write count. The existing
+full F04 composing/recording app journey now uses144 original back-and-forth
+Balance slider inputs, crossing the128-row review page boundary. It compares
+both native review pages with the complete API archive, including original
+timestamps/values, before the existing strict Keep/Undo/Redo, post-Keep editing,
+Discard and exact unrelated-project save/reopen checks. The occupied Gain
+refusal remains mandatory. Queue limits and assertions are not relaxed.
+
+This joins the same unexecuted `activity-search` checkpoint, now **two native
+groups and two app journeys** (Activity and complete composing/recording).
+Python syntax and source whitespace checks passed; no compilation or runtime
+test has yet run. Fresh foreground review must include next/previous pages and
+Ctrl+Page Up/Down alongside search/retained focus and outstanding recording
+navigation. The23:56:23UTC lower bound, terminal preceding CI and later-start
+checks still apply. Source changes do not inherit3408's functional pass.

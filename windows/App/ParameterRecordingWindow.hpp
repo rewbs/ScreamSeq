@@ -38,7 +38,7 @@ private:
   Json keptTarget_,keepCandidate_;
   struct QueuedAction {std::string document,revision,take,method;Json params,lossEvidence,navigationTarget;bool capturing,completed;};
   std::optional<QueuedAction> queuedAction_;
-  struct QueuedTarget {std::string document,revision,take,key;};
+  struct QueuedTarget {std::string document,revision,take,key;size_t offset=0;};
   std::optional<QueuedTarget> queuedTarget_;
   bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
@@ -134,9 +134,10 @@ private:
     NativeInputGate::present(controls_.at(target),CB_SETCURSEL,selected,0);
   }
   void cancelTargetSelection(){queuedTarget_.reset();KillTimer(window_,9);}
-  void changeTarget(std::string key) {
+  void changeTarget(std::string key,size_t offset=0) {
     const auto previousKey=targetKey_;const auto previousOffset=offset_;const auto previousChosen=targetChosen_;
-    targetChosen_=true;targetKey_=std::move(key);offset_=0;
+    const auto previousTotal=total_;
+    targetChosen_=true;targetKey_=std::move(key);offset_=offset;
     try{refresh();presentTargetSelection();}
     catch(...){
       // Failed reads retain the old event page. If its take/catalogue is still
@@ -144,7 +145,7 @@ private:
       // belonging to the attempted target or reset their selected row/caret.
       if(displayedTake_==take()&&displayedTarget_==previousKey&&displayedOffset_==previousOffset&&
          (previousKey.empty()||std::any_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==previousKey;}))){
-        targetKey_=previousKey;offset_=previousOffset;targetChosen_=previousChosen;presentTargetSelection();
+        targetKey_=previousKey;offset_=previousOffset;total_=previousTotal;targetChosen_=previousChosen;presentTargetSelection();
       }
       throw;
     }
@@ -164,6 +165,22 @@ private:
     }
     cancelTargetSelection();changeTarget(key);
   }
+  void selectPage(int id) {
+    if(queuedAction_)return;
+    const auto context=callbacks_.context();
+    const auto base=queuedTarget_&&queuedTarget_->key==targetKey_&&queuedTarget_->take==take()&&
+      context==std::pair(queuedTarget_->document,queuedTarget_->revision)?queuedTarget_->offset:offset_;
+    const auto last=total_?((total_-1)/pageSize)*pageSize:0;
+    const auto wanted=id==previous?(base>=pageSize?base-pageSize:0):base>=last?last:std::min(last,base+pageSize);
+    if(pending_||(callbacks_.available&&!callbacks_.available())){
+      // Paging is relative to the displayed target, not a different selector
+      // choice which has not loaded yet. Multiple clicks retain their bounded
+      // destination without reentering a read or queuing any musical write.
+      if(refreshing_||!pending_){queuedTarget_=QueuedTarget{document_,context.second,take(),targetKey_,wanted};SetTimer(window_,9,20,nullptr);}
+      return;
+    }
+    cancelTargetSelection();if(wanted!=offset_)changeTarget(targetKey_,wanted);
+  }
   void drainTargetSelection() {
     if(pending_||!queuedTarget_)return;
     auto choice=std::move(*queuedTarget_);queuedTarget_.reset();requireContext();
@@ -171,7 +188,7 @@ private:
     if(callbacks_.context()!=std::pair(choice.document,choice.revision)||take()!=choice.take||
        (!choice.key.empty()&&std::none_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==choice.key;})))
       throw std::runtime_error("Song or recording target changed during refresh; choose the input target again");
-    changeTarget(std::move(choice.key));
+    changeTarget(std::move(choice.key),choice.offset);
   }
   std::wstring cell(size_t row,unsigned column)const {
     if(row>=rows_.size())return {};const auto &value=rows_[row];
@@ -347,6 +364,7 @@ private:
     if(setting_)return;
     if(id==close&&notification==BN_CLICKED){hide();return;}
     if(id==target&&notification==CBN_SELCHANGE){selectTarget();return;}
+    if((id==previous||id==next)&&notification==BN_CLICKED){selectPage(id);return;}
     if(pending_){
       if(refreshing_&&notification==BN_CLICKED&&(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved))queueAction(id);
       return;
@@ -368,12 +386,12 @@ private:
         // its matching completion can be reconciled; never enable a repeat.
         if(returned){rememberKept(*returned);completion_.finish();}set(statusLabel,wide(error_));layout();}return;
     }
-    if(id==previous||id==next){offset_=id==previous?(offset_>=pageSize?offset_-pageSize:0):std::min(total_,offset_+pageSize);refresh();return;}
     if(id==saveCopy){pending_=true;try{callbacks_.saveRecovery();pending_=false;error_="Recovery copy saved";refresh();}catch(...){pending_=false;throw;}return;}
     if(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved){queueAction(id);drainAction();}
   }
   bool key(WPARAM key,bool ctrl,bool)override {
     if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(review,BN_CLICKED);return true;}
+    if(ctrl&&(key==VK_PRIOR||key==VK_NEXT)){action(key==VK_PRIOR?previous:next,BN_CLICKED);return true;}
     if(ctrl&&key=='A'&&GetFocus()==controls_.at(inputDetails)){NativeInputGate::present(controls_.at(inputDetails),EM_SETSEL,0,-1);return true;}
     if(key==VK_RETURN){wchar_t kind[20]{};GetClassNameW(GetFocus(),kind,20);if(!_wcsicmp(kind,L"Button")){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}return false;
   }
@@ -460,6 +478,7 @@ public:
     add(acknowledge,L"BUTTON",L"Keep accepted points despite reported input loss",BS_AUTOCHECKBOX);
     for(int id:{heading,summary,help,page,statusLabel})label(id,id==heading?L"PLUGIN AUTOMATION RECORDING":L"");
     accessibleName(scope,L"Plugins to record");accessibleName(target,L"Recording input target");accessibleName(acknowledge,L"Keep accepted points despite reported input loss");
+    accessibleName(previous,L"Previous recorded input page (Ctrl+Page Up)");accessibleName(next,L"Next recorded input page (Ctrl+Page Down)");
     add(inputDetails,L"EDIT",L"",ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL);
     SendMessageW(controls_.at(inputDetails),EM_SETLIMITTEXT,262144,0);
     accessibleName(inputDetails,L"Selected recording input details, read only");
@@ -479,6 +498,7 @@ public:
   void hide()override{KillTimer(window_,7);cancelTargetSelection();NativeToolWindow::hide();}
   Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"queuedAction",queuedAction_?Json(queuedAction_->method):Json()},{"take",state_},{"delivery",delivery_},
     {"queuedTarget",queuedTarget_?Json(queuedTarget_->key):Json()},
+    {"queuedOffset",queuedTarget_?Json(queuedTarget_->offset):Json()},
     {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"inputDetails",utf8(field(inputDetails))},
     {"keptTarget",keptTarget_},{"canOpenKept",canOpenKept()},{"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
 };

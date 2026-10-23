@@ -191,7 +191,8 @@ class PluginRecordingTests(unittest.TestCase):
             foregroundVisualQualified=False, source=project.name, saved=saved.name,
             beforeTypedSHA256=digest(before), afterTypedSHA256=digest(after),
             onlyRecordedAutomationChanged=comparison,
-            checks=['six-domain composing history', 'occupied Gain refusal preserves music', 'native Balance capture and 25 original slider inputs',
+            checks=['six-domain composing history', 'occupied Gain refusal preserves music', 'native Balance capture and 144 original slider inputs',
+                    'native review pagination preserves exact original input timestamps and values',
                     'Stop preserves playback', 'Keep is one Undo', 'Redo',
                     'Discard preserves preceding music', 'save/reopen',
                     'exact unrelated project preservation']))
@@ -370,7 +371,10 @@ class PluginRecordingTests(unittest.TestCase):
             # trackbar notifications without waiting for the document worker
             # after each input. Every original event must survive that backlog.
             count_before = captured['eventCount']
-            for position in range(2000, 8001, 250):
+            # Three back-and-forth sweeps cross the review's128-input boundary
+            # without repeating a turnaround value or changing queue budgets.
+            positions = (list(range(2000, 8001, 250)) + list(range(7750, 2000, -250))) * 3
+            for position in positions:
                 self.desktop.send(slider, 0x405, 1, position)  # TBM_SETPOS
                 self.desktop.send(parameters, 0x114, 5 | (position << 16), slider)  # TB_THUMBTRACK
                 sweep_values.append(-100 + position / 50)
@@ -403,7 +407,7 @@ class PluginRecordingTests(unittest.TestCase):
             self.trace_recording_clock('second-input', plugin, parameter)
         self.assertEqual(self.doc()['revision'], revision, 'Recording input must not add manual edit history')
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
-        events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
+        events = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter, limit=512)
         inspected = self.read('automation.recording.events', take=take['take'], plugin=plugin,
                               parameter=parameter, limit=16, includeTiming=True)
         self.assertEqual(inspected['total'], events['total'])
@@ -433,9 +437,25 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertIsNotNone(stopped['endTime'])
         if sweep_values:
             self.trace_recording_clock('stopped-slider-sweep', plugin, parameter)
-            page = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter)
+            page = self.read('automation.recording.events', take=take['take'], plugin=plugin, parameter=parameter, limit=512)
             self.assertTrue(all(e['frame'] is not None for e in page['events']), page)
             self.assertTrue(all(t['unmapped'] == 0 and t['overflow'] == 0 for t in stopped['targets']), stopped)
+            self.assertEqual(page['total'], len(page['events']))
+            self.assertGreater(page['total'], 128)
+            review_state = lambda: self.read('workspace.get')['parameterRecording']
+            first_page = self.wait_for(review_state, lambda s: not s['pending'] and s['offset'] == 0
+                                       and len(s['events']) == 128)
+            self.assertEqual(first_page['events'], page['events'][:128])
+            self.recording_button(9730)
+            second_page = self.wait_for(review_state, lambda s: not s['pending'] and s['offset'] == 128)
+            self.assertEqual(second_page['events'], page['events'][128:])
+            self.assertEqual(second_page['target'], first_page['target'])
+            self.assertIn('Original host time: ' + page['events'][128]['timestamp'], second_page['inputDetails'])
+            self.recording_button(9729)
+            returned_page = self.wait_for(review_state, lambda s: not s['pending'] and s['offset'] == 0)
+            self.assertEqual(returned_page['events'], first_page['events'])
+            self.assertEqual(returned_page['target'], first_page['target'])
+            self.assertEqual(self.doc()['revision'], revision, 'Review pagination must not change musical history')
         self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take stopped / Keep or Discard to finish')
         self.assertTrue(self.read('transport.get')['playing'])
         before_refusals = self.doc()
