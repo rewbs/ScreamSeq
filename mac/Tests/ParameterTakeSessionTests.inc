@@ -88,11 +88,32 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   check([session captureParameterTake:identities[1] parameter:7 value:.6 timestamp:secondTime],"Capture second native control");
   [NSThread sleepForTimeInterval:.03];
   NSDictionary *recovering=tree();const auto live=[session parameterTakeReview];
-  check(!live.endTime&&live.targets.size()==2&&live.targets[0].events.size()==1&&live.targets[1].events.size()==1&&
+  const bool recoveryIntact=!live.endTime&&live.targets.size()==2&&live.targets[0].events.size()==1&&live.targets[1].events.size()==1&&
     live.targets[0].events[0].hostTime==firstTime&&live.targets[1].events[0].hostTime==secondTime&&
     live.targets[0].events[0].frame&&live.targets[1].events[0].frame&&
-    *live.targets[0].events[0].frame<*live.targets[1].events[0].frame,
-    "Real-session recovery lost original-time input or sealed the live take");
+    *live.targets[0].events[0].frame<*live.targets[1].events[0].frame;
+  if(!recoveryIntact) {
+    // Keep the original strict gate. An aggregate failure does not establish
+    // whether input was lost, timing was absent, or ownership changed. Emit the
+    // already captured review; do not poll, retry, extend sleeps or remap time.
+    const auto stamp=[](std::optional<uint64_t> value){return value?std::to_string(*value):std::string("none");};
+    std::cerr<<"RECOVERY_DIAGNOSTIC start="<<live.startTime<<" end="<<stamp(live.endTime)
+      <<" stoppedEnd="<<stamp(live.stoppedEndTime)<<" epoch="<<live.playbackEpoch
+      <<" completed="<<live.completed<<" failure="<<int(live.failure)<<" rejected="<<live.rejected
+      <<" expectedTimes="<<firstTime<<","<<secondTime<<" targets="<<live.targets.size()<<"\n";
+    for(const auto &source:live.sources)std::cerr<<"RECOVERY_SOURCE plugin="<<source.initial.plugin
+      <<" incarnation="<<source.initial.source.incarnation<<" initialDropped="<<source.initial.source.dropped
+      <<" dropped="<<source.dropped<<" drained="<<source.drained<<"\n";
+    for(const auto &target:live.targets) {
+      std::cerr<<"RECOVERY_TARGET plugin="<<target.key.plugin<<" parameter="<<target.key.parameter
+        <<" events="<<target.events.size()<<" sourceLoss="<<target.loss.source
+        <<" overflow="<<target.loss.overflow<<" unmapped="<<target.loss.unmapped<<"\n";
+      for(size_t i=0;i<std::min(size_t(4),target.events.size());++i){const auto &event=target.events[i];
+        std::cerr<<"RECOVERY_INPUT index="<<i<<" originalTime="<<event.hostTime
+          <<" frame="<<stamp(event.frame)<<" value="<<event.value<<"\n";}
+    }
+  }
+  check(recoveryIntact,"Real-session recovery lost original-time input or sealed the live take");
   check([recovering[@"plugins"] isEqual:baseline[@"plugins"]]&&
     [recovering[@"screamseqPluginGestureRecovery"] count]==1&&session.playing,
     "Recovery baked preview into plugin state, lost evidence or stopped playback");

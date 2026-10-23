@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**23:39UTC terminal3408 CI:** Mac ARM fully passed. Intel compiled, passed134
+CTests/interface/socket/typed gates, but failed the real-session recovery input/
+timestamp/frame/ownership assertion. Its aggregate message does not establish
+the failed condition. Failure-only captured-review diagnostics are added to the
+next Mac test; the assertion, timing and production behavior are unchanged.
+Windows compiled and passed159 portable/worker plus53 native groups;117 app
+cases retain23 failures/one error/one optional skip, with21 distinct failed
+cases. Routing startup evidence reports no audio devices. No CI rerun, skip,
+relaxed assertion, package or merge. Terminal log hashes and classification are
+recorded in LIVE-PARAMETER-RELEASE and `recorded-owner-admission` receipts.
+
 **Next source batch (unbuilt):** Activity now has native parameter search by
 name/unit/stable ID, Ctrl+F and explicit stable selection. Filtering retains the
 current observation and raw recorded draft, including busy/pumped reads; the

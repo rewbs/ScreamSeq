@@ -1387,3 +1387,40 @@ save/reopen checks. The two-group/two-app checkpoint scope is unchanged, with
 fresh foreground selection immediately after typing added to the UI checklist.
 Python syntax, UTF-8 decoding and whitespace checks passed. No new build or
 runtime test has run.
+
+### Terminal3408 CI evidence and Intel recovery diagnosis
+
+At23:39UTC both preceding runs were terminal. Mac run40036686704 ARM
+job120697795725 passed completely, including134 CTests, native interface,
+socket/typed contracts and the actual BlackHole512 session-take lifecycle.
+Intel job120697796050 compiled and passed134 CTests, the full37-group interface
+harness and socket/typed contracts, but failed the real-session native-control
+test with `Real-session recovery lost original-time input or sealed the live
+take`. The compound assertion checks two original inputs, their timestamps,
+mapped ordered frames and unsealed ownership. The existing log does not identify
+which condition failed. Do not infer a particular clock defect, call this a
+flaky pass, or substitute the earlier successful Intel result.
+
+`mac/Tests/ParameterTakeSessionTests.inc` now emits bounded failure-only evidence
+from that already captured review: start/end/epoch, failure/rejected counts,
+provider incarnation/loss, target counts and original timestamps/mapped frames.
+The exact assertion and its30ms timing remain unchanged. There is no extra poll,
+retry, wait or production-code change. These diagnostics require the next Mac
+build; the local Windows native/app selection stays two groups/two journeys.
+
+Windows run40036686763 job120697795826 compiled and passed159 portable/worker
+tests and53 native groups. Its117 app cases failed23 assertions plus one error,
+with one optional skip:21 distinct cases, including three additional
+missing-window teardown failures. Routing startup diagnostics directly report
+`devices: []`; other live startup failures do not independently prove their
+root cause. The layered composing case received `Session closed before
+execution` during startup. The gate remains failed. No missing endpoint is
+replaced with a fabricated clock or skipped check.
+
+Exact terminal job logs and hashes are retained in
+`recorded-owner-admission/completed-ci.json`; Windows case classification is in
+`windows-ci-classification.json` in that same evidence directory. Windows log
+SHA256 is`03b5f2bc3ac89c28a1d81e7efc03aed7b725a7fa1d97568d44468e7178722a34`;
+Intel log SHA256 is`0657720b1ac3c228aa212b45b0eebcd96c650944d5075ecdd0ba60a6147e0c70`.
+No jobs were restarted. The earliest next checkpoint remains23:56:23UTC,
+subject to a fresh later-start inspection. No package or merge is qualified.
