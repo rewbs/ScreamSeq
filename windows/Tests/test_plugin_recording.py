@@ -448,10 +448,18 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertEqual((lane['plugin'], lane['parameter']), (plugin, parameter))
         self.assertGreater(lane['pointCount'], 0)
         self.assertEqual(self.doc(), before_navigation, 'Opening the kept lane must not change music/history')
-        self.assertEqual(self.read('context.get'), before_cursor, 'Opening the kept lane moved the pattern cursor')
+        after_cursor = self.read('context.get')
+        # context.get includes live transport telemetry alongside the detached
+        # editing cursor. Playback must advance while that editing state stays.
+        self.assertEqual({k: v for k, v in after_cursor.items() if k != 'playback'},
+                         {k: v for k, v in before_cursor.items() if k != 'playback'},
+                         'Opening the kept lane changed the editing context')
+        self.assertTrue(before_cursor['playback']['playing'] and after_cursor['playback']['playing'])
         after_transport = self.read('transport.get')
         self.assertTrue(after_transport['playing'])
         self.assertEqual(after_transport['playbackEpoch'], before_transport['playbackEpoch'])
+        self.assertGreater(after_transport['frames'], before_transport['frames'])
+        self.assertEqual(after_transport['region'], before_transport['region'])
         points = self.read('automation.get')
         self.assertGreater(points['total'], points_before['total'])
         self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
