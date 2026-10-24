@@ -437,8 +437,12 @@ public:
     // or replace a retained preview, raw field, bank or formula draft.
     if(!visible()||retainedDraft()||automaticEdit_)return;
     const auto now=context_();if(now.busy||now.document!=captured_.document||current())return;
+    const auto focus=GetFocus();const auto id=GetDlgCtrlID(focus);
+    const bool textField=IsChild(window_,focus)&&(id==pointRow||id==pointValue||id==formula||id==search);
+    DWORD first=0,last=0;if(textField)SendMessageW(focus,EM_GETSEL,WPARAM(&first),LPARAM(&last));
     try{load(false);}
     catch(const std::exception &e){error(e);} // The history operation already succeeded.
+    if(textField&&GetFocus()==focus)SendMessageW(focus,EM_SETSEL,first,last);
   }
   void hide()override{
     cancelDrag();

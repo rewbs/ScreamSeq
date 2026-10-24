@@ -167,9 +167,34 @@ void applicationAutomaticEdits(){
       SendMessageW(window,WM_KEYDOWN,key,0);settle(window);
       restoreCheck(GetFocus()==window&&lane.snapshot().at("points")==expected&&!lane.snapshot().at("dirty").get<bool>(),
         "Song automation keyboard deletion did not save the selected point with canvas focus retained");
-      app.edit("history.undo",{{"domain","all"}});press(window,4615);
-      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Song automation point deletion did not Undo exactly once");
+      const auto beforeHistory=lane.snapshot();app.edit("history.undo",{{"domain","all"}});
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline&&lane.snapshot().at("points")==oldPoints&&
+        !lane.snapshot().at("stale").get<bool>()&&GetFocus()==window&&
+        lane.snapshot().at("startSeconds")==beforeHistory.at("startSeconds")&&
+        lane.snapshot().at("endSeconds")==beforeHistory.at("endSeconds"),
+        "Song automation Undo lost exact music, left the visible lane stale or changed canvas focus/viewport");
       SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    }
+    {
+      const auto field=GetDlgItem(window,4609),index=GetDlgItem(window,4605);
+      SetWindowTextW(index,L"0");press(window,4626);SetFocus(field);SetWindowTextW(field,L"-9");lane.flushForProjectSave();
+      const auto edited=app.documentOperation("automation.get",Json::object());const auto beforeHistory=lane.snapshot();
+      SendMessageW(field,EM_SETSEL,1,2);
+      app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision}});
+      DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline&&lane.snapshot().at("points")==late&&
+        !lane.snapshot().at("stale").get<bool>()&&lane.snapshot().at("selectedPoint")==0&&
+        GetFocus()==field&&first==1&&last==2&&lane.snapshot().at("startSeconds")==beforeHistory.at("startSeconds")&&
+        lane.snapshot().at("endSeconds")==beforeHistory.at("endSeconds"),
+        "API history did not update the clean recorded lane with exact target, selection, viewport and field caret");
+      SetWindowTextW(field,L"unfinished");SendMessageW(field,EM_SETSEL,2,5);
+      app.documentOperation("history.redo",{{"expectedRevision",app.view->session.revision}});
+      SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(app.documentOperation("automation.get",Json::object())==edited&&lane.snapshot().at("fieldDraft").get<bool>()&&
+        lane.snapshot().at("stale").get<bool>()&&restoreText(field)==L"unfinished"&&GetFocus()==field&&first==2&&last==5,
+        "External Redo discarded retained raw recorded input or its caret");
+      press(window,4615);app.edit("history.undo",{{"domain","all"}});
+      restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Recorded history presentation added a musical Undo entry");
     }
     {
       // Moving to another point immediately after typing must finish the old

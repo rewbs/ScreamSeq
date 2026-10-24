@@ -2140,3 +2140,29 @@ canvas deletion scenarios and live Save journey assert exact unchanged values
 and revision for stationary/jitter selection before editing. Actual drags retain
 the existing live render/cancel/release checks. Seven native groups/seven app
 cases remain; no extra full suite or build is introduced.
+
+### Shared history in the recorded-song editor (source continuation)
+
+A new strict assertion in the existing live song-automation journey failed
+against0f5 in6.637s, without rebuilding: API Undo restored canonical-18 while
+the visible lane still displayed-12. The failed log/hash is retained in
+`activity-refresh-history/absolute-history-baseline.*`. The first invocation
+was rejected before launch for a relative log path; only the corrected absolute
+log invocation executed. This is diagnostic evidence, not a green candidate.
+
+Song automation now receives the same post-history clean-editor refresh as
+pattern automation. Its existing loader retains stable plugin/parameter/frame
+identity and viewport. It restores a field disabled during its bounded read
+only if focus remains empty and the same owner is active; history also preserves
+the field's selected text range. An in-flight editor operation, drag, automatic
+edit or raw draft prevents refresh. Native editor Undo/Redo retains its own
+completion path, so the shared notification does not read twice while pending.
+
+The native automatic-edit group now checks exact displayed points, viewport,
+canvas/field focus, selection and caret after shared/UI/API history, and protects
+invalid newer input across external Redo. The existing live recorded journey
+checks the displayed lane, focus and caret on API Undo/Redo as well as its native
+buttons, same playback epoch, exact plugin state and save/reopen. Include this
+one additional affected case locally: **seven native groups and eight app
+journeys**. It is already registered in the single-build CI integration step.
+No shared musical, clock, codec or API mutation semantics change.

@@ -18,14 +18,14 @@ Activity Refresh, updates clean pattern curves after UI/API history without
 following the editing cursor, and suppresses native pointer jitter before a
 real curve drag. New assertions retain exact data, preview/raw-input guards,
 focus and history. See LIVE-PARAMETER-RELEASE's latest section. Current scripts
-will be frozen in `activity-refresh-history`; seven native groups/seven app
+will be frozen in `activity-refresh-history`; seven native groups/eight app
 journeys remain mandatory, then fresh Computer Use. No package or merge.
 
 Current0f5 CI40056452912/40056452909 was active at03:09; next checkpoint no earlier
 than2026-10-24 03:59:51UTC, and only after terminal CI/later-start inspection.
 The diagnostic QA process38880 exited normally. Its240.343s run recorded25
 callback overruns: neither performance nor temporal flicker is qualified.
-The entries below are historical and must not override this boundary.
+The same existing-binary diagnostic also confirmed stale Song automation after API history. Both clean editors now refresh while retaining field focus/caret; the added eighth local app case covers recorded Undo/Redo and reopen. The entries below are historical and must not override this boundary.
 **24 October 01:10 UTC checkpoint:** PR7 and the clean qualification source are
 6e4656d5ce2f974b0ab3e42d2ef763e367845426. One local build passed. Menu-bar and
 plugin-search native groups passed; automatic-edit and Activity groups failed

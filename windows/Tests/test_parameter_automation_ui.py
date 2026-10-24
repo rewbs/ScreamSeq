@@ -151,10 +151,13 @@ class ParameterAutomationUITests(unittest.TestCase):
             self.assertEqual(current['points'],lane['points'],current)
             self.assertFalse(current['stale'],current)
             self.assertEqual((current['pattern'],current['plugin'],current['parameter']),(0,plugin,1))
+        self.desktop.send(field,0xB1,1,2)
         self.write('history.undo');self.assertEqual(self.saved(),baseline)
         displayed(baseline);self.assertEqual(self.desktop.focus(field),field)
+        self.assertEqual(self.desktop.send(field,0xB0),1|(2<<16))
         self.write('history.redo');self.assertEqual(self.saved(),edited)
         displayed(edited);self.assertEqual(self.desktop.focus(field),field)
+        self.assertEqual(self.desktop.send(field,0xB0),1|(2<<16))
         handle=self.state()['handles'][0]
         self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x202,handle['x'],handle['y']);self.idle()
         self.assertEqual(self.state()['selectedPoint'],0);self.key(0x08)
