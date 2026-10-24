@@ -170,6 +170,8 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         field=self.control(4609)
         self.desktop.send(field,0x201,1,4|(4<<16));self.desktop.send(field,0x202,0,4|(4<<16))
         self.desktop.send(field,0xB1,1,2)
+        before_view=self.state()
+        self.field(4627,'12.');self.field(4628,'unfinished')
         for operation,expected in [('history.undo',saved),('history.redo',changed)]:
             self.write(operation)
             self.assertEqual(self.saved(),expected)
@@ -179,6 +181,11 @@ class AbsoluteAutomationUITests(unittest.TestCase):
             self.assertEqual((local['plugin'],local['parameter']),(plugin,1))
             self.assertEqual(self.desktop.focus(field),field,'History refresh must retain the native value field focus')
             self.assertEqual(self.desktop.send(field,0xB0),1|(2<<16),'History refresh must retain the selected text range')
+            self.assertEqual((local['startSeconds'],local['endSeconds']),
+                             (before_view['startSeconds'],before_view['endSeconds']))
+            for identifier,text in ((4627,'12.'),(4628,'unfinished')):
+                raw=ctypes.create_unicode_buffer(80);self.desktop.send(self.control(identifier),0xD,80,ctypes.addressof(raw))
+                self.assertEqual(raw.value,text,'History must retain unfinished view-range text without applying it')
             continuing()
         self.press(4631);self.assertEqual(self.saved(),saved);continuing()
         self.press(4632);self.assertEqual(self.saved(),changed);continuing()

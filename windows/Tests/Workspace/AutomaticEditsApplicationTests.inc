@@ -179,6 +179,8 @@ void applicationAutomaticEdits(){
       const auto field=GetDlgItem(window,4609),index=GetDlgItem(window,4605);
       SetWindowTextW(index,L"0");press(window,4626);SetFocus(field);SetWindowTextW(field,L"-9");lane.flushForProjectSave();
       const auto edited=app.documentOperation("automation.get",Json::object());const auto beforeHistory=lane.snapshot();
+      const auto rangeStart=GetDlgItem(window,4627),rangeEnd=GetDlgItem(window,4628);
+      SetWindowTextW(rangeStart,L"12.");SetWindowTextW(rangeEnd,L"unfinished");
       SendMessageW(field,EM_SETSEL,1,2);
       app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision}});
       DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
@@ -187,6 +189,8 @@ void applicationAutomaticEdits(){
         GetFocus()==field&&first==1&&last==2&&lane.snapshot().at("startSeconds")==beforeHistory.at("startSeconds")&&
         lane.snapshot().at("endSeconds")==beforeHistory.at("endSeconds"),
         "API history did not update the clean recorded lane with exact target, selection, viewport and field caret");
+      restoreCheck(restoreText(rangeStart)==L"12."&&restoreText(rangeEnd)==L"unfinished",
+        "Musical history discarded unfinished visible-range fields or implicitly applied their view");
       SetWindowTextW(field,L"unfinished");SendMessageW(field,EM_SETSEL,2,5);
       app.documentOperation("history.redo",{{"expectedRevision",app.view->session.revision}});
       SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));

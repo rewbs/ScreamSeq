@@ -2266,3 +2266,12 @@ After correction, disposable child exits0/7/259, live-owner observation and
 unowned-PID refusal passed in0.344s, including cleanup and original-desktop
 restoration. No application build or UI/audio qualification occurred. The next
 eight actual-app journeys still execute afresh using this helper.
+
+Pre-build review found that the same-target song-automation loader preserved
+the viewport but replaced unfinished visible-range text with formatted bounds.
+It now retains both raw range fields while refreshing music/history for that
+same parameter. Explicit Set view/zoom and different-target selection retain
+their existing semantics. The native automatic-edit and existing live app
+history journey now assert partial/invalid range text, unchanged viewport,
+exact Undo/Redo, point-field caret and continuing playback together. This is
+source-only coverage, not a new runtime pass or additional test cycle.
