@@ -1,5 +1,17 @@
 # Selection-render reply correction
 
+**Executed ARM64 checkpoint,23:04UTC:** sourceb0375de637dd940cce225a0aba15fab69ee2f50f
+compiled once; ApiTests passed21.80s with slow selection/replay, ordinary timeout,
+queued cancellation and close assertions. Both recording native groups and five
+actual-app cases passed, including the complete layered sample/VST3 selection
+PCM/reopen/independent-layer and full-song export journey. Fresh Computer Use
+passed the composing/recording/mixer/focus smoke; owned QA exited normally.
+The inventory preflight failure and its explicit mandatory-setup correction are
+retained in `render-reply/`, alongside build/check/foreground receipts. No rebuild
+was needed. Corrected x64 artifact replay and current platform CI remain pending;
+the earlier x64 failure is not declared closed by ARM64 evidence. No package or
+main merge has occurred. Original finding and planned checks follow.
+
 24 October 2026, after the 22:36 UTC status snapshot. Source-only until the next
 coordinated checkpoint passes; no production claim follows from this correction.
 

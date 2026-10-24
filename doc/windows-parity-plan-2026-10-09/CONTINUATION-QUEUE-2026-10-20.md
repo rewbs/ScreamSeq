@@ -1,5 +1,38 @@
 # Current continuation queue
 
+**24 October23:04UTC — corrected ARM64 automated and foreground pass:**
+Frozen `b0375de637dd940cce225a0aba15fab69ee2f50f` is on PR7; one local Release
+build started22:52:52UTC and completed22:54:37UTC. Executable SHA256
+`77fb8a0e046ea4b23f0e379eb591c05b01688beb0313cbb32bd776b4c3d31039`.
+Three native groups plus mandatory setup and five actual-app cases passed;
+full layered sample/VST3 PCM and full-song export remain intact. Fresh owned
+Computer Use PID22468 passed precise gestures/Save caret/Tab/Backspace, graph
+framing, Params Recording action, native Balance slider/Stop/Keep, live mixer
+gain/balance/pre-balance/width and maximize/restore. Process exited0; do not
+reuse its handles. Four API snapshots preserve epoch3. Audio265.6s at48k/480
+had22overruns, zero starvation/device errors and no processor fault; no sustained
+performance or temporal-flicker pass. See `render-reply/foreground-check.json`.
+
+The first `check.ps1` inventory omitted CTest's mandatory scratch setup in its
+expected count, so no tests executed. The failed preflight is preserved; exact
+three groups plus named setup were then run once, without rebuilding. Waiter
+session96376 exited1 at that preflight. The separate resumed check process39680
+is terminal, with successful checks.json; do not restart either. QA terminal
+session39844 completed0.
+
+Next: inspect existing Windows run40140424174/job121010812681 and Mac
+run40140424287/jobs121010813142 and121010813293. All were compiling at23:04UTC.
+No restart/rebuild. New checkpoint no earlier than23:53:17UTC, rechecking later
+starts. Exact PR test merge79df3d591afbc60d65b620e3fc7a76c7ed59386a is fetched
+and has the candidate tree. Prepared `render-reply/verify-x64-artifact.py` and
+`check-x64.py` pin source/provider and all five cases; run only on the corrected
+artifact. The earlier828 x64 render failure remains mandatory. Prior21 x64
+real-endpoint cases and reciprocal preservation are reusable only for unchanged
+inputs. Both preceding828 Mac architectures passed135 CTests plus full native
+interface/socket gates. Source review found no further product correction.
+Close review/integration after actual platform and x64 results; package only
+with successful final receipts. Keep this release scope fixed.
+
 **24 October 22:41 UTC — combine two focused release corrections:**
 The exact828 x64 app/provider layered journey passed composing/history/reopen
 but failed its first selection render at the five-second API reply deadline.

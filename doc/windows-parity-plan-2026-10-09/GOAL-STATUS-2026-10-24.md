@@ -1,5 +1,25 @@
 # Goal status — 24 October 2026
 
+**23:04 UTC update:** corrected source `b0375de637dd940cce225a0aba15fab69ee2f50f`
+is now built and on PR7. ARM64 passed all three native groups plus required
+scratch setup and all five actual-app journeys, including the kept-take guard
+and full layered sample/VST3 recording, exact PCM/reopen and full-song export.
+Fresh Computer Use on the same executable passed precise-note gestures and
+Save/text focus, graph-to-Params-to-Recording with a real Balance slider gesture,
+Stop/Keep, all four mixer controls and connected/compact maximize/restore.
+Four snapshots retained playback epoch3; QA exited normally. The 265.6-second
+dense-effects workload had22 overruns, zero starvation/device errors and no
+processor fault; sustained performance/flicker remain unqualified.
+
+Both preceding Mac architectures passed. Current CI runs40140424174 (Windows)
+and40140424287 (Mac) are compiling. **Corrected x64 live replay, final platform
+acceptance, main integration and packaging remain.** The two defects below are
+now qualified on ARM64; the x64 render failure is not closed by that pass.
+Evidence: `bin/mac-gesture-20261022/render-reply/`. The initial check preflight
+miscounted CTest's required scratch fixture; no tests ran before that stop. Its
+receipt is retained and the explicit corrected inventory passed without a
+rebuild. No final production package has been made.
+
 **Subsequent source continuation:** both Mac architectures have now completed
 successfully. The [selection-render reply correction](SELECTION-RENDER-REPLY-2026-10-24.md)
 and its regression are now prepared in source for the same batch as the Discard
