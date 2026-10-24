@@ -6,6 +6,40 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October 22:00 UTC — current candidate:** Frozen82834c95bd7a06fc8f9ad62ca3cf1a1ac1d0bded
+is now PR7's head and built once in `bank-closure/`. Local build21:51:47–21:53:57
+passed; executableSHA256e4500fdb8bbb00939fc0be0533c0f32bbfdcd0c3d0d138c8fc31c6b4b4f5acbf.
+Automatic-edit native group and exact bank handoff app case passed; reuse unchanged
+946 coverage. Fresh Computer Use on ownedPID24076 verified fully on-screen bank
+opening from the compact right inspector at200 percent DPI, moved-position/source
+retention on reopen, precise insertion/deletion/cursor/typing/Save caret/Tab/reverse
+Tab/text Backspace, connected layout/maximize/restore, graph overview/Home framing,
+and live mixer gain/pre-balance/width. Epoch3 and advancing frames persisted in four
+API snapshots. Process exited normally; never reuse its handles. Foreground receipt
+is a bounded functional pass, not integration/performance qualification. The helper
+does not expose the bank as an independent input target: no bank typing continuity
+claim. Dense15-effect playback232.5s recorded37overruns, zero starvation/device errors
+or processor faults. Preserve the prior-main capacity diagnosis and all failed timing.
+
+Current CI40136080736(Mac) and40136080789(Windows) is live; inspect with
+`inspect-bank-closure-ci.py`, do not restart. Earliest next coordinated build is
+22:52:17UTC, subject to later starts/active jobs. Previous946Intel completed its
+model/recovery/socket/plugin-editor groups but was cancelled in interface at the
+old60-minute job boundary; current workflow allows90minutes without test changes.
+MacARM946 exchange40135099003 and Windows return40135577303 both passed extended
+fixtures using retained binaries. `recording-root/reciprocal-exchange.json` records it.
+The bank-only product delta does not alter codec/shared/Mac inputs.
+
+Remaining: inspect final current platform jobs, obtain the newly retained x64VST3
+fixture and replay the required layered composing/recording case on the matching
+CI app; preserve failures/no-device limitations and confirm all other failures are
+covered. Review the final PR, integrate on main at the coordinated cadence, then
+execute the prepared `bank-closure/package.ps1` only with passed integration and
+foreground receipts. No package or merge yet. Do not run old scripts. Waiter95398
+completed successfully; earlier45388 was stopped before build because automatic
+JSON date conversion delayed the gate. Its replacement uses DateKindString and
+retains a separate waiter-utc receipt. There is no pending local build/test process.
+
 **24 October 21:45 UTC:** The exact x64 CI binary passed all21 affected cases
 on the local real endpoint (x64 emulation on ARM64); its required VST3 layering
 case remains uncovered until the matching x64 provider is retained. The ARM64
