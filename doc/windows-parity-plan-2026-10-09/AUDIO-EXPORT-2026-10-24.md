@@ -259,3 +259,27 @@ particular processor from this alone. Report SHA256
 `foreground-diagnostic/analysis.json` preserve the evidence. Production remains
 held pending the native failures, full composing exports, Mac gates, reciprocal
 edited projects and sustained Windows performance qualification.
+
+
+Correction source is frozen at `209f65464b9b978aa7b655fe602e2ea443b8b586`, backed
+up on `codex/mac-gesture-next-checkpoint` and fast-forwarded into the clean
+qualification checkout. `bin/mac-gesture-20261022/audio-export-followup/` contains
+prepared `checkpoint.ps1`, `build.ps1`, `check.ps1` and `freeze.json`. None has
+started a new build. They pin the source and07:01:52 gate, require a fresh
+terminal preceding-CI receipt and select ten native groups plus scratch setup,
+including newly built ApiTests, followed by three actual-app journeys. The
+runner collects independent app diagnostics even after a native failure, but
+its final aggregate still fails and no package/foreground qualification is
+permitted from partial evidence. It never reruns a recorded attempt. The
+previous `audio-export` build and reports remain intact. Documentation-only
+commits after the freeze do not belong to its compiled source.
+
+At06:29 UTC current Mac ARM job120796834728 completed: compilation succeeded,
+134/135 CTests passed; the sole native failure was the same exact dry WAV
+partition assertion. This reinforces that it is not Windows-only, without
+settling the underlying engine-versus-writer contract. Its terminal log SHA256:
+`730a289468656f1495a4562657766b25fbd20387b4b0c564713e119758b38185`.
+`audio-export/completed-ci.json` pins steps and source. Intel and Windows were
+still running; inspect their terminal evidence before the next checkpoint.
+The read-only `collect-audio-export-ci.py` downloads only completed native jobs
+and preserves already downloaded logs. No failed job was restarted.

@@ -35,6 +35,15 @@ Backspace edited text, Tab/Shift+Tab traversed correctly. All receipts are under
 That stage includes native instruments/routing; it is not individual-processor
 or CPU-time attribution. No performance, temporal-flicker or release claim.
 
+Prepared correction is frozen at `209f65464b9b978aa7b655fe602e2ea443b8b586`,
+backed up to `codex/mac-gesture-next-checkpoint` and clean in qualification.
+Use `audio-export-followup/checkpoint.ps1` only after inspecting its receipts;
+none exists yet. Its check runner retains all failures and collects independent
+app diagnostics without turning a failed aggregate green. At06:29 the preceding
+Mac ARM job passed compilation and134/135 CTests; its sole native failure is
+the same dry partition assertion. Intel and Windows remained active. See
+`audio-export/completed-ci.json` for the downloaded log hash.
+
 Next checkpoint **no earlier than2026-10-24 07:01:52 UTC**, extended by later
 actual starts and blocked until preceding CI is terminal. At06:17 current CI
 40068553924 (Mac) and40068553934 (Windows) was still building; never restart it.
