@@ -457,3 +457,31 @@ virtual-device recording gates passed. Intel remained compiling; Windows had
 completed compilation and was testing. No jobs were restarted. Terminal ARM
 log SHA256 `3aadc5b8fcdfaa07b5121cb18a26e36ea39acf74a3a3d15a3053718491b29797`
 is pinned in `audio-export-followup/completed-ci.json`.
+
+### Source continuation: retain sample setup through capture observations
+
+Source inspection found that `SampleRecordingWindow::timer(3)` calls `perform`
+every 150 ms during capture, and `perform` disables the sample-name edit and
+Keep-as combo until the read returns. The status request does not own these
+fields. `SampleRecordingWindow.hpp` now distinguishes observation from mutation:
+polls and opening/reconciling a take keep raw fields enabled, while pending
+departure, recording lifecycle and Keep guards remain in force. Raw edits still
+advance the existing generation and retain their captured document/revision.
+No musical model, API, history, file format or device routing changes.
+
+`recordingSetupRetention` in `DraftImportRetentionTests.inc` now injects typing
+and an output-choice change during successful and busy status reads. It checks
+enabled controls, exact focus/selection/caret, newer raw text, generation,
+captured target, retained take and zero musical commits. It also asserts that
+Start and Keep still disable the raw fields. This runs in the existing
+`native-tool-window-tests` registration (not a workspace-restore subgroup).
+The fake provider opens no microphone. These changes are **unbuilt**; do not
+inherit the prior candidate's UI or compilation evidence. Add this registration
+and `document-controller-live-parameters` to the next bounded checkpoint, then
+check fresh native focus/typing in the isolated application. Continuous capture
+typing still needs a controlled input fixture; an idle recorder is insufficient.
+
+At07:40 the Intel compilation had passed and its tests were running. Windows
+was still testing. The next build remains no earlier than08:02:41 UTC, pending
+terminal CI and later starts. No additional build or test execution was made
+for this source continuation.

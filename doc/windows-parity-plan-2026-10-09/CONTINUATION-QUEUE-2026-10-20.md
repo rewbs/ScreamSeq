@@ -8,6 +8,14 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 07:43 UTC source continuation:** Sample recording status polls
+now leave the name and Keep-as fields enabled, with pending departure and
+mutation guards retained. Success/busy focus, caret and newer-draft assertions
+are added to `native-tool-window-tests`. This is unbuilt; include it and the
+unbuilt `document-controller-live-parameters` export case in the next checkpoint.
+Intel compilation passed; Intel/Windows CI tests were still running at07:40.
+No package or merge, and no build before08:02:41 UTC (or later actual starts).
+
 **24 October 07:17 UTC update:** PR7/frozen qualification source is
 `6a9d3d4b7d931cb291f8f11b6ba29a0115de379b`. The single07:02 build and terminal
 `audio-export-followup/qualified-checks.json` supersede the candidate status

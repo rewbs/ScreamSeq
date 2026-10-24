@@ -28,7 +28,7 @@ private:
   std::string selectedDevice_,document_,baseRevision_,take_,permission_;
   struct Input {unsigned first=0,count=1;};
   std::vector<Input> inputs_;Input input_;
-  bool pending_=false,setting_=false,loaded_=false,draft_=false;uint64_t generation_=0;
+  bool pending_=false,observing_=false,setting_=false,loaded_=false,draft_=false;uint64_t generation_=0;
   std::pair<std::string,std::string> draftContext_,pendingContext_;
   Json baseline_=Json::array();
   Json raw()const{return Json::array({utf8(field(name)),choice(output)});}
@@ -49,10 +49,10 @@ private:
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
   void error(const std::exception &e)override{auto message=wide(e.what());if(lifecycle_)message+=L" / Review current take; the earlier operation will not be repeated";status(std::move(message));}
   void schedule(){if(visible()&&capturing()&&!lifecycle_)SetTimer(window_,3,150,nullptr);else KillTimer(window_,3);}
-  template<typename F> void perform(F operation){
-    require(!pending_,"A recording request is still running");pendingContext_=context_();pending_=true;layout();
-    try{operation();}catch(...){pending_=false;layout();schedule();throw;}
-    pending_=false;layout();schedule();requestPaint();
+  template<typename F> void perform(F operation,bool observing=false){
+    require(!pending_,"A recording request is still running");pendingContext_=context_();pending_=true;observing_=observing;layout();
+    try{operation();}catch(...){pending_=false;observing_=false;layout();schedule();throw;}
+    pending_=false;observing_=false;layout();schedule();requestPaint();
   }
   template<typename F> void lifecycleRequest(const std::string &method,Json params,F finish){
     requireResolved();const auto captured=context_();
@@ -147,7 +147,7 @@ private:
       const bool retained=!take_.empty();accept(request_("sample.recording.get",Json::object()),true);
       if(retained&&take_.empty())status(L"The session no longer holds that take / ready to record");
       if(!take_.empty()&&!takeState_.contains("error"))status(!sameDocument()?L"Take belongs to another song / Stop and Discard remain available":capturing()?L"Recording take restored / Stop retains it":L"Retained take restored / Keep adds it to this song");
-    });
+    },true);
   }
   void begin(){
     requireResolved();
@@ -240,7 +240,7 @@ private:
   }
   void timer(UINT_PTR id)override{
     if(id!=3)return;KillTimer(window_,3);if(!visible()||take_.empty()||completion_.retained()||lifecycle_)return;if(pending_){schedule();return;}
-    try{perform([&]{accept(request_("sample.recording.get",{{"take",take_}}));});}
+    try{perform([&]{accept(request_("sample.recording.get",{{"take",take_}}));},true);}
     catch(const Api::ApiError &e){
       if(e.code==-32001){try{loadTake();}catch(const Api::ApiError &next){if(next.code!=-32002)error(next);}catch(const std::exception &next){error(next);}}
       else if(e.code!=-32002)error(e);schedule();
@@ -263,7 +263,11 @@ private:
     set(keep,completion_.retained()?L"Review result":L"Keep take");
     EnableWindow(controls_.at(keep),!pending_&&!lifecycle_&&(completion_.retained()||(!take_.empty()&&!capturing()&&sameDocument()&&takeState_.value("frames",uint64_t(0))>0)));
     EnableWindow(controls_.at(discard),!pending_&&!completion_.retained()&&!lifecycle_&&!take_.empty());
-    for(int id:{name,output,close,discardSetup})EnableWindow(controls_.at(id),!pending_);
+    // A status read never owns editable setup. Disabling these every 150 ms
+    // cancels typing/selection and can close an open native combo. Keep the
+    // pending departure guard and lifecycle actions separate from raw input.
+    for(int id:{name,output})EnableWindow(controls_.at(id),!pending_||observing_);
+    for(int id:{close,discardSetup})EnableWindow(controls_.at(id),!pending_);
     EnableWindow(controls_.at(discardSetup),!pending_&&!completion_.retained()&&!lifecycle_);
   }
   void paint(RenderSurface &s)override{
