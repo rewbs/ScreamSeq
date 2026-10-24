@@ -23,7 +23,14 @@ text Backspace, Save caret, Tab traversal, left-edge drag/Undo, visible cursor
 and native WAV export with unchanged playback epoch. Float worked; resize and
 sustained presentation remain unqualified. No package or merge.
 
-CI40072558416/40072558372 remained active at07:15. Next checkpoint **no earlier
+At07:30 Mac ARM job120808941853 was terminal: compilation,134/135 CTests,
+native interface, socket/conformance and AU/VST3 virtual-device recording
+passed; the sole CTest failure is the precise export oracle. Dry partition
+counts/deltas exactly match Windows. Intel and Windows remain active.
+Source0460f9cf7 adds independent export case reporting and an on-demand pinned
+stock PCM workflow (`qualification: stock`) for the next coordinated checkpoint.
+No current product or engine behavior changed, and no stock comparison has run.
+Next checkpoint **no earlier
 than2026-10-24 08:02:41 UTC**, extended by later starts and requiring preceding
 CI terminal. Inspect existing receipts; never run the07:02 build/check again.
 The following06:25 narrative is retained as historical failure context.

@@ -448,3 +448,12 @@ completed source ref; record the returned run before any retry. The ordinary
 CI inspector's `Build ` step prefix includes both stock build stages, so their
 actual starts extend the next hourly gate. This workflow path is also unrun;
 static review/Python parsing do not constitute a passing stock comparison.
+
+At07:30 the frozen6a Mac ARM job120808941853 was terminal. Compilation passed,
+134/135 CTests passed, and the only native failure was the same precise oracle.
+The dry17/4096 changed-sample counts, first offsets and maximum deltas exactly
+match Windows. Full native interface, socket/conformance and owned AU/VST3
+virtual-device recording gates passed. Intel remained compiling; Windows had
+completed compilation and was testing. No jobs were restarted. Terminal ARM
+log SHA256 `3aadc5b8fcdfaa07b5121cb18a26e36ea39acf74a3a3d15a3053718491b29797`
+is pinned in `audio-export-followup/completed-ci.json`.
