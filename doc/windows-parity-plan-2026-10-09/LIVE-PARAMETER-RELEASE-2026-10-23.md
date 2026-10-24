@@ -2242,3 +2242,27 @@ opening and no replay from later timers. All assertions are unbuilt; no new
 build or duplicate suite has run. The bounded nine-group/eight-journey gate
 is unchanged. Fresh Computer Use must exercise Delete followed promptly by
 Refresh/parameter/source navigation and verify the accepted lane.
+
+### 0f5 Windows CI and bounded readiness diagnostics
+
+Windows job120760390739 is terminal failed. Compilation,159 portable/worker
+tests,53 native groups,39 vendor-ownership cases and18 typed/pipe cases passed.
+The composing integration step ran122 tests in268.281s with25 failures across22
+distinct cases and one optional skip. The failures are live-startup assertions
+plus three repeated missing-window teardown assertions; recording/routing
+diagnostics explicitly report empty audio-device catalogues. Do not turn these
+into successful playback evidence or infer a device cause for every case whose
+diagnostic lacks a device snapshot. Complete log SHA256:
+`ed4fc9e1309ccf05976c8e043c84ea9f18c90e1ff227dc387bf3c0015a7930c9`.
+
+Three automation UI startup loops now use a shared owned-process handle read
+to fail promptly only after confirmed termination. A live owner retains its
+existing polling deadline and audioActive assertion. No retry, skip, fallback
+device or weakened musical assertion was added. The private desktop helper's
+cleanup now uses the same wait result: a genuine exit259 is terminal, not
+STILL_ACTIVE. Its new diagnostic initially exposed that old cleanup bug, with
+WinError5 on the already-exited child; preserve process-readiness-probe-failed.
+After correction, disposable child exits0/7/259, live-owner observation and
+unowned-PID refusal passed in0.344s, including cleanup and original-desktop
+restoration. No application build or UI/audio qualification occurred. The next
+eight actual-app journeys still execute afresh using this helper.

@@ -144,9 +144,14 @@ class AbsoluteAutomationUITests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit short silent WASAPI qualification')
     def test_live_automatic_point_history_and_save_preserve_playback(self):
         plugin=self.setup_curve();self.press(4614);self.route_master(plugin);saved=[dict(frame=p['frame'],value=p['value']) for p in self.read('automation.get')['points']];path=self.folder/'live-absolute.screamseq';self.write('document.save',path=str(path));self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop','--automation','--seconds','120','--project',str(path),'--vst3-test-cache',str(self.cache)]);self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        last_transport=None
         for _ in range(100):
+            code=self.desktop.exit_code(self.pid)
+            if code is not None:self.fail(dict(reason='Owned silent app exited before audio readiness',pid=self.pid,
+                exitCode=code,transport=last_transport))
             try:
-                if self.read('transport.get')['audioActive']:break
+                last_transport=self.read('transport.get')
+                if last_transport['audioActive']:break
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent automation app did not start')
@@ -200,9 +205,14 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         source=self.folder/'activity-source.screamseq';self.write('document.save',path=str(source))
         self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop','--automation','--seconds','120','--project',str(source),'--vst3-test-cache',str(self.cache)])
         self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        last_transport=None
         for _ in range(100):
+            code=self.desktop.exit_code(self.pid)
+            if code is not None:self.fail(dict(reason='Owned silent app exited before audio readiness',pid=self.pid,
+                exitCode=code,transport=last_transport))
             try:
-                if self.read('transport.get')['audioActive']:break
+                last_transport=self.read('transport.get')
+                if last_transport['audioActive']:break
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent activity app did not start')

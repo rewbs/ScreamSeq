@@ -117,9 +117,14 @@ class ParameterAutomationUITests(unittest.TestCase):
         self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop',
             '--automation','--seconds','120','--project',str(path),'--vst3-test-cache',str(self.cache)])
         self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        last_transport=None
         for _ in range(100):
+            code=self.desktop.exit_code(self.pid)
+            if code is not None:self.fail(dict(reason='Owned silent app exited before audio readiness',pid=self.pid,
+                exitCode=code,transport=last_transport))
             try:
-                if self.read('transport.get')['audioActive']:break
+                last_transport=self.read('transport.get')
+                if last_transport['audioActive']:break
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent pattern automation app did not start')
