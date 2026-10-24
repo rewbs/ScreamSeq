@@ -8,7 +8,7 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**Next frozen candidate:** `d6da2520aac7ba5b7f854273d029396099834364`, committed,
+**Next frozen candidate:** `84fac64a3b85fd133ebd0b3284a24933a0e02022`, committed,
 backed up to `codex/mac-gesture-next-checkpoint`, and fast-forwarded into the clean
 qualification checkout. `bin/mac-gesture-20261022/recording-root/` contains the
 new freeze and parsed-but-unexecuted checkpoint/build/check/validator scripts.
@@ -19,6 +19,15 @@ The local build targets app/scanner, native-tool and workspace owners, and the
 shared export test. Three native groups plus two app journeys run; no stock job
 is redispatched because its relevant inputs are unchanged. The validator retains
 separate foreground/performance/CI requirements and does not permit packaging.
+The earlier d6 freeze is preserved as superseded, unexecuted preparation. This
+candidate also corrects the Mac interface test's fixed-delay retry assumption:
+wait for bounded completion, retain exact value/status/write assertions, and
+require exact admission/retry counts. Both Mac interface jobs must execute it.
+Terminal066 Windows evidence is161/162 portable,52/53 native,25 app failures and
+one skip; Mac ARM is134/135 CTests with an additional interface retry failure.
+See the export report for exact errors, log hashes and the source-only correction.
+Do not infer an overwritten status message from the retry failure: the observed
+slider had not reverted when the assertion ran. Intel was still live at08:40.
 
 **24 October 08:26 UTC source continuation:** The impossible dry cross-block
 equality assertion is explicitly corrected against the independently verified
