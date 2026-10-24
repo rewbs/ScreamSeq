@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "49068ec822bfdd86e72404df75f08d47f5d707cd9becffdf4aedd99c3966adb6",
+    "sha256": "70c70aa2ab41f7834d94d681103384ae2a8b462756ef6cfddf6b9a52b5d36406",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
@@ -34,6 +34,7 @@
       "automation.target.get",
       "context.get",
       "context.set",
+      "document.exportAudio",
       "document.exportModule",
       "document.get",
       "document.patch",
@@ -256,7 +257,8 @@
       "workspace.panel",
       "workspace.ruler",
       "workspace.shortcut.set"
-    ]
+    ],
+    "review20261024": "Source adds guarded accepted-state document.exportAudio on both platforms, with shared WAV rendering and native atomic publication. Inventory reviewed; runtime qualification pending. See AUDIO-EXPORT-2026-10-24.md. No parity/performance gate is waived."
   },
   "platforms": {
     "windows": {
@@ -360,6 +362,7 @@
         "automation.recording.stop",
         "automation.replaceLane",
         "context.set",
+        "document.exportAudio",
         "document.exportModule",
         "document.new",
         "document.open",
@@ -736,6 +739,7 @@
         "automation.recording.stop",
         "automation.replaceLane",
         "context.set",
+        "document.exportAudio",
         "document.exportModule",
         "document.patch",
         "document.save",

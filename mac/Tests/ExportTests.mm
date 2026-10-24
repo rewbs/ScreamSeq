@@ -135,6 +135,12 @@ int main() {
     std::ifstream retained(destination);
     std::string contents((std::istreambuf_iterator<char>(retained)), {});
     require(rejected && contents == "keep existing audio", "failed export retains original destination");
+    bool exclusiveRejected=false;
+    try {exportProjectAudio(module,{}, {},destination.string(),UINT32_MAX,nullptr,false);}
+    catch(const std::exception &){exclusiveRejected=true;}
+    std::ifstream exclusiveRetained(destination);
+    const std::string exclusiveContents((std::istreambuf_iterator<char>(exclusiveRetained)),{});
+    require(exclusiveRejected&&exclusiveContents=="keep existing audio","Exclusive publication replaced an existing destination");
     std::cout << "PASS 512 KiB worker export, dry WAV fidelity, exact export duration, latency, tail and failed-export preservation\n";
     return 0;
   } catch (const std::exception &error) {

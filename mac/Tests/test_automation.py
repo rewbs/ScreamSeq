@@ -832,7 +832,35 @@ def saving_tools(client, directory, app_test):
         assert client.call("context.get")["data"]["file"] == str(path)
     assert client.call("document.get")["revision"] == revision
     assert not list(directory.glob('.*.staged.*'))
+    # Full-song audio export uses accepted native state without becoming Save.
+    audio = directory / 'agent-audio.wav'
+    audio_request = {'expectedRevision': revision, 'path': str(audio)}
+    before_audio = client.call('document.get')
+    dry_audio = client.call('document.exportAudio', {**audio_request, 'dryRun': True})
+    assert not dry_audio['changed'] and not dry_audio['data']['written'] and not audio.exists()
+    for extra in ({'path': 'relative.wav'}, {'path': str(audio.with_suffix('.mod'))},
+                  {'overwrite': 1}, {'dryRun': 1}, {'unexpected': True},
+                  {'path': str(directory / 'absent' / 'song.wav')}):
+        expect_error(-32602, lambda: client.call('document.exportAudio', {**audio_request, **extra}))
+    expect_error(-32001, lambda: client.call('document.exportAudio', {**audio_request, 'expectedRevision': 'stale'}))
+    rendered = client.call('document.exportAudio', audio_request)
+    assert not rendered['changed'] and not rendered['playbackStopped'] and rendered['revision'] == revision
+    assert rendered['data'] == dict(path=str(audio), format='wav', written=True, rate=48000,
+                                    channels=2, bits=32, scope='selectedSequence', sourceState='acceptedSong')
+    import struct
+    wav = audio.read_bytes()
+    assert len(wav) > 44 and wav[:4] == b'RIFF' and wav[8:16] == b'WAVEfmt ' and wav[36:40] == b'data'
+    assert struct.unpack_from('<I', wav, 4)[0] == len(wav)-8
+    assert struct.unpack_from('<HHIIHH', wav, 20) == (3, 2, 48000, 384000, 8, 32)
+    assert struct.unpack_from('<I', wav, 40)[0] == len(wav)-44
+    expect_error(-32602, lambda: client.call('document.exportAudio', audio_request))
+    assert audio.read_bytes() == wav
+    client.call('document.exportAudio', {**audio_request, 'overwrite': True})
+    assert audio.read_bytes() == wav and client.call('document.get') == before_audio
+    if app_test:
+        assert client.call('context.get')['data']['file'] == str(path)
     print("PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination")
+    print('PASS accepted-state audio export socket: float WAV, strict guards, atomic overwrite and unchanged song/save destination')
 
 
 def clipboard_tools(client):

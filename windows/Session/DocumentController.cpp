@@ -2,6 +2,8 @@
 #include "TimelineOperations.hpp"
 #include "windows/Audio/WasapiCapture.hpp"
 #include "editor/hosted/SelectionRender.hpp"
+#include "editor/hosted/AudioExportStream.hpp"
+#include "windows/Project/AtomicOutputStream.hpp"
 #include "editor/hosted/ParameterEdits.hpp"
 #include "editor/hosted/PluginEditQueue.hpp"
 #include "editor/hosted/ControlInputRecovery.hpp"
@@ -647,7 +649,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
   const bool patternMethod=std::find(patternMethods.begin(),patternMethods.end(),method)!=patternMethods.end();
   auto pluginMethods=PluginOperations::reads();auto pluginWrites=PluginOperations::writes();writes.insert(writes.end(),pluginWrites.begin(),pluginWrites.end());pluginMethods.insert(pluginMethods.end(),pluginWrites.begin(),pluginWrites.end());
   const bool pluginMethod=std::find(pluginMethods.begin(),pluginMethods.end(),method)!=pluginMethods.end() || ((method=="history.undo"||method=="history.redo")&&params.value("domain",Json())=="plugins");
-  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.exportModule" || replacing;
+  const bool write=std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="sample.renderSelection" || method=="document.save" || method=="document.exportModule" || method=="document.exportAudio" || replacing;
   if(write) {
     if(parameterRecording_&&method!="plugin.editor.close")
       throw Api::ApiError(-32002,"Finish or discard the retained parameter take before changing or saving the song");
@@ -656,7 +658,7 @@ Json DocumentController::operation(const std::string &method,Json params) {
     params.erase("expectedRevision");
     // A document mutation/save uses the accepted baseline. Never serialize or
     // carry a temporary audible value into another edit or plugin topology.
-    if(method!="document.exportModule"&&!flag(params,"dryRun")&&
+    if(method!="document.exportModule"&&method!="document.exportAudio"&&!flag(params,"dryRun")&&
        !(method=="automation.recorded.clear"&&project_.preserved.at("automation").empty()))cancelParameterPreview();
   }
   const auto beforeRevision=revision();const auto beforePath=project_.path;const auto beforeSaved=project_.savedRevision;const auto beforeSavedPlugins=project_.savedPluginRevision;const auto beforeEditors=plugins_->openEditorCount();const bool beforeRecovered=project_.recoveredUnsaved;
@@ -722,6 +724,33 @@ Json DocumentController::operation(const std::string &method,Json params) {
     bool discard=flag(params,"discard");
     if((project_.recoveredUnsaved || document_->revision!=project_.savedRevision || project_.pluginRevision!=project_.savedPluginRevision) && !discard) throw Api::ApiError(-32602,"Unsaved work: save or explicitly discard before opening");
     open(path);return {{"path",utf8(path)},{"loadWarnings",project_.loadWarnings},{"requiresSaveAs",project_.requiresSaveAs},{"loadSourcePath",utf8(project_.loadSourcePath)}};
+  } else if(method=="document.exportAudio") {
+    std::filesystem::path path;bool overwrite=false,dry=false;
+    std::vector<std::byte> snapshot;std::vector<Tracker::PluginState> states;
+    std::vector<Tracker::ParameterChange> automation;
+    try {
+      // Export the accepted song, never mutable live vendors or a temporary
+      // preview. No editor flush, parameter cancellation, stop or history edit.
+      keys(params,{"path","overwrite","dryRun"});
+      if(recording_||(sampleRecording_&&sampleRecording_->hasTake()))
+        throw Api::ApiError(-32602,"Keep or discard the recording take before exporting audio");
+      if(!params.contains("path"))throw Api::ApiError(-32602,"path is required");
+      path=pathValue(params.at("path"));overwrite=flag(params,"overwrite");dry=flag(params,"dryRun");
+      if(extension(path)!=L".wav")throw Api::ApiError(-32602,"Audio export requires a .wav destination");
+      if(!overwrite&&std::filesystem::exists(path))throw Api::ApiError(-32602,"File exists; use overwrite:true");
+      if(!std::filesystem::is_directory(path.parent_path())||std::filesystem::is_directory(path))
+        throw Api::ApiError(-32602,"Export destination must be a file in an existing directory");
+      Project::validateProjectSaveDestination(project_,path);
+      snapshot=document_->snapshotData();states=projectPluginStates(project_);automation=projectAbsoluteAutomation(project_);
+      result={{"path",utf8(path)},{"format","wav"},{"written",!dry},{"rate",48000},{"channels",2},{"bits",32},
+              {"scope","selectedSequence"},{"sourceState","acceptedSong"}};
+    }catch(const Api::ApiError &e){throw Api::ApiError(e.code,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+     catch(const std::exception &e){throw Api::ApiError(-32003,e.what(),Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});}
+    // Publication failures retain uncertain filesystem outcome semantics; a
+    // song revision alone cannot prove whether an external file was written.
+    if(!dry)Project::writeAtomicStream(path,overwrite,[&](std::ostream &output){
+      Tracker::writeProjectAudio(snapshot,states,automation,output,document_->song().Order.GetCurrentSequenceIndex(),&document_->native());
+    });
   } else if(method=="document.exportModule") {
     std::filesystem::path path;bool overwrite=false,dry=false;std::vector<std::byte> bytes;
     try {

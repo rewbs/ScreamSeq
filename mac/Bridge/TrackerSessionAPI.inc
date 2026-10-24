@@ -52,7 +52,7 @@
       @"sample.renderSelection", @"sample.recording.start", @"sample.recording.stop", @"sample.recording.commit", @"sample.recording.discard",
       @"parameter.activity.watch", @"automation.recorded.edit", @"automation.recorded.clear", @"envelope.bank.save", @"scratch.gestures.set", @"scratch.gestures.remove", @"scratch.gestures.clone", @"envelope.bank.remove", @"envelope.bank.apply", @"envelope.bank.unlink", @"envelope.catalogue.publish", @"envelope.catalogue.import", @"transport.play", @"transport.stop", @"transport.note", @"transport.panic", @"transport.loop", @"graph.plugin.set", @"graph.plugin.bypass", @"graph.plugin.preset.save", @"graph.plugin.preset.load", @"graph.note.connect", @"graph.note.update", @"graph.note.disconnect", @"graph.note.restoreAssignment", @"graph.source.mute", @"graph.trim.set", @"graph.group.bypass", @"graph.makeIndependent", @"graph.selection.paste", @"graph.selection.cut", @"graph.selection.duplicate", @"graph.plugin.editor.open", @"graph.plugin.editor.commit", @"graph.plugin.editor.close", @"graph.layout.set", @"graph.presentation.set", @"graph.routes.set", @"graph.audio.connection.set", @"graph.connections.remove", @"graph.controller", @"graph.signal.clear", @"graph.scope.watch", @"graph.listen.set", @"graph.song.source.add", @"graph.song.source.update", @"graph.song.source.remove", @"graph.song.modulation.set", @"graph.song.modulation.remove", @"graph.song.group.create", @"graph.song.group.update", @"graph.song.group.remove", @"graph.song.group.export", @"graph.group.create", @"graph.group.update", @"graph.group.remove", @"graph.group.export", @"graph.create", @"graph.clone", @"graph.update", @"graph.remove", @"graph.node.add", @"graph.node.remove", @"graph.nodes.insert", @"graph.nodes.detach", @"graph.assign", @"graph.instrument.assign", @"graph.commands.set", @"graph.automation.set",
       @"recording.start", @"recording.capture", @"recording.stop", @"recording.commit", @"recording.discard", @"pattern.notes.set", @"pattern.performance.set", @"pattern.effects.set", @"pattern.effect.set", @"instrument.envelope.transform",
-      @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule",
+      @"instrument.plugin.set", @"plugin.programs.load", @"plugin.instruments.set", @"document.timing.set", @"track.create", @"track.group", @"track.ungroup", @"track.column.set", @"pattern.apply",   @"document.patch",        @"pattern.create",    @"order.edit", @"document.save", @"document.exportModule", @"document.exportAudio",
       @"sequence.select", @"sample.patch",          @"sample.process",    @"sample.import", @"sample.importMany", @"sample.clipboard.copy", @"sample.clipboard.set", @"sample.cut", @"sample.delete", @"sample.paste",
       @"sample.pcm.set", @"sample.copyToNew", @"sample.draw", @"sample.crossfade", @"sample.loops.set", @"instrument.create",     @"instrument.import", @"instrument.importMultisample", @"instrument.patch",
       @"plugin.preset.save", @"plugin.preset.load", @"plugin.library.set", @"plugin.locations.trust", @"plugin.add", @"plugin.duplicate",      @"plugin.remove",         @"plugin.move",       @"plugin.bypass",
@@ -78,7 +78,7 @@
       throw Error(-32001, "Song changed; read its current revision and prepare the edit again");
     if (mutation && !libraryMutation && ![method isEqual:@"graph.signal.clear"] && ![method isEqual:@"graph.scope.watch"] && ![method isEqual:@"graph.listen.set"] && ![method hasPrefix:@"sample.clipboard."] && ![method hasPrefix:@"transport."])
       require(_document->editable(), "This document is read-only");
-    if(mutation&&!parameterRecording&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
+    if(mutation&&!parameterRecording&&!_parameterPreviewCommitting&&![method isEqual:@"document.exportModule"]&&![method isEqual:@"document.exportAudio"]&&![method hasPrefix:@"plugin.parameters.preview."]&&![method hasPrefix:@"graph.plugin.preview."]&&!(p[@"dryRun"]&&boolean(p[@"dryRun"]))&&!(clearRecorded&&_automation.empty())) [self cancelParameterPreview];
     const bool wasPlaying = self.playing;
     auto &song = _document->song();
     id result = @{};
@@ -297,6 +297,27 @@
     } else if ([method isEqual:@"pattern.commands"]) {
       allowed(@[]);
       result = patternCommandCatalog(song.GetType());
+    } else if ([method isEqual:@"document.exportAudio"]) {
+      allowed(@[@"path",@"overwrite",@"dryRun"]);
+      require(!_recording&&!_sampleRecordingID,"Keep or discard the recording take before exporting audio");
+      NSString *path=string(p[@"path"]);
+      require(path.isAbsolutePath,"Export path must be absolute");
+      require([path.pathExtension.lowercaseString isEqual:@"wav"],"Audio export requires a .wav destination");
+      [self validateRecoveredSavePath:path];
+      const bool overwrite=p[@"overwrite"]?boolean(p[@"overwrite"]):false;
+      const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false;
+      require(overwrite||![NSFileManager.defaultManager fileExistsAtPath:path],"File exists; use overwrite:true");
+      BOOL directory=NO;
+      require([NSFileManager.defaultManager fileExistsAtPath:path.stringByDeletingLastPathComponent isDirectory:&directory]&&directory,
+              "Export directory does not exist");
+      require(![NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&directory]||!directory,"Export destination must be a file");
+      // Accepted state only: projectData would cancel previews/commit pending
+      // manual edits. Export must not mutate the live song or native vendors.
+      const auto snapshot=_document->snapshotData();
+      result=@{@"path":path,@"format":@"wav",@"written":@(!dry),@"rate":@48000,@"channels":@2,@"bits":@32,
+               @"scope":@"selectedSequence",@"sourceState":@"acceptedSong"};
+      if(!dry)exportProjectAudio(snapshot,_plugins,_automation,path.fileSystemRepresentation,
+                                song.Order.GetCurrentSequenceIndex(),&_document->native(),overwrite);
     } else if ([method isEqual:@"document.save"] || [method isEqual:@"document.exportModule"]) {
       allowed(@[@"path", @"overwrite", @"dryRun"]);
       NSString *path = string(p[@"path"]);

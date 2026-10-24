@@ -23372,6 +23372,57 @@
       ],
       "additionalProperties": false,
       "description": "Retained native parameter take. Mac timestamps use mach-absolute-time. Stop leaves transport playing. Mac VST3 release can verify real processing and private baseline copies while playback continues. A successful restorationPending response retains the take: retry with the current revision and same take after readback, never replay accepted input or uncertain writes. Unsupported or divergent state remains retained for stopped restoration. Explicit opaque Discard requires closed owned editors."
+    },
+    {
+      "description": "Render the accepted selected sequence to 48 kHz stereo IEEE float32 WAV using private processors. Requires expectedRevision and absolute .wav path. Preserves native save destination, dirty state, preview, live transport and history. Uncommitted recording takes must be kept/discarded first. Temporary previews and uncaptured native-editor values are excluded. dryRun validates snapshot and destination only; processor availability/rendering is checked on actual export. overwrite defaults false and publication is atomic.",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "document.exportAudio"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "expectedRevision": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "path": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Absolute .wav destination; protected recovered source paths and aliases are rejected."
+            },
+            "overwrite": {
+              "type": "boolean",
+              "default": false
+            },
+            "dryRun": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "expectedRevision",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
     }
   ],
   "$defs": {
