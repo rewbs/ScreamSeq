@@ -1,5 +1,16 @@
 # Current continuation queue
 
+**24 October23:50UTC:** Current Mac Intel job121010813293 has completed
+successfully:135CTests,36interface groups, plugin lifecycle and socket/typed
+gates. Both current Mac architectures and composite Windows acceptance are now
+complete. `render-reply/mac-intel-acceptance.json` and
+`compatibility-acceptance.json` retain final results/reuse bounds. See
+`RELEASE-ACCEPTANCE-2026-10-24.md` for the requirement-by-requirement audit.
+No new product change or build was needed. Remaining: integrate reviewed source
+and documentation on main at/after23:53:17UTC (recheck later starts), then run
+`render-reply/package.ps1` and its prepared read-only packaged runtime check.
+Do not rerun the completed x64 replay or rewrite its failed aggregate as green.
+
 ## Latest continuation: 24 October 23:32 UTC
 
 Corrected x64 acceptance is now complete using existing binaries; do not rerun
