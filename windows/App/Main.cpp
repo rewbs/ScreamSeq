@@ -762,6 +762,8 @@ public:
                 parameterRecordingWindow->observeBoundary(documentId,method,result);
         }
         refreshDocument();
+        if((method=="history.undo"||method=="history.redo")&&parameterAutomationWindow)
+            parameterAutomationWindow->refreshAfterHistory();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
         // A dropped vendor editor never blocks the operation; say what happened.
         if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {

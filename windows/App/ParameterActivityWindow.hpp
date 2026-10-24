@@ -34,6 +34,17 @@ private:
   std::optional<uint64_t> pendingPointSelectionFrame_;
   bool pendingPointDelete_=false;
   void cancelNavigation(){pendingNavigation_={};pendingPointSelectionFrame_.reset();pendingPointDelete_=false;KillTimer(window_,4);}
+  void deferRefresh(){
+    const auto c=context_();const auto generation=generation_;
+    cancelNavigation();
+    pendingNavigation_=[this,c,generation]{
+      // Refresh explicitly discards the captured fields, but never input typed
+      // after that request or a different revision reached while it waited.
+      guardRead(c,generation);require(visible(),"Activity refresh was closed");
+      action(refresh,BN_CLICKED);
+    };
+    SetTimer(window_,4,100,nullptr);
+  }
   void deferTargetSelection(int id){
     const auto index=selection(id);if(index<0)return;
     const auto wanted=id==processors?targets_.at(size_t(index)).at("key").get<std::string>():target_;
@@ -308,6 +319,7 @@ private:
     // A list focus notification is not a new navigation intent. Cancelling a
     // queued selection here would let Delete target the old selected point.
     if(id==items&&(notification==LBN_SETFOCUS||notification==LBN_KILLFOCUS))return;
+    if(id==refresh&&notification==BN_CLICKED&&(polling_||(!pending_&&context_().busy))){deferRefresh();return;}
     if(id==removePoint&&notification==BN_CLICKED&&pendingNavigation_){
       require(pendingPointSelectionFrame_.has_value(),"Finish the requested Activity navigation before deleting");
       // The list has already reported the musician's new stable timestamp.

@@ -2085,3 +2085,58 @@ gates. Its complete log SHA256 is
 Both8a platform runs are terminal; no old job was restarted. The02:59:03UTC
 lower bound still applies. The scheduling change requires the next Mac CI run;
 retain both the Intel timeout and ARM API-page clock failure as failed evidence.
+
+### 0f5 checkpoint and foreground diagnosis (2026-10-24 03:15 UTC)
+
+Frozen `0f5d8d735361f146faff6378686e3219aa87e4f3` built once at
+02:59:25.1512902 UTC, finishing03:01:43.2293098. Executable SHA256:
+`a3ca6583abba7bc414040b5b80c40e350c78c20cb6061879ca6db81f09e5bbde`.
+All seven native groups passed. Six of seven actual-app journeys passed, including
+live pattern Save/Backspace/history/reopen and the six-domain recording journey.
+Activity failed after external Undo/Redo: Refresh was ignored during a pumped
+observation, leaving selectedPoint2 on a stale revision instead of refreshing to
+point0. Preserve `activity-delete-correction/checks.json` and `app.log`; no
+aggregate rerun, package or merge was made.
+
+The correction queues explicit Refresh behind the observer/worker with document,
+revision and raw-field generation guards. It cannot discard subsequently typed
+text or rebase to a later revision, and Close cancels it. Native assertions cover
+busy, one-shot completion, newer text/caret, stale revision and Close. The app
+journey waits for the requested fresh lane before clicking its first point; it
+still requires exact selection, edits, history, playback and reopen.
+
+Fresh Computer Use on isolated silent PID38880 observed precise-note double-click
+insertion (four to five hits), canvas Backspace (back to four), visible playback
+cursor, automatic velocity typing, native Ctrl+S retaining the caret, Tab then
+Shift+Tab returning to that field, and text Backspace changing91 to9 without
+removing a hit. Docked child UIA still reports Main; these are visible-caret and
+behavior observations, not a Narrator qualification. Pattern canvas Backspace
+removed its selected point. Ctrl+Z restored the canonical lane but left the
+visible curve stale: `foreground-diagnostic/pattern-undo.json` records two
+canonical points against one displayed point and differing revisions. The next
+source batch refreshes clean visible pattern editors after shared UI/API history,
+resolving the existing stable target rather than following the cursor. Retained
+raw fields, compound previews, banks and formula drafts remain guarded. Native
+and actual-app assertions now compare displayed points after Undo/Redo without
+manual Reload and retain selection identity, focus and exact unrelated lanes.
+
+The QA process exited normally with unchanged executable hash. Its240.343s run
+at48kHz/480frames reported25 deadline overruns, zero starvation/device errors,
+max callback14558.2us, realtimeAuditPassed=false and
+sustainedPresentationQualified=false. The three read-only snapshots retain
+playback evidence. This is diagnostic-only and cannot authorize production
+packaging or a broad performance/flicker claim. A first-point click also changed
+its value slightly (.25 to.25080385852090037); native pointer-jitter handling is a
+follow-up, not silently counted as selection-only success.
+
+At03:09:33 both current CI runs40056452912/40056452909 were still compiling.
+Latest observed actual build start02:59:51 UTC makes the next checkpoint no earlier
+than03:59:51 UTC, and only after all preceding CI is terminal. No jobs restarted.
+
+The pointer-jitter follow-up is now included in this unbuilt cohesive batch:
+pattern curves use Windows' DPI-aware drag threshold and ignore mouse moves
+without the held left button, matching song automation. The existing native
+canvas deletion scenarios and live Save journey assert exact unchanged values
+and revision for stationary/jitter selection before editing. Actual drags retain
+the existing live render/cancel/release checks. Seven native groups/seven app
+cases remain; no extra full suite or build is introduced.

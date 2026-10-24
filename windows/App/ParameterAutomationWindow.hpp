@@ -28,6 +28,7 @@ private:
   int compactPage_=1;
   HWND pendingFocus_{};
   uint64_t generation_=0;Json dragBefore_;int dragSelection_=-1;
+  bool dragMoved_=false;float dragX_=0,dragY_=0;
   AutomationCanvas canvas_;
   std::unique_ptr<EnvelopeBankWindow> bank_;
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
@@ -229,14 +230,20 @@ private:
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)canvas_.fit(rows_);else if(id==panLeft||id==panRight)canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),rows_);else canvas_.zoom(id==zoomIn?2:.5,rows_);schedule();rebuild();}
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelection_;++generation_;values_=Json::array();schedule();showPoint();rebuild();ReleaseCapture();}
-  void mouse(UINT message,float x,float y,WPARAM)override{
+  void mouse(UINT message,float x,float y,WPARAM w)override{
     if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();schedule();if(completed&&dirty_)queueCurveEdit(1);return;}
     if(!canvasVisible_)return;
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)&&parameter_&&!pending_&&!pointFields_){SetFocus(window_);dragBefore_=points_;dragDirty_=dirty_;dragSelection_=selected_;selected_=canvas_.hit(x,y);
       if(selected_<0){auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(points_[i].at("position")==position)selected_=int(i);
         if(selected_<0){Json p={{"position",position},{"value",canvas_.value(y)},{"curve",curves[size_t(kind_)]}};if(kind_==8)p["formula"]="mix(start,end,t)";replacePoint(std::move(p));}}
-      showPoint();dragging_=true;SetCapture(window_);return;}
-    if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto p=points_[size_t(selected_)];const auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(int(i)!=selected_&&points_[i].at("position")==position)return;p["position"]=position;p["value"]=canvas_.value(y);replacePoint(std::move(p));}
+      showPoint();dragX_=x;dragY_=y;dragMoved_=false;dragging_=true;SetCapture(window_);return;}
+    if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0&&(w&MK_LBUTTON)){
+      // Selecting a handle must not quantize its value to a rounded pointer
+      // pixel. Match the native song-automation editor's drag threshold.
+      const auto dpi=GetDpiForWindow(window_);const float scale=96.f/dpi;
+      if(!dragMoved_&&std::abs(x-dragX_)<GetSystemMetricsForDpi(SM_CXDRAG,dpi)*scale&&
+          std::abs(y-dragY_)<GetSystemMetricsForDpi(SM_CYDRAG,dpi)*scale)return;
+      dragMoved_=true;auto p=points_[size_t(selected_)];const auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(int(i)!=selected_&&points_[i].at("position")==position)return;p["position"]=position;p["value"]=canvas_.value(y);replacePoint(std::move(p));}
   }
   bool wheel(UINT message,float x,float y,WPARAM w)override{
     if(!canvasVisible_||!canvas_.viewport.contains(x,y)||dragging_)return false;const double delta=GET_WHEEL_DELTA_WPARAM(w)/120.0;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;
@@ -424,6 +431,15 @@ public:
     require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending pattern curve before saving the project");
   }
   void flushForHistory(){finishAutomaticCurveEdit();}
+  void refreshAfterHistory(){
+    // History changes accepted music, not the inspected target. Reload a clean
+    // visible editor by its stable pattern/plugin IDs; never follow the cursor
+    // or replace a retained preview, raw field, bank or formula draft.
+    if(!visible()||retainedDraft()||automaticEdit_)return;
+    const auto now=context_();if(now.busy||now.document!=captured_.document||current())return;
+    try{load(false);}
+    catch(const std::exception &e){error(e);} // The history operation already succeeded.
+  }
   void hide()override{
     cancelDrag();
     if(automaticEdit_)flushAutomaticEdit();

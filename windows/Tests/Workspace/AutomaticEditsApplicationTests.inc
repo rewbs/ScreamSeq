@@ -489,6 +489,13 @@ void applicationAutomaticEdits(){
     const auto preview=curve.snapshot().at("points");restoreCheck(app.saveFile(),"Save rejected accepted music merely because a tool preview exists");
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&curve.snapshot().at("points")==preview&&
       curve.snapshot().at("dirty").get<bool>(),"Save implicitly accepted or discarded a compound transform preview");
+    app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision}});
+    restoreCheck(curve.snapshot().at("points")==preview&&curve.snapshot().at("dirty").get<bool>()&&
+      curve.snapshot().at("stale").get<bool>()&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,
+      "External history replaced a retained compound preview or changed the wrong history entry");
+    app.documentOperation("history.redo",{{"expectedRevision",app.view->session.revision}});
+    restoreCheck(curve.snapshot().at("points")==preview&&curve.snapshot().at("dirty").get<bool>()&&
+      app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Redo discarded a retained preview");
     restoreRejected([&]{app.edit("history.undo",{{"domain","all"}});});press(window,4218);
     app.documentOperation("document.open",departureOpenRequest(app,path));
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Pattern Save/reopen omitted the automatic point or accepted the preview");fixture.close();
@@ -530,15 +537,35 @@ void applicationAutomaticEdits(){
     app.openParameterAutomation(plugin,1,true);auto &curve=*app.parameterAutomationWindow;const auto window=curve.window();
     ScreamSeq::Tests::ownGuiWindow(window);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
     restoreCheck(curve.snapshot().at("selectedPoint")==0,"Pattern deletion fixture must select its first point");
+    const auto beforeClick=app.view->session.revision;const auto handle=curve.snapshot().at("handles")[0];
+    const auto scale=GetDpiForWindow(window)/96.;const auto x=int(std::lround(handle.at("x").get<double>()*scale));
+    const auto y=int(std::lround(handle.at("y").get<double>()*scale));
+    SendMessageW(window,WM_LBUTTONDOWN,MK_LBUTTON,MAKELPARAM(x,y));
+    SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,MAKELPARAM(x,y));
+    SendMessageW(window,WM_MOUSEMOVE,MK_LBUTTON,MAKELPARAM(x+1,y-1));
+    SendMessageW(window,WM_MOUSEMOVE,0,MAKELPARAM(x+20,y-20));
+    SendMessageW(window,WM_LBUTTONUP,0,MAKELPARAM(x,y));settle(window);
+    restoreCheck(app.view->session.revision==beforeClick&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline&&
+      curve.snapshot().at("selectedPoint")==0,"Selecting a pattern handle changed its exact value or added pointer-jitter history");
     const auto field=GetDlgItem(window,4208);SetFocus(field);SetWindowTextW(field,L"62.5");
     SetFocus(window);SendMessageW(window,WM_KEYDOWN,removeKey,0);settle(window);
     auto edited=baseline;for(auto &lane:edited["lanes"])if(lane.at("parameter")==1)lane["points"][0]["value"]=.625;
     auto removed=edited;for(auto &lane:removed["lanes"])if(lane.at("parameter")==1)lane["points"].erase(lane["points"].begin());
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==removed&&!curve.queuedMusicalEdit()&&GetFocus()==window,
       "Pattern canvas deletion failed, changed another lane or lost canvas focus");
-    app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    const auto displayed=[&](const Json &expected){
+      const auto state=curve.snapshot();const auto found=std::find_if(expected.at("lanes").begin(),expected.at("lanes").end(),
+        [](const auto &lane){return lane.at("parameter")==1;});
+      restoreCheck(found!=expected.at("lanes").end()&&state.at("points")==found->at("points")&&
+        !state.at("stale").get<bool>()&&state.at("pattern")==0&&state.at("plugin")==plugin&&state.at("parameter")==1&&
+        GetFocus()==window,"Shared history left a stale visible curve, followed another target or moved canvas focus");
+    };
+    app.edit("history.undo",{{"domain","all"}});displayed(edited);
+    restoreCheck(curve.snapshot().at("selectedPoint")==1,"Undo reinterpreted the retained point's index instead of its stable position");
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Undo deletion lost the preceding automatic field edit");
-    app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    app.edit("history.redo",{{"domain","all"}});displayed(removed);
+    app.edit("history.undo",{{"domain","all"}});displayed(edited);
+    app.edit("history.undo",{{"domain","all"}});displayed(baseline);
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern point edit and deletion did not form exact history steps");
     SetFocus(field);SetWindowTextW(field,L"invalid");SetFocus(window);SendMessageW(window,WM_KEYDOWN,removeKey,0);
     restoreCheck(restoreText(field)==L"invalid"&&curve.snapshot().at("fieldDraft").get<bool>()&&

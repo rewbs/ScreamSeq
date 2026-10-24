@@ -125,9 +125,13 @@ class ParameterAutomationUITests(unittest.TestCase):
         else:self.fail('silent pattern automation app did not start')
         before=self.read('transport.get');baseline=self.saved();opaque=self.read('plugin.state.get',plugin=plugin)
         self.start();self.select(4204,1);handle=self.state()['handles'][0]
-        self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x202,handle['x'],handle['y'])
+        selection_revision=self.client.call('document.get')['revision']
+        self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x200,handle['x'],handle['y'])
+        self.mouse(0x200,handle['x']+1,handle['y']-1);self.mouse(0x202,handle['x'],handle['y'])
         self.assertEqual(self.state()['selectedPoint'],0)
         self.idle() # Finish selection preview before beginning the timed edit.
+        self.assertEqual(self.saved(),baseline,'Selecting an existing handle must preserve exact point values')
+        self.assertEqual(self.client.call('document.get')['revision'],selection_revision,'Pointer jitter must not add history')
         field=self.control(4208)
         self.desktop.send(field,0x201,1,4|(4<<16));self.desktop.send(field,0x202,0,4|(4<<16))
         self.field(4208,'62.500');self.desktop.send(field,0xB1,1,4);selection=self.desktop.send(field,0xB0)
@@ -141,9 +145,17 @@ class ParameterAutomationUITests(unittest.TestCase):
         self.assertFalse(self.state()['retainedDraft']);self.assertEqual(self.desktop.focus(field),field)
         self.assertEqual(self.desktop.send(field,0xB0),selection)
         text=ctypes.create_unicode_buffer(64);self.desktop.send(field,0xD,64,ctypes.addressof(text));self.assertEqual(text.value,'62.500')
+        def displayed(expected):
+            lane=next(l for l in expected if l['plugin']==plugin and l['parameter']==1)
+            current=self.state()
+            self.assertEqual(current['points'],lane['points'],current)
+            self.assertFalse(current['stale'],current)
+            self.assertEqual((current['pattern'],current['plugin'],current['parameter']),(0,plugin,1))
         self.write('history.undo');self.assertEqual(self.saved(),baseline)
+        displayed(baseline);self.assertEqual(self.desktop.focus(field),field)
         self.write('history.redo');self.assertEqual(self.saved(),edited)
-        self.press(4218);handle=self.state()['handles'][0]
+        displayed(edited);self.assertEqual(self.desktop.focus(field),field)
+        handle=self.state()['handles'][0]
         self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x202,handle['x'],handle['y']);self.idle()
         self.assertEqual(self.state()['selectedPoint'],0);self.key(0x08)
         deleted=json.loads(json.dumps(edited))
@@ -151,8 +163,11 @@ class ParameterAutomationUITests(unittest.TestCase):
             if lane['plugin']==plugin and lane['parameter']==1:lane['points'].pop(0)
         self.assertEqual(self.saved_idle(),deleted,'Canvas Backspace must delete only the selected point')
         self.write('history.undo');self.assertEqual(self.saved(),edited)
+        displayed(edited)
         self.write('history.redo');self.assertEqual(self.saved(),deleted)
+        displayed(deleted)
         self.write('history.undo');self.assertEqual(self.saved(),edited)
+        displayed(edited)
         after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive']);self.assertFalse(after['fault'])
         self.assertEqual(after['playbackEpoch'],before['playbackEpoch']);self.assertGreater(after['frames'],before['frames'])
         self.assertEqual(after['overruns'],0);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)

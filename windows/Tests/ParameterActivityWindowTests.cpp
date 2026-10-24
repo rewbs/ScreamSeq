@@ -78,6 +78,46 @@ void run(){
       twoParameters=false;click(11002);
     }
     {
+      // Refresh after external history can arrive inside a pumped observer
+      // read. It must finish once when idle, not leave the old revision behind.
+      choose(11006,2);SetFocus(GetDlgItem(window,11016));
+      const auto beforeLane=lane;const auto beforeEdits=edits;
+      context.revision="refresh-after-history";
+      const auto beforeGeneration=tool.snapshot().at("generation").get<uint64_t>();
+      const auto beforeWatches=watches;
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11002);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      require(watches==beforeWatches&&tool.snapshot().at("generation")==beforeGeneration&&tool.snapshot().at("stale")==true,
+        "Refresh reentered the observing worker or silently adopted stale point fields");
+      context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
+      require(watches==beforeWatches,"Queued Refresh bypassed the busy document owner");
+      SendMessageW(window,WM_TIMER,4,0);
+      require(watches==beforeWatches+1&&tool.snapshot().at("generation")==beforeGeneration+1&&
+        tool.snapshot().at("stale")==false&&tool.snapshot().at("recorded")==beforeLane&&
+        tool.snapshot().at("selectedPoint")==0&&lane==beforeLane&&edits==beforeEdits,
+        "Refresh during observation was lost or changed music instead of loading the current lane");
+      SendMessageW(window,WM_TIMER,4,0);require(watches==beforeWatches+1,"Completed Refresh restarted observation twice");
+      for(const bool changedDocument:{false,true}){
+        pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11002);};
+        SendMessageW(window,WM_TIMER,3,0);pump={};
+        const auto captured=tool.snapshot();const auto priorWatches=watches;
+        if(changedDocument)context.revision="refresh-later-revision";
+        else {SetWindowTextW(GetDlgItem(window,11016),L"unfinished");SendMessageW(GetDlgItem(window,11016),EM_SETSEL,2,5);}
+        SendMessageW(window,WM_TIMER,4,0);
+        DWORD first=0,last=0;SendMessageW(GetDlgItem(window,11016),EM_GETSEL,WPARAM(&first),LPARAM(&last));
+        require(watches==priorWatches&&lane==beforeLane&&edits==beforeEdits&&
+          (changedDocument?tool.snapshot().at("expectedRevision")==captured.at("expectedRevision"):
+            tool.snapshot().at("rawValue")=="unfinished"&&first==2&&last==5&&GetFocus()==GetDlgItem(window,11016)),
+          "Deferred Refresh discarded newer raw input/caret or crossed a later song revision");
+        click(11002);
+      }
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11002);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};const auto priorWatches=watches;
+      tool.hide();SendMessageW(window,WM_TIMER,4,0);
+      require(watches==priorWatches&&!tool.visible(),"Deferred Refresh reopened a closed observer");
+      tool.openAt("a",1);choose(11006,0);
+    }
+    {
       searchCatalogue=true;twoParameters=true;click(11002);
       const auto search=GetDlgItem(window,11021);require(search!=nullptr,"Missing Activity search edit");
       {

@@ -382,6 +382,8 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.write('history.undo');self.assertEqual(self.read('automation.get'),edited)
         self.write('history.redo');self.assertEqual(self.read('automation.get'),moved)
         press(11002) # Re-read the current revision after external Undo/Redo.
+        refreshed=visible_lane(moved)
+        self.assertEqual(refreshed['selectedPoint'],0,refreshed)
         point_list=control(11007)
         self.desktop.send(point_list,0x201,1,8|(8<<16))
         self.desktop.send(point_list,0x202,0,8|(8<<16))
