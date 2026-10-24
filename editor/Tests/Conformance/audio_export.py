@@ -13,10 +13,10 @@ from native_roundtrip import write_json
 from project_tree import EvidenceError, read_bytes, sha256
 
 
-def run(client, recorded, layer_directory, output):
-    recorded, layer_directory, output = Path(recorded), Path(layer_directory), Path(output)
+def run(client, baseline, recorded, layer_directory, output):
+    baseline, recorded, layer_directory, output = Path(baseline), Path(recorded), Path(layer_directory), Path(output)
     output.mkdir(exist_ok=False)
-    sources = {'recorded': recorded, 'both-layers': layer_directory / 'layer-source.screamseq'}
+    sources = {'before-recording': baseline, 'recorded': recorded, 'both-layers': layer_directory / 'layer-source.screamseq'}
     sources.update({name: layer_directory / (name + '.screamseq')
                     for name in ('sample-layer', 'plugin-layer', 'neither-layer')})
     immutable = {name: sha256(read_bytes(path)) for name, path in sources.items()}
@@ -45,7 +45,11 @@ def run(client, recorded, layer_directory, output):
                     name + ': export changed the document or stopped transport')
             require(client.call('document.get') == before and client.call('context.get') == context,
                     name + ': export changed accepted state, history, Save baseline or editor context')
-            wav = read_bytes(destination)
+            # F04 has three order occurrences; the full-song writer also keeps
+            # up to sixty seconds of reported tail. Bound memory before reading
+            # rather than imposing the pattern-local resampler's shorter limit.
+            max_frames = 48000*120
+            wav = read_bytes(destination, limit=44+max_frames*8)
             require(len(wav) > 44 and (len(wav)-44) % 8 == 0, name + ': incomplete stereo WAV')
             require((wav[:4], wav[8:16], wav[36:40]) == (b'RIFF', b'WAVEfmt ', b'data') and
                     struct.unpack_from('<HHIIHH', wav, 20) == (3, 2, 48000, 384000, 8, 32) and
@@ -53,7 +57,7 @@ def run(client, recorded, layer_directory, output):
                     struct.unpack_from('<I', wav, 40)[0] == len(wav)-44,
                     name + ': invalid float WAV identity, rate or exact chunk lengths')
             frames = (len(wav)-44) // 8
-            require(0 < frames <= 48000*60, name + ': fixture export exceeds its bounded minute')
+            require(0 < frames <= max_frames, name + ': fixture export exceeds its bounded two minutes including tails')
             pcm = array.array('f', wav[44:])
             if sys.byteorder != 'little':
                 pcm.byteswap()
@@ -66,6 +70,11 @@ def run(client, recorded, layer_directory, output):
         # removal/gating in these derivatives so this DC-producing fixture
         # proves both layers rather than mistaking intentional suppression for
         # a missing instrument. The original processed song is exported too.
+        before, after = layers['before-recording'], layers['recorded']
+        require(len(before) == len(after), 'Parameter recording changed full-song export duration')
+        changed = sum(abs(a-b) > 2/32768 for a, b in zip(before, after) if abs(a) < 1 and abs(b) < 1)
+        report['recordedReplay'] = dict(changedUnsaturatedSamples=changed)
+        require(changed >= 64, 'Saved native VST3 recording did not change audible full-song export')
         for present, absent in (('both-layers', 'sample-layer'), ('both-layers', 'plugin-layer'),
                                 ('sample-layer', 'neither-layer'), ('plugin-layer', 'neither-layer')):
             left, right = layers[present], layers[absent]

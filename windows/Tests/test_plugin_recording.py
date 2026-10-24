@@ -303,7 +303,7 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertTrue(replay['passed'], replay)
         self.assertTrue(replay['independentLayersQualified'], replay)
         from audio_export import run as export_audio
-        exported = export_audio(self.client, saved, evidence / 'audio-replay', evidence / 'full-song-export')
+        exported = export_audio(self.client, project, saved, evidence / 'audio-replay', evidence / 'full-song-export')
         self.assertTrue(exported['passed'] and exported['inputFilesUnchanged'], exported)
         write_json(evidence / 'recording-journey.json', dict(
             passed=True, parityComplete=False, silentNativePlayback=True,

@@ -157,3 +157,14 @@ song is also exported. This is unexecuted test source, not vendor or hardware
 qualification. It stays within the existing layered app case, so the checkpoint
 still has three app journeys and one build. Each successful run retains its WAV
 hashes and `full-song-export/report.json`.
+
+The final WAV assertions also compare the pre-recording and recorded processed
+song, requiring64 changed unsaturated samples so a VST3 export that ignores
+recorded automation cannot pass on sample audibility alone. Each WAV read is
+bounded before allocation to two minutes: F04 has three order occurrences and
+the production writer permits up to60 seconds of hosted tail. This replaces
+the unexecuted one-minute fixture ceiling, not a failed assertion; the bound
+must include both complete music and valid tails. Native state and history
+equality, independent layer assertions and every prior failed receipt remain
+unchanged. The added baseline makes six WAV exports within the one existing
+layered app journey.
