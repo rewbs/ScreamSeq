@@ -1807,3 +1807,32 @@ coverage checks removal/replacement, restoration and removal while navigation
 is queued, with exact target, no callback to a replacement and unchanged music.
 This matches the existing Mac availability rule and does not add musical edits.
 The three-native/two-app scope is unchanged; these additions are unbuilt.
+
+### Recording review after an owner-changing read failure (source only)
+
+Source inspection found another presentation mismatch: `refresh` adopts the
+worker's new take before requesting its input page. A failed page read could
+therefore retain the previous take's rows and details. The same problem occurs
+when the displayed target disappears and loading the replacement page fails.
+The error path now clears only rows whose take or target is no longer current,
+explains that the page needs reloading, and retains the newly observed lifecycle
+and recovery guards. Same-owner failures still preserve the old page, selected
+input and caret through the existing navigation rollback.
+
+The existing native recording-review fixture adds both failure cases, exact
+subsequent recovery of the original page, unchanged focus, no writes and exact
+unrelated music preservation. This is source evidence and unbuilt coverage;
+the pending three-native/two-fresh-app checkpoint remains unchanged. No audio,
+API, history, timing or persistence behavior changes.
+
+The preceding6e CI Windows run40047539078 is terminal and failed: compilation,
+159 portable/worker checks and51/53 native groups passed; automatic-edit and
+Activity native groups failed. Its117 app cases reported24 failures across21
+distinct cases, including three secondary missing-window teardown failures,
+plus one optional skip. Routing diagnostics show an empty device catalogue;
+that does not individually establish the cause of every startup failure.
+ARM Mac job120732587023 passed134 CTests, full native interface, socket/typed
+gates and its real-session recording lifecycle. Intel job120732586809 was
+still running at01:39 UTC. These results remain evidence for6e only, not the
+unbuilt corrections; original failed receipts and hashed logs are retained in
+`bin/mac-gesture-20261022/activity-history-correction/`.

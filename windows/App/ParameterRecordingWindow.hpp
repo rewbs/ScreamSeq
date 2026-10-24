@@ -430,7 +430,20 @@ private:
     }
     if(id==7&&visible()&&!pending_&&!queuedAction_&&!queuedTarget_&&!completion_.retained()&&(!callbacks_.available||callbacks_.available()))refresh();
   }
-  void error(const std::exception &error)override{error_=error.what();set(statusLabel,wide(error_));layout();}
+  void error(const std::exception &error)override{
+    // A failed page read may follow a successfully observed lifecycle change.
+    // Keep that new lifecycle (and its recovery guards), but never label an old
+    // take's inputs as the new take or a removed target. Same-owner read failures
+    // retain their page/selection through changeTarget's rollback instead.
+    if(displayedTake_!=take()||(!displayedTarget_.empty()&&
+       std::none_of(targets_.begin(),targets_.end(),[&](const auto &entry){return entry.dump()==displayedTarget_;}))){
+      rows_=Json::array();total_=offset_=0;
+      NativeReportList::setItemCount(controls_.at(events),0,LVSICF_NOSCROLL);
+      selectionDetails();set(page,L"Input page unavailable · Refresh / review to retry");
+      set(summary,L"Recording state changed · previous inputs are no longer displayed. Refresh / review to load this take.");
+    }
+    error_=error.what();set(statusLabel,wide(error_));layout();
+  }
   void layout()override {
     if(!ready_)return;const auto [w,h]=size();place(heading,12,10,w-(callbacks_.recoveredInputs?218:24),24);place(recovered,w-198,8,186,26,bool(callbacks_.recoveredInputs));place(summary,12,40,w-24,40);
     const float recoveryWidth=playbackRecovery()?126.f:0.f;

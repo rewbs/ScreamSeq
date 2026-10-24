@@ -11,6 +11,7 @@ void applicationParameterRecordingReview() {
     Json openedAutomation=Json::array();
     std::function<void()> duringRead;
     std::function<void()> duringPageRead;
+    std::function<void()> duringDeliveryPage;
     std::string contextRevision;
     bool available=true;
     bool inputProtected=false;
@@ -29,7 +30,9 @@ void applicationParameterRecordingReview() {
       restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
       "Native review reconciled the wrong completion");
       if(std::exchange(failReconcile,false))throw std::runtime_error("Owned readback failure");++reconciled;};
-    callbacks.delivery=[&](size_t offset,size_t limit){auto page=delivery;page["events"]=Json::array();
+    callbacks.delivery=[&](size_t offset,size_t limit){
+      if(limit==128)if(auto hook=std::exchange(duringDeliveryPage,{}))hook();
+      auto page=delivery;page["events"]=Json::array();
       for(size_t i=offset;i<std::min(delivery.at("events").size(),offset+limit);++i)page["events"].push_back(delivery.at("events")[i]);return page;};
     callbacks.read=[&](const std::string &method,const Json &params)->Json {
       if(method=="automation.recording.get"){
@@ -442,6 +445,27 @@ void applicationParameterRecordingReview() {
       tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
       ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
       "Failed target page read relabelled old input or discarded selected details/focus");
+    // A new take or a removed target cannot inherit the prior page when the
+    // new event read fails. Retain the observed lifecycle, not stale input rows.
+    const auto originalTake=take;
+    for(const bool newTake:{true,false}){
+      if(newTake)take["take"]="replacement-page-owner";
+      else take["targets"].erase(take["targets"].begin());
+      const auto failPage=[] {throw std::runtime_error("Owned replacement page failure");};
+      if(newTake)duringPageRead=failPage;else duringDeliveryPage=failPage;
+      SendMessageW(window,WM_TIMER,7,0);
+      restoreCheck(tool.snapshot().at("take")==take&&tool.snapshot().at("events").empty()&&
+        tool.snapshot().at("total")==0&&ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1&&
+        tool.snapshot().at("inputDetails").get<std::string>().find("900719925474") == std::string::npos&&
+        GetFocus()==control(9728)&&writes.size()==beforeTargetNavigation&&songState(app)==music,
+        "Failed replacement page displayed another take's inputs, rolled back lifecycle or changed focus/music");
+      take=originalTake;click(9725);chooseTarget(1);
+      ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+      ScreamSeq::NativeReportList::setItemState(control(9732),17,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      restoreCheck(tool.snapshot().at("events")==beforeFailedTarget.at("events")&&
+        tool.snapshot().at("inputDetails")==beforeFailedDetails&&GetFocus()==control(9728),
+        "Review did not recover the exact original inputs after a replacement-page failure");
+    }
     // A long take crosses native review pages. Polls may pump these clicks just
     // like target selection; failed reads must retain the displayed page and
     // its exact original input, including text selected for copying.
