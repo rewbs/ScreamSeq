@@ -1,5 +1,32 @@
 # Current continuation queue
 
+## Latest continuation: 24 October 23:32 UTC
+
+Corrected x64 acceptance is now complete using existing binaries; do not rerun
+the five-case replay. See `X64-COMPOSING-CLOSURE-2026-10-24.md` and
+`bin/mac-gesture-20261022/render-reply/ci-x64/acceptance.json`. Four actual-app
+cases passed, including complete layered recording/selection PCM/full-song WAV
+exports. One controller wrapper failed before execution because its executable
+is absent from the artifact; its exact current-source CI case passed. Keep the
+failed aggregate and use the separate composite acceptance, not a fabricated
+green result. Session84391 exited1 normally after all five selected cases; no
+test process remains to restart. All23 distinct current CI failed cases are
+accounted for by fresh or explicitly unchanged prior real-endpoint evidence.
+
+Current Mac ARM run40140424287/job121010813142 passed135CTests and36 interface
+groups plus native lifecycle/socket gates. Receipt: `render-reply/mac-arm-acceptance.json`.
+Intel job121010813293 remains running; inspect that handle, do not restart.
+Windows CI remains failed on device-less startup despite162 portable/worker and
+53 native groups passing. No production integration receipt/package exists.
+
+Next: observe current Intel to completion; finish reciprocal/review accounting;
+integrate reviewed source and documentation on main at the hourly gate, then
+package the exact accepted ARM64 binary. Avoid a doc-only PR push followed by
+another merge build. Earliest gate remains23:53:17UTC subject to later starts.
+Product source is stillb0375de63; subsequent local commits are documentation only.
+No fresh Computer Use is required merely for documentation: corrected ARM64
+foreground receipt already passed on this identical binary with stated limits.
+
 **24 October23:04UTC — corrected ARM64 automated and foreground pass:**
 Frozen `b0375de637dd940cce225a0aba15fab69ee2f50f` is on PR7; one local Release
 build started22:52:52UTC and completed22:54:37UTC. Executable SHA256
