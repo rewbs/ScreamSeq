@@ -306,3 +306,25 @@ suspected stale-tail writer change was removed after that source review.
 No export/DSP product code changed in this continuation. Resolve the newest
 `audio-export-followup/freeze.json`; its earlier unexecuted209 manifest is
 retained separately. The exact failed dry partition assertion remains required.
+
+At06:56 an analytic source check identified a possible explanation for the tiny
+partition differences. `soundlib/MixerLoops.cpp` is byte-equivalent after newline
+normalization to pinned upstream f83cedb0; the active mixer is integer. Its
+rounded click-offset decay does not commute with summing separate voice offsets.
+`Fastmix.cpp` decays ending voices through the remaining chunk, then merges their
+residues into the shared offset for the next chunk. A two-offset model using
+1280000 and987654, first chunks17/512, differs by at most110 integer mix units
+(8.19564e-7 normalized). `audio-export/stock-offset-model.json` retains source
+identity and results. This is **not an application render**, does not establish
+the cause of the demo failure and does not replace or relax any assertion.
+Inspect the next complete same-partition independent-core comparisons before
+changing either the shared renderer or its compatibility expectations.
+
+The new frozen candidate is6a9d3d4b7; later primary commits currently contain
+documentation only and are excluded from that compiled source. Eleven native
+groups include precise cursor retention. If the mandatory exact PCM group still
+fails, `audio-export-followup/launch-diagnostic.py` permits only an explicitly
+diagnostic fresh UI process after the entire automated attempt is terminal and
+the silent device/source/provider/binary checks pass. It uses ordinary callback
+timing, no cycle instrumentation. Its receipt cannot qualify a release; the
+normal passing-candidate launcher and package gate remain strict.
