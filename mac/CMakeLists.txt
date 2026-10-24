@@ -383,6 +383,9 @@ else()
   target_link_libraries(cabinet-tests PRIVATE RealtimeAudit)
 endif()
 add_test(NAME cabinet COMMAND cabinet-tests)
+# Extreme tail/partition coverage is CPU intensive. Keep its full workload and
+# timeout, but avoid competing CTests on the small hosted runners.
+set_tests_properties(cabinet PROPERTIES RUN_SERIAL TRUE)
 add_executable(dynamics-tests Tests/DynamicsTests.mm)
 target_compile_options(dynamics-tests PRIVATE -fobjc-arc)
 target_link_libraries(dynamics-tests PRIVATE TrackerMac)

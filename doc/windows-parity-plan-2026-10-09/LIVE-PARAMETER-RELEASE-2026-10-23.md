@@ -2066,3 +2066,22 @@ deletes its selected point with native Backspace, checks exact Undo/Redo and
 retains the same playback epoch and plugin state before reopening the saved
 file. Counts remain seven native groups and seven app cases. Add canvas versus
 text Backspace to the fresh foreground check; this source has not been built.
+
+### Terminal8a Intel gate and bounded scheduling correction
+
+Intel job120747070173 is terminal failed.133/134 CTests passed; `cabinet`
+reached the120-second limit in its final api-and-export phase. Its completed
+phase timings were models0.718s, preamps0.597s, routing/timing6.819s,
+extremes/budget110.203s and compensation1.257s. The prior6e Intel cabinet run
+passed in98.73s;8a ARM passed in56.64s. This does not establish a DSP regression
+or prove scheduler contention. The cabinet CTest now requests RUN_SERIAL so its
+existing extreme-tail/partition workload does not compete with other CTests.
+No fixture, assertion, render count, budget or120-second timeout changes.
+
+The same Intel job passed real-device AU/VST3 recording lifecycle, the full
+native interface, recovery/picker, private socket admission and typed/socket
+gates. Its complete log SHA256 is
+`f6f5e860b10f45ddd1481846a590af1d1f7daa1c673a985c162f3df55f3ec5c5`.
+Both8a platform runs are terminal; no old job was restarted. The02:59:03UTC
+lower bound still applies. The scheduling change requires the next Mac CI run;
+retain both the Intel timeout and ARM API-page clock failure as failed evidence.
