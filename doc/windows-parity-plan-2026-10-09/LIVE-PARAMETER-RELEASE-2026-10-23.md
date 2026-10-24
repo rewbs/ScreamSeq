@@ -1851,3 +1851,22 @@ completion, zero writes, pending/button/status recovery, no automatic replay,
 and a later explicit Start with the original plugin selection. This remains
 unbuilt and requires both Mac native interface jobs in the same checkpoint as
 the earlier selection change. No shared/audio/API/persistence change was made.
+
+### Preceding6e Mac qualification completed
+
+Intel job120732586809 subsequently completed successfully. Its134 CTests,
+full native interface, socket/typed gates and explicit BlackHole2ch/512-frame
+session lifecycle passed. The live lifecycle advanced frames5120→14336 and
+callbacks10→28 while checking capture, recovery, Keep/Undo/Redo, live release,
+Discard and save/reopen. The downloaded log SHA256 is
+`322f27992e5a38d505999e9c91306dfbfeb4ac79ca3598573829b6446ee61f25`.
+Both Mac architectures therefore passed6e. This does not qualify the subsequent
+Mac UI changes or explain the intermittent1071 Intel unmapped-first-input case.
+
+Source audit confirms that Mac arms after the first timeline publication,
+while Core Audio supplies presentation timestamps. A published first interval
+can therefore be later than the UI's current host time; generation alone does
+not establish coverage for every immediately following input. This is a
+candidate startup explanation, not proof of the earlier runtime failure.
+No timestamp, admission or assertion was changed. Retain the existing
+failure-only per-event coverage diagnostics for any recurrence.
