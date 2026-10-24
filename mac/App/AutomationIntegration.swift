@@ -63,8 +63,8 @@ extension AppController {
       return
     }
     var error: NSError?
-    // Export rejects hosted/native layers. Its admission and dry run must not
-    // commit pending vendor gestures while explaining that refusal.
+    // Exports must not commit pending vendor gestures during admission or dry
+    // run. Module export rejects hosted layers; audio export uses accepted state.
     // Take lifecycle owns its bounded intake and reports retained failures.
     // A preliminary manual drain could block Get/Discard precisely when the
     // musician needs to inspect or resolve a refused native input boundary.
@@ -75,7 +75,7 @@ extension AppController {
     // recover it. stop/panic own their transport boundary; input stays with the
     // retained take rather than being retried through the manual edit prefix.
     let retainedTransportExit = session.parameterRecordingTakeID != nil && (method == "transport.stop" || method == "transport.panic")
-    let edits = method == "document.exportModule" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit ? 0 :
+    let edits = method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
     if edits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
