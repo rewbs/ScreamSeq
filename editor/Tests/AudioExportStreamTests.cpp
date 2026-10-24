@@ -35,7 +35,7 @@ class FailedDataBuffer final:public std::stringbuf {
 };
 int main() {
   try {
-    auto document=Document::demo();const auto module=document->serialize();
+    auto document=Document::demo();const auto module=document->snapshotData();
     const auto native=document->native();const auto revision=document->revision;
     const auto undo=document->historyHead(false),redo=document->historyHead(true);
     const auto dry=render(module);check(!dry.empty(),"Empty demo export");
@@ -53,6 +53,19 @@ int main() {
     const auto quiet=render(module,{}, {},&muted);
     check(quiet.size()==dry.size()&&std::all_of(quiet.begin(),quiet.end(),[](float value){return value==0.f;}),
           "Native column mutes were omitted from export");
+    auto precise=native;
+    precise.preciseNotes.push_back({precise.patterns.at(0).id,precise.tracks.at(0).id,32768,1,73,91});
+    precise.validate(document->song());
+    const auto notes=render(module,{}, {},&precise);
+    check(notes!=dry,"Precise sub-row note was omitted from export");
+    auto preciseReference=std::make_unique<Renderer>(module,48000,0,false,std::string{},UINT32_MAX,PlaybackRegion{},&precise);
+    offset=0;
+    while(const auto frames=preciseReference->render(buffer.data(),512)) {
+      check(offset+frames*2<=notes.size(),"Precise export truncated core PCM");
+      check(std::equal(buffer.begin(),buffer.begin()+frames*2,notes.begin()+offset),"Precise export differs from independent core PCM");
+      offset+=frames*2;
+    }
+    check(offset==notes.size(),"Precise WAV contains extra padding");
     PluginState gain;gain.descriptor.format="Built-in";gain.descriptor.classID="resonance.gainer.v1";gain.instanceID="export-gain";
     auto probe=std::make_unique<NativePlugin>(gain,48000,true);
     check(probe->parameter(1,-6),"Configure gain fixture");gain=probe->state();
@@ -72,7 +85,7 @@ int main() {
     FailedDataBuffer failed;std::ostream broken(&failed);
     rejects([&]{writeProjectAudio(module,{}, {},broken);},"Failed data write reported success");
     check(failed.str().size()==44,"Failure injection did not reach the first data write");
-    check(document->serialize()==module&&document->native()==native&&document->revision==revision&&
+    check(document->snapshotData()==module&&document->native()==native&&document->revision==revision&&
           document->historyHead(false)==undo&&document->historyHead(true)==redo&&plugins==pluginBefore&&points==pointBefore,
           "Export mutated source, plugin state, recording or history");
     std::cout<<"PASS shared WAV header, exact dry PCM, partitioned recorded DSP, failure and source preservation\n";

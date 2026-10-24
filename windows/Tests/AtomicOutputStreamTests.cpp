@@ -22,6 +22,12 @@ int main(){
     check(read(destination)=="WAVEpayload","Render failure replaced destination");
     rejects([&]{writeAtomicStream(destination,true,[](std::ostream &output){output<<"partial";output.setstate(std::ios_base::badbit);});},"Bad stream accepted");
     check(read(destination)=="WAVEpayload","Bad stream replaced destination");
+    {
+      FileDetail::Handle locked(CreateFileW(destination.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr));
+      check(locked.value!=INVALID_HANDLE_VALUE,"Cannot establish destination publication lock");
+      rejects([&]{writeAtomicStream(destination,true,[](std::ostream &output){output<<"complete replacement";});},"Locked destination publication succeeded");
+      check(read(destination)=="WAVEpayload","Publication failure lost original destination");
+    }
     const auto racing=scratch/L"racing.wav";
     rejects([&]{writeAtomicStream(racing,false,[&](std::ostream &output){output<<"ours";std::ofstream other(racing);other<<"created meanwhile";});},"Publication overwrote a racing destination");
     check(read(racing)=="created meanwhile","Racing destination was lost");

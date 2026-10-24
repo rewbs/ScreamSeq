@@ -28,10 +28,15 @@ plugin latency/tail (latency capped at 60 seconds). Write failures stop promptly
 It retains the existing one-hour total render bound and 60-second tail cap.
 Native file owners must discard incomplete staging output on every failure.
 
+Callers must use `Document::snapshotData()` or the project wrapper's equivalent
+module snapshot, preserving exact native sample and timing archives. Plain
+module serialization is not an acceptable substitute.
+
 New `audio-export-stream` is registered on both platforms and included in the
 Windows worker target. Assertions cover exact independent dry core PCM and
 duration, WAV headers, callback partitions, audible hosted/recorded processing,
-native column mutes, injected stream failures and unchanged source/history.
+native column mutes, precise sub-row notes against independent core PCM,
+injected stream failures and unchanged source/history.
 These assertions have **not executed**. Existing Mac `export` additionally
 covers actual AU latency/tails, a 512 KiB worker stack and failed-destination
 preservation; it remains required after extraction. Prior Mac passes do not
@@ -45,7 +50,8 @@ qualify this changed rendering source.
    with explicit overwrite policy. Test failure and concurrent-destination
    preservation. `atomic-output-stream` asserts header seeking, Unicode paths,
    chunked writes, no-overwrite race rejection, explicit overwrite, render/stream
-   failure preservation and removal of staging files. This test is unexecuted.
+   failure preservation, locked-destination publication failure and removal of
+   staging files. This test is unexecuted.
    Project byte-buffer saving is not suitable for a one-hour WAV.
 2. Add `document.exportAudio` to both native dispatchers, describe/schema/guide
    and actual-app tests. Require current document revision and absolute `.wav`

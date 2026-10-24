@@ -12,6 +12,8 @@ inline constexpr uint32_t audioExportRate=48000;
 // selected sequence to stereo float32 WAV. The stream must start at offset zero
 // and support seek; its owner supplies staging, durability and atomic publication.
 // No document, device, live processor, save baseline or history is changed.
+// Hosts must supply Document::snapshotData() (or the equivalent project module
+// snapshot), not a lossy module export, so exact sample/timing archives survive.
 // Returns written stereo frames, excluding compensated latency, including tails.
 uint64_t writeProjectAudio(const std::vector<std::byte> &module,
                           const std::vector<PluginState> &plugins,
