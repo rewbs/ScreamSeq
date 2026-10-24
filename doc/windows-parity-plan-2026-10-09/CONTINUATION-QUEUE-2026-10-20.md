@@ -8,6 +8,26 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 07:17 UTC update:** PR7/frozen qualification source is
+`6a9d3d4b7d931cb291f8f11b6ba29a0115de379b`. The single07:02 build and terminal
+`audio-export-followup/qualified-checks.json` supersede the candidate status
+below:10/11 native groups plus setup, all3 composing/recording app journeys and
+bounded silent WASAPI pass. Shared export PCM remains red. The precise-note
+oracle omitted explicit schedule preparation; the primary checkout fixes that
+setup without weakening exact PCM assertions, unbuilt. Same-partition dry
+exports are exactly equal to independent core; tiny differences across
+partitions remain under investigation. The primary also has an unbuilt
+`document-controller-live-parameters` accepted-song/active-preview export case.
+Fresh foreground observations cover automatic precise edits, canvas versus
+text Backspace, Save caret, Tab traversal, left-edge drag/Undo, visible cursor
+and native WAV export with unchanged playback epoch. Float worked; resize and
+sustained presentation remain unqualified. No package or merge.
+
+CI40072558416/40072558372 remained active at07:15. Next checkpoint **no earlier
+than2026-10-24 08:02:41 UTC**, extended by later starts and requiring preceding
+CI terminal. Inspect existing receipts; never run the07:02 build/check again.
+The following06:25 narrative is retained as historical failure context.
+
 **24 October 06:25 UTC:** PR7 and the completed qualification build are
 `dbb15bfa07d6964cc06e0ca91ed422c784f2983b`. One local build passed; seven of nine
 native groups plus required scratch setup passed. The shared exact partition

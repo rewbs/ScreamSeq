@@ -80,6 +80,10 @@ int main() {
     const auto notes=render(module,{}, {},&precise);
     check(notes!=dry,"Precise sub-row note was omitted from export");
     auto preciseReference=std::make_unique<Renderer>(module,48000,0,false,std::string{},UINT32_MAX,PlaybackRegion{},&precise);
+    // The constructor prepares native effect metadata, not the event schedule.
+    // Match the explicit preparation performed by attachMusicalAutomation,
+    // while keeping this PCM oracle independent of the hosted WAV writer.
+    preciseReference->preparePreciseNotes(precise);
     offset=0;
     while(const auto frames=preciseReference->render(buffer.data(),512)) {
       check(offset+frames*2<=notes.size(),"Precise export truncated core PCM");

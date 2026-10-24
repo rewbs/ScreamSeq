@@ -339,3 +339,55 @@ This asserts the API's accepted-song contract; native File export intentionally
 finishes queued UI intent first. It is not part of frozen6a9d's current build or
 eleven-group attempt. Include the controller registration at a subsequent
 cohesive checkpoint; do not repeat the current build for this test addition.
+
+## 07:02 checkpoint: compiled corrections and remaining export gate
+
+Frozen `6a9d3d4b7d931cb291f8f11b6ba29a0115de379b` built once at
+07:02:11–07:05:50 UTC. Executable SHA256:
+`d912ec2702526228a82bc03c43557a071aa7c23cc8e96aa7a416c472848ff8c6`.
+`audio-export-followup/qualified-checks.json` is terminal: **10/11 native
+groups plus scratch setup pass; all three actual-app journeys pass**. The
+module-export exact history correction, native Save/menu/focus checks, precise
+cursor retention/identity guards and actual pipe timeout/cancellation checks
+now have rebuilt evidence. Silent WASAPI and its separate cycle-delivery probe
+passed their bounded gates. No aggregate pass, package or merge occurred.
+
+The F04 composing, layered VST3/sample composing and interleaved precise-note /
+plugin-take journeys completed in172.667seconds. They include recorded edits,
+cross-domain chronological history, exact unrelated-state preservation,
+save/reopen and completed full-song exports. The preceding five-second export
+reply failures did not recur. These results do not qualify commercial plugins,
+physical recording inputs or sustained presentation.
+
+The shared WAV group remains red. Dry export at512 frames is exact against an
+independent core. At17/4096 it is also exact against the core at the same
+partition, with376128frames in every case and no padding. Against512,17 has
+18430changed samples (maximum8.12113e-7),4096 has7300(maximum7.37607e-7).
+The next failure is an invalid precise-note oracle setup: the Renderer
+constructor prepares native effect metadata but does not create event
+schedules; `PluginChain::attachMusicalAutomation` explicitly calls
+`preparePreciseNotes`. The test's independent Renderer omitted that call.
+The primary source now adds it while retaining exact sample/duration checks.
+This correction is **unbuilt**. Hosted gain, recorded-comb tails and the later
+failure/preservation assertions were not reached in this run. The exact dry
+cross-partition assertion remains mandatory; no tolerance was loosened.
+
+Fresh Computer Use on owned PID37312 directly observed double-click insertion
+(four to five hits), canvas Backspace removal, velocity61→98 automatic editing,
+Ctrl+S retaining the caret, text Backspace98→9 retaining all four hits, and
+Tab/Shift+Tab between velocity and Save now. The playback cursor was visible
+when playback crossed the inspected row. A left-border handle drag changed
+offset/velocity and Ctrl+Z restored them. Native File > Export audio completed
+to a new disposable WAV and retained the velocity caret. Three read-only
+observations pin playback epoch1, advancing frames1648320→4259040→9810720 and
+no fault through edit/Save/export. Float retained the same four events. A
+floating resize attempt produced no geometry change; do not count it as a
+resize pass or infer a product defect from Main-targeted helper input. The
+floating window is exposed only as related UI. Docked field UIA remains absent;
+caret observations supplement, rather than replace, the passing native tests.
+
+At07:15 CI40072558416(Mac) and40072558372(Windows) were still compiling.
+Latest actual start07:02:41 sets the next checkpoint no earlier than08:02:41,
+subject to later starts and terminal preceding jobs. Never repeat current
+receipts. Include the unbuilt live-preview/export worker acceptance and oracle
+setup correction in the next coherent batch. Preserve all failed logs.
