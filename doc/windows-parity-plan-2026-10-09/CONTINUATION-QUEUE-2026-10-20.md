@@ -6,6 +6,19 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October21:30 UTC:** PR7 title/body now describe the actual live composing,
+recording and editor scope; it remains draft/unmerged at946 with no review threads.
+Windows946 portable/worker and native editor/preference/recovery steps passed;
+actual-app integration is live. Intel still compiles. The matched ARM64 audio
+comparison completed (owned session17094 exited0): integrated main ancestor97bd
+has14 overruns versus4 for946, with zero starvation/device errors in both60s runs
+on the exact original15-effect fixture. See the closure document for source
+identity controls and limitations. This confirms a pre-existing capacity issue,
+not a pass of sustained timing or proof of a speedup; no DSP rewrite/test waiver.
+The next placement launcher and QA helper are prepared and parsed in
+`bank-placement/`; neither executed. No new build or package. Next build gate and
+frozen source below remain unchanged.
+
 **Next frozen placement checkpoint:** `c9ed68551840e4197d5227d99685b3a232212c10`,
 committed, backed up to `codex/mac-gesture-next-checkpoint`, and fast-forwarded
 into the clean qualification checkout. PR7 remains946. Prepared

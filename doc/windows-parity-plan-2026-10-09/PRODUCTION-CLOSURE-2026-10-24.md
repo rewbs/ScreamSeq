@@ -27,3 +27,24 @@ requested journey gets a focused correction and the cheapest meaningful checks.
 
 This is a closure boundary, not a completion claim. Record final executed results
 against these requirements and provide the usable executable path when qualified.
+
+**Audio regression triage, 24 October21:30 UTC.** A matched ARM64 comparison
+used the unchanged fifteen-effect fixture,48kHz/480frames and60s per process.
+Previously integrated97bd596a4 produced14 deadline overruns,15.240ms maximum
+callback and zero starvation/device errors. Candidate946 produced4 overruns,
+11.8364ms maximum and zero starvation/device errors. Both exited normally with
+unchanged binary/project hashes. The retained97 build is an ancestor of main;
+its NativeEffects, CabinetSimulator, Oversampler, HostedAudio, Windows audio
+device and HostedProject rendering sources are unchanged through current main.
+This establishes that overruns on this workload predate this batch, not that
+every timing regression is excluded or that the candidate has a measured speedup.
+See `recording-root/main-ancestor-comparison/receipt.json` and both audio reports.
+
+Keep the original workload and its failed timing measurements. The cabinet
+isolation experiment does not replace it. Avoid an unrelated DSP rewrite merely
+to eliminate an existing main limitation while closing these UI/editing streams.
+Final qualification must still verify continuous playback, accepted live edits,
+transport/history preservation and no new processor/device failures; disclose
+the dense-effects timing limit. Broad sustained realtime/presentation performance
+remains unqualified. No test assertion or measured threshold is changed by this
+regression classification.
