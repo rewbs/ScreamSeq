@@ -622,8 +622,7 @@ void run(){
         }
         lane=initial;context.revision="delete-boundary-restored";click(11002);choose(11006,2);SetWindowTextW(GetDlgItem(window,11021),L"");
       }
-      // A source handoff must display the point just typed, not the lane from
-      // before its debounce. Capture the source before the save reorders rows.
+      // Reopening a connected observer retains its already requested deletion.
       for(const int entry:{0,1,2}){
         const auto initial=lane;const auto beforeEdits=edits;twoParameters=true;
         context.revision="delete-reopen-"+std::to_string(entry);click(11002);selectPoint(0);SetFocus(itemList);
@@ -647,6 +646,70 @@ void run(){
         if(entry==2)tool.openSourceAt("a",1);
         twoParameters=false;lane=initial;context.revision="delete-reopen-restored";click(11002);
       }
+      // A subsequent destination is ordered after the stable point deletion,
+      // whether it arrives inside the read or before the posted timer runs.
+      for(const bool duringRead:{false,true})for(const int destination:{0,1,2,3,4,5}){
+        const auto initial=lane;const auto beforeEdits=edits;twoParameters=true;
+        context.revision="delete-then-navigation";click(11002);choose(11006,2);selectPoint(0);SetFocus(itemList);
+        navigation=nullptr;navigationLane=nullptr;
+        const auto navigate=[&]{
+          if(destination==0)click(11002);
+          else if(destination==1)choose(11001,1);
+          else if(destination==2)click(11009);
+          else if(destination==3)selectPoint(2);
+          else if(destination==4)choose(11006,0);
+          else {click(11009);choose(11001,1);} // latest destination wins, Delete stays first
+        };
+        pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);if(duringRead)navigate();
+        }};
+        SendMessageW(window,WM_TIMER,3,0);pump={};if(!duringRead)navigate();
+        require(lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit()&&navigation.is_null(),
+          "Navigation discarded a selected-point Delete or ran before it completed");
+        context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
+        require(lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit()&&navigation.is_null(),
+          "Ordered Activity navigation bypassed its busy owner");
+        SendMessageW(window,WM_TIMER,4,0);auto expected=initial;expected.erase(expected.begin()+1);
+        require(lane==expected&&edits==beforeEdits+1&&!tool.queuedMusicalEdit(),
+          "Ordered navigation lost, repeated or retargeted selected-point Delete");
+        if(destination==1||destination==5)require(tool.snapshot().at("parameter")==2&&navigation.is_null(),
+          "Latest parameter destination was lost or an earlier source was opened");
+        else if(destination==2)require(navigation.at("kind")=="recorded"&&navigation.at("plugin")=="a"&&
+          navigation.at("parameter")==1&&navigationLane==expected,"Source opened the pre-deletion lane or another target");
+        else if(destination==3)require(tool.snapshot().at("selectedPoint")==1&&
+          tool.snapshot().at("recorded").at(1).at("frame")==initial.at(2).at("frame"),
+          "Post-deletion selection used the old row index instead of its frame");
+        else if(destination==4)require(tool.snapshot().at("page")==0,"Details navigation after Delete was lost");
+        else require(tool.snapshot().at("recorded")==expected&&tool.snapshot().at("stale")==false,
+          "Refresh did not observe the accepted deletion");
+        SendMessageW(window,WM_TIMER,4,0);require(lane==expected&&edits==beforeEdits+1,
+          "Completed ordered navigation replayed a deletion");
+        if(destination==1||destination==5)tool.openSourceAt("a",1);
+        twoParameters=false;lane=initial;context.revision="delete-navigation-restored";click(11002);choose(11006,2);
+      }
+      for(const int failure:{0,1,2,3}){
+        const auto initial=lane;const auto beforeEdits=edits;context.revision="delete-navigation-failure";
+        click(11002);selectPoint(0);SetFocus(itemList);navigation=nullptr;
+        pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);click(11009);
+        }};
+        SendMessageW(window,WM_TIMER,3,0);pump={};
+        if(failure==0)context.revision="external-history-before-delete";
+        else if(failure==1){SetFocus(valueField);SetWindowTextW(valueField,L"-");SendMessageW(valueField,EM_SETSEL,1,1);}
+        else if(failure==2)failRead="automation.recorded.get";
+        if(failure==3)tool.hide();else SendMessageW(window,WM_TIMER,4,0);
+        failRead.clear();SendMessageW(window,WM_TIMER,0x5345,0);SendMessageW(window,WM_TIMER,4,0);
+        auto expected=initial;if(failure>=2)expected.erase(expected.begin()+1);
+        require(navigation.is_null()&&lane==expected&&edits==beforeEdits+(failure>=2?1:0)&&!tool.queuedMusicalEdit(),
+          "Failed or closed deletion replayed, silently rebased, or opened a source before clean completion");
+        if(failure==1){DWORD begin=0,end=0;SendMessageW(valueField,EM_GETSEL,WPARAM(&begin),LPARAM(&end));
+          require(tool.snapshot().at("rawValue")=="-"&&GetFocus()==valueField&&begin==1&&end==1,
+            "Queued deletion/navigation discarded newer raw input or caret");}
+        if(failure==3)tool.openAt();
+        lane=initial;context.revision="delete-navigation-failure-restored";click(11002);choose(11006,2);
+      }
+      // A source handoff must display the point just typed, not the lane from
+      // before its debounce. Capture the source before the save reorders rows.
       for(const bool pumped:{false,true})for(const int button:{11008,11009}){
         const auto initial=lane;click(11002);selectPoint(0);const auto beforeEdits=edits;
         navigation=nullptr;navigationLane=nullptr;SetWindowTextW(valueField,L"0.6875");

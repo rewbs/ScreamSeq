@@ -30,34 +30,41 @@ private:
   size_t searchMatches_=0;
   bool searchPending_=false;
   std::function<void()> pendingNavigation_;
+  std::function<void()> navigationAfterDelete_;
   std::function<void()> pendingHistory_;
   std::optional<uint64_t> pendingPointSelectionFrame_;
   bool pendingPointDelete_=false;
-  void cancelNavigation(){pendingNavigation_={};pendingPointSelectionFrame_.reset();pendingPointDelete_=false;KillTimer(window_,4);}
+  void cancelNavigation(){pendingNavigation_={};navigationAfterDelete_={};pendingPointSelectionFrame_.reset();pendingPointDelete_=false;KillTimer(window_,4);}
+  void deferNavigation(std::function<void()> navigate){
+    if(pendingPointDelete_){
+      // The original stable selection/Delete owns the revision guard. A newer
+      // destination can replace navigation, but cannot replace that mutation.
+      navigationAfterDelete_=std::move(navigate);
+    }else{
+      const auto c=context_();const auto generation=generation_;
+      cancelNavigation();
+      pendingNavigation_=[this,c,generation,navigate=std::move(navigate)]{
+        guardRead(c,generation);require(visible(),"Activity navigation was closed");navigate();
+      };
+    }
+    SetTimer(window_,4,100,nullptr);
+  }
   void deferRefresh(){
-    const auto c=context_();const auto generation=generation_;
-    cancelNavigation();
-    pendingNavigation_=[this,c,generation]{
+    deferNavigation([this]{
       // Refresh explicitly discards the captured fields, but never input typed
       // after that request or a different revision reached while it waited.
-      guardRead(c,generation);require(visible(),"Activity refresh was closed");
       action(refresh,BN_CLICKED);
-    };
-    SetTimer(window_,4,100,nullptr);
+    });
   }
   void deferTargetSelection(int id){
     const auto index=selection(id);if(index<0)return;
     const auto wanted=id==processors?targets_.at(size_t(index)).at("key").get<std::string>():target_;
     const auto parameter=id==parameters?selectedParameter():parameter_;
     if(id==parameters&&!parameter)return;
-    const auto c=context_();const auto generation=generation_;
-    cancelNavigation();
-    pendingNavigation_=[this,id,wanted,parameter,c,generation]{
-      guardRead(c,generation);require(visible(),"Activity navigation was closed");
+    deferNavigation([this,id,wanted,parameter]{
       finishPointEditForNavigation();
       beginPending();try{load(wanted,parameter,false,id==parameters);pending_=false;}catch(...){pending_=false;throw;}
-    };
-    SetTimer(window_,4,100,nullptr);
+    });
   }
   void finishPointEditForNavigation(){
     if(automaticEdit_)flushAutomaticEdit();
@@ -72,6 +79,9 @@ private:
     const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));
     if(i<0||size_t(i)>=recorded_.size())return;
     const auto frame=recorded_[size_t(i)].at("frame").get<uint64_t>();const bool samePoint=i==selected_;
+    if(pendingPointDelete_){
+      deferNavigation([this,frame]{require(page_==2,"Recorded point page changed");selectRecordedPoint(frame,false);});return;
+    }
     const auto c=context_();const auto generation=generation_;
     cancelNavigation();pendingPointSelectionFrame_=frame;
     pendingNavigation_=[this,frame,samePoint,c,generation]{
@@ -305,14 +315,11 @@ private:
     return page_==0?sourceLink(sources_.at(listed_[size_t(i)]),false):sourceLink(points_.at(listed_[size_t(i)]).at("source"),true);
   }
   void deferSourceNavigation(bool lane){
-    const auto source=selectedSource(lane);const auto c=context_();const auto generation=generation_;
-    cancelNavigation();
-    pendingNavigation_=[this,source,c,generation]{
-      guardRead(c,generation);require(visible(),"Activity source navigation was closed");
+    const auto source=selectedSource(lane);
+    deferNavigation([this,source]{
       finishPointEditForNavigation();
       beginPending();try{inspect_(source);pending_=false;}catch(...){pending_=false;throw;}
-    };
-    SetTimer(window_,4,100,nullptr);
+    });
   }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){hide();return;}
@@ -321,7 +328,7 @@ private:
     if(id==items&&(notification==LBN_SETFOCUS||notification==LBN_KILLFOCUS))return;
     if((id==search||id==time||id==value)&&(notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_UPDATE))return;
     if((id==processors||id==parameters||id==mode||id==details)&&(notification==CBN_SETFOCUS||notification==CBN_KILLFOCUS))return;
-    if(id==refresh&&notification==BN_CLICKED&&(polling_||(!pending_&&context_().busy))){deferRefresh();return;}
+    if(id==refresh&&notification==BN_CLICKED&&(pendingPointDelete_||polling_||(!pending_&&context_().busy))){deferRefresh();return;}
     if(id==removePoint&&notification==BN_CLICKED&&pendingNavigation_){
       require(pendingPointSelectionFrame_.has_value(),"Finish the requested Activity navigation before deleting");
       // The list has already reported the musician's new stable timestamp.
@@ -333,6 +340,21 @@ private:
       // Filtering is presentation-only. It cannot revoke an already requested
       // stable point selection/Delete or the Refresh waiting behind a read.
       if(pending_){searchPending_=true;SetTimer(window_,5,20,nullptr);}else filterParameters();
+      return;
+    }
+    if(pendingPointDelete_&&(notification==BN_CLICKED||
+        (notification==CBN_SELCHANGE&&(id==processors||id==parameters||id==mode||id==details))||
+        (notification==LBN_SELCHANGE&&id==items&&page_==2))){
+      if(notification==CBN_SELCHANGE&&(id==processors||id==parameters))deferTargetSelection(id);
+      else if(notification==LBN_SELCHANGE&&id==items&&page_==2)deferPointSelection();
+      else if(notification==BN_CLICKED&&(id==openSource||id==openLane))deferSourceNavigation(id==openLane);
+      else if(notification==BN_CLICKED&&id==savePoint){
+        if(!pending_&&!context_().busy)flushForProjectSave();return;
+      }else if((notification==CBN_SELCHANGE&&(id==mode||id==details))||notification==BN_CLICKED){
+        const auto row=notification==CBN_SELCHANGE?selection(id):-1;
+        deferNavigation([this,id,notification,row]{if(row>=0)choose(id,row);action(id,notification);});
+      }
+      if(pending_&&(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE))restorePendingSelection(id);
       return;
     }
     if((id==time||id==value)&&notification==EN_CHANGE){fields_=true;++generation_;if(page_==2&&selected_>=0)queuePointEdit(generation_);return;}if(pending_){
@@ -393,7 +415,17 @@ private:
   void timer(UINT_PTR id)override{
     if(id==6){if(pending_||context_().busy)return;KillTimer(window_,6);auto history=std::exchange(pendingHistory_,{});if(history)history();return;}
     if(id==5){if(pending_)return;if(searchPending_)filterParameters();else KillTimer(window_,5);return;}
-    if(id==4){if(pending_||context_().busy)return;KillTimer(window_,4);auto navigate=std::exchange(pendingNavigation_,{});if(navigate)navigate();return;}
+    if(id==4){if(pending_||context_().busy)return;KillTimer(window_,4);
+      auto navigate=std::exchange(pendingNavigation_,{}),after=std::exchange(navigationAfterDelete_,{});
+      if(navigate)navigate();
+      if(after){
+        // Only a fully accepted deletion and its fresh read may hand off.
+        // Stale, uncertain or newer raw input must never be silently rebased.
+        require(visible()&&current()&&!fields_&&!automaticEdit_&&!pending_&&!pendingNavigation_&&!pendingPointDelete_,
+          "Point deletion did not finish cleanly; retained input needs review before navigating");
+        after();
+      }
+      return;}
     if(id==3)poll();
   }
   bool key(WPARAM key,bool ctrl,bool shift)override{
@@ -493,6 +525,7 @@ public:
   }
   void flushForHistory(){flushForProjectSave();}
   void hide()override{
+    navigationAfterDelete_={};
     if(pendingPointDelete_)flushForProjectSave();
     cancelNavigation();
     pendingHistory_={};KillTimer(window_,6);
@@ -525,7 +558,7 @@ public:
     // pumped read. Keep an already requested point edit/selection attached.
     if(same){show();SetFocus(controls_.at(parameters));return;}
     require(!pending_&&!c.busy,"Finish the current activity read or document operation first");
-    if(pendingPointDelete_)flushForProjectSave();
+    if(pendingPointDelete_){navigationAfterDelete_={};flushForProjectSave();}
     require(!fields_&&!frozen_,"The activity editor retains a point draft or frozen trace. Save/Refresh it before choosing another parameter.");
     cancelNavigation();
     beginPending();try{load(std::move(plugin),parameter,false,true);pending_=false;}catch(...){pending_=false;throw;}

@@ -2222,3 +2222,23 @@ asserts both reopen paths during a pumped read, different-target busy refusal,
 then exact one-time deletion and stable destination after idle. This does not
 yet claim every sequence of in-window target/Refresh actions preserves queued
 deletion; that broader ordered-navigation audit remains outstanding.
+
+The following source continuation addresses that in-window ordering too.
+ParameterActivityWindow now retains one latest navigation destination separately
+from an already queued stable selection/Delete. Refresh, parameter/processor,
+source, recorded-row and details navigation cannot revoke the musical action.
+The timer consumes both intents once, performs the original guarded deletion,
+then follows the captured destination only after a clean accepted edit/read.
+The new revision is used only after that owned edit completes; external history,
+new raw input or an uncertain post-write read prevents the handoff. Close drops
+the destination but drains the requested deletion. A later navigation replaces
+only the destination, never the deletion's stable timestamp.
+
+The existing Activity native registration adds twelve arrival/destination
+scenarios (inside observation or before timer delivery), plus stale history,
+new raw text/caret, post-write read failure and Close. They require exact
+unrelated points, one mutation, stable post-sort selection, no early source
+opening and no replay from later timers. All assertions are unbuilt; no new
+build or duplicate suite has run. The bounded nine-group/eight-journey gate
+is unchanged. Fresh Computer Use must exercise Delete followed promptly by
+Refresh/parameter/source navigation and verify the accepted lane.
