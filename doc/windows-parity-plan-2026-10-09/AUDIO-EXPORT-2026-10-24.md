@@ -391,3 +391,16 @@ Latest actual start07:02:41 sets the next checkpoint no earlier than08:02:41,
 subject to later starts and terminal preceding jobs. Never repeat current
 receipts. Include the unbuilt live-preview/export worker acceptance and oracle
 setup correction in the next coherent batch. Preserve all failed logs.
+
+PID37312 subsequently exited normally(code0), binary hash unchanged. Its
+480.059-second silent48kHz/480-frame ordinary-timing run recorded37 deadline
+overruns, zero starvation/device errors and no processor fault. Both
+`realtimeAuditPassed` and `sustainedPresentationQualified` arefalse. Extra cycle
+and stage instrumentation was disabled. These are failed sustained-performance
+observations, not an acoustic result or evidence that a particular plugin
+caused the overruns. The32-event timing ring omitted5 additional events.
+`foreground-diagnostic/foreground-observations.json` records the bounded UI
+checks and remaining limits. The native exported WAV has1296946frames,
+27.019708seconds, finite stereo float PCM at48kHz, peak0.2454051524 and SHA256
+`0d16fced0db1bccd174520134ee4210034a863df1ae5d96cabd0f80d17075c20`.
+Do not reuse the exited PID or window handles.
