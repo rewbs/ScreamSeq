@@ -82,6 +82,11 @@ qualify this changed rendering source.
 4. Compose/record/Keep/Undo/Redo/Save/export/reopen journey: assert unrelated
    music and native project stay exact, epoch advances continuously, and compare
    exported audio using shared fixtures. Test invalid/stale/overwrite failures.
+   The existing actual Windows composed F04/Balance recording journey now adds
+   WAV export after Keep/reopen, strict no-overwrite refusal, audible PCM/header
+   checks, exact native file/context preservation and an advancing unchanged
+   playback epoch. It is source-only. Its addition does not alter the frozen
+   retained-reveal checkout's older five app cases.
 
 Both native controls and the API are now source-only and unqualified.
 Cheap reviewed inventory tests passed (6 tests); this is not execution evidence

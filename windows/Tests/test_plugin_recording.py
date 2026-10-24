@@ -186,6 +186,46 @@ class PluginRecordingTests(unittest.TestCase):
         comparison = differences(expected, after)
         self.assertTrue(comparison['equal'], comparison)
         self.assertNotEqual(before['automation'], after['automation'])
+        # Finish the same composed/recorded song through the real API. This
+        # renders accepted native/music state while the owned device keeps its
+        # existing playback epoch; it must not establish another Save baseline.
+        import struct
+        self.write('transport.play', pattern=0, startRow=0, endRow=1, cursorRow=0, loop=True)
+        export_transport = self.read('transport.get')
+        export_document = self.doc()
+        export_context = self.read('context.get')
+        saved_bytes = saved.read_bytes()
+        audio = evidence / 'recorded-composing-journey.wav'
+        request = dict(expectedRevision=export_document['revision'], path=str(audio))
+        preview = self.client.call('document.exportAudio', dict(request, dryRun=True))
+        self.assertFalse(preview['changed'])
+        self.assertFalse(audio.exists())
+        rendered = self.client.call('document.exportAudio', request)
+        self.assertFalse(rendered['changed'])
+        self.assertFalse(rendered['playbackStopped'])
+        self.assertEqual(rendered['revision'], export_document['revision'])
+        wav = audio.read_bytes()
+        self.assertGreater(len(wav), 44)
+        self.assertEqual((wav[:4], wav[8:16], wav[36:40]), (b'RIFF', b'WAVEfmt ', b'data'))
+        self.assertEqual(struct.unpack_from('<HHIIHH', wav, 20), (3, 2, 48000, 384000, 8, 32))
+        self.assertEqual(struct.unpack_from('<I', wav, 40)[0], len(wav)-44)
+        self.assertEqual(struct.unpack_from('<I', wav, 4)[0], len(wav)-8)
+        self.assertTrue(any(abs(value[0]) > 1e-6 for value in struct.iter_unpack('<f', wav[44:])),
+                        'Composed fixture WAV must contain audible PCM')
+        with self.assertRaises(ApiError) as raised:
+            self.client.call('document.exportAudio', request)
+        self.assertEqual(raised.exception.code, -32602)
+        self.assertEqual(audio.read_bytes(), wav)
+        self.assertEqual(self.doc(), export_document)
+        self.assertEqual(saved.read_bytes(), saved_bytes)
+        context_after_export = self.read('context.get')
+        self.assertEqual({k: v for k, v in context_after_export.items() if k != 'playback'},
+                         {k: v for k, v in export_context.items() if k != 'playback'})
+        transport_after_export = self.read('transport.get')
+        self.assertTrue(transport_after_export['playing'])
+        self.assertEqual(transport_after_export['playbackEpoch'], export_transport['playbackEpoch'])
+        self.assertGreater(transport_after_export['frames'], export_transport['frames'])
+        self.write('transport.stop')
         write_json(evidence / 'recording-journey.json', dict(
             passed=True, parityComplete=False, silentNativePlayback=True,
             foregroundVisualQualified=False, source=project.name, saved=saved.name,
@@ -195,7 +235,8 @@ class PluginRecordingTests(unittest.TestCase):
                     'native review pagination preserves exact original input timestamps and values',
                     'Stop preserves playback', 'Keep is one Undo', 'Redo',
                     'Discard preserves preceding music', 'save/reopen',
-                    'exact unrelated project preservation']))
+                    'exact unrelated project preservation', 'accepted native WAV export after Keep and reopen',
+                    'export keeps live playback epoch and native save baseline']))
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
     def test_sample_layered_vst3_composing_and_recording_journey(self):
