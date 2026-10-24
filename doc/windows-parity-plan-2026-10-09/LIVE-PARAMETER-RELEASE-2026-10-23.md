@@ -2021,3 +2021,32 @@ also intentionally retains input awaiting later intervals. Do not tighten its
 constructor, approximate input timestamps or relax exact mapping based on this
 hypothesis. Collect the pending failure-only API_PAGE_CLOCK projection first.
 At02:37UTC8a Intel and Windows compilation had passed and tests were still active.
+
+### Pattern journey coverage and terminal Windows8a evidence
+
+A bounded four-case diagnostic on the unchanged8a ARM64 executable passed the
+transform/keyboard and formula/bank/link journeys. Two older fixtures failed
+because they expected normal edits to remain dirty until Apply and to prevent
+target navigation. The user-requested automatic-edit contract requires the
+opposite. Their updated checks require exact automatic publication, Verify and
+Save-now no-op revisions, Undo/Redo and saved-file contents. Draft-retention
+checks now create an explicit compound preview and still require exact preview,
+accepted music, hidden state, stale rejection and independent cursor retention.
+There is no debounce wait in the separate immediate-Save regression.
+
+The aligned navigation case passed on8a. The point journey then found an obsolete
+fixture handle after document.open; reopening through the native shell passed
+that journey in a separate bounded run. Preserve all three original logs and
+`pattern-coverage-diagnostic.json`; this is test-fixture diagnosis, not a pass for
+the unbuilt product corrections. Add these four journeys to the fresh checkpoint
+and existing single-build CI step: seven native groups and seven app cases locally,
+122 app cases in CI. No previously passing app result substitutes for these runs.
+
+Windows8a job120747070280 is terminal: compilation,159 portable/worker tests,
+53 native groups,39 vendor ownership cases and18 fixture/API checks passed.
+The117-case integration suite failed24 checks across21 distinct cases, with one
+optional skip. Live-startup/clock failures and three secondary audition teardown
+failures remain failures. The complete log hash is
+`17ac9de2515cb4882327c21056535fb769b05dea81fac9542896245024f87cbc`;
+`windows-failure-summary.json` retains every assertion without truncation. Do not
+call this CI green or infer each startup failure's cause from another case.

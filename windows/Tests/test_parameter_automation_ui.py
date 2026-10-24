@@ -68,6 +68,15 @@ class ParameterAutomationUITests(unittest.TestCase):
     def start(self):
         self.idle();hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,502,private_desktop.user.GetDlgItem(hwnd,502));self.idle();self.assertTrue(self.state()['visible'])
     def saved(self,pattern=0):return self.read('automation.pattern.get',pattern=pattern)['lanes']
+    def saved_idle(self):
+        # Only use after ordinary edits whose contract is automatic saving.
+        # Immediate Save/navigation cases deliberately do not use this wait.
+        end=time.monotonic()+4
+        while time.monotonic()<end:
+            state=self.state()
+            if not any(state.get(key) for key in ('pending','dirty','fieldDraft')):return self.saved()
+            time.sleep(.025)
+        self.fail('Automatic pattern edit did not settle: '+str(self.state()))
     def mouse(self,message,x,y):
         scale=self.read('workspace.get')['dpi']/96;self.desktop.send(self.window(),message,1 if message!=0x202 else 0,(int(x*scale)&65535)|((int(y*scale)&65535)<<16))
     def key(self,key):self.desktop.send(self.window(),0x100,key);self.idle()
@@ -89,11 +98,13 @@ class ParameterAutomationUITests(unittest.TestCase):
 
     def test_native_points_guards_verify_history_and_reopen(self):
         plugin=self.setup_curve();self.field(4207,.25);self.field(4208,25);self.select(4205,2);self.press(4210);self.assertEqual(self.state()['points'][0],dict(position=64,value=.25,curve='smooth'))
-        before=self.doc();self.press(4216);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['dirty']);self.press(4215);saved=self.saved();self.assertEqual(saved[0]['plugin'],plugin)
+        saved=self.saved_idle();self.assertEqual(saved[0]['plugin'],plugin);self.assertEqual(saved[0]['points'],self.state()['points'])
+        before=self.doc();self.press(4216);self.assertEqual(self.doc(),before);self.assertEqual(self.saved(),saved);self.assertFalse(self.state()['dirty'])
+        self.press(4215);self.assertEqual(self.doc(),before,'Explicit Save now duplicated an already automatic edit')
         self.field(4207,'1e100');self.press(4210);self.assertEqual(self.saved(),saved);self.assertTrue(self.state()['fieldDraft']);self.key(0x1B)
         self.field(4207,63.99609375);self.press(4210);self.assertIn('occupies',self.state()['status']);self.key(0x1B)
-        self.press(4214);self.press(4215);self.assertFalse(self.saved()[0]['enabled']);self.write('history.undo',domain='document');self.assertEqual(self.saved(),saved);self.write('history.redo',domain='document');self.assertFalse(self.saved()[0]['enabled'])
-        path=self.folder/'native-parameters.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4219);self.select(4204,1);self.assertEqual(self.state()['points'],saved[0]['points']);self.assertFalse(self.state()['enabled']);self.press(4217);self.assertEqual(self.saved(),[])
+        self.press(4214);disabled=self.saved_idle();self.assertFalse(disabled[0]['enabled']);self.write('history.undo',domain='document');self.assertEqual(self.saved(),saved);self.write('history.redo',domain='document');self.assertEqual(self.saved(),disabled)
+        path=self.folder/'native-parameters.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.start();self.select(4204,1);self.assertEqual(self.state()['points'],saved[0]['points']);self.assertFalse(self.state()['enabled']);self.press(4217);self.assertEqual(self.saved(),[])
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
     def test_native_save_finishes_pattern_point_during_playback_and_reopens_exact_lanes(self):
@@ -174,10 +185,14 @@ class ParameterAutomationUITests(unittest.TestCase):
         self.assertEqual(self.saved(),saved,'Reopen changed the displayed-and-saved curve')
 
     def test_search_target_stale_close_and_independent_cursor(self):
-        first=self.add_gain();second=self.add_gain();self.start();self.press(4212);draft=self.state()['points'];self.select(4202,1);self.assertEqual(self.state()['plugin'],first);self.assertEqual(self.state()['points'],draft)
-        self.field(4203,'nonexistent parameter');self.assertEqual(self.state()['filteredCount'],0);self.assertEqual(self.state()['points'],draft);self.field(4203,'');self.press(4239);self.start();self.assertTrue(self.state()['dirty']);self.assertEqual(self.state()['points'],draft)
+        first=self.add_gain();second=self.add_gain();self.start();self.press(4212);accepted=self.saved_idle()
+        self.select(4202,1);self.assertEqual(self.state()['plugin'],second);self.assertEqual(self.saved(),accepted)
+        self.select(4202,0);self.select(4230,1);self.press(4238);draft=self.state()['points']
+        self.assertTrue(self.state()['dirty']);self.assertNotEqual(draft,accepted[0]['points']);self.assertEqual(self.saved(),accepted)
+        self.select(4202,1);self.assertEqual(self.state()['plugin'],first);self.assertEqual(self.state()['points'],draft)
+        self.field(4203,'nonexistent parameter');self.assertEqual(self.state()['filteredCount'],0);self.assertEqual(self.state()['points'],draft);self.field(4203,'');self.press(4239);self.start();self.assertTrue(self.state()['dirty']);self.assertEqual(self.state()['points'],draft);self.assertEqual(self.saved(),accepted)
         self.write('document.patch',title='External change');before=self.doc();self.press(4215);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.press(4218);self.select(4202,1);self.assertEqual(self.state()['plugin'],second)
-        self.press(4212);self.press(4215);other=self.write('pattern.create',rows=32)['pattern'];cursor=self.read('context.get');self.press(4218);self.select(4201,1);self.assertEqual(self.state()['pattern'],other);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.read('context.get'),cursor)
+        self.press(4212);both=self.saved_idle();other=self.write('pattern.create',rows=32)['pattern'];cursor=self.read('context.get');self.press(4218);self.select(4201,1);self.assertEqual(self.state()['pattern'],other);self.assertEqual(self.state()['points'],[]);self.assertEqual(self.read('context.get'),cursor);self.assertEqual(self.saved(),both)
 
     def test_transform_preview_copy_paste_and_local_keyboard_zoom(self):
         self.setup_curve();self.press(4215);baseline=self.saved()[0];self.select(4230,1);self.press(4238);self.assertTrue(self.state()['dirty']);self.assertEqual(self.saved()[0],baseline);self.assertEqual(self.state()['points'][0]['value'],1);self.press(4215)
