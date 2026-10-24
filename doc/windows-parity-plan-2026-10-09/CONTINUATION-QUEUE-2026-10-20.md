@@ -31,6 +31,14 @@ registration adds exact identity/no-write checks; both Mac jobs must execute
 them. This is source-only native UI work. Windows product/reused fixtures,
 shared musical timing, API and persistence inputs are unchanged.
 
+**Latest source continuation:** Windows Record availability now follows retained
+original-input ownership, including owner-only, pending and loss states. It
+guards immediate and read-queued actions before submission. New native checks
+require no write/music change and retained focus. This changes the pending gate
+to **three native groups and two fresh app journeys**; reuse only6e's unchanged
+menu group plus validated shared/audio inputs. See the latest live-parameter
+report and resolve `activity-fixture-correction/freeze.json` for current source.
+
 **24 October 00:42 UTC continuation:** the current Windows source also finishes
 queued Activity edits before opening their captured source. The old1071 binary
 failed the new exact destination-value assertion (-6 displayed after typing -9).

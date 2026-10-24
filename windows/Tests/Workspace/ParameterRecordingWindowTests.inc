@@ -13,6 +13,7 @@ void applicationParameterRecordingReview() {
     std::function<void()> duringPageRead;
     std::string contextRevision;
     bool available=true;
+    bool inputProtected=false;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
     std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
@@ -20,6 +21,7 @@ void applicationParameterRecordingReview() {
     callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
     callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&(parameter==1||parameter==2),"Review looked up another parameter name");++nameReads;return parameter==1?L"Gain":L"Balance";};
     callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
+    callbacks.inputProtected=[&]{return inputProtected;};
     callbacks.recordedAutomation=[&](const std::string &identity,uint32_t parameter){openedAutomation.push_back({identity,parameter});};
     callbacks.reconcile=[&](const Call &call){if(call.method=="transport.stop"){
       restoreCheck(call.result.at("playing")==false,"Review accepted an invalid playback Stop receipt");++playbackReconciled;return;}
@@ -81,6 +83,31 @@ void applicationParameterRecordingReview() {
     ScreamSeq::ParameterRecordingWindow tool(app.window,std::move(callbacks));tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto control=[&](int id){return GetDlgItem(window,id);};const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(control(id)));};
     restoreCheck(GetNextDlgTabItem(window,control(9720),FALSE)==control(9721),"Recording scope and Record are not adjacent in Tab order");
+    // A completed input may leave only its owner, with no visible event row.
+    // This is still protected by application admission until reconciliation.
+    inputProtected=true;click(9725);SetFocus(control(9720));click(9721);
+    restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&GetFocus()==control(9720)&&
+      tool.snapshot().at("error").get<std::string>().find("Original parameter input")!=std::string::npos&&songState(app)==music,
+      "Record ignored retained original input ownership or submitted a refused replacement take");
+    inputProtected=false;
+    const auto emptyDelivery=delivery;
+    for(const auto *flag:{"pending","needsReview"}){
+      delivery[flag]=true;click(9725);click(9721);
+      restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&songState(app)==music,
+        "Record bypassed unresolved native input delivery");delivery=emptyDelivery;
+    }
+    delivery["lost"]=1;click(9725);click(9721);
+    restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&songState(app)==music,
+      "Record bypassed retained native input loss without a visible event row");
+    delivery=emptyDelivery;click(9725);
+    restoreCheck(IsWindowEnabled(control(9721))&&writes.empty(),"Resolved original input did not restore Record availability");
+    duringRead=[&]{click(9721);inputProtected=true;};click(9725);
+    restoreCheck(tool.snapshot().at("queuedAction")=="automation.recording.start"&&writes.empty(),
+      "Record reentered its observation read");
+    SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(tool.snapshot().at("queuedAction").is_null()&&writes.empty()&&!IsWindowEnabled(control(9721))&&songState(app)==music,
+      "Queued Record bypassed original input protection discovered during readback");
+    inputProtected=false;click(9725);
     SendMessageW(control(9720),CB_SETCURSEL,1,0);click(9721);
     restoreCheck(writes.size()==1&&tool.snapshot().at("take").at("capturing")==true&&IsWindowEnabled(control(9722))&&!IsWindowEnabled(control(9723)),
         "Record did not enter the retained capture state or allowed Keep while capturing");

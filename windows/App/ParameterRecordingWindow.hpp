@@ -24,6 +24,7 @@ public:
     std::function<bool()> available;
     std::function<void()> recoveredInputs;
     std::function<void(const std::string &,uint32_t)> recordedAutomation;
+    std::function<bool()> inputProtected;
   };
 private:
   enum:int {scope=9720,start,stop,keep,discard,review,saveCopy,close,target,previous,next,acknowledge,
@@ -51,6 +52,9 @@ private:
   }
   static constexpr size_t pageSize=128;
   bool retained()const{return state_.value("retained",false);}
+  bool inputProtected()const{return (callbacks_.inputProtected&&callbacks_.inputProtected())||
+    delivery_.value("pending",false)||delivery_.value("needsReview",false)||
+    delivery_.value("retained",size_t(0))||delivery_.value("lost",uint64_t(0));}
   bool capturing()const{return state_.value("capturing",false);}
   bool playbackRecovery()const{return retained()&&(!capturing()||!state_.value("compatible",false));}
   bool needsPlaybackStop()const{return playbackRecovery()&&state_.value("transportPlaying",false);}
@@ -297,6 +301,7 @@ private:
         L"Recording context lost · stop playback, then save recovery or discard"):
         L"Playback stopped · original input retained for review or discard"):
       state_.value("compatible",false)?L"Stopped take · review before keeping or discarding":L"Take no longer matches the song · save a recovery copy or discard"):
+      inputProtected()?L"Original parameter input is retained. Refresh / review its outcome before recording again.":
       !keptTarget_.is_null()?L"Take kept · "+targetName(keptTarget_)+L" · Open Song automation to edit its points.":
       L"Start playback, then record native controls or plugin editor gestures.");
     const auto counts=L"Captured "+std::to_wstring(state_.value("eventCount",size_t(0)))+L" inputs · "+
@@ -312,6 +317,7 @@ private:
     Json params=Json::object();std::string method;
     if(id==start){
       if(retained())throw std::runtime_error("Finish the retained take before recording again");
+      if(inputProtected())throw std::runtime_error("Original parameter input is retained; Refresh / review its outcome before recording again");
       const auto selected=SendMessageW(controls_.at(scope),CB_GETCURSEL,0,0);
       if(selected<0||size_t(selected)>rack_.size())throw std::runtime_error("Choose available rack plugins");
       auto plugins=Json::array();
@@ -350,6 +356,8 @@ private:
     requireContext();
     if(callbacks_.context()!=std::pair(action.document,action.revision)||take()!=action.take||capturing()!=action.capturing||state_.value("completed",false)!=action.completed)
       throw std::runtime_error("Song or recording changed during refresh; review it before choosing the action again");
+    if(action.method=="automation.recording.start"&&inputProtected())
+      throw std::runtime_error("Original parameter input is retained; Refresh / review its outcome before recording again");
     if(action.method=="transport.stop"&&!needsPlaybackStop())
       throw std::runtime_error("Playback changed during refresh; review the retained take before choosing the action again");
     if(action.params.value("restoreSavedState",false)&&(!state_.value("completed",false)||!state_.contains("transportPlaying")||state_.at("transportPlaying")!=false))
@@ -435,7 +443,7 @@ private:
     place(restoreSaved,152,h-76,150,28,completed);
     place(saveCopy,completed?310.f:272.f,h-76,completed?138.f:150.f,28);place(review,w-190,h-76,178,28);place(statusLabel,12,h-40,w-24,32);
     const bool ready=!pending_&&!queuedAction_&&!completion_.retained();
-    EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!rack_.empty());
+    EnableWindow(controls_.at(scope),!retained());EnableWindow(controls_.at(start),ready&&!retained()&&!inputProtected()&&!rack_.empty());
     EnableWindow(controls_.at(stop),ready&&retained()&&capturing());
     EnableWindow(controls_.at(stopPlayback),ready&&needsPlaybackStop());
     EnableWindow(controls_.at(keep),ready&&retained()&&!capturing()&&(completed||state_.value("compatible",false))&&!delivery_.value("pending",false)&&(completed||!loss()||lossAcknowledged_));

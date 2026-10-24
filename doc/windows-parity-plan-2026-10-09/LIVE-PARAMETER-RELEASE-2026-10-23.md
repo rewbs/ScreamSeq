@@ -1770,3 +1770,31 @@ checkpoint. Windows product and its reused passing fixtures remain unchanged;
 the reuse validators explicitly allow only these two additional Mac UI/test
 files. There is no change to recording admission, timestamps, restoration,
 audio, API, history or storage.
+
+### Windows Record admission matches retained native input (source only)
+
+`ParameterRecordingWindow` previously enabled Record whenever the worker reported
+no retained take and a rack plugin existed. `Application::ParameterRecordingInputLease`
+separately rejects a new take while `ParameterControlDelivery` retains an owner,
+entries or loss. In particular, accepted entries can leave only an owner, with
+no review row. Mac already consults its input-protection owner in this state.
+
+The Windows window now reads the same application protection state, also honors
+pending/refused/lost delivery summaries, disables Record and explains that the
+original outcome needs review. Both immediate and queued Record paths recheck
+this guard before submitting. It does not release/replay input, acknowledge
+loss, infer a successful Keep, or enable saving an archive with unknown ownership.
+Existing reconciliation and worker admission remain authoritative.
+
+The existing recording-review native fixture covers owner-only protection,
+pending/refused/loss summaries, restoration of availability after resolution,
+and protection arriving during a pumped read. Assertions require no write,
+unchanged music and retained scope focus. This is source inspection plus
+unbuilt regression coverage, not a runtime pass.
+
+This broadens the pending Windows checkpoint: run three native groups
+(automatic-edit, Activity, plugin-search/recording-review) and both complete
+composing app journeys afresh. Only the unchanged6e menu native result and
+validated unchanged shared/audio evidence are reused. Do not reuse the6e app
+diagnostic passes for this new presentation behavior. The single-build hourly
+gate and fresh Computer Use requirement are unchanged.

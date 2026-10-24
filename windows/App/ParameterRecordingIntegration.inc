@@ -65,6 +65,7 @@
         };
         callbacks.saveRecovery=[this]{saveRecovery(view->session.revision,true);};
         callbacks.available=[this]{return !busy&&!recoveryRestoring&&!departureInput&&!parameterRecordingInput;};
+        callbacks.inputProtected=[this]{return parameterControlDelivery.hasOwner()||parameterControlDelivery.retained()||parameterControlDelivery.lost();};
         callbacks.recoveredInputs=[this]{openPluginRecoveryReview();};
         callbacks.recordedAutomation=[this](const std::string &plugin,uint32_t parameter){
             // Use stable source navigation: never replace another lane's retained
