@@ -521,3 +521,16 @@ journeys did run successfully with WASAPI, but do not turn this remote gate
 green. Full log SHA256:
 `3edf8d40ec046345bbb17efd878b2282ba96cbe00415013ce6e0f91b43e99d5b`, pinned in
 `audio-export-followup/completed-ci.json`. No CI job was restarted.
+
+Before dispatch, the same observation batch also corrects recorder Tab order.
+The constructor previously grouped buttons before combo/edit creation, so native
+traversal reached actions before capture setup. The new order is Input,
+Refresh, Channels, Limit, Name, Keep as, any visible recovery actions, then
+Record/Stop/Keep/Discard, Discard setup and Close. Windows skips unavailable
+controls normally. No custom keyboard routing or automatic recording is added.
+The existing native owner group sends actual Tab and Shift+Tab messages through
+the controls in idle, capturing and stopped states, and requires exact setup,
+take and draft preservation. This source and its assertions are unbuilt. The
+prepared freeze may advance to include it only while no checkpoint/build/dispatch
+receipt exists; retain the earlier freeze as a superseded preparation, not as an
+executed attempt. Include setup-first traversal in fresh foreground checks.

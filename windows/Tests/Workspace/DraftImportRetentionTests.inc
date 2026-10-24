@@ -115,6 +115,28 @@ void pluginPathRequestRetention(HWND main){
   std::cout<<"Plugin path Check, scan, Reload and reconnect protect captured and newer intent\n";
 }
 
+void recordingTabOrder(ScreamSeq::SampleRecordingWindow &tool,std::initializer_list<int> order){
+  struct Keyboard {
+    BYTE original[256]{};
+    Keyboard(){require(GetKeyboardState(original),"Read recorder fixture keyboard state");}
+    ~Keyboard(){SetKeyboardState(original);}
+    void shift(bool active){BYTE state[256]{};std::copy(std::begin(original),std::end(original),std::begin(state));
+      for(int key:{VK_CONTROL,VK_LCONTROL,VK_RCONTROL,VK_SHIFT,VK_LSHIFT,VK_RSHIFT,VK_MENU,VK_LMENU,VK_RMENU})state[key]&=0x7f;
+      if(active)state[VK_SHIFT]|=0x80;require(SetKeyboardState(state),"Set recorder fixture modifiers");}
+  } keyboard;
+  const auto before=tool.snapshot();const auto focused=GetFocus();const std::vector<int> expected(order);
+  for(size_t i=0;i<expected.size();++i){const auto a=GetDlgItem(tool.window(),expected[i]),b=GetDlgItem(tool.window(),expected[(i+1)%expected.size()]);
+    require(IsWindowVisible(a)&&IsWindowEnabled(a)&&(GetWindowLongPtrW(a,GWL_STYLE)&WS_TABSTOP),"Recorder expected Tab target is unavailable");
+    SetFocus(a);require(GetFocus()==a,"Focus recorder fixture control");keyboard.shift(false);
+    SendMessageW(a,WM_KEYDOWN,VK_TAB,0);SendMessageW(a,WM_KEYUP,VK_TAB,0);
+    require(GetFocus()==b,"Recorder forward Tab did not follow setup then take actions");keyboard.shift(true);
+    SendMessageW(b,WM_KEYDOWN,VK_TAB,0);SendMessageW(b,WM_KEYUP,VK_TAB,0);
+    require(GetFocus()==a,"Recorder reverse Tab did not return to the preceding available control");
+  }
+  require(tool.snapshot()==before,"Recorder keyboard traversal changed setup, take or draft state");
+  if(focused&&IsWindow(focused)&&IsWindowEnabled(focused))SetFocus(focused);
+}
+
 void recordingSetupRetention(HWND main){
   using Json=ScreamSeq::Api::Json;
   DraftRegistryHost host(main);std::pair<std::string,std::string> context{"record-document","r1"};
@@ -164,6 +186,7 @@ void recordingSetupRetention(HWND main){
   };
   {
     ScreamSeq::SampleRecordingWindow tool(main,request,[&]{return context;},committed,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.openAt();
+    recordingTabOrder(tool,{6501,6503,6502,6514,6508,6509,6504,6511,6510});
     require(pendingObserved&&discardRefused&&host.registry.capture(context.first,context.second).drafts.empty(),"Recording reads omitted pending work or fabricated a draft");
     require(tool.snapshot().at("maxSeconds")==60,"Recorder default duration changed");
     chooseDraftField(tool.window(),6501,1);chooseDraftField(tool.window(),6502,2);chooseDraftField(tool.window(),6514,1);
@@ -177,6 +200,7 @@ void recordingSetupRetention(HWND main){
     require(starts==1&&pendingObserved&&discardRefused&&selectionRetained&&tool.hasRetainedTake(),"Pending recording start lost its captured input or census guard");
     require(submitted.at("maxSeconds")==300&&tool.snapshot().at("maxSeconds")==300&&!IsWindowEnabled(GetDlgItem(tool.window(),6514)),"Recorder lost the five-minute choice across reopen/start");
     require(tool.snapshot().at("state").at("maxFrames")==16777216&&text(GetDlgItem(tool.window(),6556)).find(L"174.76")!=std::wstring::npos,"Recorder did not display the actual frame-capped duration");
+    recordingTabOrder(tool,{6508,6509,6505,6507,6511,6510});
     // The status read pumps the native owner, so edits can arrive before its
     // completion. Exercise success and busy refusal without opening hardware.
     for(bool busy:{false,true}){
@@ -193,7 +217,7 @@ void recordingSetupRetention(HWND main){
     }
     SetWindowTextW(GetDlgItem(tool.window(),6508),L"Submitted take");chooseDraftField(tool.window(),6509,0);
     chooseDraftField(tool.window(),6514,0);require(tool.snapshot().at("maxSeconds")==300,"Retained take allowed duration setup changes");
-    clickDraftButton(tool.window(),6505);const auto stopped=draftOf(tool);
+    clickDraftButton(tool.window(),6505);recordingTabOrder(tool,{6508,6509,6506,6507,6511,6510});const auto stopped=draftOf(tool);
     reject=true;clickDraftButton(tool.window(),6506);
     require(commits==0&&tool.hasRetainedTake()&&draftOf(tool).sameWork(stopped),"Rejected Keep consumed the take or setup");
     reject=false;inject=true;clickDraftButton(tool.window(),6506);const auto newer=draftOf(tool);

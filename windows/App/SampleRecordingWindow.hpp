@@ -286,7 +286,14 @@ public:
     accessibleName(device,L"Recording input device");accessibleName(channels,L"Recording input channels");accessibleName(limit,L"New take limit");
     accessibleName(name,L"Recorded sample name");accessibleName(output,L"Keep take as");
     for(const auto text:{L"Sample",L"Sample + mapped instrument"})ScreamSeq::NativeInputGate::present(controls_.at(output),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);baseline_=raw();draftContext_=context_();finish();
+    ScreamSeq::NativeInputGate::present(controls_.at(output),CB_SETCURSEL,0,0);
+    // Walk capture setup before take actions. Creation order groups control
+    // types, so it must not also determine the musician's keyboard journey.
+    HWND previous=HWND_TOP;
+    for(int id:{device,refresh,channels,limit,name,output,reviewTake,acceptState,record,stop,keep,discard,discardSetup,close}){
+      SetWindowPos(controls_.at(id),previous,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previous=controls_.at(id);
+    }
+    baseline_=raw();draftContext_=context_();finish();
   }
   ~SampleRecordingWindow()override{ready_=false;if(window_)KillTimer(window_,3);}
   bool hasRetainedTake()const{return !take_.empty();}
