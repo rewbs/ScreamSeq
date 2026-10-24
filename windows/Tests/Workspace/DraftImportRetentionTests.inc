@@ -125,6 +125,10 @@ void recordingTabOrder(ScreamSeq::SampleRecordingWindow &tool,std::initializer_l
       if(active)state[VK_SHIFT]|=0x80;require(SetKeyboardState(state),"Set recorder fixture modifiers");}
   } keyboard;
   const auto before=tool.snapshot();const auto focused=GetFocus();const std::vector<int> expected(order);
+  for(bool reverse:{false,true}){SetFocus(tool.window());keyboard.shift(reverse);
+    SendMessageW(tool.window(),WM_KEYDOWN,VK_TAB,0);SendMessageW(tool.window(),WM_KEYUP,VK_TAB,0);
+    require(GetFocus()==GetDlgItem(tool.window(),reverse?expected.back():expected.front()),"Recorder root trapped keyboard entry instead of entering its controls");
+  }
   for(size_t i=0;i<expected.size();++i){const auto a=GetDlgItem(tool.window(),expected[i]),b=GetDlgItem(tool.window(),expected[(i+1)%expected.size()]);
     require(IsWindowVisible(a)&&IsWindowEnabled(a)&&(GetWindowLongPtrW(a,GWL_STYLE)&WS_TABSTOP),"Recorder expected Tab target is unavailable");
     SetFocus(a);require(GetFocus()==a,"Focus recorder fixture control");keyboard.shift(false);
@@ -186,6 +190,7 @@ void recordingSetupRetention(HWND main){
   };
   {
     ScreamSeq::SampleRecordingWindow tool(main,request,[&]{return context;},committed,[&](const auto &method,const auto &params){auto result=request(method,params);return ScreamSeq::Api::CompletedCall{method,context.first,context.second,std::move(result)};});owner=&tool;ScreamSeq::Tests::ownGuiWindow(tool.window());tool.openAt();
+    require(GetFocus()==GetDlgItem(tool.window(),6501),"Opening the recorder did not focus its first setup control");
     recordingTabOrder(tool,{6501,6503,6502,6514,6508,6509,6504,6511,6510});
     require(pendingObserved&&discardRefused&&host.registry.capture(context.first,context.second).drafts.empty(),"Recording reads omitted pending work or fabricated a draft");
     require(tool.snapshot().at("maxSeconds")==60,"Recorder default duration changed");
@@ -206,6 +211,9 @@ void recordingSetupRetention(HWND main){
     for(bool busy:{false,true}){
       SetWindowTextW(GetDlgItem(tool.window(),6508),L"Submitted take");chooseDraftField(tool.window(),6509,0);
       auto name=GetDlgItem(tool.window(),6508);SetFocus(name);SendMessageW(name,EM_SETSEL,2,5);
+      auto beforeOpen=tool.snapshot();beforeOpen.erase("status");tool.openAt();auto afterOpen=tool.snapshot();afterOpen.erase("status");
+      // Reopening may update its explanatory status, but never its setup/take.
+      require(GetFocus()==name&&afterOpen==beforeOpen,"Reopening the visible recorder stole raw field focus or changed setup");
       const auto beforePoll=draftOf(tool);pollBusy=busy;pollInput=true;
       SendMessageW(tool.window(),WM_TIMER,3,0);pollInput=false;
       DWORD first=0,last=0;SendMessageW(name,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));

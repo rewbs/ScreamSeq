@@ -534,3 +534,26 @@ take and draft preservation. This source and its assertions are unbuilt. The
 prepared freeze may advance to include it only while no checkpoint/build/dispatch
 receipt exists; retain the earlier freeze as a superseded preparation, not as an
 executed attempt. Include setup-first traversal in fresh foreground checks.
+
+The same source continuation adds root Tab/Shift+Tab entry and focuses the first
+available setup control after initial loading only if the active recorder still
+has root/null focus. A child or another owner's focus is not reclaimed after a
+pumping read. Visible reopen retains the name caret. The native fixture now
+checks root entry in all three states and exact reopen setup/take preservation
+(the explanatory status is allowed to change). The actual-app recorder case
+also walks Input→Refresh→Channels→Limit→Name and requires visible reopen to
+retain its selected text range and draft identity.
+
+One new pre-correction diagnostic ran that extended app case against retained6a,
+without a build or microphone. It failed in0.677s at initial input focus, before
+the added Tab assertions. `recording-observation/recorder-baseline.json` pins the
+old executable and new test hashes; keep this failed receipt. The new source is
+not qualified by this failure and must pass the next scheduled check.
+
+At07:53 the preceding Intel job120808941485 was terminal. Like ARM, compilation,
+native interface, socket/conformance, sample library and native AU/VST3 device
+recording gates passed;134/135 CTests passed, with only the precise export oracle
+failing. Dry partition diagnostics exactly match ARM/Windows. Intel log SHA256
+`9b587b9387474a80561be3b24ada2adc71e96c8dd4b9e8435e1bb12ca9563d88` is retained in
+`audio-export-followup/completed-ci.json`. Both preceding workflows are terminal;
+the time gate still prohibits a new build before08:02:41 UTC.

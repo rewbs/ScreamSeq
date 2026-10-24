@@ -42,8 +42,25 @@ class SampleCaptureUiTests(unittest.TestCase):
         user.GetDlgItem.argtypes = [wintypes.HWND, ctypes.c_int]
         user.GetDlgItem.restype = wintypes.HWND
         name = user.GetDlgItem(recorder, 6508)
+        # Enter the actual native recorder from the shell, then reach naming
+        # through capture setup without a pointer or starting a microphone.
+        self.assertEqual(self.desktop.focus(recorder), user.GetDlgItem(recorder, 6501))
+        for previous, following in ((6501, 6503), (6503, 6502), (6502, 6514), (6514, 6508)):
+            control = user.GetDlgItem(recorder, previous)
+            self.desktop.send(control, 0x100, 9)
+            self.desktop.send(control, 0x101, 9)
+            self.assertEqual(self.desktop.focus(recorder), user.GetDlgItem(recorder, following))
         text = ctypes.create_unicode_buffer('Retained recorder name')
         self.desktop.send(name, 0xC, 0, ctypes.addressof(text))
+        self.desktop.send(name, 0xB1, 2, 6)
+        before_reopen = self.state()
+        self.desktop.send(main, 0x111, 577)
+        self.assertEqual(self.desktop.focus(recorder), name)
+        selection = self.desktop.send(name, 0xB0)
+        self.assertEqual((selection & 65535, selection >> 16), (2, 6))
+        after_reopen = self.state()
+        for key in ('name', 'createInstrument', 'generation', 'draftDocument', 'draftRevision', 'take'):
+            self.assertEqual(after_reopen[key], before_reopen[key])
         captured = self.state()
         before = self.doc()
         self.desktop.send(recorder, 0x111, 6510)

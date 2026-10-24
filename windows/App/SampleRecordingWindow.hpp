@@ -47,6 +47,13 @@ private:
   bool inputAvailable()const{const auto count=inputChannels();return count<=64&&!selectedDevice_.empty()&&input_.first<count&&input_.count<=count-input_.first;}
   void require(bool ok,const char *why)const{if(!ok)throw std::runtime_error(why);}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
+  void focusEntry(){
+    // A newly opened native tool can initially focus its root. Enter setup
+    // without taking focus back from a child or another owner during a read.
+    const auto focused=GetFocus();
+    if((focused&&focused!=window_)||GetActiveWindow()!=GetAncestor(window_,GA_ROOT))return;
+    const auto first=GetNextDlgTabItem(window_,nullptr,FALSE);if(first)SetFocus(first);
+  }
   void error(const std::exception &e)override{auto message=wide(e.what());if(lifecycle_)message+=L" / Review current take; the earlier operation will not be repeated";status(std::move(message));}
   void schedule(){if(visible()&&capturing()&&!lifecycle_)SetTimer(window_,3,150,nullptr);else KillTimer(window_,3);}
   template<typename F> void perform(F operation,bool observing=false){
@@ -233,7 +240,8 @@ private:
     if(id==acceptState){acknowledgeKeep();return;}
     if(id==reviewTake)reviewLifecycle();else if(id==refresh){requireResolved();loadDevices();}else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
-  bool key(WPARAM value,bool,bool)override{
+  bool key(WPARAM value,bool,bool shift)override{
+    if(value==VK_TAB&&GetFocus()==window_){const auto next=GetNextDlgTabItem(window_,nullptr,shift);if(next)SetFocus(next);return true;}
     if(value==VK_ESCAPE){hide();return true;}
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(_wcsicmp(type,L"Button")==0&&IsWindowEnabled(GetFocus()))action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}
     return false;
@@ -300,7 +308,14 @@ public:
   void protectTake(const Json &value){require(!pending_,"Wait for the recording request before leaving this song");requireResolved();accept(value,true);protectTake();}
   void protectTake(){show();status(capturing()?L"Stop, then Keep or Discard this take before leaving the song":L"Keep or Discard this take before leaving the song");layout();schedule();}
   void documentChanged(){if(ready_&&!pending_){describe();layout();requestPaint();}}
-  void openAt(){show();if(pending_)return;if(lifecycle_){status(L"Review current take before another operation / the microphone may still be active");layout();return;}if(completion_.retained()){status(L"Review the retained Keep result before recording again");layout();return;}if(!loaded_)try{loadDevices();}catch(const std::exception &e){error(e);}try{loadTake();}catch(const std::exception &e){error(e);}describe();layout();schedule();}
+  void openAt(){
+    show();if(pending_)return;
+    if(lifecycle_){status(L"Review current take before another operation / the microphone may still be active");layout();focusEntry();return;}
+    if(completion_.retained()){status(L"Review the retained Keep result before recording again");layout();focusEntry();return;}
+    if(!loaded_)try{loadDevices();}catch(const std::exception &e){error(e);}
+    try{loadTake();}catch(const std::exception &e){error(e);}
+    describe();layout();schedule();focusEntry();
+  }
   void hide()override{
     if(pending_){status(L"Wait for the recording request to finish before closing");return;}
     require(!lifecycle_,"Review current take before closing / the microphone may still be active");
