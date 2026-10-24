@@ -1870,3 +1870,48 @@ not establish coverage for every immediately following input. This is a
 candidate startup explanation, not proof of the earlier runtime failure.
 No timestamp, admission or assertion was changed. Retain the existing
 failure-only per-event coverage diagnostics for any recurrence.
+
+### 8a checkpoint: selected-point Delete race (2026-10-24)
+
+Frozen `8a5ddb9837c83d1dd1bd7d266b44e11ec14127ea` compiled locally at
+01:58:32 UTC. All three targeted native groups passed. The complete composing
+journey, including 144 native parameter inputs and preservation across six
+musical domains, passed. The Activity selection/history/reopen journey failed:
+Backspace arrived after a point selection had been captured during observation
+but before its navigation timer drained. The application refused the action
+with “Wait for the selected point before deleting”; the requested point remained.
+This is a product race, not permission to add a fixture delay. Original receipts
+remain in `bin/mac-gesture-20261022/activity-fixture-correction/`.
+
+The next source correction retains one Delete intent behind that stable point
+timestamp. It first finishes any accepted edit to the previous point, resolves
+the chosen timestamp after reordering, and deletes it once. Repeated keys before
+drain coalesce. Save/Close flush the intent; a busy owner retains it, while stale
+document/revision or changed fields reject it without automatic replay. Native
+coverage requires exact unrelated points, selection and list focus, dirty-point
+reordering, duplicate-key collapse, Save/Close ordering and stale refusal.
+The failing actual-app journey and its assertions remain unchanged. This
+correction is source-only until the next hourly checkpoint.
+
+A separate diagnostic Computer Use session exercised the built 8a executable,
+SHA256 `8a547818229a261851dba48c16239c14878f587f0bb3f2ad289e77ba0be80550`.
+Owned PID36964 exited normally. Record → Balance slider → Stop → Keep → Song
+automation reached the same stable plugin and parameter. Two captured original
+frames were appended exactly; two pre-existing points remained exact. Five API
+snapshots retained playback epoch2 and increasing frames. Dock search typing,
+Backspace, Tab/Shift+Tab and text Backspace after native Ctrl+S worked visibly.
+The evidence is diagnostic because the aggregate app gate failed; no package
+or merge is authorised by these partial results.
+
+The silent 48kHz/480-frame session lasted 312.093 seconds and reported 19 deadline
+overruns, zero starvation indicators and zero device errors. Both realtime audit
+and sustained presentation qualification remain false. This is no performance
+or temporal flicker pass. Floating text continuity, resize/compact layouts and
+Narrator were not qualified. Snapshot assertions, process identity, limitations
+and evidence hashes are retained in `foreground-diagnostic/diagnostic.json`.
+
+At02:14 UTC the 8a CI runs40052191113/40052191157 were still running; Mac ARM
+compilation passed, Intel and Windows compilation were ongoing. Windows actually
+started at01:59:03, extending the next build gate to at least02:59:03 UTC. Require
+terminal preceding CI and recheck later actual starts before another checkpoint.
+Do not rerun or replace the executed 8a build/check receipts.

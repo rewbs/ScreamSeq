@@ -488,17 +488,30 @@ void run(){
         SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
       lane=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",36000},{"value",.625}},{{"frame",48000},{"value",.25}}});
       context.revision="pumped-point-navigation";click(11002);selectPoint(1);
-      const auto before=edits;const auto initial=lane;
+      auto before=edits;const auto initial=lane;
       SetWindowTextW(GetDlgItem(window,11015),L"1.25");
       pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(2);};
       SendMessageW(window,WM_TIMER,3,0);pump={};
       SetFocus(itemList);SendMessageW(window,WM_KEYDOWN,VK_DELETE,0);
+      SendMessageW(window,WM_KEYDOWN,VK_BACK,0);
       require(lane==initial&&edits==before&&tool.snapshot().at("selectedPoint")==1&&tool.queuedMusicalEdit(),
         "Delete before a deferred selection completed removed the previously selected point");
       SendMessageW(window,WM_TIMER,0x5345,0);context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
       require(lane==initial&&edits==before&&tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==1,
         "Pumped point navigation or debounce reentered the worker or invalidated the queued destination");
       SendMessageW(window,WM_TIMER,4,0);SendMessageW(window,WM_TIMER,0x5345,0);
+      auto afterDelete=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",60000},{"value",.625}}});
+      require(lane==afterDelete&&edits==before+2&&!tool.queuedMusicalEdit()&&
+        tool.snapshot().at("selectedPoint")==-1&&GetFocus()==itemList,
+        "Deferred Delete lost the chosen timestamp, removed the old edited point, repeated a key or lost focus");
+      SendMessageW(window,WM_TIMER,4,0);SendMessageW(window,WM_TIMER,0x5345,0);
+      require(lane==afterDelete&&edits==before+2,"Draining an already completed point Delete repeated the mutation");
+      // Also retain the original selection-only debounce ordering contract.
+      lane=initial;context.revision="pumped-selection-only";click(11002);selectPoint(1);before=edits;
+      SetWindowTextW(GetDlgItem(window,11015),L"1.25");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")selectPoint(2);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      SendMessageW(window,WM_TIMER,0x5345,0);SendMessageW(window,WM_TIMER,4,0);
       auto expected=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.25}},{{"frame",60000},{"value",.625}}});
       require(lane==expected&&edits==before+1&&!tool.queuedMusicalEdit()&&
         tool.snapshot().at("selectedPoint")==1&&SendMessageW(itemList,LB_GETCURSEL,0,0)==1,
@@ -533,6 +546,35 @@ void run(){
     {
       const auto selectPoint=[&](int row){SendMessageW(itemList,LB_SETCURSEL,row,0);
         SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
+      // A clean selection received during polling also retains Delete, even
+      // if Save/Close is requested before the navigation timer can run.
+      for(const int boundary:{0,1,2}){
+        const auto initial=lane;const auto beforeEdits=edits;
+        context.revision="delete-boundary-"+std::to_string(boundary);click(11002);selectPoint(0);SetFocus(itemList);
+        pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);}};
+        SendMessageW(window,WM_TIMER,3,0);pump={};
+        require(lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit(),
+          "Select then Backspace reentered an observation or lost its pending musical edit");
+        context.busy=true;bool refused=false;try{tool.flushForProjectSave();}catch(const std::exception &){refused=true;}
+        require(refused&&lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit(),
+          "Save bypassed the busy owner or dropped a pending selected-point deletion");context.busy=false;
+        if(boundary==2){
+          context.revision="delete-boundary-stale";refused=false;
+          try{tool.flushForProjectSave();}catch(const std::exception &){refused=true;}
+          require(refused&&lane==initial&&edits==beforeEdits&&!tool.queuedMusicalEdit(),
+            "Queued Delete silently rebased to changed music or remained replayable after rejection");
+        }else{
+          if(boundary==0)tool.flushForProjectSave();else tool.hide();
+          auto expected=initial;expected.erase(expected.begin()+1);
+          require(lane==expected&&edits==beforeEdits+1&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==-1,
+            "Save/Close omitted or repeated the exact selected-point deletion");
+          SendMessageW(window,WM_TIMER,4,0);require(lane==expected&&edits==beforeEdits+1,
+            "A posted selection timer repeated the deletion after Save/Close");
+          if(boundary==1)tool.openAt();
+        }
+        lane=initial;context.revision="delete-boundary-restored";click(11002);choose(11006,2);
+      }
       // A source handoff must display the point just typed, not the lane from
       // before its debounce. Capture the source before the save reorders rows.
       for(const bool pumped:{false,true})for(const int button:{11008,11009}){

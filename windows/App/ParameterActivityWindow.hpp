@@ -31,13 +31,16 @@ private:
   bool searchPending_=false;
   std::function<void()> pendingNavigation_;
   std::function<void()> pendingHistory_;
-  void cancelNavigation(){pendingNavigation_={};KillTimer(window_,4);}
+  std::optional<uint64_t> pendingPointSelectionFrame_;
+  bool pendingPointDelete_=false;
+  void cancelNavigation(){pendingNavigation_={};pendingPointSelectionFrame_.reset();pendingPointDelete_=false;KillTimer(window_,4);}
   void deferTargetSelection(int id){
     const auto index=selection(id);if(index<0)return;
     const auto wanted=id==processors?targets_.at(size_t(index)).at("key").get<std::string>():target_;
     const auto parameter=id==parameters?selectedParameter():parameter_;
     if(id==parameters&&!parameter)return;
     const auto c=context_();const auto generation=generation_;
+    cancelNavigation();
     pendingNavigation_=[this,id,wanted,parameter,c,generation]{
       guardRead(c,generation);require(visible(),"Activity navigation was closed");
       finishPointEditForNavigation();
@@ -59,15 +62,18 @@ private:
     if(i<0||size_t(i)>=recorded_.size())return;
     const auto frame=recorded_[size_t(i)].at("frame").get<uint64_t>();const bool samePoint=i==selected_;
     const auto c=context_();const auto generation=generation_;
+    cancelNavigation();pendingPointSelectionFrame_=frame;
     pendingNavigation_=[this,frame,samePoint,c,generation]{
+      const bool remove=std::exchange(pendingPointDelete_,false);pendingPointSelectionFrame_.reset();
       guardRead(c,generation);require(visible()&&page_==2,"Recorded point navigation was closed");
       finishPointEditForNavigation();selectRecordedPoint(frame,samePoint);
+      if(remove)action(removePoint,BN_CLICKED);
     };
     SetTimer(window_,4,100,nullptr);
   }
   std::optional<Tracker::DocumentDraft> documentDraft()const override {
     return describeDraft(captured_.document,captured_.revision,Json::array({target_,plugin_,parameter_?Json(*parameter_):Json(),originalFrame_}).dump(),
-      generation_,fields_,pending_||bool(automaticEdit_));
+      generation_,fields_,pending_||bool(automaticEdit_)||pendingPointDelete_);
   }
   WorkspaceRect plot_{};
   std::map<int,LRESULT> pendingSelections_;
@@ -289,6 +295,7 @@ private:
   }
   void deferSourceNavigation(bool lane){
     const auto source=selectedSource(lane);const auto c=context_();const auto generation=generation_;
+    cancelNavigation();
     pendingNavigation_=[this,source,c,generation]{
       guardRead(c,generation);require(visible(),"Activity source navigation was closed");
       finishPointEditForNavigation();
@@ -301,6 +308,13 @@ private:
     // A list focus notification is not a new navigation intent. Cancelling a
     // queued selection here would let Delete target the old selected point.
     if(id==items&&(notification==LBN_SETFOCUS||notification==LBN_KILLFOCUS))return;
+    if(id==removePoint&&notification==BN_CLICKED&&pendingNavigation_){
+      require(pendingPointSelectionFrame_.has_value(),"Finish the requested Activity navigation before deleting");
+      // The list has already reported the musician's new stable timestamp.
+      // Keep one Delete intent behind that selection; never apply it to the
+      // previous row or replay a duplicate key after the point disappears.
+      pendingPointDelete_=true;return;
+    }
     if(id==search&&notification==EN_CHANGE){
       cancelNavigation();
       if(pending_){searchPending_=true;SetTimer(window_,5,20,nullptr);}else filterParameters();
@@ -370,8 +384,7 @@ private:
   bool key(WPARAM key,bool ctrl,bool shift)override{
     if(ctrl&&key=='F'){SetFocus(controls_.at(search));SendMessageW(controls_.at(search),EM_SETSEL,0,-1);return true;}
     if(!ctrl&&!shift&&(key==VK_BACK||key==VK_DELETE)&&page_==2&&GetFocus()==controls_.at(items)){
-      require(!pendingNavigation_,"Wait for the selected point before deleting");
-      if(selected_>=0)action(removePoint,BN_CLICKED);return true;
+      if(selected_>=0||pendingPointSelectionFrame_)action(removePoint,BN_CLICKED);return true;
     }
     if(key==VK_ESCAPE){hide();return true;}
     if(ctrl&&key=='R'){action(refresh,BN_CLICKED);return true;}
@@ -455,15 +468,17 @@ public:
     };
     SetTimer(window_,6,20,nullptr);return true;
   }
-  bool queuedMusicalEdit()const{return bool(automaticEdit_)||bool(pendingHistory_);}
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)||bool(pendingHistory_)||pendingPointDelete_;}
   void flushForProjectSave(){
     // Finish an already queued typing or explicit Save/Delete intent. Invalid,
     // rejected or uncertain fields are never retried by project Save/history.
+    if(pendingPointDelete_){require(!pending_&&!context_().busy,"Wait for the selected point before saving");timer(4);}
     if(automaticEdit_)flushAutomaticEdit();
-    require(!automaticEdit_&&!pending_&&!pendingHistory_,"Wait for the requested point edit before continuing");
+    require(!automaticEdit_&&!pending_&&!pendingHistory_&&!pendingPointDelete_,"Wait for the requested point edit before continuing");
   }
   void flushForHistory(){flushForProjectSave();}
   void hide()override{
+    if(pendingPointDelete_)flushForProjectSave();
     cancelNavigation();
     pendingHistory_={};KillTimer(window_,6);
     if(automaticEdit_)flushForProjectSave();
