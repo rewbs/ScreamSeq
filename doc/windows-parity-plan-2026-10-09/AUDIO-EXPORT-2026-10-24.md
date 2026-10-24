@@ -144,3 +144,16 @@ audio chooser failure and a module chooser that observes the latest precise
 velocity before cancellation, retaining field focus/selection and exact Undo.
 This is source-only, included in the same nine-group checkpoint; do not treat
 the earlier module-export pass as evidence for the changed native command.
+
+The existing mandatory native VST3 composing journey now also calls the
+portable actual-API `editor/Tests/Conformance/audio_export.py` reader/validator.
+After its qualified-source resampling derivatives are created, export the
+processed recorded song plus both/sample/plugin/neither-layer variants. Require
+valid finite float32 WAVs, bounded complete-sequence duration, at least64 changed
+unsaturated samples for each independent layer comparison, exact document and
+stopped editor context, and unchanged source-file hashes. The explicitly bypassed
+effect derivatives are reused only for source isolation; the original processed
+song is also exported. This is unexecuted test source, not vendor or hardware
+qualification. It stays within the existing layered app case, so the checkpoint
+still has three app journeys and one build. Each successful run retains its WAV
+hashes and `full-song-export/report.json`.
