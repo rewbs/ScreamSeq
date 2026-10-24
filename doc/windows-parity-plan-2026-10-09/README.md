@@ -22,21 +22,29 @@ overruns but one starvation indicator. See the
 Later source improves recording review, original-time admission, recorded-point
 editing, Save/Close, connected automation handoffs and clean history refresh.
 PR7 remains separate from main. The latest built candidate is
-`aa008f059cf43228bda7fe83e542653e58accf5d`: one local ARM64 build passed all nine
-native/shared groups, eight composing journeys and the short silent WASAPI
-audit. Fresh Computer Use confirmed precise gestures/Save caret and native
-plugin Record/slider/Stop/Keep with two exact mapped original inputs and
-continuing playback. Mac ARM CI passed completely; Intel compiled and was
-still testing at 24 October 04:28 UTC; Windows was still building. These results
-replace the older source-only labels, not the retained failed receipts.
+`24788ebc34f35a94f24138d63a1df248cddff445`: one local ARM64 build passed seven
+native groups, five composing journeys and the short silent WASAPI audit.
+Fresh Computer Use confirmed frozen Activity retention, clean precise-note
+refresh after hidden Undo, gestures/Save caret, Float/Dock and native
+Record/slider/Stop/Keep with exact original inputs and continuous playback.
+These results close the two preceding retained-view failures within that scope.
+At 24 October 05:32 UTC Mac ARM CI had completed successfully; Intel was building
+and Windows had compiled successfully with later checks still running.
 
-Fresh foreground review found frozen Activity capture loss on reopen and a
-clean precise row staying stale when resize revealed it after other edits.
-Both are corrected in source with native and app regressions, not yet rebuilt.
-The 606.133-second silent UI workload recorded38 deadline overruns, with no
-sustained presentation or realtime-audit pass. A separate opt-in CPU-cycle
-diagnostic is being added; profiling evidence cannot qualify release performance.
-No newer production package or main merge has been made.
+The 634.541-second silent UI workload recorded45 deadline overruns, with no
+sustained presentation or realtime-audit pass. A separate180-second CPU-cycle
+diagnostic retained15 slow callbacks;14 used more cycles than their preceding
+equal-frame callback. This is diagnostic context, not stack attribution or
+release qualification. No newer production package or main merge has been made.
+
+The next frozen source is `451f7f85c70aac0c5bfc74ba06d258c4cc101e2c`, combining
+[full-song WAV export](AUDIO-EXPORT-2026-10-24.md) with opt-in prepared-render
+stage diagnostics. Both are **unbuilt**. Its prepared `audio-export` checkpoint
+requires nine native groups, three app journeys, fresh ordinary audio and
+Computer Use, plus a separate diagnostic run. It must wait until06:01:19 UTC
+or any later actual build gate and until preceding CI is terminal. The shared
+export extraction requires new Mac export/PCM/socket gates; older passes do not
+qualify these changes.
 
 Reciprocal preservation passed both Mac architectures and both Windows return
 legs on retained4d source; reuse only where the relevant codec/persistence inputs
