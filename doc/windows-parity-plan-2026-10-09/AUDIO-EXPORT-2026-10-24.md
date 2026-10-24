@@ -404,3 +404,47 @@ checks and remaining limits. The native exported WAV has1296946frames,
 27.019708seconds, finite stereo float PCM at48kHz, peak0.2454051524 and SHA256
 `0d16fced0db1bccd174520134ee4210034a863df1ae5d96cabd0f80d17075c20`.
 Do not reuse the exited PID or window handles.
+
+### Source continuation: collect independent failures and stock partitions
+
+The shared export test now runs eight independent named cases in one
+registration: dry core, dry partitions, native mutes, precise core, recorded
+gain, recorded tail, invalid/failed streams and source/history preservation.
+Each failed case increments the final failure count; the registration remains
+red if any case fails. All existing exact assertions and tolerance bounds are
+retained. A precise-or-partition failure therefore no longer hides later tail
+and atomic-failure evidence until another hourly compilation.
+
+`mac/Tests/ReferenceRenderer.cpp` and `RenderAudit.cpp` accept an optional final
+block-size argument(1..4096); existing invocations retain512. Allocation of the
+selected output buffer occurs before the callback audit. `mac/test_audio.py`
+accepts `SCREAMSEQ_AUDIO_BLOCKS=512,17,4096`, still compares every sample exactly
+to the separate pinned stock process at the same block size, and separately
+reports cross-partition differences within stock. That characterization is
+not a tolerance or a replacement for the shared failed assertion. The runner
+checks `reference-source.json`, pinned upstream identity, stock-test success,
+library hash and renderer hash before trusting the oracle. Old harness binaries
+cannot silently ignore the block request.
+
+This is **unbuilt source**, with only Python AST parsing and diff checks done.
+At a coordinated Mac checkpoint, build the normal render-audit target and the
+pinned oracle using `mac/build-reference.sh`, then run
+`SCREAMSEQ_AUDIO_BLOCKS=512,17,4096 python3 mac/test_audio.py`. Retain the source
+receipt and complete result/log even on failure. Do not build the stock library
+outside the hourly checkpoint or infer upstream behavior from the analytic
+integer-decay model alone. Until that evidence exists, the test-contract versus
+engine-compatibility question remains unresolved. No product DSP changed in
+this continuation. Existing6a product/UI receipts retain their bounded scope;
+the new C++ test/harness source cannot inherit their compilation pass.
+
+The Mac workflow now has a manual-only `qualification: stock` mode for that
+checkpoint. It runs one ARM job with two build workers, only tracker-core-tests
+and render-audit from ScreamSeq, then the independent pinned upstream library.
+It generates the existing core corpus and retains comparison/build logs,
+reference provenance and harness hashes even on assertion failure. It creates
+no application bundle, starts no device and does not replace normal PR gates.
+Dispatch it only alongside the next coordinated checkpoint, at the exact
+completed source ref; record the returned run before any retry. The ordinary
+CI inspector's `Build ` step prefix includes both stock build stages, so their
+actual starts extend the next hourly gate. This workflow path is also unrun;
+static review/Python parsing do not constitute a passing stock comparison.
