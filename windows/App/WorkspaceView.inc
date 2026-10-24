@@ -340,7 +340,7 @@
                 // including after flushing a queued precise-note field edit.
                 return;
             }
-            else if(id==exportModuleCommand) exportModuleFile();
+            else if(id==exportModuleCommand) {exportModuleFile();return;}
             else if(id==exportAudioCommand) {exportAudioFile();return;}
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
             else if(id==copyCommand) copyCells();

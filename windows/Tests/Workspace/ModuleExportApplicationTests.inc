@@ -6,6 +6,16 @@ void applicationAudioExport() {
     const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
     const auto output=fixture.folder/L"composed.wav";
     restoreCheck(app.menuCommandState(exportAudioCommand).enabled,"Audio export missing from File menu");
+    SetFocus(field);SendMessageW(field,EM_SETSEL,0,1);
+    const auto beforeChooserFailure=songState(app);
+    app.audioExportChooser=[&]() -> std::filesystem::path {
+        SetFocus(app.window);throw std::runtime_error("Owned native chooser failure");
+    };
+    restoreRejected([&]{app.exportAudioFile();});
+    DWORD failedFirst=0,failedLast=0;
+    SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&failedFirst),reinterpret_cast<LPARAM>(&failedLast));
+    restoreCheck(GetFocus()==field&&failedFirst==0&&failedLast==1&&songState(app)==beforeChooserFailure&&
+        !std::filesystem::exists(output),"Failed audio chooser lost field focus/caret or changed music");
     app.audioExportChooser=[] {return std::filesystem::path{};};
     const auto beforeCancel=songState(app);app.command(exportAudioCommand);
     restoreCheck(songState(app)==beforeCancel&&!std::filesystem::exists(output),"Cancelled audio chooser changed song");
@@ -117,4 +127,26 @@ void applicationModuleExport() {
         app.nativeCommandReport.at("observed").at("file")==app.inspectSavedCommandFile(output,true)&&
         ScreamSeq::Project::readProjectBytes(output)==external&&songState(app)==before&&app.view->path==path&&app.view->dirty==dirty,
         "Unknown export Review fabricated success, repeated publication or changed native state");
+
+    // Module export is also a native file boundary: it must finish the user's
+    // pending automatic edit, then let format validation decide representability.
+    app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+    app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
+    const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+    const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+    const auto beforeIntent=songState(app);unsigned intentChoosers=0;
+    rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+    app.moduleExportChooser=[&](const auto &) {
+        ++intentChoosers;
+        restoreCheck(app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94&&
+            !app.preciseNoteWindow->retainedDraft(),"Module chooser opened before the latest automatic note edit");
+        SetFocus(app.window);return std::filesystem::path{};
+    };
+    app.command(exportModuleCommand);
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    restoreCheck(intentChoosers==1&&GetFocus()==field&&first==1&&last==2&&app.view->path==path&&
+        ScreamSeq::Project::readProjectBytes(output)==external,
+        "Cancelled module export lost field focus/caret, changed native save destination or wrote a file");
+    app.edit("history.undo",{{"domain","all"}});
+    restoreCheck(songState(app)==beforeIntent,"Module export changed or duplicated the automatic note's Undo history");
 }

@@ -132,3 +132,15 @@ the chooser or write again. This assertion is unbuilt. The real chooser's
 suggested name and remembered folder are fresh foreground checks; no additional
 build or test registration is introduced. Resolve the current
 `audio-export/freeze.json`; earlier frozen manifests are retained separately.
+
+Source review found module export did not finish automatic field edits before
+capturing its revision, and its command fell through to navigation after the
+chooser. Save and both exports now call one native automatic-field flush helper;
+each still owns its existing take/vendor guards and the external APIs remain
+read-only. Both export choosers use one document/revision-guarded focus/caret
+restoration helper, including cancellation and chooser exceptions. Module export
+returns without navigating. Existing command-result assertions add an injected
+audio chooser failure and a module chooser that observes the latest precise
+velocity before cancellation, retaining field focus/selection and exact Undo.
+This is source-only, included in the same nine-group checkpoint; do not treat
+the earlier module-export pass as evidence for the changed native command.
