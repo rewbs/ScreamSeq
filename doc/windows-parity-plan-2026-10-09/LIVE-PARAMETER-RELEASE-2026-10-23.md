@@ -2050,3 +2050,19 @@ failures remain failures. The complete log hash is
 `17ac9de2515cb4882327c21056535fb769b05dea81fac9542896245024f87cbc`;
 `windows-failure-summary.json` retains every assertion without truncation. Do not
 call this CI green or infer each startup failure's cause from another case.
+
+### Pattern canvas Backspace and pending-point deletion (unbuilt)
+
+Pattern automation now accepts Backspace as well as Delete when its canvas owns
+focus. Native text fields keep ordinary Backspace editing. Deletion finishes an
+already requested point edit first, preserving two chronological Undo steps;
+invalid fields, active drags or still-busy input prevent deletion. Compound
+previews retain their explicit acceptance contract.
+
+The automatic-edit native group tests both keys, exact unrelated-lane
+preservation, field-edit/deletion Undo boundaries, canvas focus, invalid fields
+and native text Backspace. The existing live Save app journey additionally
+deletes its selected point with native Backspace, checks exact Undo/Redo and
+retains the same playback epoch and plugin state before reopening the saved
+file. Counts remain seven native groups and seven app cases. Add canvas versus
+text Backspace to the fresh foreground check; this source has not been built.

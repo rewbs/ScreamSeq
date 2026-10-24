@@ -521,6 +521,35 @@ void applicationAutomaticEdits(){
     app.edit("history.undo",{{"domain","all"}});press(window,4218);
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern navigation created extra history");fixture.close();
   }
+  for(const WPARAM removeKey:{WPARAM(VK_BACK),WPARAM(VK_DELETE)}){
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",1},{"points",Json::array({
+      {{"position",0},{"value",.25},{"curve","linear"}},{{"position",8192},{"value",.75},{"curve","smooth"}}})}});
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",2},{"points",Json::array({{{"position",256},{"value",.5},{"curve","step"}}})}});
+    const auto baseline=app.documentOperation("automation.pattern.get",{{"pattern",0}});
+    app.openParameterAutomation(plugin,1,true);auto &curve=*app.parameterAutomationWindow;const auto window=curve.window();
+    ScreamSeq::Tests::ownGuiWindow(window);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    restoreCheck(curve.snapshot().at("selectedPoint")==0,"Pattern deletion fixture must select its first point");
+    const auto field=GetDlgItem(window,4208);SetFocus(field);SetWindowTextW(field,L"62.5");
+    SetFocus(window);SendMessageW(window,WM_KEYDOWN,removeKey,0);settle(window);
+    auto edited=baseline;for(auto &lane:edited["lanes"])if(lane.at("parameter")==1)lane["points"][0]["value"]=.625;
+    auto removed=edited;for(auto &lane:removed["lanes"])if(lane.at("parameter")==1)lane["points"].erase(lane["points"].begin());
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==removed&&!curve.queuedMusicalEdit()&&GetFocus()==window,
+      "Pattern canvas deletion failed, changed another lane or lost canvas focus");
+    app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Undo deletion lost the preceding automatic field edit");
+    app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern point edit and deletion did not form exact history steps");
+    SetFocus(field);SetWindowTextW(field,L"invalid");SetFocus(window);SendMessageW(window,WM_KEYDOWN,removeKey,0);
+    restoreCheck(restoreText(field)==L"invalid"&&curve.snapshot().at("fieldDraft").get<bool>()&&
+      app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Canvas deletion discarded invalid point fields");
+    // Native EDIT consumes Backspace as a character. The tool's key handler
+    // must yield when text owns focus, even with a selected musical point.
+    SetFocus(field);SendMessageW(field,EM_SETSEL,7,7);SendMessageW(field,WM_KEYDOWN,VK_BACK,0);SendMessageW(field,WM_CHAR,VK_BACK,0);
+    restoreCheck(restoreText(field)==L"invali"&&GetFocus()==field&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,
+      "Text Backspace deleted a pattern point or failed to edit native text");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);fixture.close();
+  }
   for(const bool preview:{false,true}){
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
     app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",1},{"points",Json::array({

@@ -220,7 +220,11 @@ private:
     else if(id==setPoint)setPointFields();else if(id==apply||id==verify||id==remove)commit(id==verify,id==remove);
     else if(id==copyRange||id==previewTool){transform(id==copyRange);if(id==previewTool&&compact_)choosePage(1);}
     else if(id==enabled){enabled_=!enabled_;changed();}
-    else if(id==deletePoint){require(!pointFields_,"Set or discard the point fields first");if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();showPoint();}}
+    else if(id==deletePoint){
+      if(automaticEdit_)flushAutomaticEdit();
+      require(!automaticEdit_&&!pending_&&!dragging_&&!pointFields_,"Finish or discard the pending point before deleting");
+      if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();showPoint();}
+    }
     else if(id==rampUp||id==rampDown){require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");points_=Json::array({{{"position",0},{"value",id==rampDown?1:0},{"curve",curves[size_t(kind_)]}},{{"position",rows_*256-1},{"value",id==rampDown?0:1},{"curve",curves[size_t(kind_)]}}});if(kind_==8)for(auto &p:points_)p["formula"]="mix(start,end,t)";selected_=0;changed();showPoint();}
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)canvas_.fit(rows_);else if(id==panLeft||id==panRight)canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),rows_);else canvas_.zoom(id==zoomIn?2:.5,rows_);schedule();rebuild();}
   }
@@ -247,7 +251,7 @@ private:
     if(GetFocus()!=window_||pending_||!canvasVisible_)return false;
     if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;
     if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}
-    if(k==VK_DELETE){action(deletePoint,BN_CLICKED);return true;}if(pointFields_)return false;
+    if(k==VK_DELETE||k==VK_BACK){action(deletePoint,BN_CLICKED);return true;}if(pointFields_)return false;
     if(k==VK_TAB&&!points_.empty()){selected_=(selected_+(shift?-1:1)+int(points_.size()))%int(points_.size());showPoint();requestPaint();return true;}
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["position"]=uint32_t(std::clamp(p.at("position").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.0:double(snap_)),0.0,double(rows_)*256-1));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(shift?.001:.01),0.0,1.0);replacePoint(std::move(p));return true;}return false;
   }

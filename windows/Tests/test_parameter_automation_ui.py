@@ -143,6 +143,16 @@ class ParameterAutomationUITests(unittest.TestCase):
         text=ctypes.create_unicode_buffer(64);self.desktop.send(field,0xD,64,ctypes.addressof(text));self.assertEqual(text.value,'62.500')
         self.write('history.undo');self.assertEqual(self.saved(),baseline)
         self.write('history.redo');self.assertEqual(self.saved(),edited)
+        self.press(4218);handle=self.state()['handles'][0]
+        self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x202,handle['x'],handle['y']);self.idle()
+        self.assertEqual(self.state()['selectedPoint'],0);self.key(0x08)
+        deleted=json.loads(json.dumps(edited))
+        for lane in deleted:
+            if lane['plugin']==plugin and lane['parameter']==1:lane['points'].pop(0)
+        self.assertEqual(self.saved_idle(),deleted,'Canvas Backspace must delete only the selected point')
+        self.write('history.undo');self.assertEqual(self.saved(),edited)
+        self.write('history.redo');self.assertEqual(self.saved(),deleted)
+        self.write('history.undo');self.assertEqual(self.saved(),edited)
         after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive']);self.assertFalse(after['fault'])
         self.assertEqual(after['playbackEpoch'],before['playbackEpoch']);self.assertGreater(after['frames'],before['frames'])
         self.assertEqual(after['overruns'],0);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
