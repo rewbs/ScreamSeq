@@ -2166,3 +2166,16 @@ buttons, same playback epoch, exact plugin state and save/reopen. Include this
 one additional affected case locally: **seven native groups and eight app
 journeys**. It is already registered in the single-build CI integration step.
 No shared musical, clock, codec or API mutation semantics change.
+
+### Activity filtering must not revoke musical input (source-only)
+
+Source inspection found that Search EN_CHANGE and ordinary Edit/Combo focus
+notifications reached cancelNavigation, dropping a previously queued stable
+point selection/Delete. These are presentation events, not cancellation intent.
+Search now retains the queued action, and non-edit focus/update notifications
+return without changing navigation. Existing native queued-delete boundary
+checks now move into Search and filter during the pumped observation, retain
+its exact caret, then exercise busy Save, successful Save/Close and stale
+rejection. Exact one-delete/no-replay assertions remain. This is unbuilt source
+coverage; it does not yet prove every source/target handoff preserves deletion.
+Seven native groups and eight app cases remain the next checkpoint inventory.

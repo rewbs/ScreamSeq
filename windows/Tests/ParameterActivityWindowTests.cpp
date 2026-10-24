@@ -592,10 +592,17 @@ void run(){
         const auto initial=lane;const auto beforeEdits=edits;
         context.revision="delete-boundary-"+std::to_string(boundary);click(11002);selectPoint(0);SetFocus(itemList);
         pump=[&](const std::string &method){if(method=="parameter.activity.get"){
-          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);}};
+          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);
+          SetFocus(GetDlgItem(window,11021));SetWindowTextW(GetDlgItem(window,11021),L"dB");
+          SendMessageW(GetDlgItem(window,11021),EM_SETSEL,1,2);
+        }};
         SendMessageW(window,WM_TIMER,3,0);pump={};
         require(lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit(),
-          "Select then Backspace reentered an observation or lost its pending musical edit");
+          "Select then Backspace reentered observation, or search focus/filtering revoked the pending musical edit");
+        SendMessageW(window,WM_TIMER,5,0);
+        DWORD searchFirst=0,searchLast=0;SendMessageW(GetDlgItem(window,11021),EM_GETSEL,WPARAM(&searchFirst),LPARAM(&searchLast));
+        require(tool.queuedMusicalEdit()&&tool.snapshot().at("search")=="dB"&&GetFocus()==GetDlgItem(window,11021)&&
+          searchFirst==1&&searchLast==2,"Deferred filtering consumed the original point action or changed the search caret");
         context.busy=true;bool refused=false;try{tool.flushForProjectSave();}catch(const std::exception &){refused=true;}
         require(refused&&lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit(),
           "Save bypassed the busy owner or dropped a pending selected-point deletion");context.busy=false;
@@ -613,7 +620,7 @@ void run(){
             "A posted selection timer repeated the deletion after Save/Close");
           if(boundary==1)tool.openAt();
         }
-        lane=initial;context.revision="delete-boundary-restored";click(11002);choose(11006,2);
+        lane=initial;context.revision="delete-boundary-restored";click(11002);choose(11006,2);SetWindowTextW(GetDlgItem(window,11021),L"");
       }
       // A source handoff must display the point just typed, not the lane from
       // before its debounce. Capture the source before the save reorders rows.

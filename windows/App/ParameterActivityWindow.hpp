@@ -319,6 +319,8 @@ private:
     // A list focus notification is not a new navigation intent. Cancelling a
     // queued selection here would let Delete target the old selected point.
     if(id==items&&(notification==LBN_SETFOCUS||notification==LBN_KILLFOCUS))return;
+    if((id==search||id==time||id==value)&&(notification==EN_SETFOCUS||notification==EN_KILLFOCUS||notification==EN_UPDATE))return;
+    if((id==processors||id==parameters||id==mode||id==details)&&(notification==CBN_SETFOCUS||notification==CBN_KILLFOCUS))return;
     if(id==refresh&&notification==BN_CLICKED&&(polling_||(!pending_&&context_().busy))){deferRefresh();return;}
     if(id==removePoint&&notification==BN_CLICKED&&pendingNavigation_){
       require(pendingPointSelectionFrame_.has_value(),"Finish the requested Activity navigation before deleting");
@@ -328,7 +330,8 @@ private:
       pendingPointDelete_=true;return;
     }
     if(id==search&&notification==EN_CHANGE){
-      cancelNavigation();
+      // Filtering is presentation-only. It cannot revoke an already requested
+      // stable point selection/Delete or the Refresh waiting behind a read.
       if(pending_){searchPending_=true;SetTimer(window_,5,20,nullptr);}else filterParameters();
       return;
     }
