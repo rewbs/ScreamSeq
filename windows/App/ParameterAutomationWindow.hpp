@@ -7,7 +7,7 @@ namespace ScreamSeq {
 class ParameterAutomationWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
-  struct Cursor {std::string document,revision;unsigned pattern=0;Json patterns,plugins;};
+  struct Cursor {std::string document,revision;unsigned pattern=0;Json patterns,plugins;bool busy=false;};
   static constexpr int dockMinimumWidth=440,dockMinimumHeight=300;
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
@@ -54,7 +54,7 @@ private:
   bool reviewRequired_=false;
   bool displayControl(int id)const override{return id!=apply||reviewRequired_||automaticEditFailed_;}
   void queueCurveEdit(UINT delay=600){if(reviewRequired_)return;queueAutomaticEdit([this]{
-    if(pending_||dragging_){queueCurveEdit();return;}
+    if(pending_||dragging_||context_().busy){queueCurveEdit();return;}
     if(pointFields_&&selected_>=0)setPointFields();
     if(dirty_&&!pointFields_)commit(false,points_.empty()&&!laneID_.empty());
   },delay);}
@@ -113,7 +113,7 @@ private:
       if(!samePattern){canvas_.fit(rows_);selectedPosition.reset();setting_=true;set(rangeStart,L"0");set(rangeEnd,std::to_wstring(rows_));setting_=false;}else if(canvas_.end>rows_*256)canvas_.fit(rows_);
       parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &v){return wantedID&&v.at("id")==*wantedID;});if(p==catalog_.end())p=catalog_.begin();selectParameter(p->at("id"),selectedPosition);}
       else {points_=values_=Json::array();laneID_.clear();selected_=-1;reviewRequired_=false;dirty_=pointFields_=false;++generation_;set(targetLabel,L"No available parameter");showPoint();rebuild();}
-      choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / Apply saves; the pattern cursor remains independent");
+      choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / edits save automatically; the pattern cursor remains independent");
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void replacePoint(Json point){
@@ -145,7 +145,7 @@ private:
   Json toolSignature()const{return Json::array({tool_,field(rangeStart),field(rangeEnd),field(toolValue0),field(toolValue1),field(toolValue2),field(toolValue3),snap_,kind_});}
   std::pair<uint32_t,uint32_t> range()const{const auto first=number(rangeStart)*256,last=number(rangeEnd)*256;require(first>=0&&first<last&&last<=rows_*256&&first==std::floor(first)&&last==std::floor(last),"Choose a nonempty range inside the pattern in steps of 1/256 row");return {uint32_t(first),uint32_t(last)};}
   void transform(bool copy){
-    requireCurrent();require(!draft()&&!laneID_.empty(),"Apply the curve before copying or transforming saved points");auto [start,end]=range();Json p={{"lane",laneID_},{"start",start}};
+    requireCurrent();require(!draft()&&!laneID_.empty(),"Finish the curve edit before copying or transforming saved points");auto [start,end]=range();Json p={{"lane",laneID_},{"start",start}};
     if(copy)p["end"]=end;else{
       p["expectedRevision"]=captured_.revision;p["dryRun"]=true;p["operation"]=operations[size_t(tool_)];if(tool_<7)p["end"]=end;Json options=Json::object();
       if(tool_==2)options["amount"]=number(toolValue0)*256;
@@ -157,7 +157,7 @@ private:
     }
     const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{auto result=request_(copy?"automation.pattern.copy":"automation.pattern.transform",p);pending_=false;requireCurrent();require(generation_==token&&signature==toolSignature(),"Curve or tool settings changed / preview discarded");
       if(copy){clip_=std::move(result);status(L"Range copied inside this editor / choose Paste or Insert paste");}
-      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed(false);showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Apply saves; Reload discards");}
+      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed(false);showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Use preview saves; Reload discards");}
       else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;
     }catch(...){pending_=false;layout();throw;}layout();
   }
@@ -173,7 +173,12 @@ private:
     workbench_=std::make_unique<FormulaWorkbenchWindow>(window_,parameterName()+L" · Formula",point.at("formula").get<std::string>(),Json{{"points",points_},{"rows",rows_},{"rowsPerBeat",rowsPerBeat_}},selected,request_,std::move(current),std::move(use));workbench_->show();
   }
   void openBank(){
-    if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}requireCurrent();require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");
+    if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}
+    // A new bank captures the latest already-requested edit. An existing bank
+    // keeps its independent capture; compound previews remain explicit drafts.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending pattern curve before opening its bank");
+    requireCurrent();require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");
     const auto doc=captured_.document,plugin=pluginID_,pattern=patternID_;const auto parameter=parameter_;auto token=std::make_shared<uint64_t>(generation_);
     auto source=[this,doc,plugin,pattern,parameter,token]{return context_().document==doc&&captured_.document==doc&&pluginID_==plugin&&patternID_==pattern&&parameter_==parameter&&generation_==*token&&!pointFields_;};
     auto context=[this]{const auto c=context_();return std::pair(c.document,c.revision);};
@@ -358,7 +363,7 @@ private:
         put(rowLabel,left,248,quarter,18);put(valueLabel,left+quarter+gap,248,quarter,18);
         for(int i=0;i<4;++i)put(std::array<int,4>{pointRow,pointValue,setPoint,deletePoint}[size_t(i)],left+i*(quarter+gap),266,quarter,26);
         put(bank,left,306,inner,28);
-        set(pageHelp,kind_==8?L"Expand opens the formula workbench. Set point stages these fields; Apply saves the curve.":L"Choose Scripted on the Curve page to edit this point's formula. The reference is available for every curve.");
+        set(pageHelp,kind_==8?L"Expand opens the formula workbench. Edits to a selected point save automatically; Add point inserts a new point.":L"Choose Scripted on the Curve page to edit this point's formula. The reference is available for every curve.");
         put(pageHelp,left,346,inner,std::max(34.f,contentBottom-346));
       }else{
         const float rangeWidth=(inner-112)/2;

@@ -1994,3 +1994,30 @@ The existing strict API assertion now emits failure-only original page, expected
 timestamp, stopped review and read-only timing projection. No sleeps, retries,
 mapping or admission rules changed. This diagnostic addition still needs both
 Mac executions. At02:27UTC Intel compilation and Windows tests were ongoing.
+
+### New pattern-bank capture finishes automatic input (unbuilt)
+
+The same source audit found that a new pattern envelope bank could reject queued
+point text or capture a curve before its automatic save completed. It now finishes
+an already requested automatic edit before capturing the source revision/shape.
+An existing visible/retained bank keeps its independent capture. Compound tool
+previews can still be captured explicitly without publishing them to the lane.
+Pattern automatic edits now observe the same native owner-busy state as absolute
+automation, keeping unsent input queued until admission rather than consuming it
+as a failed worker call. Actual write failures retain the existing no-replay rule.
+
+The existing automatic-edit native group adds invalid text/caret/focus, busy
+admission, exact captured points, separate bank/point Undo steps and compound
+preview preservation. These are source-only assertions in the same seven-group,
+three-app checkpoint. Status/help text now describes automatic point saving and
+the explicit Use preview action instead of the obsolete Apply instruction.
+
+Read-only Mac timing audit: both session adapters currently admit a take from a
+nonzero timeline generation; that alone does not establish coverage of the
+current input timestamp. Core Audio publishes presentation intervals, whose
+first start may be later than current host time. This is a plausible startup
+explanation, not proof of the failed API-page assertion. The existing shared take
+also intentionally retains input awaiting later intervals. Do not tighten its
+constructor, approximate input timestamps or relax exact mapping based on this
+hypothesis. Collect the pending failure-only API_PAGE_CLOCK projection first.
+At02:37UTC8a Intel and Windows compilation had passed and tests were still active.

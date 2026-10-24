@@ -521,5 +521,50 @@ void applicationAutomaticEdits(){
     app.edit("history.undo",{{"domain","all"}});press(window,4218);
     restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern navigation created extra history");fixture.close();
   }
-  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history\n";
+  for(const bool preview:{false,true}){
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",1},{"points",Json::array({
+      {{"position",0},{"value",.25},{"curve","linear"}},{{"position",8192},{"value",.75},{"curve","smooth"}}})}});
+    const auto baseline=app.documentOperation("automation.pattern.get",{{"pattern",0}});
+    app.openParameterAutomation(plugin,1,true);auto &curve=*app.parameterAutomationWindow;const auto window=curve.window();
+    ScreamSeq::Tests::ownGuiWindow(window);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    restoreCheck(curve.snapshot().at("selectedPoint")==0,"Bank fixture must select its first point");
+    const auto field=GetDlgItem(window,4208);
+    if(preview){
+      const auto tool=GetDlgItem(window,4230);SendMessageW(tool,CB_SETCURSEL,1,0);
+      SendMessageW(window,WM_COMMAND,MAKEWPARAM(4230,CBN_SELCHANGE),LPARAM(tool));press(window,4238);
+      restoreCheck(curve.snapshot().at("dirty").get<bool>()&&!curve.queuedMusicalEdit(),"Bank preview fixture must remain unaccepted");
+    }else{
+      SetFocus(field);SetWindowTextW(field,L"invalid");SendMessageW(field,EM_SETSEL,1,4);press(window,4220);
+      DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(!curve.snapshot().at("envelopeBank").at("visible").get<bool>()&&restoreText(field)==L"invalid"&&
+        GetFocus()==field&&first==1&&last==4&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,
+        "Opening a bank discarded invalid point text, focus or music");
+      SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);SetWindowTextW(field,L"62.5");
+      app.busy=true;press(window,4220);app.busy=false;
+      restoreCheck(curve.queuedMusicalEdit()&&!curve.snapshot().at("envelopeBank").at("visible").get<bool>()&&
+        app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Busy bank opening consumed an unsent edit or captured stale music");
+    }
+    press(window,4220);const auto captured=curve.snapshot();
+    restoreCheck(captured.at("envelopeBank").at("visible").get<bool>()&&captured.at("envelopeBank").at("sourceCurrent").get<bool>()&&
+      captured.at("envelopeBank").at("expectedRevision")==app.view->session.revision&&!curve.queuedMusicalEdit(),
+      "New pattern bank did not capture the completed point revision");
+    auto expected=baseline;if(!preview)expected["lanes"][0]["points"][0]["value"]=.625;
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==expected&&captured.at("dirty").get<bool>()==preview,
+      "Bank opening accepted a compound preview or omitted an automatic point");
+    HWND bank=nullptr;EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM out)->BOOL{
+      wchar_t name[96]{};GetClassNameW(h,name,96);if(!wcscmp(name,L"ScreamSeq.EnvelopeBank")){*reinterpret_cast<HWND *>(out)=h;return FALSE;}return TRUE;
+    },reinterpret_cast<LPARAM>(&bank));restoreCheck(bank&&GetWindow(bank,GW_OWNER)==window,"Find the owned pattern bank");
+    ScreamSeq::Tests::ownGuiWindow(bank);press(bank,1005);
+    const auto entries=app.documentOperation("envelope.bank.list",Json::object()).at("entries");
+    restoreCheck(entries.size()==1&&entries[0].at("shape").at("points")==captured.at("points")&&
+      app.documentOperation("automation.pattern.get",{{"pattern",0}})==expected,"Bank saved stale points or changed the source lane");
+    app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+    restoreCheck(app.documentOperation("envelope.bank.list",Json::object()).at("entries").empty()&&
+      app.documentOperation("automation.pattern.get",{{"pattern",0}})==expected,"Captured bank save was not one separate history step");
+    if(!preview){app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+      restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Bank opening added extra point history");}
+    fixture.close();
+  }
+  std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history/bank capture\n";
 }
