@@ -500,6 +500,14 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take stopped / Keep or Discard to finish')
         self.assertTrue(self.read('transport.get')['playing'])
         before_refusals = self.doc()
+        pending_export = self.folder / 'unkept-recording.wav'
+        for dry in (False, True):
+            with self.subTest(exportWithRetainedTake=dry), self.assertRaises(ApiError) as raised:
+                self.write('document.exportAudio', path=str(pending_export), dryRun=dry)
+            self.assertEqual(raised.exception.code, -32002)
+            self.assertFalse(pending_export.exists())
+            self.assertEqual(self.doc(), before_refusals)
+            self.assertTrue(self.take()['retained'])
         for flag, code in ((True, -32002), (1, -32602), ('true', -32602), (None, -32602)):
             with self.subTest(restoreSavedState=flag), self.assertRaises(ApiError) as raised:
                 self.write('automation.recording.commit', take=take['take'], restoreSavedState=flag)

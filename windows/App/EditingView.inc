@@ -333,7 +333,7 @@
             throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Export; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         status=L"Rendering audio…";frameRequested=true;
         retainedNativeCommand("audioExport","document.exportAudio",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
-            {{"path",utf8Path(path)}},[&](const Json &){status=L"Audio exported / native project save state retained";});
+            {{"path",utf8Path(path)}},[&](const Json &){status=L"Audio exported / native project save state retained";frameRequested=true;});
     }
     bool saveFile(bool saveAs=false) {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
