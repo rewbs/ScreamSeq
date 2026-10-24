@@ -656,6 +656,10 @@ void applicationAutomaticEdits(){
   }
   for(const bool preview:{false,true}){
     RestoreFixture fixture;auto &app=*fixture.app;createRestoreInstrument(app);
+    MONITORINFO ownerMonitor{sizeof(ownerMonitor)};
+    restoreCheck(GetMonitorInfoW(MonitorFromWindow(fixture.root,MONITOR_DEFAULTTONEAREST),&ownerMonitor),"Find the instrument owner's work area");
+    restoreCheck(SetWindowPos(fixture.root,nullptr,ownerMonitor.rcWork.right-200,ownerMonitor.rcWork.bottom-200,0,0,
+      SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE),"Place the instrument source near the monitor edge");
     app.edit("instrument.patch",{{"instrument",1},{"values",{{"envelope",0},{"enabled",true},{"points",Json::array({Json::array({0,32}),Json::array({16,48}),Json::array({48,0})})}}}});
     app.openInstrumentEnvelope();auto &instrument=*app.instrumentEnvelopeWindow;const auto window=instrument.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto identity=instrument.snapshot().at("instrument");
@@ -687,7 +691,18 @@ void applicationAutomaticEdits(){
       wchar_t kind[96]{};GetClassNameW(h,kind,96);if(!wcscmp(kind,L"ScreamSeq.EnvelopeBank")){*reinterpret_cast<HWND *>(out)=h;return FALSE;}return TRUE;
     },reinterpret_cast<LPARAM>(&bank));
     restoreCheck(bank&&GetWindow(bank,GW_OWNER)==GetAncestor(window,GA_ROOT),"Find the owned instrument bank");ScreamSeq::Tests::ownGuiWindow(bank);
+    MONITORINFO bankMonitor{sizeof(bankMonitor)};RECT bankBounds{};
+    restoreCheck(GetMonitorInfoW(MonitorFromWindow(window,MONITOR_DEFAULTTONEAREST),&bankMonitor)&&GetWindowRect(bank,&bankBounds)&&
+      bankBounds.left>=bankMonitor.rcWork.left&&bankBounds.top>=bankMonitor.rcWork.top&&
+      bankBounds.right<=bankMonitor.rcWork.right&&bankBounds.bottom<=bankMonitor.rcWork.bottom,
+      "New instrument bank opened with controls outside the source monitor's work area");
+    // A later explicit placement belongs to the musician; reopening raises the
+    // same captured bank instead of applying initial placement again.
+    restoreCheck(SetWindowPos(bank,nullptr,bankBounds.left+12,bankBounds.top+12,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE),"Move the retained bank");
+    restoreCheck(GetWindowRect(bank,&bankBounds),"Read the retained bank placement");
     const auto revision=app.view->session.revision;press(window,4404);settle(window);
+    RECT reopenedBounds{};
+    restoreCheck(GetWindowRect(bank,&reopenedBounds)&&EqualRect(&bankBounds,&reopenedBounds),"Reopening a retained bank reset the musician's window placement");
     restoreCheck(app.view->session.revision==revision&&instrument.snapshot().at("envelopeBank")==captured.at("envelopeBank"),
       "Reopening a retained instrument bank recaptured it or replayed an automatic edit");
     press(bank,1005);const auto entries=app.documentOperation("envelope.bank.list",Json::object()).at("entries");

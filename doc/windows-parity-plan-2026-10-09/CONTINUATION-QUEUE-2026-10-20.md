@@ -6,7 +6,42 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October 21:21 UTC diagnostic continuation:** `recording-root/cabinet-isolation/`
+contains a completed two-case comparison using the same946 executable and60s
+silent playback per case. Original15-effect fixture:6 overruns,0 starvation,
+maximum callback14.0949ms. Disposable copy with only the cabinet removed:0
+overruns,2 starvation indicators, maximum callback8.1666ms and wake gap34.7848ms.
+Both used48kHz/480frames and exited0; exact binary and fixture hashes retained.
+This localizes a substantial processing contribution, not a complete root cause
+or acceptance pass. The reduced fixture cannot replace the original. No DSP
+change has been made: six cabinet route histories are intentionally kept warm.
+`Main.cpp` emits both qualification booleans as constant false; those mean no
+qualification from that report, not a measured allocation/presentation failure.
+The callback and starvation counters are real measurements. Latest Windows CI
+compilation passed at21:19:57; tests continue, Intel still building.
+
 ## Current integration boundary
+
+**24 October 21:15 UTC — supersedes the frozen-candidate instructions below.**
+Frozen `946c61af7a3dde87c87500a9837cdc81d69292d9` is built and pushed to PR7.
+`recording-root/qualified-checks.json` and `closure-checks.json` establish five
+native groups and eleven actual-app passes. Do not rerun those recorded attempts.
+Fresh Computer Use on PID46052 confirmed navigation, graph wiring/removal,
+parameter sliders/pages/search, live mixer and precise-note typing/Save/history
+gestures. That process exited normally; never reuse its handles. Foreground
+status remains `needs-correction`: envelope-bank initial placement can hide its
+actions off-screen, and audio recorded36 overruns (zero starvation/device errors).
+The bank now uses the existing initial work-area clamp, with exact containment
+and retained-placement assertions; this correction is unbuilt. No new package
+or main merge. Current ARM CI job passed; Intel and Windows are still live.
+Inspect exact runs40131518375/40131518388 and later starts without restarting.
+Next coordinated build cannot start before21:50:05 UTC or overlap active CI.
+The active closure scope and current evidence are in
+[PRODUCTION-CLOSURE-2026-10-24.md](PRODUCTION-CLOSURE-2026-10-24.md) and
+[CURRENT-STATE-2026-10-24.md](CURRENT-STATE-2026-10-24.md). Preserve failed audio
+evidence while investigating; reduced diagnostic workloads cannot replace it.
+
+### Historical checkpoint preparation (superseded)
 
 **Next frozen candidate:** `84fac64a3b85fd133ebd0b3284a24933a0e02022`, committed,
 backed up to `codex/mac-gesture-next-checkpoint`, and fast-forwarded into the clean
