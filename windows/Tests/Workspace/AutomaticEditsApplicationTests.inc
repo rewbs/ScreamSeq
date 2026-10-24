@@ -30,6 +30,39 @@ void applicationAutomaticEdits(){
     SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);fixture.close();
   }
   {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({
+      {{"frame",48000},{"value",-6.}},{{"frame",96000},{"value",-3.}},{{"frame",144000},{"value",-9.}}})}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",2},{"points",Json::array({{{"frame",12000},{"value",25.}}})}});
+    app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    SetWindowTextW(GetDlgItem(window,4605),L"1");press(window,4626);
+    restoreCheck(lane.snapshot().at("selectedPoint")==1,"Choose the middle recorded point");
+    const auto viewport=lane.snapshot();
+    app.edit("automation.recorded.edit",{{"plugin",plugin},{"parameter",1},{"frame",24000},{"value",-12.}});
+    const auto inserted=app.documentOperation("automation.get",Json::object());const auto revision=app.view->session.revision;
+    SetFocus(window);press(window,4615);const auto refreshed=lane.snapshot();
+    restoreCheck(refreshed.at("selectedPoint")==2&&refreshed.at("points")[2].at("frame")==96000&&
+      app.documentOperation("automation.get",Json::object())==inserted&&app.view->session.revision==revision&&GetFocus()==window,
+      "Reload after insertion selected a different recorded point, changed music or lost canvas focus");
+    for(const auto *key:{"startSeconds","endSeconds","valueLow","valueHigh"})
+      restoreCheck(refreshed.at(key)==viewport.at(key),"Stable point reload reset the recorded viewport");
+    SetWindowTextW(GetDlgItem(window,4609),L"-7");settle(window);
+    auto edited=inserted;for(auto &point:edited["points"])if(point.at("id")==1&&point.at("frame")==96000)point["value"]=-7.;
+    restoreCheck(app.documentOperation("automation.get",Json::object())==edited&&lane.snapshot().at("selectedPoint")==2,
+      "Editing after a reordered reload changed another point or unrelated lane");
+    press(window,4631);restoreCheck(app.documentOperation("automation.get",Json::object())==inserted&&lane.snapshot().at("selectedPoint")==2,
+      "Native Undo lost the retained recorded point or changed unrelated automation");
+    press(window,4632);restoreCheck(app.documentOperation("automation.get",Json::object())==edited&&lane.snapshot().at("selectedPoint")==2,
+      "Native Redo lost the retained recorded point or changed unrelated automation");
+    app.edit("automation.recorded.edit",{{"plugin",plugin},{"parameter",1},{"frame",96000},{"remove",true}});
+    const auto deleted=app.documentOperation("automation.get",Json::object());press(window,4615);
+    restoreCheck(lane.snapshot().at("selectedPoint")==-1,"Reload silently selected a replacement for a removed point");
+    press(window,4612);settle(window);restoreCheck(app.documentOperation("automation.get",Json::object())==deleted,
+      "Delete after selected-point removal affected another point");
+    press(window,4631);restoreCheck(app.documentOperation("automation.get",Json::object())==edited&&lane.snapshot().at("selectedPoint")==-1,
+      "History invented a selection after the selected recorded point disappeared");fixture.close();
+  }
+  {
     RestoreFixture fixture;auto &app=*fixture.app;app.openSampleDetail();auto *tool=app.sampleDetailWindow.get();const auto window=tool->window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto before=app.documentOperation("sample.get",{{"sample",1}});const auto pcm=app.documentOperation("sample.pcm.get",{{"sample",1}});
     const auto field=GetDlgItem(window,4857);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);

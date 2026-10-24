@@ -20,13 +20,19 @@ overruns but one starvation indicator. See the
 [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
 
 Later source improves recorded-point editing, native Save/Close, restoration and
-short-take navigation. PR7 remains separate from main. The latest built579
-candidate passed four of five local native groups; the failed stable-parameter
-fixture and further navigation/accessibility corrections await the next build.
-Its sustained Windows audio check had31 deadline overruns, so it is not a newer
-production package. Mac ARM579 passed the real-device BlackHole live recording
-lifecycle in addition to134 CTests, interface and socket gates; Intel evidence
-was still pending at20:28 UTC. Reciprocal preservation passed both Mac
+short-take navigation. PR7 remains separate from main. The latest built1071
+candidate failed Activity's deferred-selection native gate; its separate
+144-input composing diagnostic passed. Further Activity focus/history,
+Keep-to-edit handoff and recorded-point selection corrections remain unbuilt.
+An old-binary diagnostic reproduced selection moving to the wrong timestamp
+after history and Reload. The next gate is four native groups and two complete
+app journeys, followed by fresh Computer Use. Windows1071 CI passed159 portable/
+worker and52/53 native groups, retaining24 app failures/one skip. Mac ARM1071
+passed134 CTests, native interface/socket/typed gates and the BlackHole live take
+lifecycle; Intel compiled and was still testing at00:34UTC on24 October.
+The prior350.554-second Windows foreground workload had32 deadline overruns;
+there is no newer qualified package or sustained-performance claim.
+Reciprocal preservation passed both Mac
 architectures and both Windows return legs on the retained4d source. These
 bounded passes do not close arbitrary vendor, device or full foreground parity.
 The [live parameter report](LIVE-PARAMETER-RELEASE-2026-10-23.md) and

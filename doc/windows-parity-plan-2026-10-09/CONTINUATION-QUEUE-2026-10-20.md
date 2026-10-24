@@ -20,7 +20,11 @@ New native and actual-app assertions remain unbuilt. See the latest section of
 LIVE-PARAMETER-RELEASE for exact receipts, causes and limits. No package/merge/UI
 qualification. Next checkpoint no earlier than2026-10-24 00:57:22UTC and only
 after1071 CI40042447607/40042447613 is terminal and later starts are inspected.
-The three-native/two-app gate remains; preserve all earlier failed receipts.
+The next gate now includes four native groups/two app journeys; preserve all
+earlier failed receipts. The added automatic-edit group protects retaining the
+same recorded point after insertion/deletion/history, with no replacement
+selection if its timestamp disappears. The old1071 diagnostic reproduced the
+wrong-row selection on Reload; the source correction is still unbuilt.
 
 The correction batch also retains Keep → Song automation navigation during
 recording refresh/worker busy periods and clears stale Keep destinations at an

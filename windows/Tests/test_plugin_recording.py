@@ -518,6 +518,8 @@ class PluginRecordingTests(unittest.TestCase):
                                     lambda s: not s['dirty'] and s['pointCount'] == selected['pointCount'] - 1)
             self.assertEqual(deleted['points'], remaining)
             self.assertEqual(self.desktop.focus(owner), owner)
+            self.assertGreaterEqual(deleted['selectedPoint'], 0)
+            retained_frame = deleted['points'][deleted['selectedPoint']]['frame']
             after_delete = self.read('automation.get')
             self.assertEqual(after_delete['total'], points['total'] - 1)
             self.write('history.undo')
@@ -532,6 +534,9 @@ class PluginRecordingTests(unittest.TestCase):
             self.write('document.save', path=str(pending_path))
             self.desktop.send(owner, 0x111, 4615, private_desktop.user.GetDlgItem(owner, 4615))
             selected = self.read('workspace.get')['absoluteAutomation']
+            expected_selection = next(i for i, p in enumerate(selected['points']) if p['frame'] == retained_frame)
+            self.assertEqual(selected['selectedPoint'], expected_selection,
+                             'Reload after history must retain the same point, not its former row number')
             field = private_desktop.user.GetDlgItem(owner, 4609)
             self.assertTrue(field and private_desktop.user.IsWindowVisible(field))
             self.desktop.send(field, 0x201, 1, 4 | (4 << 16))

@@ -1564,3 +1564,53 @@ fresh Computer Use. Include Keep → Song automation and original target retenti
 in the foreground checklist. These additions are unbuilt; only Python syntax,
 UTF-8 and whitespace checks have run. Preserve1071 and338fa6f source/evidence;
 the prepared correction candidate will be advanced before any build starts.
+
+### Recorded-point identity correction and terminal CI evidence (24 October)
+
+The 1071 executable reproduced a further composing defect at00:32UTC: after
+native recorded-point deletion, exact Undo/Redo and Reload, selection remained
+at row1 although the surviving selected frame had moved to row2. The diagnostic
+failed precisely at the new identity assertion; prior capture, Keep, native
+deletion and history checks reached it successfully. Receipt, source/binary and
+fixture hashes are retained in
+`activity-history-correction/selection-diagnostic/receipt.json` and `app.log`.
+This is a failed old-binary regression diagnostic, not current-source validation.
+
+`windows/App/AbsoluteAutomationWindow.hpp` now retains the selected frame on a
+same-document/plugin/parameter reload. Reordering the lane cannot redirect the
+next edit; removal or an external time move clears selection instead of choosing
+a neighbour. An intentional local time edit already updates the selected frame
+before publication and continues to follow it. This uses the lane's unique frame
+identity, without adding stored IDs or changing the codec, API, model or audio.
+
+The existing automatic-edit native group now covers earlier insertion, exact
+selected-point value editing, unrelated lane preservation, viewport/focus,
+Undo/Redo, external deletion and no-op Delete with no selection. The full
+144-input composing journey adds exact surviving-frame selection after its
+existing deletion/history/Reload sequence. The next gate therefore runs FOUR
+native groups (workspace-plugin-search, parameter-activity-window,
+workspace-menu-bar, workspace-automatic-edit) and TWO app journeys. No extra
+build target is required. Fresh Computer Use must include this history-to-edit
+transition, alongside the Activity and recording handoff checks. Source is
+unbuilt; no package or merge follows from this diagnostic.
+
+At00:34UTC,1071 Windows CI40042447607/job120716413684 was terminal failed:
+compilation,159 portable/worker and52/53 native groups passed; Activity failed
+the already diagnosed focus/deferred-selection assertion. The117 app cases
+retained24 failures across21 cases and one optional skip. Three failures were
+additional missing-window teardown assertions; routing/composing diagnostics
+explicitly reported empty audio devices. Other startup failures do not each
+independently prove that cause. Exact blocks are retained in
+`activity-search/windows-ci-classification.json`; downloaded Windows log SHA256
+is388a3395518a2cb7f406497c3e6492dd5f09eae2737f3d1c35c9d740a8845c7d.
+
+Mac ARM job120716413993 passed134 CTests, native interface/socket/typed gates
+and the actual BlackHole2ch512 take lifecycle, including original inputs,
+Keep/Undo/Redo, live release/Discard, restoration and save/reopen. Log SHA256
+is4bb6b2a5bd259283bf9a02e11c1409118ad02812b9aaa3489c1c07b04ccb6dfa.
+Intel job120716413791 compiled successfully at00:25:46UTC and was still testing
+at00:34UTC. Preserve its pending recovery result. Terminal logs/steps/hashes are
+in `activity-search/completed-ci.json`; no old job was restarted. The next gate
+remains no earlier than00:57:22UTC, after all preceding jobs are terminal and a
+fresh later-start inspection. No Windows CI, performance or overall parity pass
+is claimed.
