@@ -39,10 +39,14 @@ qualify this changed rendering source.
 
 ## Next cohesive implementation batch
 
-1. Windows native streaming staging writer: hold an exclusively created handle,
+1. Windows native streaming staging writer (source now present in
+   `windows/Project/AtomicOutputStream.hpp`, not built): hold an exclusively created handle,
    render without accumulating the WAV in memory, flush/close, atomically publish
    with explicit overwrite policy. Test failure and concurrent-destination
-   preservation. Project byte-buffer saving is not suitable for a one-hour WAV.
+   preservation. `atomic-output-stream` asserts header seeking, Unicode paths,
+   chunked writes, no-overwrite race rejection, explicit overwrite, render/stream
+   failure preservation and removal of staging files. This test is unexecuted.
+   Project byte-buffer saving is not suitable for a one-hour WAV.
 2. Add `document.exportAudio` to both native dispatchers, describe/schema/guide
    and actual-app tests. Require current document revision and absolute `.wav`
    destination; preserve recovered source protection. Define accepted plugin
