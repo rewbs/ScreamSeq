@@ -9,6 +9,7 @@ void require(bool value,const char *message){if(!value)throw std::runtime_error(
 void run(){
   auto owner=CreateWindowExW(0,L"STATIC",L"Activity test owner",WS_OVERLAPPEDWINDOW,0,0,1200,850,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
   require(owner!=nullptr,"Create test owner");ShowWindow(owner,SW_SHOW);
+  struct OwnerCleanup {HWND &window;~OwnerCleanup(){if(window)DestroyWindow(window);}} ownerCleanup{owner};
   {
     ScreamSeq::ParameterActivityWindow::Context context{"song","r1",false};bool prepared=false,twoParameters=false,searchCatalogue=false,reverseCatalogue=false;uint32_t watchedParameter=1;unsigned edits=0,watches=0,requests=0;std::string token="1:1";Json navigation;
     Json processor={{"key","song/rack/a"},{"name","Gain copy"},{"plugin","a"},{"graph","n0"},{"node","n0"},{"target","n0"},{"instrument","n0"},{"role",0},{"channel",0},{"bypass",false},{"parameterCount",1}};
@@ -237,6 +238,28 @@ void run(){
       require(lane==traceLane&&context.revision==traceRevision&&edits==0,"Recent trace navigation changed musical data");
     }
     SendMessageW(GetDlgItem(window,11007),LB_SETCURSEL,0,0);click(11008);require(navigation.at("kind")=="baseline"&&navigation.at("parameter")==1&&navigation.at("plugin")=="a","Baseline provenance lost watched plugin/parameter");
+    {
+      const auto originalRevision=context.revision;const auto beforeEdits=edits;
+      for(const int button:{11008,11009}){
+        navigation=nullptr;
+        pump=[&](const std::string &method){if(method=="parameter.activity.get")click(button);};
+        SendMessageW(window,WM_TIMER,3,0);pump={};
+        require(navigation.is_null(),"Source navigation reentered an observation read");
+        context.busy=true;SendMessageW(window,WM_TIMER,4,0);context.busy=false;
+        require(navigation.is_null(),"Queued source navigation bypassed the busy document owner");
+        SetFocus(GetDlgItem(window,11007));SendMessageW(window,WM_TIMER,4,0);
+        require(navigation.at("kind")== (button==11008?"baseline":"recorded")&&
+          navigation.at("plugin")=="a"&&navigation.at("parameter")==1&&edits==beforeEdits,
+          "Source click during polling was lost or opened a different parameter");
+        navigation=nullptr;SendMessageW(window,WM_TIMER,4,0);
+        require(navigation.is_null(),"Queued source navigation repeated after completion");
+      }
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")click(11008);};
+      SendMessageW(window,WM_TIMER,3,0);pump={};context.revision="source-navigation-stale";
+      SendMessageW(window,WM_TIMER,4,0);context.revision=originalRevision;
+      require(navigation.is_null()&&edits==beforeEdits,"Queued source navigation crossed a changed song revision");
+      click(11002);
+    }
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
         {11000,L"Parameter activity processor copy"},{11021,L"Search activity parameters by name, unit or ID"},{11001,L"Parameter activity parameter"},
@@ -527,6 +550,80 @@ void run(){
       require(lane==removed&&edits==beforeEdits+3&&!tool.queuedMusicalEdit()&&tool.snapshot().at("selectedPoint")==-1,
         "List Delete received during observation was lost or repeated");click(11002);
     }
+    {
+      // Shared history changes the visible clean page without a manual Refresh.
+      // A frozen trace, active field, or pumped input has a separate contract.
+      lane=Json::array({{{"frame",24000},{"value",-.5}},{{"frame",48000},{"value",.5}}});
+      context.revision="history-base";click(11002);SetFocus(itemList);
+      const auto beforeEdits=edits;const auto beforeLane=lane;
+      lane[0]["value"]=-.25;context.revision="history-value";SendMessageW(window,WM_TIMER,3,0);
+      require(tool.snapshot().at("recorded")==lane&&tool.snapshot().at("selectedPoint")==0&&
+        tool.snapshot().at("rawValue")=="-0.25"&&!tool.snapshot().at("stale").get<bool>()&&GetFocus()==itemList&&edits==beforeEdits,
+        "Clean history refresh lost the selected frame, list focus or exact lane");
+      click(11003);const auto frozenCursor=tool.snapshot().at("cursor");
+      lane.erase(lane.begin());context.revision="history-delete";SendMessageW(window,WM_TIMER,3,0);
+      require(tool.snapshot().at("recorded")==lane&&tool.snapshot().at("selectedPoint")==-1&&
+        tool.snapshot().at("frozen")==true&&tool.snapshot().at("cursor")==frozenCursor,
+        "History refresh resumed a frozen trace or selected a replacement point");
+      lane=beforeLane;context.revision="history-undo";SendMessageW(window,WM_TIMER,3,0);
+      require(tool.snapshot().at("recorded")==lane&&tool.snapshot().at("selectedPoint")==-1&&edits==beforeEdits,
+        "History Undo invented a point selection or submitted an edit");
+      SetFocus(valueField);SendMessageW(valueField,EM_SETSEL,0,1);
+      const auto focused=tool.snapshot();lane[0]["value"]=-.375;context.revision="history-focused";
+      SendMessageW(window,WM_TIMER,3,0);SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(tool.snapshot().at("recorded")==focused.at("recorded")&&
+        tool.snapshot().at("rawValue")==focused.at("rawValue")&&
+        tool.snapshot().at("expectedRevision")==focused.at("expectedRevision")&&GetFocus()==valueField&&first==0&&last==1,
+        "History refresh rebased focused text or changed its native caret");
+      SetFocus(itemList);SendMessageW(window,WM_TIMER,3,0);
+      require(tool.snapshot().at("recorded")==lane&&!tool.snapshot().at("stale").get<bool>(),
+        "Clean page did not catch up after leaving the retained field");
+      click(11003); // Resume only the trace; keep the current recorded target.
+      const auto beforePump=tool.snapshot();lane[0]["value"]=-.625;context.revision="history-pumped";
+      pump=[&](const std::string &method){if(method=="automation.recorded.get"){
+        SetFocus(valueField);SetWindowTextW(valueField,L"unfinished");SendMessageW(valueField,EM_SETSEL,2,5);}};
+      SendMessageW(window,WM_TIMER,3,0);pump={};SendMessageW(valueField,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      require(tool.snapshot().at("recorded")==beforePump.at("recorded")&&
+        tool.snapshot().at("expectedRevision")==beforePump.at("expectedRevision")&&
+        tool.snapshot().at("rawValue")=="unfinished"&&tool.snapshot().at("fieldDraft")==true&&
+        !tool.snapshot().at("frozen").get<bool>()&&GetFocus()==valueField&&first==2&&last==5&&edits==beforeEdits,
+        "Pumped history read overwrote new input, rebased its guard or froze observation");
+      click(11002);SetFocus(itemList);
+      const auto beforeFailure=tool.snapshot();lane[0]["value"]=-.75;context.revision="history-read-failure";
+      unsigned laneReads=0;pump=[&](const std::string &method){if(method=="automation.recorded.get")++laneReads;};
+      failRead="automation.recorded.get";SendMessageW(window,WM_TIMER,3,0);SendMessageW(window,WM_TIMER,3,0);pump={};failRead.clear();
+      require(laneReads==1&&tool.snapshot().at("recorded")==beforeFailure.at("recorded")&&
+        tool.snapshot().at("expectedRevision")==beforeFailure.at("expectedRevision")&&
+        !tool.snapshot().at("frozen").get<bool>()&&edits==beforeEdits,
+        "Failed history read discarded fields, stopped observation or retried every tick");
+      click(11002);require(tool.snapshot().at("recorded")==lane,"Explicit Refresh did not recover a failed history page");
+      const auto beforeBusy=tool.snapshot();lane[0]["value"]=-.875;context.revision="history-busy";
+      context.busy=true;const auto beforeRequests=requests;SendMessageW(window,WM_TIMER,3,0);context.busy=false;
+      require(requests==beforeRequests&&tool.snapshot().at("recorded")==beforeBusy.at("recorded"),
+        "History refresh bypassed the busy document owner");
+      SendMessageW(window,WM_TIMER,3,0);require(tool.snapshot().at("recorded")==lane&&edits==beforeEdits,
+        "History refresh did not resume after the document owner became idle");
+      click(11002);
+    }
+    {
+      unsigned histories=0;SetFocus(itemList);
+      pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+        require(tool.deferHistoryIfObserving([&]{tool.flushForHistory();++histories;}),"Polling list history was not queued");}};
+      SendMessageW(window,WM_TIMER,3,0);pump={};
+      require(histories==0&&tool.queuedMusicalEdit(),"History reentered the observation read or lost its intent");
+      bool secondRefused=false;try{tool.deferHistoryIfObserving([&]{histories+=100;});}catch(const std::exception &){secondRefused=true;}
+      require(secondRefused&&histories==0,"A second history command overtook the queued command");
+      context.busy=true;SendMessageW(window,WM_TIMER,6,0);context.busy=false;
+      require(histories==0,"Queued history bypassed the document owner");
+      SendMessageW(window,WM_TIMER,6,0);SendMessageW(window,WM_TIMER,6,0);
+      require(histories==1&&!tool.queuedMusicalEdit()&&GetFocus()==itemList,"Queued history was lost, repeated or changed focus");
+      pump=[&](const std::string &method){if(method=="parameter.activity.get")tool.deferHistoryIfObserving([&]{++histories;});};
+      SendMessageW(window,WM_TIMER,3,0);pump={};SetFocus(valueField);SendMessageW(window,WM_TIMER,6,0);
+      require(histories==1&&!tool.queuedMusicalEdit(),"Queued history crossed a newer field focus");
+      SetFocus(itemList);pump=[&](const std::string &method){if(method=="parameter.activity.get")tool.deferHistoryIfObserving([&]{++histories;});};
+      SendMessageW(window,WM_TIMER,3,0);pump={};context.revision="history-command-stale";SendMessageW(window,WM_TIMER,6,0);
+      require(histories==1&&!tool.queuedMusicalEdit(),"Queued history crossed a changed document revision");click(11002);
+    }
     // A real revision change during a read must still reject the snapshot.
     const auto beforeRevisionChange=tool.snapshot();
     pump=[&](const std::string &method){if(method=="parameter.activity.get")context.revision="changed-during-read";};
@@ -539,7 +636,7 @@ void run(){
     MINMAXINFO limits{};SendMessageW(window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&limits));SetWindowPos(window,nullptr,0,0,limits.ptMinTrackSize.x,limits.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     RECT client{};GetClientRect(window,&client);for(auto child=GetWindow(window,GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT))if(IsWindowVisible(child)){RECT r{};GetWindowRect(child,&r);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&r),2);wchar_t type[32]{};GetClassNameW(child,type,32);require(r.left>=0&&r.top>=0&&r.right<=client.right&&(wcscmp(type,L"ComboBox")==0||r.bottom<=client.bottom),"Activity controls escaped minimum client bounds");}
   }
-  require(DestroyWindow(owner)!=FALSE,"Destroy test owner");
+  require(DestroyWindow(owner)!=FALSE,"Destroy test owner");owner=nullptr;
 }
 }
 int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqActivityTests",[]{INITCOMMONCONTROLSEX common{sizeof(common),ICC_STANDARD_CLASSES};InitCommonControlsEx(&common);run();});std::cout<<"Parameter activity retained-window tests passed\n";return 0;}catch(const std::exception &e){std::cerr<<e.what()<<'\n';return 1;}}

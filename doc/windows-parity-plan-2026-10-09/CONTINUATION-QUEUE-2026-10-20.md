@@ -8,6 +8,22 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October checkpoint1071 failed qualification:** compilation passed;
+menu-bar and workspace-plugin-search native groups passed; Activity's queued
+selection/Delete assertion failed. The separate144-input composing diagnostic
+passed. Activity diagnostics exposed lost source navigation, an incorrect
+expected deletion total, and intermittent Ctrl+Y refusal; one later diagnostic
+passed but does not supersede failures. Source now corrects list focus cancelling
+navigation, queues guarded source/history intents during observation, and
+refreshes clean recorded lists after history without rebasing active text.
+New native and actual-app assertions remain unbuilt. See the latest section of
+LIVE-PARAMETER-RELEASE for exact receipts, causes and limits. No package/merge/UI
+qualification. Next checkpoint no earlier than2026-10-24 00:57:22UTC and only
+after1071 CI40042447607/40042447613 is terminal and later starts are inspected.
+The three-native/two-app gate remains; preserve all earlier failed receipts.
+
+The entries immediately below describe the preceding preparation and evidence.
+
 **Latest bounded gate:** three native groups (Activity, workspace-plugin-search,
 workspace-menu-bar), two actual-app journeys. Activity list Backspace/Delete and
 configured shared Undo/Redo are added, preserving text deletion/native text Undo

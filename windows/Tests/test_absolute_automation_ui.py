@@ -231,6 +231,14 @@ class AbsoluteAutomationUITests(unittest.TestCase):
                 if current==expected and not local['fieldDraft'] and not local['pending']:return
                 time.sleep(.025)
             self.fail(dict(expected=expected,actual=current,activity=local))
+        def visible_lane(expected):
+            expected_lane=[dict(frame=p['frame'],value=p['value']) for p in expected['points'] if p['slot']==0 and p['id']==1]
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline:
+                local=state()
+                if local['recorded']==expected_lane and not local['pending'] and not local['stale']:return local
+                time.sleep(.025)
+            self.fail(dict(expected=expected_lane,activity=local))
         # Search is presentation-only, including while observation polls. Keep
         # Enabled visible as the current target until Gain is explicitly chosen.
         observer=state()
@@ -276,17 +284,17 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         press(11008)
         # Playback has not reached the recorded points yet. The observed event
         # is the manual baseline, whose source is the rack (not the lane).
-        linked_workspace=self.read('workspace.get')
-        self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
         main=self.desktop.hwnd(self.pid)
         parameter_control=private_desktop.user.GetDlgItem(main,311)
         parameter_text=ctypes.create_unicode_buffer(256)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
             self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))
-            if parameter_text.value=='Gain / dB':break
+            linked_workspace=self.read('workspace.get')
+            if parameter_text.value=='Gain / dB' and linked_workspace['lowerEditor']=='plugins':break
             time.sleep(.025)
-        self.assertEqual(parameter_text.value,'Gain / dB')
+        self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
+        self.assertEqual(parameter_text.value,'Gain / dB',linked_workspace)
         self.assertFalse(linked_workspace['absoluteAutomation']['visible'])
         self.assertEqual(self.read('automation.get'),baseline)
         press(11009) # Explicit Song automation destination, independent of source.
@@ -340,6 +348,7 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.desktop.send(point_list,0x100,0x08)
         deleted=json.loads(json.dumps(moved))
         deleted['points']=[p for p in deleted['points'] if not (p['id']==1 and p['frame']==24000)]
+        deleted['total']=len(deleted['points'])
         accepted(deleted)
         self.assertEqual(state()['selectedPoint'],-1)
         self.assertEqual(self.desktop.focus(owner),point_list)
@@ -348,11 +357,16 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         import test_workspace_shortcuts as shortcuts
         keyboard=types.SimpleNamespace(desktop=self.desktop,ready=self.idle)
         shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
-        self.assertEqual(self.read('automation.get'),moved)
+        self.assertEqual(self.read('automation.get'),moved,state())
+        self.assertEqual(visible_lane(moved)['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
         shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Y'),hwnd=point_list,ctrl=True)
-        self.assertEqual(self.read('automation.get'),deleted)
+        self.assertEqual(self.read('automation.get'),deleted,self.read('workspace.get'))
+        self.assertEqual(visible_lane(deleted)['selectedPoint'],-1)
         shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
-        self.assertEqual(self.read('automation.get'),moved)
+        self.assertEqual(self.read('automation.get'),moved,state())
+        self.assertEqual(visible_lane(moved)['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
         destination=self.folder/'activity-edited.screamseq';self.write('document.save',path=str(destination))
         after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive'])
         self.assertEqual(after['playbackEpoch'],transport['playbackEpoch']);self.assertGreater(after['frames'],transport['frames'])

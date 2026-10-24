@@ -1452,3 +1452,82 @@ only, before UI checks; it does not qualify sustained full-song performance or
 erase the earlier measured overruns. Fresh foreground review includes list
 Backspace versus text deletion and keyboard history. All new behavior remains
 unbuilt; only syntax/encoding/whitespace checks have run.
+
+### 24 October, 00:00 UTC checkpoint1071 and source corrections
+
+Source `1071d5f3c39c641163c47ca19a70bf6216851014` was pushed at the single
+coordinated checkpoint. Local ARM64 compilation passed, starting23:56:50UTC and
+ending23:58:54UTC. Executable SHA256:
+`6045b3cfb77e6f6bdc7950667633b0f829604b3c440d8e4d7200fdfd316f7276`.
+`activity-search/build.json`, `checks.json`, `native.log` and `native.xml` are
+immutable attempt evidence. Two of three native groups passed: menu bar and
+workspace-plugin-search. Activity failed its new assertion that Delete must not
+remove the old point before a deferred selection completes. The app phase was
+not executed by the gate; no successful reuse receipt, foreground qualification,
+package or merge followed.
+
+The real native defect is `LBN_SETFOCUS`/`LBN_KILLFOCUS` reaching Activity's
+general action handler and cancelling pending navigation. Focusing the list
+therefore removed the protection against deleting the previous selection. The
+source correction ignores those non-action notifications. The assertion remains
+unchanged. The fixture now also destroys its root window during exception
+unwinding, so an assertion failure does not produce a secondary leaked-owner
+diagnostic.
+
+The two previously unexecuted app journeys ran once as diagnostics against the
+unchanged1071 binary/source: the full composing journey passed, including144
+original Balance inputs, both review pages, occupied Gain refusal, Keep/Undo/
+Redo/Discard and preservation/reopen. Activity failed because Open source left
+the rack on Enabled instead of Gain. A focused diagnostic got past that point
+and exposed an incorrect expected `automation.get.total` after deletion (the
+expected points were correct but total remained4 instead of3). That expectation
+is corrected; the exact full-page comparisons remain.
+
+The fixture-tail diagnostic then reached and failed Ctrl+Y after successful
+Ctrl+Z. A diagnostic carrying more failure context passed the whole old journey
+in5.614s. These are retained **mixed diagnostic results**, not a qualification
+pass or proof that the intermittent failures disappeared. Evidence lives in
+`activity-search/app-diagnostic`, `source-link-diagnostic`,
+`fixture-tail-diagnostic` and `history-key-diagnostic`. No builds were repeated.
+
+Source inspection identifies two supported race paths: enabled source buttons
+were ignored during a pumped observation read, and history rejects an Activity
+owner still marked pending. Source navigation now captures the exact source
+identity and defers it until idle, under document/revision/generation guards.
+Native assertions cover both source destinations, busy ownership, single
+completion and stale rejection. The actual-app source check retains the same
+five-second bound and exact destination assertions while allowing queued
+navigation to finish; failures now include workspace state.
+
+Configured history from the Recorded points list now retains one command if it
+arrives inside observation. It runs only after the owner is idle, with unchanged
+document/revision/generation, point selection and list focus. A second command
+cannot overtake it; hiding the owner cancels it. Native cases enforce those
+guards, single execution and no reentrant mutation. This narrowly changes
+`WorkspaceShortcutDispatch.inc` and Activity; native text history stays local.
+
+The same coherent batch fixes stale visible recorded points after external
+Undo/Redo. A clean page adopts a guarded read, preserving the selected frame,
+scroll and focus, or retaining no selection when the point disappeared. A
+frozen trace stays frozen while its clean recorded page follows history.
+Focused time/value fields, invalid/new input, queued edits/navigation/history
+and busy owners are not rebased. Pumped typing discards the staged read without
+freezing observation. A failed lane read retains its old fields and continues
+observation; it is not retried every timer tick (explicit Refresh or a later
+revision can retry). Native assertions cover these paths. The actual journey
+now requires exact visible lane updates and list focus after Ctrl+Z/Y/Z,
+without a manual Refresh.
+
+All corrections above are **source only**. Python syntax and `git diff --check`
+passed. The next bounded gate remains three native groups/two actual-app
+journeys, followed by fresh isolated Computer Use, including source navigation,
+keyboard history, search, text deletion/caret and recording review. Neither
+the successful diagnostic nor prior precise-note evidence qualifies these new
+changes. Preserve the outstanding sustained-performance, Mac Intel recovery,
+Windows CI live-device and reciprocal edited-project requirements.
+
+At00:09UTC,1071 CI runs40042447607 (Windows) and40042447613 (Mac) were still
+building. Actual starts were23:57:22Z Windows,23:57:16Z Intel and23:57:09Z ARM.
+The next build is **no earlier than2026-10-24 00:57:22UTC**, after these jobs
+are terminal and a fresh inspection rules out later/concurrent checkpoints.
+No jobs were restarted; no foreground check is permitted for failed1071.

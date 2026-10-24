@@ -25,10 +25,12 @@ private:
   size_t offset_=0,total_=0;int page_=0,traceMode_=0,selected_=-1;double seconds_=8;
   bool setting_=false,pending_=false,polling_=false,frozen_=false,fields_=false,active_=false;
   bool explicitPointAction_=false;
+  std::string recordedRefreshFailure_;
   std::vector<uint32_t> parameterChoices_;
   size_t searchMatches_=0;
   bool searchPending_=false;
   std::function<void()> pendingNavigation_;
+  std::function<void()> pendingHistory_;
   void cancelNavigation(){pendingNavigation_={};KillTimer(window_,4);}
   void deferTargetSelection(int id){
     const auto index=selection(id);if(index<0)return;
@@ -154,6 +156,38 @@ private:
     require(r.at("target").at("key")==target&&r.at("parameter")==parameter,"Prepared processor changed while starting observation / Refresh");return r.at("token").get<std::string>();
   }
   void adoptRecorded(RecordedRead r) {recorded_=std::move(r.points);offset_=r.offset;total_=r.total;selected_=r.selected;showFields();}
+  bool cleanRecordedPage()const {
+    const auto focus=GetFocus();
+    return page_==2&&!fields_&&!automaticEdit_&&!pendingNavigation_&&!pendingHistory_&&
+      focus!=controls_.at(time)&&focus!=controls_.at(value);
+  }
+  void refreshCleanRecordedPage(const Context &c){
+    if(c.revision==captured_.revision||c.revision==recordedRefreshFailure_||!cleanRecordedPage())return;
+    const auto generation=generation_;const auto selected=selected_;
+    const auto frame=selected>=0?std::optional<uint64_t>(originalFrame_):std::nullopt;
+    try{
+      auto lane=readRecorded(plugin_,parameter_,offset_,c,generation);
+      // Reads pump messages. A new field or navigation owns its original
+      // revision; do not rebase it onto the newly observed history state.
+      if(!visible()||!cleanRecordedPage())return;
+      std::optional<SourcesRead> sourceData;
+      if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,generation);
+      if(!visible()||!cleanRecordedPage())return;
+      guardRead(c,generation);
+      const auto found=std::find_if(lane.points.begin(),lane.points.end(),[&](const auto &point){return frame&&point.at("frame")==*frame;});
+      lane.selected=found==lane.points.end()?-1:int(found-lane.points.begin());
+      captured_=c;adoptRecorded(std::move(lane));list();++generation_;recordedRefreshFailure_.clear();
+      if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}
+      status(L"Recorded points updated from song history · Shared Undo/Redo");
+    }catch(const std::exception &e){
+      const auto now=context_();
+      if(now.document!=c.document||now.revision!=c.revision)throw;
+      if(generation!=generation_||!cleanRecordedPage())return;
+      // A failed lane read retains its old fields without stopping observation
+      // or hammering the worker every timer tick. Explicit Refresh retries it.
+      recordedRefreshFailure_=c.revision;error(e);
+    }
+  }
   void recorded(size_t offset) {const auto c=context_();const auto generation=generation_;auto r=readRecorded(plugin_,parameter_,offset,c,generation);guardRead(c,generation);captured_=c;adoptRecorded(std::move(r));}
   void recorded(){recorded(offset_);}
   void sources(){const auto c=context_();const auto generation=generation_;auto r=readSources(target_,parameter_,c,generation);guardRead(c,generation);sources_=std::move(r.sources);sourceRevision_=c.revision;set(ruleLabel,r.rule);}
@@ -173,15 +207,16 @@ private:
     if(selected)token=readWatch(target,*selected,false,c,generation);guardRead(c,generation);
     targets_=std::move(targets);parameters_=std::move(catalog);target_=std::move(target);plugin_=std::move(plugin);parameter_=selected;engine_=engine;active_=active;captured_=c;
     token_=std::move(token);cursor_=dropped_=0;points_.clear();selectedTrace_.reset();sources_=std::move(sourceData.sources);sourceRevision_=c.revision;adoptRecorded(std::move(lane));++generation_;
-    choices();list();set(ruleLabel,sourceData.rule);set(targetLabel,target_.empty()?L"Choose a prepared processor copy":wide(target_));
+    recordedRefreshFailure_.clear();choices();list();set(ruleLabel,sourceData.rule);set(targetLabel,target_.empty()?L"Choose a prepared processor copy":wide(target_));
     status(parameter_?L"Live observation · click trace to inspect · F6 focuses trace · Enter opens source":L"Start playback to prepare processor copies, then Refresh");
   }
-  void poll(){if(!visible()||pending_||frozen_||!parameter_||context_().busy)return;beginPending();polling_=true;
+  void poll(){if(!visible()||pending_||!parameter_||context_().busy)return;beginPending();polling_=true;
     struct Reset{bool &value;~Reset(){value=false;}}reset{polling_};try{
     const auto c=context_();require(c.document==captured_.document,"Song changed / captured observer retained; Refresh");
-    // Observation never adopts the recorded lane or its editable fields. Typing
-    // during a pumped read must not freeze the trace. Document/revision/watch
-    // guards still apply; reads which adopt fields retain their generation guard.
+    // Freezing the trace does not freeze a clean recorded list after Undo/Redo.
+    if(frozen_){refreshCleanRecordedPage(c);pending_=false;return;}
+    // Typing during a pumped observation read must not freeze the trace. Only
+    // a clean recorded page may adopt a changed revision, under its own guard.
     const auto r=request_("parameter.activity.get",{{"after",cursor_},{"limit",2048}});guardRead(c,std::nullopt);
     // A click can freeze the currently displayed trace while this read pumps
     // native messages. Keep that exact view/cursor; Resume can consume later data.
@@ -192,7 +227,7 @@ private:
     for(const auto &p:r.at("points")){for(const auto *key:{"seconds","value","minimum","maximum"})require(std::isfinite(p.at(key).get<double>()),"Invalid activity value");(void)p.at("sequence").get<uint64_t>();(void)p.at("pattern");(void)p.at("order");(void)p.at("position");(void)p.at("source").at("kind").get<std::string>();next.push_back(p);}
     while(next.size()>8192)next.pop_front();std::optional<SourcesRead> sourceData;if(sourceRevision_!=c.revision)sourceData=readSources(target_,parameter_,c,std::nullopt);guardRead(c,std::nullopt);
     if(frozen_){pending_=false;return;}
-    points_=std::move(next);cursor_=cursor;dropped_=dropped;active_=active;if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}if(page_==1)list();requestPaint();pending_=false;
+    points_=std::move(next);cursor_=cursor;dropped_=dropped;active_=active;if(sourceData){sources_=std::move(sourceData->sources);sourceRevision_=c.revision;set(ruleLabel,sourceData->rule);}if(page_==1)list();refreshCleanRecordedPage(c);requestPaint();pending_=false;
   }catch(const std::exception &e){pending_=false;frozen_=true;set(freeze,L"Resume");error(e);}}
   void commit(bool remove){
     require(parameter_&&!plugin_.empty(),"Recorded points require a rack plugin parameter");require(current(),"Song changed / point fields retained; Refresh before applying");const auto before=captured_;const auto generation=generation_;
@@ -243,8 +278,28 @@ private:
     }
     source["plugin"]=plugin_;source["parameter"]=*parameter_;return source;
   }
+  Json selectedSource(bool lane)const {
+    require(current(),"Song changed / Refresh before navigating captured sources");
+    if(lane){require(parameter_&&!plugin_.empty(),"Choose a rack plugin parameter");return {{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}};}
+    if(selectedTrace_){const auto *point=traceSelection();require(point!=nullptr,"The selected trace event has expired; select a current source");return sourceLink(point->at("source"),true);}
+    const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));
+    require(i>=0&&size_t(i)<listed_.size(),"Select a source, recent change or trace point");
+    if(page_==2){require(parameter_&&!plugin_.empty(),"Choose a rack plugin parameter");return {{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}};}
+    return page_==0?sourceLink(sources_.at(listed_[size_t(i)]),false):sourceLink(points_.at(listed_[size_t(i)]).at("source"),true);
+  }
+  void deferSourceNavigation(bool lane){
+    const auto source=selectedSource(lane);const auto c=context_();const auto generation=generation_;
+    pendingNavigation_=[this,source,c,generation]{
+      guardRead(c,generation);require(visible(),"Activity source navigation was closed");
+      beginPending();try{inspect_(source);pending_=false;}catch(...){pending_=false;throw;}
+    };
+    SetTimer(window_,4,100,nullptr);
+  }
   void action(int id,unsigned notification)override{
     if(setting_)return;if(id==close){hide();return;}
+    // A list focus notification is not a new navigation intent. Cancelling a
+    // queued selection here would let Delete target the old selected point.
+    if(id==items&&(notification==LBN_SETFOCUS||notification==LBN_KILLFOCUS))return;
     if(id==search&&notification==EN_CHANGE){
       cancelNavigation();
       if(pending_){searchPending_=true;SetTimer(window_,5,20,nullptr);}else filterParameters();
@@ -260,6 +315,9 @@ private:
       // once the owner is idle; never reinterpret a later catalogue row index.
       if(polling_&&notification==CBN_SELCHANGE&&(id==processors||id==parameters))deferTargetSelection(id);
       if(polling_&&notification==LBN_SELCHANGE&&id==items&&page_==2)deferPointSelection();
+      // Source buttons stay usable during observation. Capture the actual
+      // source now; a later trace/list update must not reinterpret the click.
+      if(polling_&&notification==BN_CLICKED&&(id==openSource||id==openLane))deferSourceNavigation(id==openLane);
       if(notification==CBN_SELCHANGE||notification==LBN_SELCHANGE)restorePendingSelection(id);return;}
     cancelNavigation();
     if(notification==BN_CLICKED&&(id==refresh||id==savePoint||id==removePoint)){cancelAutomaticEdit();explicitPointAction_=false;}
@@ -291,8 +349,7 @@ private:
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
         else if(id==clear){watch(true);list();requestPaint();}
-        else if(id==openLane){require(current(),"Song changed / Refresh before navigating captured sources");require(parameter_&&!plugin_.empty(),"Choose a rack plugin parameter");inspect_({{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}});}
-        else if(id==openSource){require(current(),"Song changed / Refresh before navigating captured sources");if(selectedTrace_){const auto *point=traceSelection();require(point!=nullptr,"The selected trace event has expired; select a current source");inspect_(sourceLink(point->at("source"),true));}else{const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));require(i>=0&&size_t(i)<listed_.size(),"Select a source, recent change or trace point");if(page_==0)inspect_(sourceLink(sources_.at(listed_[size_t(i)]),false));else if(page_==1)inspect_(sourceLink(points_.at(listed_[size_t(i)]).at("source"),true));else inspect_({{"kind","recorded"},{"plugin",plugin_},{"parameter",*parameter_}});}}
+        else if(id==openLane||id==openSource)inspect_(selectedSource(id==openLane));
         else if(id==previous||id==next){require(!fields_,"Save or Refresh before changing recorded pages");const auto wanted=id==previous?(offset_>=512?offset_-512:0):std::min(offset_+512,total_?((total_-1)/512)*512:0);recorded(wanted);list();}
         else if(id==newPoint){require(!fields_,"Save or Refresh the current point first");selected_=-1;showFields();list();SetFocus(controls_.at(time));}
         else if(id==savePoint||id==removePoint)commit(id==removePoint);
@@ -302,6 +359,7 @@ private:
     }catch(...){pending_=false;choices();if(page_==2)ScreamSeq::NativeInputGate::present(controls_.at(items),LB_SETCURSEL,selected_,0);throw;}
   }
   void timer(UINT_PTR id)override{
+    if(id==6){if(pending_||context_().busy)return;KillTimer(window_,6);auto history=std::exchange(pendingHistory_,{});if(history)history();return;}
     if(id==5){if(pending_)return;if(searchPending_)filterParameters();else KillTimer(window_,5);return;}
     if(id==4){if(pending_||context_().busy)return;KillTimer(window_,4);auto navigate=std::exchange(pendingNavigation_,{});if(navigate)navigate();return;}
     if(id==3)poll();
@@ -381,16 +439,30 @@ private:
 
 public:
   bool recordedPointListFocused()const{return page_==2&&GetFocus()==controls_.at(items);}
-  bool queuedMusicalEdit()const{return bool(automaticEdit_);}
+  bool deferHistoryIfObserving(std::function<void()> perform){
+    if(recordedPointListFocused())require(!pendingHistory_,"Wait for the queued Activity history command");
+    if(!pending_||!polling_||!recordedPointListFocused())return false;
+    require(!pendingHistory_&&!pendingNavigation_,"Wait for the queued Activity action before another history command");
+    const auto c=context_();const auto generation=generation_;const auto selected=selected_;const auto frame=originalFrame_;
+    pendingHistory_=[this,perform=std::move(perform),c,generation,selected,frame]{
+      guardRead(c,generation);
+      require(visible()&&recordedPointListFocused()&&selected_==selected&&originalFrame_==frame,
+        "Activity selection or focus changed / request history again");
+      perform();
+    };
+    SetTimer(window_,6,20,nullptr);return true;
+  }
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)||bool(pendingHistory_);}
   void flushForProjectSave(){
     // Finish an already queued typing or explicit Save/Delete intent. Invalid,
     // rejected or uncertain fields are never retried by project Save/history.
     if(automaticEdit_)flushAutomaticEdit();
-    require(!automaticEdit_&&!pending_,"Wait for the requested point edit before continuing");
+    require(!automaticEdit_&&!pending_&&!pendingHistory_,"Wait for the requested point edit before continuing");
   }
   void flushForHistory(){flushForProjectSave();}
   void hide()override{
     cancelNavigation();
+    pendingHistory_={};KillTimer(window_,6);
     if(automaticEdit_)flushForProjectSave();
     NativeToolWindow::hide();
   }

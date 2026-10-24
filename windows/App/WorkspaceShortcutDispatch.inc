@@ -210,6 +210,8 @@
     }
     void runWorkspaceShortcut(int id) {
         const auto focus=GetFocus();const auto panel=workspaceState.focus;const bool inspector=inspectorCanvasFocus;
+        if((id==undoCommand||id==redoCommand||id==redoAlternateCommand)&&parameterActivityWindow&&
+            parameterActivityWindow->deferHistoryIfObserving([this,id]{runWorkspaceShortcut(id);}))return;
         if((id==clearCommand||id==patternPasteMix||id==patternClearField||id==patternDeleteChannelRow)&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
             status=L"Focus the pattern selection before using this command";return;
         }
