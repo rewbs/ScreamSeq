@@ -1749,3 +1749,24 @@ It records reuse explicitly; it never changes6e's failed aggregate receipt.
 The existing3408 audio reuse also requires its separate unchanged-input check.
 Scripts were syntax-parsed only. The fresh foreground launcher and packaging
 guards remain closed until automated and visible qualification pass.
+
+### Mac recording-review selection continuation (source only)
+
+Source review found that `PluginRecordingView.accept` restored a matching target
+after `NSTableView.reloadData()` but never explicitly deselected a removed
+target. It also retained selection when an identically shaped target list
+arrived for another take/document. The native view now retains selection by
+plugin/parameter only within the same document and take; otherwise it clears
+selection. Unchanged polling does not touch selection. Original-input review
+continues to use its separate event identity handling.
+
+The existing `pluginKeptNavigationChecks` interface registration now checks
+insertion, reordering, removal while the old row number remains valid,
+unchanged polling, new take and new document with identical target IDs. It
+requires exact reviewed targets and no musical writes. These checks and the
+Mac UI change are unbuilt; no runtime reproduction or Mac pass is claimed.
+Both Mac architecture/interface jobs must execute them at the next coordinated
+checkpoint. Windows product and its reused passing fixtures remain unchanged;
+the reuse validators explicitly allow only these two additional Mac UI/test
+files. There is no change to recording admission, timestamps, restoration,
+audio, API, history or storage.

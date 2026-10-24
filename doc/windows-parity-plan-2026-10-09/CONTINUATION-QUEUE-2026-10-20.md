@@ -25,6 +25,12 @@ Current CI40047539078/40047539069 is active; next checkpoint is no earlier than
 `activity-history-correction` receipts. Inspect the Mac failure-only clock
 diagnostic before changing recording timing. The entries below are historical.
 
+The pending checkpoint also corrects Mac recording-review selection across
+target removal/reordering and take/document boundaries. Its existing interface
+registration adds exact identity/no-write checks; both Mac jobs must execute
+them. This is source-only native UI work. Windows product/reused fixtures,
+shared musical timing, API and persistence inputs are unchanged.
+
 **24 October 00:42 UTC continuation:** the current Windows source also finishes
 queued Activity edits before opening their captured source. The old1071 binary
 failed the new exact destination-value assertion (-6 displayed after typing -9).

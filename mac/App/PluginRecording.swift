@@ -264,8 +264,8 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     }
   }
   private func accept(_ data: [String: Any], revision: String, document: String) {
-    let oldLoss = loss, oldTake = take
-    let selected = table.selectedRow >= 0 && table.selectedRow < targets.count ? targets[table.selectedRow] : nil
+    let oldLoss = loss, oldTake = take, oldDocument = self.document
+    let selected = !reviewingInputs && targets.indices.contains(table.selectedRow) ? targets[table.selectedRow] : nil
     self.document = document; self.revision = revision; state = data
     retained = data["retained"] as? Bool == true
     take = retained ? data["take"] as? String ?? "" : ""
@@ -273,11 +273,18 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     completed = retained && data["completed"] as? Bool == true
     if let target = keptTarget, target.document != document || (retained && target.take != take) { keptTarget = nil }
     let updated = retained ? data["targets"] as? [[String: Any]] ?? [] : []
-    if !(updated as NSArray).isEqual(to: targets) {
+    let sameTake = oldDocument == document && oldTake == take
+    let targetsChanged = !(updated as NSArray).isEqual(to: targets)
+    if targetsChanged {
       targets = updated; if !reviewingInputs { table.reloadData() }
-      if !reviewingInputs, let selected, let row = targets.firstIndex(where: {
+    }
+    if !reviewingInputs && (targetsChanged || !sameTake) {
+      // Native table reloads can retain a row number after that parameter has
+      // disappeared. Selection belongs to this take and stable target instead.
+      if sameTake, let selected, let row = targets.firstIndex(where: {
         $0["plugin"] as? String == selected["plugin"] as? String && $0["parameter"] as? Int == selected["parameter"] as? Int
       }) { table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+      else { table.deselectAll(nil) }
     }
     if oldTake != take || !oldLoss.isEqual(loss) { acknowledge.state = .off }
     let count = data["eventCount"] as? Int ?? 0

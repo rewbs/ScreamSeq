@@ -24,6 +24,34 @@ private final class PluginTakeReplies {
 
 extension InterfaceTests {
   static func pluginKeptNavigationChecks() throws {
+    // Selection identifies a target within one take, never a retained row
+    // number, another take, or another document using the same plugin IDs.
+    let selection = PluginTakeReplies(), selectedView = selection.view
+    var selectionState = selection.state(capturing: false)
+    let lead: [String: Any] = ["plugin": "plugin-a", "parameter": 7, "eventCount": 2]
+    let delay: [String: Any] = ["plugin": "plugin-b", "parameter": 42, "eventCount": 1]
+    let other: [String: Any] = ["plugin": "plugin-a", "parameter": 8, "eventCount": 1]
+    selectionState["targets"] = [lead, delay]
+    selection.load(selectionState); selectedView.table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+    selectionState["targets"] = [other, lead, delay]; selection.load(selectionState)
+    try require(selectedView.table.selectedRow == 2,
+      "Target insertion must retain the selected stable plugin and parameter")
+    selectionState["targets"] = [other, delay, lead]; selection.load(selectionState)
+    try require(selectedView.table.selectedRow == 1, "Target reorder must follow the selected identity")
+    selectionState["targets"] = [other, lead]; selection.load(selectionState)
+    try require(selectedView.table.selectedRow == -1,
+      "Removing the selected parameter cannot silently select the row replacing it")
+    selectedView.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    selection.load(selectionState)
+    try require(selectedView.table.selectedRow == 0, "Unchanged polling must retain explicit target selection")
+    selectionState["take"] = "take-b"; selection.load(selectionState)
+    try require(selectedView.table.selectedRow == -1, "A new take cannot inherit the old take's selected target")
+    selectedView.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+    selection.document = "song-b"; selection.revision = "song-b:0:0"; selection.load(selectionState)
+    try require(selectedView.table.selectedRow == -1 && selection.writes.isEmpty &&
+      (selectedView.targets as NSArray).isEqual(to: [other, lead]),
+      "Cross-document selection resets must preserve the exact reviewed targets without musical writes")
+
     let h = PluginTakeReplies(), view = h.view
     var opened = [(String, Int)]()
     view.onRecordedAutomation = { opened.append(($0, $1)) }
