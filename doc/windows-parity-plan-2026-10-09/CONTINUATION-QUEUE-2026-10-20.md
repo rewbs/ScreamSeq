@@ -8,6 +8,16 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October presentation-start correction:**0f5 ARM device evidence proves
+its first accepted input preceded the first presentation interval. Both native
+recording Start adapters now use a shared first-presentation admission guard,
+preserving original timestamps and pending/gap semantics. New shared assertions
+and unchanged strict real-device event mapping require fresh execution; see
+LIVE-PARAMETER-RELEASE's final section. The unexecuted `activity-refresh-history`
+checkpoint now requires **nine native/shared groups, eight app journeys and
+a fresh silent hardware audit**, then Computer Use. Earlier clock/audio passes
+are historical evidence, not qualification of this source. No package or merge.
+
 **24 October 03:18 UTC current boundary:** frozen0f5 built once; all seven native
 groups and six/seven composing journeys passed. Activity Refresh was swallowed
 while polling after external history; preserve the failed aggregate. Fresh

@@ -37,6 +37,13 @@ time. Get reports `hostTime`, `timebaseNumerator` and `timebaseDenominator` for
 clock conversion. Windows uses its own explicitly named QPC clock. The musical
 recording timeline is 48 kHz on both platforms.
 
+Start waits for the current playback epoch's first presentation time, not just
+its first published future buffer. Before that boundary it refuses without
+installing a take; reread and retry once playback timing becomes available.
+Pending later coverage may arrive after native input, so admission does not
+promise every event already has a frame. Original timestamps and timing gaps
+remain intact; neither Start nor a later read clamps input to the song start.
+
 `events {take, plugin, parameter, offset?, limit?, includeTiming?}` pages original input in
 capture order (default 128, maximum 512). Exact timestamp/frame values are
 decimal strings; `frame:null` preserves unmapped or post-playback-Stop evidence.

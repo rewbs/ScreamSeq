@@ -31,12 +31,16 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
   [session setPlaybackLoop:YES];
   auto start=[&] {
     check([session playOrder:0 error:&error],"Start timed native session playback");
-    // Real Core Audio callbacks must establish timing. Only the initial absent
-    // clock is retryable here; any other admission failure fails the test.
+    // Real Core Audio callbacks must establish timing and reach presentation
+    // start. Only that initial admission is retryable; preserve its revision
+    // and lack of ownership rather than retrying an installed take.
+    NSString *armingRevision=session.automationRevision;
     for(unsigned attempt=0;;++attempt) {
       try{[session startParameterTake:identities expectedRevision:session.automationRevision];break;}
       catch(const std::exception &e){
         if(attempt>=200||std::string(e.what())!="Start timed song playback before recording plugin parameters")throw;
+        check(session.parameterRecordingTakeID==nil&&[session.automationRevision isEqual:armingRevision],
+          "Waiting for presentation installed a take or changed music");
         [NSThread sleepForTimeInterval:.005];
       }
     }
@@ -235,12 +239,16 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     check(reply!=nil,error.localizedDescription.UTF8String?:"Native parameter API request failed");return reply;
   };
   check([session playOrder:0 error:&error],"Start API take playback");NSDictionary *armedAPI=nil;
+  NSString *apiArmingRevision=session.automationRevision;
   for(unsigned attempt=0;;++attempt) {
     error=nil;armedAPI=[session automationMethod:@"automation.recording.start"
       params:@{@"expectedRevision":session.automationRevision,@"plugins":identities} error:&error];
     if(armedAPI)break;
     check(attempt<200&&[error.localizedDescription isEqual:@"Start timed song playback before recording plugin parameters"],
-      "API take admission failed for a reason other than the initial real clock");[NSThread sleepForTimeInterval:.005];
+      "API take admission failed for a reason other than the initial real clock");
+    check(session.parameterRecordingTakeID==nil&&[session.automationRevision isEqual:apiArmingRevision],
+      "API presentation admission installed ownership or changed music on refusal");
+    [NSThread sleepForTimeInterval:.005];
   }
   NSString *token=armedAPI[@"data"][@"take"],*apiRevision=session.automationRevision;
   NSMutableArray *timestamps=[NSMutableArray array];

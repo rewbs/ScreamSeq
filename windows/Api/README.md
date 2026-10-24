@@ -27,7 +27,11 @@ Native clock units and provider-restoration requirements remain platform-specifi
   once transport has actually stopped. Provider restoration can still retain it.
 - `automation.recording.start {expectedRevision, plugins}` arms distinct stable
   rack identities during timed playback. Finish competing takes, manual drafts
-  and previews first. It does not change song history.
+  and previews first. It does not change song history. Before the current
+  epoch's first presentation time, it refuses without installing a take;
+  a published future buffer alone is insufficient. Retry after timing becomes
+  available. Later pending coverage and actual gaps retain original timestamps;
+  admission never invents a frame or clamps input to the song start.
 - `automation.recording.capture {expectedRevision, take, plugin, parameter,
   value, timestamp}` submits original native input once. Use the same host clock
   at the actual input event; never replace its time with a retry time. A returned

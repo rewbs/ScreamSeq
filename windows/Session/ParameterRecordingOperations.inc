@@ -101,7 +101,8 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     auto next=std::make_unique<ParameterRecordingSession>();next->host=playback_.get();
     next->hostGeneration=feedback.generation;next->timeline=playback_->recordingTimeline();
     auto frames=std::shared_ptr<const Tracker::RecordingFrameTimeline>(next->timeline,&next->timeline->absoluteFrames);
-    if(!frames->generation()) {
+    const auto startTime=hostTime100ns();
+    if(!frames->hasStartedAt(startTime,frames->generation())) {
       const auto failure=frames->failureDetails().reason;
       const auto message=failure==Tracker::RecordingFrameTimeline::Failure::None?
         std::string("Playback timing is not available yet; retry after the first timed buffer"):
@@ -113,7 +114,7 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     }
     std::vector<Tracker::RecordedGestureTake::Provider> sources;
     for(const auto &id:identities)sources.push_back({id,plugins_->parameterEditSource(id)});
-    next->take=std::make_shared<Tracker::RecordedGestureTake>(recordingIdentity(),revision(),hostTime100ns(),frames,
+    next->take=std::make_shared<Tracker::RecordedGestureTake>(recordingIdentity(),revision(),startTime,frames,
       projectPluginStates(project_),projectAbsoluteAutomation(project_),sources);
     auto *session=next.get();
     plugins_->beginRecordedEditors(next->take,[this,session]{

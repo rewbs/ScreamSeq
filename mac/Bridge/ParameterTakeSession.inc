@@ -31,14 +31,16 @@
   [self commitManualParameters];
   if(![revision isEqual:self.automationRevision])throw Error(-32001,"Song changed while preparing the manual baseline");
   const auto timeline=_audio->recordingFrameTimeline();
-  if(!_audio->playing()||!timeline||!timeline->generation())throw Error(-32002,"Start timed song playback before recording plugin parameters");
+  const auto start=mach_absolute_time();
+  if(!_audio->playing()||!timeline||!timeline->hasStartedAt(start,timeline->generation()))
+    throw Error(-32002,"Start timed song playback before recording plugin parameters");
   std::vector<RecordedGestureTake::Provider> providers;providers.reserve(requested.size());
   for(const auto &identity:requested) {
     const auto slot=_audio->pluginSlot(identity);require(slot.has_value(),"Recorded plugin is not prepared");
     providers.push_back({identity,_audio->pluginEditSource(*slot)});
   }
   auto take=std::make_shared<RecordedGestureTake>(NSUUID.UUID.UUIDString.UTF8String,revision.UTF8String,
-    mach_absolute_time(),timeline,_plugins,_automation,providers);
+    start,timeline,_plugins,_automation,providers);
   __weak TrackerSession *weakSession=self;
   auto next=std::make_unique<NativeParameterTake>(*_audio,take,[weakSession,timeline] {
     TrackerSession *session=weakSession;

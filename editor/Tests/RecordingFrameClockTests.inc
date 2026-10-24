@@ -41,11 +41,18 @@ static void recordingFrameClock() {
   check(clock->locate(100,1)==47999,"Rejected publication damaged earlier coverage");
 
   auto timeline=std::make_unique<RecordingFrameTimeline>();
+  check(!timeline->hasStartedAt(1000,10),"Unpublished presentation admitted recording");
   check(timeline->publish(1000,2000,48000,1000,48000,10),"Timeline start rejected");
+  check(!timeline->hasStartedAt(0,10)&&!timeline->hasStartedAt(999,10)&&
+    !timeline->hasStartedAt(1000,0)&&!timeline->hasStartedAt(1000,9)&&
+    timeline->hasStartedAt(1000,10)&&timeline->hasStartedAt(2000,10)&&!timeline->locate(2000,10),
+    "Recording admission confused future presentation, current epoch or pending coverage");
   check(timeline->publish(3000,4000,50000,1000,48000,10),"Timeline after gap rejected");
   check(timeline->locate(1500,10)==48500&&timeline->locate(3500,10)==50500&&
     !timeline->locate(2500,10),"Delayed lookup lost its origin or filled a timing gap");
   const auto gap=timeline->inspect(2500,10);
+  check(timeline->hasStartedAt(2500,10)&&!timeline->locate(2500,10),
+    "Admission repaired an actual presentation gap");
   check(std::string(gap.status)=="gap"&&gap.coverage.before&&gap.coverage.after&&!gap.coverage.covering&&
     gap.coverage.before->start==1000&&gap.coverage.before->end==2000&&gap.coverage.before->frame==48000&&
     gap.coverage.after->start==3000&&gap.coverage.after->end==4000&&gap.coverage.after->frame==50000&&
@@ -58,6 +65,8 @@ static void recordingFrameClock() {
     std::string(timeline->inspect(1500,11).status)=="unavailable",
     "Timing inspection confused unknown, future, covered or wrong-generation input");
   timeline->close(10,3600);
+  check(!timeline->hasStartedAt(3500,10)&&!timeline->hasStartedAt(3600,10),
+    "Stopped playback admitted a new take from retained coverage");
   check(timeline->stopped()&&timeline->locate(3599,10)==50599&&!timeline->locate(3600,10),
     "Stop did not preserve earlier queued events and trim its exclusive bound");
   check(std::string(timeline->inspect(3600,10).status)=="after-stop"&&
@@ -66,9 +75,12 @@ static void recordingFrameClock() {
   check(timeline->publish(5000,6000,0,1000,48000,11)&&
     !timeline->locate(1500,10)&&timeline->locate(5500,11)==500,
     "Restart reused old coverage or failed to reset frame origin");
+  check(!timeline->hasStartedAt(4999,11)&&!timeline->hasStartedAt(5500,10)&&timeline->hasStartedAt(5000,11),
+    "Recording admission reused a retired presentation start");
   check(!timeline->publish(6000,7000,1000,1000,48000,10)&&
     timeline->locate(5500,11)==500,"Retired generation replaced the current one");
   timeline->invalidate();
+  check(!timeline->hasStartedAt(5500,11),"Invalidated playback admitted recording");
   check(std::string(timeline->inspect(5500,11).status)=="unavailable"&&
     timeline->inspect(5500,11).failure==RecordingFrameTimeline::Failure::Invalidated&&
     !timeline->inspect(5500,11).coverage.covering,"Invalidated timeline exposed usable diagnostic coverage");

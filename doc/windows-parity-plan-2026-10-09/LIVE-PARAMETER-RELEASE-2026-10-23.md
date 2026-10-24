@@ -2179,3 +2179,36 @@ its exact caret, then exercise busy Save, successful Save/Close and stale
 rejection. Exact one-delete/no-replay assertions remain. This is unbuilt source
 coverage; it does not yet prove every source/target handoff preserves deletion.
 Seven native groups and eight app cases remain the next checkpoint inventory.
+
+### Presentation-start recording admission (source continuation, 24 October)
+
+The0f5 ARM real-device lifecycle failure is now diagnosed by its unchanged
+API-page assertion. Original input41888856612 was preserved, epoch5 stayed
+current, but the first presentation interval began41888925372. Timing reported
+`before-start`, with no covering or earlier interval. The second target mapped;
+both providers reported zero lost input. Source/log receipt:
+`activity-delete-correction/completed-job-120760390587.log`, SHA256
+`5631642dab0dac27a2db113126843d8c8bab24e8354ad1446667c1c6656c62bc`.
+This is a real admission defect: a nonzero epoch can describe a future buffer.
+It is not evidence of lost input, another epoch or a reason to relax frame checks.
+
+Both native Start adapters now use shared RecordingFrameTimeline::hasStartedAt
+with the exact captured arm timestamp. It requires the current live epoch and
+an already-reached first presentation boundary. This is deliberately not a
+requirement for immediate per-event coverage: WASAPI can publish a completed
+interval after input delivery. Pending input stays original and genuine gaps
+remain unmapped. No interpolation, timestamp clamping, sleep, callback changes,
+new project fields or new API methods are introduced. The low-level retained
+take constructor remains suitable for replay-free deterministic lifecycle tests;
+native admission owns the actual host clock and playing state.
+
+The existing shared recorded-automation target now asserts future/unpublished,
+exact first boundary, pending/gap, wrong/retired generation, Stop and invalidation
+admission, with unchanged locate results. Mac real-device retries additionally
+assert no take owner or revision mutation on initial timing refusal; immediate
+original-input frame checks remain mandatory. Both Mac architectures must rerun
+their real AU/VST3 lifecycle, shared clock and interface gates. Windows must run
+fresh shared recorded-automation, WASAPI lifecycle/silent audit and the existing
+complete composing/recording journey. The local checkpoint expands to **nine
+native/shared groups and eight app journeys**, one build only. Earlier shared
+clock/audio passes cannot qualify these changed inputs. All source is unbuilt.

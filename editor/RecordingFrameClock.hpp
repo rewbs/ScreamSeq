@@ -188,6 +188,15 @@ public:
   }
   uint64_t generation() const noexcept {return generation_.load(std::memory_order_acquire);}
   bool stopped() const noexcept {return stopped_.load(std::memory_order_acquire);}
+  // Control-owner admission, not an event mapping. A published buffer may be
+  // scheduled in the future; generation alone does not mean playback has begun.
+  // Permit pending coverage after the first presentation boundary (WASAPI can
+  // publish after delivery), without filling gaps or changing input timestamps.
+  bool hasStartedAt(uint64_t time,uint64_t expectedGeneration) const noexcept {
+    if(!time||!expectedGeneration||generation()!=expectedGeneration||stopped())return false;
+    const auto first=first_.load(std::memory_order_acquire);
+    return first&&time>=first&&generation()==expectedGeneration&&!stopped();
+  }
   std::optional<uint64_t> stoppedEndTime(uint64_t expectedGeneration) const noexcept {
     if(!expectedGeneration||!stopped()||generation()!=expectedGeneration)return {};
     const auto end=end_.load(std::memory_order_acquire);
