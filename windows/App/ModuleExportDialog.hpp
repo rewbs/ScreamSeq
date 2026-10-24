@@ -8,7 +8,8 @@
 
 namespace ScreamSeq {
 // UI owner only. The caller keeps a captured document/revision across Show.
-inline std::filesystem::path chooseExportFile(HWND owner,const std::wstring &format,const std::wstring &label,const wchar_t *title) {
+inline std::filesystem::path chooseExportFile(HWND owner,const std::wstring &format,const std::wstring &label,const wchar_t *title,
+                                            const std::filesystem::path &source={}) {
 	Microsoft::WRL::ComPtr<IFileSaveDialog> dialog;
 	const auto require=[](HRESULT result) {
 		if(FAILED(result))throw std::runtime_error("Cannot open the export chooser");
@@ -19,7 +20,15 @@ inline std::filesystem::path chooseExportFile(HWND owner,const std::wstring &for
 	const auto pattern=L"*."+format;
 	const COMDLG_FILTERSPEC filter{label.c_str(),pattern.c_str()};
 	require(dialog->SetFileTypes(1,&filter));require(dialog->SetDefaultExtension(format.c_str()));
-	require(dialog->SetFileName((L"Untitled."+format).c_str()));
+	// A saved/imported filename already follows the platform's filename rules.
+	// Keep its stem; the musical title may contain characters Windows forbids.
+	const auto stem=source.empty()?std::wstring(L"Untitled"):source.stem().wstring();
+	require(dialog->SetFileName(((stem.empty()?L"Untitled":stem)+L"."+format).c_str()));
+	if(source.is_absolute()) {
+		Microsoft::WRL::ComPtr<IShellItem> folder;
+		if(SUCCEEDED(SHCreateItemFromParsingName(source.parent_path().c_str(),nullptr,IID_PPV_ARGS(&folder))))
+			dialog->SetDefaultFolder(folder.Get()); // Preserve the chooser's remembered user location.
+	}
 	require(dialog->SetTitle(title));require(dialog->SetOkButtonLabel(L"Export"));
 	const auto result=dialog->Show(owner);
 	if(result==HRESULT_FROM_WIN32(ERROR_CANCELLED))return {};
@@ -29,10 +38,10 @@ inline std::filesystem::path chooseExportFile(HWND owner,const std::wstring &for
 	try {std::filesystem::path destination(path);CoTaskMemFree(path);return destination;}
 	catch(...) {CoTaskMemFree(path);throw;}
 }
-inline std::filesystem::path chooseModuleExport(HWND owner,const std::wstring &format) {
-	return chooseExportFile(owner,format,format+L" module (*."+format+L")",L"Export module");
+inline std::filesystem::path chooseModuleExport(HWND owner,const std::wstring &format,const std::filesystem::path &source={}) {
+	return chooseExportFile(owner,format,format+L" module (*."+format+L")",L"Export module",source);
 }
-inline std::filesystem::path chooseAudioExport(HWND owner) {
-	return chooseExportFile(owner,L"wav",L"Stereo float WAV (48 kHz)",L"Export audio");
+inline std::filesystem::path chooseAudioExport(HWND owner,const std::filesystem::path &source={}) {
+	return chooseExportFile(owner,L"wav",L"Stereo float WAV (48 kHz)",L"Export audio",source);
 }
 }

@@ -116,3 +116,19 @@ Mac must run its existing AU latency/tail/small-stack export test, new shared
 writer test, socket saving journey and both architecture builds at the same
 coordinated checkpoint. Prior device evidence may be reused only for unchanged
 callback inputs; the failed sustained foreground run remains a release blocker.
+
+The final pre-build native continuation uses a saved/imported song's filename
+stem for the export suggestion and supplies its folder as a chooser default,
+while allowing Windows to retain the user's remembered export location. Unsaved
+songs retain the Untitled fallback; arbitrary musical titles are not treated as
+Windows filenames. Audio and module export share this native behavior.
+
+Audio export result Review now names the correct operation instead of falling
+through to the sample-operation status. The existing native command-result
+group adds a real successful WAV write followed by an injected presentation
+failure and an external replacement. Re-entering Export must review the retained
+receipt exactly once, preserve the replacement file and song, and never reopen
+the chooser or write again. This assertion is unbuilt. The real chooser's
+suggested name and remembered folder are fresh foreground checks; no additional
+build or test registration is introduced. Resolve the current
+`audio-export/freeze.json`; earlier frozen manifests are retained separately.

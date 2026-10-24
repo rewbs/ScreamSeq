@@ -24,6 +24,26 @@ void applicationAudioExport() {
         "Audio export lost pending precise edit, native save state or field caret");
     const auto bytes=ScreamSeq::Project::readProjectBytes(output);
     restoreCheck(bytes.size()>44&&std::memcmp(bytes.data(),"RIFF",4)==0,"Native audio command did not create WAV");
+    const auto accepted=songState(app);unsigned writes=0,choosers=0;
+    app.audioExportChooser=[&]{++choosers;return output;};
+    app.sampleMutationCompletion=[&](const std::string &method) {
+        if(method=="document.exportAudio"){++writes;throw std::runtime_error("Owned audio export presentation failure");}
+    };
+    restoreRejected([&]{app.exportAudioFile();});
+    restoreCheck(writes==1&&choosers==1&&app.nativeCommandCompletion.returned()&&
+        app.nativeCommandCompletion.returned()->method=="document.exportAudio"&&
+        ScreamSeq::Project::readProjectBytes(output)==bytes,
+        "Audio export completion lost its successful publication receipt");
+    // An external replacement after publication must survive result Review.
+    const std::vector<std::byte> external{std::byte{0x31},std::byte{0x32},std::byte{0x33}};
+    ScreamSeq::Project::writeProjectFile(output,external,true);
+    app.exportAudioFile();app.reviewNativeCommand();
+    restoreCheck(writes==1&&choosers==1&&!app.nativeCommandCompletion.retained()&&
+        app.nativeCommandReport.at("outcome")=="verified"&&
+        app.status.find(L"Earlier audio export completed")!=std::wstring::npos&&
+        ScreamSeq::Project::readProjectBytes(output)==external&&songState(app)==accepted&&app.view->path==path,
+        "Audio export Review relabeled the operation, reopened a chooser, repeated publication or changed music");
+    app.sampleMutationCompletion={};
 }
 void applicationModuleExport() {
     RestoreFixture fixture;auto &app=*fixture.app;

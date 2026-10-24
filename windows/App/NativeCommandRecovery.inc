@@ -77,7 +77,7 @@
     }
     virtual int chooseNativeCommandAcknowledgement(const Json &report){
         const auto domain=report.at("submission").at("domain").get<std::string>();
-        auto message=L"Current "+wide(domain=="midi"?"recording":domain=="save"?"saved project and recovery":domain)+L" state was inspected. The earlier operation outcome is unverified.\n\nYes: Acknowledge the observation without repeating the operation.\nNo: Keep the result pending for later review.";
+        auto message=L"Current "+wide(domain=="midi"?"recording":domain=="save"?"saved project and recovery":domain=="audioExport"?"audio export file":domain)+L" state was inspected. The earlier operation outcome is unverified.\n\nYes: Acknowledge the observation without repeating the operation.\nNo: Keep the result pending for later review.";
         return modalMessage(message.c_str(),L"Review command result",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2);
     }
     void reviewNativeCommand(){
@@ -91,6 +91,7 @@
             if(domain=="track")status=L"Earlier track operation completed / current selection retained / no write repeated";
             if(domain=="graph")status=L"Earlier graph operation completed / current draft retained / no write repeated";
             if(domain=="export")status=L"Earlier module export completed / no file write repeated";
+            if(domain=="audioExport")status=L"Earlier audio export completed / no file write repeated";
             if(domain=="midi")updateRecordingWindow();nativeCommandCompletion.finish();frameRequested=true;return;
         }
         nativeCommandReport=readNativeCommandState();const auto observation=nativeCommandReport;

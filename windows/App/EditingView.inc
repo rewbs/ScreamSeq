@@ -290,7 +290,7 @@
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     virtual std::filesystem::path chooseModuleExportFile(const std::wstring &format) {
-        ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format);
+        ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format,view->path);
     }
     void exportModuleFile() {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
@@ -308,7 +308,7 @@
             {{"path",utf8Path(path)}},[&](const Json &){status=L"Module exported / native project save state retained";});
     }
     virtual std::filesystem::path chooseAudioExportFile() {
-        ModalScope modal(modalDepth);return ScreamSeq::chooseAudioExport(window);
+        ModalScope modal(modalDepth);return ScreamSeq::chooseAudioExport(window,view->path);
     }
     void exportAudioFile() {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
