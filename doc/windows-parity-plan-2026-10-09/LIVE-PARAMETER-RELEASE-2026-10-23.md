@@ -1738,3 +1738,14 @@ test-only, rerun the two failed native groups and validate unchanged product,
 menu/search fixture and app-journey inputs before reusing their individual
 passing results. The old aggregate native gate remains failed. Fresh foreground
 inspection is required after the corrected native groups pass.
+
+The fixture corrections are committed as3ca8181ed and backed up without CI.
+The new unexecuted attempt is `bin/mac-gesture-20261022/activity-fixture-correction/`.
+Resolve its freeze for the final source, including this report. `checkpoint.ps1`
+rechecks6e CI and later starts before pushing the PR/building. `check.ps1` runs
+only the two failed native groups, then validates exact source-delta/receipt
+identities before reusing the two individual native passes and two app passes.
+It records reuse explicitly; it never changes6e's failed aggregate receipt.
+The existing3408 audio reuse also requires its separate unchanged-input check.
+Scripts were syntax-parsed only. The fresh foreground launcher and packaging
+guards remain closed until automated and visible qualification pass.
