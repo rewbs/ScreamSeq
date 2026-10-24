@@ -6,6 +6,20 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October 21:45 UTC:** The exact x64 CI binary passed all21 affected cases
+on the local real endpoint (x64 emulation on ARM64); its required VST3 layering
+case remains uncovered until the matching x64 provider is retained. The ARM64
+layered composing/recording journey passed separately at21:41. Current Mac ARM
+exchange40135099003 passed; the guarded Windows return helper is prepared.
+Intel compilation completed21:41; observe its same job, do not restart it.
+Both earlier bank waiters are stopped before any build. The pending combined
+`bank-closure/` checkpoint includes the bank correction, x64 fixture retention
+and a90-minute Intel job allowance; individual test deadlines/assertions stay
+unchanged. Freeze the committed source, keep the21:50:05 gate (or later starts),
+and wait for all preceding CI to be terminal. Only one waiter may own this build.
+See GOAL-STATUS-2026-10-24.md for the requested report; its snapshot is not a
+qualification claim. No package or main merge yet.
+
 **24 October21:37 UTC:** Windows946 CI is terminal:162/162 portable/worker,
 53/53 native groups passed. App124 has25 failures/one optional skip:22 unique
 live-startup failures plus3 secondary teardown failures; recorded devices are

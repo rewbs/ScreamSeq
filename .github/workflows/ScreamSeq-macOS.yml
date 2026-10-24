@@ -66,7 +66,9 @@ jobs:
       matrix:
         runner: ${{ fromJSON(inputs.build_runner == 'macos-15' && '["macos-15"]' || inputs.build_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    # Intel's clean build plus unchanged acceptance suites can exceed an hour.
+    # Keep individual test deadlines; allow the job to finish without rebuilding.
+    timeout-minutes: ${{ matrix.runner == 'macos-15-intel' && 90 || 60 }}
     env:
       SCREAMSEQ_BUILD_DIR: bin/mac-ci
       SCREAMSEQ_BUILD_JOBS: "2"
