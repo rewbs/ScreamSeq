@@ -518,13 +518,16 @@ public:
       const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
     }
     finish();SetTimer(window_,3,100,nullptr);}
-  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){cancelNavigation();const bool retain=visible()||fields_;show();if(!retain){beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
+  void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||fields_;show();if(!retain){cancelNavigation();beginPending();try{load(std::move(plugin),parameter);pending_=false;}catch(...){pending_=false;throw;}}SetFocus(controls_.at(processors));}
   void openSourceAt(std::string plugin,uint32_t parameter) {
-    cancelNavigation();
     const auto c=context_();const bool same=captured_.document==c.document&&plugin_==plugin&&parameter_&&*parameter_==parameter;
-    require(!pending_&&!c.busy,"Finish the current activity read or document operation first");
+    // Raising the existing observer is presentation-only, including during a
+    // pumped read. Keep an already requested point edit/selection attached.
     if(same){show();SetFocus(controls_.at(parameters));return;}
+    require(!pending_&&!c.busy,"Finish the current activity read or document operation first");
+    if(pendingPointDelete_)flushForProjectSave();
     require(!fields_&&!frozen_,"The activity editor retains a point draft or frozen trace. Save/Refresh it before choosing another parameter.");
+    cancelNavigation();
     beginPending();try{load(std::move(plugin),parameter,false,true);pending_=false;}catch(...){pending_=false;throw;}
     show();SetFocus(controls_.at(parameters));
   }

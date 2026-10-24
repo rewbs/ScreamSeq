@@ -2212,3 +2212,13 @@ fresh shared recorded-automation, WASAPI lifecycle/silent audit and the existing
 complete composing/recording journey. The local checkpoint expands to **nine
 native/shared groups and eight app journeys**, one build only. Earlier shared
 clock/audio passes cannot qualify these changed inputs. All source is unbuilt.
+
+Activity external reopen paths now preserve a queued selected-point Delete.
+Raising the retained observer or its same parameter is presentation-only, even
+inside an observation read. A different explicit parameter first drains that
+already requested deletion when idle; busy admission refuses without dropping
+it. Existing raw-draft/frozen-trace guards remain. The Activity native group
+asserts both reopen paths during a pumped read, different-target busy refusal,
+then exact one-time deletion and stable destination after idle. This does not
+yet claim every sequence of in-window target/Refresh actions preserves queued
+deletion; that broader ordered-navigation audit remains outstanding.

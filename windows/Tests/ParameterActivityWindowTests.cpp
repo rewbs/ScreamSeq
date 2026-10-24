@@ -624,6 +624,29 @@ void run(){
       }
       // A source handoff must display the point just typed, not the lane from
       // before its debounce. Capture the source before the save reorders rows.
+      for(const int entry:{0,1,2}){
+        const auto initial=lane;const auto beforeEdits=edits;twoParameters=true;
+        context.revision="delete-reopen-"+std::to_string(entry);click(11002);selectPoint(0);SetFocus(itemList);
+        bool refused=false;
+        pump=[&](const std::string &method){if(method=="parameter.activity.get"){
+          selectPoint(1);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);
+          if(entry==0)tool.openAt();
+          else if(entry==1)tool.openSourceAt("a",1);
+          else try{tool.openSourceAt("a",2);}catch(const std::exception &){refused=true;}
+        }};
+        SendMessageW(window,WM_TIMER,3,0);pump={};
+        require(refused==(entry==2)&&lane==initial&&edits==beforeEdits&&tool.queuedMusicalEdit()&&
+          tool.snapshot().at("parameter")==1,"Reopening Activity cancelled its queued point edit or entered the busy worker");
+        if(entry==2)tool.openSourceAt("a",2);else SendMessageW(window,WM_TIMER,4,0);
+        auto expected=initial;expected.erase(expected.begin()+1);
+        require(lane==expected&&edits==beforeEdits+1&&!tool.queuedMusicalEdit()&&
+          tool.snapshot().at("parameter")== (entry==2?2:1),
+          "Connected Activity reopening failed to retain exact deletion before changing targets");
+        SendMessageW(window,WM_TIMER,4,0);require(lane==expected&&edits==beforeEdits+1,
+          "Reopening Activity left an already accepted deletion replayable");
+        if(entry==2)tool.openSourceAt("a",1);
+        twoParameters=false;lane=initial;context.revision="delete-reopen-restored";click(11002);
+      }
       for(const bool pumped:{false,true})for(const int button:{11008,11009}){
         const auto initial=lane;click(11002);selectPoint(0);const auto beforeEdits=edits;
         navigation=nullptr;navigationLane=nullptr;SetWindowTextW(valueField,L"0.6875");
