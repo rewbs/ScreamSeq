@@ -488,17 +488,27 @@ extension InterfaceTests {
     editor.update(model: model(["a"]), values: values)
     try require(editor.selected == 0 && editor.selectedPlugin == "a", "A removed plugin falls back to a valid slot")
 
-    var edits = [Double](), busy = true
+    var edits = [Double](), busy = true, availabilityChecks = 0
     editor.onParameter = { _, _, value, _ in if !busy { edits.append(value) } }
-    editor.canEdit = { !busy }; editor.parameterRetryDelay = 0.01
+    editor.canEdit = { availabilityChecks += 1; return !busy }; editor.parameterRetryDelay = 0.01
+    func finishParameterRetry() {
+      // The behavior under test is completion of a bounded retry chain, not
+      // dispatch latency on a loaded CI host. Keep pumping short run-loop turns
+      // until it settles, with a hard deadline and exact assertions below.
+      let deadline = ProcessInfo.processInfo.systemUptime + 1
+      while editor.hasDeferredParameterEdits && ProcessInfo.processInfo.systemUptime < deadline { wait(0.005) }
+    }
     let row = editor.tableView(editor.parameters, viewFor: nil, row: 0) as! PluginParameterRow
     row.slider.doubleValue = 0.8; row.slider.update()
-    try require(edits.isEmpty, "A busy document does not take the parameter edit")
-    busy = false; wait(0.08)
-    try require(edits == [0.8], "The edit is sent once the document is free instead of being lost (edits: \(edits), slider: \(row.slider.doubleValue), selected: \(editor.selectedPlugin ?? "none"), status: \(editor.note.stringValue))")
+    try require(edits.isEmpty && editor.hasDeferredParameterEdits, "A busy document queues the parameter edit without sending it")
+    busy = false; finishParameterRetry()
+    try require(!editor.hasDeferredParameterEdits && availabilityChecks == 2 && edits == [0.8], "The edit is sent once the document is free instead of being lost (edits: \(edits), checks: \(availabilityChecks), pending: \(editor.hasDeferredParameterEdits), slider: \(row.slider.doubleValue), selected: \(editor.selectedPlugin ?? "none"), status: \(editor.note.stringValue))")
     busy = true; editor.parameterRetryLimit = 2
-    row.slider.doubleValue = 0.2; row.slider.update(); wait(0.12)
-    try require(edits == [0.8] && row.slider.doubleValue == 0.8 && editor.note.stringValue.contains("busy"), "An edit that never gets through restores the real value and says so (edits: \(edits), slider: \(row.slider.doubleValue), status: \(editor.note.stringValue))")
+    let checksBeforeRefusal = availabilityChecks
+    row.slider.doubleValue = 0.2; row.slider.update()
+    try require(editor.hasDeferredParameterEdits, "A second busy edit starts its own bounded retry chain")
+    finishParameterRetry()
+    try require(!editor.hasDeferredParameterEdits && availabilityChecks == checksBeforeRefusal + 4 && edits == [0.8] && row.slider.doubleValue == 0.8 && editor.note.stringValue.contains("busy"), "An edit that never gets through restores the real value and says so (edits: \(edits), checks: \(availabilityChecks - checksBeforeRefusal), pending: \(editor.hasDeferredParameterEdits), slider: \(row.slider.doubleValue), status: \(editor.note.stringValue))")
     busy = false
     row.slider.doubleValue = 0.2; row.slider.update()
     try require(edits == [0.8, 0.2], "The restored value is still the baseline for the next edit")

@@ -698,3 +698,40 @@ these stage totals; obtain a narrower target-only profile before optimization.
 At08:24 both native workflows remained in progress; the stock job is terminal
 success. The09:05:43 UTC minimum gate is unchanged. No additional build, CI
 dispatch, package or main merge occurred during this continuation.
+
+### 08:40 UTC — terminal Windows and Mac ARM evidence; retry assertion correction
+
+Windows job120820903152 completed with compilation,161/162 portable tests and
+52/53 native groups passing. The failures are the dry export partition assertion
+and sample-recorder root entry already corrected in the unbuilt continuation.
+The122-case app suite retains25 failures and one skip:22 distinct live-startup
+failures and three secondary audition teardown failures. Its recording snapshots
+show no active audio endpoint. Vendor ownership, typed/pipe conformance, scratch
+and inventory steps passed. This is failed CI, not an environment waiver or a
+substitute for the passing local WASAPI journeys. The complete log is pinned in
+`recording-observation/completed-ci.json`, SHA256
+`a0f683f7d17617272550f5b70bff9b7b4abfe2b4e8f9494c95eeb7fd6d90875a`.
+
+Mac ARM job120820903312 compiled and passed134/135 CTests (the same dry export
+assertion failed), AU/VST3 lifecycle, sample-library, socket and typed gates.
+Its full native interface harness failed `pluginDraftChecks`: after a fixed
+120ms wait, the slider still held the proposed0.2 and the status remained the
+normal summary. This establishes that expected revert/status was absent at the
+assertion, **not** that a completed error message was overwritten. The earlier
+commentary interpretation was premature. Log SHA256:
+`c58824c1f228c8fe9a9fc9632d0f8c3d0c93836042592185bb03c11d5b3416b1`.
+
+The test previously slept80ms for one deferred callback and120ms for three
+chained callbacks. It now pumps short run-loop turns until the editor's existing
+pending flag clears, with a hard one-second monotonic deadline. It retains exact
+accepted values, no-extra-write and refused-value/error-message assertions, adds
+explicit pending-state assertions, and counts availability checks: exactly two
+for the accepted edit and four for the refused edit (initial admission plus
+three bounded retries). This is a source-only test correction, not a production
+change or proof that the old failure was exclusively scheduling. Both Mac native
+interface jobs must confirm it at the next coordinated checkpoint. No assertion
+is skipped on timeout; diagnostics include pending state and retry count.
+
+Intel CI was still running at the last collection. The09:05:43 UTC minimum
+gate and terminal-CI prerequisite remain. No build, package or main merge was
+performed while making this correction.
