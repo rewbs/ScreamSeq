@@ -1,5 +1,6 @@
     std::vector<ScreamSeq::WorkspaceCommand> defaultWorkspaceCommands()const {
         return {
+            {patternHeaderMenuCommand,L"Pattern / Header actions",L""},
             {navigationEffectsCommand,L"Navigate / Pattern effects panel",L""},
             {navigationRecipesCommand,L"Navigate / Graph recipes panel",L""},
             {floatInstrumentCommand,L"Window / Float instruments",L""},{floatAutomationCommand,L"Window / Float pattern automation",L""},
@@ -118,6 +119,7 @@
             {documentLoadReportCommand,L"File / Project load and recovery report",L""},
             {openCommand,L"File / Open project or module",L"Ctrl+O"},{saveCommand,L"File / Save native project",L"Ctrl+S"},
             {exportModuleCommand,L"File / Export module…",L""},
+            {exportAudioCommand,L"File / Export audio…",L""},
             {saveAsCommand,L"File / Save As",L"Ctrl+Shift+S"},{undoCommand,L"Edit / Undo",L"Ctrl+Z"},{redoCommand,L"Edit / Redo",L"Ctrl+Y"},
             {recoveryCommand,L"File / Recover a song",L""},{exitCommand,L"File / Exit",L"Alt+F4 (Windows)"},
             {copyCommand,L"Pattern / Copy rectangular cells",L"Ctrl+C"},{pasteCommand,L"Pattern / Paste rectangular cells",L"Ctrl+V"},{clearCommand,L"Pattern / Clear selection",L"Delete"},

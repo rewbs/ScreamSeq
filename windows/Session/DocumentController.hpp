@@ -196,7 +196,7 @@ class DocumentController {
   void installRecording(std::unique_ptr<RecordingTake>,bool removePreserved=false);
   Json recordingOperation(const std::string &method,const Json &params);
   Json parameterActivityOperation(const std::string &method,const Json &params);
-  std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next);
+  std::function<void()> prepareNativeUpdate(const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells = {});
   std::string revision() const;
   std::string revision(uint64_t documentRevision) const;
   Json operation(const std::string &method,Json params);

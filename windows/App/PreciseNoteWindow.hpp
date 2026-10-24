@@ -72,10 +72,11 @@ private:
   uint64_t generation_=0;
   unsigned rows_=0,rowsPerBeat_=4,units_=0,snap_=0;
   int selected_=-1,page_=0,dragSelection_=-1;
-  bool initialized_=false,setting_=false,pending_=false,dragging_=false;
+  bool initialized_=false,setting_=false,pending_=false,dragging_=false,dragHadAutomaticEdit_=false;
   bool replaceLegacy_=true,moveLegacyEffect_=false,canvasVisible_=false;
   HWND pendingFocus_{};
   WorkspaceRect plot_{};
+  std::optional<double> playbackOffset_;
 
   static void require(bool ok,const char *message){if(!ok)throw std::runtime_error(message);}
   static bool sameIdentity(const Target &a,const Target &b){return a.patternID==b.patternID&&a.trackID==b.trackID&&a.row==b.row;}
@@ -97,6 +98,20 @@ private:
 #include "PreciseNoteOwnerInteraction.inc"
 #include "PreciseNoteOwnerLayout.inc"
 
+  static constexpr UINT_PTR capturedRefreshTimer=3;
+  void resumeVisiblePresentation()noexcept override{
+    // Compact layout changes can reveal a row that was hidden during edits.
+    // Defer worker reads until native layout/placement has unwound.
+    if(window_)SetTimer(window_,capturedRefreshTimer,20,nullptr);
+  }
+  void timer(UINT_PTR id)override{
+    if(id!=capturedRefreshTimer)return;
+    if(!visible()||!hasTarget()||retainedDraft()||context_().document!=document_){KillTimer(window_,id);return;}
+    if(context_().busy)return;
+    for(int control:{pitch,units,snap,localEffect})if(SendMessageW(controls_.at(control),CB_GETDROPPEDSTATE,0,0))return;
+    KillTimer(window_,id);refreshCleanCaptured();
+  }
+
 public:
   PreciseNoteWindow(HWND owner,Request request,ContextProvider context,std::function<void()> returnToPattern)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),return_(std::move(returnToPattern)){
@@ -109,7 +124,7 @@ public:
     for(int id:{pitch,units,snap,localEffect})combo(id);
     for(int id:{instrument,velocity,offset,parameter,repeatCount,endVelocity})edit(id,L"",32);
     for(auto [id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{
-      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Write note"},
+      {addHit,L"Add hit"},{removeHit,L"Remove"},{checkDraft,L"Check"},{applyDraft,L"Save now"},
       {loadTarget,L"Load selection"},{replaceRow,L"Replace row note: on"},{fillRow,L"Fill to row end"},
       {pageTimeline,L"Timeline"},{pageHit,L"Hit"},{pageTools,L"Tools"},{pageDetails,L"Details"},{reloadCapturedCommand,L"Reload captured"},
       {returnPattern,L"Return to pattern"},{close,L"Close"}})button(id,text);
@@ -117,6 +132,14 @@ public:
       {titleLabel,L"Choose a pattern row"},{statusLabel,L""},{pitchLabel,L"Pitch"},{instrumentLabel,L"Instrument"},
       {velocityLabel,L"Velocity"},{offsetLabel,L"Offset"},{unitsLabel,L"Units"},{effectLabel,L"Note-local effect"},
       {parameterLabel,L"Hex"},{repeatLabel,L"Hits (2–64)"},{endLabel,L"End velocity (1–127)"}})label(id,text);
+    // These controls move between pages. Give the native providers stable names
+    // instead of relying on a preceding HWND label or the current numeric value.
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+      {list,L"Precise hits in the captured row"},{pitch,L"Hit pitch"},{instrument,L"Hit instrument"},
+      {velocity,L"Hit velocity"},{offset,L"Hit offset"},{units,L"Hit offset units"},{snap,L"Timeline snap"},
+      {localEffect,L"Note-local effect"},{parameter,L"Note-local effect parameter, hexadecimal"},
+      {repeatCount,L"Fill hit count"},{endVelocity,L"Fill end velocity"},{detailsText,L"Precise note details, read only"}})
+      accessibleName(id,name);
     for(unsigned n=1;n<=122;++n){const auto text=n<=120?L"Note "+std::to_wstring(n):n==121?L"Note off":L"Cut";
       const auto i=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));
       ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,i,n<=120?n:n==121?255:254);}
@@ -133,6 +156,14 @@ public:
       dragging_||draft_!=original_||pointRaw()!=pointBaseline_||toolsRaw()!=toolsBaseline_,pending_);
   }
   bool pending()const noexcept{return pending_;}
+  void playback(const std::string &document,unsigned pattern,double position,bool playing){
+    std::optional<double> next;
+    if(playing&&hasTarget()&&document==document_&&pattern==target_.pattern&&std::isfinite(position)&&
+       position>=double(target_.row)*256&&position<double(target_.row+1)*256)
+      next=(position-double(target_.row)*256)/256;
+    if(next==playbackOffset_)return;playbackOffset_=next;
+    if(visible()&&canvasVisible_)requestPaint();
+  }
   bool capturedCurrent()const{return current();}
   std::optional<Target> capturedTarget()const{return hasTarget()?std::optional<Target>(target_):std::nullopt;}
   void initializeHidden(std::optional<Target> target={}){
@@ -155,9 +186,50 @@ public:
     require(hasTarget()&&!pending_&&!dragging_,"Choose a captured row while the editor is ready");const auto now=context_();
     require(now.document==document_,"Document changed / Load selection to capture the new song");load(now,resolve(now,target_),false);
   }
+  bool refreshCleanCaptured(){
+    // Pin/focus retain the addressed row, not an obsolete version of its music.
+    // Never rebase unsaved text, a drag, or an uncertain submitted operation.
+    if(!visible()||!hasTarget()||retainedDraft())return false;
+    const auto now=context_();if(now.busy||now.document!=document_||now.revision==revision_)return false;
+    for(int id:{pitch,units,snap,localEffect})if(SendMessageW(controls_.at(id),CB_GETDROPPEDSTATE,0,0))return false;
+    const auto previous=selected_>=0?draft_.at(size_t(selected_)):Json();
+    const auto raw=pointRaw();const auto beat=rowsPerBeat_,insertion=insertionInstrument_;const auto focused=GetFocus();
+    const int focusedID=GetDlgCtrlID(focused);DWORD first=0,last=0;
+    const bool edit=owns(focused)&&(focusedID==instrument||focusedID==velocity||focusedID==offset||focusedID==parameter);
+    if(edit)SendMessageW(focused,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    load(now,resolve(now,target_),false);
+    insertionInstrument_=insertion;
+    if(selected_<0){Setting guard(setting_);set(instrument,std::to_wstring(insertion));pointBaseline_=pointRaw();}
+    const auto selected=selected_>=0?draft_.at(size_t(selected_)):Json();
+    if(previous==selected&&beat==rowsPerBeat_){
+      // Unrelated edits need a fresh replacement baseline, not reformatted text.
+      Setting guard(setting_);for(auto [id,key]:std::initializer_list<std::pair<int,const char *>>{
+        {instrument,"instrument"},{velocity,"velocity"},{offset,"offset"},{parameter,"parameter"}})
+        set(id,wide(raw.at(key).get<std::string>()));
+      pointBaseline_=pointRaw();
+    }
+    if(edit&&GetFocus()==focused){const auto length=DWORD(GetWindowTextLengthW(focused));
+      SendMessageW(focused,EM_SETSEL,std::min(first,length),std::min(last,length));}
+    return true;
+  }
   void observeContext(){const auto now=context_();if(now.document==observedDocument_&&now.revision==observedRevision_)return;
     observedDocument_=now.document;observedRevision_=now.revision;layout();requestPaint();}
-  void hide()override{cancelDrag();NativeToolWindow::hide();}
+  void hide()override{KillTimer(window_,capturedRefreshTimer);cancelDrag();if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_,"Wait for the pending note edit before closing");NativeToolWindow::hide();}
+  void flushForProjectSave(){
+    // Native Save must include a valid edit still inside its typing debounce.
+    // No timer means no automatic intent: never retry a failed/uncertain write
+    // or silently turn an invalid raw draft into a different musical value.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending precise-note edit before saving the project");
+  }
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&draft_!=original_;}
+  void flushForHistory(){
+    // A song-level Undo must undo the value the musician just entered, even
+    // inside the typing debounce. Local Windows text Undo bypasses this path.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending precise-note edit before changing history");
+  }
   bool dispatchLegacyAction(int id){
     if(!((id>=addHit&&id<=fillRow)||(id>=reloadCapturedCommand&&id<=close)))return false;
     action(id,BN_CLICKED);layout();requestPaint();return true;
@@ -175,6 +247,7 @@ public:
       {"draftCount",draft_.size()},{"selectedEvent",selected_>=0?draft_.at(size_t(selected_)):Json()},
       {"page",std::array<const char *,4>{"timeline","hit","tools","details"}[size_t(page_)]},{"rowsPerBeat",rowsPerBeat_},
       {"timeline",{{"x",plot_.x},{"y",plot_.y},{"width",plot_.w},{"height",plot_.h}}},{"canvasVisible",canvasVisible_},
+      {"playbackOffset",playbackOffset_?Json(*playbackOffset_):Json()},
       {"details",utf8(details())},{"selectedHitSummary",selected_>=0?hitSummary(draft_.at(size_t(selected_))):Json::array()},
       {"raw",pointRaw()},{"tools",toolsRaw()},{"controls",bounds},{"status",utf8(displayStatus())}});if(includeDraft)result["draft"]=draft_;return result;
   }

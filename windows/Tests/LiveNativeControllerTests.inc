@@ -1,3 +1,28 @@
+void livePreciseNoteControllerTests() {
+  bool active=false,refuse=false;unsigned stops=0;HostedProjectPlayback *playback=nullptr;
+  PlaybackHooks hooks;hooks.feedback=[&]{PlaybackFeedback f;f.playing=f.audioActive=active;f.generation=9;return f;};
+  hooks.publishNativeUpdate=[&](auto *owner,auto &plan){return !refuse&&active&&owner==playback&&owner->publishNativeUpdate(plan);};
+  DocumentController c({},"live-precise-notes",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,{},hooks);
+  playback=c.prepare(48000,Json::object(),true,true).get();active=true;const auto initialStops=stops;
+  const auto original=c.view();const auto oldNotes=call(c,"pattern.notes.get",{{"pattern",0}});
+  const Json change={{"pattern",0},{"events",Json::array({{{"channel",0},{"position",4*65536+16384},{"note",67},{"instrument",1},{"velocity",90}}})},
+    {"clearRows",Json::array({{{"row",4},{"channel",0}}})}};
+  auto dry=change;dry["dryRun"]=true;invoke(c,"pattern.notes.set",dry);
+  need(c.view()==original&&active&&stops==initialStops,"Precise dry run changed view or playback");
+  refuse=true;bool rejected=false;try{invoke(c,"pattern.notes.set",change);}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  need(rejected&&c.view()==original&&call(c,"pattern.notes.get",{{"pattern",0}})==oldNotes&&active&&stops==initialStops,"Precise publication rejection changed notes/cells/history or stopped playback");
+  refuse=false;invoke(c,"pattern.notes.set",change);const auto changed=c.view();
+  need(changed->cell(0,4,0).note==0&&active&&stops==initialStops,"Precise conversion stopped playback or left the ordinary note");
+  std::vector<float> pcm(1024);const auto render=[&]{need(playback->render(pcm.data(),512),"Live precise rendering failed");};render();
+  refuse=true;rejected=false;try{invoke(c,"history.undo",{{"domain","all"}});}catch(const Api::ApiError &e){rejected=e.code==-32002;}
+  need(rejected&&c.view()==changed&&active&&stops==initialStops,"Rejected precise Undo consumed history or interrupted transport");
+  refuse=false;invoke(c,"history.undo",{{"domain","all"}});render();
+  need(c.view()->cell(0,4,0)==original->cell(0,4,0)&&call(c,"pattern.notes.get",{{"pattern",0}})==oldNotes&&active&&stops==initialStops,"One live Undo did not restore ordinary note and precise schedule together");
+  invoke(c,"history.redo",{{"domain","all"}});render();
+  need(c.view()->cell(0,4,0)==changed->cell(0,4,0)&&active&&stops==initialStops,"Live Redo failed or stopped playback");
+  const auto saved=c.view();invoke(c,"pattern.notes.set",change);need(c.view()==saved&&active&&stops==initialStops,"Precise no-op changed history or playback");
+  std::cout<<"PASS live precise controller conversion, rejection, one Undo/Redo and no-op without transport interruption\n";
+}
 void patternAutomationAdmissionTests() {
   auto document=Tracker::Document::demo();unsigned stops=0,preparations=0,publications=0;bool denyAdmission=false,denyPublication=false;
   PatternHostHooks hooks;hooks.plugins={"admission-plugin"};

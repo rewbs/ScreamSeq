@@ -1,6 +1,7 @@
 #include "windows/Plugins/WindowsVST3.hpp"
 #include "windows/Audio/HostClock.hpp"
 #include <windows.h>
+#include <commctrl.h>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -22,9 +23,24 @@ int main(int argc,char **argv){try{
   check(before&&event.hostTime>=before&&event.hostTime<=after&&event.hostTime<drain,"native editor timestamp lost across delayed drain");
   check(p->droppedEdits()==0,"ordinary reopen cycle lost notifications");
   std::array<float,128> pcm;pcm.fill(1);check(p->process(pcm.data(),64,0,nullptr,0,{}),"editor edit audio processing");check(pcm[0]==.625f,"native editor gain not applied");
+  const auto panel=GetWindow(host,GW_CHILD),slider=GetDlgItem(panel,7001);
+  check(slider&&IsWindowVisible(slider)&&(GetWindowLongPtrW(slider,GWL_STYLE)&WS_TABSTOP),"vendor gain slider absent or inaccessible");
+  check(SendMessageW(slider,TBM_GETPOS,0,0)==625,"vendor slider did not show its attach gesture");
+  const auto gestureStart=ScreamSeq::hostTime100ns();
+  SendMessageW(slider,TBM_SETPOS,TRUE,250);
+  SendMessageW(panel,WM_HSCROLL,MAKEWPARAM(TB_THUMBTRACK,250),reinterpret_cast<LPARAM>(slider));
+  SendMessageW(panel,WM_HSCROLL,TB_ENDTRACK,reinterpret_cast<LPARAM>(slider));
+  const auto gestureEnd=ScreamSeq::hostTime100ns();
+  check(p->popEdit(event)&&event.id==7&&event.value==.25f&&event.hostTime>=gestureStart&&event.hostTime<=gestureEnd,"vendor slider lost original input or timestamp");
+  check(!p->popEdit(event),"slider end-track duplicated a gesture");
+  SendMessageW(slider,WM_KEYDOWN,VK_RIGHT,0);SendMessageW(slider,WM_KEYUP,VK_RIGHT,0);
+  check(SendMessageW(slider,TBM_GETPOS,0,0)==251,"native arrow key did not change vendor slider");
+  check(p->popEdit(event)&&event.id==7&&event.value==.251f,"vendor keyboard input was not recorded");
+  check(!p->popEdit(event)&&p->droppedEdits()==0,"vendor control fabricated or lost input");
+  pcm.fill(1);check(p->process(pcm.data(),64,0,nullptr,0,{})&&pcm[0]==.251f,"vendor slider did not change actual PCM");
   check(GetForegroundWindow()==foreground,"editor stole foreground focus");
   if(repeat==1){DWORD_PTR result=0;check(SendMessageTimeoutW(host,WM_CLOSE,0,0,SMTO_ABORTIFHUNG,1000,&result)!=0,"scoped HWND close message");}else p->closeEditor();check(!p->editorOpen()&&!IsWindow(host)&&counts(1)==repeat+1,"editor remove/close lifetime");
  }
- std::cout<<"PASS actual HWND attach/frame resize/commit PCM/remove, three reopen cycles, no foreground activation\n";
+ std::cout<<"PASS actual HWND attach/frame resize/slider/keyboard/original timestamps/PCM/remove, three reopen cycles, no foreground activation\n";
  return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}

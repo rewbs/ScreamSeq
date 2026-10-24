@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <mach/mach_time.h>
+#include "editor/hosted/ParameterEdits.hpp"
+#include "editor/hosted/PluginBaselineVerification.hpp"
 namespace Tracker {
 namespace {
 void check(OSStatus status, const char *message) {
@@ -171,7 +173,7 @@ void AudioDevice::play(const std::vector<std::byte> &bytes, uint32_t order, bool
   // flattening its channel inserts onto this raw preview.
   plugins_ = isolatedSample || (pluginStates_.empty() && !(native && (native->mixer.active() || !native->performance.commands.empty())))
                  ? nullptr
-                 : std::make_unique<PluginChain>(pluginStates_, sampleRate_, false, automation_,
+                 : std::make_shared<PluginChain>(pluginStates_, sampleRate_, false, automation_,
                                                  uint64_t(double(renderer_->telemetry().frames) * 48000 / sampleRate_));
   ++pluginEpoch_;
   if (plugins_)
@@ -210,7 +212,7 @@ void AudioDevice::restoreParameterActivity() {
 void AudioDevice::setPlugins(const std::vector<PluginState> &states, const std::vector<ParameterChange> &automation,
                              bool preserveEditors) {
   pendingEditors_ = preserveEditors && plugins_ ? plugins_->openEditors() : std::vector<size_t>{};
-  auto next = states.empty() ? nullptr : std::make_unique<PluginChain>(states, sampleRate_, false, automation);
+  auto next = states.empty() ? nullptr : std::make_shared<PluginChain>(states, sampleRate_, false, automation);
   stop();
   renderer_.reset();
   plugins_ = std::move(next);
@@ -253,6 +255,201 @@ std::vector<PluginState> AudioDevice::pluginStates() {
   if (plugins_)
     pluginStates_ = plugins_->states();
   return pluginStates_;
+}
+std::optional<NativePlugin::ProcessingState> AudioDevice::pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &owner) {
+  const auto retained=plugins_; // A vendor callback may replace the active host.
+  const auto validate=[&]()->size_t {
+    if(!retained||plugins_!=retained||pluginEpoch_!=expectedEpoch||owner.plugin.empty()||!owner.source.incarnation)
+      throw std::runtime_error("Processing-state observation belongs to a replaced native host");
+    const auto index=pluginSlot(owner.plugin);
+    if(!index||plugins_->editSource(*index)!=owner.source)
+      throw std::runtime_error("Processing-state observation belongs to another native provider");
+    return *index;
+  };
+  const auto index=validate();auto observed=retained->processingState(index);
+  if(validate()!=index||(observed&&observed->source!=owner.source))
+    throw std::runtime_error("Native provider moved during processing-state observation");
+  return observed;
+}
+std::optional<AudioDevice::PluginPreviewCancellation> AudioDevice::cancelPluginParameterPreviewsTracked(
+    uint64_t expectedEpoch,std::span<const ParameterPreviewOwner> owners) {
+  if(!plugins_||pluginEpoch_!=expectedEpoch||owners.size()>4096)return std::nullopt;
+  PluginPreviewCancellation receipt;receipt.owner_=this;receipt.epoch_=expectedEpoch;receipt.chain_=plugins_;
+  std::vector<PluginChain::ParameterPreviewTarget> targets;targets.reserve(owners.size());
+  for(const auto &owner:owners) {
+    const auto index=pluginSlot(owner.plugin);
+    if(!index||*index>UINT32_MAX||!owner.provider||receipt.chain_->editSource(*index).incarnation!=owner.provider)
+      return std::nullopt;
+    targets.push_back({uint32_t(*index),owner.parameter});
+  }
+  auto hosted=receipt.chain_->cancelParameterPreviewsTracked(targets);
+  if(!hosted)return std::nullopt;
+  receipt.hosted_=std::move(*hosted);
+  return std::optional<PluginPreviewCancellation>{std::move(receipt)};
+}
+PluginChain::PreviewCancellationState AudioDevice::pluginPreviewCancellationState(const PluginPreviewCancellation &receipt) const noexcept {
+  if(receipt.owner_!=this||receipt.epoch_!=pluginEpoch_||!receipt.chain_||receipt.chain_!=plugins_)
+    return PluginChain::PreviewCancellationState::Invalid;
+  return receipt.chain_->parameterPreviewCancellationState(receipt.hosted_);
+}
+void AudioDevice::verifyProcessingPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
+    std::span<const PluginState> saved) {
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid processing-state verification group");
+  const auto retained=plugins_;
+  struct Item {PluginStateOwner owner;size_t slot;PluginState accepted;};
+  std::vector<Item> items;items.reserve(owners.size());std::set<std::string> seen;
+  size_t bytes=0;
+  for(const auto &owner:owners) {
+    const auto index=pluginSlot(owner.plugin);
+    const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(!index||baseline==saved.end()||!seen.insert(owner.plugin).second)
+      throw std::invalid_argument("Processing-state verification needs distinct saved provider identities");
+    constexpr size_t budget=256u*1024u*1024u;
+    if(baseline->state.size()>budget-bytes)throw std::runtime_error("Saved verification states exceed the bounded group budget");
+    bytes+=baseline->state.size();items.push_back({owner,*index,*baseline});
+  }
+  const auto validate=[&] {
+    if(!retained||plugins_!=retained||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Processing-state verification belongs to a replaced host; take retained");
+    for(const auto &item:items)if(!item.owner.source.incarnation||pluginSlot(item.owner.plugin)!=item.slot||
+        retained->editSource(item.slot)!=item.owner.source)
+      throw std::runtime_error("Processing-state verification belongs to another provider; take retained");
+  };
+  validate();
+  for(const auto &item:items) {
+    const auto observed=pluginProcessingState(expectedEpoch,item.owner);validate();
+    if(!observed)throw std::runtime_error("This plugin cannot verify state during playback; stop playback with the take retained");
+    verifyPluginParameterBaseline(item.accepted,observed->state,sampleRate_,validate);
+    validate();
+  }
+}
+void AudioDevice::restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,
+    std::span<const PluginState> saved) {
+  const auto validate=[&] {
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Stop playback before native plugin state verification; take retained");
+    for(const auto &owner:owners) {
+      const auto slot=pluginSlot(owner.plugin);
+      if(!slot||*slot>UINT32_MAX||!owner.source.incarnation||plugins_->editSource(*slot)!=owner.source)
+        throw std::runtime_error("Native provider changed during baseline restoration; take retained");
+    }
+  };
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid native restoration group");
+  validate();
+  if(!joinStoppedProcessing())throw std::runtime_error("Plugin processing is still active; take retained");
+  plugins_->applyPending();validate();
+  struct Restore {PluginStateOwner owner;size_t slot;PluginState expected;std::vector<ParameterChange> values;};
+  std::vector<Restore> prepared;prepared.reserve(owners.size());std::set<std::string> seen;
+  for(const auto &owner:owners) {
+    if(!seen.insert(owner.plugin).second)throw std::invalid_argument("Duplicate native restoration provider");
+    const auto baseline=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(baseline==saved.end())throw std::runtime_error("Saved plugin baseline is missing; take retained");
+    const auto slot=*pluginSlot(owner.plugin);
+    NativePlugin probe(*baseline,sampleRate_);
+    auto expected=probe.state();auto parameters=probe.parameters();
+    validate();if(pluginSlot(owner.plugin)!=slot)throw std::runtime_error("Native rack moved during restoration preparation");
+    const auto catalog=plugins_->parameters(slot);validate();
+    std::vector<std::pair<uint32_t,double>> requested;
+    for(const auto &p:parameters)if(p.writable)requested.emplace_back(p.id,p.manualValue.value_or(p.value));
+    Restore item{owner,slot,std::move(expected),{}};item.values.reserve(requested.size());
+    if(!requested.empty())for(const auto &[id,value]:prepareParameterEdits(catalog,requested))
+      item.values.push_back({uint32_t(slot),id,value,0});
+    prepared.push_back(std::move(item));
+  }
+  // Vendor preparation can pump native work. Validate the entire group again
+  // before writing its first value. The outer owner checks queue positions too.
+  const auto validatePrepared=[&] {
+    validate();
+    for(const auto &item:prepared)if(pluginSlot(item.owner.plugin)!=item.slot)
+      throw std::runtime_error("Native rack moved during restoration publication");
+  };
+  validatePrepared();
+  for(const auto &item:prepared) {
+    for(size_t offset=0;offset<item.values.size();offset+=128) {
+      validatePrepared();plugins_->applyPending();validatePrepared();
+      if(!plugins_->enqueueParameters(std::span(item.values).subspan(offset,std::min<size_t>(128,item.values.size()-offset))))
+        throw std::runtime_error("Native baseline parameter queue refused restoration; take retained");
+    }
+    plugins_->applyPending();validatePrepared();
+    const auto restored=plugins_->state(item.slot);validatePrepared();
+    if(pluginSlot(item.owner.plugin)!=item.slot||restored.instanceID!=item.owner.plugin||
+       restored.state!=item.expected.state||restored.audioLayout!=item.expected.audioLayout)
+      throw std::runtime_error("Native hidden state differs from the saved baseline; take retained for explicit restoration");
+  }
+}
+std::unique_ptr<AudioDevice::StoppedPluginRepair> AudioDevice::prepareStoppedPluginRepair(
+    uint64_t expectedEpoch,std::span<const PluginStateOwner> owners,std::span<const PluginState> saved) {
+  if(owners.empty()||owners.size()>maximumNativePlugins)throw std::invalid_argument("Invalid opaque repair group");
+  const auto validate=[&] {
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Stopped opaque repair belongs to a replaced or active host");
+    const auto open=plugins_->openEditors();
+    if(active()||!plugins_||pluginEpoch_!=expectedEpoch)
+      throw std::runtime_error("Native host changed during closed-editor observation");
+    for(const auto &owner:owners) {
+      const auto slot=pluginSlot(owner.plugin);
+      if(!slot||!owner.source.incarnation||plugins_->editSource(*slot)!=owner.source||
+          std::find(open.begin(),open.end(),*slot)!=open.end())
+        throw std::runtime_error("Close the original native editors before opaque repair");
+    }
+  };
+  validate();if(!joinStoppedProcessing())throw std::runtime_error("Native rendering has not stopped");validate();
+  auto result=std::make_unique<StoppedPluginRepair>();result->owner=this;result->epoch=expectedEpoch;
+  result->providers.assign(owners.begin(),owners.end());
+  std::vector<PluginState> group;group.reserve(owners.size());std::set<std::string> seen;
+  for(const auto &owner:owners) {
+    if(!seen.insert(owner.plugin).second)throw std::invalid_argument("Duplicate opaque repair provider");
+    const auto state=std::find_if(saved.begin(),saved.end(),[&](const auto &p){return p.instanceID==owner.plugin;});
+    if(state==saved.end())throw std::runtime_error("Opaque repair has no accepted plugin baseline");
+    group.push_back(*state);
+  }
+  result->hosted=plugins_->prepareStoppedRepair(group);
+  validate();
+  result->originalCuts.reserve(owners.size());
+  for(const auto &owner:owners) {
+    const auto slot=pluginSlot(owner.plugin);
+    if(!slot||active()||pluginEpoch_!=expectedEpoch)throw std::runtime_error("Original repair host changed");
+    const auto cut=pluginInputBoundary(*slot,mach_absolute_time());
+    if(!cut||cut->source!=owner.source)throw std::runtime_error("Original repair input provider changed");
+    result->originalCuts.push_back(*cut);
+  }
+  result->replacementCuts.reserve(result->hosted->items.size());
+  for(const auto &item:result->hosted->items) {
+    const auto cut=item.replacement->prepared->editBoundary(mach_absolute_time());
+    if(!cut||cut->fence.pending||cut->source.dropped)
+      throw std::runtime_error("Replacement native provider has unreviewed input");
+    result->replacementCuts.push_back(*cut);
+  }
+  validate();
+  return result;
+}
+bool AudioDevice::StoppedPluginRepair::releaseRetiredInputBarrier(const std::string &identity,PluginEditorInputBarrier barrier) {
+  if(!adopted()||!barrier.incarnation)return false;
+  for(auto &item:hosted->items)if(item.requested.instanceID==identity) {
+    auto &retired=item.replacement->prepared;
+    return retired&&item.replacement->source.incarnation==barrier.incarnation&&
+      retired->editSource().incarnation==barrier.incarnation&&retired->endEditorInputBarrier(barrier);
+  }
+  return false;
+}
+bool AudioDevice::adoptStoppedPluginRepair(StoppedPluginRepair &plan) {
+  if(plan.owner!=this||!plan.hosted||plan.adopted()||plan.providers.empty()||plan.originalCuts.size()!=plan.providers.size()||
+      active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+  if(!joinStoppedProcessing())return false;
+  // Editor observation can execute native code. Repeat host and provider checks
+  // afterwards, then adopt the complete shared group without native callbacks.
+  const auto open=plugins_->openEditors();
+  if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+  for(size_t n=0;n<plan.providers.size();++n) {
+    if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+    const auto &owner=plan.providers[n];
+    const auto slot=pluginSlot(owner.plugin);
+    if(!slot||plugins_->editSource(*slot)!=owner.source||std::find(open.begin(),open.end(),*slot)!=open.end())return false;
+    const auto cut=pluginInputBoundary(*slot,mach_absolute_time());const auto &before=plan.originalCuts[n];
+    if(!cut||cut->source!=before.source||cut->fence.position!=before.fence.position||cut->fence.pending!=before.fence.pending)return false;
+  }
+  if(active()||!plugins_||plan.epoch!=pluginEpoch_||plan.hosted->owner!=plugins_.get())return false;
+  return plugins_->adoptStoppedRepair(*plan.hosted);
 }
 void AudioDevice::stop() {
   playing_ = false;

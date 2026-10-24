@@ -150,6 +150,9 @@ public:
   // Collect only on the control thread, including after a failed candidate.
   void collect() noexcept {settle();plans_.collect();}
   bool ready() noexcept {collect();return submitted_==nullptr;}
+  // Control owner. Retire completed transitions before bounding a stopped
+  // native-state repair; an unfinished transition cannot be repaired in place.
+  size_t stoppedStorageBytes() noexcept {return ready()?storage(*stable_):SIZE_MAX;}
   const Plan &controlPlan() noexcept {settle();return *stable_;}
   bool controls(const std::vector<MixerControls> &) noexcept;
   Plan &refreshStopped(std::vector<MixerProcessorInfo>); // Quiescent: update latency catalogue and dependent schedule together.

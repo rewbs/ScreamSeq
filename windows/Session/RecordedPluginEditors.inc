@@ -3,21 +3,11 @@
 // Vendor HWND restoration leases belong to the native plugin provider.
 bool PluginOperations::overlayRecordedRecovery(Project::ProjectState &copy)const {
   if(!recordedEditors_)return false;
-  auto archive=recordedGestureRecovery(recordedEditors_->take->review());
   // Repeated snapshots replace only this live take's archive, preserving any
   // earlier recovered take awaiting review. Preparing the value is fallible;
   // the caller owns an independent project copy throughout.
-  auto &archives=copy.preserved["screamseqPluginGestureRecovery"];
-  if(archives.is_null())archives=Json::array();
-  need(archives.is_array(),"Existing plugin gesture recovery archive is incompatible; retained");
-  auto found=std::find_if(archives.begin(),archives.end(),[&](const auto &old){
-    return old.is_object()&&old.value("take",Json())==archive.at("take")&&
-      old.value("revision",Json())==archive.at("revision");
-  });
-  if(found==archives.end()) {
-    need(archives.size()<64,"Plugin gesture recovery archive capacity reached; retained input needs review");
-    archives.push_back(std::move(archive));
-  } else *found=std::move(archive);
+  try {Tracker::overlayRecordedGestureRecovery(copy.preserved,recordedGestureRecovery(recordedEditors_->take->review()));}
+  catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   return true;
 }
 bool PluginOperations::ownsRecordedEditor(const std::string &identity)const noexcept {
@@ -190,9 +180,11 @@ void PluginOperations::captureRecordedRecoveryInput() {
   }
   throw Api::ApiError(-32002,"Recorded recovery input exceeded its fixed native boundary; take retained");
 }
-bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview) {
+bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<bool()> &restorePreview,bool restoreSavedState) {
   if(!recordedEditors_)return true;
   auto &capture=*recordedEditors_;
+  need(!restoreSavedState||(!discard&&capture.take->completed()),"Saved-state recovery requires an already-kept take");
+  const bool abandonLater=discard||restoreSavedState;
   need(restorePreview&&(capture.take->completed()||(discard&&capture.take->endTime())),
     "Commit the take, or stop and explicitly discard it, before releasing plugin ownership");
   const auto endInputBarriers=[&]{
@@ -209,9 +201,10 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
   // restoration lease has been acquired, new gestures must retain this owner
   // and their queue, rather than disappear during baseline restoration.
   const auto requireStoppedInput=[&]{for(const auto &[identity,cut]:capture.releaseCuts) {
+    if(restoreSavedState)need(!editors_.at(identity)->editorOpen(),"Close every recorded plugin editor before restoring saved state and abandoning later input");
     // Explicit stopped discard with a closed editor abandons its transient
     // input as well as the take. Normal completion never takes this escape.
-    if(discard&&!editors_.at(identity)->editorOpen())continue;
+    if(abandonLater&&!editors_.at(identity)->editorOpen())continue;
     const auto current=editors_.at(identity)->editBoundary(ScreamSeq::hostTime100ns());
     need(current&&current->source==cut.source&&current->fence.position==cut.fence.position,
       "Plugin received input after Stop; later input and recording protection retained");
@@ -248,7 +241,7 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
     }
     requireStoppedInput();
     const auto beforeRestore=recordedEditorCuts(capture);
-    for(const auto &item:prepared)if(!discard||item.open)
+    for(const auto &item:prepared)if(!abandonLater||item.open)
       need(beforeRestore.at(item.identity).fence.pending==0,"Drain the retained recording input before restoring its baseline");
     // Queue refusal leaves manual state/history and retained input untouched.
     if(!restorePreview()){endInputBarriers();return false;}
@@ -268,8 +261,9 @@ bool PluginOperations::releaseRecordedEditors(bool discard,const std::function<b
     // classify those as disposable restoration noise: retain the queue/take and
     // require explicit review/Close rather than blindly draining notifications.
     const auto requireUnchangedInput=[&]{
+      if(restoreSavedState)requireStoppedInput();
       const auto afterRestore=recordedEditorCuts(capture);
-      for(const auto &item:prepared)if(!discard||item.open) {
+      for(const auto &item:prepared)if(!abandonLater||item.open) {
         const auto &before=beforeRestore.at(item.identity),&after=afterRestore.at(item.identity);
         need(before.source==after.source&&before.fence.position==after.fence.position,
           "Plugin produced input during restoration; close its editor to discard or retain it for review");

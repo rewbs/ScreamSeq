@@ -10,6 +10,7 @@ struct PatternHostHooks {
   std::function<void(const Tracker::NativeSong &)> validateCandidate;
   std::function<std::function<void()>(const Tracker::NativeSong &,const Tracker::NativeSong &)> prepareNativeUpdate;
   std::function<std::function<void()>(const Tracker::NativeSong &)> prepareScratchPublication;
+  std::function<std::function<void()>(const Tracker::NativeSong &,const std::vector<Tracker::Edit> &)> preparePrecisePublication;
 };
 // Serial document owner only. The dispatcher owns expectedRevision. Mutations
 // use shared validation/history; native automation can publish a prepared live

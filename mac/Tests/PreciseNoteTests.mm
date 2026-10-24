@@ -26,6 +26,28 @@ static void configure(Document &doc,bool instrument) {
     n.preciseNotes={{p,t,1234,1,61,127},{p,t,2000,0,255,127},{p,t,8765,1,65,93},{p,t,32123,0,255,127},
       {p,t,65777,1,69,45},{p,t,170003,0,255,127}};});
 }
+static void liveSchedulePublicationTest() {
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u}) {
+    auto doc=Document::demo();configure(*doc,false);
+    auto before=doc->native(),next=before;
+    next.preciseNotes.push_back({next.patterns.at(0).id,next.tracks.at(1).id,2*65536+4321,1,67,95});
+    Renderer live(doc->snapshotData(),rate),reference(doc->snapshotData(),rate);
+    live.preparePreciseNotes(before);reference.preparePreciseNotes(next);
+    std::vector<float> actual(rate*2),expected(rate*2);
+    const auto render=[&](Renderer &r,std::vector<float> &output,unsigned start,unsigned end){
+      for(unsigned at=start;at<end;){const auto count=std::min(block,end-at);uint64_t a,f,l;
+        tracker_audit_begin();const auto received=r.render(output.data()+at*2,count);tracker_audit_end(&a,&f,&l);
+        check(received==count&&a+f+l==0&&!r.faulted(),"Live precise schedule touched allocator/lock or interrupted rendering");at+=count;}
+    };
+    render(live,actual,0,1000);
+    auto prepared=std::make_unique<PreciseNoteUpdate>(next,std::vector<Edit>{});
+    check(live.publishPreciseNoteUpdate(prepared)&&!prepared,"Prepared precise schedule did not transfer ownership on control thread");
+    render(live,actual,1000,rate);render(reference,expected,0,rate);
+    for(size_t i=0;i<actual.size();++i)check(std::abs(actual[i]-expected[i])<1e-6f,"Live precise schedule changed earlier voices, event timing or callback-partition PCM");
+    check(live.telemetry().frames==rate,"Precise schedule replacement restarted transport");
+  }
+  std::cout<<"PASS shared live precise schedule publication, PCM partitions and realtime audit\n";
+}
 static void voiceIsolationTest() {
   auto doc=Document::demo();configure(*doc,false);
   doc->transaction([](CSoundFile &s){s.ChnSettings[0].nPan=0;s.ChnSettings[1].nPan=256;
@@ -388,5 +410,5 @@ int main(int argc,char **argv){ trustFixtureArguments(argc, argv);@autoreleasepo
   check(fixtureBundle,"Open repeat velocity fixture");auto velocityMode=reinterpret_cast<void(*)(bool)>(dlsym(fixtureBundle,"ResonanceFixtureVelocityMode"));check(velocityMode,"Fixture velocity PCM mode");
   velocityMode(true);setFixtureAUVelocityMode(true);nativeRepeatTest(vst[1]);nativeRepeatTest(au[1]);velocityMode(false);setFixtureAUVelocityMode(false);
   cutCommandTest(vst[1]);cutCommandTest(au[1]);cutAndInstrumentAPITest(vst[1]);
-  voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
+  liveSchedulePublicationTest();voiceIsolationTest();forwardJumpTest();recordingTest();apiTest();offsetWorkflowTest();beatAndEffectTest();std::cout<<"PASS sample/AU/VST3 precise note timing, same-row releases, repeat, tempo/groove, callback partitions, timestamp capture, realtime audit, beat offsets, per-hit effects and project recall\n";return 0;
 }catch(const std::exception &e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}}

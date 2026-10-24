@@ -90,7 +90,7 @@
         const auto &catalog=typingCatalog(typingSample);
         const auto found=std::find_if(catalog.begin(),catalog.end(),[&](const auto &v){return v.at("id")==typingSoundId;});
         if(found!=catalog.end())label=(typingSample?"Sample ":"Instrument ")+std::to_string(typingSound)+" / "+found->value("name",std::string());
-        return {{"devices",midiDevices},{"settings",midiSettingsSnapshot()},
+        return {{"document",documentId},{"devices",midiDevices},{"settings",midiSettingsSnapshot()},
             {"target",{{"label",label},{"firstChannel",channel},{"availableChannels",view->channels-channel}}},
             {"recording",view->recording},{"playing",songPlaying()},{"busy",busy||midiBusy||recoveryRestoring},
             {"error",recordingError}};

@@ -91,7 +91,16 @@ HostedProjectPlayback::HostedProjectPlayback(Tracker::Document &document,const P
 }
 HostedProjectPlayback::~HostedProjectPlayback(){renderer_.reset();chain_.reset();}
 std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayback::prepareNativeUpdate(
-    const Tracker::NativeSong &before,const Tracker::NativeSong &next) {
+    const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells) {
+  if(before.preciseNotes!=next.preciseNotes||!cells.empty()) {
+    auto notesOnly=before;notesOnly.preciseNotes=next.preciseNotes;
+    if(notesOnly!=next||cells.size()>512)return {};
+    if(nativeUpdateGeneration_==UINT64_MAX)throw std::runtime_error("Live update generation exhausted");
+    auto prepared=std::make_unique<PreparedNativeUpdate>();
+    prepared->owner_=this;prepared->generation_=nativeUpdateGeneration_;
+    prepared->preciseNotes_=std::make_unique<Tracker::PreciseNoteUpdate>(next,cells);
+    return prepared;
+  }
   // These native fields also describe renderer-owned schedules or identities.
   // Updating them needs a separate prepared renderer contract, not a graph plan.
   if(before.patterns!=next.patterns || before.tracks!=next.tracks || before.samples!=next.samples ||
@@ -127,7 +136,7 @@ std::unique_ptr<HostedProjectPlayback::PreparedNativeUpdate> HostedProjectPlayba
 }
 bool HostedProjectPlayback::publishNativeUpdate(PreparedNativeUpdate &prepared) {
   if(prepared.owner_!=this || prepared.generation_!=nativeUpdateGeneration_ || prepared.published_)return false;
-  const bool accepted=prepared.columnMutes_?renderer_->publishColumnMuteUpdate(prepared.columnMutes_):prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
+  const bool accepted=prepared.preciseNotes_?renderer_->publishPreciseNoteUpdate(prepared.preciseNotes_):prepared.columnMutes_?renderer_->publishColumnMuteUpdate(prepared.columnMutes_):prepared.scratch_?renderer_->publishScratchUpdate(prepared.scratch_):prepared.controls_?chain_->publishGraphControls(std::move(prepared.controls_)):
     prepared.routing_&&chain_->publishMixerRouting(prepared.routing_);
   if(accepted){prepared.published_=true;++nativeUpdateGeneration_;}
   return accepted;
@@ -142,10 +151,13 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   return render(stereo,frames,RenderTime{});
 }
 bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTime &time) noexcept {
+  RenderStageEvidence::Sample evidence(renderEvidence_,frames,rate_,
+    renderEvidence_?renderer_->telemetry().frames:0,time.generation);
   // One audio writer owns all timeline publication. Invalid callbacks must also
   // clear the renderer origin: offline rendering cannot reuse a hardware time.
   renderer_->recordingTime(0,0);
   if(failed()) {
+    presentedFrames_.reset();
     // The final device notification still carries its original generation.
     // It must never revive the timing invalidated by a processor failure.
     timeline_->generation.store(0,std::memory_order_release);
@@ -160,36 +172,66 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     timeline_->firstHostTime.store(0);timeline_->endHostTime.store(0);
     if(previous)timeline_->discontinuities.fetch_add(1);
     timeline_->generation.store(time.generation,std::memory_order_release);
+    mappedStart_=mappedEnd_=0;
   }
+  // A proven hardware regression is terminal for an owned take, even when
+  // the device continues rendering untimed buffers in its quarantined epoch.
+  if(time.discontinuity)timeline_->absoluteFrames.invalidate();
   if(time.stopped){
+    presentedFrames_.reset(); // Never extrapolate the unconfirmed queued tail at Stop.
     const auto end=timeline_->endHostTime.load();
     if(time.hostTime&&end>time.hostTime)timeline_->endHostTime.store(time.hostTime,std::memory_order_release);
     timeline_->stopped.store(true,std::memory_order_release);
     timeline_->absoluteFrames.close(time.generation,time.hostTime);
     return true;
   }
+  const auto callbackFrame=renderer_->telemetry().frames;
+  auto frameTime=time;if(time.sampleRate!=rate_)frameTime.valid=false;
+  const auto presented=presentedFrames_.begin(frameTime,callbackFrame);
+  if(presentedFrames_.rejected())timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
+  if(captureFrames_&&presented)timeline_->absoluteFrames.publish(presented->start,presented->end,
+    presented->frame,presented->frames,presented->rate,presented->generation);
+  uint32_t callbackReceived=0;
   for(uint32_t at=0;at<frames;) {
+    evidence.enter(RenderStageEvidence::Stage::Preparation);
     if(offline_&&chain_->latencyChangePending()) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     const auto origin=time.offset(at),end=time.offset(at+count);
-    const bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;
+    bool mapped=time.valid&&time.generation&&time.sampleRate==rate_&&origin.valid&&end.valid;
+    // Forward WASAPI device/QPC readings can still project a nonmonotonic
+    // presentation interval. Do not submit that estimate to either musical
+    // clock, clamp it to "now", or invalidate previously valid take coverage.
+    // Render it as an explicit timing hole; later forward coverage keeps its
+    // actual frame origin. Genuine device regressions remain terminal above.
+    if(mapped&&(origin.hostTime<mappedStart_||end.hostTime<=mappedEnd_)) {
+      mapped=false;
+      if(!presentedFrames_.rejected())timeline_->unmappedCorrelations.fetch_add(1,std::memory_order_relaxed);
+    }
     renderer_->recordingTime(mapped?origin.hostTime:0,mapped?double(hostTicksPerSecond)/rate_:0);
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     const auto frame=renderer_->telemetry().frames;
+    evidence.enter(RenderStageEvidence::Stage::Engine);
     const auto received=renderer_->render(buffer,count);
+    callbackReceived+=received;
+    evidence.enter(RenderStageEvidence::Stage::Hosted);
     // A notification inside the last slice must also fail an offline render;
     // there may be no next callback in which to detect its stale compensation.
     if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
+    evidence.enter(RenderStageEvidence::Stage::Timing);
     if(mapped){
-      if(captureFrames_&&received) {
+      if(captureFrames_&&received&&!time.correlatedBoundary) {
         const auto musicEnd=time.offset(at+received);
-        if(musicEnd.valid)timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
+        if(musicEnd.valid&&musicEnd.hostTime>mappedEnd_)
+          timeline_->absoluteFrames.publish(origin.hostTime,musicEnd.hostTime,frame,received,rate_,time.generation);
       }
+      mappedStart_=origin.hostTime;mappedEnd_=end.hostTime;
       if(!timeline_->firstHostTime.load(std::memory_order_relaxed))timeline_->firstHostTime.store(origin.hostTime,std::memory_order_release);
       timeline_->endHostTime.store(end.hostTime,std::memory_order_release);
     }
     at+=count;
   }
+  presentedFrames_.rendered(callbackFrame,callbackReceived,frames);
+  evidence.completed();
   return true;
 }
 }

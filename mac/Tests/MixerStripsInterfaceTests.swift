@@ -69,8 +69,13 @@ extension InterfaceTests {
     answer("song:3")
     strip.width.doubleValue = 1.7; strip.slide(strip.width)
     replies.removeFirst()(["error": ["message": "Song changed; reload"]])
-    try require(strip.width.doubleValue == 1 && strip.fader.doubleValue == -6 && editor.status.stringValue.contains("Song changed"), "Rejected gesture restores saved controls without losing prior commits")
-    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["width"] as? Double == 1, "Rejected gesture previews the saved value so the engine matches the document")
+    try require(strip.width.doubleValue == 1.7 && strip.fader.doubleValue == -6 && editor.status.stringValue.contains("Song changed") && replies.isEmpty,
+      "Uncertain gesture keeps visible controls and prior commits without replaying a stale baseline")
+    editor.reload();try require(calls.last?.0 == "mixer.get", "Strip review reads current accepted music first")
+    var accepted=buses;accepted[0]["gainDB"] = -6.0;accepted[0]["pan"] = -0.5;accepted[0]["width"] = 1.7
+    replies.removeFirst()(["result":["revision":"song:3","data":["active":true,"buses":accepted]]])
+    try require(calls.last?.1["preview"] as? Bool == true && calls.last?.1["width"] as? Double == 1.7,
+      "An uncertain commit that succeeded is not rolled back by stale strip state")
     answer("song:3")
     editor.load(); let count = calls.count
     strip.pan.doubleValue = 0.9; strip.slide(strip.pan)

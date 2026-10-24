@@ -1,12 +1,13 @@
 #pragma once
 #include "NativeToolWindow.hpp"
+#include "PluginParameterField.hpp"
 #include <cwctype>
 
 namespace ScreamSeq {
 class AbsoluteAutomationWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
-  struct Context {std::string document,revision,plugin;std::optional<uint32_t> parameter;Json plugins;};
+  struct Context {std::string document,revision,plugin;std::optional<uint32_t> parameter;Json plugins;bool busy=false;};
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
   enum:int {plugin=4601,search,parameters,units,pointIndex,previous,next,time,value,setPoint,addPoint,deletePoint,clear,apply,reload,lastTouched,openRack,openPattern,fit,zoomOut,zoomIn,panLeft,panRight,close,fromRack,selectPoint,windowStart,windowEnd,setWindow,snap,undo,redo,clearAll,
@@ -16,6 +17,8 @@ private:
   Context captured_;std::string pluginID_;std::optional<uint32_t> parameter_;size_t slot_=0;
   Json all_=Json::array(),catalog_=Json::array(),points_=Json::array();std::vector<size_t> filtered_;
   bool setting_=false,pending_=false,dirty_=false,fields_=false,dragging_=false,dragDirty_=false;int selected_=-1,unit_=0,snap_=0,dragSelected_=-1;uint64_t generation_=0;Json dragBefore_;
+  bool dragMoved_=false;float dragX_=0,dragY_=0;
+  HWND pendingFocus_{};
   AutomationCanvas canvas_;struct Segment{AutomationCanvas::Point a,b;};std::vector<Segment> lines_;std::vector<size_t> handles_;
   void require(bool ok,const char *why)const{if(!ok)throw std::runtime_error(why);}
   bool draft()const{return dirty_||fields_;}
@@ -47,15 +50,31 @@ private:
       if(ordinal%stride==0||int(i)==selected_){handles_.push_back(i);canvas_.handles.push_back(p);}}
     flush();lines_.push_back({previous,{r.x+r.w,previous.y}});requestPaint();
   }
-  void fitCurve(){canvas_.start=0;canvas_.end=std::max(8.,points_.empty()?8.:points_.back().at("frame").get<double>()/48000+1)*256;canvas_.valueLow=0;canvas_.valueHigh=1;rebuild();}
+  void showRange(){set(windowStart,canvas_.start/256);set(windowEnd,canvas_.end/256);}
+  void fitCurve(){
+    double first=0,last=8;
+    if(!points_.empty()){
+      const auto begin=points_.front().at("frame").get<double>()/48000;
+      const auto end=points_.back().at("frame").get<double>()/48000;
+      const auto duration=end-begin,span=duration>0?std::max(1./48000,duration*1.1):1.;
+      first=std::max(0.,begin-(span-duration)/2);last=std::min(604801.,first+span);
+    }
+    canvas_.start=first*256;canvas_.end=last*256;canvas_.valueLow=0;canvas_.valueHigh=1;showRange();rebuild();
+  }
   bool displayControl(int id)const override{return id!=apply||automaticEditFailed_;}
   void queueLaneEdit(UINT delay=600){queueAutomaticEdit([this]{
-    if(pending_||dragging_){queueLaneEdit();return;}
+    // Admission is observed before submitting: keep this unsent intent while
+    // the serial owner is occupied. Never catch/replay an uncertain write.
+    if(pending_||dragging_||context_().busy){queueLaneEdit();return;}
     if(fields_&&selected_>=0)setFields();
     if(dirty_&&!fields_)commit();
   },delay);}
   void changed(){dirty_=true;++generation_;rebuild();status(L"Saving song automation…");if(!dragging_)queueLaneEdit();}
-  void showPoint(){setting_=true;set(pointIndex,selected_);if(selected_>=0&&size_t(selected_)<points_.size()){const auto &p=points_[size_t(selected_)];set(time,p.at("frame").get<double>()/(unit_==0?48000:1));set(value,p.at("value"));}else{set(time,L"0");set(value,target()?target()->at("value"):Json(0));}fields_=false;setting_=false;}
+  void showPoint(){setting_=true;set(pointIndex,selected_);double shownValue=target()?target()->at("value").get<double>():0;
+    if(selected_>=0&&size_t(selected_)<points_.size()){const auto &p=points_[size_t(selected_)];set(time,p.at("frame").get<double>()/(unit_==0?48000:1));shownValue=p.at("value").get<double>();}else set(time,L"0");
+    // Reuse the rack's round-tripping native-scalar formatting. This changes
+    // only generated text; the automatic-edit owner still protects raw input.
+    set(value,wide(PluginParameterField::editableText(shownValue,minimum(),maximum())));fields_=false;setting_=false;}
   void selectParameter(uint32_t id){parameter_=id;points_=Json::array();for(const auto &p:all_)if(p.at("slot")==slot_&&p.at("id")==id)points_.push_back({{"frame",p.at("frame")},{"value",p.at("value")}});std::sort(points_.begin(),points_.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});selected_=points_.empty()?-1:0;dirty_=fields_=false;++generation_;showPoint();fitCurve();const auto p=target();set(targetLabel,p?wide(p->at("name").get<std::string>())+L" · "+wide(p->value("unitLabel",std::string()))+L" · native values "+std::to_wstring(minimum())+L" to "+std::to_wstring(maximum()):L"No parameter");}
   void filter(){auto term=field(search);std::transform(term.begin(),term.end(),term.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});filtered_.clear();int selected=-1;SendMessageW(controls_.at(parameters),WM_SETREDRAW,FALSE,0);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_RESETCONTENT,0,0);for(size_t i=0;i<catalog_.size();++i){auto name=wide(catalog_[i].at("name").get<std::string>()),folded=name;std::transform(folded.begin(),folded.end(),folded.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});if(!term.empty()&&folded.find(term)==std::wstring::npos)continue;if(parameter_&&catalog_[i].at("id")==*parameter_)selected=int(filtered_.size());filtered_.push_back(i);ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));}ScreamSeq::NativeInputGate::present(controls_.at(parameters),LB_SETCURSEL,selected,0);SendMessageW(controls_.at(parameters),WM_SETREDRAW,TRUE,0);InvalidateRect(controls_.at(parameters),nullptr,FALSE);}
   void choices(){setting_=true;ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_RESETCONTENT,0,0);for(size_t i=0;i<captured_.plugins.size();++i){const auto name=wide(captured_.plugins[i].at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(plugin),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name.c_str()));if(captured_.plugins[i].at("instanceID")==pluginID_)choose(plugin,int(i));}setting_=false;filter();}
@@ -66,9 +85,15 @@ private:
     const auto token=generation_;pending_=true;layout();try{Json all=Json::array(),catalog=Json::array();size_t total=0;do{const auto page=request_("automation.get",{{"offset",all.size()},{"limit",4096}});require(page.at("sampleRate")==48000,"Unsupported absolute automation time base");total=page.at("total");require(total<=100000&&all.size()<=total,"Automation inventory exceeds its bound");for(const auto &p:page.at("points"))all.push_back(p);require(all.size()>=total||!page.at("points").empty(),"Automation page did not advance");require(c.document==context_().document&&c.revision==context_().revision&&generation_==token,"Song or draft changed while loading / editor retained");}while(all.size()<total);
       size_t slot=0;std::string id;if(chosen!=c.plugins.end()){slot=size_t(chosen-c.plugins.begin());id=chosen->at("instanceID");catalog=request_("plugin.parameters.get",{{"slot",slot}});}if(!follow&&id==pluginID_&&parameter)require(std::any_of(catalog.begin(),catalog.end(),[&](const auto &p){return p.at("id")==*parameter;}),"Captured parameter is unavailable / use From rack");const auto after=context_();require(after.document==c.document&&after.revision==c.revision&&generation_==token,"Song or draft changed while loading / editor retained");
       if(strictTarget)require(std::any_of(catalog.begin(),catalog.end(),[&](const auto &p){return p.at("id")==*parameter;}),"Captured source parameter is unavailable");
-      const bool same=c.document==captured_.document&&id==pluginID_&&parameter==parameter_;const auto oldStart=canvas_.start,oldEnd=canvas_.end,oldLow=canvas_.valueLow,oldHigh=canvas_.valueHigh;const auto oldSelected=selected_;
+      // Reordering a lane is not a request to select another point. Retain its
+      // frame identity; a removed/moved point leaves no selection on reload.
+      const bool same=c.document==captured_.document&&id==pluginID_&&parameter==parameter_;const auto oldStart=canvas_.start,oldEnd=canvas_.end,oldLow=canvas_.valueLow,oldHigh=canvas_.valueHigh;const auto oldFrame=selected_>=0&&size_t(selected_)<points_.size()?std::optional<uint64_t>(points_[size_t(selected_)].at("frame").get<uint64_t>()):std::nullopt;
+      // These fields describe an explicit Set view intent, not musical point
+      // edits. Preserve their raw text alongside the unchanged viewport when
+      // history or a point commit refreshes the same inspected parameter.
+      const auto oldStartText=field(windowStart),oldEndText=field(windowEnd);
       captured_=c;slot_=slot;pluginID_=id;all_=std::move(all);catalog_=std::move(catalog);parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &p){return parameter&&p.at("id")==*parameter;});selectParameter((p==catalog_.end()?catalog_.front():*p).at("id"));}else{points_=Json::array();selected_=-1;dirty_=fields_=false;++generation_;showPoint();fitCurve();set(targetLabel,L"Add a plugin to choose an automation target");}
-      if(same){canvas_.start=oldStart;canvas_.end=oldEnd;canvas_.valueLow=oldLow;canvas_.valueHigh=oldHigh;selected_=points_.empty()?-1:std::clamp(oldSelected,-1,int(points_.size()-1));showPoint();rebuild();}choices();pending_=false;status(L"Absolute song time / step values hold until the next point / Apply uses the shared Undo history");
+      if(same){canvas_.start=oldStart;canvas_.end=oldEnd;canvas_.valueLow=oldLow;canvas_.valueHigh=oldHigh;const auto retained=std::find_if(points_.begin(),points_.end(),[&](const auto &point){return oldFrame&&point.at("frame")==*oldFrame;});selected_=retained==points_.end()?-1:int(retained-points_.begin());showPoint();set(windowStart,oldStartText);set(windowEnd,oldEndText);rebuild();}choices();pending_=false;status(L"Absolute song time / step values hold until the next point / Edits save automatically with Undo");
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void replacePoint(Json point){require(writable(),"Choose a writable parameter");auto next=points_;if(selected_>=0)next.erase(next.begin()+selected_);require(next.size()<100000,"Automation exceeds 100000 points");auto it=std::lower_bound(next.begin(),next.end(),point.at("frame"),[](const auto &a,const auto &f){return a.at("frame")<f;});require(it==next.end()||it->at("frame")!=point.at("frame"),"Another point occupies this frame");const int selected=int(it-next.begin());next.insert(it,point);if(next!=points_){points_=std::move(next);selected_=selected;changed();}showPoint();}
@@ -77,28 +102,57 @@ private:
   void touch(){require(!draft(),"Finish or discard the draft before using another target");const auto t=request_("automation.target.get",Json::object()).at("target");require(!t.is_null()&&t.value("available",false),"No available last-touched parameter");load(true,t.at("plugin"),t.at("parameter").get<uint32_t>());}
   void action(int id,unsigned n)override{
     if(setting_)return;if(id==close){if(dragging_)cancelDrag();hide();return;}if(id==search&&n==EN_CHANGE){filter();return;}if((id==time||id==value)&&n==EN_CHANGE){fields_=true;++generation_;if(selected_>=0)queueLaneEdit();return;}if(pending_)return;
-    if(n==CBN_SELCHANGE){if(id==plugin){const auto wanted=selection(plugin);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(plugin,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard before changing plugin");}const int i=selection(plugin);try{if(i>=0)load(false,captured_.plugins.at(size_t(i)).at("instanceID"));}catch(...){choices();throw;}return;}if(id==units){if(fields_){choose(units,unit_);throw std::runtime_error("Set or discard point fields before changing time units");}unit_=std::clamp(selection(units),0,1);showPoint();return;}if(id==snap){snap_=std::clamp(selection(snap),0,3);return;}}
-    if(id==parameters&&n==LBN_SELCHANGE){if(draft()){filter();throw std::runtime_error("Finish or discard before changing parameter");}const auto i=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(i>=0&&size_t(i)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(i)]).at("id"));filter();}return;}if(n!=BN_CLICKED)return;
+    if(n==CBN_SELCHANGE){if(id==plugin){const auto wanted=selection(plugin);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(plugin,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard before changing plugin");}const int i=selection(plugin);try{if(i>=0)load(false,captured_.plugins.at(size_t(i)).at("instanceID"));}catch(...){choices();throw;}return;}if(id==units){const auto wanted=std::clamp(selection(units),0,1);try{flushAutomaticEdit();require(!fields_,"Set or discard point fields before changing time units");}catch(...){choose(units,unit_);throw;}unit_=wanted;choose(units,unit_);showPoint();return;}if(id==snap){snap_=std::clamp(selection(snap),0,3);return;}}
+    if(id==parameters&&n==LBN_SELCHANGE){
+      const auto i=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);
+      if(i<0||size_t(i)>=filtered_.size())return;
+      // Saving refreshes the catalogue/list. Retain the clicked stable ID, not
+      // its old filtered row, across that refresh and any pumped worker calls.
+      const auto wanted=catalog_.at(filtered_[size_t(i)]).at("id").get<uint32_t>();
+      try{flushAutomaticEdit();require(!draft(),"Finish or discard before changing parameter");requireCurrent();
+        require(std::any_of(catalog_.begin(),catalog_.end(),[&](const auto &p){return p.at("id")==wanted;}),"Selected parameter is no longer available");
+        selectParameter(wanted);filter();
+      }catch(...){filter();throw;}return;
+    }if(n!=BN_CLICKED)return;
+    if(id==fromRack||id==lastTouched||id==undo||id==redo||id==openRack||id==openPattern){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before continuing");}
     if(id==apply)commit();else if(id==reload)load(false);else if(id==fromRack)load(true);else if(id==lastTouched)touch();else if(id==setPoint)setFields();
     else if(id==openRack||id==openPattern){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_,id==openPattern);}
     else if(id==undo||id==redo){requireCurrent();require(!draft(),"Finish or discard before using Undo/Redo");const auto token=generation_;pending_=true;layout();try{request_(id==undo?"history.undo":"history.redo",{{"expectedRevision",captured_.revision},{"domain","plugins"}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed during history operation / draft retained");load(false);}catch(...){pending_=false;layout();throw;}}
     else if(id==clearAll){requireCurrent();require(!draft()&&!dragging_,"Finish or discard the current lane draft before clearing all recordings");const auto token=generation_;pending_=true;layout();try{request_("automation.recorded.clear",{{"expectedRevision",captured_.revision}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed while clearing recordings / newer draft retained");load(false);status(L"All recorded automation cleared / Undo restores every lane");}catch(...){pending_=false;layout();throw;}}
-    else if(id==addPoint){require(!fields_,"Set or discard the pending point first");selected_=-1;showPoint();SetFocus(controls_.at(time));}
-    else if(id==deletePoint||id==clear){require(!fields_,"Set or discard the pending point first");if(id==clear){if(!points_.empty()){points_=Json::array();selected_=-1;changed();}}else if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();}showPoint();}
-    else if(id==selectPoint||id==previous||id==next){require(!fields_,"Set or discard the pending point first");const auto index=id==selectPoint?number(pointIndex):selected_+(id==previous?-1:1);require(index>=0&&index<points_.size()&&index==std::floor(index),"Choose an existing point index");selected_=int(index);showPoint();const double p=position(points_[size_t(selected_)].at("frame"));if(p<canvas_.start||p>canvas_.end)canvas_.pan(p-(canvas_.start+canvas_.end)/2,604801);rebuild();}
+    else if(id==addPoint){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point first");selected_=-1;showPoint();SetFocus(controls_.at(time));}
+    else if(id==deletePoint||id==clear){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point first");if(id==clear){if(!points_.empty()){points_=Json::array();selected_=-1;changed();}}else if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();}showPoint();}
+    else if(id==selectPoint||id==previous||id==next){
+      // Saving can sort the edited point and repopulate its index field. Keep
+      // an explicitly requested index; relative navigation follows the newly
+      // sorted point. Never navigate past a rejected or uncertain raw draft.
+      const auto requested=id==selectPoint?number(pointIndex):0.;
+      flushAutomaticEdit();require(!draft(),"Finish or discard the pending point first");
+      const auto index=id==selectPoint?requested:selected_+(id==previous?-1:1);require(index>=0&&index<points_.size()&&index==std::floor(index),"Choose an existing point index");selected_=int(index);showPoint();const double p=position(points_[size_t(selected_)].at("frame"));if(p<canvas_.start||p>canvas_.end){canvas_.pan(p-(canvas_.start+canvas_.end)/2,604801);showRange();}rebuild();}
     else if(id==setWindow){const auto first=number(windowStart),last=number(windowEnd);require(first>=0&&last>first&&last<=604801,"Choose an ordered time range within the song automation limit");canvas_.start=first*256;canvas_.end=last*256;rebuild();}
-    else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)fitCurve();else if(id==zoomIn||id==zoomOut)canvas_.zoom(id==zoomIn?2:.5,604801);else canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),604801);rebuild();}
+    else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)fitCurve();else if(id==zoomIn||id==zoomOut)canvas_.zoom(id==zoomIn?2:.5,604801);else canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),604801);showRange();rebuild();}
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelected_;++generation_;showPoint();rebuild();ReleaseCapture();}
-  void mouse(UINT m,float x,float y,WPARAM)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_||fields_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
-    if(m==WM_LBUTTONDOWN&&hit.contains(x,y)){SetFocus(window_);const auto i=canvas_.hit(x,y);selected_=i<0?-1:int(handles_.at(size_t(i)));showPoint();if(selected_>=0&&writable()){dragBefore_=points_;dragDirty_=dirty_;dragSelected_=selected_;dragging_=true;SetCapture(window_);}rebuild();}
+  void mouse(UINT m,float x,float y,WPARAM w)override{if(m==WM_CAPTURECHANGED){cancelDrag();return;}if(m==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();if(completed&&dirty_)queueLaneEdit(1);return;}if(pending_)return;const auto r=canvas_.viewport;const WorkspaceRect hit{r.x-7,r.y-7,r.w+14,r.h+14};
+    if((m==WM_LBUTTONDOWN&&hit.contains(x,y))||(m==WM_LBUTTONDBLCLK&&r.contains(x,y))){
+      flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before editing the timeline");
+    }
+    if(fields_)return;
+    if(m==WM_LBUTTONDOWN&&hit.contains(x,y)){SetFocus(window_);const auto i=canvas_.hit(x,y);selected_=i<0?-1:int(handles_.at(size_t(i)));showPoint();if(selected_>=0&&writable()){dragBefore_=points_;dragDirty_=dirty_;dragSelected_=selected_;dragX_=x;dragY_=y;dragMoved_=false;dragging_=true;SetCapture(window_);}rebuild();}
     else if(m==WM_LBUTTONDBLCLK&&r.contains(x,y)&&writable()&&canvas_.hit(x,y)<0){selected_=-1;replacePoint({{"frame",frame(x)},{"value",native(y)}});}
-    else if(m==WM_MOUSEMOVE&&dragging_)replacePoint({{"frame",frame(x)},{"value",native(y)}});
+    else if(m==WM_MOUSEMOVE&&dragging_&&(w&MK_LBUTTON)){
+      // Capture can deliver mouse moves at the click position. Selecting a
+      // handle must preserve its exact frame/value instead of snapping to the
+      // rounded pointer pixel. Start editing only outside the native drag box.
+      const auto dpi=GetDpiForWindow(window_);const float scale=96.f/dpi;
+      if(!dragMoved_&&std::abs(x-dragX_)<GetSystemMetricsForDpi(SM_CXDRAG,dpi)*scale&&
+          std::abs(y-dragY_)<GetSystemMetricsForDpi(SM_CYDRAG,dpi)*scale)return;
+      dragMoved_=true;replacePoint({{"frame",frame(x)},{"value",native(y)}});
+    }
   }
-  bool wheel(UINT m,float x,float y,WPARAM w)override{if(!canvas_.viewport.contains(x,y)||dragging_)return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w)/120.;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;if(ctrl){if(shift)canvas_.zoomValues(std::pow(1.25,delta));else canvas_.zoom(std::pow(1.25,delta),604801);}else if(shift)canvas_.panValues(delta*(canvas_.valueHigh-canvas_.valueLow)*.1);else canvas_.pan(delta*(m==WM_MOUSEHWHEEL?1:-1)*(canvas_.end-canvas_.start)*.1,604801);rebuild();return true;}
+  bool wheel(UINT m,float x,float y,WPARAM w)override{if(!canvas_.viewport.contains(x,y)||dragging_)return false;const auto delta=GET_WHEEL_DELTA_WPARAM(w)/120.;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;if(ctrl){if(shift)canvas_.zoomValues(std::pow(1.25,delta));else canvas_.zoom(std::pow(1.25,delta),604801);}else if(shift)canvas_.panValues(delta*(canvas_.valueHigh-canvas_.valueLow)*.1);else canvas_.pan(delta*(m==WM_MOUSEHWHEEL?1:-1)*(canvas_.end-canvas_.start)*.1,604801);showRange();rebuild();return true;}
   bool key(WPARAM k,bool ctrl,bool shift)override{if(k==VK_ESCAPE){if(dragging_)cancelDrag();else if(fields_){++generation_;showPoint();}else hide();return true;}if(k==VK_F6){SetFocus(GetFocus()==window_?controls_.at(parameters):window_);requestPaint();return true;}if(ctrl&&k==VK_RETURN){action(apply,BN_CLICKED);return true;}if(ctrl&&k=='R'){action(reload,BN_CLICKED);return true;}if(k==VK_RETURN){const auto id=GetDlgCtrlID(GetFocus());if(id==time||id==value){action(setPoint,BN_CLICKED);return true;}if(id==pointIndex){action(selectPoint,BN_CLICKED);return true;}wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(!_wcsicmp(type,L"Button")){action(id,BN_CLICKED);return true;}}
-    if(GetFocus()!=window_||pending_)return false;if(ctrl){if(k=='Z'||k=='Y'){action(k=='Y'||shift?redo:undo,BN_CLICKED);return true;}if(k==VK_LEFT||k==VK_RIGHT){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}return false;}if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_ADD||k==VK_OEM_PLUS||k==VK_SUBTRACT||k==VK_OEM_MINUS){action(k==VK_ADD||k==VK_OEM_PLUS?zoomIn:zoomOut,BN_CLICKED);return true;}if(k==VK_INSERT){action(addPoint,BN_CLICKED);return true;}if(k==VK_DELETE){action(deletePoint,BN_CLICKED);return true;}if(fields_)return false;if(k==VK_TAB&&!points_.empty()){selected_=(selected_+(shift?-1:1)+int(points_.size()))%int(points_.size());showPoint();rebuild();return true;}if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["frame"]=uint64_t(std::clamp(p.at("frame").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.:480.),0.,double(maxFrame)));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(maximum()-minimum())*(shift?.001:.01),minimum(),maximum());replacePoint(p);return true;}return false;}
-  void layout()override{const auto [w,h]=size();place(heading,18,14,w-36,24);place(plugin,18,48,350,250);place(lastTouched,376,48,138,26);place(openRack,522,48,130,26);place(openPattern,660,48,150,26);place(fromRack,818,48,134,26);
+    if(GetFocus()!=window_||pending_)return false;if(ctrl){if(k=='Z'||k=='Y'){action(k=='Y'||shift?redo:undo,BN_CLICKED);return true;}if(k==VK_LEFT||k==VK_RIGHT){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}return false;}if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_ADD||k==VK_OEM_PLUS||k==VK_SUBTRACT||k==VK_OEM_MINUS){action(k==VK_ADD||k==VK_OEM_PLUS?zoomIn:zoomOut,BN_CLICKED);return true;}if(k==VK_INSERT){action(addPoint,BN_CLICKED);return true;}if(k==VK_DELETE||k==VK_BACK){action(deletePoint,BN_CLICKED);return true;}if(fields_)return false;if(k==VK_TAB&&!points_.empty()){selected_=(selected_+(shift?-1:1)+int(points_.size()))%int(points_.size());showPoint();rebuild();return true;}if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["frame"]=uint64_t(std::clamp(p.at("frame").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.:480.),0.,double(maxFrame)));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(maximum()-minimum())*(shift?.001:.01),minimum(),maximum());replacePoint(p);return true;}return false;}
+  void layout()override{const auto previousFocus=GetFocus();const auto [w,h]=size();place(heading,18,14,w-36,24);place(plugin,18,48,350,250);place(lastTouched,376,48,138,26);place(openRack,522,48,130,26);place(openPattern,660,48,150,26);place(fromRack,818,48,134,26);
     place(search,18,92,214,26);place(parameters,18,128,214,h-280);place(targetLabel,258,88,w-276,24);place(helpLabel,258,114,w-276,24);canvas_.viewport={258,166,w-280,h-392};rebuild();
     float x=258;for(auto [id,width]:std::initializer_list<std::pair<int,int>>{{panLeft,34},{zoomOut,34},{fit,44},{zoomIn,34},{panRight,34}}){place(id,x,h-212,width,26);x+=width+5;}place(rangeLabel,466,h-209,64,22);place(windowStart,530,h-212,90,26);place(windowEnd,628,h-212,90,26);place(setWindow,726,h-212,106,26);place(snap,840,h-212,144,220);
     place(indexLabel,258,h-169,138,18);place(pointIndex,258,h-150,88,26);place(selectPoint,354,h-150,84,26);place(previous,446,h-150,40,26);place(next,494,h-150,40,26);place(unitsLabel,552,h-169,140,18);place(units,552,h-150,160,180);
@@ -107,14 +161,62 @@ private:
     for(auto [id,c]:controls_)if(id>=plugin&&id<=clearAll)EnableWindow(c,!pending_||id==close||id==search);for(int id:{time,value,setPoint,addPoint,deletePoint,clear,apply,previous,next,selectPoint,openRack,openPattern})EnableWindow(controls_.at(id),!pending_&&parameter_.has_value());
     EnableWindow(controls_.at(clearAll),!pending_&&!draft()&&!dragging_&&!all_.empty());
     set(timeLabel,unit_==0?L"Time / seconds":L"Time / 48 kHz frames");set(helpLabel,std::to_wstring(points_.size())+L" points · step playback · double-click adds · F6 focuses canvas");
+    if(pending_&&previousFocus&&IsChild(window_,previousFocus)&&!GetFocus())pendingFocus_=previousFocus;
+    if(!pending_&&pendingFocus_){const auto restore=pendingFocus_;pendingFocus_=nullptr;
+      if(!GetFocus()&&IsWindowVisible(restore)&&IsWindowEnabled(restore)&&GetActiveWindow()==GetAncestor(window_,GA_ROOT))SetFocus(restore);}
   }
   void paint(RenderSurface &s)override{NativeToolWindow::paint(s);const auto colors=NativeControls::curveColors();const auto r=canvas_.viewport;s.fill(r.x,r.y,r.w,r.h,colors.background);s.clip(r.x,r.y,r.w,r.h);for(int i=0;i<=4;++i){const auto y=r.y+i*r.h/4;s.line(r.x,y,r.x+r.w,y,colors.grid);}const auto step=std::pow(10.,std::floor(std::log10(std::max(1./48000,(canvas_.end-canvas_.start)/256/8))));for(double t=std::ceil(canvas_.start/256/step)*step;t<=canvas_.end/256;t+=step){const auto x=canvas_.screen(t*256,0).x;s.line(x,r.y,x,r.y+r.h,colors.grid);}for(const auto &line:lines_)s.line(line.a.x,line.a.y,line.b.x,line.b.y,colors.curve,2);for(size_t i=0;i<canvas_.handles.size();++i){const auto p=canvas_.handles[i];paintCurveHandle(s,p.x,p.y,int(handles_[i])==selected_,colors,colors.curve);}s.unclip();paintCurveBorder(s,r,GetFocus()==window_,colors);wchar_t text[160]{};swprintf_s(text,L"Seconds %.4f–%.4f · native values %.4f–%.4f",canvas_.start/256,canvas_.end/256,minimum()+canvas_.valueLow*(maximum()-minimum()),minimum()+canvas_.valueHigh*(maximum()-minimum()));s.uiText(text,r.x,r.y-22,r.w,colors.text);}
 public:
+  void hide()override{
+    cancelDrag();
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_,"Wait for the pending song automation edit before closing");
+    NativeToolWindow::hide();
+  }
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&(dirty_||(fields_&&selected_>=0));}
+  void flushForProjectSave(){
+    // Finish only an already queued intent. Never retry a rejected or uncertain
+    // write merely because Save was pressed again; its raw draft stays visible.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending song automation edit before saving the project");
+  }
+  void flushForHistory(){
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_&&!draft(),"Finish or discard the pending song automation point before changing history");
+  }
+  void refreshAfterHistory(){
+    if(!visible()||pending_||dragging_||draft()||automaticEdit_)return;
+    const auto c=context_();if(c.busy||c.document!=captured_.document||current())return;
+    const auto focus=GetFocus();const auto id=GetDlgCtrlID(focus);
+    const bool textField=IsChild(window_,focus)&&(id==time||id==value||id==pointIndex||id==search||id==windowStart||id==windowEnd);
+    DWORD first=0,last=0;if(textField)SendMessageW(focus,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    try{load(false);}
+    catch(const std::exception &e){error(e);} // Keep the accepted history outcome.
+    if(textField&&GetFocus()==focus)SendMessageW(focus,EM_SETSEL,first,last);
+  }
   AbsoluteAutomationWindow(HWND owner,Request request,std::function<Context()> context,std::function<void(const std::string &,uint32_t,bool)> inspect):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)){
+    canvas_.positionQuantum=canvas_.minimumZoomSpan=256./48000;
     minimumWidth_=1040;minimumHeight_=700;create(L"ScreamSeq.AbsoluteAutomation",L"Song parameter automation",1140,760,true);for(int id:{plugin,units,snap})combo(id);for(int id:{search,pointIndex,time,value,windowStart,windowEnd})edit(id,L"",id==search?128:40);add(parameters,L"LISTBOX",L"Song automation parameters",LBS_NOTIFY|LBS_NOINTEGRALHEIGHT|WS_VSCROLL);
     for(auto title:{L"Seconds",L"48 kHz frames"})ScreamSeq::NativeInputGate::present(controls_.at(units),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title));choose(units,0);for(auto title:{L"Snap 10 ms",L"Snap 100 ms",L"Snap 1 second",L"Snap 1 frame"})ScreamSeq::NativeInputGate::present(controls_.at(snap),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(title));choose(snap,0);
     for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{previous,L"‹"},{next,L"›"},{setPoint,L"Set point"},{addPoint,L"Add point"},{deletePoint,L"Delete point"},{clear,L"Clear lane"},{clearAll,L"Clear all recordings"},{apply,L"Retry changes"},{reload,L"Reload"},{lastTouched,L"Use last touched"},{openRack,L"Show in rack"},{openPattern,L"Pattern curves…"},{fit,L"Fit"},{zoomOut,L"−"},{zoomIn,L"+"},{panLeft,L"‹"},{panRight,L"›"},{close,L"Close"},{fromRack,L"From rack"},{selectPoint,L"Select"},{setWindow,L"Set view"},{undo,L"Undo"},{redo,L"Redo"}})button(id,title);
-    for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Song parameter automation"},{targetLabel,L"Choose a plugin parameter"},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{indexLabel,L"Point index / zero based"},{rangeLabel,L"Seconds"},{unitsLabel,L"Time entry"},{statusLabel,L""},{helpLabel,L""}})label(id,title);set(windowStart,L"0");set(windowEnd,L"8");finish();
+    for(auto [id,title]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"Song parameter automation"},{targetLabel,L"Choose a plugin parameter"},{timeLabel,L"Time / seconds"},{valueLabel,L"Value / native units"},{indexLabel,L"Point index / zero based"},{rangeLabel,L"Seconds"},{unitsLabel,L"Time entry"},{statusLabel,L""},{helpLabel,L""}})label(id,title);
+    for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
+      {plugin,L"Recorded automation plugin"},{search,L"Search recorded parameters"},{parameters,L"Recorded automation parameters"},
+      {units,L"Point time units"},{snap,L"Recorded timeline snap"},{pointIndex,L"Point index, zero based"},
+      {time,L"Point time"},{value,L"Point value, native units"},{windowStart,L"Visible start, seconds"},{windowEnd,L"Visible end, seconds"},
+      {previous,L"Previous recorded point"},{next,L"Next recorded point"},{panLeft,L"Pan recorded timeline left"},
+      {panRight,L"Pan recorded timeline right"},{zoomOut,L"Zoom recorded timeline out"},{zoomIn,L"Zoom recorded timeline in"}})
+      accessibleName(id,name);
+    // Native Tab/Shift+Tab follow the visible groups, rather than grouping all
+    // combo boxes and edits by their construction order. Keep standard roles.
+    HWND previousControl=HWND_TOP;
+    for(const auto id:{plugin,lastTouched,openRack,openPattern,fromRack,search,parameters,
+        panLeft,zoomOut,fit,zoomIn,panRight,windowStart,windowEnd,setWindow,snap,
+        pointIndex,selectPoint,previous,next,units,time,value,setPoint,addPoint,deletePoint,
+        apply,reload,undo,redo,clear,clearAll,close}){
+      const auto control=controls_.at(id);SetWindowPos(control,previousControl,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);previousControl=control;
+    }
+    set(windowStart,L"0");set(windowEnd,L"8");finish();
   }
   void openAt(std::string plugin={},std::optional<uint32_t> parameter={}){const bool retain=visible()||draft();show();if(!retain)load(true,std::move(plugin),parameter);SetFocus(controls_.at(parameters));}
   std::optional<Tracker::DocumentDraft> documentDraft()const override {

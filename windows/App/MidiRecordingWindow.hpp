@@ -2,6 +2,7 @@
 #include "NativeToolWindow.hpp"
 #include "NativeReportList.hpp"
 #include <array>
+#include <optional>
 #include <set>
 
 namespace ScreamSeq {
@@ -20,7 +21,7 @@ private:
     events,finishTake,discardTake,refreshReview,showEvent,close,
     heading=7300,help,sourceLabel,connection,soundLabel,columnsLabel,quantumLabel,latencyLabel,
     latencyUnits,draftStatus,takeStatus,eventDetail,statusLabel};
-  enum class Operation {none,rescan,apply,finish,discard,review,navigate,sound};
+  enum class Operation {none,rescan,apply,arm,finish,discard,review,navigate,sound};
   inline static constexpr std::array<const wchar_t *,6> headings{L"Pattern",L"Track",L"Row + offset",L"Note",L"Sound",L"Velocity"};
   Callbacks callbacks_;
   Json state_=Json::object(),settings_=Json::object(),devices_=Json::array(),recording_=Json::object(),events_=Json::array();
@@ -30,12 +31,15 @@ private:
   uint64_t draftGeneration_=0;
   bool draftArmed_=false,dirty_=false,loaded_=false,setting_=false,externalBusy_=false,sourceRefresh_=false,resizingColumns_=false;
   Operation operation_=Operation::none;
+  struct PendingSettings {Operation operation;Json params;uint64_t generation;std::string document;};
+  std::optional<PendingSettings> pendingSettings_;
+  static constexpr UINT_PTR settingsTimer=11;
   HWND pendingFocus_{};
   int selected_=-1;
   HIMAGELIST rowHeight_{};
   std::array<float,6> columnWidths_{120,92,150,88,124,86};
   float listWidth_=-1;UINT columnDpi_=0;
-  inline static constexpr UINT_PTR notificationSubclass=0x4d525731,listSubclass=0x4d525732;
+  inline static constexpr UINT_PTR notificationSubclass=0x4d525731,listSubclass=0x4d525732,armSubclass=0x4d525733;
 
   static void require(bool condition,const char *message){if(!condition)throw std::runtime_error(message);}
   static std::string string(const Json &value,const char *key,size_t limit,bool optional=false){
@@ -77,7 +81,7 @@ private:
   bool unavailable()const{return operation_!=Operation::none||externalBusy_||state_.value("busy",false);}
   bool compatible()const{return recording_.value("compatible",false);}
   const char *operationName()const{
-    switch(operation_){case Operation::rescan:return "rescan";case Operation::apply:return "apply";case Operation::finish:return "finish";case Operation::discard:return "discard";case Operation::review:return "review";case Operation::navigate:return "navigate";case Operation::sound:return "sound";default:return "";}
+    switch(operation_){case Operation::rescan:return "rescan";case Operation::apply:return "apply";case Operation::arm:return "arm";case Operation::finish:return "finish";case Operation::discard:return "discard";case Operation::review:return "review";case Operation::navigate:return "navigate";case Operation::sound:return "sound";default:return "";}
   }
   static std::string eventKey(const Json &event){return Json::array({event.at("patternID"),event.at("track"),event.at("position"),event.at("note"),event.at("instrument"),event.at("velocity")}).dump();}
   std::wstring cell(size_t row,unsigned column)const{
@@ -119,13 +123,18 @@ private:
     const auto adjustment=number(latency);require(adjustment>=-500&&adjustment<=500,"Input adjustment must be -500 to +500 ms");
     return {{"expectedMidiRevision",baseRevision_},{"source",draftSource_},{"armed",draftArmed_},{"channelsCount",unsigned(count)},{"quantization",draftQuantum_},{"latencyMS",adjustment}};
   }
+  Json armParameters()const{
+    require(loaded_,"MIDI settings are not available yet");Json params;
+    for(const auto *key:{"source","armed","channelsCount","quantization","latencyMS"})params[key]=settings_.at(key);
+    params["armed"]=!settings_.at("armed").get<bool>();params["expectedMidiRevision"]=settings_.at("revision");return params;
+  }
   void textStatus(){
-    set(arm,draftArmed_?L"Record notes: on":L"Record notes: off");
+    set(arm,settings_.value("armed",false)?L"Disarm notes":L"Arm notes");
     const auto target=state_.value("target",Json::object());const auto label=string(target,"label",16384,true);set(sound,label.empty()?L"Choose a sound in the main window":wide(label));
     std::wstring connected=settings_.value("connected",false)?L"Connected":L"Disconnected";
     if(!settings_.value("source",std::string()).empty()&&!settings_.value("connected",false))connected=L"Selected source is unavailable. Rescan or choose another source.";
     const auto serviceError=string(settings_,"error",16384,true);if(!serviceError.empty())connected=wide(serviceError);set(connection,connected);
-    if(dirty_)set(draftStatus,baseRevision_!=settings_.value("revision",std::string())?L"Settings changed elsewhere. Use saved settings to reload.":L"Unapplied settings / Ctrl+Enter applies");
+    if(dirty_)set(draftStatus,baseRevision_!=settings_.value("revision",std::string())?L"Settings changed elsewhere. Use saved settings to reload.":L"Unapplied settings / Arm uses saved values / Ctrl+Enter applies");
     else if(target.contains("firstChannel")&&target["firstChannel"].is_number_integer()&&target.contains("availableChannels")&&target["availableChannels"].is_number_integer())set(draftStatus,L"Start: CH "+std::to_wstring(target["firstChannel"].get<unsigned>()+1)+L" / "+std::to_wstring(target["availableChannels"].get<unsigned>())+L" columns available. Captured on Play.");
     else set(draftStatus,L"Sound and starting column are captured when recording starts.");
     const auto count=recording_.value("eventCount",0u),missing=recording_.value("missingTime",0u),exhausted=recording_.value("exhaustedVoices",0u),overflow=recording_.value("overflow",0u);
@@ -135,14 +144,16 @@ private:
     if(!take().empty())summary+=L"\nMissing time "+std::to_wstring(missing)+L" / No free column "+std::to_wstring(exhausted)+L" / Overflow "+std::to_wstring(overflow);
     set(takeStatus,summary);
     if(!error_.empty())status_=wide(error_);
-    else if(operation_!=Operation::none)status_=operation_==Operation::finish?L"Stopping and finishing the captured take…":operation_==Operation::discard?L"Discarding the captured take…":operation_==Operation::rescan?L"Looking for MIDI sources…":operation_==Operation::review?L"Reading captured events…":operation_==Operation::apply?L"Applying MIDI settings…":L"Opening the selected target…";
+    else if(pendingSettings_)status_=pendingSettings_->operation==Operation::arm?L"Recording arm queued / waiting for the current operation":L"Settings queued / waiting for the current operation";
+    else if(operation_!=Operation::none)status_=operation_==Operation::finish?L"Stopping and finishing the captured take…":operation_==Operation::discard?L"Discarding the captured take…":operation_==Operation::rescan?L"Looking for MIDI sources…":operation_==Operation::review?L"Reading captured events…":operation_==Operation::apply?L"Applying MIDI settings…":operation_==Operation::arm?L"Changing recording arm state…":L"Opening the selected target…";
     else if(state_.contains("error")&&state_["error"].is_string()&&!state_["error"].get_ref<const std::string &>().empty())status_=wide(state_["error"]);
     else if(const auto reason=string(recording_,"inputError",512,true);!reason.empty())status_=wide(reason);
     else if(!take().empty()&&events_.size()!=count)status_=L"Refresh review for the latest events. Finish replaces notes in recorded rows as one Undo.";
     else status_=L"Finish replaces notes in recorded rows as one Undo. Enter shows a selected event; Escape closes this window.";
     set(statusLabel,status_);requestPaint();
   }
-  void changed(){if(setting_)return;dirty_=true;++draftGeneration_;error_.clear();textStatus();layout();}
+  void cancelPendingSettings(){pendingSettings_.reset();KillTimer(window_,settingsTimer);}
+  void changed(){if(setting_)return;cancelPendingSettings();dirty_=true;++draftGeneration_;error_.clear();textStatus();layout();}
   void installEvents(const Json &next,const std::string &identity){
     const bool same=identity==reviewTake_;const bool first=events_.empty();const auto oldKey=same?selectedKey_:std::string();const auto occurrence=selectedOccurrence_;
     const auto list=controls_.at(events);const auto oldTop=ListView_GetTopIndex(list);events_=next;reviewTake_=identity;selected_=-1;selectedKey_.clear();selectedOccurrence_=0;
@@ -155,17 +166,39 @@ private:
   }
   void begin(Operation operation){
     const bool navigation=operation==Operation::navigate||operation==Operation::sound;
+    // A keyboard Apply can arrive while the host pumps a short worker read.
+    // Retain that one intent, not a later draft or a new document's arm request.
+    if((operation==Operation::apply||operation==Operation::arm)&&operation_==Operation::none&&unavailable()&&(operation==Operation::arm?loaded_:dirty_)){
+      if(pendingSettings_&&pendingSettings_->operation!=operation){fail("Another MIDI settings command is queued; wait for its result before changing arm state");return;}
+      if(!pendingSettings_){pendingSettings_=PendingSettings{operation,operation==Operation::arm?armParameters():parameters(),draftGeneration_,state_.value("document",std::string())};SetTimer(window_,settingsTimer,25,nullptr);}
+      error_.clear();textStatus();return;
+    }
     if((unavailable()&&!navigation)||(navigation&&operation_==operation))return;
     if(operation==Operation::apply&&!dirty_)return;
+    if(operation==Operation::apply)cancelPendingSettings();
     const auto identity=take();if((operation==Operation::finish||operation==Operation::discard||operation==Operation::review)&&identity.empty())return;
     if(operation==Operation::finish&&!compatible())return;
     if(operation==Operation::navigate&&(selected_<0||reviewTake_!=identity))return;
     Json params;if(operation==Operation::apply)params=parameters();const auto generation=draftGeneration_;
+    const auto beforeSettings=settings_;
+    if(operation==Operation::arm){
+      params=armParameters();cancelPendingSettings();
+    }
     const auto event=operation==Operation::navigate?events_.at(size_t(selected_)):Json();
     const auto previous=operation_;const auto previousTake=actionTake_;operation_=operation;actionTake_=identity;error_.clear();textStatus();layout();
     try{
       if(operation==Operation::rescan){if(callbacks_.rescan)callbacks_.rescan();}
       else if(operation==Operation::apply){require(bool(callbacks_.applySettings),"MIDI settings are unavailable");auto applied=callbacks_.applySettings(std::move(params));validateSettings(applied);settings_=std::move(applied);state_["settings"]=settings_;loaded_=true;if(generation==draftGeneration_)savedFields();}
+      else if(operation==Operation::arm){
+        require(bool(callbacks_.applySettings),"MIDI settings are unavailable");auto applied=callbacks_.applySettings(std::move(params));validateSettings(applied);
+        // Arm operates on accepted settings, so even an unfinished '-' timing
+        // field cannot prevent Disarm or silently reconnect a draft source.
+        // Rebase only this acknowledged arm-only change, never a foreign edit.
+        bool armOnly=true;for(const auto *key:{"source","channelsCount","quantization","latencyMS"})if(applied.at(key)!=beforeSettings.at(key))armOnly=false;
+        settings_=std::move(applied);state_["settings"]=settings_;draftArmed_=settings_.at("armed").get<bool>();
+        if(!dirty_)savedFields();
+        else if(armOnly&&baseRevision_==beforeSettings.at("revision").get<std::string>())baseRevision_=settings_.at("revision").get<std::string>();
+      }
       else if(operation==Operation::finish){if(callbacks_.finish)callbacks_.finish(identity);}
       else if(operation==Operation::discard){if(callbacks_.discard)callbacks_.discard(identity);}
       else if(operation==Operation::review){if(callbacks_.review)callbacks_.review(identity);}
@@ -182,8 +215,10 @@ private:
     if((id==columns||id==latency)&&notification==EN_CHANGE){changed();return;}
     if(notification!=BN_CLICKED)return;
     if(id==close){hide();return;}if(id==showEvent){begin(Operation::navigate);return;}if(id==chooseSound){begin(Operation::sound);return;}
+    if(id==apply){begin(Operation::apply);return;}
+    if(id==arm){begin(Operation::arm);return;}
     if(unavailable())return;
-    if(id==arm){draftArmed_=!draftArmed_;changed();}else if(id==rescan)begin(Operation::rescan);else if(id==apply)begin(Operation::apply);else if(id==revert){savedFields();error_.clear();textStatus();layout();}
+    if(id==rescan)begin(Operation::rescan);else if(id==revert){cancelPendingSettings();savedFields();error_.clear();textStatus();layout();}
     else if(id==finishTake)begin(Operation::finish);else if(id==discardTake)begin(Operation::discard);else if(id==refreshReview)begin(Operation::review);
   }
   bool key(WPARAM value,bool ctrl,bool shift)override{
@@ -198,6 +233,17 @@ private:
     return false;
   }
   void error(const std::exception &error)override{fail(error.what());}
+  void timer(UINT_PTR id)override{
+    if(id!=settingsTimer||!pendingSettings_)return;
+    if(!visible()){cancelPendingSettings();return;}
+    if(unavailable())return;
+    const auto pending=std::move(*pendingSettings_);cancelPendingSettings();
+    if((pending.operation==Operation::apply&&!dirty_)||pending.generation!=draftGeneration_||pending.document!=state_.value("document",std::string())||
+        pending.params.at("expectedMidiRevision")!=settings_.value("revision",std::string())||pending.params!=(pending.operation==Operation::arm?armParameters():parameters())){
+      fail("Settings or document changed before the queued command; review the retained state and try again");return;
+    }
+    begin(pending.operation);
+  }
   void resizeColumns(){
     const auto list=controls_.at(events);RECT bounds{};GetClientRect(list,&bounds);const auto dpi=GetDpiForWindow(window_);const float width=bounds.right*96.f/dpi;
     if(width==listWidth_&&dpi==columnDpi_)return;if(listWidth_>0)columnWidths_[2]=std::max(130.f,columnWidths_[2]+width-listWidth_);else columnWidths_[2]=std::max(130.f,width-columnWidths_[0]-columnWidths_[1]-columnWidths_[3]-columnWidths_[4]-columnWidths_[5]);
@@ -239,6 +285,12 @@ private:
     if(self.ready_&&NativeReportList::themeMessage(m))NativeReportList::refresh(self.controls_.at(events));
     if(m==WM_NOTIFY&&self.ready_)try{return self.notify(reinterpret_cast<NMHDR *>(l));}catch(const std::exception &error){self.error(error);return 0;}return DefSubclassProc(h,m,w,l);
   }
+  static LRESULT CALLBACK armKeys(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR){
+    if(m==WM_NCDESTROY)RemoveWindowSubclass(h,armKeys,id);
+    // Holding a native activation key must not repeatedly arm/disarm a take.
+    if(m==WM_KEYDOWN&&(w==VK_SPACE||w==VK_RETURN)&&(l&(1LL<<30)))return 0;
+    return DefSubclassProc(h,m,w,l);
+  }
   static LRESULT CALLBACK listNotifications(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data){
     auto &self=*reinterpret_cast<MidiRecordingWindow *>(data);if(m==WM_NCDESTROY)RemoveWindowSubclass(h,listNotifications,id);
     if(m==WM_NOTIFY){const auto header=reinterpret_cast<NMHDR *>(l);if(header->hwndFrom==ListView_GetHeader(h)){
@@ -249,24 +301,26 @@ private:
 public:
   MidiRecordingWindow(HWND owner,Callbacks callbacks):NativeToolWindow(owner),callbacks_(std::move(callbacks)){
     minimumClientWidth_=720;minimumClientHeight_=570;INITCOMMONCONTROLSEX common{sizeof(common),ICC_LISTVIEW_CLASSES};require(InitCommonControlsEx(&common),"Cannot initialize take review");create(L"ScreamSeq.MidiRecording",L"MIDI & recording",860,700);
-    combo(source);button(rescan,L"Rescan");button(arm,L"Record notes: off");add(sound,L"EDIT",L"",ES_READONLY|ES_AUTOHSCROLL);button(chooseSound,L"Choose…");edit(columns,L"1",3);combo(quantum);edit(latency,L"0",20);button(apply,L"Apply settings");button(revert,L"Use saved settings");
+    combo(source);button(rescan,L"Rescan");button(arm,L"Arm notes");add(sound,L"EDIT",L"",ES_READONLY|ES_AUTOHSCROLL);button(chooseSound,L"Choose…");edit(columns,L"1",3);combo(quantum);edit(latency,L"0",20);button(apply,L"Apply settings");button(revert,L"Use saved settings");
     const auto list=add(events,WC_LISTVIEWW,L"Captured notes",LVS_REPORT|LVS_OWNERDATA|LVS_SINGLESEL|LVS_SHOWSELALWAYS|WS_BORDER);ListView_SetExtendedListViewStyle(list,LVS_EX_FULLROWSELECT|LVS_EX_DOUBLEBUFFER);
     if(const auto theme=LoadLibraryW(L"uxtheme.dll")){using Theme=HRESULT(WINAPI *)(HWND,LPCWSTR,LPCWSTR);if(const auto setTheme=reinterpret_cast<Theme>(GetProcAddress(theme,"SetWindowTheme")))setTheme(list,L"",L"");FreeLibrary(theme);}
     NativeReportList::install(list);
     for(int i=0;i<6;++i){LVCOLUMNW column{};column.mask=LVCF_TEXT|LVCF_WIDTH;column.pszText=const_cast<wchar_t *>(headings[size_t(i)]);column.cx=100;ListView_InsertColumn(list,i,&column);}
     button(finishTake,L"Finish take");button(discardTake,L"Discard take");button(refreshReview,L"Refresh review");button(showEvent,L"Show in note editor");button(close,L"Close");
     for(const auto &[id,text]:std::initializer_list<std::pair<int,const wchar_t *>>{{heading,L"MIDI / RECORDING"},{help,L"Record a performance into precise pattern notes. Positive input adjustment places notes earlier.\nNormal keyboard note entry and Live keys keep their current behavior."},{sourceLabel,L"MIDI source"},{connection,L"Disconnected"},{soundLabel,L"Sound"},{columnsLabel,L"Adjacent note columns"},{quantumLabel,L"Timing grid"},{latencyLabel,L"Input adjustment"},{latencyUnits,L"milliseconds"},{draftStatus,L""},{takeStatus,L""},{eventDetail,L""},{statusLabel,L""}})label(id,text);
-    require(SetWindowSubclass(window_,notifications,notificationSubclass,reinterpret_cast<DWORD_PTR>(this))&&SetWindowSubclass(list,listNotifications,listSubclass,reinterpret_cast<DWORD_PTR>(this)),"Cannot initialize take review notifications");
+    require(SetWindowSubclass(window_,notifications,notificationSubclass,reinterpret_cast<DWORD_PTR>(this))&&SetWindowSubclass(list,listNotifications,listSubclass,reinterpret_cast<DWORD_PTR>(this))&&SetWindowSubclass(controls_.at(arm),armKeys,armSubclass,0),"Cannot initialize take review notifications");
     setting_=true;quantumOptions();setting_=false;sourceOptions();finish();details();textStatus();
   }
   ~MidiRecordingWindow()override{if(window_)RemoveWindowSubclass(window_,notifications,notificationSubclass);if(controls_.contains(events)){RemoveWindowSubclass(controls_.at(events),listNotifications,listSubclass);ListView_SetImageList(controls_.at(events),nullptr,LVSIL_SMALL);}if(rowHeight_)ImageList_Destroy(rowHeight_);}
   void show(){const auto focus=GetFocus();const bool existing=visible();NativeToolWindow::show();if(existing&&owns(focus))SetFocus(focus);else SetFocus(controls_.at(source));}
+  void hide()override{cancelPendingSettings();NativeToolWindow::hide();}
   void update(const Json &snapshot){
     require(snapshot.is_object(),"Invalid MIDI recording snapshot");auto next=state_;for(auto it=snapshot.begin();it!=snapshot.end();++it)next[it.key()]=it.value();
     if(next.contains("settings"))validateSettings(next["settings"]);if(next.contains("devices"))validateDevices(next["devices"]);if(next.contains("recording"))validateRecording(next["recording"]);
     if(next.contains("busy"))require(next["busy"].is_boolean(),"Invalid recording request state");
     if(next.contains("target")){require(next["target"].is_object(),"Invalid recording target");string(next["target"],"label",16384,true);if(next["target"].contains("firstChannel"))integer(next["target"],"firstChannel",0,127);if(next["target"].contains("availableChannels"))integer(next["target"],"availableChannels",0,128);}
     string(next,"error",16384,true);
+    string(next,"document",200,true);
     if(operation_==Operation::review&&next.contains("recording")&&next["recording"].value("take",std::string())==actionTake_&&take()!=actionTake_)throw std::runtime_error("Recording take changed. Refresh its review again.");
     const bool devicesChanged=next.value("devices",devices_)!=devices_;const bool settingsChanged=!loaded_||!sameSettings(next.value("settings",settings_),settings_);const auto oldTake=take();state_=std::move(next);
     if(state_.contains("settings")){settings_=state_["settings"];loaded_=true;if(settingsChanged&&!dirty_&&operation_!=Operation::apply)savedFields();}
@@ -283,7 +337,7 @@ public:
   void setBusy(bool busy){externalBusy_=busy;textStatus();layout();}
   void fail(std::string error){error_=std::move(error);textStatus();layout();}
   bool retainedDraft()const{return dirty_;}
-  Json snapshot()const{return {{"visible",visible()},{"pending",unavailable()},{"operation",operationName()},{"actionTake",actionTake_},{"dirty",dirty_},{"settings",settings_},{"recording",recording_},{"reviewedCount",events_.size()},{"reviewTake",reviewTake_},{"selectedEvent",selected_>=0?events_[size_t(selected_)]:Json()},
+  Json snapshot()const{return {{"visible",visible()},{"pending",unavailable()||pendingSettings_.has_value()},{"queuedSettings",pendingSettings_.has_value()},{"operation",operationName()},{"actionTake",actionTake_},{"dirty",dirty_},{"settings",settings_},{"recording",recording_},{"reviewedCount",events_.size()},{"reviewTake",reviewTake_},{"selectedEvent",selected_>=0?events_[size_t(selected_)]:Json()},
     {"draft",{{"baseRevision",baseRevision_},{"source",draftSource_},{"armed",draftArmed_},{"channelsCountText",utf8(field(columns))},{"quantization",draftQuantum_},{"latencyMSText",utf8(field(latency))}}},{"status",utf8(status_)},{"error",error_}};}
 };
 }

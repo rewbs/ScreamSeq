@@ -36,7 +36,7 @@
         const auto &period=p.at("periodFrames");need(period==0||period==64||period==128||period==256||period==512,"Preferred period must be 0, 64, 128, 256 or 512 frames");
         if(p.contains("dryRun"))need(p.at("dryRun").is_boolean(),"dryRun must be boolean");
         const auto endpointText=wide(id);need(id.empty()||!endpointText.empty(),"Invalid endpoint ID");
-        ScreamSeq::WasapiDevice::Options options{endpointText,period.get<unsigned>()};
+        ScreamSeq::WasapiDevice::Options options{endpointText,period.get<unsigned>(),audioOptions.diagnosticThreadCycles};
         const bool same=audioOptions.endpoint==options.endpoint&&audioOptions.periodFrames==options.periodFrames;
         if(same&&!p.value("dryRun",false))return reply(audioSettingsSnapshot());
         const bool inspect=inspection;

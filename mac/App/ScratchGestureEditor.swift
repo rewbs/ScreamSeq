@@ -247,7 +247,7 @@ final class ScratchGestureEditor:NSView,NSTextFieldDelegate {
     guard let onRequest,!invalidated else{return};let document=documentGeneration
     onRequest(method,params){[weak self] response in
       guard let self,self.documentGeneration==document,!self.invalidated else{return}
-      if (response["error"] as? [String:Any])?["code"] as? Int == -32002,attempt<5 {DispatchQueue.main.asyncAfter(deadline:.now()+0.05*Double(attempt+1)){[weak self] in self?.request(method,params,attempt:attempt+1,completion:completion)}}
+      if NativeRequestOutcome.canRetryWrite(response),attempt<5 {DispatchQueue.main.asyncAfter(deadline:.now()+0.05*Double(attempt+1)){[weak self] in self?.request(method,params,attempt:attempt+1,completion:completion)}}
       else{completion(response)}
     }
   }

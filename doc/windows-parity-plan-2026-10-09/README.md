@@ -1,22 +1,75 @@
 # ScreamSeq Windows parity implementation plan
 
-**Current boundary (21 October Pacific / 22 October UTC):** shared main is
-`4e4862bcc575795bd736fe5edc126f8e873f1d24`, including the qualified navigation
-and flicker work. The separate Windows ARM64 navigation package is recorded in
-[navigation implementation](NAVIGATION-IMPLEMENTATION-2026-10-21.md).
-The plugin controls/recording batch is on draft PR #6. Candidate `bcd10d8a8`
-compiled but Windows startup failed on a duplicate menu command. The prepared
-menu and MIDI chooser corrections await the next coordinated checkpoint, no
-earlier than **2026-10-22 05:56:14 UTC**. Its Mac ARM build passed 134 native tests
-and 35 interface groups, then stopped on a stale API inventory baseline. The
-[reviewed inventory correction](PLUGIN-API-INVENTORY-2026-10-22.md) includes
-additional contract checks and a cheap pre-build gate. Consult the
-[current queue](CONTINUATION-QUEUE-2026-10-20.md) and
-[recording report](PLUGIN-GESTURE-RECOVERY-2026-10-21.md) for candidate identities
-and limits. Original input, Undo/persistence and
-fresh reciprocal fixtures remain release gates. **The overall 117-row parity
-inventory is not complete.** The dated entries below are historical checkpoints,
-not current absence claims or permission to repeat an old build.
+**Current boundary (24 October UTC):** shared main remains
+`0fe8f34008fe6517d7598affc31a4948a2ab14b8`, including the qualified navigation,
+flicker, plugin control/recording and command/scratch work from PR#6. Its tree
+matches077e. Both Mac architecture jobs passed. Windows CI retained12 distinct
+playback/startup failures; all12 passed unchanged locally on the exact downloaded
+CI executable with an available endpoint (ARM64 emulation, silent output).
+That bounded replay does not turn the original Windows CI result green.
+
+The latest separately packaged ARM64 candidate is
+`~/Downloads/ScreamSeq-Windows-ARM64-composing-9c5c6ebb1/ScreamSeq.exe` (SHA256
+`72f42e436329d9581f886ed1b7dbb70f604886a8b93dddd2577d679f7c88c801`). It contains
+immediate MIDI Arm and the requested precise timeline double-click, selected-hit
+Backspace, playback cursor and automatic live edits, including Save and Undo.
+Its foreground receipt confirms precise editing and a plugin take composing
+journey, with continuous playback. Floating keyboard continuity, temporal
+flicker and broad performance remain unqualified; its audio run had zero deadline
+overruns but one starvation indicator. See the
+[precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
+
+Later source improves recording review, original-time admission, recorded-point
+editing, Save/Close, connected automation handoffs and clean history refresh.
+PR7 remains separate from main. The preceding built candidate was
+`24788ebc34f35a94f24138d63a1df248cddff445`: one local ARM64 build passed seven
+native groups, five composing journeys and the short silent WASAPI audit.
+Fresh Computer Use confirmed frozen Activity retention, clean precise-note
+refresh after hidden Undo, gestures/Save caret, Float/Dock and native
+Record/slider/Stop/Keep with exact original inputs and continuous playback.
+These results close the two preceding retained-view failures within that scope.
+At 24 October 05:52 UTC Mac ARM and Intel CI had each passed134 CTests and their
+native interface/socket/device gates. Windows
+compiled and passed159 portable/worker and53 native groups, but its122-case app
+run failed25 assertions across22 tests, largely startup failures on a runner
+without a WASAPI endpoint. Its original failed result remains intact; the
+[current queue](CONTINUATION-QUEUE-2026-10-20.md) pins the downloaded evidence.
+
+The 634.541-second silent UI workload recorded45 deadline overruns, with no
+sustained presentation or realtime-audit pass. A separate180-second CPU-cycle
+diagnostic retained15 slow callbacks;14 used more cycles than their preceding
+equal-frame callback. This is diagnostic context, not stack attribution or
+release qualification. No newer production package or main merge has been made.
+
+The latest built source is `dbb15bfa07d6964cc06e0ca91ed422c784f2983b`, now on
+PR7. Its [full-song export checkpoint](AUDIO-EXPORT-2026-10-24.md) passed seven
+of nine native groups plus setup; the exact partition PCM check and new native
+Undo fixture failed. Diagnostic composing runs passed interleaved note/take
+history but found the API's five-second dispatch limit interrupting both export
+replies. Source corrections preserve exact project-byte Undo checks and extend
+only admitted export replies to the Mac socket's120-second ceiling, retaining
+bounded queued cancellation and active-close handling. They are unbuilt; the
+exact cross-partition failure remains mandatory with expanded diagnostics.
+Fresh Computer Use completed native WAV export and confirmed chooser-cancel
+caret, automatic velocity typing, text Backspace and Tab/Shift+Tab. Its separate
+300-second instrumented run had25 overruns;24 matched engine-stage wall time,
+which includes routing/instruments. No processor-stack attribution, clean
+performance qualification, package or merge follows. Next build is no earlier
+than07:01:52 UTC, after checking later starts and terminal preceding CI. Required
+Mac gates, full composing exports and sustained Windows audio remain open.
+
+Reciprocal preservation passed both Mac architectures and both Windows return
+legs on retained4d source; reuse only where the relevant codec/persistence inputs
+remain unchanged. These bounded passes do not close arbitrary vendor, device or
+full foreground parity. The [live parameter report](LIVE-PARAMETER-RELEASE-2026-10-23.md)
+and [current queue](CONTINUATION-QUEUE-2026-10-20.md) identify exact receipts and
+remaining gates. Resolve the newest frozen checkpoint; do not execute historical
+commands or package new source using an older executable.
+
+**The overall 117-row parity inventory is not complete.** Original input,
+Undo/persistence, native UI/audio and reciprocal fixtures remain gates. The dated
+entries below are historical checkpoints, not current absence claims or permission
+to repeat an old build. Consult the current queue before resuming implementation.
 
 **Historical executed checkpoint (20 October, `7fb99d0b2`):**
 [recorded take/graph qualification](TAKE-BATCH-QUALIFICATION-2026-10-20.md)

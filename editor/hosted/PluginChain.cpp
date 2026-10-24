@@ -9,6 +9,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <set>
+#include <type_traits>
 namespace Tracker {
 void validatePluginCapacity(const std::vector<PluginState> &states, size_t mixerBuses) {
   validatePluginAssignments(states);
@@ -127,6 +128,7 @@ bool PluginChain::previewParameters(std::span<const ParameterChange> changes) no
 bool PluginChain::enqueueParameterBatch(std::span<const ParameterChange> changes,bool preview) noexcept {
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
   if(changes.size()>queue_.size() || changes.size()>queue_.size()-(w-r) || failed_.load(std::memory_order_relaxed))return false;
+  if(!changes.empty()&&controlSerial_==UINT64_MAX)return false;
   for(const auto &change:changes)if(change.slot>=rack_.size() || !std::isfinite(change.value) || change.frame)return false;
   if(preview)for(const auto &change:changes) {
     const auto &catalog=rack_[change.slot]->parameters;
@@ -134,9 +136,11 @@ bool PluginChain::enqueueParameterBatch(std::span<const ParameterChange> changes
     if(parameter==catalog.end()||!parameter->writable||!std::isfinite(parameter->min)||!std::isfinite(parameter->max)||
         parameter->min>parameter->max||change.value<parameter->min||change.value>parameter->max)return false;
   }
+  const auto serial=changes.empty()?controlSerial_:++controlSerial_;
   for(size_t i=0;i<changes.size();++i) {
     const auto &change=changes[i];auto &entry=*rack_[change.slot];
-    queue_[(w+uint32_t(i))%queue_.size()]={change,i+1==changes.size(),false,entry.plugin.get(),entry.activity};
+    queue_[(w+uint32_t(i))%queue_.size()]={change,i+1==changes.size(),false,entry.plugin.get(),entry.activity,serial};
+    entry.lastQueuedControlSerial=serial;
     for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==change.id) {
       entry.previewed[n]=preview;
       if(!preview)entry.parameters[n].value=change.value;
@@ -159,20 +163,44 @@ bool PluginChain::cancelParameterPreviews(size_t slot,std::span<const uint32_t> 
   return cancelParameterPreviews(targets);
 }
 bool PluginChain::cancelParameterPreviews(std::span<const ParameterPreviewTarget> targets) {
-  if(targets.size()>queue_.size())return false;
+  return cancelParameterPreviewsTracked(targets).has_value();
+}
+std::optional<PluginChain::ParameterPreviewCancellation> PluginChain::cancelParameterPreviewsTracked(std::span<const ParameterPreviewTarget> targets) {
+  if(targets.size()>queue_.size())return std::nullopt;
+  ParameterPreviewCancellation receipt;receipt.owner_=this;
+  receipt.graphRevision_=graphControlRevision_;receipt.recordedRevision_=recordedRevision_;
+  receipt.providers_.reserve(std::min(targets.size(),rack_.size()));
   std::vector<ParameterChange> restore;restore.reserve(targets.size());
   std::set<std::pair<uint32_t,uint32_t>> seen;
   for(const auto &target:targets) {
-    if(target.slot>=rack_.size())return false;
+    if(target.slot>=rack_.size())return std::nullopt;
     const auto &entry=*rack_[target.slot];
     const auto p=std::find_if(entry.parameters.begin(),entry.parameters.end(),[&](const auto &p){return p.id==target.id;});
-    if(p==entry.parameters.end())return false;
+    if(p==entry.parameters.end())return std::nullopt;
+    if(std::none_of(receipt.providers_.begin(),receipt.providers_.end(),[&](const auto &provider){return provider.slot==target.slot;}))
+      receipt.providers_.push_back({target.slot,rack_[target.slot],entry.plugin,entry.preset,entry.plugin->editSource(),0});
     if(seen.emplace(target.slot,target.id).second&&entry.previewed[size_t(p-entry.parameters.begin())])
       restore.push_back({target.slot,target.id,p->value,0});
   }
   // All IDs, allocations and the full queue capacity are checked before the
   // existing atomic publisher clears any preview ownership or queues values.
-  return enqueueParameters(restore);
+  if(!enqueueParameters(restore))return std::nullopt;
+  receipt.serial_=controlSerial_;
+  for(auto &provider:receipt.providers_)provider.serial=provider.entry->lastQueuedControlSerial;
+  static_assert(std::is_nothrow_move_constructible_v<ParameterPreviewCancellation>);
+  return std::optional<ParameterPreviewCancellation>{std::move(receipt)};
+}
+PluginChain::PreviewCancellationState PluginChain::parameterPreviewCancellationState(const ParameterPreviewCancellation &receipt) const noexcept {
+  if(receipt.owner_!=this||receipt.serial_!=controlSerial_||receipt.graphRevision_!=graphControlRevision_||
+      receipt.recordedRevision_!=recordedRevision_||failed_.load(std::memory_order_acquire))return PreviewCancellationState::Invalid;
+  bool pending=false;
+  for(const auto &provider:receipt.providers_) {
+    if(provider.slot>=rack_.size()||rack_[provider.slot]!=provider.entry||provider.entry->plugin!=provider.plugin||
+        provider.entry->preset!=provider.preset||provider.plugin->editSource()!=provider.source)
+      return PreviewCancellationState::Invalid;
+    if(!provider.plugin->processedControl(provider.serial))pending=true;
+  }
+  return pending?PreviewCancellationState::Pending:PreviewCancellationState::Processed;
 }
 void PluginChain::beginRenderBlock() noexcept {observation_->listen.begin(position_);activity_->begin(position_);consumeMusicalPlan();applyPending();parameterBlockOpen_=true;}
 bool PluginChain::latencyChangePending() const noexcept {
@@ -544,6 +572,7 @@ void PluginChain::applyPending() noexcept {
     else if (!entry.plugin->appliedParameter(change.id,change.value,position_,{}))
       failed_ = true;
     entry.plugin->queuedManual(change.id,r);
+    entry.plugin->queuedControl(entry.serial);
     ++r;++n;
     if(recorded&&!recordedApplied&&r==recorded->parameterFence)adoptRecorded();
     // A timeline follows every complete manual batch preceding its publication,
@@ -554,30 +583,48 @@ void PluginChain::applyPending() noexcept {
 }
 std::vector<PluginState> PluginChain::states() {
   if(parameterBlockOpen_)throw std::logic_error("Finish the audio block before capturing plugin state");
+  while(read_.load()!=write_.load())applyPending();
+  std::vector<PluginState> out;out.reserve(rack_.size());
+  for(size_t slot=0;slot<rack_.size();++slot)out.push_back(state(slot));
+  return out;
+}
+PluginState PluginChain::state(size_t slot) {
+  if(parameterBlockOpen_)throw std::logic_error("Finish the audio block before capturing plugin state");
+  if(slot>=rack_.size())throw std::out_of_range("Plugin state target no longer exists");
   while (read_.load() != write_.load())
     applyPending();
-  std::vector<PluginState> out;
-  for(const auto &entry:rack_) {
-    auto state=entry->plugin->state();const auto &baseline=entry->baseline;
-    if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool value){return value;})) {
-      // Never reset the audible vendor just to save. Keep its other opaque
-      // settings, replacing only transient parameter values in a private copy.
-      NativePlugin accepted(state,sampleRate_,offline_);
-      for(size_t n=0;n<entry->parameters.size();++n)if(entry->previewed[n]) {
-        const auto &parameter=entry->parameters[n];
-        if(!accepted.parameter(parameter.id,parameter.value)) {
-          (void)accepted.state(); // Drain this private vendor's bounded queue.
-          if(!accepted.parameter(parameter.id,parameter.value))
-            throw std::runtime_error("Cannot capture accepted plugin values while previewing");
-        }
+  if(slot>=rack_.size())throw std::out_of_range("Plugin state target changed during pending publication");
+  const auto entry=rack_[slot]; // Vendor callbacks must not invalidate this owner.
+  auto state=entry->plugin->state();const auto &baseline=entry->baseline;
+  if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool value){return value;})) {
+    // Never reset the audible vendor just to save. Keep its other opaque
+    // settings, replacing only transient parameter values in a private copy.
+    NativePlugin accepted(state,sampleRate_,offline_);
+    for(size_t n=0;n<entry->parameters.size();++n)if(entry->previewed[n]) {
+      const auto &parameter=entry->parameters[n];
+      if(!accepted.parameter(parameter.id,parameter.value)) {
+        (void)accepted.state(); // Drain this private vendor's bounded queue.
+        if(!accepted.parameter(parameter.id,parameter.value))
+          throw std::runtime_error("Cannot capture accepted plugin values while previewing");
       }
-      state=accepted.state();
     }
-    state.bypass=entry->plugin->bypassed();state.instrument=baseline.instrument;state.midiChannel=baseline.midiChannel;state.aliases=baseline.aliases;
-    state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
-    out.push_back(std::move(state));
+    state=accepted.state();
   }
-  return out;
+  state.bypass=entry->plugin->bypassed();state.instrument=baseline.instrument;state.midiChannel=baseline.midiChannel;state.aliases=baseline.aliases;
+  state.auxiliaryInputs=baseline.auxiliaryInputs;state.auxiliaryOutputs=baseline.auxiliaryOutputs;
+  return state;
+}
+std::optional<NativePlugin::ProcessingState> PluginChain::processingState(size_t slot) const {
+  if(slot>=rack_.size())throw std::out_of_range("Processing-state target no longer exists");
+  const auto entry=rack_[slot];const auto plugin=entry->plugin;const auto preset=entry->preset;
+  const auto source=plugin->editSource();
+  const auto revision=recordedRevision_,graphRevision=graphControlRevision_;
+  const auto fence=write_.load(std::memory_order_acquire);
+  auto observed=plugin->processingState();
+  if(slot>=rack_.size()||rack_[slot]!=entry||entry->plugin!=plugin||entry->preset!=preset||plugin->editSource()!=source||
+     recordedRevision_!=revision||graphControlRevision_!=graphRevision||write_.load(std::memory_order_acquire)!=fence)
+    throw std::runtime_error("Rack or queued controls changed during processing-state observation");
+  return observed;
 }
 std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
   std::vector<PluginFailureEntry> result;
@@ -586,6 +633,72 @@ std::vector<PluginFailureEntry> PluginChain::failureDiagnostics() const {
     if(failure.reason)result.push_back({i,rack_[i]->baseline.instanceID,failure});
   }
   return result;
+}
+std::unique_ptr<PluginChain::StoppedRepair> PluginChain::prepareStoppedRepair(std::span<const PluginState> saved) {
+  if(parameterBlockOpen_)throw std::logic_error("Finish processing before stopped plugin repair");
+  if(saved.empty()||saved.size()>maximumNativePlugins)throw std::invalid_argument("Invalid stopped plugin repair group");
+  while(read_.load()!=write_.load())applyPending();
+  auto plan=std::make_unique<StoppedRepair>();plan->owner=this;plan->rack=rack_;
+  plan->graphRevision=graphControlRevision_;plan->recordedRevision=recordedRevision_;plan->parameterFence=write_.load();
+  constexpr size_t limit=256u*1024u*1024u;size_t bytes=sizeof(StoppedRepair);
+  const auto budget=[&](size_t amount){if(amount>limit-bytes)throw std::runtime_error("Stopped plugin repair exceeds the combined 256 MB storage budget");bytes+=amount;};
+  if(mixerTransition_){budget(mixerTransition_->stoppedStorageBytes());plan->routing=&mixerTransition_->controlPlan();}
+  budget(instrumentGeneratorStorage_);budget(sampleAdapterStorage_);
+  if(signalGraph_)budget(signalGraph_->storageBytes());if(sampleSignalGraph_)budget(sampleSignalGraph_->storageBytes());
+  // Conservative double-counting of shared graph/rack ownership is intentional:
+  // every old and prepared backend must fit before any native owner is changed.
+  graphControlPlans_.forEachRetained([&](const auto &p){budget(p.preparedStorage);});
+  if(compoundGraphControls_)budget(compoundGraphControls_->preparedStorage);
+  recordedPlans_.forEachRetained([&](const auto &p){budget(sizeof(p)+p.manualBaselines.capacity()*sizeof(ParameterChange));for(const auto &lane:p.lanes)budget(lane.timeline.storageBytes());});
+  for(const auto &entry:retainedRack_){budget(entry->plugin->preparedStorageBytes());if(entry->preset)budget(entry->preset->storageBytes());}
+  plan->items.reserve(saved.size());budget(plan->items.capacity()*sizeof(StoppedRepair::Item));budget(plan->rack.capacity()*sizeof(plan->rack[0]));
+  std::set<std::string> seen;
+  for(const auto &state:saved) {
+    if(state.instanceID.empty()||!seen.insert(state.instanceID).second)throw std::invalid_argument("Duplicate or missing stopped repair identity");
+    const auto found=std::find_if(plan->rack.begin(),plan->rack.end(),[&](const auto &p){return p->baseline.instanceID==state.instanceID;});
+    if(found==plan->rack.end())throw std::invalid_argument("Stopped repair target is not in the current rack");
+    auto entry=*found;
+    if(std::any_of(entry->previewed.begin(),entry->previewed.end(),[](bool v){return v;}))
+      throw std::runtime_error("Restore transient previews before stopped opaque repair");
+    StoppedRepair::Item item;item.entry=entry;item.before=entry->baseline;item.requested=state;
+    item.replacement=entry->plugin->prepareStoppedReplacement(state,offline_);item.accepted=item.replacement->canonical;
+    item.parameters=item.replacement->prepared->parameters();item.previewed.resize(item.parameters.size());
+    budget(item.replacement->prepared->preparedStorageBytes());budget(sizeof(NativePlugin::StoppedReplacement));
+    budget(item.before.state.capacity());budget(item.accepted.state.capacity());budget(item.requested.state.capacity());budget(item.replacement->canonical.state.capacity());
+    budget(item.parameters.capacity()*sizeof(PluginParameter));budget(item.previewed.capacity());
+    for(const auto &p:item.parameters){budget(p.name.capacity());budget(p.unitLabel.capacity());budget(p.choices.capacity()*sizeof(std::string));for(const auto &v:p.choices)budget(v.capacity());}
+    plan->items.push_back(std::move(item));
+  }
+  if(!acceptsStoppedRepair(*plan))throw std::runtime_error("Plugin rack changed during stopped repair preparation");
+  return plan;
+}
+bool PluginChain::acceptsStoppedRepair(const StoppedRepair &plan) const noexcept {
+  if(plan.owner!=this||plan.adopted||plan.items.empty())return false;
+  // Collection can retire vendor objects and execute native teardown. Perform
+  // it before the final rack/input guards, never between those guards and swap.
+  const auto *routing=mixerTransition_&&mixerTransition_->ready()?&mixerTransition_->controlPlan():nullptr;
+  if(mixerTransition_&&!routing)return false;
+  if(parameterBlockOpen_||rack_!=plan.rack||
+     read_.load()!=plan.parameterFence||write_.load()!=plan.parameterFence||
+     graphControlRevision_!=plan.graphRevision||recordedRevision_!=plan.recordedRevision||routing!=plan.routing)return false;
+  for(const auto &item:plan.items)if(!item.replacement||item.entry->baseline!=item.before||
+    std::any_of(item.entry->previewed.begin(),item.entry->previewed.end(),[](bool v){return v;})||
+    !item.entry->plugin->acceptsStoppedReplacement(*item.replacement))return false;
+  return true;
+}
+bool PluginChain::adoptStoppedRepair(StoppedRepair &plan) noexcept {
+  if(!acceptsStoppedRepair(plan))return false;
+  static_assert(std::is_nothrow_swappable_v<PluginState>);
+  // No vendor/native call, allocation or fallible publication after the complete
+  // group guard. Old notification queues remain in the caller-retained plans.
+  // Native adapters must handle their input cuts and lease cleanup explicitly.
+  for(auto &item:plan.items) {
+    item.entry->plugin->commitStoppedReplacement(*item.replacement);
+    std::swap(item.entry->baseline,item.accepted);
+    item.entry->parameters.swap(item.parameters);item.entry->previewed.swap(item.previewed);
+    for(const auto &p:item.entry->parameters)item.entry->plugin->observedBaseline(p.id,p.value);
+  }
+  plan.adopted=true;liveTailRevision_.fetch_add(1,std::memory_order_relaxed);return true;
 }
 std::vector<PluginParameter> PluginChain::parameters(size_t slot) const {
   if(slot>=rack_.size())return {};auto result=rack_[slot]->plugin->parameters();
@@ -682,11 +795,12 @@ bool PluginChain::popEdit(size_t slot,PluginEdit &event,PluginEditSource &source
   source={};
   if(slot>=rack_.size())return false;
   const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
-  if(w-r==queue_.size()){source=rack_[slot]->plugin->editSource();return false;}
+  if(w-r==queue_.size()||controlSerial_==UINT64_MAX){source=rack_[slot]->plugin->editSource();return false;}
   if(!rack_[slot]->plugin->popEdit(event,source))return false;
   const auto id=event.id;const auto value=event.value;
   auto &entry=*rack_[slot];
-  queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity};write_.store(w+1,std::memory_order_release);
+  const auto serial=++controlSerial_;entry.lastQueuedControlSerial=serial;
+  queue_[w%queue_.size()]={{uint32_t(slot),id,value,0},true,true,entry.plugin.get(),entry.activity,serial};write_.store(w+1,std::memory_order_release);
   for(size_t n=0;n<entry.parameters.size();++n)if(entry.parameters[n].id==id){entry.parameters[n].value=value;entry.previewed[n]=false;}
   for(auto &p:activity_->processors[entry.activity-1].parameters)if(p.id==id)p.value=value;
   return true;

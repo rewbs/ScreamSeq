@@ -1,6 +1,6 @@
 #include "PreciseNoteRuntime.hpp"
 namespace Tracker {
-PreciseNoteRuntime::PreciseNoteRuntime(const NativeSong &native) {
+PreciseNoteSchedule::PreciseNoteSchedule(const NativeSong &native) {
   for(const auto &note:native.preciseNotes) {
     const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==note.pattern;});
     const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==note.track;});
@@ -18,6 +18,7 @@ PreciseNoteRuntime::PreciseNoteRuntime(const NativeSong &native) {
     return std::tuple(a.position,a.channel,a.cutCommand?2:int(a.note<128))<std::tuple(b.position,b.channel,b.cutCommand?2:int(b.note<128));
   });
 }
+PreciseNoteRuntime::PreciseNoteRuntime(const NativeSong &native):initial_(native),schedule_(&initial_) {}
 uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) noexcept {
   using namespace OpenMPT;const auto &state=song.m_PlayState;
   if(!count||state.m_flags[SONG_PAUSED|SONG_FADINGSONG]||!state.m_nSamplesPerTick||!state.TicksOnRow())return count;
@@ -33,11 +34,12 @@ uint32_t PreciseNoteRuntime::prepare(OpenMPT::CSoundFile &song,uint32_t count) n
     row_=state.m_nRow;
     effectOverrides_.fill(false);
   }
-  if(restart) {
+  if(restart||changed_) {
     pattern_=state.m_nPattern;order_=state.m_nCurrentOrder;
-    auto found=patterns_.find(uint16_t(pattern_));events_=found==patterns_.end()?nullptr:&found->second;
+    auto found=schedule_->patterns_.find(uint16_t(pattern_));events_=found==schedule_->patterns_.end()?nullptr:&found->second;
     // A jump into the middle of a pattern must not replay historical notes.
     next_=events_?size_t(std::lower_bound(events_->begin(),events_->end(),position-1e-8,[](const auto &event,double p){return event.position<p;})-events_->begin()):0;
+    changed_=false;
   }
   previous_=position;
   if(!events_)return count;

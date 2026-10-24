@@ -189,6 +189,26 @@ void liveDragPresentation(Owner &owner){
   require(f.tool.snapshot().at("points")==original&&f.tool.snapshot().at("previewSamples").get<size_t>()>2&&f.writes.empty(),
     "Escape failed to restore visible unsaved curve without a write");
 }
+void localScratchInterpolation(){
+  ScreamSeq::AutomationDraftPreview preview;
+  static constexpr const char *names[]={"step","linear","smooth","exponential","logarithmic","step-next","exponential-reverse","logarithmic-reverse"};
+  for(size_t kind=0;kind<std::size(names);++kind){
+    Json points=Json::array({{{"position",0},{"value",.2},{"curve",names[kind]}},{{"position",65536},{"value",.8},{"curve","linear"}}});
+    const std::vector<Tracker::AutomationPoint> shared{{0,.2,Tracker::AutomationCurve(kind)},{65536,.8}};
+    const auto &values=preview.scratchValues(points,0,65536,2);
+    require(values.size()==257,"Scratch draft did not produce its bounded immediate curve");
+    for(const auto &sample:values)require(std::abs(sample[1].get<double>()-Tracker::scratchEnvelopeValue(shared,sample[0].get<double>()/65536,2))<1e-12,
+      "Scratch display differs from playback interpolation");
+  }
+  Json points=Json::array({{{"position",0},{"value",0},{"curve","scripted"},{"formula","beat/4"}},{{"position",65536},{"value",.5},{"curve","linear"}}});
+  require(preview.scratchValues(points,0,65536,2)[128][1]==.25,"Scratch preview used the pattern clock instead of cycle beats");
+  require(preview.scratchValues(points,0,65536,4)[128][1]==.5,"Scratch duration reused stale curve samples");
+  require(preview.scratchValues(points,16384,32768,2)[0][1]==.125,"Scratch zoom lost absolute cycle phase");
+  points[0]["formula"]="sin(";
+  require(preview.scratchValues(points,0,65536,2).empty(),"Invalid scratch formula was shown as a straight line");
+  points[0]["formula"]=".75";
+  require(preview.scratchValues(points,0,65536,2)[128][1]==.75,"Corrected scratch formula remained blank");
+}
 void hiddenInitialization(Owner &owner){
   SetActiveWindow(owner.window);SetFocus(owner.edit);const auto outside=GetFocus();
   {
@@ -265,7 +285,7 @@ int main(){try{
   ScreamSeq::Tests::runPrivateGui(L"ScreamSeqParameterDock",[]{
     // Like the existing retained-tool fixture, this uses intrinsic User32
     // controls; every real HWND is checked after creation below.
-    localDraftInterpolation();Owner owner;minimumBoundsAndActions(owner);pointDraftAndAxes(owner);formulaAndToolDrafts(owner);curveMappingAndKeyboard(owner);liveDragPresentation(owner);hiddenInitialization(owner);hiddenPreviewResume(owner);owner.close();
+    localDraftInterpolation();localScratchInterpolation();Owner owner;minimumBoundsAndActions(owner);pointDraftAndAxes(owner);formulaAndToolDrafts(owner);curveMappingAndKeyboard(owner);liveDragPresentation(owner);hiddenInitialization(owner);hiddenPreviewResume(owner);owner.close();
   });
   std::cout<<"PASS automation short dock: 440x300/310 page bounds, complete actions, unchanged floating minimum, retained HWND/text/caret/axes/context, curve hit mapping, guarded keyboard Apply, pure hidden initialization and ordinary preview timer resumption\n";return 0;
 }catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

@@ -186,10 +186,11 @@ class SessionAdapter {
     }
     if(host_ && host_->supportsDocumentOperations()) {
       for(const auto *m:{"pattern.commands","sample.get","sample.waveform.get","pattern.notes.get","pattern.timeline.get","document.timing.get","arrangement.get","arrangement.matrix","automation.formula.reference","automation.formula.preview"}) result["reads"].push_back(m);
-      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.exportModule","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
+      for(const auto *m:{"pattern.apply","history.undo","history.redo","document.patch","pattern.create","order.edit","sequence.select","document.save","document.exportModule","document.exportAudio","document.open","pattern.notes.set","document.timing.set","song.annotate","arrangement.copyBlock"}) {
         result["writes"].push_back(m);result["revisionGuards"][m]={"expectedRevision"};
       }
       result["musicalEditing"]=true;
+      result["audioExport"]="document.exportAudio renders the accepted selected sequence to 48 kHz stereo float32 WAV. Requires path, expectedRevision; overwrite and dryRun default false. Excludes temporary previews and uncommitted takes; preserves playback, history and native save state. Dry run validates snapshot/destination without loading processors. Use a 120-second client timeout for full-song export. A timeout after execution begins has uncertain outcome: inspect the destination before retrying; never automatically replay with a new request ID.";
       result["moduleExport"]="document.exportModule accepts path, overwrite and dryRun plus expectedRevision. It exports the current MOD/XM/S3M/IT/MPTM format with matching extension after loss checks, without changing the native save destination, dirty state, playback or history. Hosted/native layers, takes and retained unknown fields require a .screamseq project.";
       result["arrangementMatrix"]={{"maximumOrders",128},{"maximumChannels",32},{"defaultOrders",64},{"defaultChannels",16},{"densityBins",16},
         {"density","events = occupied tracker cells + precise on/off events + native FX records; notes = pitched tracker cells + precise onsets. trackerEvents, preciseEvents and nativeFxEvents expose the stored layers separately; counts and bins are uint32."},
@@ -202,6 +203,10 @@ class SessionAdapter {
       if(std::find(result["reads"].begin(),result["reads"].end(),"automation.recovery.get")!=result["reads"].end()) {
         result["revisionGuards"]["automation.recovery.get"]={"expectedRevision"};
         result["pluginRecording"]={{"schema","windows/Api/plugin-recording.schema.json"},{"clock","windows-qpc-100ns"},
+          {"timingInspection",{{"field","includeTiming"},{"maximumPage",16},{"readOnly",true}}},
+          {"savedStateRecovery",{{"method","automation.recording.commit"},{"field","restoreSavedState"},
+            {"requiresCompletedTake",true},{"requiresStoppedAudio",true},{"requiresClosedEditors",true},
+            {"semantics","Explicitly abandons later unsaved native input; kept automation, revision and Undo remain unchanged"}}},
           {"scope","Stable rack plugin identities; independent graph recipe copies are not recorded"},
           {"input","Original timestamp and native value; accepted input is never resent after preview failure"},
           {"recovery","Detached read-only archives preserve original clocks and identities; never rearm or replay them"}};
@@ -327,7 +332,7 @@ public:
     const bool independentRead=std::find(separateReads.begin(),separateReads.end(),method)!=separateReads.end();
     const bool independentWrite=std::find(separateWrites.begin(),separateWrites.end(),method)!=separateWrites.end();
     const bool docRead=host_ && host_->supportsDocumentOperations() && (std::find(reads.begin(),reads.end(),method)!=reads.end() || method=="pattern.commands" || method=="sample.get" || method=="sample.waveform.get" || method=="pattern.notes.get" || method=="pattern.timeline.get" || method=="document.timing.get" || method=="arrangement.get" || method=="arrangement.matrix" || method=="automation.formula.reference" || method=="automation.formula.preview");
-    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.exportModule" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
+    const bool docWrite=host_ && host_->supportsDocumentOperations() && (std::find(writes.begin(),writes.end(),method)!=writes.end() || method=="pattern.apply" || method=="history.undo" || method=="history.redo" || method=="document.patch" || method=="pattern.create" || method=="order.edit" || method=="sequence.select" || method=="document.save" || method=="document.exportModule" || method=="document.exportAudio" || method=="document.open" || method=="pattern.notes.set" || method=="document.timing.set" || method=="song.annotate" || method=="arrangement.copyBlock");
     const bool liveLoop=method=="transport.loop" && host_ && host_->supportsPlaybackLoop();
     const bool write=independentWrite || docWrite || method=="transport.play" || method=="transport.stop" || liveLoop || method=="context.set" || (workspace && method!="workspace.get" && method!="workspace.commands.get");
     std::string revision;

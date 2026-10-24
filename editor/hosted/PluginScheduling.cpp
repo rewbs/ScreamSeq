@@ -164,6 +164,10 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
   trimFrame_=position+frames;
   renderedThrough_ = position + frames;
   if(activity_)activity_->held(activityProcessor_,renderedThrough_-1,activityAudible_&&!bypassed());
+  if(frames&&renderedControlSerial_!=pendingControlSerial_) {
+    renderedControlSerial_=pendingControlSerial_;
+    publishedControlSerial_.store(renderedControlSerial_,std::memory_order_release);
+  }
   return true;
 }
 void NativePlugin::cancelScheduledParameter(uint32_t id) noexcept {

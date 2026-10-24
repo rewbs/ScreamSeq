@@ -361,7 +361,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       self.loadParameters()
     }
   }
-  func request(_ method: String, _ params: [String: Any], done: @escaping ([String: Any]) -> Void) {
+  func request(_ method: String, _ params: [String: Any], attempt: Int = 0, done: @escaping ([String: Any]) -> Void) {
     guard !loading, let onRequest else { return }
     loading = true
     let generation=requestGeneration
@@ -370,11 +370,11 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       guard let result = reply["result"] as? [String: Any] else {
         let error=reply["error"] as? [String:Any]
         self.status.stringValue = error?["message"] as? String ?? "Operation failed"
-        if error?["code"] as? Int == -32002 {
+        if NativeRequestOutcome.canRetryWrite(reply), attempt < 5 {
           self.loading=true
           DispatchQueue.main.asyncAfter(deadline:.now()+0.035){[weak self] in
             guard let self,self.requestGeneration==generation else{return}
-            self.loading=false;self.request(method,params,done:done)
+            self.loading=false;self.request(method,params,attempt:attempt+1,done:done)
           }
         }
         return

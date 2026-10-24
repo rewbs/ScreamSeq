@@ -1,5 +1,50 @@
 # Scratch inspector refresh after external history
 
+## Retained x64 CI replay, 22 October 14:43 UTC
+
+Windows run39793062072 / job119873630506 finished with a failed merged-app
+stage: 92 cases,15 failure records across12 unique playback-dependent cases,
+and2 skips. The158 portable/worker and49 native registrations passed, as did
+the separate four scratch cases,39 vendor-ownership cases and18 conformance
+checks. The retained runner report explicitly lists no audio endpoints and an
+inactive recording clock. This remains a failed CI job, not a waived assertion.
+
+The retained artifact12434490236 was downloaded once and safely extracted.
+ZIP SHA256: `505fb882c86e19de5bb9383207687f6176ca8126a60e629ea854ef5ee21a3d9d`.
+Its x64 PE executable SHA256 is
+`20636cb7562edcc7b3f047b2e7dca3ced144c8c383f95d0c7af42eb42914489d`.
+Archive, executable and build-receipt hashes match their recorded identity.
+Synthetic merge `b4ebe926f7918232d62abb509c815ac88f5710f9` and candidate96b
+have the identical source tree `8a20baa0fb183e6c03aa9ca5d24053128441ea1a`.
+
+One local replay used this unchanged CI executable, exact96b test source,
+silent WASAPI and a never-switched private desktop. All12 affected methods
+passed in36.817seconds in the original order, including the plugin recording
+Keep/history/Redo/reopen/discard case that failed twice on the older1fb binary.
+No assertion, timeout or test ordering changed. The process suite exited0 and
+the executable hash remained unchanged. Receipts, original CI log/device report
+and replay log are in `scratch-refresh/ci/windows-x64/` under the existing
+`bin/mac-gesture-20261022/` evidence root. This is a successful bounded check of
+the new candidate under Windows ARM64 x64 emulation, not proof of native x64
+hardware, foreground input, sustained audio timing or absence of all races.
+The earlier failures remain retained; no additional build was performed.
+
+Mac ARM job119873630766 and Intel job119873630187 were both terminal success
+when rechecked through GitHub's API before15:01:30UTC. Their logs retain model,
+interface, socket, vendor, library and conformance results. Both have134 native
+model/host registrations and the full interface harness. This qualifies the96b
+Mac inputs, not the subsequent unbuilt Mac take-adapter changes on the backup
+branch. No Mac/shared/engine input differs between96b and the Windows077e freeze.
+
+Retained-only workflow39800910382 was accepted at15:01:31UTC for both Mac
+architectures. It reuses app run39793062128 and the actual Windows fixture output
+from run39793062072, including edited opaque metadata, composing history and
+envelope-bank outputs. Its nonempty retained-app selector skips build jobs.
+The request and run identity are in `retained-exchange-96b/dispatch.json` under
+the existing evidence root. It was queued at the latest observation; this is not
+a passing reciprocal result. The return Mac-to-Windows leg remains required.
+No recurring work was created and no build was triggered by this dispatch.
+
 ## Foreground diagnosis and status correction, 22 October 14:16–14:22 UTC
 
 The unchanged96b candidate passed all20 independently selected app cases,

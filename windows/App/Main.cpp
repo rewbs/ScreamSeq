@@ -16,6 +16,7 @@
 #include "WorkspaceLayoutWindow.hpp"
 #include "CommandPalette.hpp"
 #include "NativeContextMenu.hpp"
+#include "NativeTextSearch.hpp"
 #include "NativeMenuBar.hpp"
 #include "NativePatternAccessibility.hpp"
 #include "WorkspaceShortcuts.hpp"
@@ -115,8 +116,8 @@ constexpr int mixingGraphPanelCommand=643,mixingGraphFloatCommand=644,editorMixi
     navigationAutomationCommand=652,navigationWindowsCommand=653,navigationLayoutsCommand=654;
 constexpr int navigationEffectsCommand=655,navigationRecipesCommand=656,
     floatInstrumentCommand=657,floatAutomationCommand=658,floatNotesCommand=659,floatCurveCommand=660,
-    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662;
-static_assert(contextActionLast<700&&pluginRecoveryReviewCommand<700,"Application commands must not overlap effect field controls");
+    parameterRecordingCommand=661,pluginRecoveryReviewCommand=662,patternHeaderMenuCommand=663,exportAudioCommand=664;
+static_assert(contextActionLast<700&&patternHeaderMenuCommand<700,"Application commands must not overlap effect field controls");
 constexpr int copyFocusedCommand=540,pasteFocusedCommand=541,cutFocusedCommand=542,
     deleteFocusedCommand=543,selectAllFocusedCommand=544,togglePlaybackCommand=545,redoAlternateCommand=546,reloadShortcutsCommand=547,recoveryCommand=548,
     midiRecordingCommand=549,midiArmCommand=550,recordingFinishCommand=551,recordingDiscardCommand=552,
@@ -256,6 +257,10 @@ public:
     ScreamSeq::HostedProjectPlayback *preparedPlayback=nullptr; // Worker-owned, borrowed only until the next prepare.
 	Tracker::Renderer *renderer=nullptr;
 	ScreamSeq::WasapiDevice device;
+    ScreamSeq::RenderStageEvidence renderStageEvidence;
+    static uint64_t renderProbeTicks() noexcept {
+        LARGE_INTEGER value{};return QueryPerformanceCounter(&value)?uint64_t(value.QuadPart):0;
+    }
 	bool inspection = false, follow = true;
     bool silentOutput=false; // Explicit diagnostic mode; DSP still runs in full.
     bool frameRequested=true;
@@ -303,6 +308,7 @@ public:
             const auto timeline=preparedPlayback->recordingTimeline();
             const auto failure=timeline->absoluteFrames.failureDetails();
             result.transport["recordingClock"]["frameTimeline"]={{"generation",timeline->absoluteFrames.generation()},
+                {"unmappedCorrelations",timeline->unmappedCorrelations.load()},
                 {"stopped",timeline->absoluteFrames.stopped()},{"failure",Tracker::RecordingFrameTimeline::failureName(failure.reason)},
                 {"start",std::to_string(failure.start)},{"previousStart",std::to_string(failure.previousStart)},
                 {"end",std::to_string(failure.end)},{"previousEnd",std::to_string(failure.previousEnd)},
@@ -639,7 +645,12 @@ public:
         try {
             if(parameterControlDelivery.pending())controller->service();
             parameterControlDelivery.collect();
-            if(parameterControlDelivery.needsReview())status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+            if(parameterControlDelivery.needsReview()) {
+                status=parameterControlDelivery.lost()?L"Parameter input was lost / take review required":L"Parameter input needs review / original values and timestamps retained";
+                const auto reason=parameterControlDelivery.reviewMessage();
+                for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())
+                    editor->recordingNeedsReview(parameterTakeDocument,reason);
+            }
             if(!parameterControlDelivery.pending())KillTimer(window,11);
         }catch(const std::exception &e){status=wide(e.what());}
     }
@@ -671,7 +682,8 @@ public:
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&app.parameterControlDelivery.pending())
                 throw ScreamSeq::Api::ApiError(-32002,"Wait for original parameter input delivery before finishing the take",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             if(method=="automation.recording.commit"&&app.parameterControlDelivery.needsReview()&&
-                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>()))
+                !(params.contains("acknowledgeLoss")&&params.at("acknowledgeLoss").is_boolean()&&params.at("acknowledgeLoss").get<bool>())&&
+                !(params.contains("restoreSavedState")&&params.at("restoreSavedState").is_boolean()&&params.at("restoreSavedState").get<bool>()))
                 throw ScreamSeq::Api::ApiError(-32002,"Review original refused or uncertain input and explicitly acknowledge loss before keeping accepted points",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
             // Freeze raw native fields through worker admission, baseline
             // restoration and readback. Release musical keys before filtering
@@ -740,15 +752,24 @@ public:
             parameterTakeState=result;parameterTakeDocument=documentId;parameterControlDelivery.collect();
             if((method=="automation.recording.commit"||method=="automation.recording.discard")&&!result.at("retained").get<bool>()){
                 parameterControlDelivery.release(documentId,result.at("take").get<std::string>());pluginDetailsRevision.clear();
-                if(status==L"Parameter input was lost / take review required"||
-                   status==L"Parameter input needs review / original values and timestamps retained")
-                    status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
+                // The confirmed lifecycle action owns this feedback, regardless
+                // of which native editor supplied input. Params and vendor
+                // editors need not have set the dock's earlier status string.
+                status=method=="automation.recording.commit"?L"Plugin automation take kept":L"Plugin automation take discarded";
                 for(const auto &[id,editor]:graphPluginParameters)if(editor&&!editor->retired())editor->takeFinished();
             }
+            if(method=="automation.recording.start"&&result.value("capturing",false))
+                status=L"Recording original parameter input / Stop the take to review";
+            if(method=="automation.recording.stop"&&result.value("retained",false)&&!result.value("capturing",false))
+                status=L"Plugin automation take stopped / Keep or Discard to finish";
             if(parameterRecordingWindow&&!parameterRecordingWindow->retired())
                 parameterRecordingWindow->observeBoundary(documentId,method,result);
         }
         refreshDocument();
+        if((method=="history.undo"||method=="history.redo")&&parameterAutomationWindow)
+            parameterAutomationWindow->refreshAfterHistory();
+        if((method=="history.undo"||method=="history.redo")&&absoluteAutomationWindow)
+            absoluteAutomationWindow->refreshAfterHistory();
         if(method=="document.save"&&result.value("written",false))clearRecoveryAfterSave();
         // A dropped vendor editor never blocks the operation; say what happened.
         if(result.is_object()&&result.contains("pluginEditorWarning")&&result.at("pluginEditorWarning").is_string()) {
@@ -864,6 +885,15 @@ public:
             auto generation=stopGeneration;
 			preparedPlayback=await(controller->prepare(lastRate,settings,playbackLoop,false,audition));renderer=&preparedPlayback->renderer();
             if(generation!=stopGeneration) throw ScreamSeq::Api::ApiError(-32003,"Playback preparation cancelled by Stop");
+            // Extra stage clocks belong only to the explicit profiling run.
+            // Reset/attach before starting the device; no live observer races.
+            if(audioOptions.diagnosticThreadCycles) {
+                LARGE_INTEGER clockFrequency{};
+                if(!QueryPerformanceFrequency(&clockFrequency)||
+                   !renderStageEvidence.reset(renderProbeTicks,uint64_t(clockFrequency.QuadPart)))
+                    throw std::runtime_error("Cannot initialize render-stage diagnostic clock");
+                preparedPlayback->renderEvidence(&renderStageEvidence);
+            }
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
             auditionOnly=audition;
 			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();}
@@ -1016,15 +1046,15 @@ public:
         else parameterActivityWindow->openAt(std::move(plugin),parameter);
     }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
-        if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter,bool pattern){
-            if(pattern){openParameterAutomation(plugin,parameter);return;}
+        if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins"),busy||(recoveryRestoring&&!departureRefreshing)};},[this](const auto &plugin,uint32_t parameter,bool pattern){
+            if(pattern){openParameterAutomation(plugin,parameter,true);return;}
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("Captured plugin is unavailable");selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         });
         absoluteAutomationWindow->openAt(std::move(plugin),parameter);
     }
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> parameterAutomationWindow;
     std::unique_ptr<ScreamSeq::ParameterAutomationWindow> makeParameterAutomationWindow(std::shared_ptr<bool> preparing={}){
-        auto editor=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins")};},[this](const auto &plugin,uint32_t parameter){
+        auto editor=std::make_unique<ScreamSeq::ParameterAutomationWindow>(window,[this,preparing](const auto &method,const auto &p){return preparing&&*preparing?workspacePreparationRead(method,p):documentOperation(method,p);},[this]{return ScreamSeq::ParameterAutomationWindow::Cursor{documentId,view->session.revision,patternIndex,view->session.document.at("patterns"),view->session.document.at("nativePlugins"),busy||(recoveryRestoring&&!departureRefreshing)};},[this](const auto &plugin,uint32_t parameter){
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("The captured plugin is unavailable");
             selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         },[this](const auto &plugin,uint32_t parameter){openAbsoluteAutomation(plugin,parameter);});
@@ -1115,6 +1145,7 @@ public:
         if(device.running() && preparedPlayback && preparedPlayback->failed()) {stop();status=L"Playback stopped: audio processor reported a fault";}
 		auto begin = ScreamSeq::ticks();
 		auto playback = renderer ? renderer->telemetry() : Tracker::Telemetry{};
+        if(preciseNoteWindow)preciseNoteWindow->playback(documentId,playback.pattern,playback.patternPosition,device.running()&&!auditionOnly);
         if((instrumentEnvelopeWindow&&instrumentEnvelopeWindow->visible())||(sampleDetailWindow&&sampleDetailWindow->visible())) {
             const auto voices=device.running()&&renderer?renderer->voicePositions():std::vector<Tracker::VoicePosition>{};
             if(instrumentEnvelopeWindow)instrumentEnvelopeWindow->playback(documentId,view->session.document.at("instruments"),voices);
@@ -1144,6 +1175,38 @@ public:
 		if(path.empty()) return;
 		lastAudio = device.stats();
 		auto sorted = cpuDraw; std::sort(sorted.begin(), sorted.end());
+        ScreamSeq::DeadlineEvidence::Snapshot deadlines;
+        const bool deadlineAvailable=device.stoppedDeadlineEvidence(deadlines);
+        Json stageReport={{"enabled",audioOptions.diagnosticThreadCycles},{"availableAfterJoin",deadlineAvailable},
+            {"diagnosticOnly",true},{"clock","QPC ticks; wall time, not CPU time"},
+            {"stageNames",{"preparation","engineIncludingInstruments","hostedProcessing","timingPublication"}},
+            {"limitation","Whole prepared-render stages, not per-plugin stacks. Extra clocks add overhead; no release-performance qualification."}};
+        if(deadlineAvailable&&audioOptions.diagnosticThreadCycles) {
+            const auto stages=renderStageEvidence.snapshot();Json events=Json::array();
+            for(size_t i=0;i<stages.count;++i){const auto &e=stages.events[i];
+                events.push_back({{"ordinal",e.ordinal},{"frameOffset",e.frameOffset},{"generation",e.generation},
+                    {"startTicks",std::to_string(e.startTicks)},{"totalTicks",e.totalTicks},{"stageTicks",e.stageTicks},
+                    {"frames",e.frames},{"sampleRate",e.rate},{"completed",e.completed}});
+            }
+            stageReport.update({{"frequency",stages.frequency},{"callbacks",stages.callbacks},{"capacity",ScreamSeq::RenderStageEvidence::capacity},
+                {"omitted",stages.omitted},{"invalidClocks",stages.invalidClocks},{"events",std::move(events)}});
+        }
+        Json deadlineEvents=Json::array();
+        for(size_t i=0;i<deadlines.count;++i){const auto &e=deadlines.events[i];
+            deadlineEvents.push_back({{"callback",e.callback},{"frameOffset",e.frameOffset},{"generation",e.generation},
+                {"serviceStartTicks",std::to_string(e.serviceStartTicks)},{"qpcFrequency",e.qpcFrequency},
+                {"wakeGapNs",e.wakeGapNanoseconds},{"preCallbackNs",e.preCallbackNanoseconds},
+                {"callbackNs",e.callbackNanoseconds},{"postCallbackNs",e.postCallbackNanoseconds},{"serviceNs",e.serviceNanoseconds},
+                {"renderBudgetNs",e.renderBudgetNanoseconds},{"periodNs",e.periodNanoseconds},
+                {"frames",e.frames},{"padding",e.padding},{"sampleRate",e.sampleRate},
+                {"threadCycles",std::to_string(e.threadCycles)},{"threadCyclesValid",e.threadCyclesValid},
+                {"previousThreadCycles",std::to_string(e.previousThreadCycles)},{"previousThreadCyclesValid",e.previousThreadCyclesValid},
+                {"previousCallbackNs",e.previousCallbackNanoseconds},{"previousFrames",e.previousFrames}});
+        }
+        const Json deadlineReport={{"availableAfterJoin",deadlineAvailable},{"capacity",ScreamSeq::DeadlineEvidence::capacity},
+            {"omitted",deadlines.omitted},{"clock","QPC ticks; timing durations in nanoseconds"},{"events",std::move(deadlineEvents)},
+            {"diagnosticThreadCycles",audioOptions.diagnosticThreadCycles},{"cycleSamples",deadlines.cycleSamples},{"cycleFailures",deadlines.cycleFailures},
+            {"cycleInterpretation","Optional CPU cycles include query overhead; do not convert to duration or infer preemption from cycles alone. When enabled, this is a profiling run, not release performance qualification."}};
 		std::ofstream out(path, std::ios::binary);
 		out << std::setprecision(12) << "{\"durationSeconds\":" << seconds << ",\"drawnFrames\":" << cpuDraw.size()
             << ",\"textCacheEntries\":" << surface->textCacheSize() << ",\"textCacheHits\":" << surface->textHits() << ",\"textCacheMisses\":" << surface->textMisses()
@@ -1158,9 +1221,15 @@ public:
 			<< ",\"callbackCount\":" << lastAudio.callbackCount << ",\"renderedFrames\":" << lastAudio.framesRendered
 			<< ",\"maxCallbackMicros\":" << lastAudio.maxCallbackNanoseconds / 1000.0
 			<< ",\"maxServiceMicros\":" << lastAudio.maxServiceNanoseconds / 1000.0
+			<< ",\"maxWakeGapMicros\":" << lastAudio.maxWakeGapNanoseconds / 1000.0
+			<< ",\"bufferFrames\":" << lastAudio.bufferFrames << ",\"endpointChannels\":" << lastAudio.endpointChannels
+			<< ",\"mode\":\"" << (lastAudio.mode == ScreamSeq::WasapiDevice::Mode::LowLatencyShared ? "lowLatencyShared" :
+				lastAudio.mode == ScreamSeq::WasapiDevice::Mode::StandardShared ? "standardShared" : "closed") << "\""
+			<< ",\"fallbackError\":" << lastAudio.fallbackError << ",\"waitTimeouts\":" << lastAudio.waitTimeouts
 			<< ",\"deadlineOverruns\":" << lastAudio.deadlineOverruns << ",\"starvationIndicators\":" << lastAudio.starvationIndicators
 			<< ",\"deviceErrors\":" << lastAudio.deviceErrors << ",\"lastError\":" << lastAudio.lastError
-			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"realtimeAuditPassed\":false}}";
+			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"deadlineEvidence\":" << deadlineReport.dump()
+            << ",\"renderStageEvidence\":" << stageReport.dump() << ",\"realtimeAuditPassed\":false}}";
 		out.close(); if(!out) throw std::runtime_error("Cannot write application report");
 	}
 };
@@ -1299,7 +1368,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
-        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false,midiTestInput=false;
+        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false,midiTestInput=false,diagnosticThreadCycles=false;
         unsigned auditionSample=0,auditionInstrument=0,recoveryTestWriteDelay=0;
 		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride,recoveryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
@@ -1315,6 +1384,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--audio-test") audioTest = true;
             else if(args[i]==L"--audio-test-silent") {audioTest=true;silentOutput=true;}
             else if(args[i]==L"--audio-test-allow-stop") audioTestAllowStop=true;
+            else if(args[i]==L"--audio-test-cycles") diagnosticThreadCycles=true;
 			else if(args[i] == L"--seconds" && i + 1 < args.size()) seconds = std::stod(args[++i]);
 			else if(args[i] == L"--report" && i + 1 < args.size()) report = args[++i];
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
@@ -1328,6 +1398,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
+        if(diagnosticThreadCycles&&(!audioTest||inspection||offline||hostedOffline||report.empty()||!seconds))throw std::runtime_error("Thread-cycle diagnostics require an audio test, duration and report");
         if(!recoveryOverride.empty()&&(!automation||!(inspection||audioTest)||offline||hostedOffline||!recoveryOverride.is_absolute()))throw std::runtime_error("An absolute private recovery directory requires an automated inspection or audio qualification session");
         if(recoveryTestWriteDelay&&(recoveryOverride.empty()||!inspection))throw std::runtime_error("A recovery write delay requires a private inspection recovery directory");
         if(midiTestInput&&(!automation||!(inspection||audioTest)||offline||hostedOffline))throw std::runtime_error("Private MIDI injection requires an automated inspection or audio qualification session");
@@ -1358,6 +1429,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+        app.audioOptions.diagnosticThreadCycles=diagnosticThreadCycles;
 		WindowOwner windowOwner{window};
         if(!inspection&&!audioTest){
             PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find workspace directory");

@@ -2,6 +2,7 @@ import Foundation
 
 @main struct RecoveryTests {
   static func main() throws {
+    snapshotSchedulingChecks()
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
       "resonance-recovery-" + UUID().uuidString, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -52,6 +53,33 @@ import Foundation
     print(
       "PASS recovery generations, newest selection across documents, failed-write retention, document-scoped cleanup, conservative cross-session pruning"
     )
+  }
+  static func snapshotSchedulingChecks() {
+    let revision = "song:4:2"
+    var lastRevision: String? = nil, lastTake: String? = nil
+    func needsCopy(_ take: String?, dirty: Bool = false, force: Bool = false) -> Bool {
+      RecoverySnapshotPolicy.needsCopy(force: force, dirty: dirty, revision: revision,
+        lastRevision: lastRevision, take: take, lastTake: lastTake)
+    }
+    precondition(!needsCopy(nil), "An untouched song does not create timed recovery copies")
+    precondition(needsCopy(nil, dirty: true), "An unsaved musical revision needs a copy")
+    lastRevision = revision
+    precondition(!needsCopy(nil, dirty: true), "Unchanged accepted music does not rotate recovery generations")
+    for token in ["midi-take", "parameter-take"] {
+      precondition(needsCopy(token), "A new take needs recovery even before a musical edit")
+      lastTake = token
+      // Input, missing-time and restoration evidence can all change without
+      // changing the musical revision, including after Stop or accepted Keep.
+      for _ in 0..<3 {
+        precondition(needsCopy(token), "Retained input cannot be deduplicated by musical revision")
+      }
+      precondition(needsCopy(nil), "Release needs a final copy without stale live-take evidence")
+      lastTake = nil
+      precondition(!needsCopy(nil), "After release, identical snapshots stop rotating copies")
+    }
+    precondition(needsCopy(nil, force: true), "Explicit recovery.save still captures unchanged music")
+    precondition(RecoverySnapshotPolicy.needsCopy(force: false, dirty: true, revision: "song:5:2",
+      lastRevision: revision, take: nil, lastTake: nil), "Later musical edits resume timed recovery")
   }
   static func pruningChecks() throws {
     let fm = FileManager.default

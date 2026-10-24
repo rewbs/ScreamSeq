@@ -35,6 +35,29 @@ def expect_error(code, action):
         raise AssertionError(f"Expected API error {code}")
 
 
+def parameter_recording_admission(client):
+    before=client.call('document.get')
+    recovery=client.call('api.describe')['data']['pluginParameterRecording']['savedStateRecovery']
+    assert recovery['method']=='automation.recording.commit' and recovery['field']=='restoreSavedState'
+    assert all(recovery[k] is True for k in ('requiresCompletedTake','requiresStoppedAudio','requiresClosedEditors'))
+    reply=client.call('automation.recording.get')
+    state=reply['data']
+    assert not reply['changed'] and reply['revision']==before['revision']
+    assert state['retained'] is False and state['capturing'] is False and state['take']==''
+    assert state['clock']=='mach-absolute-time' and isinstance(state['hostTime'],str) and int(state['hostTime'])>0
+    assert state['timebaseNumerator']>0 and state['timebaseDenominator']>0
+    assert state['releaseRequiresStoppedTransport'] is False, 'An empty take owns no unsupported provider'
+    expect_error(-32602,lambda:client.call('automation.recording.get',{'unknown':1}))
+    expect_error(-32001,lambda:client.call('automation.recording.start',{'expectedRevision':'stale','plugins':[]}))
+    for plugins in ([],True,['missing'],['missing','missing']):
+        expect_error(-32602,lambda:client.call('automation.recording.start',{'expectedRevision':before['revision'],'plugins':plugins}))
+    for operation in ('stop','commit','discard'):
+        expect_error(-32001,lambda:client.call('automation.recording.'+operation,{'expectedRevision':before['revision'],'take':'missing'}))
+    expect_error(-32001,lambda:client.call('automation.recording.events',{'take':'missing','plugin':'missing','parameter':0}))
+    assert client.call('document.get')==before
+    print('PASS retained parameter recording socket: original Mac clock, strict empty/stale/unknown admission and unchanged document; live device lifecycle is a separate gate')
+
+
 def busy_receipts(client):
     """Real socket admission retries and duplicate IDs around a held request."""
     before = client.call("document.get")
@@ -809,7 +832,35 @@ def saving_tools(client, directory, app_test):
         assert client.call("context.get")["data"]["file"] == str(path)
     assert client.call("document.get")["revision"] == revision
     assert not list(directory.glob('.*.staged.*'))
+    # Full-song audio export uses accepted native state without becoming Save.
+    audio = directory / 'agent-audio.wav'
+    audio_request = {'expectedRevision': revision, 'path': str(audio)}
+    before_audio = client.call('document.get')
+    dry_audio = client.call('document.exportAudio', {**audio_request, 'dryRun': True})
+    assert not dry_audio['changed'] and not dry_audio['data']['written'] and not audio.exists()
+    for extra in ({'path': 'relative.wav'}, {'path': str(audio.with_suffix('.mod'))},
+                  {'overwrite': 1}, {'dryRun': 1}, {'unexpected': True},
+                  {'path': str(directory / 'absent' / 'song.wav')}):
+        expect_error(-32602, lambda: client.call('document.exportAudio', {**audio_request, **extra}))
+    expect_error(-32001, lambda: client.call('document.exportAudio', {**audio_request, 'expectedRevision': 'stale'}))
+    rendered = client.call('document.exportAudio', audio_request)
+    assert not rendered['changed'] and not rendered['playbackStopped'] and rendered['revision'] == revision
+    assert rendered['data'] == dict(path=str(audio), format='wav', written=True, rate=48000,
+                                    channels=2, bits=32, scope='selectedSequence', sourceState='acceptedSong')
+    import struct
+    wav = audio.read_bytes()
+    assert len(wav) > 44 and wav[:4] == b'RIFF' and wav[8:16] == b'WAVEfmt ' and wav[36:40] == b'data'
+    assert struct.unpack_from('<I', wav, 4)[0] == len(wav)-8
+    assert struct.unpack_from('<HHIIHH', wav, 20) == (3, 2, 48000, 384000, 8, 32)
+    assert struct.unpack_from('<I', wav, 40)[0] == len(wav)-44
+    expect_error(-32602, lambda: client.call('document.exportAudio', audio_request))
+    assert audio.read_bytes() == wav
+    client.call('document.exportAudio', {**audio_request, 'overwrite': True})
+    assert audio.read_bytes() == wav and client.call('document.get') == before_audio
+    if app_test:
+        assert client.call('context.get')['data']['file'] == str(path)
     print("PASS native save/module export socket: dry run, strict paths/overwrite, stale revisions, v4 payload, unchanged history and native UI save destination")
+    print('PASS accepted-state audio export socket: float WAV, strict guards, atomic overwrite and unchanged song/save destination')
 
 
 def clipboard_tools(client):
@@ -2357,6 +2408,7 @@ def main():
                 assert client.call("document.get")==before_preview
                 print("PASS preview destination socket: explicit channels, independent default, strict range/type validation, no audio start on release, unchanged document")
                 plugin_bypass(client)
+                parameter_recording_admission(client)
                 detach_insert(client)
                 parameter_activity(client)
                 audio_port_trims(client)

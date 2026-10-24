@@ -19,8 +19,115 @@ current-clock mapping, history or playback changes occur. Decimal timestamp/loss
 strings and native values remain exact; removed plugins are still reviewable.
 Native saves preserve the typed originals, including unsupported independent
 archives. These methods read detached imported evidence, not the current live
-take. The separate `automation.recording.*` lifecycle is currently exposed only
-by the [Windows adapter](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review).
+take. The separate `automation.recording.*` lifecycle addresses the live retained
+take on each platform; see the [Windows guide](../windows/Api/README.md#plugin-automation-recording-and-recovered-input-review)
+and the Mac release limits below. The Mac adapter has native session/socket
+coverage; live vendor/device and complete composing qualification remain separate
+gates. Method availability alone is not a claim of complete UI parity.
+
+## Plugin parameter recording
+
+`automation.recording.get {}` returns the take token, original times, target/loss
+counts and current lifecycle state. `start {expectedRevision, plugins}` arms
+distinct stable rack IDs during timed playback. `capture {expectedRevision,
+take, plugin, parameter, value, timestamp}` accepts one original native control
+event; `value` uses the parameter catalogue's native units. Mac `timestamp` is
+an unsigned decimal **mach-absolute-time** string, never wall time or polling
+time. Get reports `hostTime`, `timebaseNumerator` and `timebaseDenominator` for
+clock conversion. Windows uses its own explicitly named QPC clock. The musical
+recording timeline is 48 kHz on both platforms.
+
+Start waits for the current playback epoch's first presentation time, not just
+its first published future buffer. Before that boundary it refuses without
+installing a take; reread and retry once playback timing becomes available.
+Pending later coverage may arrive after native input, so admission does not
+promise every event already has a frame. Original timestamps and timing gaps
+remain intact; neither Start nor a later read clamps input to the song start.
+
+`events {take, plugin, parameter, offset?, limit?, includeTiming?}` pages original input in
+capture order (default 128, maximum 512). Exact timestamp/frame values are
+decimal strings; `frame:null` preserves unmapped or post-playback-Stop evidence.
+Reading does not retime or replay events. `stop {expectedRevision, take}` seals
+capture without stopping song playback. `commit {expectedRevision, take,
+acknowledgeLoss?, restoreSavedState?}` makes one chronological Undo edit for the whole take;
+acknowledging loss requires an explicit boolean. Empty takes add no history.
+`discard {expectedRevision, take}` abandons input without changing accepted music.
+All writes reject unknown keys, stale revisions and wrong take identities.
+
+For an already-kept retained take, **Restore saved state** sends
+`commit {expectedRevision, take, restoreSavedState:true}`. This explicit recovery
+requires stopped playback/audio and every owned plugin editor closed. It restores
+accepted plugin state and abandons later unsaved native input; the kept automation,
+song revision and chronological Undo entry remain unchanged. An unkept take must
+use ordinary Keep or Discard. The flag is a strict boolean, defaulting to false.
+Ordinary **Finish restoration** never selects it implicitly. Failed or pending
+recovery retains the take; inspect current state before explicitly retrying.
+Native input still draining, changed ownership or an uncertain write blocks release.
+
+After confirmed Keep and native release, the Mac review's **Song automation…**
+opens the selected parameter's recorded points in Parameter activity. Selection
+is captured when Keep is chosen, using document/plugin/parameter identities;
+later selection changes during reads or restoration cannot redirect it. The link
+survives ordinary polling, clears for a new take, and refuses another document or
+a removed plugin. An uncertain Keep followed by an empty read does not establish
+a navigation target. Opening recorded points never starts playback or moves the
+pattern editing cursor. Windows provides the equivalent Song automation route.
+
+Optional `includeTiming:true` requires an explicit page `limit` from1 to16.
+The default event projection is unchanged. Each returned row adds `timing`:
+`retained-frame` means its cached frame remains in the evidence and is not beyond
+the playback Stop cut; no clock scan is needed. This does not certify the take's
+current context or authorize Keep, which still checks the retained summary.
+Otherwise inspection reports `covered` (coverage is now observable but the read
+does not resolve the input), `gap` (between observed intervals), `pending`
+(beyond observed coverage), `expired` (older than retained ring coverage),
+`before-start`, `after-stop`, `missing-timestamp`, `unavailable` or `changed`.
+Unmapped rows also report exact decimal `generation`/`expectedGeneration`, nullable
+exclusive `stopTime`, the timeline `failure`, and nullable `before`, `after`, `covering` intervals. Each
+interval contains exact decimal `startTime`, exclusive `endTime`, `deviceFrame`,
+numeric `frames` and device `rate`. Host units follow the platform clock above;
+device frames are not the event's canonical48kHz frame. These bounded observations
+are not one atomic snapshot while audio advances. In particular, `pending` is
+not a promise of future coverage, and neighbours must never be interpolated to
+repair a gap. Inspection does not consume queues, resolve frames, change loss,
+acknowledge missing input or mutate the document/recovery evidence. Capture
+original timing diagnostics before the ring expires when investigating failure.
+
+**Mac VST3 release can verify during playback.** Keep/Discard first restore the
+current accepted controls and wait for every owned processor to render that
+publication. A definite successful response with `restorationPending:true`
+retains the take while processing catches up. Retry the same lifecycle operation
+with the current revision and same take; do not replay captured inputs. The native
+window performs at most eight such retries after successful readbacks. It never
+retries an unknown/error outcome automatically. Completed takes never publish
+history twice.
+
+Live verification uses non-flushing observations and disposable providers. It
+rejects inconsistent state round trips, changed identities/layouts/catalogues,
+hidden or discrete state differences and changed original input. AU observation
+is not yet supported in this path. A live Keep can therefore still return
+`completed:true`, `retained:true` and `restorationError`. Preserve that take; stop
+transport explicitly, reread its revision and retry Commit. No release is inferred
+from queue submission alone, and a pending attempt leaves native editors usable.
+Explicit opaque Discard additionally requires all owned native editors closed.
+Neither operation silently stops playback or drops ownership after a failed
+cleanup. `discardCleanupPending` identifies an adopted opaque repair whose
+original queues/backends remain retained. New input on a repaired provider is
+preserved and refuses release; a dedicated review flow for that case and AU live
+restoration remain unfinished. Generic native rack controls now send
+original values and timestamps through the retained-take owner. Its native review
+provides Record, Stop recording, Keep, Discard and original-input pages.
+
+Get's `transportPlaying`, `discardable` and
+`releaseRequiresStoppedTransport` describe recovery eligibility. In particular,
+a failed recording clock can leave `capturing:true` after its normal Stop cut
+fails. Once playback has stopped, `discardable:true` permits explicit Discard;
+clients must not trap that take behind a requirement for `capturing:false`.
+The native Mac and Windows take windows offer a separate **Stop playback** action when
+recovery or restoration needs it. This sends the normal revision-guarded
+`transport.stop` and rereads the take; it never automatically commits, discards
+or retries an uncertain write. The closed-editor opaque-Discard requirement
+still applies.
 
 ## Scratch phrases
 
@@ -343,6 +450,8 @@ their separate compatibility rules.
 `document.save {path, overwrite?, dryRun?, expectedRevision}` saves the open song as a native `.screamseq` project; the legacy `.resonance` extension is also accepted. The path must be absolute, its parent must exist, and replacing an existing file requires `overwrite:true`. `dryRun:true` validates serialization and the destination without writing. Success returns `{path, format, written, projectVersion}`, with container version 6, including for previews. An actual save updates the application's save destination and clears its unsaved indicator; preview does neither. The song revision and history remain unchanged, and saving does not stop playback. Recovered source files remain protected: save a separate copy even when `overwrite:true`. This command performs an atomic file replacement, not an undoable song edit. As with other commands, keep the same request ID/content when retrying an uncertain response; a file can have been written even if the reply was lost.
 
 `document.exportModule` accepts the same fields on both platforms and exports the current MOD/XM/S3M/IT/MPTM format, with its matching extension. It leaves the native save destination, unsaved indicator, recovery source protection and Undo/Redo unchanged. Native annotations, hosted plugins, recorded automation, uncommitted takes, retained unknown fields and recovery archives block export with an explanation. Structure, sample data/settings/key-map and timing losses also cause an error before file replacement; the published bytes are the validated candidate. It does not promise preservation of every other legacy-format field. Use `document.save` for exact native sample persistence. Both methods require the current `expectedRevision`; neither opens a song, changes the song or starts playback.
+
+`document.exportAudio` accepts `expectedRevision`, absolute `.wav` `path`, and optional boolean `overwrite`/`dryRun` (both default false). It renders the complete selected sequence as 48 kHz stereo IEEE float32 WAV, with hosted effects, native routing/notes and accepted recorded automation. It uses the exact song snapshot and private processors; temporary parameter previews and uncaptured native-editor changes are excluded. Keep or discard MIDI, sample and plugin recording takes first. Export preserves the live transport, preview, native save destination, dirty state and chronological history. It does not establish a Save baseline. A dry run validates the snapshot and destination without creating processors or a file, so it does not promise that unavailable plugins will render. Actual rendering uses a one-hour total bound, latency compensation and a tail capped at 60 seconds. Atomic native publication preserves an existing destination on failure; `overwrite:false` also protects a file created during rendering. The reply reports `path`, `format:"wav"`, `written`, `rate:48000`, `channels:2`, `bits:32`, `scope:"selectedSequence"`, and `sourceState:"acceptedSong"`. Use a 120-second client timeout for full-song exports. The Windows control queue still cancels requests that have not begun within five seconds; once admitted, export has a 120-second total reply budget, matching the Mac socket ceiling. Rendering longer than that can continue after an uncertain reply or transport timeout: inspect the destination before retrying, and never automatically replay with a new request ID. This new cross-platform implementation awaits qualification; see the [export batch](../doc/windows-parity-plan-2026-10-09/AUDIO-EXPORT-2026-10-24.md).
 
 Native projects use project envelope version 4, or version 5 when aliases/non-default plugin MIDI channels are present, retaining exact sample frames, loop boundaries, properties and sample mappings independently of legacy module encoding. Existing versions 1–4 still open. Older readers reject version 5. This also applies to structural Undo/Redo, recovery and native WAV rendering. For the internal format and limits, see [sample snapshots](SAMPLE_SNAPSHOTS.md).
 
@@ -1508,6 +1617,13 @@ notes in the snapshot without stopping live recording. After recovery, inspect
 (or use Pattern → Finish Recording Take). A take whose underlying song changed
 remains available for inspection but cannot be silently committed to a different
 song. Finish or discard an existing take before restoring another document.
+Retained plugin automation takes also receive timed recovery copies even when
+the musical revision has not changed. Recovery preserves captured input when
+further provider intake fails. These archives reopen as detached evidence for
+`automation.recovery.list/get`; they never resume a live plugin take or replay
+uncertain input. `hasRecording` retains its resumable MIDI-take meaning. Close
+or replacement waits until a live plugin take is kept/discarded and its native
+restoration has finished.
 A normal Save removes only the current session's recovery copies. Older recovered
 sources and other sessions remain available.
 
@@ -1688,6 +1804,18 @@ These are bounded, coherent snapshots of the engine, not estimates based on note
 age. They include looping, overlapping preview notes and NNA voices. No voices
 are reported after audio stops; plugin-internal sample/envelope positions are not
 visible to the host. Readers never block the audio callback.
+
+On Windows, `transport.get.recordingClock` describes the device correlation;
+its optional `frameTimeline` describes the retained plugin-recording coverage.
+`frameTimeline.unmappedCorrelations` counts native render slices excluded because
+their projected presentation boundaries did not advance monotonically. It is a
+diagnostic, not a dropped-input count: an original input outside mapped coverage
+remains subject to the recording take's existing unmapped/loss review. No client
+may substitute the current time for that input. A genuine device discontinuity
+still invalidates the retained timeline. `frameTimeline.failure` and its original
+boundary/frame fields report terminal failure separately. These reads change
+neither song history nor the take; zero rejected correlations does not establish
+realtime performance or physical-device timing accuracy.
 
 Application-only `workspace.ruler({mode})` selects `rows`, `beats`, `patternTime`
 or `songTime`; `workspace.get.positionMode` reports the choice. Clicking the

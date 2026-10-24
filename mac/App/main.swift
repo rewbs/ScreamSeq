@@ -32,6 +32,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var pluginBrowserWindow: NSWindow?
   var sampleBrowserWindow: NSWindow?
   var sampleRecordingWindow: NSWindow?
+  var pluginRecordingWindow: NSWindow?
+  lazy var pluginRecordingInput: PluginRecordingInput = {
+    let input = PluginRecordingInput()
+    input.onReady = { [weak self, weak input] in
+      guard let self, let input else { return }
+      self.pluginEditor.recordingNeedsReview(input.delivery.owner?.document == self.recoveryID ? input.delivery.reviewMessage : nil)
+      self.schedulePluginControlPump()
+    }
+    return input
+  }()
+  var pluginControlPumpScheduled = false, pluginParameterGestureActive = false, pluginManualGestureApplied = false
   lazy var sampleLibrary = SampleLibrary(directory: sampleLibraryDirectory)
   let sampleAudition = SampleAudition()
   let sampleInspectionQueue = DispatchQueue(label: "org.resonance.sample-inspection", qos: .userInitiated)
@@ -82,7 +93,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let recoveryWriter = DispatchQueue(label: "org.resonance.recovery", qos: .utility)
   // Typing queued by the pattern grid while busy replays once the current
   // completion (including its refresh) has finished.
-  var busy = false { didSet { if oldValue && !busy { DispatchQueue.main.async { [weak self] in self?.drainDeferred(); self?.patternView.replayDeferredKeys() } } } }
+  var busy = false { didSet { if oldValue && !busy { DispatchQueue.main.async { [weak self] in self?.synchronizeManualPluginGesture(); self?.servicePluginControlInput(); self?.drainDeferred(); self?.patternView.replayDeferredKeys() } } } }
   var shuttingDown = false
   // Quit was already confirmed (saved or discarded) by the unsaved-changes prompt.
   var terminateConfirmed = false
@@ -757,6 +768,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       trace?.finish(.tick,start:tickStarted)
     }
     guard !busy, !sessionReading else { return }
+    servicePluginControlInput()
+    guard !busy else { return }
     // This also runs while a dialog is open. An application-modal dialog owns the
     // document until it closes: keep input and displays alive, but start no
     // operation, edit or request that its own action would find in the way.
@@ -781,7 +794,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       var pluginError: NSError?
       let edits = UIWorkTrace.measure(.pluginEdits){session.collectPluginEdits(pluginEditor.record.state == .on, error: &pluginError)}
       if let pluginError { throw pluginError }
-      if edits > 0 {
+      if edits > 0 && session.parameterRecordingTakeID == nil {
         dirty = true
         window.isDocumentEdited = true
       }
@@ -1010,6 +1023,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     saveDocumentAs(then: then)
   }
   func saveDocumentAs(then: (() -> Void)? = nil) {
+    guard !pluginRecordingInput.protectsDocument else {
+      showPluginRecording(); statusLabel.stringValue = "Finish the plugin take before saving the song. Save a recovery copy from the take review to retain original input."; return
+    }
     guard !busy else {
       statusLabel.stringValue = "Save will continue when the current operation finishes"
       deferUntilIdle { [weak self] in self?.saveDocumentAs(then: then) }
@@ -1025,6 +1041,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   func save(to url: URL, then: (() -> Void)? = nil) {
+    guard !pluginRecordingInput.protectsDocument else {
+      showPluginRecording(); statusLabel.stringValue = "Finish the plugin take before saving the song. Save a recovery copy from the take review to retain original input."; return
+    }
     guard !busy, !sessionReading else {
       // Keep the save and whatever follows it (quit, open) instead of dropping them.
       if busy { statusLabel.stringValue = "Saving \(url.lastPathComponent) when the current operation finishes" }
@@ -1054,7 +1073,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func createSong(demo: Bool) {
     perform(
-      demo ? "Opening demo…" : "Creating song…", { self.session.newSong(demo) },
+      demo ? "Opening demo…" : "Creating song…", { try self.session.createSong(demo) },
       completion: {
         self.documentURL = nil
         self.recoveryID = UUID().uuidString
@@ -1088,24 +1107,46 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   @objc func exportAudio() {
-    guard !busy else { return }
+    guard !busy, !sessionReading else {
+      statusLabel.stringValue = "Audio export will continue when the current operation finishes"
+      deferUntilIdle { [weak self] in self?.exportAudio() }
+      return
+    }
+    guard !pluginRecordingInput.protectsDocument else {
+      showPluginRecording()
+      statusLabel.stringValue = "Keep or discard the plugin take and finish restoration before exporting audio."
+      return
+    }
+    guard !pluginParameterGestureActive, !pluginManualGestureApplied,
+      !pluginEditor.hasDeferredParameterEdits else {
+      statusLabel.stringValue = "Finish the current parameter edit before exporting audio."
+      return
+    }
+    // The native command finishes already delivered vendor edits before it
+    // captures the chooser's revision. The external export API deliberately
+    // does not drain vendors: invalid requests and dry runs must stay read-only.
+    var pluginError: NSError?
+    let edits = session.collectPluginEdits(false, error: &pluginError)
+    if edits > 0 {
+      dirty = true
+      window.isDocumentEdited = true
+    }
+    if let pluginError { show(pluginError); return }
+    let revision = session.automationRevision
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.wav]
     panel.nameFieldStringValue = model.title + ".wav"
     panel.beginSheetModal(for: window) { [weak self] response in
       guard response == .OK, let self, let url = panel.url else { return }
-      self.perform(
-        "Rendering audio…", refresh: false,
-        {
-          let data = self.session.serializedData()
-          guard !data.isEmpty else {
-            throw NSError(
-              domain: "ScreamSeq", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: "This module could not be prepared for export."]
-            )
-          }
-          try TrackerSession.export(data, path: url.path)
-        }, completion: { self.statusLabel.stringValue = "Exported \(url.lastPathComponent)" })
+      self.handleAutomation("document.exportAudio", params: [
+        "expectedRevision": revision, "path": url.path, "overwrite": true
+      ]) { [weak self] response in
+        if let error = response["error"] as? [String: Any] {
+          self?.statusLabel.stringValue = error["message"] as? String ?? "Audio export failed"
+        } else {
+          self?.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+        }
+      }
     }
   }
   @objc func audioSettings() {
@@ -1225,6 +1266,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     pluginEditor.onSavePreset = { [weak self] slot in self?.showPluginPreset(slot: slot, saving: true) }
     pluginEditor.onLoadPreset = { [weak self] slot in self?.showPluginPreset(slot: slot, saving: false) }
     pluginEditor.onSelect = { [weak self] _ in self?.refreshPlugins() }
+    pluginEditor.onRecordingTake = { [weak self] in self?.showPluginRecording() }
     pluginEditor.onOpen = { [weak self] slot in
       guard let self, !self.busy else { return }
       if self.model.nativePlugins.indices.contains(slot), self.model.nativePlugins[slot]["format"] as? String == "Built-in" {
@@ -1268,19 +1310,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     // onParameter ignores edits while busy; the editor waits and retries instead of losing them.
     pluginEditor.canEdit = { [weak self] in self.map { !$0.busy } ?? false }
+    pluginEditor.onOriginalParameter = { [weak self] plugin, parameter, value, timestamp in
+      guard let self else { return false }
+      return try self.pluginRecordingInput.capture(.init(plugin: plugin, parameter: parameter, value: value, timestamp: timestamp))
+    }
     pluginEditor.onParameter = { [weak self] slot, id, value, record in
       guard let self, !self.busy else { return }
       if self.sessionReading {
         self.deferUntilIdle { [weak self] in self?.pluginEditor.onParameter?(slot, id, value, record) }
         return
       }
+      self.synchronizeManualPluginGesture()
       do {
         try self.session.pluginParameter(slot, identifier: id, value: value, record: record)
         self.dirty = true
         self.window.isDocumentEdited = true
       } catch { self.show(error) }
     }
-    pluginEditor.onGesture = { [weak self] active in self?.session.parameterGesture(active) }
+    pluginEditor.onGesture = { [weak self] active in
+      guard let self else { return }; self.pluginParameterGestureActive = active
+      self.synchronizeManualPluginGesture()
+    }
     pluginEditor.onAutomate = { [weak self] plugin, parameter in self?.automateParameter(plugin: plugin, parameter: parameter) }
     pluginEditor.onInspectParameter = { [weak self] plugin, parameter in self?.showParameterActivity(plugin: plugin, parameter: parameter) }
     pluginEditor.onGraph = { [weak self] plugin in
@@ -1375,6 +1425,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func finishSessionRead() {
     sessionReads -= 1
     guard sessionReads == 0 else { return }
+    synchronizeManualPluginGesture()
+    servicePluginControlInput()
     drainDeferred()
     DispatchQueue.main.async { [weak self] in self?.patternView.replayDeferredKeys() }
   }
@@ -1690,7 +1742,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     _ message: String, refresh: Bool = true, markDirty: Bool = false,
     _ operation: @escaping () throws -> Void, completion: @escaping () -> Void = {}
   ) {
-    guard !busy else {
+    guard !busy, !pluginRecordingInput.changingState else {
       NSSound.beep()
       return
     }
@@ -1705,7 +1757,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var pluginError: NSError?
     let pluginEdits = session.collectPluginEdits(
       pluginEditor.record.state == .on, error: &pluginError)
-    if pluginEdits > 0 {
+    if pluginEdits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
       window.isDocumentEdited = true
     }
@@ -1744,6 +1796,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   enum UnsavedChoice { case proceed, save, cancel }
   func unsavedChoice() -> UnsavedChoice {
+    if pluginRecordingInput.protectsDocument || session.parameterRecordingTakeID != nil {
+      showPluginRecording()
+      statusLabel.stringValue = "Keep or discard the plugin automation take and finish its restoration before closing or replacing this song."
+      return .cancel
+    }
     if session.sampleRecordingTakeID != nil {
       showSampleRecorder()
       statusLabel.stringValue = "Add or discard the recorded sample before closing or replacing this song."
@@ -2060,6 +2117,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item(workspaceMenu, "Restore Custom Layout", #selector(restoreWorkspaceLayout))
     let win = submenu("Window")
     item(win, "Mixer…", #selector(showMixer), "m", [.command, .shift])
+    item(win, "Plugin Automation Take…", #selector(showPluginRecording))
     win.addItem(
       withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
     NSApp.windowsMenu = win

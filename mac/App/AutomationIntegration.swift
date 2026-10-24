@@ -25,17 +25,35 @@ extension AppController {
   }
 
   func handleAutomation(
-    _ method: String, params: [String: Any], reply: @escaping AutomationServer.Reply
+    _ method: String, params: [String: Any], reply: @escaping AutomationServer.Reply,
+    recordingInputAdmitted: Bool = false
   ) {
     guard !shuttingDown else {
       reply(AutomationServer.error(-32002, "The application is shutting down"))
       return
     }
+    if !recordingInputAdmitted && PluginRecordingInput.isBoundary(method) {
+      guard (!busy || pluginRecordingInput.delivery.submitted), window.attachedSheet == nil, NSApp.modalWindow == nil else {
+        reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly")); return
+      }
+      if method == "automation.recording.start" && (pluginParameterGestureActive || pluginManualGestureApplied || pluginEditor.hasDeferredParameterEdits || sessionReading || !deferredActions.isEmpty) {
+        reply(AutomationServer.notAdmittedBusy("Finish the current manual parameter gesture before recording.")); return
+      }
+      pluginRecordingInput.request(method, params: params, reply: reply)
+      servicePluginControlInput(); return
+    }
+    if !recordingInputAdmitted && pluginRecordingInput.changingState &&
+      !method.hasSuffix(".get") && method != "automation.recording.events" && method != "api.describe" && !method.hasPrefix("recovery.") {
+      reply(AutomationServer.notAdmittedBusy("Plugin recording is changing state; no mutation was queued.")); return
+    }
+    if pluginRecordingInput.protectsDocument && ["document.new", "document.open", "document.save"].contains(method) {
+      reply(AutomationServer.notAdmittedBusy("Finish the plugin take before replacing or saving the song. Recovery copies remain available.")); return
+    }
     if handleWorkspaceAutomation(method, params: params, reply: reply) { return }
     if handleSampleLibraryAutomation(method, params: params, reply: reply) { return }
     if sessionReading, !busy {
       // An inspector read is using the unlocked session; run the request right after it.
-      deferUntilIdle({ [weak self] in self?.handleAutomation(method, params: params, reply: reply) },
+      deferUntilIdle({ [weak self] in self?.handleAutomation(method, params: params, reply: reply, recordingInputAdmitted: recordingInputAdmitted) },
         cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
       return
     }
@@ -45,11 +63,21 @@ extension AppController {
       return
     }
     var error: NSError?
-    // Export rejects hosted/native layers. Its admission and dry run must not
-    // commit pending vendor gestures while explaining that refusal.
-    let edits = method == "document.exportModule" ? 0 :
+    // Exports must not commit pending vendor gestures during admission or dry
+    // run. Module export rejects hosted layers; audio export uses accepted state.
+    // Take lifecycle owns its bounded intake and reports retained failures.
+    // A preliminary manual drain could block Get/Discard precisely when the
+    // musician needs to inspect or resolve a refused native input boundary.
+    // Recovery snapshots have their own best-effort intake. Listing/status must
+    // also remain available when a retained provider has refused more input.
+    let retainedRecovery = method.hasPrefix("recovery.") && session.parameterRecordingTakeID != nil
+    // A failed take drain must never prevent the explicit Stop needed to
+    // recover it. stop/panic own their transport boundary; input stays with the
+    // retained take rather than being retried through the manual edit prefix.
+    let retainedTransportExit = session.parameterRecordingTakeID != nil && (method == "transport.stop" || method == "transport.panic")
+    let edits = method == "document.exportModule" || method == "document.exportAudio" || method.hasPrefix("automation.recording.") || retainedRecovery || retainedTransportExit ? 0 :
       session.collectPluginEdits(pluginEditor.record.state == .on, error: &error)
-    if edits > 0 {
+    if edits > 0 && session.parameterRecordingTakeID == nil {
       dirty = true
       window.isDocumentEdited = true
     }
@@ -103,6 +131,10 @@ extension AppController {
       let changed = before != self.session.automationRevision
       let revision = self.session.automationRevision
       DispatchQueue.main.async {
+        let response: [String: Any]
+        if let result { response = ["result": result] }
+        else { response = AutomationServer.error(error?.code ?? -32003, error?.localizedDescription ?? "Operation failed", data: ["revision": revision]) }
+        self.pluginRecordingInput.observe(method, response: response)
         self.busy = false
         if changed {
           self.dirty = true

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 private func midiNoteNumber(_ text: String) -> Double? {
   let normalized = text.uppercased().replacingOccurrences(of: "♯", with: "#").replacingOccurrences(of: "♭", with: "B")
@@ -161,6 +162,26 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   /// Asked before a parameter edit is sent. While the document is busy the
   /// edit is retried instead of being recorded as applied.
   var canEdit: (() -> Bool)?
+  // A retained take owns every original input before the ordinary manual-edit
+  // busy/coalescing path. true means that owner retained/handled the input;
+  // it is not a claim that the worker already accepted or committed it.
+  var onOriginalParameter: ((String, UInt32, Double, UInt64) throws -> Bool)?
+  private var recordingNotice: String?, noteBeforeRecordingNotice: String?
+  func recordingNeedsReview(_ message: String?) {
+    if let message {
+      if recordingNotice == nil { noteBeforeRecordingNotice = note.stringValue }
+      let notice = "Take needs review: \(message)"
+      recordingNotice = notice
+      if note.stringValue != notice { note.stringValue = notice }
+    } else if let previous = recordingNotice {
+      if note.stringValue == previous { note.stringValue = noteBeforeRecordingNotice ?? "" }
+      recordingNotice = nil; noteBeforeRecordingNotice = nil
+    }
+    if recordingReviewButton.isHidden != (recordingNotice == nil) { recordingReviewButton.isHidden = recordingNotice == nil }
+    // Status-only publication: never reload rows or change the field editor,
+    // selection or original values when an asynchronous capture is refused.
+  }
+  var parameterInputClock: () -> UInt64 = { mach_absolute_time() }
   var parameterRetryDelay = 0.1, parameterRetryLimit = 30
   private var parameterGeneration: UInt64 = 0
   var parameterValues = [[AnyHashable: Any]](), filteredValues = [[AnyHashable: Any]]()
@@ -189,6 +210,8 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   var onSavePreset: ((Int) -> Void)?, onLoadPreset: ((Int) -> Void)?
   var savePresetButton: ActionButton!, loadPresetButton: ActionButton!
   var onActivity:(()->Void)?
+  var onRecordingTake: (() -> Void)?
+  private(set) var recordingReviewButton: ActionButton!
   var onPatternAutomation: (() -> Void)?
   let rack = PluginRack(frame: .zero)
   var onGesture: ((Bool) -> Void)?, onGraph: ((String) -> Void)?
@@ -227,7 +250,19 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     instrumentActions = stack(.horizontal, [createInstrumentButton!, instrumentsButton!, NSView()], spacing: 8)
     let title = stack(.horizontal, [Theme.label("Plugins", size: 18, weight: .semibold), NSView(),
       ActionButton("Add plugin…", symbol: "plus", prominent: true) { [weak self] in self?.onAdd?() }, more], spacing: 8)
-    let content = stack(.vertical, [title, note, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
+    note.lineBreakMode = .byWordWrapping; note.maximumNumberOfLines = 3
+    note.preferredMaxLayoutWidth = 620
+    note.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    recordingReviewButton = ActionButton("Review take…") { [weak self] in self?.onRecordingTake?() }
+    recordingReviewButton.isHidden = true
+    recordingReviewButton.setAccessibilityLabel("Review plugin automation take")
+    recordingReviewButton.setContentHuggingPriority(.required, for: .horizontal)
+    recordingReviewButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+    // AppKit stacks separate alignment rects, not the full label/button frames.
+    // Leave room for the native bezel overhang and let the message wrap instead
+    // of stretching Review into the remaining width of a compact editor.
+    let recordingStatus = stack(.horizontal, [note, recordingReviewButton!], spacing: 16)
+    let content = stack(.vertical, [title, recordingStatus, rack, instrumentActions!, dynamicsMeter, search, scroll], spacing: 10)
     content.stretchAcrossAxis(); content.fill(self, inset: 12)
     update(model: PatternModel([:]), values: [])
   }
@@ -237,6 +272,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   func actionMenu(_ identity: String? = nil) -> NSMenu {
     let menu = NSMenu(title: "Plugin"); menu.autoenablesItems = false
     menu.addItem(ContextAction("Add built-in effect…") { [weak self] in self?.onAddBuiltIn?() })
+    menu.addItem(ContextAction("Plugin automation take…") { [weak self] in self?.onRecordingTake?() })
     guard let id = identity ?? selectedIdentity, let slot = plugins.firstIndex(where: { $0["instanceID"] as? String == id }) else {
       for title in ["Open interface / controls", "Bypass / enable plugin", "Show in Graph…", "Audio buses…", "Programs…", "Save preset…", "Load preset…", "Automation envelopes…", "Parameter activity…", "New trigger instrument…", "Assign tracker instruments…", "Move earlier", "Move later", "Remove plugin"] {
         let item=ContextAction(title,enabled:false){};item.toolTip="Select a plugin in Plugin controls first";menu.addItem(item)
@@ -290,6 +326,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
   }
   required init?(coder: NSCoder) { fatalError() }
   private var deferredEdits = [Int: Int](), editTicket = 0
+  var hasDeferredParameterEdits: Bool { !deferredEdits.isEmpty }
   private func deferEdit(_ id: Int, slot: Int, generation: UInt64, value: Double, attempt: Int,
     accept: @escaping (Double) -> Void, revert: @escaping () -> Void) {
     editTicket += 1; let ticket = editTicket; deferredEdits[id] = ticket
@@ -361,6 +398,7 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
     parameterValues = plugins.isEmpty ? [] : values
     filterParameters()
     if plugins.isEmpty { note.stringValue = "Add a built-in effect, AU or VST3 to begin." }
+    if let recordingNotice { noteBeforeRecordingNotice = note.stringValue; note.stringValue = recordingNotice }
   }
   func controlTextDidChange(_ notification: Notification) { filterParameters() }
   func showMeters(_ values: [AnyHashable: Any]) { dynamicsMeter.update(values) }
@@ -478,6 +516,13 @@ final class PluginEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NS
       }
       self.deferredEdits[id] = nil
       guard value != currentValue else { return }
+      if let identity, let parameterID = UInt32(exactly: id), let original = self.onOriginalParameter {
+        do {
+          if try original(identity, parameterID, value, self.parameterInputClock()) { currentValue = value; return }
+        } catch {
+          revert(); self.note.stringValue = error.localizedDescription; return
+        }
+      }
       // currentValue advances only when the edit is really sent. While the
       // document is busy the edit waits, so it is neither lost nor mistaken
       // for one that was applied.

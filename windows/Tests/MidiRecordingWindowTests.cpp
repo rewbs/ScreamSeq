@@ -19,7 +19,7 @@ Json devices(){return Json::array({{{"id","device-a"},{"name","Keys"}},{{"id","d
 Json take(std::string id="",unsigned count=0,bool capturing=false,bool compatible=true){return {{"take",id},{"baseRevision","song-1"},{"capturing",capturing},{"compatible",compatible},{"eventCount",count},{"missingTime",0},{"exhaustedVoices",0},{"overflow",0},{"events",Json::array()}};}
 Json event(unsigned row,unsigned note=61){return {{"patternID","p-opaque"},{"track","n-opaque"},{"position",row*65536+123},{"note",note},{"instrument",4},{"velocity",100},{"patternLabel","Verse"},{"trackLabel","CH 2"},{"soundLabel","Piano"}};}
 Json fullTake(std::string id,Json events){auto result=take(id,unsigned(events.size()));result["events"]=std::move(events);return result;}
-Json initial(){return {{"settings",settings()},{"devices",devices()},{"target",{{"label","04 / Piano"},{"firstChannel",1},{"availableChannels",7}}},{"recording",take()},{"playing",false}};}
+Json initial(){return {{"document","owned-song"},{"settings",settings()},{"devices",devices()},{"target",{{"label","04 / Piano"},{"firstChannel",1},{"availableChannels",7}}},{"recording",take()},{"playing",false}};}
 std::wstring text(HWND window){std::wstring result(size_t(GetWindowTextLengthW(window))+1,0);GetWindowTextW(window,result.data(),int(result.size()));result.resize(wcslen(result.c_str()));return result;}
 struct Browser {
   unsigned scans=0,sounds=0;std::vector<Json> applies,navigations;std::vector<std::string> finishes,discards,reviews;
@@ -76,8 +76,13 @@ void reviewSelection(Owner &owner){
 }
 void callbacksAndKeyboard(Owner &owner){
   Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();SetActiveWindow(tool.window());const auto row=event(2);tool.update({{"recording",fullTake("old",Json::array({row}))}});
-  unsigned forwarded=0;tool.workspaceKeys([&](WPARAM,bool){++forwarded;return true;});browser.key(7203,VK_SPACE);require(tool.retainedDraft()&&tool.snapshot()["draft"]["armed"]==true&&IsWindowEnabled(browser.control(7209))&&forwarded==0,"Space on Arm escaped local ownership");
-  browser.key(7208,VK_RETURN,true);require(browser.applies.size()==1&&!tool.retainedDraft()&&forwarded==0,"Ctrl+Enter did not apply MIDI settings locally");
+  unsigned forwarded=0;tool.workspaceKeys([&](WPARAM,bool){++forwarded;return true;});browser.key(7203,VK_SPACE);
+  require(browser.applies.size()==1&&!tool.retainedDraft()&&tool.snapshot()["settings"]["armed"]==true&&
+    !IsWindowEnabled(browser.control(7209))&&GetFocus()==browser.control(7203)&&forwarded==0,"Space on Arm did not apply once with local focus ownership");
+  SendMessageW(browser.control(7203),WM_KEYDOWN,VK_SPACE,LPARAM(1LL<<30));
+  SendMessageW(browser.control(7203),WM_KEYDOWN,VK_RETURN,LPARAM(1LL<<30));
+  require(browser.applies.size()==1&&tool.snapshot()["settings"]["armed"]==true,"Held activation key repeatedly toggled recording arm state");
+  browser.key(7208,VK_RETURN,true);require(browser.applies.size()==1&&!tool.retainedDraft()&&forwarded==0,"Ctrl+Enter after immediate Arm created a duplicate settings write");
   browser.onFinish=[&](std::string id){require(id=="old"&&tool.snapshot()["actionTake"]=="old"&&tool.snapshot()["pending"].get<bool>(),"Finish did not capture original take");browser.click(7212);browser.click(7213);browser.click(7214);require(browser.finishes.size()==1&&browser.discards.empty()&&browser.reviews.empty(),"Pending take operation reentered destructive callback");browser.click(7215);require(browser.navigations.size()==1&&tool.snapshot()["actionTake"]=="old","Navigation during Finish lost outer callback ownership");tool.update({{"recording",take("new",0)}});};
   browser.key(7211,VK_RETURN,true,true);require(browser.finishes==std::vector<std::string>{"old"}&&!tool.snapshot()["pending"].get<bool>(),"Finish completion redirected target or stayed pending");
   tool.update({{"recording",fullTake("review-old",Json::array({row}))}});browser.onReview=[&](std::string){tool.update({{"recording",take("review-new",0)}});tool.update({{"recording",fullTake("review-old",Json::array({row}))}});};browser.click(7214);
@@ -87,6 +92,90 @@ void callbacksAndKeyboard(Owner &owner){
   browser.onDiscard=[](std::string){throw std::runtime_error("Take changed before discard");};browser.click(7213);require(!tool.snapshot()["pending"].get<bool>()&&tool.snapshot()["error"]=="Take changed before discard","Failed take action lost error or pending guard");
   browser.onSound=[&]{SetActiveWindow(owner.window);SetFocus(owner.edit);};browser.click(7205);require(browser.sounds==1&&GetFocus()==owner.edit,"Choose sound completion stole the chosen focus");
   tool.workspaceKeys({});tool.show();browser.key(7206,VK_TAB);require(GetFocus()==browser.control(7207),"Tab skipped timing grid");browser.key(7211,VK_F5);require(browser.scans==1,"F5 did not rescan sources");browser.key(7211,VK_ESCAPE);require(!tool.visible(),"Escape did not hide MIDI window");
+}
+void immediateArm(Owner &owner){
+  Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();SetActiveWindow(tool.window());
+  browser.combo(7201,2);browser.edit(7208,L"-");
+  browser.onApply=[&](Json params){
+    require(tool.snapshot()["operation"]=="arm"&&tool.snapshot()["pending"]==true,"Arm did not own its pending operation");
+    browser.click(7203);require(browser.applies.size()==1,"Arm reentered while submitting settings");
+    auto next=settings("armed");next["armed"]=true;return next;
+  };
+  browser.key(7203,VK_SPACE);
+  require(browser.applies.size()==1&&browser.applies[0]["armed"]==true&&browser.applies[0]["source"]=="device-a"&&
+    browser.applies[0]["latencyMS"]==0&&browser.applies[0]["expectedMidiRevision"]=="m1"&&tool.retainedDraft()&&
+    text(browser.control(7208))==L"-"&&tool.snapshot()["draft"]["source"]=="device-b"&&
+    tool.snapshot()["draft"]["baseRevision"]=="armed"&&text(browser.control(7203))==L"Disarm notes"&&
+    GetFocus()==browser.control(7203),"Immediate Arm submitted a draft source/value, lost the draft, or changed focus");
+  browser.onApply={};browser.key(7203,VK_RETURN);
+  require(browser.applies.size()==2&&browser.applies.back()["armed"]==false&&browser.applies.back()["source"]=="device-a"&&
+    tool.snapshot()["settings"]["armed"]==false&&text(browser.control(7208))==L"-"&&
+    text(browser.control(7203))==L"Arm notes","An incomplete numeric field blocked Disarm or falsely displayed an armed state");
+  // The user's draft remains explicitly applicable at the acknowledged revision.
+  browser.edit(7208,L"12.5");browser.click(7209);
+  require(browser.applies.size()==3&&browser.applies.back()["source"]=="device-b"&&browser.applies.back()["latencyMS"]==12.5&&
+    browser.applies.back()["armed"]==false&&!tool.retainedDraft(),"Later Apply lost retained values or replayed the old arm state");
+  browser.onApply=[](Json)->Json{throw std::runtime_error("Arm refused");};browser.key(7203,VK_SPACE);
+  require(browser.applies.size()==4&&tool.snapshot()["settings"]["armed"]==false&&text(browser.control(7203))==L"Arm notes"&&
+    tool.snapshot()["error"]=="Arm refused"&&!tool.snapshot()["pending"].get<bool>(),"Refused Arm displayed a false active state");
+  // An unrelated settings revision is not rebased merely because Arm succeeds.
+  browser.edit(7208,L"9");tool.update({{"settings",settings("foreign")}});
+  browser.onApply=[](Json){auto next=settings("armed-foreign");next["armed"]=true;return next;};browser.click(7203);
+  require(tool.snapshot()["draft"]["baseRevision"]=="m-applied"&&tool.snapshot()["settings"]["armed"]==true&&
+    text(browser.control(7309)).find(L"changed elsewhere")!=std::wstring::npos,"Arm erased an existing settings conflict");
+}
+void queuedArm(Owner &owner){
+  for(const auto *change:{"none","draft","settings","document","hide","refusal"}){
+    Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();
+    const auto tick=[&]{SendMessageW(tool.window(),WM_TIMER,11,0);};
+    tool.setBusy(true);browser.click(7203);browser.click(7203);tick();
+    require(browser.applies.empty()&&tool.snapshot()["queuedSettings"]==true&&text(browser.control(7203))==L"Arm notes",
+      "Busy Arm was dropped, duplicated or displayed as already armed");
+    const std::string_view scenario(change);
+    if(scenario=="draft")browser.edit(7208,L"-");
+    if(scenario=="settings")tool.update({{"settings",settings("foreign")}});
+    if(scenario=="document")tool.update({{"document","replacement-song"}});
+    if(scenario=="hide"){tool.hide();tool.show();}
+    if(scenario=="refusal")browser.onApply=[](Json)->Json{throw std::runtime_error("Queued Arm refused");};
+    tool.setBusy(false);tick();tick();
+    const bool submitted=scenario=="none"||scenario=="refusal";
+    require(browser.applies.size()==(submitted?1u:0u)&&!tool.snapshot()["pending"].get<bool>(),
+      "Queued Arm crossed a changed draft/settings/document, survived Hide or retried a submitted failure");
+    if(scenario=="none")require(browser.applies[0]["expectedMidiRevision"]=="m1"&&browser.applies[0]["armed"]==true&&
+      tool.snapshot()["settings"]["armed"]==true&&!tool.retainedDraft(),"Queued Arm lost its captured settings or requested state");
+    else require(tool.snapshot()["settings"]["armed"]==false,"Refused or canceled Arm changed canonical arm state");
+    if(scenario=="draft")require(text(browser.control(7208))==L"-"&&tool.retainedDraft(),"Canceled Arm erased newer raw text");
+  }
+}
+void queuedSettings(Owner &owner){
+  Browser browser(owner.window);auto &tool=browser.tool;auto armed=initial();armed["settings"]["armed"]=true;tool.update(armed);tool.show();SetActiveWindow(tool.window());
+  const auto tick=[&]{SendMessageW(tool.window(),WM_TIMER,11,0);};
+  browser.edit(7208,L"-4.500");
+  tool.update({{"busy",true}});browser.key(7208,VK_RETURN,true);browser.key(7208,VK_RETURN,true);tick();
+  require(browser.applies.empty()&&tool.snapshot()["queuedSettings"]==true&&tool.snapshot()["pending"]==true,
+    "Busy Ctrl+Enter was lost, duplicated or entered the settings callback");
+  tool.update({{"busy",false}});SetFocus(browser.control(7208));SendMessageW(browser.control(7208),EM_SETSEL,1,3);tick();tick();
+  require(browser.applies.size()==1&&browser.applies[0]["armed"]==true&&browser.applies[0]["latencyMS"]==-4.5&&
+    browser.applies[0]["expectedMidiRevision"]=="m1"&&!tool.retainedDraft()&&!tool.snapshot()["pending"].get<bool>()&&GetFocus()==browser.control(7208),
+    "Queued settings did not publish exactly once with original arm/value/revision and retained focus");
+  // A newer raw edit cancels the earlier intent instead of being silently saved.
+  browser.edit(7208,L"8");tool.setBusy(true);browser.key(7208,VK_RETURN,true);browser.edit(7208,L"-");tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&text(browser.control(7208))==L"-"&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Queued Apply captured a newer invalid draft or erased it");
+  browser.edit(7208,L"9");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.update({{"settings",settings("foreign-settings")}});tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&tool.snapshot()["error"].get<std::string>().find("changed")!=std::string::npos,
+    "Queued Apply silently rebased after another settings write");
+  browser.click(7210);browser.edit(7208,L"10");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.update({{"document","replacement-song"}});tool.setBusy(false);tick();
+  require(browser.applies.size()==1&&text(browser.control(7208))==L"10"&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Queued settings armed a replacement document");
+  browser.click(7210);browser.edit(7208,L"11");tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.hide();tool.setBusy(false);tool.show();tick();
+  require(browser.applies.size()==1&&tool.retainedDraft()&&!tool.snapshot()["queuedSettings"].get<bool>(),
+    "Closing MIDI settings left a delayed invisible arm action");
+  // Once submitted, a callback failure is not permission to retry on a timer.
+  browser.onApply=[](Json)->Json{throw std::runtime_error("Owned settings refusal");};
+  tool.setBusy(true);browser.key(7208,VK_RETURN,true);tool.setBusy(false);tick();tick();
+  require(browser.applies.size()==2&&tool.retainedDraft()&&tool.snapshot()["error"]=="Owned settings refusal"&&
+    !tool.snapshot()["pending"].get<bool>(),"Queued settings retried an uncertain callback or lost its retained draft");
 }
 void boundsAndColumns(Owner &owner){
   Browser browser(owner.window);auto &tool=browser.tool;tool.update(initial());tool.show();const auto window=tool.window();const auto dpi=GetDpiForWindow(window);RECT frame{0,0,MulDiv(720,dpi,96),MulDiv(570,dpi,96)};
@@ -104,4 +193,4 @@ void boundsAndColumns(Owner &owner){
   std::cout<<"MIDI recording minimum 720 x 570 DIPs checked at "<<dpi<<" DPI\n";
 }
 }
-int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMidiRecordingTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;settingsAndFocus(owner);reviewSelection(owner);callbacksAndKeyboard(owner);boundsAndColumns(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned MIDI test windows");});std::cout<<"PASS MIDI recording window: retained drafts/focus, revision guards, take identity, virtual review, keyboard and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}
+int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqMidiRecordingTest",[]{HWND parent{},edit{};{Owner owner;parent=owner.window;edit=owner.edit;settingsAndFocus(owner);reviewSelection(owner);callbacksAndKeyboard(owner);immediateArm(owner);queuedArm(owner);queuedSettings(owner);boundsAndColumns(owner);owner.close();}require(!IsWindow(parent)&&!IsWindow(edit),"Destroy owned MIDI test windows");});std::cout<<"PASS MIDI recording window: retained drafts/focus, revision guards, take identity, virtual review, queued settings, keyboard and bounds\n";return 0;}catch(const std::exception &error){std::cerr<<error.what()<<'\n';return 1;}}

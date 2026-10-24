@@ -74,6 +74,15 @@ No event/padding observation proves zero hardware glitches. Negotiated period an
 buffer sizes are not acoustic round-trip latency. Statistics require lock-free
 integer atomics at compile time. Only the worker updates timing maxima.
 
+The application QA report retains the existing device wake-gap maximum, event
+timeouts, negotiated buffer/channel counts, shared-mode selection and fallback
+error alongside callback/service maxima. These are sampled when writing the
+report, without adding callback instrumentation. A wake gap includes time spent
+in the preceding service as well as waiting; maxima can come from different
+callbacks, so subtracting them cannot attribute a stall to a particular thread
+or driver. Use a time-aligned profile to establish causation. These fields do
+not turn the report's realtime or presentation qualification flags into passes.
+
 ## Diagnostics (silence only)
 
 From a Developer command prompt with the installed SDK/compiler:

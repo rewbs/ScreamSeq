@@ -1,5 +1,55 @@
 // Actual Windows prepared-host publication, with the same rendering entry point
 // used by WASAPI. Preparation/publication are outside the callback audit scope.
+static void preparedPreciseNotes(const Project::ProjectState &state) {
+  using namespace Tracker;
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u}) {
+    auto doc=Document::demo();const auto before=doc->native();auto next=before;
+    const auto pattern=before.patterns.at(0).id,track=before.tracks.at(0).id;
+    next.preciseNotes.push_back({pattern,track,4*65536+16384,1,67,95});
+    auto cleared=doc->cell(0,4,0);cleared.note=cleared.instrument=0;
+    if(cleared.volumeCommand==OpenMPT::VOLCMD_VOLUME)cleared.volumeCommand=cleared.volume=0;
+    const std::vector<Edit> cells={{0,4,0,doc->cell(0,4,0),cleared}};
+    HostedProjectPlayback live(*doc,state,rate,{},true);
+    auto first=renderPrepared(live,1000,block);
+    auto publication=live.prepareNativeUpdate(before,next,cells);
+    check(publication&&publication->kind()==HostedProjectPlayback::PreparedNativeUpdate::Kind::PreciseNotes&&live.publishNativeUpdate(*publication),"Precise schedule and ordinary conversion failed live publication");
+    auto rest=renderPrepared(live,rate-1000,block);first.insert(first.end(),rest.begin(),rest.end());
+    doc->editNative(next,cells);
+    const auto reference=render(*doc,state,rate,block);
+    double worst=0;for(size_t i=0;i<reference.size();++i)worst=std::max(worst,std::abs(double(reference[i])-first[i]));
+    check(worst<1e-6&&live.renderer().telemetry().frames==rate,"Live precise conversion interrupted timing, replayed a note or differed from exact prepared PCM");
+    // A new event behind the current playback cursor must wait for a future
+    // pass; publishing a schedule cannot reset/retrigger the active voice.
+    auto past=next;past.preciseNotes.push_back({pattern,track,1,1,72,127});
+    const auto generation=live.renderer().song().m_PlayState.Chn[0].nativeNoteGeneration;
+    auto late=live.prepareNativeUpdate(next,past);check(late&&live.publishNativeUpdate(*late),"Past precise edit publication refused");
+    renderPrepared(live,1,1);
+    check(live.renderer().song().m_PlayState.Chn[0].nativeNoteGeneration==generation,"Schedule replacement replayed a past onset");
+  }
+  auto doc=Document::demo();auto next=doc->native();HostedProjectPlayback live(*doc,state,48000,{},true);
+  std::vector<Edit> expected;
+  for(unsigned i=0;i<4;++i){auto before=next;next.preciseNotes.push_back({next.patterns.at(0).id,next.tracks.at(0).id,(8+i)*65536+1,1,61,80});
+    auto cell=doc->cell(0,uint16_t(8+i),0);cell.note=70+uint8_t(i);
+    std::vector<Edit> cells={{0,uint16_t(8+i),0,{},cell}};
+    auto plan=live.prepareNativeUpdate(before,next,cells);check(bool(plan),"FIFO precise preparation failed");
+    check(live.publishNativeUpdate(*plan)==(i<3),"Precise queue capacity did not refuse atomically");if(i<3)expected.push_back(cells[0]);
+  }
+  for(size_t i=0;i<expected.size();++i){renderPrepared(live,1,1);const auto &edit=expected[i];
+    check(live.renderer().song().Patterns[edit.pattern].GetpModCommand(edit.row,edit.channel)->note==edit.after.note,"FIFO skipped an ordinary-cell conversion");}
+  for(bool preciseFirst:{true,false}) {
+    auto before=doc->native(),after=before;after.preciseNotes.push_back({before.patterns.at(0).id,before.tracks.at(0).id,12*65536+1,1,61,90});
+    HostedProjectPlayback mixed(*doc,state,48000,{},true);
+    auto old=doc->cell(0,12,0),a=old,b=old;a.note=65;b.note=72;
+    auto plan=mixed.prepareNativeUpdate(before,after,{{0,12,0,old,a}});
+    check(bool(plan),"Mixed ordinary/precise plan missing");
+    if(preciseFirst)check(mixed.publishNativeUpdate(*plan),"First precise plan refused");
+    check(mixed.renderer().enqueue({{0,12,0,old,b}}),"Interleaved ordinary cell refused");
+    if(!preciseFirst)check(mixed.publishNativeUpdate(*plan),"Later precise plan refused");
+    renderPrepared(mixed,2,1);
+    check(mixed.renderer().song().Patterns[0].GetpModCommand(12,0)->note==(preciseFirst?72:65),"Separate queues reordered a later musical edit");
+  }
+  std::cout<<"PASS live precise notes: exact PCM at three rates/partitions, original clock, no past retrigger, FIFO conversion and queue refusal\n";
+}
 static void preparedNativeUpdates(const Project::ProjectState &state) {
   using namespace Tracker;
   using Kind=HostedProjectPlayback::PreparedNativeUpdate::Kind;

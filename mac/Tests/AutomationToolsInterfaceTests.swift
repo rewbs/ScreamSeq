@@ -66,7 +66,7 @@ extension InterfaceTests {
     func answer(_ data:Any,_ revision:String="r0"){replies.removeFirst()(["result":["revision":revision,"data":data]])}
     func waitForSave(){let deadline=Date(timeIntervalSinceNow:0.25);while Date()<deadline {_ = RunLoop.main.run(mode:.default,before:deadline)}}
     editor.load()
-    replies.removeFirst()(["error":["code":-32002,"message":"Busy"]]);waitForSave()
+    replies.removeFirst()(["error":["code":-32002,"message":"Busy","data":["writeOutcome":"notCommitted"]]]);waitForSave()
     try require(calls.count==2 && editor.loading,"Busy automation loads retry without making stale parameters editable")
     answer(["rows":64,"lanes":[]])
     answer([["id":7,"name":"Gain","value":0.5]])
@@ -94,5 +94,20 @@ extension InterfaceTests {
     editor.search.stringValue="missing";editor.filter()
     try require(editor.parameterID==nil && !editor.canvas.allowsEditing,"Filtering out a parameter clears its editing target")
     editor.autoSaveWork?.cancel();editor.formulaPreviewWork?.cancel();editor.onRequest=nil
+    let bounded=PatternAutomationEditor(frame:.zero);var attempts=0,completions=0
+    let captured:[String:Any]=["expectedRevision":"song:7","lane":"n20"]
+    bounded.onRequest={_,params,reply in
+      attempts+=1
+      if !NSDictionary(dictionary:params).isEqual(to:captured){reply(["error":["message":"Captured params changed"]]);return}
+      reply(["error":["code":-32002,"message":"Not admitted","data":["writeOutcome":"notCommitted"]]])
+    }
+    bounded.request("automation.pattern.remove",captured){_ in completions+=1};pumpMainRunLoop(0.4)
+    try require(attempts==6 && completions==0 && !bounded.loading && bounded.status.stringValue=="Not admitted",
+      "Automation retries are bounded and preserve the captured request without claiming success")
+    attempts=0
+    bounded.onRequest={_,_,reply in attempts+=1;reply(["error":["code":-32002,"message":"Unknown outcome","data":["writeOutcome":"unknown"]]])}
+    bounded.request("automation.pattern.remove",captured){_ in completions+=1};pumpMainRunLoop(0.2)
+    try require(attempts==1 && completions==0 && !bounded.loading && bounded.status.stringValue=="Unknown outcome",
+      "Automation never replays an uncertain deletion")
   }
 }

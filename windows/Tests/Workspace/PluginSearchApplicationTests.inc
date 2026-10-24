@@ -56,6 +56,21 @@ void applicationParameterRecordingAdmission() {
     restoreCheck(songState(app)==musicBeforeReview&&!app.parameterRecordingInput,"Completion review resent a write or left native input locked");
     proof.document="other song";restoreRejected([&]{app.reconcileParameterRecording(proof);});
     restoreCheck(songState(app)==musicBeforeReview,"Foreign completion review changed this song");
+    // This action belongs to SessionHost, not DocumentController's dispatcher.
+    // Confirm actual native routing, stale rejection and post-Stop read failure
+    // receipts without requiring hardware in this application fixture.
+    auto stopReceipt=std::make_shared<ScreamSeq::NativeCallReceipt>();const auto stopGeneration=app.stopGeneration;
+    restoreRejected([&]{app.stopParameterRecordingPlayback({{"expectedRevision","stale"}},stopReceipt);});
+    restoreRejected([&]{app.stopParameterRecordingPlayback({{"expectedRevision",app.view->session.revision},{"take","wrong-domain"}},stopReceipt);});
+    restoreCheck(app.stopGeneration==stopGeneration&&!stopReceipt->read(),"Invalid playback Stop touched native transport or published success");
+    app.sampleMutationCompletion=[](const std::string &method){if(method=="transport.stop")throw std::runtime_error("Owned Stop presentation failure");};
+    restoreRejected([&]{app.stopParameterRecordingPlayback({{"expectedRevision",app.view->session.revision}},stopReceipt);});
+    app.sampleMutationCompletion={};const auto stopped=stopReceipt->read();
+    restoreCheck(stopped&&stopped->method=="transport.stop"&&stopped->document==app.documentId&&stopped->result.at("playing")==false&&
+      app.stopGeneration==stopGeneration+1,"Native Stop presentation failure lost its completed transport receipt");
+    app.reconcileParameterRecording(*stopped);
+    restoreCheck(app.stopGeneration==stopGeneration+1&&songState(app)==musicBeforeReview,
+      "Playback Stop readback replayed Stop or changed unrelated music");
 }
 void applicationPluginRackPosition() {
     RestoreFixture fixture;auto &app=*fixture.app;resizeRestoreClient(app,1440,800);
@@ -110,7 +125,14 @@ void applicationPluginSearch() {
     restoreCheck(app.selectedParameter==1179&&restoreText(value)==L"179","Filtered parameter row was used as an unfiltered catalogue index");
     restoreCheck(SendMessageW(selector,CB_GETCOUNT,0,0)==1,"Choosing a matching parameter retained a stale outside-search row");
     rawDraftText(value,L"-");const auto generation=app.pluginDraftGeneration;const auto target=app.pluginDraftTarget;
+    app.setWorkspaceCanvasFocus("pattern");
     SetFocus(query);rawDraftText(query,L"1000");
+    restoreCheck(app.workspacePresentationFocus()=="plugins"&&app.workspaceSnapshot().at("focus")=="plugins"&&
+        app.workspaceState.focus=="pattern","Native search focus was labelled as the retained pattern canvas or changed canvas intent");
+    SetFocus(app.window);
+    restoreCheck(app.workspacePresentationFocus()=="pattern"&&app.workspaceSnapshot().at("focus")=="pattern",
+        "Returning to Main lost the retained pattern focus intent");
+    SetFocus(query);
     restoreCheck(app.pluginDraft&&app.pluginDraftParameter==1179&&app.pluginDraftGeneration==generation&&app.pluginDraftTarget==target&&restoreText(value)==L"-",
         "Searching erased, rebased or retargeted the raw parameter draft");
     SendMessageW(selector,CB_SETCURSEL,0,0);restoreRejected([&]{app.pluginCommand(pluginParameter);});

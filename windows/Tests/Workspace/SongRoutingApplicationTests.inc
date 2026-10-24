@@ -134,7 +134,7 @@ void applicationMixingGraphUsability(){
   restoreCheck(tool->snapshot().at("expectedRevision")==captured&&tool->snapshot().at("draft")==true&&restoreText(GetDlgItem(window,3807))==L"-.","Automatic graph refresh discarded or rebased raw input");
   click(3839);restoreCheck(!library->visible(),"Dirty graph opened an effect browser against another revision");click(3815);
   select(bus);if(tool->snapshot().at("compact")==true&&tool->snapshot().at("inspector")==true)click(3846);
-  click(3816); // Fit the enlarged graph before clicking a visible node.
+  click(3849); // Explicit whole overview before clicking a distant visible node.
   const auto canvas=tool->snapshot().at("canvas");restoreCheck(canvas.at("viewport")[2]>0,"Graph canvas must be visible before native double-click");
   const auto node=*std::find_if(canvas.at("nodes").begin(),canvas.at("nodes").end(),[&](const auto &n){return n.at("id")==bus;});
   const auto rect=node.at("rect"),viewport=canvas.at("viewport");const auto x=rect[0].get<float>()+rect[2].get<float>()/2,y=rect[1].get<float>()+rect[3].get<float>()/2;

@@ -2,6 +2,7 @@
 // Observable sole-owner tests; the request double is not a document/Undo oracle.
 #include "PreciseNoteWindow.hpp"
 #include "PrivateGuiProcessTest.hpp"
+#include "AccessibleControl.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -78,13 +79,41 @@ struct Fixture {
   }
   HWND control(int id)const{const auto window=GetDlgItem(tool.window(),id);require(window,"Missing precise-note control");return window;}
   void click(int id){press(control(id));}
-  void page(int page){click(Tool::pageTimeline+page);}
+  void page(int page){click(std::array<int,4>{Tool::pageTimeline,Tool::pageHit,Tool::pageTools,Tool::pageDetails}.at(size_t(page)));}
   void field(int id,const wchar_t *value){const auto before=tool.operationGuard().at("generation");type(control(id),value);require(tool.operationGuard().at("generation")>before&&tool.retainedDraft(),"Native field edit did not register a retained draft");}
   void choose(int id,int value){require(IsWindowVisible(control(id))&&IsWindowEnabled(control(id)),"Combo is unavailable");SendMessageW(control(id),CB_SETCURSEL,value,0);SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(id)));}
   void select(int value){require(IsWindowVisible(control(Tool::list))&&IsWindowEnabled(control(Tool::list)),"List is unavailable");SendMessageW(control(Tool::list),LB_SETCURSEL,value,0);SendMessageW(tool.window(),WM_COMMAND,MAKEWPARAM(Tool::list,LBN_SELCHANGE),reinterpret_cast<LPARAM>(control(Tool::list)));require(tool.snapshot().at("selected")==value,"Native list did not select requested event");}
   void dock(HWND parent,int height=300){tool.dock(parent);tool.dockBounds(0,48,440,float(height));}
   void selectB(){current.selected=Tool::Target{"pattern-b","track-b",1,5,1};++current.selectionGeneration;}
 };
+void namedNativeFields(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);
+  const std::vector<std::pair<int,std::wstring>> names={
+    {Tool::list,L"Precise hits in the captured row"},{Tool::pitch,L"Hit pitch"},{Tool::instrument,L"Hit instrument"},
+    {Tool::velocity,L"Hit velocity"},{Tool::offset,L"Hit offset"},{Tool::units,L"Hit offset units"},{Tool::snap,L"Timeline snap"},
+    {Tool::localEffect,L"Note-local effect"},{Tool::parameter,L"Note-local effect parameter, hexadecimal"},
+    {Tool::repeatCount,L"Fill hit count"},{Tool::endVelocity,L"Fill end velocity"},{Tool::detailsText,L"Precise note details, read only"}};
+  f.field(Tool::offset,L"-");SendMessageW(f.control(Tool::offset),EM_SETSEL,0,1);
+  const auto raw=f.tool.snapshot().at("raw");const auto before=f.saved;
+  for(int page=0;page<4;++page){
+    f.page(page);
+    for(const auto &[id,name]:names)if(IsWindowVisible(f.control(id)))
+      require(ScreamSeq::Tests::accessibleName(f.control(id))==name,"Precise field lost its stable native accessible name");
+  }
+  f.page(0);focus(f.control(Tool::offset));SendMessageW(f.control(Tool::offset),EM_SETSEL,0,1);
+  // A name is only an annotation: raw text, selection and standard edit role
+  // still belong to the Windows provider, including incomplete numeric input.
+  Microsoft::WRL::ComPtr<IAccessible> provider;
+  ScreamSeq::check(AccessibleObjectFromWindow(f.control(Tool::offset),OBJID_CLIENT,IID_PPV_ARGS(&provider)),"Read named precise field provider");
+  VARIANT self{},role{};self.vt=VT_I4;self.lVal=CHILDID_SELF;BSTR value=nullptr;
+  ScreamSeq::check(provider->get_accValue(self,&value),"Read named precise field value");
+  const bool exact=value&&std::wstring_view(value,SysStringLen(value))==L"-";SysFreeString(value);
+  ScreamSeq::check(provider->get_accRole(self,&role),"Read named precise field role");
+  const bool nativeEdit=role.vt==VT_I4&&role.lVal==ROLE_SYSTEM_TEXT;VariantClear(&role);
+  require(exact&&nativeEdit&&caret(f.control(Tool::offset))==std::pair<DWORD,DWORD>{0,1}&&
+    GetFocus()==f.control(Tool::offset)&&f.tool.snapshot().at("raw")==raw&&f.saved==before&&f.writes==0,
+    "Accessible naming changed native text semantics, selection, draft or music");
+}
 void bounds(Fixture &f,std::set<int> *reachable=nullptr){
   RECT client{};GetClientRect(f.tool.window(),&client);std::vector<std::pair<int,RECT>> boxes;
   for(HWND child=GetWindow(f.tool.window(),GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT)){
@@ -226,6 +255,231 @@ void pendingNewerRawAndFocus(Owner &owner){
     f.beforeReply={};f.click(Tool::applyDraft);require(f.submissions.size()==2&&f.writes==2&&f.tool.snapshot().at("selectedEvent").at("velocity")==111&&!f.tool.retainedDraft(),"Explicit next Apply did not save the retained newer raw value");
   }
 }
+void immediateTimelineAndPlayback(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);
+  const auto plot=f.tool.snapshot().at("timeline");
+  const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+  const auto before=f.saved.at("pattern-a");
+  // Complete native double-click sequence in a populated row. The first
+  // empty-space click must not validate a new event at the old occupied offset.
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.5,y+h*.6,MK_LBUTTON);
+  mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.6);
+  mouse(f.tool.window(),WM_LBUTTONDBLCLK,x+w*.5,y+h*.6,MK_LBUTTON);
+  mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.6);
+  require(f.writes==1&&f.saved.at("pattern-a").size()==before.size()+1&&!f.tool.retainedDraft(),"Populated-row double click did not publish exactly one hit");
+  key(f.tool.window(),VK_BACK);
+  require(f.writes==2&&f.saved.at("pattern-a").size()==before.size()&&std::all_of(before.begin(),before.end(),[&](const auto &e){return std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),e)!=f.saved.at("pattern-a").end();}),"Backspace did not delete only the inserted hit immediately");
+  f.page(1);f.select(0);const auto old=f.saved.at("pattern-a");
+  focus(f.control(Tool::list));key(f.control(Tool::list),VK_BACK);
+  require(f.writes==3&&f.saved.at("pattern-a").size()+1==old.size(),"Hit list Backspace did not publish deletion");
+  f.page(0);f.field(Tool::velocity,L"93");const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes==4&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1}&&!f.tool.retainedDraft(),"Debounced valid field edit lost focus/caret or required Apply");
+  const auto count=f.tool.snapshot().at("draftCount");key(field,VK_BACK);
+  require(f.tool.snapshot().at("draftCount")==count,"Text Backspace deleted a musical hit");
+  f.field(Tool::offset,L"1/");const auto saved=f.saved;SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.saved==saved&&text(f.control(Tool::offset))==L"1/","Incomplete fraction escaped the retained raw draft");
+  const auto retainedBefore=retained(f.tool.snapshot());const auto focused=GetFocus();
+  f.tool.playback("doc-a",0,2*256+64,true);
+  require(f.tool.snapshot().at("playbackOffset")==.25&&retained(f.tool.snapshot())==retainedBefore&&GetFocus()==focused,"Playback cursor altered editing focus/selection or used wrong units");
+  f.tool.playback("doc-a",0,3*256,true);require(f.tool.snapshot().at("playbackOffset").is_null(),"Cursor leaked into a different row");
+  f.tool.playback("other",0,2*256+64,true);require(f.tool.snapshot().at("playbackOffset").is_null(),"Foreign document cursor leaked into retained editor");
+  f.tool.playback("doc-a",0,2*256+64,false);require(f.tool.snapshot().at("playbackOffset").is_null(),"Stopped cursor remained visible");
+}
+void automaticAdmissionAndUncertainReply(Owner &owner){
+  const auto tick=[](Fixture &f){SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);};
+  {
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+    f.current.busy=true;tick(f);tick(f);
+    require(f.submissions.empty()&&f.writes==0&&f.tool.retainedDraft(),"Busy admission submitted or discarded a queued precise field edit");
+    f.current.busy=false;tick(f);tick(f);
+    require(f.submissions.size()==1&&f.writes==1&&!f.tool.retainedDraft()&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1},
+      "Deferred precise field edit did not save exactly once with its caret retained");
+  }
+  {
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    // This double commits before its reply fails: automatically retrying it
+    // could duplicate history or overwrite a newer edit in a real session.
+    f.beforeReply=[](const auto &method,Json &){if(method=="pattern.notes.set")throw std::runtime_error("Lost acknowledgement after commit");};
+    tick(f);const auto saved=f.saved;tick(f);tick(f);
+    require(f.submissions.size()==1&&f.writes==1&&f.saved==saved&&f.tool.retainedDraft(),"Uncertain precise write was retried or its draft disappeared");
+    f.beforeReply={};f.tool.reloadCaptured();
+    require(!f.tool.retainedDraft()&&f.tool.snapshot().at("selectedEvent").at("velocity")==94,"Explicit recapture did not reconcile the acknowledged song state");
+  }
+}
+void playbackCaptureIdentity(Owner &owner){
+  for(int variant=0;variant<4;++variant){
+    Fixture f(owner.window);f.dock(owner.window);
+    f.tool.playback("doc-a",0,2*256+64,true);
+    const auto saved=f.saved;const auto writes=f.writes;
+    if(variant==0)f.current.selected->row=3;
+    if(variant==1)f.current.document="other-document";
+    if(variant==2){f.current.patterns[0]["index"]=4;f.current.selected->pattern=4;}
+    if(variant==3){
+      f.current.patterns[0]["id"]="replacement-pattern";
+      f.current.selected->patternID="replacement-pattern";
+      f.saved["replacement-pattern"]=f.saved.at("pattern-a");
+    }
+    ++f.current.selectionGeneration;f.tool.loadSelection();
+    require(f.tool.snapshot().at("playbackOffset").is_null(),"Recapture borrowed telemetry from another row, document or pattern identity");
+    require(f.writes==writes&&f.saved.at("pattern-a")==saved.at("pattern-a")&&f.saved.at("pattern-b")==saved.at("pattern-b"),
+      "Playback recapture changed music");
+  }
+}
+void cleanCapturedRevisionRefresh(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"093");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  const auto hit=[&](unsigned position)->Json &{auto &events=f.saved.at("pattern-a");
+    const auto found=std::find_if(events.begin(),events.end(),[&](const auto &event){return event.at("channel")==0&&event.at("position")==position;});
+    require(found!=events.end(),"Revision refresh fixture lost its addressed event");return *found;};
+  const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,2);
+  f.tool.playback("doc-a",0,2*256+64,true);
+  f.selectB(); // Pinned/focused refresh must keep pattern A, row 2.
+  hit(3*units+100)["velocity"]=51;f.current.revision="r"+std::to_string(++f.revision);
+  const auto reads=f.reads,writes=f.writes;
+  require(f.tool.refreshCleanCaptured()&&f.reads==reads+1&&f.writes==writes&&f.tool.capturedCurrent(),"Clean capture did not refresh its replacement baseline without writing");
+  require(text(field)==L"093"&&caret(field)==std::pair<DWORD,DWORD>{1,2}&&GetFocus()==field&&!f.tool.retainedDraft(),"Unrelated revision reformatted the clean focused field or lost its caret");
+  require(f.tool.capturedTarget()->patternID=="pattern-a"&&f.tool.capturedTarget()->row==2,"Revision refresh followed the unrelated pattern cursor");
+  require(f.tool.snapshot().at("playbackOffset")==.25,"Unrelated revision erased the captured-row playback cursor");
+  // Undo/Redo changes the selected event's musical value, and its visible field
+  // follows without requiring Reload captured or stealing keyboard ownership.
+  hit(2*units+16384)["velocity"]=71;f.current.revision="r"+std::to_string(++f.revision);
+  require(f.tool.refreshCleanCaptured()&&text(field)==L"71"&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},"Clean history refresh left stale music or lost native field focus");
+  require(f.tool.snapshot().at("playbackOffset")==.25,"History refresh erased the captured-row playback cursor");
+  f.field(Tool::velocity,L"72");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(hit(2*units+16384).at("velocity")==72&&hit(3*units+100).at("velocity")==51&&!f.tool.retainedDraft(),"Editing after refresh required reload or overwrote another row");
+  f.tool.hide();hit(3*units+100)["velocity"]=52;f.current.revision="r"+std::to_string(++f.revision);
+  const auto hiddenReads=f.reads,hiddenWrites=f.writes;
+  f.tool.show();require(f.reads==hiddenReads,"Revealing a precise row reentered the worker during native layout");
+  SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);f.current.busy=true;
+  SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==hiddenReads&&!f.tool.capturedCurrent(),"Revealed row bypassed the busy document owner");
+  f.current.busy=false;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==hiddenReads+1&&f.writes==hiddenWrites&&f.tool.capturedCurrent()&&
+    f.tool.capturedTarget()->patternID=="pattern-a"&&f.tool.capturedTarget()->row==2&&
+    text(field)==L"72"&&caret(field)==std::pair<DWORD,DWORD>{1,2}&&GetFocus()==field,
+    "Revealed clean row stayed stale, followed the cursor, wrote music or lost its field/caret");
+  SendMessageW(f.tool.window(),WM_TIMER,3,0);require(f.reads==hiddenReads+1,"Completed reveal refresh repeated a worker read");
+  f.field(Tool::velocity,L"72x");const auto retainedDraft=retained(f.tool.snapshot());
+  f.current.revision="r"+std::to_string(++f.revision);const auto draftReads=f.reads;
+  require(!f.tool.refreshCleanCaptured()&&f.reads==draftReads&&retained(f.tool.snapshot())==retainedDraft,"Revision refresh rebased or discarded invalid raw input");
+  f.tool.hide();f.tool.show();SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==draftReads&&retained(f.tool.snapshot())==retainedDraft&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},
+    "Revealing a row discarded invalid raw input or moved its caret");
+  f.tool.reloadCaptured();const auto captured=retained(f.tool.snapshot());f.current.document="other-document";
+  require(!f.tool.refreshCleanCaptured()&&retained(f.tool.snapshot())==captured,"Clean captured refresh crossed document identity");
+  f.tool.hide();f.tool.show();const auto otherReads=f.reads;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==otherReads&&retained(f.tool.snapshot())==captured,"Revealed row crossed document identity");
+  Fixture blank(owner.window,false);blank.saved.at("pattern-a")=Json::array();blank.current.insertionInstrument=2;blank.tool.openAt();blank.dock(owner.window);
+  blank.current.insertionInstrument=3;blank.current.revision="r"+std::to_string(++blank.revision);
+  require(blank.tool.refreshCleanCaptured()&&text(blank.control(Tool::instrument))==L"2","Unrelated revision changed the captured empty-row insertion sound");
+  blank.click(Tool::addHit);blank.click(Tool::removeHit);
+  require(text(blank.control(Tool::instrument))==L"2"&&!blank.tool.retainedDraft(),"Removing a hit exposed a later uncaptured sound after refresh");
+}
+void projectSaveFlushesOnlyQueuedIntent(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+  const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,1);
+  f.tool.flushForProjectSave();f.tool.flushForProjectSave();
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.retainedDraft()&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,1},"Native project save failed to flush one valid queued edit with focus intact");
+  f.field(Tool::offset,L"1/");f.tool.flushForProjectSave();
+  require(f.writes==1&&text(f.control(Tool::offset))==L"1/"&&f.tool.retainedDraft(),"Project save normalized or published invalid raw input");
+  f.tool.reloadCaptured();f.field(Tool::velocity,L"95");f.current.busy=true;
+  rejected([&]{f.tool.flushForProjectSave();},"Project save proceeded while the automatic edit still awaited worker admission");
+  require(f.submissions.size()==1&&f.tool.retainedDraft(),"Busy project save submitted or lost a precise draft");
+  f.current.busy=false;f.beforeReply=[](const auto &method,Json &){if(method=="pattern.notes.set")throw std::runtime_error("Uncertain save flush acknowledgement");};
+  rejected([&]{f.tool.flushForProjectSave();},"Uncertain flush outcome did not stop the project save");
+  const auto submitted=f.submissions.size();f.tool.flushForProjectSave();
+  require(submitted==2&&f.submissions.size()==submitted&&f.tool.retainedDraft(),"Later project save replayed an uncertain field write");
+}
+void cancellingDragRetainsEarlierAutomaticEdit(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+  const auto before=f.tool.snapshot().at("selectedEvent"),plot=f.tool.snapshot().at("timeline");
+  const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.25,y+h*(1-94./127),MK_LBUTTON);
+  mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.5,y+h*.5,MK_LBUTTON);
+  require(f.tool.snapshot().at("selectedEvent")!=before,"Cancelled drag fixture did not move its hit");
+  key(f.tool.window(),VK_ESCAPE);
+  require(f.writes==0&&f.tool.snapshot().at("selectedEvent")==before&&GetCapture()!=f.tool.window(),"Escape failed to cancel just the drag");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.retainedDraft()&&
+    std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),before)!=f.saved.at("pattern-a").end(),
+    "Cancelling a drag lost or duplicated the valid field edit queued before it");
+}
+void selectionFinishesEarlierAutomaticEdit(Owner &owner){
+  for(bool blank:{false,true}){
+    Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"94");
+    const auto edited=f.tool.snapshot().at("selectedEvent"),plot=f.tool.snapshot().at("timeline");
+    if(blank){
+      mouse(f.tool.window(),WM_LBUTTONDOWN,plot.at("x").get<double>()+plot.at("width").get<double>()*.5,
+        plot.at("y").get<double>()+plot.at("height").get<double>()*.9,MK_LBUTTON);
+      require(f.tool.snapshot().at("selected")==-1,"Blank canvas did not deselect the saved hit");
+    }else {f.page(1);f.select(1);}
+    require(f.writes==1&&f.submissions.size()==1&&std::find(f.saved.at("pattern-a").begin(),f.saved.at("pattern-a").end(),edited)!=f.saved.at("pattern-a").end(),
+      "Changing selection stranded the earlier valid field edit");
+    f.field(Tool::velocity,L"unfinished");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
+    require(f.writes==1&&f.submissions.size()==1&&text(f.control(Tool::velocity))==L"unfinished",
+      "New invalid selection input replayed or changed the already saved hit");
+  }
+  Fixture newer(owner.window);newer.dock(owner.window);newer.field(Tool::velocity,L"94");newer.page(1);
+  newer.beforeReply=[&](const auto &method,Json &){if(method=="pattern.notes.set"){
+    SetWindowTextW(newer.control(Tool::velocity),L"newer raw");
+  }};
+  SendMessageW(newer.control(Tool::list),LB_SETCURSEL,1,0);
+  SendMessageW(newer.tool.window(),WM_COMMAND,MAKEWPARAM(Tool::list,LBN_SELCHANGE),reinterpret_cast<LPARAM>(newer.control(Tool::list)));
+  require(newer.writes==1&&newer.tool.snapshot().at("selected")==0&&text(newer.control(Tool::velocity))==L"newer raw"&&newer.tool.retainedDraft(),
+    "Selection after a pumped save discarded newer raw input");
+}
+void historyFinishesQueuedMusic(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);require(!f.tool.queuedMusicalEdit(),"Clean notes advertised an Undo candidate");
+  f.choose(Tool::snap,1);require(!f.tool.queuedMusicalEdit(),"Presentation-only snap advertised a musical Undo candidate");
+  f.field(Tool::velocity,L"94");require(f.tool.queuedMusicalEdit(),"Queued velocity did not advertise a musical Undo candidate");
+  focus(f.tool.window());f.tool.flushForHistory();
+  require(f.writes==1&&f.submissions.size()==1&&!f.tool.queuedMusicalEdit()&&!f.tool.retainedDraft()&&GetFocus()==f.tool.window(),
+    "History failed to publish the queued edit once without moving canvas focus");
+  SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);require(f.submissions.size()==1,"History flush left a timer that repeated the note edit");
+  f.field(Tool::velocity,L"unfinished");f.tool.flushForHistory();
+  require(f.submissions.size()==1&&text(f.control(Tool::velocity))==L"unfinished"&&f.tool.retainedDraft(),"History flushed invalid raw input");
+}
+void nativeEdgeHitHandles(Owner &owner){
+  for(const auto &[offset,velocity]:std::array<std::pair<unsigned,unsigned>,4>{{{0,80},{65535,80},{16384,127},{16384,1}}}){
+    Fixture f(owner.window,false);const auto hit=event(0,2,offset,65,velocity);
+    f.saved["pattern-a"]=Json::array({hit,event(1,2,100,72,60)});f.tool.openAt();f.dock(owner.window);
+    const auto plot=f.tool.snapshot(false).at("timeline");
+    const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
+    const auto px=offset==0?x-3:offset==65535?x+w+3:x+w*offset/units;
+    const auto py=velocity==127?y-3:velocity==1?y+h+2:y+h*(1-velocity/127.);
+    mouse(f.tool.window(),WM_LBUTTONDOWN,px,py,MK_LBUTTON);
+    require(GetCapture()==f.tool.window()&&f.tool.snapshot().at("dragging"),"Visible edge hit handle could not be grabbed outside plot border");
+    mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.5,y+h*.5,MK_LBUTTON);mouse(f.tool.window(),WM_LBUTTONUP,x+w*.5,y+h*.5);
+    require(f.writes==1&&!f.tool.retainedDraft()&&std::abs(int(f.tool.snapshot().at("selectedEvent").at("position").get<unsigned>()%units)-32768)<=128,
+      "Edge hit drag did not immediately save one timing edit");
+    require(f.saved.at("pattern-a")==Json::array({event(1,2,100,72,60),f.tool.snapshot().at("selectedEvent")}),
+      "Edge drag changed another channel or the exact replacement event set");
+    const auto saved=f.saved;const auto submissions=f.submissions.size();
+    mouse(f.tool.window(),WM_LBUTTONDBLCLK,x-3,y+h*.75);mouse(f.tool.window(),WM_LBUTTONUP,x-3,y+h*.75);
+    require(f.saved==saved&&f.submissions.size()==submissions,"Double-click in empty timeline margin inserted a note");
+  }
+}
+void nativePageTabOrder(Owner &owner){
+  Fixture f(owner.window);f.dock(owner.window);f.field(Tool::offset,L"unfinished");
+  const auto before=retained(f.tool.snapshot());
+  const std::array<std::vector<int>,4> bodies={
+    std::vector<int>{Tool::snap,Tool::addHit,Tool::removeHit,Tool::offset,Tool::units,Tool::velocity},
+    std::vector<int>{Tool::list,Tool::pitch,Tool::instrument,Tool::velocity,Tool::localEffect,Tool::parameter,Tool::offset,Tool::units,Tool::snap},
+    std::vector<int>{Tool::replaceRow,Tool::repeatCount,Tool::endVelocity,Tool::fillRow,Tool::loadTarget,Tool::returnPattern,Tool::close},
+    std::vector<int>{Tool::detailsText}};
+  for(int page=0;page<4;++page){f.page(page);std::vector<int> expected{Tool::pageTimeline,Tool::pageHit,Tool::pageTools,Tool::pageDetails};
+    expected.insert(expected.end(),bodies[page].begin(),bodies[page].end());
+    expected.insert(expected.end(),{Tool::applyDraft,Tool::checkDraft,Tool::reloadCapturedCommand});
+    for(size_t i=0;i<expected.size();++i){const auto a=f.control(expected[i]),b=f.control(expected[(i+1)%expected.size()]);
+      require(IsWindowVisible(a)&&IsWindowEnabled(a)&&(GetWindowLongPtrW(a,GWL_STYLE)&WS_TABSTOP),"Tab-order fixture includes unreachable control");
+      focus(a);key(a,VK_TAB);require(GetFocus()==b,"Forward Tab did not follow precise page reading order");
+      key(b,VK_TAB,false,true);require(GetFocus()==a,"Reverse Tab did not return to preceding visible control");
+    }
+    require(retained(f.tool.snapshot())==before&&f.writes==0,"Tab traversal changed retained note input or wrote music");
+  }
+}
 void nativeTimelineKeysDragAndCancel(Owner &owner){
   Fixture f(owner.window,false);f.saved["pattern-a"]=Json::array();f.tool.openAt();f.dock(owner.window);auto plot=f.tool.snapshot(false).at("timeline");
   const auto x=plot.at("x").get<double>(),y=plot.at("y").get<double>(),w=plot.at("width").get<double>(),h=plot.at("height").get<double>();
@@ -239,8 +493,9 @@ void nativeTimelineKeysDragAndCancel(Owner &owner){
   key(f.tool.window(),VK_RIGHT,false,false,true);require(f.tool.snapshot().at("selectedEvent").at("position").get<unsigned>()==nudged.at("position").get<unsigned>()+1,"Alt nudge did not use one precise unit");
   // Invalid raw input must not be overwritten by a later canvas arrow.
   f.field(Tool::offset,L"unfinished");const auto invalid=retained(f.tool.snapshot());focus(f.tool.window());key(f.tool.window(),VK_RIGHT);require(retained(f.tool.snapshot())==invalid&&text(f.control(Tool::offset))==L"unfinished","Canvas arrow clamped/replaced invalid raw timing");
-  f.tool.reloadCaptured();mouse(f.tool.window(),WM_LBUTTONDBLCLK,x+w*.25,y+h*.25);initial=f.tool.snapshot().at("selectedEvent");f.choose(Tool::snap,1);
-  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*.25,y+h*(1-initial.at("velocity").get<double>()/127),MK_LBUTTON);
+  f.tool.reloadCaptured();initial=f.tool.snapshot().at("selectedEvent");f.choose(Tool::snap,1);
+  require(f.tool.snapshot().at("snap")==1,"Snap selector failed before the drag");
+  mouse(f.tool.window(),WM_LBUTTONDOWN,x+w*(initial.at("position").get<unsigned>()%units)/units,y+h*(1-initial.at("velocity").get<double>()/127),MK_LBUTTON);
   {Keys modifiers(false,true,false);mouse(f.tool.window(),WM_MOUSEMOVE,x+w*.75,y+h*.8,MK_LBUTTON|MK_SHIFT);}
   mouse(f.tool.window(),WM_LBUTTONUP,x+w*.75,y+h*.8);const auto shifted=f.tool.snapshot().at("selectedEvent");
   require(shifted.at("position")==2*units+49152&&shifted.at("velocity")==initial.at("velocity")&&GetCapture()!=f.tool.window(),"Snapped Shift-drag lost exact grid or velocity lock");
@@ -251,7 +506,7 @@ void nativeTimelineKeysDragAndCancel(Owner &owner){
   require(caret(f.control(Tool::offset))==std::pair<DWORD,DWORD>{1,1}&&retained(f.tool.snapshot())==editState,"Native Edit arrow was consumed as musical timing input");
   key(f.control(Tool::offset),VK_F6);require(f.tool.snapshot(false).at("page")=="timeline"&&GetFocus()==f.tool.window(),"LocalF6 did not restore Timeline canvas");
   key(f.tool.window(),'D',true);require(f.tool.snapshot().at("draftCount")==2,"Canvas duplicate did not stage another hit");key(f.tool.window(),VK_DELETE);require(f.tool.snapshot().at("draftCount")==1,"Canvas Delete did not remove only selected hit");
-  require(f.submissions.empty()&&f.current.revision=="r0"&&f.saved.at("pattern-a").empty(),"Local gestures saved musical data before Apply");
+  require(f.writes>=5&&f.saved.at("pattern-a")==f.tool.snapshot().at("draft")&&!f.tool.retainedDraft(),"Timeline gestures did not save immediately without Apply");
   key(f.tool.window(),VK_ESCAPE);require(f.returns==1,"Idle Escape did not invoke Return exactly once");
 }
 void focusedButtonEnterRunsItsOwnAction(Owner &owner){
@@ -271,6 +526,8 @@ void focusedButtonEnterRunsItsOwnAction(Owner &owner){
       require(f.submissions.size()==1&&f.submissions[0].at("dryRun")==false&&f.writes==1&&f.tool.capturedCurrent(),"Focused Apply Enter did not submit exactly one save");
       const auto &events=f.saved.at("pattern-a");const auto savedHit=std::find_if(events.begin(),events.end(),[](const auto &e){return e.at("channel")==0&&e.at("position")==2*units+16384;});
       require(savedHit!=events.end()&&savedHit->at("velocity")==90,"Focused Apply Enter saved the wrong row value");
+    }else if(id==Tool::addHit||id==Tool::removeHit||id==Tool::fillRow||id==Tool::close){
+      require(f.submissions.size()==1&&f.writes==1&&f.tool.capturedCurrent(),"Musical button Enter did not save its own edit exactly once");
     }else{
       require(f.saved==saved&&f.writes==0&&f.current.revision=="r0","Enter on a non-Apply button saved music");
       if(id==Tool::checkDraft)require(f.submissions.size()==1&&f.submissions[0].at("dryRun")==true,"Focused Check Enter was not exactly one dry run");
@@ -362,7 +619,7 @@ void selectedSoundSeed(Owner &owner){
     require(f.tool.snapshot().at("raw").at("instrument")=="2"&&f.tool.snapshot().at("draftCount")==0,"An empty row did not freeze the sound selected before its read");
     f.beforeReply={};f.tool.observeContext();require(text(f.control(Tool::instrument))==L"2","A later sound choice rewrote the captured empty-row fields");
     f.page(0);f.click(Tool::addHit);require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Add used a later sound or ordinary empty-cell zero");
-    f.click(Tool::checkDraft);require(f.writes==0&&f.saved.at("pattern-a").empty()&&f.submissions.back().at("dryRun")==true,"Sound seeding/Check saved music");
+    const auto inserted=f.saved.at("pattern-a");f.click(Tool::checkDraft);require(f.writes==1&&f.saved.at("pattern-a")==inserted&&f.submissions.back().at("dryRun")==true,"Check changed the automatically saved insertion");
     f.click(Tool::applyDraft);require(f.writes==1&&f.saved.at("pattern-a")[0].at("instrument")==2,"Apply did not save exactly the captured sound");
     f.tool.reloadCaptured();require(f.tool.snapshot().at("selectedEvent").at("instrument")==2,"Reload replaced an existing precise event with the current sound");
     // Only a subsequent explicit capture of a truly empty row adopts sound 3.
@@ -459,6 +716,7 @@ int wmain(int argc,wchar_t **argv){try{
   ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqPreciseNoteOwner",argc,argv,[]{
     ScreamSeq::check(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED),"Initialize precise-note fixture COM");struct Com{~Com(){CoUninitialize();}} com;
     Owner owner;
+    namedNativeFields(owner);std::cout<<"PASS precise-note native accessible names, raw values and text semantics\n";
     minimumPages(owner);std::cout<<"PASS precise-note minimum pages, actions and compact diagnostics\n";
     retainedRawCaretAndVirtualList(owner);std::cout<<"PASS precise-note retained HWND, raw text, caret and virtual-list scroll\n";
     hiddenInitializationAndStrictReplies(owner);std::cout<<"PASS precise-note hidden initialization and strict failed/malformed reads\n";
@@ -467,6 +725,16 @@ int wmain(int argc,wchar_t **argv){try{
     requestMergeAndCheckBoundary(owner);std::cout<<"PASS precise-note captured read/merge/write and dry-run boundary\n";
     pendingNewerRawAndFocus(owner);std::cout<<"PASS precise-note pending newer raw generation and native focus ownership\n";
     nativeTimelineKeysDragAndCancel(owner);std::cout<<"PASS precise-note DPI-scaled timeline drag/cancel and local keyboard ownership\n";
+    nativeEdgeHitHandles(owner);std::cout<<"PASS precise-note visible edge handles and empty margin insertion exclusion\n";
+    nativePageTabOrder(owner);std::cout<<"PASS precise-note native forward/reverse Tab in visible reading order\n";
+    immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
+    automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
+    playbackCaptureIdentity(owner);std::cout<<"PASS precise-note playback cursor cannot cross captured row, document or pattern identity\n";
+    cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";
+    projectSaveFlushesOnlyQueuedIntent(owner);std::cout<<"PASS project save flushes one queued precise edit without replaying uncertain or invalid input\n";
+    cancellingDragRetainsEarlierAutomaticEdit(owner);std::cout<<"PASS cancelled precise drag retains an earlier queued field save exactly once\n";
+    selectionFinishesEarlierAutomaticEdit(owner);std::cout<<"PASS precise selection finishes queued edits and protects newer raw input\n";
+    historyFinishesQueuedMusic(owner);std::cout<<"PASS precise song history finishes queued music without replaying invalid input\n";
     focusedButtonEnterRunsItsOwnAction(owner);std::cout<<"PASS precise-note focused Button Enter and explicit Apply shortcut\n";
     musicalDetailsAndReadonlyKeys(owner);std::cout<<"PASS precise-note musical hit overview and retained read-only Details\n";
     descriptionValidationBeforeAdoption(owner);std::cout<<"PASS precise-note optional description validation before adoption\n";

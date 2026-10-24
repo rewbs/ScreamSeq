@@ -46,7 +46,8 @@
             [this](const auto &method,const auto &params,const auto &receipt){return documentOperationWithOutcome(method,params,receipt);},[this]{return !busy&&!recoveryRestoring;});
             const auto document=documentId;
             editor->recording([this,document,plugin]{return capturesParameterControl(document,plugin);},
-                [this,document,plugin](uint32_t parameter,double value,uint64_t time){captureParameterControl(document,plugin,parameter,value,time);});
+                [this,document,plugin](uint32_t parameter,double value,uint64_t time){captureParameterControl(document,plugin,parameter,value,time);},
+                [this]{openParameterRecording();});
             if(songRoutingWindow&&songRoutingWindow->visible()){
                 RECT graph{},panel{};GetWindowRect(songRoutingWindow->window(),&graph);GetWindowRect(editor->window(),&panel);
                 MONITORINFO monitor{sizeof(monitor)};if(GetMonitorInfoW(MonitorFromWindow(songRoutingWindow->window(),MONITOR_DEFAULTTONEAREST),&monitor)){
@@ -56,6 +57,7 @@
                 }
             }
         }
+        if(parameterControlDelivery.needsReview())editor->recordingNeedsReview(parameterTakeDocument,parameterControlDelivery.reviewMessage());
         editor->show();
     }
     std::unique_ptr<ScreamSeq::SongRoutingWindow> makeSongRoutingWindow(std::shared_ptr<bool> preparing={}){

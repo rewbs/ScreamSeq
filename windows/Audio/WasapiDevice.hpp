@@ -1,5 +1,6 @@
 #pragma once
 #include "PresentationClock.hpp"
+#include "DeadlineEvidence.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -19,6 +20,7 @@ public:
   struct Options {
     std::wstring endpoint; // Empty selects the current multimedia default.
     std::uint32_t periodFrames=0; // Zero selects the lowest supported period.
+    bool diagnosticThreadCycles=false; // Opt-in profiling overhead; never a release benchmark.
   };
   struct Endpoint {std::wstring id,name;bool isDefault=false;};
   // Control-thread enumeration only. Never changes system routing or defaults.
@@ -75,6 +77,10 @@ public:
   bool running() const noexcept;
   // Atomic fields are sampled independently, not a transactional snapshot.
   Stats stats() const noexcept;
+  // Control owner only, serialized with lifecycle. Returns false and an empty
+  // result while a worker is joinable, even if it has stopped/faulted on its own.
+  // stop() joins it. No live reader touches the render-owned evidence storage.
+  bool stoppedDeadlineEvidence(DeadlineEvidence::Snapshot &result)const noexcept;
 
 private:
   struct Impl;

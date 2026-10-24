@@ -4,7 +4,7 @@
 
 namespace ScreamSeq {
 // One in-process native request owns one receipt. This is neither a replay
-// cache nor a persisted/wire request ID. Only its worker publishes a result;
+// cache nor a persisted/wire request ID. Only its owning control path publishes a result;
 // the UI may inspect it after a lost or failed native completion callback.
 class NativeCallReceipt final {
   std::atomic<std::shared_ptr<const Api::CompletedCall>> completed_;

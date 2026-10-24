@@ -8,6 +8,760 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 07:47 UTC:** Next frozen source is
+`244a5549ca5f8fc1a2d5a6709f185686b2ad8a71`, backed up and fast-forwarded into the
+clean qualification checkout. Prepared `recording-observation/checkpoint.ps1`
+has not run. It coordinates the PR push, one manual pinned-stock PCM job and one
+local build, no earlier than08:02:41 UTC and only after current CI is terminal.
+The local checks select three changed native groups plus scratch setup and two
+actual-app cases; unchanged passing6a evidence is retained. Intel CI remains
+live. Windows is terminal:161/162 worker/portable and53/53 native groups passed;
+export PCM failed. App122 had25 failures/one skip:22 distinct playback-startup
+failures and three secondary teardown failures, with empty audio-device
+diagnostics. No false green gate, package or merge. See the export report.
+
+**24 October 07:43 UTC source continuation:** Sample recording status polls
+now leave the name and Keep-as fields enabled, with pending departure and
+mutation guards retained. Success/busy focus, caret and newer-draft assertions
+are added to `native-tool-window-tests`. This is unbuilt; include it and the
+unbuilt `document-controller-live-parameters` export case in the next checkpoint.
+Intel compilation passed; Intel/Windows CI tests were still running at07:40.
+No package or merge, and no build before08:02:41 UTC (or later actual starts).
+
+**24 October 07:17 UTC update:** PR7/frozen qualification source is
+`6a9d3d4b7d931cb291f8f11b6ba29a0115de379b`. The single07:02 build and terminal
+`audio-export-followup/qualified-checks.json` supersede the candidate status
+below:10/11 native groups plus setup, all3 composing/recording app journeys and
+bounded silent WASAPI pass. Shared export PCM remains red. The precise-note
+oracle omitted explicit schedule preparation; the primary checkout fixes that
+setup without weakening exact PCM assertions, unbuilt. Same-partition dry
+exports are exactly equal to independent core; tiny differences across
+partitions remain under investigation. The primary also has an unbuilt
+`document-controller-live-parameters` accepted-song/active-preview export case.
+Fresh foreground observations cover automatic precise edits, canvas versus
+text Backspace, Save caret, Tab traversal, left-edge drag/Undo, visible cursor
+and native WAV export with unchanged playback epoch. Float worked; resize and
+sustained presentation remain unqualified. No package or merge.
+
+At07:30 Mac ARM job120808941853 was terminal: compilation,134/135 CTests,
+native interface, socket/conformance and AU/VST3 virtual-device recording
+passed; the sole CTest failure is the precise export oracle. Dry partition
+counts/deltas exactly match Windows. Intel and Windows remain active.
+Source0460f9cf7 adds independent export case reporting and an on-demand pinned
+stock PCM workflow (`qualification: stock`) for the next coordinated checkpoint.
+No current product or engine behavior changed, and no stock comparison has run.
+Next checkpoint **no earlier
+than2026-10-24 08:02:41 UTC**, extended by later starts and requiring preceding
+CI terminal. Inspect existing receipts; never run the07:02 build/check again.
+The following06:25 narrative is retained as historical failure context.
+
+**24 October 06:25 UTC:** PR7 and the completed qualification build are
+`dbb15bfa07d6964cc06e0ca91ed422c784f2983b`. One local build passed; seven of nine
+native groups plus required scratch setup passed. The shared exact partition
+PCM assertion and new module-export Undo fixture failed. Three separate app
+journeys passed interleaved history but failed two full-song export replies at
+the server's five-second dispatch deadline. All failures are retained in
+`audio-export/qualified-checks.json` and `diagnostic-app.json`; do not repeat
+those attempts or package this candidate.
+
+Source corrections compare complete project bytes for Undo/Redo rather than
+revision wrappers, give only admitted audio exports the Mac120-second reply
+budget, preserve five-second queue cancellation, and wake active dispatches on
+close. The existing ApiTests registration adds real message/pipe lifecycle tests.
+Full export clients/process lifetimes are bounded for their actual workloads;
+ordinary edit/readiness deadlines and every musical assertion remain unchanged.
+The exact cross-partition PCM assertion is still mandatory, with independent
+full-song core comparisons and richer failure diagnostics now unbuilt. Inspect
+those before changing engine behavior or the test contract.
+
+Fresh diagnostic Computer Use on PID41068 (now exited0) produced a valid27-second
+WAV through File > Export audio; cancellation restored precise velocity caret,
+Backspace edited text, Tab/Shift+Tab traversed correctly. All receipts are under
+`audio-export/foreground-diagnostic`. Its300-second48k/480-frame silent run had
+25 overruns, zero starvation/errors;24 matched bounded engine-stage timings.
+That stage includes native instruments/routing; it is not individual-processor
+or CPU-time attribution. No performance, temporal-flicker or release claim.
+
+Resolve the latest correction in `audio-export-followup/freeze.json`, backed
+up to `codex/mac-gesture-next-checkpoint` and clean in qualification. Earlier
+unbuilt manifests are retained separately; do not build their superseded hashes.
+Use `audio-export-followup/checkpoint.ps1` only after inspecting its receipts;
+none exists yet. Its check runner retains all failures and collects independent
+app diagnostics without turning a failed aggregate green. At06:29 the preceding
+Mac ARM job passed compilation and134/135 CTests; its sole native failure is
+the same dry partition assertion. Intel and Windows remained active. See
+`audio-export/completed-ci.json` for the downloaded log hash.
+
+Next checkpoint **no earlier than2026-10-24 07:01:52 UTC**, extended by later
+actual starts and blocked until preceding CI is terminal. At06:17 current CI
+40068553924 (Mac) and40068553934 (Windows) was still building; never restart it.
+Read `inspect-audio-export-ci.py` for status. Add ApiTests to the next local build
+and native selection, retain all nine original groups plus required setup and
+three complete composing journeys. The current continuation additionally builds
+and selects `precise-note-window-tests` (eleven native groups total): clean row
+refresh must retain the last observed playback cursor, while recapturing another
+document, stable pattern, pattern slot or row clears it. These assertions are
+unbuilt. Mac export/PCM/socket, reciprocal edited
+projects and sustained Windows qualification remain before package/main merge.
+See [export findings and exact hashes](AUDIO-EXPORT-2026-10-24.md).
+
+At06:44 UTC all preceding dbb CI jobs were terminal. Mac ARM and Intel each
+passed134/135 CTests, with only the exact dry partition assertion failing;
+both passed native interface, socket, sample-library and plugin lifecycle gates.
+Windows passed161/162 portable/worker groups and52/53 native groups, retaining
+the same export and module-Undo failures. Its122-case actual-app run reported
+24 failures, one error and one optional skip, principally absent-endpoint
+startup; the error also occurred during owned-app readiness. These are failed
+results, not waived gates. Downloaded logs/hashes are in
+`audio-export/completed-ci.json`. No jobs were restarted.
+
+## Historical checkpoint notes
+
+The entries below describe earlier source and evidence boundaries. They do not
+override the current frozen source, receipts, gate or unresolved audio failure.
+
+**24 October 05:39 UTC:** `retained-reveal` source24788 built once and passed
+all seven local native groups, five composing journeys and the short silent
+WASAPI gate. Fresh Computer Use passed precise insertion/deletion/live typing,
+Save caret, retained Activity reopen, clean hidden-row refresh and native
+Record/Stop/Keep. The ordinary634.541-second run still had45 deadline overruns;
+production packaging and main merge remain held. A separate180.052-second
+cycle diagnostic retained15 overruns and is not performance qualification.
+Both owned QA processes exited normally. See the exact receipts and limitations
+in [live parameter release](LIVE-PARAMETER-RELEASE-2026-10-23.md).
+
+Next frozen source is **d67e31d1f5a4c84d53c5fa20fc8cca9c584389f8**, backed up on
+`codex/mac-gesture-next-checkpoint` and checked out cleanly in qualification.
+It adds shared full-song WAV export, guarded APIs/native commands and an
+opt-in bounded render-stage diagnostic. The completed native continuation
+preserves song filename suggestions, flushes automatic fields for both exports,
+retains chooser focus/caret on cancel/failure, and labels successful audio-result
+Review correctly without rewriting. Its layered VST3 journey now exports the
+processed song and the four verified layer-isolation derivatives. These additions
+are **unbuilt**. Earlier undispatched manifests are retained in the evidence folder.
+`audio-export/checkpoint.ps1` pushes/builds this exact hash; later clean primary
+documentation commits are excluded. Its nine native groups, three complete
+composing journeys and fresh ordinary/cycle WASAPI checks run in one build,
+followed by Computer Use and a separate stage diagnostic. See
+[audio export](AUDIO-EXPORT-2026-10-24.md). No earlier callback pass qualifies
+the changed rendering inputs.
+
+The checkpoint cannot start before **2026-10-24 06:01:19 UTC**, after checking
+later actual build starts and completion of preceding CI. At05:52,24788 Mac ARM
+and Intel both passed134 CTests plus native interface/socket/device gates.
+Windows compiled and passed159 portable/worker,53 native, four
+scratch,39 vendor-ownership and18 typed/pipe tests. Its122-case app run failed25
+assertions across22 tests, largely owned-app startup with no WASAPI endpoint
+(including three duplicate teardown failures), with one optional skip. Preserve
+that failed CI result; local passes do not turn it green. Downloaded terminal
+logs and hashes are in `retained-reveal/completed-ci.json`.
+The final Intel log SHA256 is
+`b05219ac8b684f0cdaefc9a88f5810ecf6b2495731a8a375b5163d3e947e0a6d`.
+No CI job was restarted. `audio-export/stage-reader-synthetic.json` records only
+cheap reader-validation cases and Python parse checks; it is not app evidence.
+
+
+
+**24 October 04:25 UTC current boundary:** aa008 built once; all9 native/shared
+and8 app journeys plus short silent WASAPI passed. Fresh Computer Use confirmed
+precise live gestures/Save caret and native plugin Record/slider/Stop/Keep.
+It found frozen Activity capture loss on reopen and a clean hidden precise row
+remaining stale when resize revealed it. Both have source corrections and new
+assertions, not yet rebuilt. Foreground606.133s recorded38 deadline overruns;
+no sustained performance/flicker qualification. QA19052 exited0. No package or
+merge. See LIVE-PARAMETER-RELEASE's final section and
+`activity-refresh-history/foreground-check.json`. Next checkpoint no earlier
+than2026-10-24 05:00:40UTC, only after terminal CI/later-start inspection. The
+entries below describe older boundaries and do not override this one.
+
+**24 October presentation-start correction:**0f5 ARM device evidence proves
+its first accepted input preceded the first presentation interval. Both native
+recording Start adapters now use a shared first-presentation admission guard,
+preserving original timestamps and pending/gap semantics. New shared assertions
+and unchanged strict real-device event mapping require fresh execution; see
+LIVE-PARAMETER-RELEASE's final section. The unexecuted `activity-refresh-history`
+checkpoint now requires **nine native/shared groups, eight app journeys and
+a fresh silent hardware audit**, then Computer Use. Earlier clock/audio passes
+are historical evidence, not qualification of this source. No package or merge.
+
+**24 October 03:18 UTC current boundary:** frozen0f5 built once; all seven native
+groups and six/seven composing journeys passed. Activity Refresh was swallowed
+while polling after external history; preserve the failed aggregate. Fresh
+isolated Computer Use confirmed precise insertion/deletion/live typing/native
+Save caret and found a second issue: shared Undo restored canonical pattern
+points but left the clean visible curve stale. Source now queues guarded
+Activity Refresh, updates clean pattern curves after UI/API history without
+following the editing cursor, and suppresses native pointer jitter before a
+real curve drag. New assertions retain exact data, preview/raw-input guards,
+focus and history. See LIVE-PARAMETER-RELEASE's latest section. Current scripts
+will be frozen in `activity-refresh-history`; seven native groups/eight app
+journeys remain mandatory, then fresh Computer Use. No package or merge.
+
+Current0f5 CI40056452912/40056452909 was active at03:09; next checkpoint no earlier
+than2026-10-24 03:59:51UTC, and only after terminal CI/later-start inspection.
+The diagnostic QA process38880 exited normally. Its240.343s run recorded25
+callback overruns: neither performance nor temporal flicker is qualified.
+The same existing-binary diagnostic also confirmed stale Song automation after API history. Both clean editors now refresh while retaining field focus/caret; the added eighth local app case covers recorded Undo/Redo and reopen. The entries below are historical and must not override this boundary.
+**24 October 01:10 UTC checkpoint:** PR7 and the clean qualification source are
+6e4656d5ce2f974b0ab3e42d2ef763e367845426. One local build passed. Menu-bar and
+plugin-search native groups passed; automatic-edit and Activity groups failed
+with JSON fixture errors. Two separate diagnostic app journeys passed in36.342s,
+including144 original inputs and exact history/reopen. These do not erase the
+failed native gate. Source-only test corrections now establish a fresh trace
+after Refresh, explicitly select the next scenario's point after history clears
+selection, and assert those preconditions. No product assertions were removed.
+The next bounded gate reruns both failed groups and validates unchanged inputs
+before reusing the two passing native groups and two app journeys. Fresh
+Computer Use is still required. No package or merge.
+
+Current CI40047539078/40047539069 is active; next checkpoint is no earlier than
+2026-10-24 01:58:10UTC, after terminal CI and later-start inspection. Preserve
+`activity-history-correction` receipts. Inspect the Mac failure-only clock
+diagnostic before changing recording timing. The entries below are historical.
+
+The pending checkpoint also corrects Mac recording-review selection across
+target removal/reordering and take/document boundaries. Its existing interface
+registration adds exact identity/no-write checks; both Mac jobs must execute
+them. This is source-only native UI work. Windows product/reused fixtures,
+shared musical timing, API and persistence inputs are unchanged.
+
+**Latest source continuation:** Windows Record availability now follows retained
+original-input ownership, including owner-only, pending and loss states. It
+guards immediate and read-queued actions before submission. New native checks
+require no write/music change and retained focus. This changes the pending gate
+to **three native groups and two fresh app journeys**; reuse only6e's unchanged
+menu group plus validated shared/audio inputs. See the latest live-parameter
+report and resolve `activity-fixture-correction/freeze.json` for current source.
+
+**24 October 00:42 UTC continuation:** the current Windows source also finishes
+queued Activity edits before opening their captured source. The old1071 binary
+failed the new exact destination-value assertion (-6 displayed after typing -9).
+A separate fixture timing assumption was corrected: selected trace provenance
+is read by sequence, then manual provenance is explicitly selected for the rack
+check. Intel1071 CI is terminal failed because its first retained timestamp had
+no frame mapping; both original inputs remain present and the take is unsealed.
+Failure-only existing-API clock diagnostics are added for the next Mac execution.
+No new build, package or merge. Four native groups/two app journeys remain the
+next local gate. See the latest report for exact receipts and unchanged assertions.
+
+**24 October checkpoint1071 failed qualification:** compilation passed;
+menu-bar and workspace-plugin-search native groups passed; Activity's queued
+selection/Delete assertion failed. The separate144-input composing diagnostic
+passed. Activity diagnostics exposed lost source navigation, an incorrect
+expected deletion total, and intermittent Ctrl+Y refusal; one later diagnostic
+passed but does not supersede failures. Source now corrects list focus cancelling
+navigation, queues guarded source/history intents during observation, and
+refreshes clean recorded lists after history without rebasing active text.
+New native and actual-app assertions remain unbuilt. See the latest section of
+LIVE-PARAMETER-RELEASE for exact receipts, causes and limits. No package/merge/UI
+qualification. Next checkpoint no earlier than2026-10-24 00:57:22UTC and only
+after1071 CI40042447607/40042447613 is terminal and later starts are inspected.
+The next gate now includes four native groups/two app journeys; preserve all
+earlier failed receipts. The added automatic-edit group protects retaining the
+same recorded point after insertion/deletion/history, with no replacement
+selection if its timestamp disappears. The old1071 diagnostic reproduced the
+wrong-row selection on Reload; the source correction is still unbuilt.
+
+The correction batch also retains Keep → Song automation navigation during
+recording refresh/worker busy periods and clears stale Keep destinations at an
+external new-take boundary, including hidden Record/Discard cycles. These are
+source-only native presentation changes with existing-group regressions and
+bounded exact composing-journey checks; capture/timing/history semantics stay
+with the existing worker. Include the handoff in the next fresh foreground check.
+
+The entries immediately below describe the preceding preparation and evidence.
+
+**Latest bounded gate:** three native groups (Activity, workspace-plugin-search,
+workspace-menu-bar), two actual-app journeys. Activity list Backspace/Delete and
+configured shared Undo/Redo are added, preserving text deletion/native text Undo
+and refusing deletion before a queued point selection finishes. The menu group
+protects precise-list/text shortcuts after the narrow dispatcher change. A
+one-row disposable QA loop makes the precise playback cursor observable; it is
+not a substitute for the sustained full-song workload. Still source-only.
+
+**23:39UTC terminal3408 CI:** Mac ARM fully passed. Intel compiled, passed134
+CTests/interface/socket/typed gates, but failed the real-session recovery input/
+timestamp/frame/ownership assertion. Its aggregate message does not establish
+the failed condition. Failure-only captured-review diagnostics are added to the
+next Mac test; the assertion, timing and production behavior are unchanged.
+Windows compiled and passed159 portable/worker plus53 native groups;117 app
+cases retain23 failures/one error/one optional skip, with21 distinct failed
+cases. Routing startup evidence reports no audio devices. No CI rerun, skip,
+relaxed assertion, package or merge. Terminal log hashes and classification are
+recorded in LIVE-PARAMETER-RELEASE and `recorded-owner-admission` receipts.
+
+**Next source batch (unbuilt):** Activity now has native parameter search by
+name/unit/stable ID, Ctrl+F and explicit stable selection. Filtering retains the
+current observation and raw recorded draft, including busy/pumped reads; the
+current excluded parameter stays visibly labelled. Native search matching is
+shared with the docked rack/program search. This joins the legend UTF-8 fix.
+Next local checks: Activity and workspace-plugin-search native groups plus the
+existing Activity composing/history/save app journey. Reuse unaffected3408
+checks. No build before23:56:23UTC or while preceding CI is live; inspect later
+actual starts. Full source/test details are in LIVE-PARAMETER-RELEASE.
+
+The same batch now includes recording review paging: bounded page intent survives
+pumped/busy reads; failures restore the old offset/total and selected details;
+Ctrl+Page Up/Down navigates pages. Native regressions cover failure/keyboard/
+stale/Close paths without musical writes. The full composing journey now captures
+144 original slider inputs and checks both native review pages against the exact
+API archive before Keep/history/reopen. The pending local gate is therefore two
+native groups plus **two app journeys**, not the earlier search-only one case.
+
+Idle Activity navigation now flushes an already queued valid point edit first,
+capturing stable destinations before any time-based reordering. The native group
+adds exact point selection, invalid/busy/uncertain/newer-input guards and explicit
+New/Add behavior. Point-row clicks pumped inside an observation read now retain
+their stable destination; the navigation drain orders the already queued edit
+before selecting it, regardless of debounce timer order. Native assertions cover
+both orders and newer-input guards. The existing Activity app journey now leaves
+a time edit immediately, checks exact destination fields and returns before its
+history/reopen checks. This remains source-only in the same bounded checkpoint.
+
+**23 October 23:09 UTC current checkpoint:**3408 built once; all10 native groups,
+7 app journeys and the explicit silent WASAPI allocation/lifecycle audit passed.
+Fresh Computer Use confirmed precise double-click/Backspace, automatic velocity,
+Save caret and Tab/Shift+Tab. Floating-tool testing remains partial due to helper
+targeting; no complete foreground or production pass. The full350.554-second
+silent composing workload recorded32 overruns; aligned records place elapsed
+delay inside the callback, without identifying DSP versus preemption. Three
+invalid legend punctuation bytes are corrected in source but unbuilt. Preserve
+`recorded-owner-admission` receipts; do not repeat its build/checks or package it.
+PR7 is3408; main is unchanged. Current CI40036686704/40036686763 remains active;
+next checkpoint no earlier than23:56:23UTC after terminal CI/later-start checks.
+Prior20467 Intel also passed completely; prior Windows missing-device failure
+remains a failed gate. See the latest LIVE-PARAMETER-RELEASE section for exact
+hashes, bounded observations and pending work. Entries below are historical.
+
+**20467 CI evidence update:** Windows compiled and passed158 portable/worker
+and53 native groups. Its117 app cases retain24 failures/one skip:21 distinct
+live-startup failures plus3 secondary missing-window teardown failures. The
+retained current probe has no audio devices with both Windows audio services
+Running. Keep this CI gate failed. Logs, artifact hashes and exact diagnostics
+are in `recorded-edit-guard/windows-ci-classification.json`; no rerun occurred.
+ARM fully passed; Intel job120676171254 remained active at the latest read.
+New direct Activity edits and recording selection corrections are still unbuilt.
+
+**23 October direct-edit continuation (unbuilt):** Windows Activity now queues
+existing-point value/time edits automatically, preserving original revision and
+frame, raw text/caret, busy admission and uncertain-write guards. New points
+retain explicit Add; Save now is optional for existing points. The current
+seven-case app gate now requires its Activity journey to pass without Save clicks,
+with exact history/reopen and continued playback assertions. Recording target
+read failures also restore their still-current old page/selector and selection.
+Resolve the newest `recorded-owner-admission` freeze; the10-group/7-case gate and
+22:55:37UTC lower bound remain, subject to terminal preceding CI/later starts.
+20467 ARM's retained log proves134 CTests, interface/socket/typed and actual
+BlackHole512 take lifecycle passed; Windows/Intel were active at22:34:56.
+No source-only change inherits that pass or qualifies a new package/merge.
+
+**23 October 22:28 UTC source continuation:** recording-review target choices
+are now retained through pumped reads and busy-owner admission, guarded by
+stable document/revision/take/target identities. New native assertions cover
+latest-choice precedence, detail/focus consistency, stale/removed targets,
+read failures and Close during polling without musical writes. These join the
+same unexecuted `recorded-owner-admission` checkpoint (ten native groups,
+seven app cases, silent WASAPI audit and fresh Computer Use). Resolve its newest
+freeze; no build before22:55:37UTC or while preceding CI is active. The latest
+read-only observation at22:26 found20467 ARM fully passed, Windows compiled
+and testing, and Intel still compiling. No package or merge is qualified.
+
+**23 October 22:18 UTC continuation:**20467 built once;9/9 native groups
+passed,5/7 app cases passed. Keep the failed gate: one automatic song-point edit
+was refused while busy; Activity's trace-source fixture expected a recorded lane
+from a baseline event. Fresh silent Computer Use confirmed click-vs-drag/Undo,
+constant trace visibility and precise Save/caret/Tab/Shift+Tab/text Backspace,
+but317.488seconds recorded22 overruns. No package/merge/performance claim.
+Source now retains unsent absolute edits while busy and queues stable Activity
+target selections that arrive during polling, with stale/draft/close guards.
+Bounded stopped-only WASAPI deadline records align timing phases of each failing
+callback without changing thresholds or allocating in audio. Next checkpoint:
+**ten native groups/seven app cases**, plus explicit silent WASAPI audit and
+fresh Computer Use. Gate is **22:55:37 UTC or later actual starts**, with previous
+CI terminal first. See the latest [release report](LIVE-PARAMETER-RELEASE-2026-10-23.md)
+and `recorded-edit-guard` failed/diagnostic receipts; new source is unbuilt.
+
+**23 October recording-review continuation:** the pending batch also retains
+selected original delivery identity as accepted entries leave the queue, clears
+expired/ambiguous selection and resets the catalogue/page on a new take even
+with identical parameters. Native copy selection/focus and unchanged music are
+asserted in the existing recording-review fixture. Add its plugin-search group:
+the next local checkpoint is now **nine native groups/seven app cases**, with
+unchanged build targets and the21:54:49UTC gate. Resolve the newest unexecuted
+freeze. No qualification claim follows from this source-only change.
+
+**23 October 21:33 UTC continuation:** the unbuilt Activity batch now also
+supports click-to-freeze trace inspection, Left/Right/Home/End, Enter to open
+the captured source and F6 to/from native details. Existing tests cover draft
+retention, both pumped-read races, stale-source refusal and exact unchanged
+music; the existing app journey checks the real linked Gain editor. Counts
+remain8/7.063 ARM fully passed134 CTests, interface/socket/typed and the actual
+BlackHole512 live take lifecycle; Windows/Intel were still testing at21:32.
+Resolve the latest unexecuted `recorded-edit-guard/freeze.json`, keep the
+21:54:49UTC gate and inspect later starts. Source is not qualified or packaged.
+
+**23 October 21:21 UTC continuation:** Activity Recent changes now retains
+event sequence/watch identity and scroll through its rolling512-row page,
+clears expired selection and avoids resetting unchanged list content. The
+existing native group covers these exact cases. No new build; current063 ARM
+compiled successfully while tests and Intel/Windows remained active at21:20.
+Resolve the latest unexecuted recorded-edit-guard freeze for the same8/7 gate.
+
+**23 October 21:18 UTC continuation:** the next unbuilt recorded-edit guard
+batch also makes constant Activity traces visible, names eleven native controls
+and orders Tab traversal by the visible groups. Existing native and actual-app
+Activity cases gain exact constant-trace/focus assertions; counts remain eight
+groups/seven cases. Resolve the newest `recorded-edit-guard/freeze.json`; never
+use the archived unexecuted source pin or repeat063. No build before21:54:49UTC,
+subject to later actual starts and terminal current CI. Broader parity and
+performance remain open; this is source progress, not qualification.
+
+**23 October 21:11 UTC continuation:**063383940 built once and passed five/six
+native groups. All automatic-edit assertions passed inside the remaining
+group, which hit its cumulative90-second private-child limit. Seven separate
+actual-app diagnostic journeys passed. Fresh UI found plain point selection
+snapping the recorded time/value; exact Undo and continued playback were
+observed. Source now separates command/automatic/routing groups without losing
+assertions or changing bounds, adds a native drag threshold, and prevents raw
+typing from freezing Activity observation. Next local gate is **eight groups /
+seven app cases**, then fresh UI. No build before21:54:49 UTC or while current
+CI remains active. Preserve all063 failed/diagnostic receipts; no package or
+merge. QA PID36252 exited normally. Audio still had30 overruns in315.8 seconds;
+read the latest live-parameter report for evidence and limits.
+
+**23 October 20:45 UTC continuation:** both579 Mac architectures fully passed,
+including the actual BlackHole512 live take lifecycle. Windows Activity still
+reset edited points to row zero and dropped Save/Delete during observation;
+the next batch now includes guarded deferred input and stable-frame selection.
+Two failing baseline receipts are retained. The next local checkpoint is **six
+native groups/seven app cases**, including the native activity target and its
+live selection/history/reopen journey, followed by fresh Computer Use. Resolve
+the newest unexecuted freeze; do not use the previous five/six selection. The
+hourly gate remains20:53:46 UTC; source is not yet built or packaged.
+
+**23 October 20:35 UTC continuation:** the same unbuilt batch now completes
+valid queued fields before Delete point/Clear lane, with exact two-step history
+and unrelated-lane assertions. The QA report retains existing wake-gap/buffer/
+negotiation telemetry without changing audio processing. Windows579 CI finished:
+158 portable/worker and50/51 native groups passed; the112 app cases recorded22
+failures/one skip with an empty endpoint catalogue. Three unchanged live cases
+passed on the exact retained x64 CI executable locally (private desktop, ARM64
+emulation, available endpoint): composing, native precise Save and95-second
+recording. This does not make CI green. The next five-group/six-app-case build
+remains after20:53:46 UTC and after preceding jobs are terminal. Read the latest
+live-parameter report and frozen receipt; no package or merge is qualified.
+
+**23 October 20:20 UTC continuation:** the unbuilt recorded-point batch also
+flushes fields before canvas clicks and formats generated scalar values without
+float tails. Four actual-app absolute-editor journeys were audited on the
+retained 579 binary; initial failures and corrected diagnostic passes remain in
+`absolute-journey-audit/`. The next gate is five native groups/six app cases,
+then fresh Computer Use. Resolve exact source from
+`recorded-point-navigation/freeze.json`; no build has run for that folder.
+
+**23 October 20:10 UTC continuation (supersedes historical gates below):**
+PR7 is at `5799372032e82fda77c048d4a99bc90b1c127bee`. Its one local build passed;
+four/five native groups passed and two separate diagnostic app cases passed.
+The failed command-result test confused a catalogue row with stable parameter
+ID; its correction and further recorded-point navigation/accessibility changes
+are source-only. Fresh QA PID35960 confirmed short-take Fit, zoom, automatic
+drag save and exact Undo during playback, then exited normally. Audio overruns
+and floating-helper keyboard limitations remain; no package or merge. Both Mac
+architectures and Windows return legs passed reciprocal preservation using
+retained binaries without builds. Read the latest section of
+[Live parameter release](LIVE-PARAMETER-RELEASE-2026-10-23.md), which identifies
+the actual CI merge identity and the matching reviewed tree.
+
+Inspect `bin/mac-gesture-20261022/sample-span-navigation/` receipts before any
+action; never repeat its recorded attempt. The next correction belongs in
+`recorded-point-navigation/` once frozen. No build before **20:53:46 UTC**, and
+inspect `inspect-sample-span-ci.py` for later starts and active CI first. Preserve
+the existing usable Downloads `composing-9c5c6ebb1` package and musician session.
+
+**23 October 08:22 UTC continuation (supersedes gates below):** dfe9300ea built
+once at08:00:43 UTC; PR#7 is at that source. Five of six native groups passed;
+the native menu Save focus/caret/queued-edit assertion failed. All24 actual-app
+cases subsequently passed in a separate diagnostic run. Visible silent QA
+confirmed the four requested precise-note behaviors, edge dragging, text focus,
+Ctrl+S and resize, but found Hit-list Ctrl+Z swallowed by native shortcut policy.
+The pending source correction yields only that list's Ctrl+Z/Y to shared history,
+with real native key regressions; Save's combined assertion now has exact
+diagnostics and all original requirements. No package/merge. QA PID18832 exited
+normally and must not be reused. Read the latest section of
+[the precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
+
+Resolve the next frozen source from `precise-keyboard/freeze.json` once prepared.
+Do not start another coordinated build before **09:01:15 UTC**. Inspect the
+preceding `precise-live-followup/ci-checkpoint.json` freshly and wait for its
+running jobs; at08:22 Mac ARM compiled, Intel/Windows still compiled, tests not
+yet terminal. The previous failed receipts remain authoritative. The unchanged
+shared publication/history/audio evidence can be reused; next validation focuses
+on menu/shortcut dispatch and actual-app composing/focus, followed by fresh UI.
+
+**Earlier 23 October 07:37 UTC checkpoint:** the latest source
+is on `codex/mac-gesture-intake`, backed up to `codex/mac-gesture-next-checkpoint`.
+Resolve the exact next candidate from
+`bin/mac-gesture-20261022/precise-live-followup/freeze.json`; both clean
+checkouts must match it. PR#7 remains c7d2fbd78 until the coordinated checkpoint.
+Do not build before **08:00:12 UTC**, and inspect later actual CI starts and
+current jobs before proceeding. Inspect the new folder's receipts first.
+
+The first f28 precise/MIDI candidate failed MSVC C7692 in the MIDI revision
+comparison; that is corrected. Mac ARM job120266634155 passed all134 native
+tests and the interface/transport gates. Mac Intel job120266634403 compiled
+successfully and was still running its remaining steps at06:46; Windows
+job120266633422 failed the same corrected expression. Do not restart these jobs.
+At06:52 Intel was confirmed fully passed: all134 CTests, native interface and
+socket/typed-fixture gates. Its downloaded log/hash is retained with the ARM and
+Windows logs. Both Mac passes cover f28's unchanged shared publication code.
+The c7 candidate compiled; five of six native groups and 21 of 23 diagnostic
+actual-app cases passed. Corrections address an unsupported menu-fixture read,
+a retired-HWND fixture assumption and a real native Save focus loss. The fixed
+Python retired-owner case passed alone against c7. Computer Use confirmed core
+live timeline behavior, typing and Tab focus in a disposable silent session.
+Visible edge-hit grabbing and page reading-order Tab now have source corrections
+and native/app assertions, awaiting the same next build. No new package is
+qualified. A new interleaved precise-note / plugin-take history journey passed
+against c7 in 3.294 seconds without a build; it now joins the next gate. See the
+precise-note report for hashes, failed receipts and limits.
+Explicit native accessible labels and provider/raw-text assertions also join
+this source batch; they do not establish Narrator or helper-tree qualification.
+
+`precise-live-followup/checkpoint.ps1` coordinates the corrected PR push with
+the single local build. The selection is six native registrations and24 actual
+app cases, followed by fresh isolated Computer Use and only then packaging.
+Read the [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md) for exact source,
+failed evidence, queued-field Save/selection/history checks and current limits.
+
+The c900d2b2e package remains the usable recording candidate, with known audio
+deadline overruns and bounded foreground evidence; it has neither immediate
+MIDI Arm nor the new timeline changes. The four-leg reciprocal exchange passed
+on68c2d177e and applies only to unchanged persistence inputs. Mac native capture
+and review are implemented; live restoration, native vendor/device qualification,
+performance and complete A01–A18 composing/foreground journeys remain open.
+The [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) preserves those receipts.
+No merge follows from partial local or CI evidence. Preserve the musician's
+process/audio route and do not create recurring work.
+
+**22 October 21:54 UTC continuation (supersedes gates below):** PR#7 now contains
+9195204a. Its single local build passed13 native groups and29 actual-app cases,
+with one optional plugin skip. The full F04 composing/recording preservation
+journey passed. Fresh isolated Computer Use confirmed direct recording review
+and visible Gain refusal, but sustained playback invalidated the recording
+timeline through a backwards native presentation projection. The foreground
+receipt is failed; no package/main merge. A follow-on unbuilt batch excludes
+unmapped intervals without retiming input, retains strict shared clock guards,
+adds95-second recording/history coverage, explains failed-context recovery and
+provides Mac parameter-level refusal/review feedback. See the newest
+[intake report](MAC-GESTURE-INTAKE-2026-10-22.md) for exact receipts and files.
+CI39858573202/39858573190 was still building at21:54. **No next build before
+22:36:29 UTC**, after checking later starts and current jobs. Backup-only pushes
+between gates. Mac live restoration, native vendor/device qualification,
+reciprocal edited projects and full A01–A18 journeys remain open.
+
+**22 October 20:51 UTC continuation (supersedes gates below):** frozen337fcfda
+built once;12/13 native registrations passed, with compact Pattern-header bounds
+failing at200% DPI. The separate actual-app diagnostic passed28 with one optional
+plugin skip. A new full F04 composing→recording journey passed exact six-domain
+history/save checks, native occupied-Gain refusal, successful Balance recording,
+Keep/Undo/Redo/Discard and unrelated-data preservation. Computer Use reproduced
+the Gain refusal and exposed a misleading parameter-editor status; fixes add
+the refusal reason and direct Recording action. Mac original-input pages and
+stable-selection review are also coded. These later changes are **unbuilt**.
+Read the newest [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) for failed and
+passing receipts, source ownership, remaining focus/audio limits and next checks.
+PR#7 is337fcfda; CI runs39849557952/39849557976 were building at20:45 UTC.
+**No next build before21:31:35 UTC /14:31:35 Pacific**, and inspect actual later
+CI starts first. Backup-only pushes between checkpoints; no package/main merge
+from the failed native gate. Priority remains plugin recording and complete
+composing journeys, with Mac live restoration/device and reciprocal gates open.
+
+**22 October 19:52 UTC source continuation:** Mac generic rack input is now wired
+to the retained take through a main-owner original-input queue, serial-worker
+capture, captured lifecycle/loss acknowledgement and guarded recovery snapshots.
+The native review includes delivery counts and Save recovery copy. New interface
+cases cover Stop ordering, uncertain outcomes, changed loss and refused row values;
+the actual workspace socket test also checks shared recording admission.
+This source is unbuilt. Windows CI compiled but failed its required live-audio
+app suite with no enumerated endpoint; preserve that failure. Mac ARM compiled
+but failed a graph catalogue retry assertion; source now distinguishes read-only
+busy retries from uncertain writes without weakening the assertion. See the
+newest [intake report](MAC-GESTURE-INTAKE-2026-10-22.md) section. Next coordinated
+build remains **20:13:13 UTC or later**, with final Intel build state inspected
+first. Back up source to `codex/mac-gesture-next-checkpoint` without triggering CI.
+
+**22 October 19:34 UTC checkpoint (supersedes the prepared/earlier gates below):**
+frozen `69fe8bf206049c163742ad10105a1de87afde24b` built successfully once.
+Its 13 native registrations produced 12 passes and one stale instrument-assignment
+fixture failure; preserve `take-review/checks.json` as failed. A separate diagnostic
+actual-app run passed 28 cases with one optional installed-Surge-XT skip. Fresh
+Computer Use on owned PID27232 verified a captured native control through
+Record/Stop/Keep, search typing/Backspace/Tab/Shift+Tab, Pattern keyboard return,
+Float/Dock, maximize/restore and a scratch drag whose saved curve stayed visible.
+The process exited normally after 600 seconds; original F04 and binary hashes
+are unchanged. This is **not** a package/merge or temporal-flicker/audio pass:
+35 callback deadline overruns were reported. The native fixture failure and
+remaining Mac/device/reciprocal gates still block qualification.
+
+The next coordinated build is **no earlier than 20:13:13 UTC / 13:13:13 Pacific**,
+measured from the last actual CI build start. PR#7 remains at frozen69fe8; back up
+subsequent source only to `codex/mac-gesture-next-checkpoint` between gates.
+Current source separates clean chooser refresh from genuinely stale assignment
+in the failed fixture; it also fixes Pattern header collisions observed in the
+foreground and the stale Recording status after Stop/Keep. These fixes and their
+new assertions are unbuilt. Read the newest intake-report section before the
+next checkpoint; do not rerun the existing build/check/diagnostic receipts.
+
+**22 October following source batch:** candidate `69fe8bf20` is prepared in
+`bin/mac-gesture-20261022/take-review/` and the clean qualification checkout,
+with the 19:12:11 UTC gate unchanged. Later primary-checkout work fixes Mac
+retained-plugin-take autosave scheduling, recovery admission after intake errors,
+and close/replace ownership guards. It is not part of frozen69fe8; see the intake
+report for unexecuted tests and remaining real-app timer/device qualification.
+The following source also adds the native Mac take-review window, retained
+lifecycle intent and its isolated interface group. It is wired to Window/plugin
+menus and command-palette discovery, but remains unbuilt and must not be packaged
+as a complete workflow before generic native-control delivery/recovery is wired.
+Next coding dependency: original-time, stable-identity generic rack input with
+retained pending/refused/unknown evidence; see the intake report's newest section.
+
+**22 October 18:38 UTC source checkpoint:** backup branch
+`codex/mac-gesture-next-checkpoint` contains `3c159554e` (Windows recording
+intent across polling reads, diagnostic evidence) and `a0e022ca8` (Mac mixer
+bounded admission retries and fresh-state reconciliation). Both source batches
+remain unbuilt. New Mac interface cases preserve unknown writes, exact retry
+payloads, newer raw fields and successful commits during readback. See the intake
+report. No new build/CI run, production package or main merge has occurred;
+19:12:11 UTC remains the earliest next coordinated checkpoint. The fixed API
+inventory's six portable preflight passes remain valid because its inputs have
+not changed. No extra preflight/test cycle was run just to repeat that evidence.
+
+**22 October 18:25 UTC diagnostic follow-up (supersedes earlier gates):** PR#7
+is frozen at `0198032752f8a55f2a5e003a382a78e131803aef`; main remains
+`0fe8f3400`. The single local checkpoint linked the product but failed compiling
+the workspace regression (`small` conflicts with the Windows RPC macro).
+All three CI jobs stopped at the reviewed API-inventory preflight. Both causes
+are corrected in source after the freeze; neither correction is built. Preserve
+the failed receipts in `bin/mac-gesture-20261022/take-api/` and do not rerun them.
+Next coordinated checkpoint is **no earlier than 19:12:11 UTC / 12:12:11 Pacific**.
+
+The explicitly diagnostic product passed 8/10 selected app cases. Recording
+window opening and a recording Stop failed; the opening assertion must await
+the existing view queue, and source inspection found that the recording
+window drops commands during a background read. A guarded one-action queue
+and native reentrant-read regressions are being added. Fresh Computer Use on
+owned PID36764 confirmed the Windows menu entry, Record/Stop/Keep of an empty
+take with playback continuing, readable graph framing and complete compact
+Group/Return labels. It did **not** qualify a captured-parameter take, field
+typing continuity, or temporal flicker. The process exited normally; original
+F04 and executable hashes are unchanged. Its 354.84-second silent run reported
+22 audio deadline overruns; it is not a realtime performance pass. No package
+or merge is permitted from this partial checkpoint. Continue code on the local
+branch, back up to `codex/mac-gesture-next-checkpoint`, and reserve the PR-head
+push and coordinated native builds for the hourly gate. See the current intake
+report for exact failures, remaining device/reciprocal gates and unbuilt work.
+
+**22 October 18:00 UTC source follow-up:** shared take summary/event paging and
+seven Mac retained-recording API methods are staged after ac9d672e6. Native
+controls, live release and new-provider cleanup review are still unfinished.
+See the latest `MAC-GESTURE-INTAKE-2026-10-22.md` section for concrete files,
+required native/socket/device gates and honest source-only status. Windows
+da8c CI finished with live-device failures and an empty audio catalogue; both
+Mac builds failed the corrected private-helper test call. No reruns or assertion
+weakening. Preserve the 18:11:23 UTC gate and the separate backup branch.
+
+**22 October 17:34 UTC follow-up (supersedes the build gate below):** main is
+still 0fe8f3400. PR#7 `codex/mac-gesture-intake` is frozen at da8c89f07.
+Local ARM64 build passed 13 native registrations; bounded same-binary app
+replays total 28 unique passes and one unavailable-provider skip. Original
+failed finder/toolbar receipts remain. Fresh Computer Use verified readable
+graph framing, keyboard text/focus, retained Float/Dock and maximize/restore,
+and scratch drag/release plus Undo/Redo curves. It found compact label clipping
+and tiny overview hit targets; corrections and native/app regressions are now
+source-only. Mac ARM failed a private-helper call in a test; the independent
+bit-exact assertion correction is also source-only. See
+[dense graph/scratch evidence](DENSE-GRAPH-SCRATCH-PREVIEW-2026-10-22.md).
+No merge or new production package yet. The next coordinated build is no
+earlier than **18:11:23 UTC / 11:11:23 Pacific**; inspect
+`stopped-repair-framing/ci-checkpoint.json` before dispatch. Do not repeat the
+recorded da8c build or restart its CI. Back up ongoing commits on
+`codex/mac-gesture-next-checkpoint`, not the frozen PR branch, between gates.
+The following source batch now wires whole-group opaque repair into explicit
+stopped/closed-editor Discard, retaining old queues/leases and retry ownership.
+It is unbuilt; see the latest section of `MAC-GESTURE-INTAKE-2026-10-22.md`.
+Ordinary Keep still does not replace vendors. Real Mac device-session, both
+architecture and reciprocal preservation gates remain. New-provider input
+arriving during failed cleanup is preserved/refused and still needs its
+session review path before complete public recording lifecycle exposure.
+
+**22 October 16:12UTC integration checkpoint:** PR#6 was merged at
+`0fe8f34008fe6517d7598affc31a4948a2ab14b8`, with exactly the qualified077e tree.
+Both local main and this temporary source branch now include that merge. Mac
+ARM/Intel run39802008354 is terminal success. The recorded Windows CI failure
+and exact-binary local12/12 replay remain explicit evidence, not a green CI claim.
+Main's normal push checkpoint is running: Windows39811540714 and
+Mac39811541170. Latest observed build start16:09:52UTC sets the next earliest
+build checkpoint to **17:09:52UTC**. No local rebuild accompanies it. Inspect
+`bin/mac-gesture-20261022/main-0fe8f3400/ci-checkpoint.json` before the next build;
+`inspect-main-ci.py` refreshes this read-only receipt. The existing ARM64 package
+and foreground077e evidence retain their exact source tree; a fresh main CI
+artifact will receive its own bounded Computer Use check when available.
+
+Later Mac intake/session source remains separate and unbuilt. Direct native
+editing and device refresh now reject a retained parameter take before changing
+music/transport; New uses a fallible bridge instead of allowing a C++ exception
+to cross into Swift. A real-clock, two-provider session lifecycle regression is
+prepared in `mac/Tests/ParameterTakeSessionTests.inc`. It runs only through the
+explicit BlackHole device mode, not the ordinary device-free CI `--ui` pass.
+No success claim for that new test. Live native release, explicit abandonment
+of post-Stop input, full UI/API lifecycle and socket coverage still remain.
+
+**22 October 15:50UTC follow-up:**077e Windows CI built and passed its portable,
+native, vendor and conformance gates;12 distinct app cases failed at playback/
+startup on the runner. All12 passed unchanged locally on the exact downloaded
+x64 CI executable (34.950s, ARM64 emulation, silent private desktops). CI remains
+failed and that local evidence is bounded; see the command report's appended
+receipt section. Mac ARM passed; Intel built and is still testing. No rebuild
+or extra CI run. The16:09:04UTC earliest next checkpoint remains in force.
+
+New unbuilt source now includes internal Mac session ownership, exclusive take
+polling, one-step Keep history and shared typed recovery overlay. It is not yet
+exposed by the API or UI: guarded opaque-state restoration/release, lifecycle
+controls and successful session/socket/history/reopen checks are next. See
+`MAC-GESTURE-INTAKE-2026-10-22.md`'s latest section for concrete files and gates.
+The older boundary below describes the077e package, not these later changes.
+
+**22 October 15:21 UTC:** The single077e command/scratch checkpoint passed all
+five native groups and eight selected actual-app cases. Fresh Computer Use
+verified unavailable command explanations, availability after a real edit,
+palette Run dispatch, scratch release/save feedback, retained Main Undo/Redo
+and dock typing/Backspace/Tab. Floating-window key injection and accessible-focus
+reporting remain bounded tool observations, not claimed passes. A separately
+packaged ARM64 candidate is in Downloads; see
+[qualification and executable identity](COMMAND-AVAILABILITY-2026-10-22.md).
+PR#6 is077e; paired Windows39802007518/Mac39802008354 are still running.
+No build before **16:09:04UTC**; inspect receipts, never repeat this build.
+No QA process remains. Newer Mac intake/restore source is backed up separately
+at100fca5f0 and remains unbuilt; do not conflate it with the package.
+
+The following source adds grouped native restoration leases and fixed Stop
+rechecks to the Mac take owner, with mixed AU/VST3 failure/retry and visible
+slider protection assertions. It remains unbuilt and outside077e. See
+[native intake/restoration obligations](MAC-GESTURE-INTAKE-2026-10-22.md).
+Session/API/history/recovery wiring and real opaque verification remain open.
+
+Retained96b fixture exchange passed Windows→Mac ARM/Intel (run39800910382),
+then Mac ARM→Windows (39801329971) and Mac Intel→Windows (39802052452).
+Both return artifacts were downloaded with matching GitHub SHA256, safely
+unpacked and all five report hashes matched their retained-run receipts.
+Each architecture/return contains ten passing files: F01–F05, two edited
+render/import projects, opaque metadata, unified history and envelope bank.
+Every report retains unchanged input/binary assertions. No builds were used.
+Both96b Mac CI jobs passed; Windows96b had no runner audio endpoints, with
+its original failures retained and12/12 affected exact-binary local replay passes.
+This qualifies the bounded exchange, not native x64 audio or full parity.
+Evidence is in `bin/mac-gesture-20261022/retained-{exchange,return-arm,return-intel}-96b/`.
+
 **22 October 14:37 UTC:** Source work now also closes the confirmed command
 palette availability gap from reference row 02/A16. It shares the native menu
 policy, shows unavailable reasons, retains query/focus during updates and routes
@@ -907,18 +1661,18 @@ case passed, and five subsequent keyboard/browser cases passed. See
 [context evidence](CONTEXT-PANEL-2026-10-19.md). This is not qualification of
 the newer source or a visual review.
 
-## Dependency-ordered remaining work
+## Historical dependency queue (superseded by the current integration boundary)
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
-| 1 / M | Candidate96b passed20 bounded app cases and native parameter/departure checks; its crowded command group timed out. Foreground scratch/plugin Undo refresh and dock keyboard checks passed. Scratch status and command availability corrections plus the native group split remain unbuilt. | Follow the current integration boundary and the new combined frozen scripts after15:07:58UTC. Run five affected native groups, eight app cases and fresh isolated foreground checks; reuse unchanged inputs with receipts. Keep the failed baseline/timeout and unresolved prior x64 ordering failure. Package and merge only a qualified checkpoint. |
-| 2 / L | Shared original-time capture, provider ownership, Windows native controls/delivery/recovery and a public retained-take window exist. Windows recording has actual-app and bounded97bd foreground Keep/Discard evidence; the fresh ab5 diagnostic did not requalify the full flow. Mac's existing recording adapter and seven Windows-only live APIs remain separate contracts. | Recheck the changed input-lease boundary on the next Windows candidate, then integrate the Mac take owner, native baseline restoration and API/UI with shared capture. Do not infer complete parity from the prepared Mac prerequisites or superseded Windows absence reports. |
+| 1 / M | 8a compiled and passed3/3 targeted native groups plus the complete composing/recording journey. The Activity app journey found selected-list Backspace lost behind observation/navigation. A queued stable-timestamp Delete correction and Save/Close/stale regression cases are now source-only. Diagnostic Computer Use passed Record/Stop/Keep and dock Save/typing continuity, but reported19 audio overruns/312s. | Resolve `activity-delete-correction/freeze.json`. No build before24 October02:59:03UTC or while8a CI remains live; inspect later starts. Run7 native groups (Activity, automatic edits, recording/search, menu, source navigation, parameter-automation dock, bank) and7 app journeys afresh. The batch also finishes both connected automation handoffs and pattern Save/history/Close; compound previews stay explicit. Windows8a passed159 portable/worker and53 native groups, but integration failed24/117 checks (21 distinct cases). Mac ARM8a failed the API event-page clock assertion after other gates passed; keep it failed and collect the new failure-only projection. Reuse separately validated unchanged shared/audio evidence. Both Mac interface jobs and fresh Computer Use remain required; no package/merge from partial evidence. |
+| 2 / L | Mac live VST3 restoration uses processing acknowledgements and non-flushing verification.1071 ARM passed; Intel preserved both inputs but its first timestamp had no frame mapping. The take remained open, with no provider loss/overflow. | Next Mac run adds failure-only clock coverage through the existing read API to distinguish startup, gap and pending coverage. Do not approximate original timestamps, relax the assertion or infer a product fix before that evidence. AU retains stopped restoration; divergent opaque state requires explicit stopped, closed-editor recovery. Preserve input cuts, ownership and exact history/save checks. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
-| 4 / M–L | Typed preservation and both native ownership adapters exist and have preceding paired corpus execution; this is no longer an uncompiled Mac port. New exact-history behavior and final current-candidate exchange remain open. | Qualify current Mac history and perform reciprocal edited F01–F05/output checks on retained same-candidate binaries. Keep source protection, opaque state, exact typed comparisons and merged-tree validation. Large-file memory and unsupported encodings remain explicit risks. |
-| 5 / M–L | The main integration contains mixer, tracks, graph gestures, plugin/sample layering, automatic fields and recorder-duration work. Dated P1–P5 absence claims are superseded; their complete acceptance gates are not. | Reconcile each A02–A14/A17 journey with exact candidate evidence. Reuse unchanged targeted results, but execute changed input paths and the final complete composing journeys. Direct recipe preview, sample gestures and sidebar changes specifically invalidate their earlier interaction claims. |
-| 6 / M | Native control/event checks do not establish all visual, DPI, UIA or physical input quality. The user renewed isolated foreground Computer Use authorization and explicitly requests UI/keyboard checks on hourly builds. The navigation package has bounded foreground evidence; this new plugin candidate does not. | Retain A16/P8 as open. Use the existing authorization for an owned QA process, preserving musician sessions and audio defaults. Check compact/normal layouts, focus visibility and keyboard operation, then scoped DPI/high-contrast/Narrator coverage. A fresh access denial or user interruption requires stopping input; historical Escape alone does not revoke the renewed authorization. |
+| 4 / M–L | The latest retained exchange passed Mac ARM/Intel and both Windows return legs for no-edit, edited render/import, metadata, composing history and envelope-bank preservation. Actual CI merge7a375c3f has the identical tree as reviewed4d1fa80fe. | Reuse `recorded-viewport/reciprocal-exchange.json` only for unchanged codec/persistence inputs. Native Save/field-navigation changes have separate current app gates. Any later codec or native ownership change requires fresh reciprocal edited outputs; retain binary/input/report hashes. |
+| 5 / M–L | Mixer, tracks, graph gestures, sample/plugin layering, automatic fields and capture duration are implemented. F04 six-domain composing plus native recording and sample-layered VST3 recording/PCM journeys have bounded c900 evidence. Precise live editing and interleaved note/take history have newer diagnostic evidence. These do not close all117 rows. | Continue A02–A14/A17 with exact source/input provenance: qualify the changed precise/MIDI path first, then address specific failures found in complete composing journeys. Preserve occupied Gain automation in F04; record Balance for the successful take. Reuse unchanged sample/graph/persistence results rather than rerunning broad suites per UI edit. |
+| 6 / M | Navigation, parameter and077e command/scratch packages have bounded foreground evidence. Exact native/global UIA observers passed dock-search focus after click and Shift+Tab despite Computer Use reporting Main. Floating typing remains a tool-targeting limitation; full DPI/Narrator coverage is outstanding. | Retain A16/P8 as open. Continue isolated Computer Use on changed paths and compact/normal layouts, then DPI/high-contrast/Narrator checks. Preserve musician sessions/audio defaults. Renewed authorization applies; a fresh denial or user interruption stops input. |
 | 7 / L, equipment-dependent | Real vendor/device lifecycle and physical audio/MIDI remain separately unqualified. Optional unavailable provider tests are skips, not passes. | Use explicit fixture providers/devices; preserve musician sessions and audio defaults. Qualify architecture mismatch, editor lifecycle, latency changes, reconnect, capture/overflow and physical measurements with their existing strict limits. Keep silent private-desktop observations separate from audible evidence. |
-| 8 / M | Shared-main final gate and reciprocal edited files remain open. | Run both native platforms from the integrated candidate, reciprocal F01–F05 and edited outputs, sustained display/audio checks, full composing journeys and compatibility/error paths. Confirm source/binary fingerprints and clean main integration before claiming parity. |
+| 8 / M | Final shared-main integration, sustained audio/display performance and complete117-row acceptance remain open. c900 foreground reported17 overruns/508s; the shorter c7 diagnostic had0/251s but did not pass realtime or presentation audit. | Run both native platforms from the final integrated candidate, relevant reciprocal fixture/edited outputs, complete composing and compatibility/error gates. Investigate sustained failures using target-only evidence and unchanged assertions; a short clean interval or screenshot is insufficient. Confirm source/binary fingerprints and clean main integration before claiming parity. |
 
 Effort is relative implementation/qualification scope, not elapsed-time estimates
 or percent complete. Continue source work while the existing qualification runs;

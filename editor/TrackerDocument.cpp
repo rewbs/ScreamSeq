@@ -438,7 +438,7 @@ std::vector<Edit> Document::edit(const std::vector<Edit> &input)
 	}
 	return edits;
 }
-bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
+bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input,const std::function<void()> &beforeCommit)
 {
 	validateEdits(input);metadata.validate(*song_);
 	UndoEntry entry;
@@ -452,8 +452,13 @@ bool Document::editNative(NativeSong metadata, const std::vector<Edit> &input)
 	if(metadata==native_&&entry.cells.empty())return false;
 	entry.nativeBefore=native_;entry.nativeAfter=metadata;
 	undo_.reserve(undo_.size()+1);
-	for(const auto &edit:entry.cells)put(*song_,edit);
-	native_=std::move(metadata);undo_.push_back(std::move(entry));committedHistory();++revision;trimHistory();
+  // All history allocation precedes audio publication, including MSVC map
+  // sentinel construction. A rejected queue leaves cells and both stacks intact.
+  undo_.push_back(std::move(entry));
+  try {if(beforeCommit)beforeCommit();}catch(...){undo_.pop_back();throw;}
+  for(const auto &edit:undo_.back().cells)put(*song_,edit);
+  static_assert(std::is_nothrow_move_assignable_v<NativeSong>);
+	native_=std::move(metadata);committedHistory();++revision;trimHistory();
 	return true;
 }
 std::unique_ptr<Document> Document::historyCandidate(bool redo)
@@ -470,11 +475,11 @@ std::unique_ptr<Document> Document::historyCandidate(bool redo)
 	else candidate->undo();
 	return candidate;
 }
-std::vector<Edit> Document::undo(const std::function<void()> &beforeCommit)
+std::vector<Edit> Document::undo(const std::function<void()> &beforeCommit,bool cellsPrepared)
 {
 	if(undo_.empty()) return {};
 	const auto &pending = undo_.back();
-    if(beforeCommit && (!pending.cells.empty() || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
+    if(beforeCommit && ((!cellsPrepared&&!pending.cells.empty()) || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
         throw std::invalid_argument("Live history publication requires a native-only entry");
 	if(pending.sample) validateSampleUndo(*pending.sample, false);
 	SampleAllocation sampleReplacement;
@@ -520,11 +525,11 @@ std::vector<Edit> Document::undo(const std::function<void()> &beforeCommit)
 	++revision;
 	return inverse;
 }
-std::vector<Edit> Document::redo(const std::function<void()> &beforeCommit)
+std::vector<Edit> Document::redo(const std::function<void()> &beforeCommit,bool cellsPrepared)
 {
 	if(redo_.empty()) return {};
 	const auto &pending = redo_.back();
-    if(beforeCommit && (!pending.cells.empty() || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
+    if(beforeCommit && ((!cellsPrepared&&!pending.cells.empty()) || !pending.before.empty() || !pending.after.empty() || pending.sample || pending.splice || pending.slot))
         throw std::invalid_argument("Live history publication requires a native-only entry");
 	if(pending.sample) validateSampleUndo(*pending.sample, true);
 	SampleAllocation sampleReplacement;
@@ -963,6 +968,16 @@ bool Renderer::enqueue(const std::vector<Edit> &edits)
 	write_.store(w, std::memory_order_release);
 	return true;
 }
+bool Renderer::publishPreciseNoteUpdate(std::unique_ptr<PreciseNoteUpdate> &update) noexcept {
+  // The same producer orders ordinary edits and precise conversions. A marker
+  // in the ordinary FIFO prevents a later cell write being overwritten by an
+  // earlier conversion merely because the two payloads use different storage.
+  const auto w=write_.load(std::memory_order_relaxed),r=read_.load(std::memory_order_acquire);
+  if(!update||!preciseNotes_||update->cells.size()>512||w-r>=queueSize||!preciseNoteUpdates_.available())return false;
+  if(!preciseNoteUpdates_.publish(std::move(update)))return false;
+  batchSizes_[w%queueSize]=UINT16_MAX;
+  write_.store(w+1,std::memory_order_release);return true;
+}
 bool Renderer::updateSampleLoops(uint16_t sample,const SampleEditGeometry &geometry) noexcept {
  const auto w=loopWritten_.load(std::memory_order_relaxed),r=loopRead_.load(std::memory_order_acquire);
  if(w-r>=loopUpdates_.size()||!sample||sample>song_->GetNumSamples())return false;
@@ -1136,9 +1151,20 @@ uint32_t Renderer::render(float *out, uint32_t frames) noexcept
 	noteRead_.store(noteRead, std::memory_order_release);
 	auto r = read_.load(std::memory_order_relaxed), w = write_.load(std::memory_order_acquire);
 	uint32_t processed = 0;
+  bool adoptedPrecise=false;
 	while(r != w)
 	{
 		auto size = batchSizes_[r % queueSize];
+    if(size==UINT16_MAX) {
+      // At most one schedule and 512 cell changes per render boundary. Leave
+      // an ordered marker queued if preceding cells consumed this boundary.
+      if(processed||adoptedPrecise)break;
+      const auto *update=preciseNoteUpdates_.consumeNext();
+      if(!update){fault_.store(true);break;} // Producer contract violation.
+      for(const auto &edit:update->cells)Document::put(*song_,edit);
+      preciseNotes_->adopt(update->schedule);processed=uint32_t(update->cells.size());
+      adoptedPrecise=true;++r;continue;
+    }
 		if(!size || processed + size > 512) break;
 		for(uint32_t n = 0; n < size; ++n, ++r)
 			Document::put(*song_, edits_[r % queueSize]);

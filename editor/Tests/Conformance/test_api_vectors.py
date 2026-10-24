@@ -30,15 +30,23 @@ class APIInventoryTests(unittest.TestCase):
                 self.assertEqual(api_vectors.contract_labels(vector),
                                  {'knownDifference': 'reviewed-drift', 'regressionFor': None})
 
-    def test_current_corpus_keeps_take_gap_and_historical_regressions_distinct(self):
+    def test_take_read_expectations_do_not_claim_complete_lifecycle_parity(self):
         corpus = json.loads(read_bytes(api_vectors.VECTORS))
         labels = [api_vectors.contract_labels(vector) for vector in corpus['cases']]
         labels.append(api_vectors.contract_labels({'difference': 'API-REPLAY-ERROR',
                                                    'expected': corpus['rejectedRequestIDReuse']}))
         self.assertEqual({row['knownDifference'] for row in labels if row['knownDifference']},
-                         {'API-NATIVE-PARAMETER-TAKE'})
+                         set())
         self.assertEqual({row['regressionFor'] for row in labels if row['regressionFor']},
-                         {'API-INTEGER-TYPES', 'API-PLUGIN-DRY-RUN', 'API-REPLAY-ERROR'})
+                         {'API-INTEGER-TYPES', 'API-PLUGIN-DRY-RUN', 'API-REPLAY-ERROR', 'API-NATIVE-PARAMETER-TAKE'})
+        baseline = json.loads(read_bytes(api_vectors.BASELINE))
+        contract = next(row for row in baseline['contracts'] if row['id'] == 'API-NATIVE-PARAMETER-TAKE')
+        self.assertEqual(contract['status'], 'implemented-pending-qualification-live-release-open')
+        review = baseline['platforms']['macos']['pendingNativeTakeReview20261022']
+        self.assertEqual(review['status'], 'source-reviewed-runtime-unqualified')
+        cases = [row for row in corpus['cases'] if row.get('difference') == 'API-NATIVE-PARAMETER-TAKE']
+        self.assertEqual({row['method'] for row in cases}, {'automation.recording.'+op for op in
+            ('get','events','start','capture','stop','commit','discard')})
 
     def test_reviewed_schema_and_platform_deltas_are_consistent(self):
         baseline = json.loads(read_bytes(api_vectors.BASELINE))

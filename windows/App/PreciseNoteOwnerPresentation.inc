@@ -29,7 +29,7 @@
       out+=L"Offset field: "+field(offset)+(units_==0?L" beats":L" rows")+L"\r\n";
       try{const auto amount=rowOffset();
         out+=L"Visible offset = "+decimal(amount,17)+L" row = "+decimal(amount/rowsPerBeat_,17)+L" beat.\r\n";
-      }catch(const std::exception &){out+=L"The offset remains an invalid raw draft; correct it before Check or Apply.\r\n";}
+      }catch(const std::exception &){out+=L"The offset remains an invalid raw draft; correct it to save automatically.\r\n";}
     }
     out+=L"\r\nNOTE-LOCAL EFFECT\r\n";const auto choice=selection(localEffect);
     if(choice>=0&&size_t(choice)<effects_.size()){
@@ -39,6 +39,6 @@
       for(const auto &value:effect.at("allowedParameters")){wchar_t hex[8]{};swprintf_s(hex,L"%02X",value.get<unsigned>());if(!first)out+=L", ";out+=hex;first=false;}
       out+=L"\r\nOff and Cut do not carry a note-local effect.\r\n";
     }else out+=L"Capture a row to see its supported note-local effects.\r\n";
-    out+=L"\r\nLOCAL KEYS AND POINTER\r\nTimeline: drag timing and velocity; Shift locks velocity; Alt bypasses snap. Double-click adds a hit.\r\nTimeline arrows change timing or velocity; Alt Left/Right moves one row unit; Shift Up/Down changes velocity by eight. Delete removes the selected hit.\r\nCtrl+D duplicates on Timeline or Hit list. F6 switches Timeline and Hit.\r\nEnter applies from editable fields, Timeline or Hit list. Enter on a button activates that button. Ctrl+Enter applies explicitly.\r\nEscape cancels a drag first; otherwise it returns to Pattern.\r\nDetails is read-only: select text and use native Copy. Enter here does not save.\r\nCheck validates the draft without playing audio or saving. Apply saves all hits in one document Undo step.";
+    out+=L"\r\nLOCAL KEYS AND POINTER\r\nTimeline: drag timing and velocity; Shift locks velocity; Alt bypasses snap. Double-click adds a hit.\r\nTimeline arrows change timing or velocity; Alt Left/Right moves one row unit; Shift Up/Down changes velocity by eight. Backspace or Delete removes the selected hit on Timeline or Hit list. Text fields keep normal text deletion.\r\nCtrl+D duplicates on Timeline or Hit list. F6 switches Timeline and Hit.\r\nEdits save automatically; a completed drag creates one Undo step. Valid typed values save after a short typing pause. Incomplete or refused values stay visible.\r\nThe white cursor shows playback inside this captured row, independently of selection and focus.\r\nEnter or Ctrl+Enter saves pending fields now. Enter on a button activates that button.\r\nEscape cancels a drag first; otherwise it returns to Pattern.\r\nDetails is read-only: select text and use native Copy. Enter here does not save.\r\nCheck validates pending edits without playing audio or saving. Save now retries retained edits; stale edits require Reload captured.";
     return out;
   }

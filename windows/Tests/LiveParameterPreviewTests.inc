@@ -6,6 +6,7 @@ void liveParameterPreviewTests(const std::filesystem::path &directory) {
   hooks.feedback=[&]{PlaybackFeedback r;r.playing=active;r.audioActive=active;r.generation=epoch;return r;};
   DocumentController c({},"live-parameter-preview",[&]{++stops;active=false;},[](const auto &){},{},64u*1024u*1024u,
     [&](std::span<const Tracker::ParameterChange> changes){need(std::this_thread::get_id()==producer,"Preview commit escaped UI producer");publishLiveParameters(active,playback,changes);},std::move(hooks));
+  invoke(c,"document.new",{{"demo",true},{"discard",true}});
   const auto library=call(c,"plugin.discover",{{"format","Built-in"}});
   const auto descriptor=std::find_if(library.begin(),library.end(),[](const auto &p){return p.at("classID")=="resonance.gainer.v1";});
   need(descriptor!=library.end(),"Preview fixture needs Gainer");invoke(c,"plugin.add",{{"descriptor",*descriptor}});
@@ -25,9 +26,22 @@ void liveParameterPreviewTests(const std::filesystem::path &directory) {
   auto render=[&]{need(playback->render(pcm.data(),256),"Preview render failed");};
   auto gain=[&]{for(const auto &p:playback->chain().parameters(0))if(p.id==1)return p.value;throw std::runtime_error("Missing audible gain");};
   auto reject=[&](auto action,int code){bool rejected=false;try{action();}catch(const Api::ApiError &e){rejected=e.code==code;}need(rejected,"Preview request was not rejected as specified");};
+  // Export is an accepted-song observation, unlike Save's explicit finishing
+  // of a gesture. Use actual sample music so a silent fixture cannot mask a
+  // leaked temporary gain value in the independent full-song renderer.
+  const auto acceptedExport=directory/"accepted-before-preview.wav";
+  invoke(c,"document.exportAudio",{{"path",acceptedExport.generic_string()}});
+  const auto acceptedPCM=Project::readProjectBytes(acceptedExport);
+  need(acceptedPCM.size()>44&&std::any_of(acceptedPCM.begin()+44,acceptedPCM.end(),[](std::byte b){return b!=std::byte{0};}),
+    "Preview export fixture must contain sample audio");
   view=c.view();need(preview(-12).at("audible").get<bool>(),"Active preview was not queued");render();
   need(gain()==-12&&manual()==0&&state()==baseline&&c.view()==view&&active&&stops==stopped,"Preview changed manual/opaque state, revision or transport");
   const auto retained=owner();
+  const auto previewExport=directory/"accepted-during-preview.wav";
+  invoke(c,"document.exportAudio",{{"path",previewExport.generic_string()}});render();
+  need(Project::readProjectBytes(previewExport)==acceptedPCM&&owner()==retained&&gain()==-12&&
+       manual()==0&&state()==baseline&&c.view()==view&&active&&stops==stopped,
+       "Audio export baked in or canceled a live preview, changed history or stopped playback");
   reject([&]{auto p=identity;p["gesture"]="other-drag";p["value"]=-3;invoke(c,"plugin.parameters.preview.set",p);},-32602);
   reject([&]{auto p=identity;p["parameter"]=true;p["value"]=-3;invoke(c,"plugin.parameters.preview.set",p);},-32602);
   reject([&]{preview(1000);},-32602);

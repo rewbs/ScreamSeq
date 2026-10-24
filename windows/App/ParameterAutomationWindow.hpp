@@ -7,7 +7,7 @@ namespace ScreamSeq {
 class ParameterAutomationWindow final : public NativeToolWindow {
   using Json=Api::Json;
 public:
-  struct Cursor {std::string document,revision;unsigned pattern=0;Json patterns,plugins;};
+  struct Cursor {std::string document,revision;unsigned pattern=0;Json patterns,plugins;bool busy=false;};
   static constexpr int dockMinimumWidth=440,dockMinimumHeight=300;
 private:
   using Request=std::function<Json(const std::string &,const Json &)>;
@@ -28,6 +28,7 @@ private:
   int compactPage_=1;
   HWND pendingFocus_{};
   uint64_t generation_=0;Json dragBefore_;int dragSelection_=-1;
+  bool dragMoved_=false;float dragX_=0,dragY_=0;
   AutomationCanvas canvas_;
   std::unique_ptr<EnvelopeBankWindow> bank_;
   std::unique_ptr<FormulaWorkbenchWindow> workbench_,reference_;
@@ -54,10 +55,14 @@ private:
   bool reviewRequired_=false;
   bool displayControl(int id)const override{return id!=apply||reviewRequired_||automaticEditFailed_;}
   void queueCurveEdit(UINT delay=600){if(reviewRequired_)return;queueAutomaticEdit([this]{
-    if(pending_||dragging_){queueCurveEdit();return;}
+    if(pending_||dragging_||context_().busy){queueCurveEdit();return;}
     if(pointFields_&&selected_>=0)setPointFields();
     if(dirty_&&!pointFields_)commit(false,points_.empty()&&!laneID_.empty());
   },delay);}
+  void finishAutomaticCurveEdit(){
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_&&!draft(),"Finish or discard the pending curve before continuing");
+  }
   void changed(bool automatic=true){if(!automatic){reviewRequired_=true;cancelAutomaticEdit();}dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(reviewRequired_?L"Tool preview / Use preview saves it":L"Saving curve changes…");if(!dragging_)queueCurveEdit();}
   std::wstring parameterName()const{for(const auto &p:catalog_)if(parameter_&&p.at("id")==*parameter_)return wide(p.at("name").get<std::string>());return L"No parameter";}
   void showPoint(){
@@ -109,7 +114,7 @@ private:
       if(!samePattern){canvas_.fit(rows_);selectedPosition.reset();setting_=true;set(rangeStart,L"0");set(rangeEnd,std::to_wstring(rows_));setting_=false;}else if(canvas_.end>rows_*256)canvas_.fit(rows_);
       parameter_.reset();if(!catalog_.empty()){auto p=std::find_if(catalog_.begin(),catalog_.end(),[&](const auto &v){return wantedID&&v.at("id")==*wantedID;});if(p==catalog_.end())p=catalog_.begin();selectParameter(p->at("id"),selectedPosition);}
       else {points_=values_=Json::array();laneID_.clear();selected_=-1;reviewRequired_=false;dirty_=pointFields_=false;++generation_;set(targetLabel,L"No available parameter");showPoint();rebuild();}
-      choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / Apply saves; the pattern cursor remains independent");
+      choices();pending_=false;if(!samePattern)toolFieldsDirty_=false;status(!catalogueError.empty()?catalogueError:catalog_.empty()?L"Add a plugin in the rack, then reload to choose its parameter":L"Click or drag points / edits save automatically; the pattern cursor remains independent");
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void replacePoint(Json point){
@@ -141,7 +146,7 @@ private:
   Json toolSignature()const{return Json::array({tool_,field(rangeStart),field(rangeEnd),field(toolValue0),field(toolValue1),field(toolValue2),field(toolValue3),snap_,kind_});}
   std::pair<uint32_t,uint32_t> range()const{const auto first=number(rangeStart)*256,last=number(rangeEnd)*256;require(first>=0&&first<last&&last<=rows_*256&&first==std::floor(first)&&last==std::floor(last),"Choose a nonempty range inside the pattern in steps of 1/256 row");return {uint32_t(first),uint32_t(last)};}
   void transform(bool copy){
-    requireCurrent();require(!draft()&&!laneID_.empty(),"Apply the curve before copying or transforming saved points");auto [start,end]=range();Json p={{"lane",laneID_},{"start",start}};
+    requireCurrent();require(!draft()&&!laneID_.empty(),"Finish the curve edit before copying or transforming saved points");auto [start,end]=range();Json p={{"lane",laneID_},{"start",start}};
     if(copy)p["end"]=end;else{
       p["expectedRevision"]=captured_.revision;p["dryRun"]=true;p["operation"]=operations[size_t(tool_)];if(tool_<7)p["end"]=end;Json options=Json::object();
       if(tool_==2)options["amount"]=number(toolValue0)*256;
@@ -153,7 +158,7 @@ private:
     }
     const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{auto result=request_(copy?"automation.pattern.copy":"automation.pattern.transform",p);pending_=false;requireCurrent();require(generation_==token&&signature==toolSignature(),"Curve or tool settings changed / preview discarded");
       if(copy){clip_=std::move(result);status(L"Range copied inside this editor / choose Paste or Insert paste");}
-      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed(false);showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Apply saves; Reload discards");}
+      else if(result.at("wouldChange").get<bool>()){points_=result.at("after");selected_=-1;changed(false);showPoint();status(L"Tool preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" values clipped / Use preview saves; Reload discards");}
       else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;
     }catch(...){pending_=false;layout();throw;}layout();
   }
@@ -169,7 +174,12 @@ private:
     workbench_=std::make_unique<FormulaWorkbenchWindow>(window_,parameterName()+L" · Formula",point.at("formula").get<std::string>(),Json{{"points",points_},{"rows",rows_},{"rowsPerBeat",rowsPerBeat_}},selected,request_,std::move(current),std::move(use));workbench_->show();
   }
   void openBank(){
-    if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}requireCurrent();require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");
+    if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}
+    // A new bank captures the latest already-requested edit. An existing bank
+    // keeps its independent capture; compound previews remain explicit drafts.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending pattern curve before opening its bank");
+    requireCurrent();require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");
     const auto doc=captured_.document,plugin=pluginID_,pattern=patternID_;const auto parameter=parameter_;auto token=std::make_shared<uint64_t>(generation_);
     auto source=[this,doc,plugin,pattern,parameter,token]{return context_().document==doc&&captured_.document==doc&&pluginID_==plugin&&patternID_==pattern&&parameter_==parameter&&generation_==*token&&!pointFields_;};
     auto context=[this]{const auto c=context_();return std::pair(c.document,c.revision);};
@@ -193,9 +203,17 @@ private:
       if(id==pattern||id==plugin){const auto wanted=selection(id);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(id,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
         try{if(id==pattern)load(false,{},parameter_,captured_.patterns.at(size_t(index)).at("index").get<unsigned>());else load(false,plugins_.at(size_t(index)).at("instanceID"),std::nullopt);}catch(...){choices();throw;}return;}
     }
-    if(id==parameters&&notification==LBN_SELCHANGE){const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(draft()){filter();throw std::runtime_error("Finish or discard the curve draft before changing parameter");}if(index>=0&&size_t(index)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(index)]).at("id"));filter();}return;}
+    if(id==parameters&&notification==LBN_SELCHANGE){
+      const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(index<0||size_t(index)>=filtered_.size())return;
+      const auto wanted=catalog_.at(filtered_[size_t(index)]).at("id").get<uint32_t>();
+      try{finishAutomaticCurveEdit();requireCurrent();
+        require(std::any_of(catalog_.begin(),catalog_.end(),[&](const auto &p){return p.at("id")==wanted;}),"Selected parameter is no longer available");
+        selectParameter(wanted);filter();
+      }catch(...){filter();throw;}return;
+    }
     if(id==parameters&&notification==LBN_DBLCLK&&compact_&&parameter_){choosePage(1);return;}
     if(notification!=BN_CLICKED)return;
+    if(id==fromCursor||id==lastTouched||id==openRack||id==absolute)finishAutomaticCurveEdit();
     if(id==reload||id==fromCursor){load(id==fromCursor);toolFieldsDirty_=false;}else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
     else if(id==reference){if(!reference_)reference_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Envelope formula reference","",Json::object(),-1,request_);reference_->show();}
     else if(id==openRack){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_);}
@@ -203,19 +221,29 @@ private:
     else if(id==setPoint)setPointFields();else if(id==apply||id==verify||id==remove)commit(id==verify,id==remove);
     else if(id==copyRange||id==previewTool){transform(id==copyRange);if(id==previewTool&&compact_)choosePage(1);}
     else if(id==enabled){enabled_=!enabled_;changed();}
-    else if(id==deletePoint){require(!pointFields_,"Set or discard the point fields first");if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();showPoint();}}
+    else if(id==deletePoint){
+      if(automaticEdit_)flushAutomaticEdit();
+      require(!automaticEdit_&&!pending_&&!dragging_&&!pointFields_,"Finish or discard the pending point before deleting");
+      if(selected_>=0){points_.erase(points_.begin()+selected_);selected_=points_.empty()?-1:std::min(selected_,int(points_.size()-1));changed();showPoint();}
+    }
     else if(id==rampUp||id==rampDown){require(parameter_&&!pointFields_,"Choose a parameter and set pending point fields first");points_=Json::array({{{"position",0},{"value",id==rampDown?1:0},{"curve",curves[size_t(kind_)]}},{{"position",rows_*256-1},{"value",id==rampDown?0:1},{"curve",curves[size_t(kind_)]}}});if(kind_==8)for(auto &p:points_)p["formula"]="mix(start,end,t)";selected_=0;changed();showPoint();}
     else if(id==fit||id==zoomIn||id==zoomOut||id==panLeft||id==panRight){if(id==fit)canvas_.fit(rows_);else if(id==panLeft||id==panRight)canvas_.pan((canvas_.end-canvas_.start)*(id==panLeft?-.25:.25),rows_);else canvas_.zoom(id==zoomIn?2:.5,rows_);schedule();rebuild();}
   }
   void cancelDrag(){if(!dragging_)return;dragging_=false;points_=dragBefore_;dirty_=dragDirty_;selected_=dragSelection_;++generation_;values_=Json::array();schedule();showPoint();rebuild();ReleaseCapture();}
-  void mouse(UINT message,float x,float y,WPARAM)override{
+  void mouse(UINT message,float x,float y,WPARAM w)override{
     if(message==WM_CAPTURECHANGED){cancelDrag();return;}if(message==WM_LBUTTONUP){const bool completed=dragging_;dragging_=false;ReleaseCapture();schedule();if(completed&&dirty_)queueCurveEdit(1);return;}
     if(!canvasVisible_)return;
     if(message==WM_LBUTTONDOWN&&canvas_.viewport.contains(x,y)&&parameter_&&!pending_&&!pointFields_){SetFocus(window_);dragBefore_=points_;dragDirty_=dirty_;dragSelection_=selected_;selected_=canvas_.hit(x,y);
       if(selected_<0){auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(points_[i].at("position")==position)selected_=int(i);
         if(selected_<0){Json p={{"position",position},{"value",canvas_.value(y)},{"curve",curves[size_t(kind_)]}};if(kind_==8)p["formula"]="mix(start,end,t)";replacePoint(std::move(p));}}
-      showPoint();dragging_=true;SetCapture(window_);return;}
-    if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0){auto p=points_[size_t(selected_)];const auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(int(i)!=selected_&&points_[i].at("position")==position)return;p["position"]=position;p["value"]=canvas_.value(y);replacePoint(std::move(p));}
+      showPoint();dragX_=x;dragY_=y;dragMoved_=false;dragging_=true;SetCapture(window_);return;}
+    if(message==WM_MOUSEMOVE&&dragging_&&selected_>=0&&(w&MK_LBUTTON)){
+      // Selecting a handle must not quantize its value to a rounded pointer
+      // pixel. Match the native song-automation editor's drag threshold.
+      const auto dpi=GetDpiForWindow(window_);const float scale=96.f/dpi;
+      if(!dragMoved_&&std::abs(x-dragX_)<GetSystemMetricsForDpi(SM_CXDRAG,dpi)*scale&&
+          std::abs(y-dragY_)<GetSystemMetricsForDpi(SM_CYDRAG,dpi)*scale)return;
+      dragMoved_=true;auto p=points_[size_t(selected_)];const auto position=uint32_t(std::clamp(std::round(canvas_.position(x)/snap_)*snap_,0.0,double(rows_)*256-1));for(size_t i=0;i<points_.size();++i)if(int(i)!=selected_&&points_[i].at("position")==position)return;p["position"]=position;p["value"]=canvas_.value(y);replacePoint(std::move(p));}
   }
   bool wheel(UINT message,float x,float y,WPARAM w)override{
     if(!canvasVisible_||!canvas_.viewport.contains(x,y)||dragging_)return false;const double delta=GET_WHEEL_DELTA_WPARAM(w)/120.0;const bool ctrl=GET_KEYSTATE_WPARAM(w)&MK_CONTROL,shift=GET_KEYSTATE_WPARAM(w)&MK_SHIFT;
@@ -230,7 +258,7 @@ private:
     if(GetFocus()!=window_||pending_||!canvasVisible_)return false;
     if(ctrl&&(k==VK_LEFT||k==VK_RIGHT)){action(k==VK_LEFT?panLeft:panRight,BN_CLICKED);return true;}if(ctrl)return false;
     if(k==VK_HOME){action(fit,BN_CLICKED);return true;}if(k==VK_OEM_PLUS||k==VK_ADD||k==VK_OEM_MINUS||k==VK_SUBTRACT){action(k==VK_OEM_PLUS||k==VK_ADD?zoomIn:zoomOut,BN_CLICKED);return true;}
-    if(k==VK_DELETE){action(deletePoint,BN_CLICKED);return true;}if(pointFields_)return false;
+    if(k==VK_DELETE||k==VK_BACK){action(deletePoint,BN_CLICKED);return true;}if(pointFields_)return false;
     if(k==VK_TAB&&!points_.empty()){selected_=(selected_+(shift?-1:1)+int(points_.size()))%int(points_.size());showPoint();requestPaint();return true;}
     if(selected_>=0&&(k==VK_LEFT||k==VK_RIGHT||k==VK_UP||k==VK_DOWN)){auto p=points_[size_t(selected_)];if(k==VK_LEFT||k==VK_RIGHT)p["position"]=uint32_t(std::clamp(p.at("position").get<double>()+(k==VK_LEFT?-1:1)*(shift?1.0:double(snap_)),0.0,double(rows_)*256-1));else p["value"]=std::clamp(p.at("value").get<double>()+(k==VK_UP?1:-1)*(shift?.001:.01),0.0,1.0);replacePoint(std::move(p));return true;}return false;
   }
@@ -346,7 +374,7 @@ private:
         put(rowLabel,left,248,quarter,18);put(valueLabel,left+quarter+gap,248,quarter,18);
         for(int i=0;i<4;++i)put(std::array<int,4>{pointRow,pointValue,setPoint,deletePoint}[size_t(i)],left+i*(quarter+gap),266,quarter,26);
         put(bank,left,306,inner,28);
-        set(pageHelp,kind_==8?L"Expand opens the formula workbench. Set point stages these fields; Apply saves the curve.":L"Choose Scripted on the Curve page to edit this point's formula. The reference is available for every curve.");
+        set(pageHelp,kind_==8?L"Expand opens the formula workbench. Edits to a selected point save automatically; Add point inserts a new point.":L"Choose Scripted on the Curve page to edit this point's formula. The reference is available for every curve.");
         put(pageHelp,left,346,inner,std::max(34.f,contentBottom-346));
       }else{
         const float rangeWidth=(inner-112)/2;
@@ -395,6 +423,33 @@ private:
     wchar_t label[160]{};swprintf_s(label,shortDock_?L"Rows %.2f–%.2f · %.1f–%.1f%%":L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,colors.text);
   }
 public:
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&!reviewRequired_&&(dirty_||(pointFields_&&selected_>=0));}
+  void flushForProjectSave(){
+    // Save accepted music plus already requested automatic edits. A compound
+    // tool preview remains retained until the musician explicitly uses it.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending pattern curve before saving the project");
+  }
+  void flushForHistory(){finishAutomaticCurveEdit();}
+  void refreshAfterHistory(){
+    // History changes accepted music, not the inspected target. Reload a clean
+    // visible editor by its stable pattern/plugin IDs; never follow the cursor
+    // or replace a retained preview, raw field, bank or formula draft.
+    if(!visible()||retainedDraft()||automaticEdit_)return;
+    const auto now=context_();if(now.busy||now.document!=captured_.document||current())return;
+    const auto focus=GetFocus();const auto id=GetDlgCtrlID(focus);
+    const bool textField=IsChild(window_,focus)&&(id==pointRow||id==pointValue||id==formula||id==search);
+    DWORD first=0,last=0;if(textField)SendMessageW(focus,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    try{load(false);}
+    catch(const std::exception &e){error(e);} // The history operation already succeeded.
+    if(textField&&GetFocus()==focus)SendMessageW(focus,EM_SETSEL,first,last);
+  }
+  void hide()override{
+    cancelDrag();
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_,"Wait for the pending pattern curve before closing");
+    NativeToolWindow::hide();
+  }
   void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
     bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};

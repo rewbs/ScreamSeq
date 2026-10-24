@@ -53,6 +53,23 @@ void operator delete(void *p, std::size_t, std::align_val_t alignment) noexcept 
 void operator delete[](void *p, std::size_t, std::align_val_t alignment) noexcept { ::operator delete(p, alignment); }
 
 namespace {
+size_t preciseAdmissionSweep() {
+  for(ptrdiff_t fault=0;fault<10000;++fault){
+    Tracker::Document document;const auto before=document.native();const auto cell=document.cell(0,2,0);
+    auto next=before;next.preciseNotes.push_back({next.patterns.at(0).id,next.tracks.at(0).id,2*65536+123,1,61,90});
+    auto after=cell;after.note=62;const std::vector<Tracker::Edit> edits={{0,2,0,{},after}};
+    const auto revision=document.revision;unsigned published=0;bool failed=false;
+    std::function<void()> publish=[&]{++published;};
+    failAfter=fault;
+    try{document.editNative(next,edits,publish);}catch(const std::bad_alloc &){failed=true;}catch(...){failAfter=-1;throw;}
+    failAfter=-1;
+    if(failed){check(!published&&document.native()==before&&document.cell(0,2,0)==cell&&document.revision==revision&&!document.canUndo(),"Precise conversion published or changed music before all allocations succeeded");document.editNative(next,edits,publish);}
+    check(published==1&&document.native()==next&&document.cell(0,2,0)==after,"Precise conversion retry was not one complete publication");
+    document.undo();check(document.native()==before&&document.cell(0,2,0)==cell,"Precise conversion lost atomic Undo");
+    if(!failed)return size_t(fault);
+  }
+  throw std::runtime_error("Precise admission allocation sweep did not terminate");
+}
 size_t annotationSweep(bool merge) {
   for(ptrdiff_t fault=0;fault<10000;++fault) {
     Tracker::Document document;
@@ -136,7 +153,7 @@ size_t sweep(bool redo, bool mixed, bool publication=false) {
     bool rejected = false,published=false;
     std::function<void()> commit;if(publication)commit=[&]{published=true;};
     failAfter = fault;
-    try { if(redo) document.redo(commit); else document.undo(commit); }
+    try { if(redo) document.redo(commit,publication&&mixed); else document.undo(commit,publication&&mixed); }
     catch(const std::bad_alloc &) { rejected = true; }
     catch(...) { failAfter = -1; throw; }
     failAfter = -1;
@@ -180,9 +197,9 @@ void refusedPublication(bool redo) {
 
 int main() {
   try {
-    size_t failures = 0;
+    size_t failures = preciseAdmissionSweep();
     for(bool redo : {false, true}) for(bool mixed : {false, true}) failures += sweep(redo, mixed);
-    for(bool redo:{false,true}){failures+=sweep(redo,false,true);refusedPublication(redo);}
+    for(bool redo:{false,true}){for(bool mixed:{false,true})failures+=sweep(redo,mixed,true);refusedPublication(redo);}
     for(bool merge:{false,true}){failures+=annotationSweep(merge);refusedAnnotation(merge);}
     std::cout << "PASS " << failures << " injected allocation failures: native admission and mixed-cell Undo/Redo remain atomic, retryable and reversible\n";
     return 0;

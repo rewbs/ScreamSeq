@@ -179,21 +179,91 @@ void NativePlugin::observedBaseline(uint32_t id,double value) noexcept {
   if(!activity_ || !activityProcessor_ || activityProcessor_>activity_->processors.size())return;
   for(auto &p:activity_->processors[activityProcessor_-1].parameters)if(p.id==id){p.value=float(value);return;}
 }
-PluginState NativePlugin::state() const {
-  const auto *p=publishedVendor();
-  auto state = p->backend_ ? p->backend_->state() : PluginState{descriptor_};
+void NativePlugin::decorateState(PluginState &state) const {
   state.instanceID = instanceID_;
   state.bypass=bypassed();
   state.instrument = assignedInstrument_; state.midiChannel = midiChannel_; state.aliases = aliases_;
   state.auxiliaryInputs = auxiliaryInputs_; state.auxiliaryOutputs = auxiliaryOutputs_;state.audioLayout=audioLayout_;
+}
+PluginState NativePlugin::state() const {
+  const auto *p=publishedVendor();
+  auto state = p->backend_ ? p->backend_->state() : PluginState{descriptor_};
+  decorateState(state);
   if (p->builtin_) state.state = p->builtin_->state();
   return state;
+}
+std::optional<NativePlugin::ProcessingState> NativePlugin::processingState() const {
+  if(!presetSettled_.load(std::memory_order_acquire))
+    throw std::runtime_error("Finish the vendor handoff before observing processing state");
+  const auto *vendor=publishedVendor();
+  if(!vendor->backend_)return {}; // Built-in serialization is not this capability.
+  const auto source=editSource();
+  PluginState before{descriptor_};decorateState(before);
+  auto observed=vendor->backend_->processingState();
+  PluginState after{descriptor_};decorateState(after);
+  if(!presetSettled_.load(std::memory_order_acquire)||publishedVendor()!=vendor||editSource()!=source||before!=after)
+    throw std::runtime_error("Native provider changed during processing-state observation");
+  if(!observed)return {};
+  if(observed->descriptor!=descriptor_||observed->audioLayout!=before.audioLayout)
+    throw std::runtime_error("Native processing-state identity or audio layout changed");
+  decorateState(*observed);
+  return ProcessingState{source,std::move(*observed)};
 }
 std::vector<PluginInstrumentAlias> NativePlugin::assignments() const {
   std::vector<PluginInstrumentAlias> result;
   if (assignedInstrument_) result.push_back({assignedInstrument_, midiChannel_});
   result.insert(result.end(), aliases_.begin(), aliases_.end());
   return result;
+}
+std::unique_ptr<NativePlugin::StoppedReplacement> NativePlugin::prepareStoppedReplacement(const PluginState &saved,bool offline) const {
+  const auto *current=publishedVendor();
+  const auto source=editSource();
+  if(!presetSettled_.load(std::memory_order_acquire)||renderVendor_!=current)
+    throw std::runtime_error("Finish the pending vendor handoff before stopped state repair");
+  if(editorOpen())throw std::runtime_error("Close the native editor before stopped state repair");
+  if(saved.descriptor!=descriptor_||saved.instanceID!=instanceID_||
+     saved.bypass!=bypassed()||saved.instrument!=assignedInstrument_||saved.midiChannel!=midiChannel_||saved.aliases!=aliases_||
+     saved.auxiliaryInputs!=auxiliaryInputs_||saved.auxiliaryOutputs!=auxiliaryOutputs_)
+    throw std::invalid_argument("Stopped state repair must retain plugin identity, assignments and ports");
+  auto result=std::make_unique<StoppedReplacement>();
+  result->expected=const_cast<NativePlugin *>(current);result->source=source;
+  result->prepared=std::make_unique<NativePlugin>(saved,rate_,offline);
+  const auto &next=*result->prepared;
+  if(next.audioLayout_!=audioLayout_||next.preparedInputs_!=preparedInputs_||next.preparedOutputs_!=preparedOutputs_||
+     std::llround(next.latency()*rate_)!=std::llround(latency()*rate_))
+    throw std::invalid_argument("Stopped state repair changes prepared ports or latency");
+  const auto before=parameters(),after=next.parameters();
+  if(before.size()!=after.size())throw std::invalid_argument("Stopped state repair changes parameter identities");
+  for(size_t i=0;i<before.size();++i) {
+    const auto &a=before[i],&b=after[i];
+    if(a.id!=b.id||a.min!=b.min||a.max!=b.max||a.step!=b.step||a.writable!=b.writable||a.continuous!=b.continuous)
+      throw std::invalid_argument("Stopped state repair changes the parameter catalogue");
+  }
+  result->canonical=next.state();result->tail=next.tail();
+  if(!std::isfinite(result->tail)||result->tail<0||editorOpen()||!acceptsStoppedReplacement(*result))
+    throw std::runtime_error("Native provider changed during stopped state preparation");
+  return result;
+}
+bool NativePlugin::acceptsStoppedReplacement(const StoppedReplacement &plan) const noexcept {
+  return !plan.adopted&&plan.prepared&&plan.expected==publishedVendor()&&renderVendor_==plan.expected&&
+    presetSettled_.load(std::memory_order_acquire)&&editSource()==plan.source;
+}
+bool NativePlugin::adoptStoppedReplacement(StoppedReplacement &plan) noexcept {
+  if(!acceptsStoppedReplacement(plan))return false;
+  commitStoppedReplacement(plan);return true;
+}
+void NativePlugin::commitStoppedReplacement(StoppedReplacement &plan) noexcept {
+  auto &current=*plan.expected;auto &next=*plan.prepared;
+  // The backend object's address remains stable, preserving its own native
+  // callbacks. Only unique ownership moves; the stable scheduler facade,
+  // instrument bindings and routing pointers are not replaced. Old objects
+  // are retained in plan.prepared, with their original notification identity,
+  // until the native owner finishes lease cleanup and retires the plan.
+  current.backend_.swap(next.backend_);current.builtin_.swap(next.builtin_);
+  std::swap(current.editIncarnation_,next.editIncarnation_);
+  current.tail_.store(plan.tail,std::memory_order_release);tail_.store(plan.tail,std::memory_order_release);
+  presetTailEpoch_.fetch_add(1,std::memory_order_release);
+  plan.adopted=true;
 }
 double NativePlugin::tail() const {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->tail() : tail_.load(std::memory_order_acquire);}
 uint64_t NativePlugin::tailRevision() const noexcept {const auto *p=publishedVendor();return presetTailEpoch_.load(std::memory_order_acquire)+(p->builtin_ ? p->builtin_->tailRevision() : 0);}

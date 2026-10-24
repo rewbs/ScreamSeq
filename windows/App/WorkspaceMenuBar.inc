@@ -56,8 +56,8 @@
             if(id==pasteFocusedCommand&&!IsClipboardFormatAvailable(CF_UNICODETEXT)&&!IsClipboardFormatAvailable(CF_TEXT))refuse(L"The clipboard has no text");
         }else{
             if(focusedEdit&&!(focus==window&&(workspaceState.focus=="pattern"&&trackerWorkspaceVisible()||workspaceMainCanvasFocused("samples"))))refuse(L"Focus a text field, pattern or sample selection first");
-            if((localUndo||id==pluginUndo)&&!view->session.document.value("canUndo",false))refuse(L"No song edit to undo");
-            if((localRedo||id==pluginRedo)&&!view->session.document.value("canRedo",false))refuse(L"No song edit to redo");
+            if((localUndo||id==pluginUndo)&&!canUndoSong())refuse(L"No song edit to undo");
+            if((localRedo||id==pluginRedo)&&!canRedoSong())refuse(queuedMusicalEdit()?L"The new edit replaces Redo history":L"No song edit to redo");
         }
         if(id>=selectChannelCommand&&id<=selectRowCommand&&!(focus==window&&workspaceState.focus=="pattern"&&trackerWorkspaceVisible()))refuse(L"Focus the pattern first");
         if(id==patternRowsLargerCommand&&rowHeight>=34)refuse(L"Pattern rows are already at their largest size");
@@ -78,7 +78,7 @@
         using Item=ScreamSeq::NativeMenuBar::Item;
         const auto commands=[](std::initializer_list<int> ids){std::vector<Item> result;for(const auto id:ids)result.push_back({id,id?L"Command":L""});return result;};
         std::vector<Item> menus={
-            {0,L"&File",true,false,commands({newDocumentCommand,openCommand,openDemoCommand,0,saveCommand,saveAsCommand,exportModuleCommand,0,recoveryCommand,documentLoadReportCommand,0,exitCommand})},
+            {0,L"&File",true,false,commands({newDocumentCommand,openCommand,openDemoCommand,0,saveCommand,saveAsCommand,exportAudioCommand,exportModuleCommand,0,recoveryCommand,documentLoadReportCommand,0,exitCommand})},
             {0,L"&Edit",true,false,commands({undoCommand,redoCommand,0,cutFocusedCommand,copyFocusedCommand,pasteFocusedCommand,deleteFocusedCommand,selectAllFocusedCommand,selectChannelCommand,selectRowCommand,selectPatternCommand,0,patternToolsCommand})},
             {0,L"&Song",true,false,commands({arrangementCommand,arrangementMatrixCommand,songTimingCommand,songPropertiesCommand,0,noteTrackCreateCommand,noteTrackGroupCommand,noteTrackUngroupCommand,0,newPatternCommand,duplicatePatternCommand,editSectionCommand})},
             {0,L"&Playback",true,false,commands({togglePlaybackCommand,stopCommand,0,playCursorCommand,playSelectionCommand,playSelectionCursorCommand,0,playbackLoopCommand,followCommand,liveKeysCommand,0,auditionCommand,midiRecordingCommand,parameterRecordingCommand})},
@@ -114,7 +114,7 @@
         case liveKeysCommand:return current.at("live")==menuGuard.at("live");
         case followCommand:return current.at("position").at("following")==menuGuard.at("position").at("following");
         case togglePlaybackCommand:return current.at("playing")==menuGuard.at("playing");
-        case newDocumentCommand:case openCommand:case openDemoCommand:case saveCommand:case saveAsCommand:case exportModuleCommand:case recoveryCommand:case documentLoadReportCommand:
+        case newDocumentCommand:case openCommand:case openDemoCommand:case saveCommand:case saveAsCommand:case exportModuleCommand:case exportAudioCommand:case recoveryCommand:case documentLoadReportCommand:
         case undoCommand:case redoCommand:case songPropertiesCommand:case songTimingCommand:return current.at("revision")==menuGuard.at("revision");
         default:return current==menuGuard;
         }

@@ -24,17 +24,50 @@ class SongRoutingTests(unittest.TestCase):
         self.cache.write_text(json.dumps(list(modules.values())))
         self.launch()
 
-    def launch(self,project=None):
-        args=[os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent' if project else '--inspection','--automation','--seconds','120','--vst3-test-cache',str(self.cache)]
+    def launch(self,project=None,seconds=120):
+        args=[os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent' if project else '--inspection','--automation','--seconds',str(seconds),'--vst3-test-cache',str(self.cache)]
         if project:args+=['--project',str(project),'--audio-test-allow-stop']
+        preceding_client = getattr(self, 'client', None)
         self.pid=self.desktop.launch(args);self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        owned_process = self.desktop.processes[-1]
+        last_transport = None
+        def failed(reason, exit_code=None):
+            # Preserve the actual failure instead of spending the entire startup
+            # deadline polling an already-exited child. Never restart or skip it.
+            evidence = dict(reason=reason, pid=self.pid, exitCode=exit_code,
+                            args=args, lastTransport=last_transport)
+            if preceding_client is not None:
+                try:
+                    evidence['precedingOwnedAudio'] = preceding_client.call('audio.devices.get')
+                except Exception as error:
+                    evidence['audioDiagnosticError'] = str(error)
+            destination = os.environ.get('SCREAMSEQ_COMPOSING_EVIDENCE_DIR') or os.environ.get('SCREAMSEQ_ROUTING_EVIDENCE_DIR')
+            if destination:
+                folder = Path(destination) / 'startup-failures'
+                try:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    path = folder / (self._testMethodName + '-' + str(self.pid) + '-' + str(time.monotonic_ns()) + '.json')
+                    with path.open('x', encoding='utf-8') as output:
+                        json.dump(evidence, output, indent=2)
+                except OSError as error:
+                    evidence['evidenceWriteError'] = str(error)
+            self.fail(json.dumps(evidence))
         for _ in range(100):
+            wait = private_desktop.kernel.WaitForSingleObject(owned_process.hProcess, 0)
+            if wait == 0:
+                code = wintypes.DWORD()
+                private_desktop.check(private_desktop.kernel.GetExitCodeProcess(owned_process.hProcess, ctypes.byref(code)))
+                failed('Owned routing app exited before readiness', code.value)
+            if wait != 258:
+                failed('Cannot observe owned routing app', wait)
             try:
                 self.doc()
-                if not project or self.read('transport.get')['audioActive']:return
+                if not project:return
+                last_transport = self.read('transport.get')
+                if last_transport['audioActive']:return
             except TransportError:pass
             time.sleep(.1)
-        self.fail('routing app did not start')
+        failed('Owned routing app did not become ready before its startup deadline')
 
     doc=support.GraphMixerAppTests.doc
     def read(self,method,**fields):
@@ -56,13 +89,19 @@ class SongRoutingTests(unittest.TestCase):
         hwnd=self.desktop.hwnd(self.pid);self.desktop.send(hwnd,0x111,identifier,private_desktop.user.GetDlgItem(hwnd,identifier) or 0)
     def local(self):return self.read('workspace.get')['songRouting']
     def window(self,class_name='ScreamSeq.SongRouting'):
-        found=[]
+        found=set()
         @private_desktop.callback
         def visit(hwnd,_):
             pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));name=ctypes.create_unicode_buffer(100);private_desktop.user.GetClassNameW(hwnd,name,100)
-            if pid.value==self.pid and name.value==class_name:found.append(hwnd)
+            if pid.value==self.pid and name.value==class_name:found.add(hwnd)
             return True
-        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1);return found[0]
+        private_desktop.user.EnumChildWindows.argtypes=[wintypes.HWND,private_desktop.callback,wintypes.LPARAM]
+        @private_desktop.callback
+        def root(hwnd,_):
+            visit(hwnd,0)
+            private_desktop.user.EnumChildWindows(hwnd,visit,0)
+            return True
+        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,root,0));self.assertEqual(len(found),1);return next(iter(found))
     def control(self,identifier):
         hwnd=private_desktop.user.GetDlgItem(self.window(),identifier);self.assertTrue(hwnd);return hwnd
     def idle(self):
@@ -98,9 +137,18 @@ class SongRoutingTests(unittest.TestCase):
             data.update(privateDesktop=True,foregroundVisualQualified=False)
             (folder/(name+'.json')).write_text(json.dumps(data,indent=2),encoding='utf-8')
     def bus(self,identifier):return next(b for b in self.buses() if b['id']==identifier)
-    def start(self):
+    def start(self,overview=True,floating=True):
         self.idle();self.main_command(417);self.idle();state=self.read('workspace.get')
         self.assertTrue(state['songRouting']['visible'],json.dumps(state,ensure_ascii=False))
+        self.assertTrue(state['songRouting']['docked'])
+        # These legacy routing/control fixtures use the full floating inspector.
+        # Navigation now deliberately opens beside Pattern; choose Float explicitly.
+        if floating:
+            self.read('workspace.panel',panel='mixingGraph',placement='float',focus=True);self.idle()
+            self.assertFalse(self.local()['docked'])
+        # Cable fixtures intentionally address distant stages at once. Choose
+        # the explicit overview, rather than depending on the initial framing.
+        if overview:self.desktop.send(self.window(),0x111,3849,0);self.idle()
     def test_rack_parameter_window_without_graph_retains_and_saves(self):
         plugin=self.add_gain();self.main_command(316);self.idle()
         main=self.desktop.hwnd(self.pid);rack=private_desktop.user.GetDlgItem(main,300)
@@ -280,12 +328,50 @@ class SongRoutingTests(unittest.TestCase):
         user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
         user.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)]
         self.assertTrue(user.SetWindowPos(owner,None,0,0,round(1040*scale),round(680*scale),0x16))
-        frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));previous=None
-        for identifier in (3822,3839,3840,3841,3815,3820):
+        self.idle();frame=wintypes.RECT();user.GetWindowRect(owner,ctypes.byref(frame));rectangles=[]
+        # The compact graph intentionally wraps its actions onto three rows.
+        # Test actual visible controls and pairwise overlap, not the historical
+        # assumption that every action occupies one horizontal floating toolbar.
+        identifiers=(3846,3847,3815,3801,3839,3821,3816,3817,3818,3840,3841,3845) if self.local()['compact'] else (3822,3839,3840,3841,3815,3847)
+        for identifier in identifiers:
+            self.assertTrue(user.IsWindowVisible(self.control(identifier)),identifier)
             rect=wintypes.RECT();user.GetWindowRect(self.control(identifier),ctypes.byref(rect))
             self.assertGreater(rect.right,rect.left);self.assertGreaterEqual(rect.left,frame.left);self.assertLessEqual(rect.right,frame.right)
-            if previous is not None:self.assertGreaterEqual(rect.left,previous)
-            previous=rect.right
+            self.assertGreaterEqual(rect.top,frame.top);self.assertLessEqual(rect.bottom,frame.bottom)
+            for previous in rectangles:
+                self.assertTrue(rect.right<=previous.left or rect.left>=previous.right or rect.bottom<=previous.top or rect.top>=previous.bottom,(identifier,tuple((r.left,r.top,r.right,r.bottom) for r in (rect,previous))))
+            rectangles.append(rect)
+
+    def test_dense_graph_readable_focus_overview_preserve_saved_layout(self):
+        first,_,_=self.setup_mixer();plugin=self.add_gain();target='plugin:'+plugin
+        self.write('graph.layout.set',positions=[dict(node=target,x=100000,y=100000)])
+        before=self.doc();saved=self.read('graph.get',includeState=False);self.start(overview=False,floating=False)
+        def contained(node):
+            x,y,w,h=node['rect'];vx,vy,vw,vh=self.local()['canvas']['viewport']
+            self.assertGreaterEqual(x,vx-.1);self.assertGreaterEqual(y,vy-.1)
+            self.assertLessEqual(x+w,vx+vw+.1);self.assertLessEqual(y+h,vy+vh+.1)
+        self.assertGreaterEqual(self.local()['canvas']['zoom'],.75);contained(self.node(first))
+        self.desktop.send(self.window(),0x111,3849,0);self.idle()
+        self.assertLess(self.local()['canvas']['zoom'],.15)
+        for node in self.nodes():contained(node)
+        old_zoom=self.local()['canvas']['zoom'];self.press(3817)
+        self.assertLess(self.local()['canvas']['zoom'],old_zoom)  # Minus cannot jump in from a tiny overview.
+        self.choose_node(3802,target);self.desktop.send(self.window(),0x111,3848,0);self.idle()
+        self.assertEqual(self.local()['canvas']['zoom'],1);contained(self.node(target))
+        self.assertEqual(self.node(target)['rect'][2:], [184,68]);self.assertEqual(self.local()['selected'],target)
+        for _ in range(10):self.press(3817)
+        self.choose_node(3802,first)
+        self.assertNotEqual(self.local()['selected'],target)
+        small=self.local()['canvas'];x,y,w,h=self.node(target)['rect'];self.assertLess(w,20)
+        scale=self.read('workspace.get')['dpi']/96
+        def mouse(message,x,y):self.desktop.send(self.window(),message,0 if message==0x202 else 1,(round(x*scale)&65535)|((round(y*scale)&65535)<<16))
+        mouse(0x201,x+w/2,y+h/2);mouse(0x200,x+w/2+20,y+h/2+20);mouse(0x202,x+w/2,y+h/2);self.idle()
+        self.assertEqual(self.local()['selected'],target);self.assertFalse(self.local()['draft']);self.assertFalse(self.local()['layoutDraft'])
+        self.assertEqual(self.local()['canvas'],small)
+        mouse(0x203,x+w/2,y+h/2);mouse(0x202,x+w/2,y+h/2);self.idle()
+        self.assertEqual(self.local()['canvas']['zoom'],1);contained(self.node(target))
+        self.assertEqual(self.doc(),before);self.assertEqual(self.read('graph.get',includeState=False),saved)
+        self.record('dense-routing-framing',canvas=self.local()['canvas'],graph=saved)
 
     def test_new_bus_socket_cable_preserves_main_and_selected_handle_rewires_only_send(self):
         first,second,master=self.setup_mixer();third=self.buses()[2]['id']

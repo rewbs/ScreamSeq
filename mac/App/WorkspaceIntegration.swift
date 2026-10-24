@@ -123,6 +123,9 @@ extension AppController {
       if let window = self.sampleRecordingWindow, window.isVisible, let content = window.contentView {
         menus.append(ContextActions.controls(in: content, title: "Record sample"))
       }
+      if let window = self.pluginRecordingWindow, window.isVisible, let content = window.contentView {
+        menus.append(ContextActions.controls(in: content, title: "Plugin automation take"))
+      }
       return menus
     }
     commandPalette.collect()

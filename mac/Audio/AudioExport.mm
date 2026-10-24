@@ -1,27 +1,15 @@
 #include "AudioExport.hpp"
-#include "editor/TrackerDocument.hpp"
-#include <cmath>
+#include "editor/hosted/AudioExportStream.hpp"
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <cerrno>
+#include <stdio.h>
 #include <unistd.h>
 namespace Tracker {
 void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<PluginState> &states,
                         const std::vector<ParameterChange> &automation, const std::string &path, uint32_t sequence,
-                        const NativeSong *native) {
-  constexpr uint32_t rate = 48000;
-  // Export runs on document workers with small stacks. These own large fixed
-  // audio buffers, so allocate them on the heap while retaining destruction
-  // order: renderer adapters are retired before their hosted processors.
-  auto effectsStorage = std::make_unique<PluginChain>(states, rate, true, automation);
-  auto &effects = *effectsStorage;
-  auto rendererStorage = std::make_unique<Renderer>(module, rate, 0, false, std::string{}, sequence, PlaybackRegion{}, native);
-  auto &renderer = *rendererStorage;
-  if (native) renderer.applyColumnMutes(*native, renderer.song());
-  effects.attachInstruments(renderer, native);
-  if (native) effects.attachMusicalAutomation(renderer, *native);
-  const uint64_t latency = uint64_t(std::ceil(effects.latency() * rate)),
-                 tail = uint64_t(std::ceil(std::min(effects.tail(), 60.0) * rate));
+                        const NativeSong *native, bool overwrite) {
   std::string temporary = path + ".writing.XXXXXX";
   int fd = mkstemp(temporary.data());
   if (fd < 0)
@@ -29,73 +17,7 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
   close(fd);
   try {
     std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-    auto u16 = [&](uint16_t value) {
-      char bytes[2] = {char(value), char(value >> 8)};
-      output.write(bytes, 2);
-    };
-    auto u32 = [&](uint32_t value) {
-      char bytes[4] = {char(value), char(value >> 8), char(value >> 16), char(value >> 24)};
-      output.write(bytes, 4);
-    };
-    output.write("RIFF", 4);
-    u32(0);
-    output.write("WAVEfmt ", 8);
-    u32(16);
-    u16(3);
-    u16(2);
-    u32(rate);
-    u32(rate * 8);
-    u16(8);
-    u16(32);
-    output.write("data", 4);
-    u32(0);
-    std::array<float, 1024> buffer{};
-    uint64_t position = 0, written = 0, end = UINT64_MAX, tailLimit = UINT64_MAX, tailRevision = effects.tailRevision();
-    bool ended = false;
-    while (position < end) {
-      if (effects.latencyChangePending())
-        throw std::runtime_error("A plugin changed latency during export; the incomplete export was not saved.");
-      if (position >= uint64_t(rate) * 3600)
-        throw std::runtime_error("Audio export exceeded the one-hour limit; output was not replaced.");
-      uint32_t frames = 512;
-      effects.syncTransport(renderer);
-      if (!ended) {
-        auto received = renderer.render(buffer.data(), frames);
-        if (renderer.faulted())
-          throw std::runtime_error("Audio export exceeded the engine's loop-state capacity.");
-        if (received < frames) {
-          ended = true;
-          effects.endNotes();
-          end = position + received + latency + tail;
-          tailLimit = position + received + latency + uint64_t(60) * rate;
-          frames = uint32_t(std::min<uint64_t>(frames, end - position));
-        }
-      } else {
-        frames = uint32_t(std::min<uint64_t>(frames, end - position));
-        buffer.fill(0);
-      }
-      if (!frames)
-        break;
-      if (!effects.process(buffer.data(), frames))
-        throw std::runtime_error("An Audio Unit failed during export.");
-      if (effects.latencyChangePending())
-        throw std::runtime_error("A plugin changed latency during export; the incomplete export was not saved.");
-      const auto revision = effects.tailRevision();
-      if (ended && revision != tailRevision)
-        end = std::max(end, std::min(tailLimit, position + frames + latency + tail));
-      tailRevision = revision;
-      auto skip = uint32_t(std::min<uint64_t>(frames, position < latency ? latency - position : 0));
-      output.write(reinterpret_cast<const char *>(buffer.data() + skip * 2), (frames - skip) * 8);
-      written += frames - skip;
-      position += frames;
-    }
-    output.seekp(4);
-    u32(uint32_t(36 + written * 8));
-    output.seekp(40);
-    u32(uint32_t(written * 8));
-    output.flush();
-    if (!output)
-      throw std::runtime_error("Audio export could not be written");
+    writeProjectAudio(module,states,automation,output,sequence,native);
     output.close();
     if (!output)
       throw std::runtime_error("Audio export could not be closed");
@@ -106,7 +28,12 @@ void exportProjectAudio(const std::vector<std::byte> &module, const std::vector<
     const int closed = close(persisted);
     if (flushed || closed)
       throw std::runtime_error("Audio export could not be flushed; original retained");
-    std::filesystem::rename(temporary, path);
+    if(overwrite)std::filesystem::rename(temporary, path);
+    else if(::link(temporary.c_str(),path.c_str())==0)unlink(temporary.c_str());
+    else if(const int reason=errno;
+            (reason!=ENOTSUP&&reason!=EPERM&&reason!=EXDEV&&reason!=EINVAL&&reason!=ENOSYS&&reason!=EMLINK)||
+            ::renamex_np(temporary.c_str(),path.c_str(),RENAME_EXCL)!=0)
+      throw std::runtime_error("Cannot publish audio without replacing an existing file");
   } catch (...) {
     unlink(temporary.c_str());
     throw;

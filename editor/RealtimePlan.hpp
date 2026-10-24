@@ -24,5 +24,12 @@ public:
     if(r==w)return nullptr;
     const auto *plan=slots_[(w-1)%N].get();consumed_.store(w,std::memory_order_release);return plan;
   }
+  // FIFO variant for plans carrying incremental cell edits. Do not mix with
+  // consume() on the same queue: skipping a plan would lose those edits.
+  const T *consumeNext() noexcept {
+    const auto r=consumed_.load(std::memory_order_relaxed),w=written_.load(std::memory_order_acquire);
+    if(r==w)return nullptr;
+    const auto *plan=slots_[r%N].get();consumed_.store(r+1,std::memory_order_release);return plan;
+  }
 };
 }

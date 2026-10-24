@@ -25,10 +25,15 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error;
 - (BOOL)openPath:(NSString *)path error:(NSError **)error;
 - (void)newSong:(BOOL)demo;
+// Fallible native document replacement; retained recordings must be resolved.
+- (BOOL)createSong:(BOOL)demo error:(NSError **)error;
 - (BOOL)savePath:(NSString *)path error:(NSError **)error;
 // A recovery snapshot also preserves an unfinished take, without stopping it.
 - (BOOL)saveRecoveryPath:(NSString *)path error:(NSError **)error;
 - (nullable NSData *)recoveryData:(NSError **)error;
+// Detached original native-control evidence; document/take/base-revision guarded.
+// Never imports these pending/unknown events into the live recording owner.
+- (nullable NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error NS_SWIFT_NAME(recoveryData(nativeInput:));
 - (BOOL)playOrder:(NSInteger)order error:(NSError **)error;
 - (BOOL)playRegion:(NSDictionary *)region error:(NSError **)error;
 - (void)setPlaybackLoop:(BOOL)enabled;
@@ -130,6 +135,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSDictionary *> *)midiEvents;
 @property(nonatomic, readonly) BOOL recordingActive;
 @property(nonatomic, readonly, nullable) NSString *recordingTakeID;
+// Retained through Stop/Keep until native preview restoration has completed.
+// Recovery reopens its evidence detached; it never recreates this live owner.
+@property(nonatomic, readonly, nullable) NSString *parameterRecordingTakeID;
 @property(nonatomic, readonly, nullable) NSString *sampleRecordingTakeID;
 - (BOOL)prepareAudition:(NSError **)error;
 - (BOOL)note:(NSInteger)note instrument:(NSInteger)instrument velocity:(NSInteger)velocity on:(BOOL)on;

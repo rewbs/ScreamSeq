@@ -82,7 +82,18 @@ extension InterfaceTests {
     let aggregate=editor.link(ParameterTraceSample(["value":1,"source":["kind":"graph","id":"n0"]])!)
     try require(aggregate["scope"] as? String=="song" && aggregate["node"]==nil && aggregate["plugin"] as? String=="b","Final song value opens the target and all contributors")
     try require(editor.unclampedModulationValue==nil,"An incomplete contribution snapshot cannot invent a clamp total")
+    // Native window/editing work above can exceed the catalogue's two-second
+    // refresh interval on Intel. Supply a real catalogue reply before polling
+    // the trace, rather than accidentally answering targets with trace points.
+    editor.reloadTargets()
+    try require(requests.last?.0=="parameter.activity.targets" && replies.count==1,
+      "Contribution fixture must refresh the current processor catalogue explicitly")
+    answer(["engine":1,"targets":targets])
+    try require(editor.targetKey=="rack/b" && editor.parameterID==71 && editor.token=="1:2" && replies.isEmpty,
+      "Unchanged catalogue refresh must retain the selected parameter and capture")
     RunLoop.current.run(until:Date().addingTimeInterval(0.12));editor.poll()
+    try require(requests.last?.0=="parameter.activity.get" && replies.count==1,
+      "Contribution data must answer a trace request, not a catalogue or recorded-points request")
     answer(["target":["key":"rack/b"],"parameter":71,"token":"1:2","cursor":1005,"points":[
       ["sequence":1001,"value":0.8,"source":["kind":"graph-source","id":"n0"]],
       ["sequence":1002,"value":0.3,"source":["kind":"graph-source","id":"n501"]],
