@@ -1,4 +1,4 @@
-// Real owner-message dispatch and named pipe: an offline export can take longer
+// Real owner-message dispatch and named pipe: an offline render can take longer
 // than ordinary edits, but queued cancellation, replay and close stay bounded.
 #include "../../App/ApiDispatch.hpp"
 #include <future>
@@ -7,6 +7,7 @@ void dispatchDeadlineTests() {
   struct Host : TestHost {
     unsigned calls=0;std::function<void()> action;
     bool supportsDocumentOperations()const override{return true;}
+    std::vector<std::string> additionalDocumentWrites()const override{return {"sample.renderSelection"};}
     Json documentOperation(const std::string &,const Json &)override {
       ++calls;if(action)action();return {{"written",true}};
     }
@@ -44,17 +45,23 @@ void dispatchDeadlineTests() {
   reply=send(exported);
   check(pump(reply)==result&&host.calls==1,"Completed slow export replay published twice");
 
+  const auto selection=request("sample.renderSelection",{{"expectedRevision",host.state.revision}},"slow-selection");
+  reply=send(selection);const auto rendered=pump(reply);
+  check(rendered.contains("result")&&host.calls==2,"Selection render lost its completion after the five-second edit deadline");
+  reply=send(selection);
+  check(pump(reply)==rendered&&host.calls==2,"Completed slow selection replay published twice");
+
   // Ordinary requests retain the existing budget; do not extend all writes.
   reply=send(request("document.save",{{"expectedRevision",host.state.revision}},"slow-save"));
   const auto ordinary=pump(reply);
-  check(ordinary.at("error").at("code")==-32003&&host.calls==2,"Ordinary in-flight deadline lost uncertain-outcome classification");
+  check(ordinary.at("error").at("code")==-32003&&host.calls==3,"Ordinary in-flight deadline lost uncertain-outcome classification");
 
   host.action={};
   reply=send(request("document.exportAudio",{{"expectedRevision",host.state.revision}},"queued-export"));
   check(reply.wait_for(std::chrono::seconds(7))==std::future_status::ready,"Queued export did not retain the five-second admission bound");
   check(Json::parse(reply.get()).at("error").at("code")==-32002,"Unstarted export was classified as committed or uncertain");
   MSG message{};while(PeekMessageW(&message,window,0,0,PM_REMOVE))DispatchMessageW(&message);
-  check(host.calls==2,"Cancelled queued export later executed");
+  check(host.calls==3,"Cancelled queued export later executed");
 
   // Simulate native shutdown while the owner is inside a long operation.
   // Closing must wake and join the pipe owner, not wait 120 seconds for itself.
@@ -69,9 +76,9 @@ void dispatchDeadlineTests() {
   // Transport closure may prevent delivery; neither an empty response nor a
   // closed-during-execution error proves absence of the already-begun write.
   const auto closed=reply.get();
-  check(host.calls==3,"Shutdown duplicated or skipped the entered host operation");
+  check(host.calls==4,"Shutdown duplicated or skipped the entered host operation");
   check(closeDuration<std::chrono::seconds(1),"Close joined a waiting active dispatch without waking it");
   if(!closed.empty())check(Json::parse(closed).at("error").at("code")==-32003,"Active shutdown claimed pre-execution cancellation");
   SetWindowLongPtrW(window,GWLP_USERDATA,0);dispatch.reset();
-  std::cout<<"PASS export reply deadline, exact replay, queued cancellation, ordinary timeout and active close\n";
+  std::cout<<"PASS export/selection reply deadline, exact replay, queued cancellation, ordinary timeout and active close\n";
 }

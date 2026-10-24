@@ -366,7 +366,9 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertTrue(comparison['equal'], comparison)
         self.assertNotEqual(before['automation'], after['automation'])
         from recording_render import run as render_recording
-        replay = render_recording(self.client, project, saved, evidence / 'audio-replay',
+        # Offline selection rendering uses the same bounded reply budget as
+        # full-song export. Ordinary composing requests retain their short client.
+        replay = render_recording(Client(self.client.pipe, timeout=120), project, saved, evidence / 'audio-replay',
                                   layered_instrument=1, layered_plugin=plugin)
         self.assertTrue(replay['passed'], replay)
         self.assertTrue(replay['independentLayersQualified'], replay)

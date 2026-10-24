@@ -1,5 +1,20 @@
 # Current continuation queue
 
+**24 October 22:41 UTC — combine two focused release corrections:**
+The exact828 x64 app/provider layered journey passed composing/history/reopen
+but failed its first selection render at the five-second API reply deadline.
+Current source now includes selection rendering in the existing120-second
+offline-render reply budget, retains five-second queue admission, and adds a
+slow named-pipe selection/replay regression. The full actual-app fixture and
+PCM/history assertions remain unchanged; its render client uses120seconds.
+See `SELECTION-RENDER-REPLY-2026-10-24.md`. Batch with the completed-take Discard
+guard below. Both corrections remain unbuilt. The old kept-discard waiter was
+stopped before build and must not restart. Use a new render-reply evidence folder.
+Both preceding Mac architectures have completed successfully; Windows remains
+failed with device-less startup cases, and the new real-endpoint x64 render
+failure is mandatory to close. Earliest recorded checkpoint22:52:17UTC still
+requires a fresh actual-start/active-job check. No package or main merge yet.
+
 This is a dependency queue, **not a claim that the 117-row reference inventory
 has been fully qualified**. The original A01–A18 acceptance requirements and
 fixture provenance remain in [README](README.md) and `parity-matrix.csv`.

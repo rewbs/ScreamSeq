@@ -41,6 +41,14 @@ Use the current document revision from a read. Coordinates are zero-based and bo
 
 `dryRun:true` validates the selection and destination capacity without instantiating plugins or estimating audio frames. The successful result includes the sample/instrument indices, selected/warm-up/tail/latency frame counts, clipping count and source-isolation description.
 
+Use a 120-second client timeout for offline selection rendering. Windows retains
+a five-second queue-admission deadline, then allows an admitted render the same
+120-second total reply budget as full-song export and the Mac socket. A timeout
+after execution begins leaves the outcome uncertain: inspect the document and
+retained completion before retrying, and never automatically repeat the write
+with a new request ID. These reply budgets do not change audio, memory or history
+bounds.
+
 Microphone methods:
 
 | Method | Parameters / behavior |
