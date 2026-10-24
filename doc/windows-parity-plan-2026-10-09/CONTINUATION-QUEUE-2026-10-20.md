@@ -8,6 +8,21 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 07:58 UTC:** The unexecuted observation freeze advanced to
+`066eb70524e6fdef18a4215d8dfd0fd03bcf30aa`, committed, backed up and in the clean
+qualification checkout. It additionally fixes recorder setup-first Tab order,
+root keyboard entry and initial focus, preserving visible-reopen field caret.
+The extended actual-app recorder case failed initial focus against6a in0.677s;
+that diagnostic opened no microphone and made no build. New native/app assertions
+are unbuilt. Earlier244a/c97 freeze preparations are retained separately, not
+executed attempts. Both preceding workflows are terminal as of07:53; Intel
+matches ARM's134/135 CTests and passed native interface/device/socket gates.
+Next checkpoint still **not before08:02:41 UTC**, extended by later starts.
+Prepared build/check/stock-dispatch scripts must never repeat recorded attempts.
+Fresh UI launcher supports explicitly labelled diagnosis if a gate fails;
+failed validation cannot authorize packaging. Matrix rows44/B05 now distinguish
+implemented recording features, bounded evidence and outstanding hardware gates.
+
 **24 October 07:47 UTC:** Next frozen source is
 `244a5549ca5f8fc1a2d5a6709f185686b2ad8a71`, backed up and fast-forwarded into the
 clean qualification checkout. Prepared `recording-observation/checkpoint.ps1`
