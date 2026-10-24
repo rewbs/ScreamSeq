@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 08:13 UTC:** Frozen066 built once and is now PR7's head. Both
+actual-app composing/recording cases and live-preview export passed. Native
+recorder root entry and dry cross-block export equality failed; retain all
+receipts. Root entry is corrected in primary source, **unbuilt**; qualification
+remains at066. The new poll success/busy assertions were not reached. Fresh
+diagnostic Computer Use confirmed recorder opening and initial Input focus;
+floating keyboard continuity was not measurable through the Main-targeted
+helper. PID40296 exited0; do not reuse. Silent playback253.4s had34 overruns and5
+starvation indicators, so no performance qualification or package.
+
+The independent pinned-stock job passed90 exact comparisons and reproduced the
+same dry partition differences. The test currently requires both exact stock
+output per block and equality across blocks, which this upstream fixture cannot
+satisfy simultaneously. Resolve that contract explicitly; do not silently relax
+the failed assertion. Full details and hashes are in
+[the export report](AUDIO-EXPORT-2026-10-24.md). Native Mac/Windows CI was still
+running at08:11. No next build before **09:05:43 UTC**, extended by later actual
+starts; inspect current receipts and terminal CI first. No package/main merge.
+
 **24 October 07:58 UTC:** The unexecuted observation freeze advanced to
 `066eb70524e6fdef18a4215d8dfd0fd03bcf30aa`, committed, backed up and in the clean
 qualification checkout. It additionally fixes recorder setup-first Tab order,

@@ -557,3 +557,79 @@ failing. Dry partition diagnostics exactly match ARM/Windows. Intel log SHA256
 `9b587b9387474a80561be3b24ada2adc71e96c8dd4b9e8435e1bb12ca9563d88` is retained in
 `audio-export-followup/completed-ci.json`. Both preceding workflows are terminal;
 the time gate still prohibits a new build before08:02:41 UTC.
+
+## 24 October 08:13 UTC — observation checkpoint and stock oracle
+
+Frozen source `066eb70524e6fdef18a4215d8dfd0fd03bcf30aa` built once locally,
+08:03:01–08:04:45 UTC. PR7 now points to this source. Executable SHA256 is
+`c29ae3d5d4b592171be4a1dc32643663ad032e37fbf2a5a3df645559286b630a`.
+Keep `recording-observation/build.json`, `qualified-checks.json`, native XML/log
+and app log; neither the build nor the completed checks may be repeated.
+
+The two actual-app cases passed: recorder initial Input focus, forward setup
+traversal, visible reopen caret and retained draft ownership; and the full
+cross-domain plugin-recording composition/history/save/reopen journey.
+`document-controller-live-parameters` also passed the accepted-song export during
+an active manual preview, with source/history/preview/transport preserved.
+The scratch setup passed. Two native registrations remain red:
+
+- `native-tool-window-tests` fails recorder root keyboard entry. The old message
+  does not identify forward versus reverse entry. This occurs before the new
+  success/busy polling assertions, so those assertions are **not qualified**.
+- `audio-export-stream` now executes eight independent cases: seven pass,
+  including the corrected precise-note PCM oracle; dry callback partition
+  equality fails. Same-partition output still exactly matches independent core.
+
+The source continuation replaces null-start `GetNextDlgTabItem` with explicit
+first/last visible, enabled, tab-stop traversal of the recorder's direct children.
+Ordinary child traversal remains native. Microsoft documents a null starting
+HWND as failure in [GetNextDlgTabItem](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getnextdlgtabitem).
+The assertion now reports direction and expected/observed control IDs, without
+changing the requirement. This correction is **unbuilt**, and the qualification
+checkout remains frozen at066.
+
+Fresh Computer Use on owned diagnostic PID40296 opened the recorder through
+Tools → Sound → Record microphone or audio input. Its layout and labels were
+readable at the current desktop scale; a refreshed accessibility observation
+identified Input6501 as focused. No microphone was opened. The recorder appears
+only as related UI, not its own targetable window. A Main-targeted Tab reactivated
+Main and moved the pattern selection; this helper limitation is **not** evidence
+of recorder traversal failure or success. No foreground typing, reverse Tab or
+capture-poll continuity is claimed. The recorder closed via its visible Close
+button, then the owned process exited normally with code0 after Alt+F4. Binary
+hash remained unchanged; never reuse this process or its window handles.
+
+The read-only post-close snapshot reports unchanged document content, continuing
+playback epoch1 and no processor fault. The253.4235-second silent48kHz/480-frame
+run recorded34 deadline overruns,5 starvation indicators and0 device errors;
+maximum callback15,827.9µs. `realtimeAuditPassed=false` and
+`sustainedPresentationQualified=false`. This is a failed performance observation,
+not acoustic or sustained presentation qualification. Files are retained under
+`recording-observation/foreground/`.
+
+Independent stock job120820900236/run40076515535 completed successfully. It built
+and tested retained upstream `f83cedb0cd5446e4dfaa83ac97e3087107e26767` and passed
+**90 exact PCM comparisons**, at44.1/48/96kHz and512/17/4096-frame blocks, with
+zero intercepted allocation/release/mutex calls. The demo-derived sequence0
+fixture reproduces the local dry-export differences exactly: at48kHz,17-frame
+blocks change18,430 samples with maximum8.121132850646973e-7;4096-frame blocks
+change7,300 samples with maximum7.37607479095459e-7. All have376,128 frames and
+ScreamSeq equals stock exactly at each matching block size. Full log SHA256:
+`0371ccb2ad70a55f579ed09dd6a4ac61a289b022490abb60c7fa6b7b8943c614`, pinned by
+`recording-observation/completed-ci.json`.
+
+**Interpretation and unresolved contract:** exact stock output at every caller
+block size and exact equality between those block sizes cannot both hold for
+this fixture. This now has independent upstream evidence, not only an inferred
+rounding explanation. Preserve the failed assertion and avoid speculative engine
+changes. Recommended resolution is to keep the stock-compatible render contract
+and explicitly distinguish it from export-buffer determinism; any canonical
+export buffering proposal must define its boundary and retain exact independent
+stock checks. No assertion or tolerance has been weakened in this continuation.
+
+At08:11 the Windows and both Mac native CI jobs were still compiling. Do not
+restart them. The stock library stage started08:05:43, extending the earliest
+next checkpoint to **09:05:43 UTC**, subject to any later actual starts and all
+current jobs becoming terminal. No package or main merge is permitted from this
+candidate. The next checkpoint must exercise the root-entry correction and the
+previously unreached polling assertions, plus fresh bounded foreground evidence.

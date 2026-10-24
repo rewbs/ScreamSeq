@@ -127,7 +127,9 @@ void recordingTabOrder(ScreamSeq::SampleRecordingWindow &tool,std::initializer_l
   const auto before=tool.snapshot();const auto focused=GetFocus();const std::vector<int> expected(order);
   for(bool reverse:{false,true}){SetFocus(tool.window());keyboard.shift(reverse);
     SendMessageW(tool.window(),WM_KEYDOWN,VK_TAB,0);SendMessageW(tool.window(),WM_KEYUP,VK_TAB,0);
-    require(GetFocus()==GetDlgItem(tool.window(),reverse?expected.back():expected.front()),"Recorder root trapped keyboard entry instead of entering its controls");
+    if(GetFocus()!=GetDlgItem(tool.window(),reverse?expected.back():expected.front()))throw std::runtime_error(
+      std::string("Recorder root ")+(reverse?"Shift+Tab":"Tab")+" entry expected control "+std::to_string(reverse?expected.back():expected.front())+
+      ", observed "+std::to_string(GetDlgCtrlID(GetFocus())));
   }
   for(size_t i=0;i<expected.size();++i){const auto a=GetDlgItem(tool.window(),expected[i]),b=GetDlgItem(tool.window(),expected[(i+1)%expected.size()]);
     require(IsWindowVisible(a)&&IsWindowEnabled(a)&&(GetWindowLongPtrW(a,GWL_STYLE)&WS_TABSTOP),"Recorder expected Tab target is unavailable");
