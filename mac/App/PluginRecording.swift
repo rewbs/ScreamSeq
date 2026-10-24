@@ -386,6 +386,14 @@ final class PluginRecordingView: NSView, NSTableViewDataSource, NSTableViewDeleg
     if polling { queued = intent } else { submit(intent) }
   }
   private func submit(_ intent: Intent) {
+    // A poll can complete after native input acquired an unresolved owner.
+    // Recheck at submission, not only when Record was clicked; resolving that
+    // input later must not replay an earlier queued Start automatically.
+    if intent.action == .start, onInputProtected?() == true {
+      pending = false
+      status.stringValue = "Original parameter input is retained. Review its outcome before recording again."
+      updateControls(); return
+    }
     guard onDocument?() == intent.document, document == intent.document, revision == intent.revision,
       take == intent.take, capturing == intent.capturing, completed == intent.completed,
       intent.action != .discard || mayDiscard,

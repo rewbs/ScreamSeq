@@ -1836,3 +1836,18 @@ gates and its real-session recording lifecycle. Intel job120732586809 was
 still running at01:39 UTC. These results remain evidence for6e only, not the
 unbuilt corrections; original failed receipts and hashed logs are retained in
 `bin/mac-gesture-20261022/activity-history-correction/`.
+
+### Mac queued Record input protection (source only)
+
+The Mac `act(.start)` guard already checks native input ownership at click time.
+Its deferred `submit` path did not repeat that check after an in-flight poll,
+unlike the corrected Windows path. It now cancels that queued Start before
+request submission when original input becomes protected. Resolution restores
+availability but does not replay the cancelled request; another explicit Record
+uses the selected stable plugin scope. Worker admission remains authoritative.
+
+`pluginRecordingChecks` covers ownership arriving between the click and poll
+completion, zero writes, pending/button/status recovery, no automatic replay,
+and a later explicit Start with the original plugin selection. This remains
+unbuilt and requires both Mac native interface jobs in the same checkpoint as
+the earlier selection change. No shared/audio/API/persistence change was made.

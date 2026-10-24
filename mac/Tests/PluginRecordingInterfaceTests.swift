@@ -331,6 +331,24 @@ extension InterfaceTests {
     try require(!nativeView.record.isEnabled && native.writes.count == beforeStart,
       "An unresolved native journal cannot start a replacement take even if a read reports no shared take")
 
+    let queuedStart = PluginTakeReplies(), queuedView = queuedStart.view
+    var protectedInput = false
+    queuedView.onInputProtected = { protectedInput }
+    queuedStart.load(queuedStart.state("")); queuedView.scope.selectItem(at: 2)
+    queuedView.poll(); queuedView.act(.start); protectedInput = true
+    queuedStart.answer(queuedStart.state(""))
+    try require(queuedStart.writes.isEmpty && !queuedView.pending && !queuedView.record.isEnabled &&
+      queuedView.status.stringValue.contains("Original parameter input"),
+      "Native input acquired during a read must cancel queued Record before submission")
+    protectedInput = false; queuedStart.load(queuedStart.state(""))
+    try require(queuedStart.writes.isEmpty && queuedView.record.isEnabled,
+      "Resolving original input must not replay a cancelled queued Record")
+    queuedView.act(.start)
+    try require(queuedStart.writes.count == 1 && queuedStart.writes[0].0 == "automation.recording.start" &&
+      queuedStart.writes[0].1["plugins"] as? [String] == ["plugin-b"],
+      "An explicit Record after resolution must retain the selected stable plugin scope")
+    queuedStart.answer(queuedStart.state())
+
     let reviewCase = PluginTakeReplies(), reviewed = reviewCase.view
     let originalTime: UInt64 = 9_007_199_254_740_993
     var originalRows: [[String: Any]] = (0..<23).map { index in
