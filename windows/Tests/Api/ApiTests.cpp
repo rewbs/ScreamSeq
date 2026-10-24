@@ -49,6 +49,7 @@ struct TestHost : SessionHost {
   void play(const json &settings) override { ++plays; state.transport["playing"]=true; state.transport["region"]=settings; }
   void stop() override { ++stops; state.transport["playing"]=false; }
 };
+#include "ApiDispatchTests.inc"
 void transientInputTests() {
   struct Host : TestHost {
     unsigned inputs=0,watches=0;
@@ -352,6 +353,7 @@ int main(int argc, char **argv) {
     serializationPipeTests();
     completionPipeTests();
     requestBoundaryTests();
+    dispatchDeadlineTests();
     return 0;
   } catch(const std::exception &e) { std::cerr << "FAIL: " << e.what() << '\n'; return 1; }
 }

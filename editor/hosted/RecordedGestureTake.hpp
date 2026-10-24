@@ -144,6 +144,7 @@ public:
   uint64_t rejectedEvents()const noexcept{return rejected_;}
   uint64_t startTime()const noexcept{return start_;}
   std::optional<uint64_t> endTime()const noexcept{return end_;}
+  std::optional<uint64_t> stoppedEndTime()const noexcept{return timeline_->stoppedEndTime(playbackEpoch_);}
   const RecordedGestureCapture &target(size_t index)const{return *targets_.at(index);}
   bool matchesBaseline(std::span<const PluginState> rack,std::span<const ParameterChange> points)const {
     return rack.size()==rack_.size()&&std::equal(rack.begin(),rack.end(),rack_.begin(),

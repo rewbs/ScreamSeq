@@ -1,3 +1,60 @@
+void applicationAudioExport() {
+    RestoreFixture fixture;auto &app=*fixture.app;
+    app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+    app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
+    const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+    const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+    const auto output=fixture.folder/L"composed.wav";
+    restoreCheck(app.menuCommandState(exportAudioCommand).enabled,"Audio export missing from File menu");
+    SetFocus(field);SendMessageW(field,EM_SETSEL,0,1);
+    const auto beforeChooserFailure=songState(app);
+    app.audioExportChooser=[&]() -> std::filesystem::path {
+        SetFocus(app.window);throw std::runtime_error("Owned native chooser failure");
+    };
+    restoreRejected([&]{app.exportAudioFile();});
+    DWORD failedFirst=0,failedLast=0;
+    SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&failedFirst),reinterpret_cast<LPARAM>(&failedLast));
+    restoreCheck(GetFocus()==field&&failedFirst==0&&failedLast==1&&songState(app)==beforeChooserFailure&&
+        !std::filesystem::exists(output),"Failed audio chooser lost field focus/caret or changed music");
+    app.audioExportChooser=[] {return std::filesystem::path{};};
+    const auto beforeCancel=songState(app);app.command(exportAudioCommand);
+    restoreCheck(songState(app)==beforeCancel&&!std::filesystem::exists(output),"Cancelled audio chooser changed song");
+    app.audioExportChooser=[&]{app.edit("document.patch",{{"title","Changed during audio chooser"}});return output;};
+    bool stale=false;try{app.exportAudioFile();}catch(const ScreamSeq::Api::ApiError &error){stale=error.code==-32001;}
+    restoreCheck(stale&&!std::filesystem::exists(output),"Audio chooser silently rebased its revision");
+    app.edit("history.undo",{{"domain","all"}});
+    rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+    app.audioExportChooser=[&]{return output;};
+    const auto path=app.view->path;
+    app.command(exportAudioCommand);
+    DWORD start=0,end=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));
+    restoreCheck(std::filesystem::exists(output)&&app.view->path==path&&app.view->dirty&&
+        app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94&&
+        !app.preciseNoteWindow->retainedDraft()&&GetFocus()==field&&start==1&&end==2,
+        "Audio export lost pending precise edit, native save state or field caret");
+    const auto bytes=ScreamSeq::Project::readProjectBytes(output);
+    restoreCheck(bytes.size()>44&&std::memcmp(bytes.data(),"RIFF",4)==0,"Native audio command did not create WAV");
+    const auto accepted=songState(app);unsigned writes=0,choosers=0;
+    app.audioExportChooser=[&]{++choosers;return output;};
+    app.sampleMutationCompletion=[&](const std::string &method) {
+        if(method=="document.exportAudio"){++writes;throw std::runtime_error("Owned audio export presentation failure");}
+    };
+    restoreRejected([&]{app.exportAudioFile();});
+    restoreCheck(writes==1&&choosers==1&&app.nativeCommandCompletion.returned()&&
+        app.nativeCommandCompletion.returned()->method=="document.exportAudio"&&
+        ScreamSeq::Project::readProjectBytes(output)==bytes,
+        "Audio export completion lost its successful publication receipt");
+    // An external replacement after publication must survive result Review.
+    const std::vector<std::byte> external{std::byte{0x31},std::byte{0x32},std::byte{0x33}};
+    ScreamSeq::Project::writeProjectFile(output,external,true);
+    app.exportAudioFile();app.reviewNativeCommand();
+    restoreCheck(writes==1&&choosers==1&&!app.nativeCommandCompletion.retained()&&
+        app.nativeCommandReport.at("outcome")=="verified"&&
+        app.status.find(L"Earlier audio export completed")!=std::wstring::npos&&
+        ScreamSeq::Project::readProjectBytes(output)==external&&songState(app)==accepted&&app.view->path==path,
+        "Audio export Review relabeled the operation, reopened a chooser, repeated publication or changed music");
+    app.sampleMutationCompletion={};
+}
 void applicationModuleExport() {
     RestoreFixture fixture;auto &app=*fixture.app;
     Tracker::Document imported(Tracker::Document::demo(OpenMPT::MOD_TYPE_IT)->serialize());
@@ -70,4 +127,37 @@ void applicationModuleExport() {
         app.nativeCommandReport.at("observed").at("file")==app.inspectSavedCommandFile(output,true)&&
         ScreamSeq::Project::readProjectBytes(output)==external&&songState(app)==before&&app.view->path==path&&app.view->dirty==dirty,
         "Unknown export Review fabricated success, repeated publication or changed native state");
+
+    // Module export is also a native file boundary: it must finish the user's
+    // pending automatic edit, then let format validation decide representability.
+    app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+    app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
+    const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+    const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+    const auto beforeIntent=app.await(app.controller->captureRecovery(app.view->session.revision));unsigned intentChoosers=0;
+    rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+    app.moduleExportChooser=[&](const auto &) {
+        ++intentChoosers;
+        restoreCheck(app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94&&
+            !app.preciseNoteWindow->retainedDraft(),"Module chooser opened before the latest automatic note edit");
+        SetFocus(app.window);return std::filesystem::path{};
+    };
+    app.command(exportModuleCommand);
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+    restoreCheck(intentChoosers==1&&GetFocus()==field&&first==1&&last==2&&app.view->path==path&&
+        ScreamSeq::Project::readProjectBytes(output)==external,
+        "Cancelled module export lost field focus/caret, changed native save destination or wrote a file");
+    const auto acceptedIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    restoreCheck(*acceptedIntent->bytes!=*beforeIntent->bytes,"Automatic note edit did not change accepted project bytes");
+    app.edit("history.undo",{{"domain","all"}});
+    const auto undoneIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    // Undo restores music, not an old optimistic-concurrency token or old Redo
+    // availability. Compare every serialized project byte independently.
+    restoreCheck(*undoneIntent->bytes==*beforeIntent->bytes&&undoneIntent->revision!=acceptedIntent->revision&&
+        app.view->session.document.value("canRedo",false)&&app.view->path==path,
+        ("Module export note Undo changed music: before="+beforeIntent->fingerprint+" after="+undoneIntent->fingerprint).c_str());
+    app.edit("history.redo",{{"domain","all"}});
+    const auto redoneIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    restoreCheck(*redoneIntent->bytes==*acceptedIntent->bytes&&!app.view->session.document.value("canRedo",false)&&app.view->path==path,
+        "Module export note Redo did not restore exactly one accepted edit");
 }

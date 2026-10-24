@@ -163,6 +163,13 @@
         const auto focus=GetFocus();wchar_t klass[64]{};GetClassNameW(focus,klass,64);
         const bool edit=_wcsicmp(klass,L"Edit")==0||_wcsnicmp(klass,L"RichEdit",8)==0,combo=_wcsicmp(klass,L"ComboBox")==0,list=_wcsicmp(klass,L"ListBox")==0||_wcsicmp(klass,L"SysListView32")==0;
         if(combo&&SendMessageW(focus,CB_GETDROPPEDSTATE,0,0))return true;
+        // Musical point lists edit the song, but have no native text history.
+        // Let configured Undo/Redo reach the shared history after Backspace.
+        // Editable fields and other selectors retain their existing policy.
+        const bool musicalList=(preciseNoteWindow&&focus==GetDlgItem(preciseNoteWindow->window(),ScreamSeq::PreciseNoteWindow::list))||
+            (parameterActivityWindow&&parameterActivityWindow->recordedPointListFocused());
+        if(list&&musicalList&&
+            ctrl&&!alt&&(key=='Z'||key=='Y'))return false;
         if(edit||combo||list) {
             // Open selectors and editor-local Escape already took priority.
             // Closed main controls still allow configured Stop/return and
@@ -203,10 +210,12 @@
     }
     void runWorkspaceShortcut(int id) {
         const auto focus=GetFocus();const auto panel=workspaceState.focus;const bool inspector=inspectorCanvasFocus;
+        if((id==undoCommand||id==redoCommand||id==redoAlternateCommand)&&parameterActivityWindow&&
+            parameterActivityWindow->deferHistoryIfObserving([this,id]{runWorkspaceShortcut(id);}))return;
         if((id==clearCommand||id==patternPasteMix||id==patternClearField||id==patternDeleteChannelRow)&&(!trackerWorkspaceVisible()||panel!="pattern"||ScreamSeq::NativeToolWindow::belongsToTool(focus))){
             status=L"Focus the pattern selection before using this command";return;
         }
-        const bool preserve=id==patternRowsLargerCommand||id==patternRowsSmallerCommand||id==positionRulerCommand||id==liveKeysCommand||id==togglePlaybackCommand||id==playbackLoopCommand||id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==exportModuleCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
+        const bool preserve=id==patternRowsLargerCommand||id==patternRowsSmallerCommand||id==positionRulerCommand||id==liveKeysCommand||id==togglePlaybackCommand||id==playbackLoopCommand||id==playCursorCommand||id==playSelectionCommand||id==playSelectionCursorCommand||id==stopCommand||id==saveCommand||id==saveAsCommand||id==exportModuleCommand||id==exportAudioCommand||id==undoCommand||id==redoCommand||id==redoAlternateCommand;
         command(id);
         if(id==stopCommand&&!ScreamSeq::NativeToolWindow::belongsToTool(focus))command(focusPatternCommand);
         if(preserve&&ScreamSeq::NativeToolWindow::belongsToTool(focus)&&workspaceFocusVisible(focus)){setWorkspaceCanvasFocus(panel,inspector);SetFocus(focus);}

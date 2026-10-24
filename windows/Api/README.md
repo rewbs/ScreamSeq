@@ -15,8 +15,8 @@ Closing the review window only hides it. A retained take protects song departure
 [plugin-recording.schema.json](plugin-recording.schema.json) specifies the
 Windows adapter; use `api.describe` before calling it. The underlying take,
 musical timing, history and persisted automation are shared. The detached recovery
-reads are also exposed by the Mac adapter. The seven new live recording lifecycle
-request names remain Windows-specific; Mac retains its native recording path.
+reads and live recording lifecycle methods are also exposed by the Mac adapter.
+Native clock units and provider-restoration requirements remain platform-specific.
 
 - `automation.recording.get {}` returns the retained take, original `startTime`,
   optional `endTime`, playback epoch, target counts and loss. `hostTime` is the
@@ -27,14 +27,23 @@ request names remain Windows-specific; Mac retains its native recording path.
   once transport has actually stopped. Provider restoration can still retain it.
 - `automation.recording.start {expectedRevision, plugins}` arms distinct stable
   rack identities during timed playback. Finish competing takes, manual drafts
-  and previews first. It does not change song history.
+  and previews first. It does not change song history. Before the current
+  epoch's first presentation time, it refuses without installing a take;
+  a published future buffer alone is insufficient. Retry after timing becomes
+  available. Later pending coverage and actual gaps retain original timestamps;
+  admission never invents a frame or clamps input to the song start.
 - `automation.recording.capture {expectedRevision, take, plugin, parameter,
   value, timestamp}` submits original native input once. Use the same host clock
   at the actual input event; never replace its time with a retry time. A returned
   `accepted:true` remains accepted if `intakeError` reports preview failure.
-- `automation.recording.events {take, plugin, parameter, offset?, limit?}` pages
+- `automation.recording.events {take, plugin, parameter, offset?, limit?, includeTiming?}` pages
   original values/timestamps and mapped frame strings at 48 kHz; `frame:null`
   means timing is unavailable. Default page size is 128, maximum 512.
+  For diagnosis, `includeTiming:true` requires an explicit `limit` of at most16.
+  Each row adds read-only `timing`: an existing valid mapping reports
+  `retained-frame`; an unmapped input reports observed coverage and exact nearest
+  interval bounds. See the shared [timing contract](../../mac/AUTOMATION.md#plugin-parameter-recording).
+  This inspection never maps a point, acknowledges loss or changes history.
 - `automation.recording.stop`, `.commit` and `.discard` require
   `{expectedRevision, take}`. Stop seals input. Commit additionally accepts
   `acknowledgeLoss:true` after reviewing refused/unmapped/lost input. Pending
@@ -42,6 +51,13 @@ request names remain Windows-specific; Mac retains its native recording path.
   A `completed:true, retained:true` result means music was already committed but
   native restoration needs finishing; it must not create a second Undo step.
   A transport/clock failure retains evidence for recovery or explicit Discard.
+  For a completed retained take, explicit `restoreSavedState:true` on Commit
+  restores accepted plugin state and abandons later unsaved native input, while
+  preserving kept automation, revision and Undo. Playback/audio must be stopped
+  and every owned plugin editor closed. This strict boolean defaults to false;
+  ordinary Finish restoration never selects it implicitly. The review exposes
+  **Restore saved state** for this case. Inspect retained failures or uncertain
+  replies before deliberately retrying; pending native delivery still blocks it.
 - `automation.recovery.list {offset?, limit?}` lists detached archive headers
   (default 64, maximum 128). `headerSupported` is not full validation.
   `automation.recovery.get {expectedRevision, kind, index, offset?, limit?}`
@@ -1115,6 +1131,22 @@ placement and choose bottom only if hidden. Explicit V4 files use native
 placement rather than a Main `notes` identity. No song format or pattern.notes
 request semantics change.
 
+Timeline double-click inserts a hit; Backspace/Delete removes the selected
+timeline or list hit while text fields keep native deletion. Discrete gestures
+save immediately; valid typed fields save after a 300 ms typing pause. Check is
+a dry run and Save now explicitly flushes/retries a retained edit. A clean
+captured editor refreshes that same stable row after Undo/Redo or another edit,
+including when pinned or focused; unsaved/invalid fields and uncertain writes
+are never automatically rebased. `playbackOffset` is a fraction within the
+captured row, or null when transport is stopped or playing another row.
+
+Windows prepares precise-note schedules and up to 512 companion ordinary-cell
+edits off the audio callback. Their ordered publication and conversion Undo/Redo
+preserve active playback; unavailable capacity or epoch changes reject before
+document mutation. Larger conversions require stopped playback. See the
+[precise-note qualification report](../../doc/windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md)
+for source and execution status; this source contract is not a qualification claim.
+
 The native clipboard publishes Mac's `ScreamSeq Pattern 2` Unicode text format,
 including relative FX and only the referenced stable bindings. It also accepts
 legacy `Resonance Pattern 1` text. `pattern.paste` supports overwrite, merge and
@@ -1129,7 +1161,8 @@ Clipboard source and destination are captured before asynchronous work.
 The application also registers `PluginOperations`. Shared Mac method payloads
 are used for discovery, add/remove/move/bypass, parameters, saved state, buses,
 programs, sound presets and instrument aliases. Musical plugin writes require `expectedRevision`;
-`history.undo`/`history.redo` with `domain:"plugins"` use an independent history.
+`history.undo`/`history.redo` with `domain:"plugins"` use the unified chronological
+history; the domain is a compatibility alias, not a separate stack.
 The native rack uses these same transactions. The complete current inventory is
 in `api.describe`. Browser preferences use their separate library revision.
 

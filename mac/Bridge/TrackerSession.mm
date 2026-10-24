@@ -10,6 +10,9 @@
 #include "../Plugins/PluginLibrary.hpp"
 #include "../Plugins/PluginPreset.hpp"
 #include "AutomationValidation.hpp"
+#include "NativeParameterTake.hpp"
+#include "editor/hosted/RecordedGestureRecovery.hpp"
+#include "editor/hosted/ControlInputRecovery.hpp"
 #include "SignalTelemetry.hpp"
 #include "editor/PatternTools.hpp"
 #include "editor/ProjectLoadRecovery.hpp"
@@ -28,6 +31,7 @@
 #include "editor/hosted/ManualParameterState.hpp"
 #include "editor/hosted/RecordedCapture.hpp"
 #include "editor/hosted/PluginInputRecoveryReview.hpp"
+#include "editor/hosted/RecordedGestureRead.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
 #include "editor/RackMove.hpp"
 #include "editor/PluginNoteSources.hpp"
@@ -395,6 +399,8 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   NSDictionary *_playbackRegion;
   std::unique_ptr<Document> _document;
   std::unique_ptr<AudioDevice> _audio;
+  std::unique_ptr<NativeParameterTake> _parameterTake;
+  BOOL _parameterTakeStarting;
   ParameterPreviewOwner _parameterPreview;
   ParameterPreviewOwner _recipePreview;
   uint64_t _recipePreviewGraph,_recipePreviewNode;
@@ -440,6 +446,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   double _recordingLatencyMS;
   uint64_t _recordingLastTimestamp, _recordingStartTimestamp;
 }
+#include "ParameterTakeSession.inc"
 - (instancetype)init {
   if ((self = [super init])) {
     _document = Document::demo();
@@ -493,14 +500,24 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return PluginTrust::trust(path);
 }
 - (void)newSong:(BOOL)demo {
+  // Compatibility entry point for older native callers. Never unwind a C++
+  // exception through Swift/Objective-C; the application uses createSong:error:.
+  NSError *error=nil;
+  if(![self createSong:demo error:&error])_pluginWarning=error.localizedDescription.UTF8String?:"Cannot create song";
+}
+- (BOOL)createSong:(BOOL)demo error:(NSError **)error {
+  try {
+  [self requireNoParameterTake];
+  auto next=demo?Document::demo():std::make_unique<Document>();
+  NSString *identity=NSUUID.UUID.UUIDString;
+  _audio->setPlugins({});
   _sampleRecorder.reset();
   _sampleRecordingID = nil; _sampleRecordingDocument = nil; _sampleRecordingRevision = nil;
-  // The bridge method cannot refuse, so a replaced document discards its take
-  // instead of leaving it attached to a song it was not recorded against.
+  // Preserve the established note/sample departure policy. Parameter takes
+  // have a separate review owner and are refused before any replacement.
   _recording.reset();
   _recordingID = nil;
   _recordingRevision = nil;
-  _audio->setPlugins({});
   _plugins.clear();
   _automation.clear();
   _manualParameters.clear();
@@ -511,14 +528,17 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   _pluginError.clear();
   _pluginWarning.clear();
   _pluginPathHints.clear();
-  _document = demo ? Document::demo() : std::make_unique<Document>();
-  _automationDocumentID = NSUUID.UUID.UUIDString;
+  _document=std::move(next);
+  _automationDocumentID=identity;
   _loadRecovery={};_loadSourcePath=nil;_projectMetadata={};
   _graphEditorPlugin.reset();_graphEditorID=nil;
   _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
+  return YES;
+  } catch(const std::exception &e){failure(error,e);return NO;}
 }
 - (BOOL)openPath:(NSString *)path error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(_recording)throw std::runtime_error("Finish or discard the recording take before opening another song.");
     if(_sampleRecorder)throw std::runtime_error("Add or discard the recorded sample before opening another song.");
     std::unique_ptr<Document> next;
@@ -701,6 +721,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // remembered, and the waiting plugins resolve in place with their saved state.
 - (BOOL)trustPluginLocations:(NSArray<NSString *> *)paths error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (![paths isKindOfClass:NSArray.class] || !paths.count || paths.count > maximumNativePlugins + 64)
       throw std::invalid_argument("Name the canonical plugin locations to trust");
     NSArray *waiting = [self unresolvedPluginLocations];
@@ -795,6 +816,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // value on failure so retry or Undo remains possible; never save partial edits.
 - (void)commitManualParameters {
   if (_manualParameters.empty()) return;
+  [self requireNoParameterTake];
   commitManualParameterState(_plugins, _manualParameters, [&](const PluginState &state) {
     if (const auto issue = [self rackLocationIssue:std::vector<PluginState>{state}]; !issue.empty())
       throw std::runtime_error(issue);
@@ -806,13 +828,27 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   return [self projectDataForRecovery:NO];
 }
 - (NSData *)projectDataForRecovery:(BOOL)recovery {
+  return [self projectDataForRecovery:recovery nativeInput:nil];
+}
+- (NSData *)projectDataForRecovery:(BOOL)recovery nativeInput:(NSDictionary *)input {
+  const auto controlInput=input?Tracker::readControlInputRecovery(ScreamSeq::NativePropertyTree::fromFoundation(input)):nlohmann::json();
+  if(!controlInput.is_null()&&(!recovery||!_parameterTake||
+      controlInput.at("document")!=std::string(_automationDocumentID.UTF8String)||
+      controlInput.at("take")!=_parameterTake->take().token()||
+      controlInput.at("revision")!=_parameterTake->take().revision()))
+    throw std::runtime_error("Original native input belongs to another parameter take; evidence retained");
+  if(!recovery)[self requireNoParameterTake];
+  if(recovery&&_parameterTake) {
+    try{_parameterTake->captureRecovery(_document->native());}
+    catch(const std::exception &e){_pluginWarning=e.what();} // Preserve captured evidence even when further intake is refused.
+  }
   if(!recovery&&!_parameterPreviewCommitting)[self cancelParameterPreview];
   [self commitManualParameters];
   _document->validateSamples();
   auto bytes = _document->snapshotData();
   // A recovery/save must not stop transport to query mutable AU state. During
   // playback use the cached baseline plus all parameter edits made by our controls.
-  if (!_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState())))
+  if (!_parameterTake && !_audio->active() && _pluginError.empty() && (_automation.empty() && (_document->native().automation.empty() && _document->native().performance.commands.empty() && !_audio->hasAutomatedState())))
     _plugins = _audio->pluginStates();
   NSMutableDictionary *root=encodeProjectMetadata(*_document,_plugins,_automation,_pluginPathHints);
   root[@"module"]=[NSData dataWithBytes:bytes.data() length:bytes.size()];
@@ -830,7 +866,10 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     root[@"recoveryTake"]=retainedTake;
   }
   auto current=ScreamSeq::NativePropertyTree::fromFoundation(root);
-  NSData *data=ScreamSeq::NativePropertyTree::encode(_projectMetadata.merge(std::move(current)));
+  auto merged=_projectMetadata.merge(std::move(current));
+  if(recovery&&_parameterTake)overlayRecordedGestureRecovery(merged,recordedGestureRecovery(_parameterTake->take().review()));
+  if(!controlInput.is_null())Tracker::overlayControlInputRecovery(merged,controlInput);
+  NSData *data=ScreamSeq::NativePropertyTree::encode(merged);
   // Validate the actual merged musical fields before atomic file publication.
   // Unknown extensions are retained data, never relaxed API/mutation fields.
   NSDictionary *saved=decodeProject(data);
@@ -860,6 +899,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   try { return [self projectDataForRecovery:YES]; }
   catch (const std::exception &e) { failure(error, e); return nil; }
 }
+- (NSData *)recoveryDataWithNativeInput:(NSDictionary *)input error:(NSError **)error {
+  try {
+    if(!input)throw std::invalid_argument("Original native input evidence is required");
+    return [self projectDataForRecovery:YES nativeInput:input];
+  } catch (const std::exception &e) { failure(error, e); return nil; }
+}
 - (void)validateRecoveredSavePath:(NSString *)path {
   if(!_loadRecovery.protectSource || !_loadSourcePath.length)return;
   const auto canonical=[](NSString *p){return p.stringByStandardizingPath.stringByResolvingSymlinksInPath;};
@@ -868,6 +913,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   if(sameInode || [canonical(path) isEqual:canonical(_loadSourcePath)])throw std::runtime_error("This project was recovered with compatibility warnings. Save a new .screamseq copy to preserve the original file.");
 }
 - (void)validateModuleExport {
+  [self requireNoParameterTake];
   const auto known=ScreamSeq::NativePropertyTree::fromFoundation(
     encodeProjectMetadata(*_document,_plugins,_automation,_pluginPathHints));
   const auto retained=_projectMetadata.merge(known);
@@ -903,6 +949,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)setPlaybackLoop:(BOOL)enabled { _playbackLoop=enabled; _audio->loop(enabled); }
 - (BOOL)playRegion:(NSDictionary *)settings error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     using namespace Automation;
     keys(settings, @[@"order", @"pattern", @"startRow", @"endRow", @"cursorRow", @"loop"]);
     auto &song = _document->song();
@@ -939,6 +986,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (void)stop {
+  try{[self pollParameterTake:YES];}catch(const std::exception &e){_pluginWarning=e.what();}
   [self midiEvents];
   [self stopRecordingCapture];
   _audio->stop();
@@ -951,6 +999,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   // every live processor/editor while AppKit and the main thread still exist.
   // AudioDevice's destructor joins output callbacks before releasing its graph.
   _midi.reset();
+  _parameterTake.reset(); // Recovery is written by the app before session shutdown.
   _audio.reset();
   _graphEditorPlugin.reset();
   _graphEditorID = nil;
@@ -958,6 +1007,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)configureDevice:(NSUInteger)device buffer:(NSUInteger)buffer error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->configure(uint32_t(device), uint32_t(buffer));
     return YES;
   } catch (const std::exception &e) {
@@ -1189,6 +1239,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
              values:(NSArray<NSNumber *> *)values
               error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (values.count != 6)
       throw std::runtime_error("A pattern cell has six fields.");
     Cell after{values[0].unsignedCharValue, values[1].unsignedCharValue, values[2].unsignedCharValue,
@@ -1274,6 +1325,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)historyUndo:(BOOL)redo error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     [self synchronizeHistory];
     _parameterGestureSequence = 0;
@@ -1327,6 +1379,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)editCells:(NSArray<NSDictionary *> *)input error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     std::vector<Edit> edits;
     for (NSDictionary *item in input) {
       NSArray<NSNumber *> *v = item[@"values"];
@@ -1354,6 +1407,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)editOrder:(NSInteger)order pattern:(NSInteger)pattern operation:(NSString *)operation error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(order<std::numeric_limits<int>::min()||order>std::numeric_limits<int>::max()||
        pattern<std::numeric_limits<int>::min()||pattern>std::numeric_limits<int>::max())
       throw std::invalid_argument("Order editing value is outside its range.");
@@ -1368,6 +1422,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)selectSequence:(NSInteger)sequence error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (sequence < 0 || sequence >= _document->song().Order.GetNumSequences())
       throw std::runtime_error("Select a valid sequence.");
     _audio->stop();
@@ -1380,6 +1435,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSInteger)addPattern:(NSInteger)rows duplicate:(BOOL)duplicate source:(NSInteger)source error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->stop();
     return _document->addPattern(int(rows), duplicate, int(source));
   } catch (const std::exception &e) {
@@ -1389,6 +1445,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)removeOrder:(NSInteger)order error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(order<0||order>std::numeric_limits<int>::max())throw std::invalid_argument("Select a valid order.");
     _document->orderEditChanges(int(order),0,"remove");
     _audio->stop();
@@ -1405,6 +1462,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
          channels:(NSInteger)channels
             error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (_document->native().mixer.active() && channels >= 0) {
       const auto buses = _document->native().mixer.buses.size() - _document->song().GetNumChannels() + size_t(channels);
       validatePluginCapacity(_plugins, buses);
@@ -1459,6 +1517,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSInteger)importSample:(NSString *)path slot:(NSInteger)slot error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->stop();
     return _document->importSample(path.UTF8String, int(slot));
   } catch (const std::exception &e) {
@@ -1472,6 +1531,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                   end:(NSUInteger)end
                 error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if ([operation isEqual:@"trim"]) {
       _audio->stop();
       _document->processSample(int(sample), operation.UTF8String, uint32_t(start), uint32_t(end));
@@ -1491,6 +1551,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)sampleSettings:(NSInteger)sample values:(NSDictionary *)v error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     const Tracker::SampleSettingsFields fields{v[@"rate"] != nil, v[@"volume"] != nil, v[@"pan"] != nil,
         v[@"loopStart"] != nil || v[@"loopEnd"] != nil || v[@"loop"] != nil || v[@"pingpong"] != nil};
     const auto name = [v[@"name"] isKindOfClass:NSString.class] ? std::optional<std::string>([v[@"name"] UTF8String]) : std::nullopt;
@@ -1511,6 +1572,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSInteger)addInstrument:(NSInteger)sample error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->stop();
     auto &song = _document->song();
     int result = 0;
@@ -1544,6 +1606,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSInteger)importInstrument:(NSString *)path slot:(NSInteger)slot error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->stop();
     return _document->importInstrument(path.UTF8String, int(slot));
   } catch (const std::exception &e) {
@@ -1581,6 +1644,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)instrumentSettings:(NSInteger)index values:(NSDictionary *)v error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->stop();
     _document->transaction([&](CSoundFile &s) {
       if (index < 1 || index > s.GetNumInstruments() || !s.Instruments[index])
@@ -1667,6 +1731,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)previewSample:(NSInteger)sample note:(NSInteger)note error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     auto &source = _document->song();
     if (sample < 1 || sample > source.GetNumSamples())
       throw std::runtime_error("Select a sample to preview.");
@@ -1732,6 +1797,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 // replacement is a different operation and must not silently discard editor state.
 - (std::unique_ptr<AudioDevice::LiveRackPlan>)prepareLivePlugins:(const std::vector<PluginState> &)states
               automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
+  [self requireNoParameterTake];
   std::vector<std::string> presets;
   for(const auto &state:states)if(const auto old=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &p){return p.instanceID==state.instanceID;});old!=_plugins.end()&&old->state!=state.state)presets.push_back(state.instanceID);
   // Recorded automation is attached to stable processors. A topology edit may
@@ -1755,6 +1821,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (void)restorePluginGraph:(const std::vector<PluginState> &)states
                 automation:(const std::vector<ParameterChange> &)automation native:(const NativeSong &)native {
+  [self requireNoParameterTake];
   validatePluginCapacity(states, _document->native().mixer.buses.size());
   auto nextPlugins = states;
   auto nextAutomation = automation;
@@ -1818,6 +1885,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)restoreEffectHistory:(BOOL)redo error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     auto &source = redo ? _effectRedo : _effectUndo;
     auto &destination = redo ? _effectUndo : _effectRedo;
@@ -1919,6 +1987,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   NSString *chosen = nil;
   bool newlyTrusted = false;
   try {
+    [self requireNoParameterTake];
     if(detached&&(target||before||parent))throw std::invalid_argument("An unconnected effect cannot have an insertion destination");
     if((before || parent || (position&&!detached)) && !target) throw std::invalid_argument("Insertion needs an effect destination");
     [self commitManualParameters];
@@ -1995,6 +2064,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)assignPlugin:(NSInteger)slot instrument:(NSInteger)instrument error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (slot < 0 || slot >= _plugins.size() ||
         !(_plugins[slot].descriptor.instrument || _plugins[slot].descriptor.type == kAudioUnitType_MusicDevice))
       throw std::runtime_error("Select an instrument plugin");
@@ -2030,6 +2100,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (NSInteger)collectPluginEdits:(BOOL)record error:(NSError **)error {
+  if(_parameterTake) {
+    const auto before=_parameterTake->take().eventCount();
+    try{[self pollParameterTake:NO];return NSInteger(_parameterTake->take().eventCount()-before);}
+    catch(const std::exception &e){failure(error,e);return -1;}
+  }
   NSInteger count = 0;
   for (size_t slot = 0; slot < _plugins.size(); ++slot) {
     uint32_t id;
@@ -2051,6 +2126,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)removePlugins:(NSArray<NSString *> *)identifiers sources:(const std::vector<uint64_t> &)sources dryRun:(BOOL)dryRun error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     std::set<std::string> removed;
     for(NSString *raw in identifiers) {
       const auto id=std::string(raw.UTF8String);
@@ -2088,6 +2164,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)movePlugin:(NSInteger)slot direction:(NSInteger)direction error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     [self commitManualParameters];
     auto target = slot + direction;
     if (slot < 0 || target < 0 || slot >= _plugins.size() || target >= _plugins.size())
@@ -2109,6 +2186,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)bypassPlugin:(NSInteger)slot bypass:(BOOL)bypass error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if (slot < 0 || slot >= _plugins.size())
       throw std::runtime_error("Select an effect");
     if(_plugins[slot].bypass==bool(bypass))return YES;
@@ -2205,6 +2283,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
                alreadyApplied:(BOOL)alreadyApplied
                         error:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(!_parameterPreviewCommitting)[self cancelParameterPreview];
     if (slot < 0 || size_t(slot) >= _plugins.size() || identifier < 0 || uint64_t(identifier) > UINT32_MAX || !std::isfinite(value))
       throw std::runtime_error("Invalid plugin parameter edit");
@@ -2274,6 +2353,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)clearAutomation:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(_automation.empty())return YES; // Preserve Redo and pending manual edits.
     [self commitManualParameters];
     // The playing vendor may contain a recorded or modulated effective value.
@@ -2319,6 +2399,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)refreshDevice:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     _audio->refreshDevice();
     return YES;
   } catch (const std::exception &e) {
@@ -2342,6 +2423,9 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   }
 }
 - (NSString *)recordingTakeID {return _recordingID;}
+- (NSString *)parameterRecordingTakeID {
+  return _parameterTake ? @(_parameterTake->take().token().c_str()) : nil;
+}
 - (BOOL)recordingActive { return _recording && _recording->capturing; }
 - (void)captureRecordingEvent:(uint64_t)timestamp status:(uint8_t)status note:(uint8_t)note velocity:(uint8_t)velocity {
   if(!_recording||!_recording->capturing)return;
@@ -2375,6 +2459,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (BOOL)prepareAudition:(NSError **)error {
   try {
+    [self requireNoParameterTake];
     if(_isolatedSamplePreview) { _audio->stop(); _isolatedSamplePreview=NO; }
     if (!_audio->active())
       _audio->play(_document->playbackData(), 0, true, _document->sourcePath(),

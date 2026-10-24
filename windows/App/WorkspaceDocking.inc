@@ -40,6 +40,7 @@
         const auto focus=GetFocus();
         for(const auto *id:workspaceEditorNames)
             if(auto *tool=workspaceEditorWindow(id);tool&&tool->visible()&&tool->presentationOwns(focus))return id;
+        if(workspaceMainControl(focus))return lowerEditorName();
         return workspaceState.focus;
     }
     std::string workspaceMainCanvasIdentity(HWND=nullptr)const{return lowerEditorName();}
@@ -304,6 +305,8 @@
         EditorPlacementGuard guard(followingEditors);
         for(const auto *id:workspaceEditorNames) {
             const auto &p=workspaceEditors[workspaceEditorIndex(id)];auto *tool=workspaceEditorWindow(id);
+            if(id==std::string_view("preciseNotes")&&tool&&tool->visible())
+                try{preciseNoteWindow->refreshCleanCaptured();}catch(const std::exception &e){status=wide(e.what());}
             if(p.pinned||!tool||!tool->visible()||tool->owns(GetFocus()))continue;
             // A Guide-only owner restored into a region remains deliberately
             // empty until an explicit opening or Load selection action.

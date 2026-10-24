@@ -38,6 +38,7 @@ private:
   void error(const std::exception &e)override{status(wide(e.what())+(writeUncertain_?L" · Write outcome needs review; Reload reads the current phrase · Your draft is retained":L" · Your draft is retained"));}
   double cycleBeats()const{if(target_&&target_->gesture()){const auto &p=target_->command.at("parameters");return p.value("beats",1.0)/std::max(1.0,p.value("repeats",1.0));}return 1;}
   Json previewParams(unsigned which)const{return {{"rows",257},{"rowsPerBeat",256},{"span",65537},{"start",canvases_[0].start},{"end",canvases_[0].end},{"samples",1024},{"scratchBeats",cycleBeats()},{"points",state_.points(which)}};}
+  void rebuildLane(unsigned which){auto &canvas=canvases_[which];const auto &points=state_.points(which);canvas.rebuild(points,values_[which].empty()?canvas.draftPreview.scratchValues(points,canvas.start,canvas.end,cycleBeats()):values_[which]);}
   Json call(const std::string &method,Json params,bool write=false){
     require(!pending_,"Scratch editor is busy");require(current(),"Song changed; Reload the retained scratch editor before editing");
     if(write)require(!writeUncertain_,"Previous write outcome needs review; Reload the current phrase before submitting another edit");
@@ -126,7 +127,7 @@ private:
     for(auto &entry:bank_)if(entry.at("id")==sent.at("id")){entry.update(sent);break;}
     fillPhrases();status(state_.dirty()?L"Earlier edit saved; newer draft retained":L"Phrase saved · every linked SK use updated · Ctrl+Z to undo");
   }
-  void changed(bool commit=true){++state_.generation;if(commit)saveNeeded_=true;values_={Json::array(),Json::array()};previewNeeded_=true;for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);SetTimer(window_,3,100,nullptr);if(commit)save();requestPaint();}
+  void changed(bool commit=true){++state_.generation;if(commit)saveNeeded_=true;values_={Json::array(),Json::array()};previewNeeded_=true;for(unsigned i=0;i<2;++i)rebuildLane(i);SetTimer(window_,3,100,nullptr);if(commit)save();requestPaint();}
   void pointFields(){
     require(!state_.empty(),"Choose a scratch phrase");const double position=number(pointPosition),value=number(pointValue);require(position>=0&&position<=1&&value>=0&&value<=100,"Use cycle position 0–1 and value 0–100%");
     const auto index=SendMessageW(controls_.at(pointKind),CB_GETCURSEL,0,0);require(index>=0&&index<9,"Choose an outgoing curve");Json point={{"position",unsigned(std::llround(position*65536))},{"value",value/100},{"curve",ScratchJSON::curves[size_t(index)]}};
@@ -257,13 +258,13 @@ private:
     if(!state_.empty()){unsigned uses=0;for(const auto &p:bank_)if(p.at("id")==state_.id())uses=p.value("uses",0u);set(linkLabel,L"Song phrase "+std::to_wstring(state_.id())+L" · "+std::to_wstring(uses)+(uses==1?L" linked SK use":L" linked SK uses")+L" · changes update every use");}else set(linkLabel,L"Choose New phrase to create paired Motion and Fader envelopes.");
     set(pointLabel,state_.lane?L"Fader point · Insert adds · Tab selects · arrows move · Shift gives fine steps · Delete removes interior points":L"Motion point · Insert adds · Tab selects · arrows move · Shift gives fine steps · Delete removes interior points");
     set(targetLabel,target_?L"Pattern "+std::to_wstring(target_->pattern)+L" · row "+std::to_wstring(target_->row)+L" · channel "+std::to_wstring(target_->channel+1)+L" · FX "+std::to_wstring(target_->column+1):L"No captured FX cell");
-    for(unsigned i=0;i<2;++i)canvases_[i].rebuild(state_.points(i),values_[i]);
+    for(unsigned i=0;i<2;++i)rebuildLane(i);
   }
   void paint(RenderSurface &s)override{
     NativeToolWindow::paint(s);const auto colors=NativeControls::curveColors();
     for(unsigned lane=0;lane<2;++lane){const auto &canvas=canvases_[lane];const auto &r=canvas.viewport;s.uiText(lane?L"FADER · 100% open / 0% closed":L"RECORD MOTION · rising forward / falling reverse / flat held",r.x,r.y-23,r.w,colors.text);s.fill(r.x,r.y,r.w,r.h,colors.background);s.clip(r.x,r.y,r.w,r.h);
       for(int i=0;i<=4;++i){s.line(r.x,r.y+r.h*i/4,r.x+r.w,r.y+r.h*i/4,colors.grid);s.line(r.x+r.w*i/4,r.y,r.x+r.w*i/4,r.y+r.h,colors.grid);}
-      const auto &path=canvas.curve.empty()?canvas.handles:canvas.curve;for(size_t i=1;i<path.size();++i)s.line(path[i-1].x,path[i-1].y,path[i].x,path[i].y,lane?colors.secondary:colors.curve,2);
+      const auto &path=canvas.curve;for(size_t i=1;i<path.size();++i)s.line(path[i-1].x,path[i-1].y,path[i].x,path[i].y,lane?colors.secondary:colors.curve,2);
       for(size_t i=0;i<canvas.handles.size();++i){const auto p=canvas.handles[i];paintCurveHandle(s,p.x,p.y,int(i)==state_.selected[lane],colors,lane?colors.secondary:colors.curve);}s.unclip();paintCurveBorder(s,r,state_.lane==lane,colors);s.uiText(L"100%",r.x-40,r.y,38,colors.text);s.uiText(L"0%",r.x-32,r.y+r.h-17,30,colors.text);
     }
   }
@@ -291,6 +292,6 @@ public:
   }
   void hide()override{if(dragging_)cancelDrag();KillTimer(window_,3);KillTimer(window_,4);KillTimer(window_,5);refreshScheduled_=false;hiding_=true;NativeToolWindow::hide();hiding_=false;}
   void show(){NativeToolWindow::show();documentChanged();if(previewNeeded_)SetTimer(window_,3,100,nullptr);if(saveNeeded_&&!writeUncertain_&&current())SetTimer(window_,4,350,nullptr);}
-  Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"writeNeedsReview",writeUncertain_},{"saveQueued",saveNeeded_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
+  Json snapshot()const{Json lanes=Json::array();for(unsigned i=0;i<2;++i){Json handles=Json::array();for(const auto &p:canvases_[i].handles)handles.push_back({{"x",p.x},{"y",p.y}});const auto &r=canvases_[i].viewport;lanes.push_back({{"points",state_.points(i)},{"selected",state_.selected[i]},{"handles",handles},{"previewSamples",values_[i].size()},{ "renderedSamples",canvases_[i].curve.size()},{"canvas",{{"x",r.x},{"y",r.y},{"width",r.w},{"height",r.h}}}});}return {{"visible",visible()},{"document",document_},{"expectedRevision",revision_},{"stale",!current()},{"dirty",draft()},{"pending",pending_},{"writeNeedsReview",writeUncertain_},{"saveQueued",saveNeeded_},{"selected",state_.id()},{"activeLane",state_.lane},{"fieldDraft",fieldsDirty_},{"fields",{{"position",utf8(field(pointPosition))},{"value",utf8(field(pointValue))},{"formula",utf8(field(pointFormula))}}},{"target",target_?Json{{"document",target_->document},{"revision",target_->revision},{"pattern",target_->pattern},{"patternID",target_->patternID},{"row",target_->row},{"channel",target_->channel},{"trackID",target_->trackID},{"column",target_->column},{"gesture",target_->gesture()}}:Json(nullptr)},{"draft",state_.draft},{"lanes",lanes},{"status",utf8(status_)},{"formulaWorkbench",workbench_?workbench_->snapshot():Json{{"visible",false}}},{"formulaReference",reference_?reference_->snapshot():Json{{"visible",false}}}};}
 };
 }

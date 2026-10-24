@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       qualification:
-        description: 'Full app qualification, or only the standalone native interface harness'
+        description: 'Full app, standalone native interface, or pinned stock PCM qualification'
         type: choice
-        options: [full, interface]
+        options: [full, interface, stock]
         default: full
       build_runner:
         description: 'Architecture for a manually requested full build; pushes and PRs build both'
@@ -59,14 +59,16 @@ concurrency:
 
 jobs:
   native-app:
-    if: github.event_name != 'workflow_dispatch' || (inputs.retained_app_run == '' && inputs.qualification != 'interface')
+    if: github.event_name != 'workflow_dispatch' || (inputs.retained_app_run == '' && inputs.qualification == 'full')
     name: Native app (${{ matrix.runner }})
     strategy:
       fail-fast: false
       matrix:
         runner: ${{ fromJSON(inputs.build_runner == 'macos-15' && '["macos-15"]' || inputs.build_runner == 'macos-15-intel' && '["macos-15-intel"]' || '["macos-15","macos-15-intel"]') }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    # Intel's clean build plus unchanged acceptance suites can exceed an hour.
+    # Keep individual test deadlines; allow the job to finish without rebuilding.
+    timeout-minutes: ${{ matrix.runner == 'macos-15-intel' && 90 || 60 }}
     env:
       SCREAMSEQ_BUILD_DIR: bin/mac-ci
       SCREAMSEQ_BUILD_JOBS: "2"
@@ -136,6 +138,13 @@ jobs:
         run: |
           set -o pipefail
           RESONANCE_BUILD_DIR="$SCREAMSEQ_BUILD_DIR" python -B mac/Tests/test_automation.py --busy-receipts-only 2>&1 | tee screamseq-macos-busy-replay.log
+      - name: Provision the isolated virtual audio endpoint
+        id: virtual-audio
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash .github/scripts/prepare-macos-audio.sh 2>&1 | tee screamseq-macos-audio-device.log
       - name: Owned AU and VST3 editor notification lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
@@ -145,7 +154,7 @@ jobs:
           import os, pathlib, subprocess
           build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR']).resolve(strict=True)
           subprocess.run([str(build / 'native-plugin-tests'),
-              str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui'],
+              str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui', '--loopback-record'],
               check=True, timeout=120)
           PY
       - name: Sample library tests from the existing build
@@ -202,7 +211,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   retained-app:
-    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != '' && inputs.qualification != 'interface'
+    if: github.event_name == 'workflow_dispatch' && inputs.retained_app_run != '' && inputs.qualification == 'full'
     strategy:
       fail-fast: false
       matrix:
@@ -254,5 +263,68 @@ jobs:
             bin/mac-interface/interface-tests
             bin/mac-interface/interface-tests.sha256
             bin/mac-interface/InterfaceSource.json
+          if-no-files-found: warn
+          retention-days: 14
+  stock-pcm:
+    if: github.event_name == 'workflow_dispatch' && inputs.qualification == 'stock'
+    name: Pinned stock PCM (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      SCREAMSEQ_BUILD_DIR: bin/mac-stock-pcm
+      SCREAMSEQ_BUILD_JOBS: "2"
+      SCREAMSEQ_AUDIO_BLOCKS: "512,17,4096"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Fetch the exact retained upstream oracle commit
+        shell: bash
+        run: git fetch --no-tags --depth=1 origin f83cedb0cd5446e4dfaa83ac97e3087107e26767
+      - name: Build only core fixture and callback audit targets
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S mac -B "$SCREAMSEQ_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 2>&1 | tee screamseq-stock-configure.log
+          cmake --build "$SCREAMSEQ_BUILD_DIR" --parallel "$SCREAMSEQ_BUILD_JOBS" --target tracker-core-tests render-audit 2>&1 | tee screamseq-stock-core-build.log
+      - name: Build and test the isolated pinned upstream library
+        shell: bash
+        run: |
+          set -o pipefail
+          bash mac/build-reference.sh 2>&1 | tee screamseq-stock-reference.log
+      - name: Generate fixtures and compare exact PCM at three block sizes
+        shell: bash
+        run: |
+          set -o pipefail
+          "$SCREAMSEQ_BUILD_DIR/tracker-core-tests" "$GITHUB_WORKSPACE" 2>&1 | tee screamseq-stock-fixtures.log
+          python3 -B mac/test_audio.py 2>&1 | tee screamseq-stock-comparisons.log
+      - name: Record harness and source identities even on failed assertions
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR'])
+          build.mkdir(parents=True, exist_ok=True)
+          files = ['render-audit', 'tracker-core-tests', 'reference-renderer', 'reference-source.json', 'audio-test-results.json']
+          receipt = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              blockFrames=[512,17,4096], hashes={name: hashlib.sha256((build/name).read_bytes()).hexdigest()
+              for name in files if (build/name).is_file()},
+              qualification='Identity only; exact comparisons and upstream tests must pass separately.')
+          (build/'harness-identity.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          PY
+      - name: Retain stock PCM evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: screamseq-stock-pcm-macos-15
+          path: |
+            screamseq-stock-*.log
+            bin/mac-stock-pcm/reference-build.log
+            bin/mac-stock-pcm/stock-test-results.log
+            bin/mac-stock-pcm/reference-source.json
+            bin/mac-stock-pcm/audio-test-results.json
+            bin/mac-stock-pcm/harness-identity.json
+            bin/mac-stock-pcm/CMakeCache.txt
           if-no-files-found: warn
           retention-days: 14

@@ -267,6 +267,16 @@ static void routeCrossfades() {
   std::cout<<"Cabinet interrupted routing error "<<maximum<<'\n';
 }
 int main() { @autoreleasepool { try {
-  models();preamps();routingAndTiming();extremesAndBudget();compensation();apiAndExport();routeCrossfades();
+  // Retain the active phase when CTest terminates a slow runner. These writes
+  // surround whole checks, outside every realtime audit and audio callback.
+  const auto phase=[](const char *name,auto work) {
+    std::cout<<"RUN cabinet phase "<<name<<std::endl;
+    const auto start=std::chrono::steady_clock::now();work();
+    const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    std::cout<<"PASS cabinet phase "<<name<<": "<<seconds<<"s"<<std::endl;
+  };
+  phase("models",models);phase("preamps",preamps);phase("routing-and-timing",routingAndTiming);
+  phase("extremes-and-budget",extremesAndBudget);phase("compensation",compensation);
+  phase("api-and-export",apiAndExport);phase("route-crossfades",routeCrossfades);
   std::cout<<"PASS Cabinet Simulator independent models/preamp/EQ, six routing orders, adaptive latency, aligned automation, exact bypass/mono, extremes, tails, and realtime audit\n";return 0;
 } catch(const std::exception &e) {std::cerr<<"FAIL "<<e.what()<<'\n';return 1;} } }

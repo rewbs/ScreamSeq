@@ -43,7 +43,7 @@
 		s.fill(r.x,r.y,r.w,gridHeader,0x202834);s.fill(r.x,r.y,3,26,accent);
 		s.uiTextFit({L"PATTERN "+std::to_wstring(patternIndex)+L" / "+std::to_wstring(patternRows())+L" rows",
             L"P"+std::to_wstring(patternIndex)+L" · "+std::to_wstring(patternRows())+L" rows",
-            L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,r.w-(r.w>540?378:264),accent);
+            L"P"+std::to_wstring(patternIndex)},r.x+8,r.y+5,patternHeaderTextWidth(),accent);
 		const unsigned count=view->channels,first=firstChannel(),rows=patternRows();
         const auto selectedEnd=patternSelectionEnd();
         const auto metrics=view->patternGridMetrics.at(patternIndex);

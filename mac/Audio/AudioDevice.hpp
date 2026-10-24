@@ -4,6 +4,7 @@
 #include "editor/RecordingFrameClock.hpp"
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreAudio/CoreAudio.h>
+#include <algorithm>
 #include <atomic>
 namespace Tracker {
 struct DeviceInfo {
@@ -16,7 +17,9 @@ class AudioDevice {
   std::shared_ptr<RecordingFrameTimeline> frameTimeline_;
   uint64_t captureGeneration_=0;
   bool captureFrames_=false;
-  std::unique_ptr<PluginChain> plugins_;
+  // Native-owner operations retain this chain across reentrant vendor calls.
+  // The callback borrows it without copying or releasing shared ownership.
+  std::shared_ptr<PluginChain> plugins_;
   uint64_t pluginEpoch_=0;
   std::vector<PluginState> pluginStates_;
   std::vector<size_t> pendingEditors_;
@@ -92,7 +95,76 @@ public:
     return plugins_ && plugins_->enqueueParameters(changes);
   }
   uint64_t pluginEpoch()const noexcept{return pluginEpoch_;}
+  std::optional<size_t> pluginSlot(const std::string &identity)const noexcept {
+    const auto found=std::find_if(pluginStates_.begin(),pluginStates_.end(),[&](const auto &state){return state.instanceID==identity;});
+    return found==pluginStates_.end()?std::nullopt:std::optional<size_t>(size_t(found-pluginStates_.begin()));
+  }
   bool previewPluginParameters(std::span<const ParameterChange> changes){return plugins_&&plugins_->previewParameters(changes);}
+  struct ParameterPreviewOwner {std::string plugin;uint32_t parameter=0;uint64_t provider=0;};
+  struct PluginStateOwner {std::string plugin;PluginEditSource source;};
+  class PluginPreviewCancellation {
+    friend class AudioDevice;
+    const AudioDevice *owner_=nullptr;
+    uint64_t epoch_=0;
+    std::shared_ptr<PluginChain> chain_;
+    PluginChain::ParameterPreviewCancellation hosted_;
+  };
+  // Does not join, drain or start processing. A stopped host with queued work
+  // stays Pending; use the existing stopped restoration path in that case.
+  std::optional<PluginPreviewCancellation> cancelPluginParameterPreviewsTracked(uint64_t,std::span<const ParameterPreviewOwner>);
+  PluginChain::PreviewCancellationState pluginPreviewCancellationState(const PluginPreviewCancellation &) const noexcept;
+  // Native owner only; caller protects the retained take/input cuts. Unlike
+  // ordinary state(), this never stops/joins audio or drains control queues.
+  std::optional<NativePlugin::ProcessingState> pluginProcessingState(uint64_t expectedEpoch,const PluginStateOwner &);
+  // Disposable-provider comparison only. Caller protects input, requires the
+  // cancellation processing receipt and rechecks its document/fixed Stop cuts.
+  void verifyProcessingPluginBaselines(uint64_t,std::span<const PluginStateOwner>,std::span<const PluginState>);
+  // Caller holds the full group's native input leases and rechecks its fixed
+  // cuts before and after. Never stops an active device or rewrites saved blobs.
+  // Refusal/exception retains the take, including after partial vendor restore.
+  void restoreStoppedPluginBaselines(uint64_t expectedEpoch,std::span<const PluginStateOwner>,std::span<const PluginState>);
+  struct StoppedPluginRepair {
+    const AudioDevice *owner=nullptr;
+    uint64_t epoch=0;
+    std::vector<PluginStateOwner> providers;
+    std::vector<PluginEditBoundary> originalCuts,replacementCuts;
+    std::unique_ptr<PluginChain::StoppedRepair> hosted;
+    bool adopted()const noexcept{return hosted&&hosted->adopted;}
+    // This addresses the retained old backend, never a current slot. Cleanup
+    // stays retryable even if a later operation replaced the AudioDevice host.
+    bool releaseRetiredInputBarrier(const std::string &,PluginEditorInputBarrier);
+  };
+  // Closed-editor opaque repair. The native take owns this receipt (including
+  // retired providers after adoption) until old input-cut/lease cleanup succeeds.
+  // Never reuse the old take's incarnation on a repaired provider. The next
+  // play() prepares a fresh chain; no old renderer resumes after this adoption.
+  std::unique_ptr<StoppedPluginRepair> prepareStoppedPluginRepair(uint64_t expectedEpoch,
+    std::span<const PluginStateOwner>,std::span<const PluginState>);
+  bool adoptStoppedPluginRepair(StoppedPluginRepair &);
+  // Control owner only. Resolve stable identities again: live rack publication
+  // can reorder slots without replacing the whole chain. Guard the native
+  // incarnation as well as the epoch before taking over stopped processing.
+  bool cancelPluginParameterPreviews(uint64_t expectedEpoch,std::span<const ParameterPreviewOwner> owners) {
+    if(!plugins_||expectedEpoch!=pluginEpoch_)return false;
+    std::vector<PluginChain::ParameterPreviewTarget> targets;targets.reserve(owners.size());
+    const auto resolve=[&] {
+      targets.clear();
+      for(const auto &owner:owners) {
+        const auto slot=pluginSlot(owner.plugin);
+        if(!slot||*slot>UINT32_MAX||!owner.provider||plugins_->editSource(*slot).incarnation!=owner.provider)return false;
+        targets.push_back({uint32_t(*slot),owner.parameter});
+      }
+      return true;
+    };
+    if(!resolve())return false;
+    if(joinStoppedProcessing())plugins_->applyPending();
+    // Pending accepted work can adopt a prepared vendor. Never restore that
+    // new incarnation with an old take just because its stable ID survived.
+    if(expectedEpoch!=pluginEpoch_||!resolve())return false;
+    // The shared publisher validates all IDs and reserves the complete queue
+    // before clearing any transient ownership or publishing a restore prefix.
+    return plugins_->cancelParameterPreviews(targets);
+  }
   bool cancelPluginParameterPreview(size_t slot,uint32_t id){
     if(!plugins_||!plugins_->hasParameterPreview(slot,id))return true;
     if(joinStoppedProcessing())plugins_->applyPending();
@@ -106,6 +178,7 @@ public:
     if (plugins_)
       plugins_->showEditor(slot);
   }
+  std::vector<size_t> openPluginEditors() const {return plugins_?plugins_->openEditors():std::vector<size_t>{};}
   bool popPluginEdit(size_t slot, uint32_t &id, float &value) { return plugins_ && plugins_->popEdit(slot, id, value); }
   bool popPluginEdit(size_t slot,PluginEdit &event) {return plugins_&&plugins_->popEdit(slot,event);}
   bool popPluginEdit(size_t slot,PluginEdit &event,PluginEditSource &source) {

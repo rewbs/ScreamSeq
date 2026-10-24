@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ScreamSeq Windows plugin recording and detached recovery review",
-  "description": "Windows lifecycle adapter for shared recorded gestures. Discover availability with api.describe. This does not claim matching Mac API exposure.",
+  "description": "Windows lifecycle adapter for shared recorded gestures. Discover availability with api.describe. Mac exposes the same lifecycle methods with native clock and restoration constraints.",
   "$defs": {
     "revision": {
       "type": "string",
@@ -97,6 +97,11 @@
             },
             "limit": {
               "$ref": "#/$defs/limit"
+            },
+            "includeTiming": {
+              "type": "boolean",
+              "default": false,
+              "description": "Read-only clock coverage diagnosis. Requires an explicit limit of at most 16. Never remaps or acknowledges input."
             }
           },
           "required": [
@@ -104,7 +109,31 @@
             "plugin",
             "parameter"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "includeTiming": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "includeTiming"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "limit": {
+                    "maximum": 16
+                  }
+                },
+                "required": [
+                  "limit"
+                ]
+              }
+            }
+          ]
         }
       },
       "required": [
@@ -282,6 +311,11 @@
             "acknowledgeLoss": {
               "type": "boolean",
               "default": false
+            },
+            "restoreSavedState": {
+              "type": "boolean",
+              "default": false,
+              "description": "Explicit recovery only for an already-kept retained take, with playback stopped and every owned plugin editor closed. Restores accepted plugin state and abandons later unsaved native input while preserving kept automation and its Undo entry. Never implicit in ordinary Commit retries."
             }
           },
           "required": [

@@ -28,9 +28,25 @@ void applicationInstrumentPluginAssignment(){
   restoreCheck(app.documentOperation("instrument.get",{{"instrument",1}}).at("mapping")==mapping,"Assigning plugin erased sample mapping");
   write("history.undo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin&&snapshot().at("channel")==1,"One Undo did not restore the previous MIDI channel");
   write("history.redo",{{"domain","all"}});SendMessageW(window,WM_TIMER,1,0);restoreCheck(snapshot().at("plugin")==plugin,"Redo lost plugin identity");
+  // A clean chooser intentionally follows adopted revisions on its 250 ms
+  // timer. Establish that behavior separately from an edit arriving before
+  // refresh; worker message pumping must not decide which case this tests.
+  write("document.patch",{{"title","Clean chooser refresh"}});SendMessageW(window,WM_TIMER,1,0);
+  restoreCheck(snapshot().at("revision")==app.view->session.revision&&!snapshot().at("dirty").get<bool>()&&
+    snapshot().at("instrument")==target&&snapshot().at("plugin")==plugin&&snapshot().at("channel")==7,
+    "Clean assignment refresh changed its captured instrument, plugin or MIDI channel");
+  restoreCheck(KillTimer(window,1)!=FALSE,"Assignment fixture lost its automatic refresh timer");
+  MSG queuedTimer{};while(PeekMessageW(&queuedTimer,window,WM_TIMER,WM_TIMER,PM_REMOVE))
+    if(queuedTimer.wParam!=1)DispatchMessageW(&queuedTimer);
+  const auto capturedRevision=snapshot().at("revision");
   // A stale draft must not jump to the newer revision or another instrument.
-  write("document.patch",{{"title","Newer song edit"}});const auto newer=app.view->session.revision;choose(4802,9);
-  restoreCheck(snapshot().at("dirty")==true&&snapshot().at("stale")==true&&app.view->session.revision==newer&&snapshot().at("instrument")==target,"Stale assignment was replayed or redirected");
+  write("document.patch",{{"title","Newer song edit"}});const auto newer=app.view->session.revision;
+  restoreCheck(snapshot().at("revision")==capturedRevision&&capturedRevision!=newer&&snapshot().at("stale")==true,
+    "Stale assignment fixture did not retain the pre-edit presentation revision");
+  choose(4802,9);
+  const auto refusedAssignment=snapshot();
+  restoreCheck(refusedAssignment.at("dirty")==true&&refusedAssignment.at("stale")==true&&app.view->session.revision==newer&&refusedAssignment.at("instrument")==target,
+    ("Stale assignment was replayed or redirected: "+refusedAssignment.dump()).c_str());
   press(4804);app.completionFault=[]{throw std::runtime_error("Lost assignment callback");};choose(4801,0);
   restoreCheck(!snapshot().at("completion").is_null(),"Lost assignment callback discarded its result");const auto assignedRevision=app.view->session.revision;press(4804);
   restoreCheck(snapshot().at("completion").is_null()&&snapshot().at("plugin")==""&&app.view->session.revision==assignedRevision,"Review repeated assignment or failed to read current state");

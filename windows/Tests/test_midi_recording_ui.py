@@ -110,11 +110,43 @@ class MidiRecordingUITests(unittest.TestCase):
         self.assertFalse(self.state()['dirty']); self.assertEqual(self.settings()['latencyMS'], -4.5)
         self.assertEqual(self.desktop.focus(self.window()), self.control(7208))
         self.focus_control(7203); self.desktop.send(self.control(7203), 0x100, 32)
-        self.assertTrue(self.state()['dirty']); self.assertFalse(self.read('transport.get')['audioActive'])
-        self.modified_key(self.control(7203), 13, ctrl=True); self.idle(); self.assertTrue(self.settings()['armed'])
+        self.idle()
+        self.assertFalse(self.state()['dirty']); self.assertFalse(self.read('transport.get')['audioActive'])
+        armed_settings = self.settings()
+        if not armed_settings['armed']:
+            self.fail(dict(window=self.state(), settings=armed_settings,
+                           workspaceStatus=self.read('workspace.get')['status']))
+        self.assertEqual(self.text(7203), 'Disarm notes')
+        self.assertEqual(self.desktop.focus(self.window()), self.control(7203))
+        self.modified_key(self.control(7203), 13, ctrl=True); self.idle()
+        self.assertEqual(self.settings()['revision'], armed_settings['revision'])
+        self.desktop.send(self.control(7203), 0x100, 32); self.idle()
+        self.assertFalse(self.settings()['armed']); self.assertEqual(self.text(7203), 'Arm notes')
         self.desktop.send(self.control(7203), 0x100, 0x74); self.idle()  # F5 rescan.
         self.assertEqual(before, self.doc())
         self.desktop.send(self.control(7203), 0x100, 27); self.assertFalse(self.state()['visible'])
+
+    def test_immediate_arm_and_disarm_preserve_incomplete_timing_draft(self):
+        self.start(); before = self.doc(); original = self.settings()
+        self.field(7208, '-'); self.field(7206, '3')
+        self.press(7203)
+        armed = self.settings()
+        self.assertTrue(armed['armed']); self.assertEqual(armed['latencyMS'], original['latencyMS'])
+        self.assertEqual(armed['channelsCount'], original['channelsCount'])
+        self.assertEqual(self.state()['draft']['latencyMSText'], '-')
+        self.assertEqual(self.state()['draft']['channelsCountText'], '3')
+        self.assertEqual(self.state()['draft']['baseRevision'], armed['revision'])
+        self.assertTrue(self.state()['dirty']); self.assertEqual(self.text(7203), 'Disarm notes')
+        self.press(7203)
+        disarmed = self.settings()
+        self.assertFalse(disarmed['armed']); self.assertEqual(self.text(7203), 'Arm notes')
+        self.assertEqual(self.state()['draft']['latencyMSText'], '-')
+        self.assertEqual(self.state()['draft']['baseRevision'], disarmed['revision'])
+        self.field(7208, '-3.25'); self.press(7209)
+        applied = self.settings()
+        self.assertFalse(applied['armed']); self.assertEqual(applied['latencyMS'], -3.25)
+        self.assertEqual(applied['channelsCount'], 3); self.assertFalse(self.state()['dirty'])
+        self.assertFalse(self.read('transport.get')['audioActive']); self.assertEqual(before, self.doc())
 
     def test_recovered_review_selection_navigation_and_loss_reason(self):
         path = self.folder / 'Owned review fixture.screamseq'

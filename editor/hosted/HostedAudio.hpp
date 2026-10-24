@@ -163,11 +163,14 @@ struct GraphControlPlan {
 class NativePlugin {
   static constexpr uint32_t maximumFrames = 4096;
   static uint64_t nextEditIncarnation();
-  const uint64_t editIncarnation_=nextEditIncarnation(); // Allocated off audio at construction.
+  // Allocated off audio. A quiescent stopped backend repair swaps this with
+  // its prepared replacement; native input observation is control-owner work.
+  uint64_t editIncarnation_=nextEditIncarnation();
   std::atomic<double> latency_{0};
   std::atomic<double> tail_{0};
   PluginDescriptor descriptor_;
   std::string instanceID_;
+  void decorateState(PluginState &) const;
   uint32_t assignedInstrument_ = 0, midiChannel_ = 1;
   std::vector<PluginInstrumentAlias> aliases_;
   PluginTransport transport_;
@@ -203,6 +206,9 @@ class NativePlugin {
   const std::vector<ParameterChange> *activeAutomation_=&automation_; // Audio borrows producer-owned snapshots.
   size_t automationPosition_ = 0;
   uint64_t renderedThrough_ = 0;
+  uint64_t pendingControlSerial_=0,renderedControlSerial_=0; // Audio owner only.
+  static_assert(std::atomic<uint64_t>::is_always_lock_free);
+  std::atomic<uint64_t> publishedControlSerial_{0};
   ParameterActivity *activity_ = nullptr;
   uint32_t activityProcessor_ = 0;
   bool activityAudible_ = true;
@@ -277,6 +283,11 @@ public:
   bool appliedParameter(uint32_t id,double value,uint64_t frame,ParameterSource source,uint32_t offset=0) noexcept;
   void editorParameter(uint32_t id,double value,uint64_t frame) noexcept; // Audio owner; backend already received the editor event.
   void queuedManual(uint32_t id,uint32_t serial) noexcept {for(auto &p:baselines_)if(p.id==id){p.manualSerial=serial;p.queuedManual=true;break;}}
+  void queuedControl(uint64_t serial) noexcept {pendingControlSerial_=serial;} // Audio owner.
+  // Successful positive-frame processing, not queue delivery or DAC output.
+  bool processedControl(uint64_t serial) const noexcept {
+    return presetSettled_.load(std::memory_order_acquire)&&publishedControlSerial_.load(std::memory_order_acquire)>=serial;
+  }
   void observe(ParameterActivity *activity,uint32_t processor) noexcept {activity_=activity;activityProcessor_=processor;}
   void observedBaseline(uint32_t,double) noexcept; // Control owner only.
   void audible(bool value) noexcept {activityAudible_=value;}
@@ -287,6 +298,34 @@ public:
   void loadProgram(const std::string &id); // Control-thread only, on a stopped/prepared instance.
   std::optional<EffectMeters> meters() const noexcept {const auto *p=publishedVendor();return p->builtin_ ? p->builtin_->meters() : std::nullopt;}
   PluginState state() const;
+  struct ProcessingState {PluginEditSource source;PluginState state;};
+  // Control owner only, with provider lifetime/input protected by the caller.
+  // Rejects a fading or replaced vendor and changed facade metadata. It neither
+  // drains queued parameters nor establishes an original-input cut by itself.
+  std::optional<ProcessingState> processingState() const;
+  // Quiescent native-owner repair, never an audio callback or live preset.
+  // The native adapter must protect/close editor input and drain accepted work.
+  // It also guards input cuts, document/rack revision and storage for the whole
+  // group before adoption. This primitive does not acquire or release leases.
+  // Following adoption it must reprepare playback before rendering this facade.
+  // The old vendor remains owned by the plan until control-thread retirement.
+  // Finish its old input lease through plan.prepared after adoption: the live
+  // facade deliberately has a new notification-provider incarnation then.
+  struct StoppedReplacement {
+    std::unique_ptr<NativePlugin> prepared;
+    NativePlugin *expected=nullptr;
+    PluginEditSource source;
+    PluginState canonical;
+    double tail=0;
+    bool adopted=false;
+  };
+  std::unique_ptr<StoppedReplacement> prepareStoppedReplacement(const PluginState &,bool offline) const;
+  bool acceptsStoppedReplacement(const StoppedReplacement &) const noexcept;
+  bool adoptStoppedReplacement(StoppedReplacement &) noexcept;
+private:
+  friend class PluginChain;
+  void commitStoppedReplacement(StoppedReplacement &) noexcept;
+public:
   std::vector<PluginInstrumentAlias> assignments() const;
   double latency() const { return latency_; }
   bool latencyChangePending() const noexcept;
@@ -401,6 +440,7 @@ class PluginChain {
     std::vector<bool> previewed; // Control owner; same catalog order, allocated during preparation.
     ObservedProcessor ports;
     uint32_t activity=0;
+    uint64_t lastQueuedControlSerial=0; // Control owner; not a render acknowledgement.
   };
   std::vector<std::shared_ptr<RackEntry>> rack_,retainedRack_; // Control owner only.
   struct InstrumentOriginal {OpenMPT::ModInstrument *instrument=nullptr;std::array<uint16_t,128> keyboard{};uint16_t slot=0;uint8_t midiChannel=0;};
@@ -461,9 +501,10 @@ class PluginChain {
   std::array<float,8192> sampleRawBuffer_{};
   std::array<float,8192> sampleGraphBuffer_{};
   std::vector<bool> bypass_;
-  struct QueuedParameter {ParameterChange change;bool last=false,observed=false;NativePlugin *plugin=nullptr;uint32_t activity=0;};
+  struct QueuedParameter {ParameterChange change;bool last=false,observed=false;NativePlugin *plugin=nullptr;uint32_t activity=0;uint64_t serial=0;};
   std::array<QueuedParameter, 4096> queue_{};
   bool enqueueParameterBatch(std::span<const ParameterChange>,bool preview) noexcept;
+  uint64_t controlSerial_=0; // Single producer, never wraps; independent of preset queue fences.
   alignas(64) std::atomic<uint32_t> write_{0};
   alignas(64) std::atomic<uint32_t> read_{0};
   bool parameterBlockOpen_=false; // Audio owner only; excludes mid-block updates.
@@ -680,12 +721,60 @@ public:
   // One publication across the whole take. Native adapters resolve stable IDs
   // against the retained host before calling; no prefix may restore on refusal.
   bool cancelParameterPreviews(std::span<const ParameterPreviewTarget> targets);
+  class ParameterPreviewCancellation {
+    friend class PluginChain;
+    struct Provider {
+      uint32_t slot=0;
+      std::shared_ptr<RackEntry> entry;
+      std::shared_ptr<NativePlugin> plugin;
+      std::shared_ptr<NativePlugin::Preset> preset;
+      PluginEditSource source;
+      uint64_t serial=0;
+    };
+    const PluginChain *owner_=nullptr; // Caller must retain this chain.
+    uint64_t serial_=0,graphRevision_=0,recordedRevision_=0;
+    std::vector<Provider> providers_;
+  };
+  enum class PreviewCancellationState { Pending, Processed, Invalid };
+  // Control-owner receipt for every target, including an already-clean target
+  // with accepted values still queued. New writes/plans/providers invalidate it.
+  // Does not establish an original-input cut, canonical state or device delivery.
+  std::optional<ParameterPreviewCancellation> cancelParameterPreviewsTracked(std::span<const ParameterPreviewTarget>);
+  PreviewCancellationState parameterPreviewCancellationState(const ParameterPreviewCancellation &) const noexcept;
   bool bypass(size_t slot,bool value) noexcept;
   size_t bypassStorageBytes() const noexcept;
   // Pair with process(): instrument/mixer/effect stages see the same boundary.
   // Standalone process() callers retain their automatic parameter consumption.
   void beginRenderBlock() noexcept;
   std::vector<PluginState> states();
+  // Quiescent control owner only, like states(). Capture one retained provider
+  // without serializing unrelated vendors. Native input leases are external.
+  PluginState state(size_t slot);
+  // Retains the entry and preset while a provider pumps native callbacks.
+  // Observation never reads/drains audio-owned queues or corrects previews.
+  std::optional<NativePlugin::ProcessingState> processingState(size_t slot) const;
+  // Complete-group stopped repair. Native adapters own quiescence, closed
+  // input leases, input-cut/revision checks and retirement. No audio callback
+  // may resume on this chain after adoption; prepare playback afresh.
+  struct StoppedRepair {
+    struct Item {
+      std::shared_ptr<RackEntry> entry;
+      PluginState before,accepted,requested;
+      std::unique_ptr<NativePlugin::StoppedReplacement> replacement;
+      std::vector<PluginParameter> parameters;
+      std::vector<bool> previewed;
+    };
+    const PluginChain *owner=nullptr;
+    std::vector<std::shared_ptr<RackEntry>> rack;
+    std::vector<Item> items;
+    const MixerTransition::Plan *routing=nullptr;
+    uint64_t graphRevision=0,recordedRevision=0;
+    uint32_t parameterFence=0;
+    bool adopted=false;
+  };
+  std::unique_ptr<StoppedRepair> prepareStoppedRepair(std::span<const PluginState>);
+  bool acceptsStoppedRepair(const StoppedRepair &) const noexcept;
+  bool adoptStoppedRepair(StoppedRepair &) noexcept;
   void applyPending() noexcept;
   std::vector<PluginParameter> parameters(size_t slot) const;
   std::vector<PluginProgram> programs(size_t slot) const { return slot < rack_.size() ? rack_[slot]->plugin->programs() : std::vector<PluginProgram>{}; }

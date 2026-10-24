@@ -139,7 +139,17 @@
         if(presentationBusy()) title+=L" [Document worker busy]";
         ScreamSeq::NativeControls::text(window,title);
     }
+    bool queuedMusicalEdit()const{return (preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit())||
+        (parameterAutomationWindow&&parameterAutomationWindow->queuedMusicalEdit())||
+        (absoluteAutomationWindow&&absoluteAutomationWindow->queuedMusicalEdit())||
+        (parameterActivityWindow&&parameterActivityWindow->queuedMusicalEdit());}
+    bool canUndoSong()const{return view->session.document.value("canUndo",false)||queuedMusicalEdit();}
+    bool canRedoSong()const{return view->session.document.value("canRedo",false)&&!queuedMusicalEdit();}
     Json edit(const std::string &method,Json params) {
+        if(preciseNoteWindow&&(method=="history.undo"||method=="history.redo"))preciseNoteWindow->flushForHistory();
+        if(parameterAutomationWindow&&(method=="history.undo"||method=="history.redo"))parameterAutomationWindow->flushForHistory();
+        if(absoluteAutomationWindow&&(method=="history.undo"||method=="history.redo"))absoluteAutomationWindow->flushForHistory();
+        if(parameterActivityWindow&&(method=="history.undo"||method=="history.redo"))parameterActivityWindow->flushForHistory();
         params["expectedRevision"]=view->session.revision;
         return documentOperation(method,params);
     }
@@ -280,27 +290,69 @@
         return selected ? std::filesystem::path(path.data()) : std::filesystem::path{};
     }
     virtual std::filesystem::path chooseModuleExportFile(const std::wstring &format) {
-        ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format);
+        ModalScope modal(modalDepth);return ScreamSeq::chooseModuleExport(window,format,view->path);
+    }
+    void finishAutomaticSongFields() {
+        if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
+        if(parameterAutomationWindow)parameterAutomationWindow->flushForProjectSave();
+        if(absoluteAutomationWindow)absoluteAutomationWindow->flushForProjectSave();
+        if(parameterActivityWindow)parameterActivityWindow->flushForProjectSave();
+    }
+    template<class Choose> std::filesystem::path chooseExportRetainingFocus(Choose choose) {
+        const auto document=documentId,revision=view->session.revision;
+        const auto focus=GetFocus();const bool text=menuTextControl(focus);DWORD first=0,last=0;
+        if(text)SendMessageW(focus,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+        const auto restore=[&] {
+            if(documentId==document&&view->session.revision==revision&&IsWindow(focus)&&IsWindowVisible(focus)) {
+                SetFocus(focus);if(text)SendMessageW(focus,EM_SETSEL,first,last);
+            }
+        };
+        try {auto path=choose();restore();return path;}
+        catch(...) {restore();throw;}
     }
     void exportModuleFile() {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
         if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake())return;
+        finishAutomaticSongFields();
+        documentOperation("flushPluginEditors",{{"force",true}});
         const auto document=documentId,revision=view->session.revision;
         auto format=wide(view->session.document.at("format").get<std::string>());
         std::transform(format.begin(),format.end(),format.begin(),towlower);
         if(format!=L"mod"&&format!=L"xm"&&format!=L"s3m"&&format!=L"it"&&format!=L"mptm")
             throw std::runtime_error("This source format does not support module export / use Save As for a native project");
-        const auto path=chooseModuleExportFile(format);
+        const auto path=chooseExportRetainingFocus([&]{return chooseModuleExportFile(format);});
         if(path.empty())return;
         if(documentId!=document||view->session.revision!=revision)
             throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Export; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         retainedNativeCommand("export","document.exportModule",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
             {{"path",utf8Path(path)}},[&](const Json &){status=L"Module exported / native project save state retained";});
     }
+    virtual std::filesystem::path chooseAudioExportFile() {
+        ModalScope modal(modalDepth);return ScreamSeq::chooseAudioExport(window,view->path);
+    }
+    void exportAudioFile() {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
+        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake())return;
+        // Finish accepted native field edits just as Save does. The export API
+        // itself is read-only and must never capture mutable vendors implicitly.
+        finishAutomaticSongFields();
+        documentOperation("flushPluginEditors",{{"force",true}});
+        const auto document=documentId,revision=view->session.revision;
+        const auto path=chooseExportRetainingFocus([&]{return chooseAudioExportFile();});
+        if(path.empty())return;
+        if(documentId!=document||view->session.revision!=revision)
+            throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Export; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        status=L"Rendering audio…";frameRequested=true;
+        retainedNativeCommand("audioExport","document.exportAudio",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
+            {{"path",utf8Path(path)}},[&](const Json &){status=L"Audio exported / native project save state retained";frameRequested=true;});
+    }
     bool saveFile(bool saveAs=false) {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
+        finishAutomaticSongFields();
         pluginEditorWarning.clear();
         documentOperation("flushPluginEditors",{{"force",true}});
         const auto document=documentId;auto revision=view->session.revision;auto path=view->path;

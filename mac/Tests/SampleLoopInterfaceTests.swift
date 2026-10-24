@@ -19,7 +19,7 @@ extension InterfaceTests {
     try answer("first");waitForSave()
     try require(calls.count==2 && calls[1].1["expectedRevision"] as? String=="first" &&
       (calls[1].1["normal"] as? [String:Any])?["start"] as? Int==200,"A later drag survives the first save and uses its new revision")
-    replies.removeFirst()(["error":["code":-32002,"message":"Busy"]]);waitForSave()
+    replies.removeFirst()(["error":["code":-32002,"message":"Busy","data":["writeOutcome":"notCommitted"]]]);waitForSave()
     try require(calls.count==3 && editor.loopsBusy,"A transient busy response retries the loop edit")
     try answer("second")
     editor.waveform.moveLoopMarker(.start,to:3000,finished:true)
@@ -52,6 +52,22 @@ extension InterfaceTests {
     try require(editor.loopsBusy && calls.last?.1["sample"] as? Int==2 && calls.last?.1["expectedRevision"] as? String=="new-sample",
       "Retiring a previous sample's reply resumes a new sample's pending gesture without adopting the old revision")
     try answer("new-saved")
+    editor.waveform.moveLoopMarker(.start,to:160,finished:true)
+    let uncertainCount=calls.count
+    replies.removeFirst()(["error":["code":-32002,"message":"Unknown outcome","data":["writeOutcome":"unknown"]]])
+    pumpMainRunLoop(0.2)
+    try require(calls.count==uncertainCount && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopDraftRevision=="new-saved" && editor.loopsStatus.stringValue.contains("Unknown outcome"),
+      "An uncertain sample loop write keeps its original draft/revision and cancels automatic replay")
+    editor.setLoops(dryRun:false)
+    let firstRetryCount=calls.count
+    for _ in 0..<6 {
+      try require(!replies.isEmpty,"Expected one bounded loop request")
+      replies.removeFirst()(["error":["code":-32002,"message":"Still busy","data":["writeOutcome":"notCommitted"]]])
+      waitForSave()
+    }
+    pumpMainRunLoop(0.2)
+    try require(calls.count==firstRetryCount+5 && replies.isEmpty && !editor.loopsBusy && editor.loopSaveWork==nil && editor.loopStart.integerValue==160 && editor.loopsStatus.stringValue.contains("Still busy"),
+      "Loop retry exhaustion is bounded and keeps the editable draft without another automatic write")
     editor.loopSaveWork?.cancel();editor.onRequest=nil
   }
 }

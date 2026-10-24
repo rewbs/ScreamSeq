@@ -96,8 +96,8 @@
             {noteTrackUngroupCommand,L"Ungroup current note track (keep routing)",enabled&&view->session.document.value("editable",false)&&noteTrack(channel)!=nullptr},
             {0,L"Inspect",enabled,false,{{notesCommand,L"Precise notes",enabled},{effectsCommand,L"Effects and parameter bindings",enabled},
                 {parameterAutomationCommand,L"Parameter automation…",enabled},{instrumentEnvelopeCommand,L"Instrument…",enabled}}},
-            {0,L""},{undoCommand,L"&Undo\tCtrl+Z",enabled&&view->session.document.value("canUndo",false)},
-            {redoCommand,L"&Redo\tCtrl+Y",enabled&&view->session.document.value("canRedo",false)},
+            {0,L""},{undoCommand,L"&Undo\tCtrl+Z",enabled&&canUndoSong()},
+            {redoCommand,L"&Redo\tCtrl+Y",enabled&&canRedoSong()},
             {0,L""},{paletteCommand,L"All commands…\tCtrl+K"}};
     }
     std::vector<WorkspaceMenuItem> sampleContextItems() {
@@ -120,8 +120,8 @@
                 {sampleSustainToggleCommand,L"Sustain loop enabled",valid,info.value("sustainLoop",false)},
                 {sampleSustainModeCommand,L"Cycle sustain loop direction",valid&&info.value("sustainLoop",false)}}},
             {0,L""},{sampleDetailCommand,L"Detailed waveform…",valid&&!sampleDraft},
-            {undoCommand,L"&Undo\tCtrl+Z",!busy&&view->session.document.value("canUndo",false)},
-            {redoCommand,L"&Redo\tCtrl+Y",!busy&&view->session.document.value("canRedo",false)}};
+            {undoCommand,L"&Undo\tCtrl+Z",!busy&&canUndoSong()},
+            {redoCommand,L"&Redo\tCtrl+Y",!busy&&canRedoSong()}};
     }
     std::vector<WorkspaceMenuItem> graphContextItems(const std::string &surfaceName,bool targetReady) {
         const bool idle=!busy&&!graphPending;
@@ -150,8 +150,8 @@
         items.push_back({graphApply,L"Save retained graph edit\tCtrl+Enter",current&&graphDirty&&!graphFieldDirty&&!nativeCommandCompletion.retained()});
         items.push_back({graphReload,nativeCommandCompletion.retained()?L"Review graph result":L"Reload graph / discard draft",idle&&(graphDirty||graphFieldDirty||!current||nativeCommandCompletion.retained())});
         items.push_back({0,L""});
-        items.push_back({undoCommand,L"Undo document edit\tCtrl+Z",idle&&view->session.document.value("canUndo",false)});
-        items.push_back({redoCommand,L"Redo document edit\tCtrl+Y",idle&&view->session.document.value("canRedo",false)});
+        items.push_back({undoCommand,L"Undo document edit\tCtrl+Z",idle&&canUndoSong()});
+        items.push_back({redoCommand,L"Redo document edit\tCtrl+Y",idle&&canRedoSong()});
         return items;
     }
 

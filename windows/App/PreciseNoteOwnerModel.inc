@@ -62,8 +62,10 @@
     std::sort(draft_.begin(),draft_.end(),[](const auto &a,const auto &b){return a.at("position")!=b.at("position")?a.at("position")<b.at("position"):a.at("note")>b.at("note");});
     selected_=-1;density_.fill(0);for(size_t i=0;i<draft_.size();++i){const auto &event=draft_[i];if(event==selected)selected_=int(i);++density_[(event.at("position").get<unsigned>()%unitsPerRow)/256];}
     const auto top=SendMessageW(controls_.at(list),LB_GETTOPINDEX,0,0);
-    SendMessageW(controls_.at(list),LB_SETCOUNT,draft_.size(),0);ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);
-    if(top>=0&&!draft_.empty())ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETTOPINDEX,std::min<size_t>(size_t(top),draft_.size()-1),0);
+    if(SendMessageW(controls_.at(list),LB_GETCOUNT,0,0)!=LRESULT(draft_.size()))SendMessageW(controls_.at(list),LB_SETCOUNT,draft_.size(),0);
+    if(SendMessageW(controls_.at(list),LB_GETCURSEL,0,0)!=selected_)ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETCURSEL,selected_,0);
+    if(top>=0&&!draft_.empty()){const auto nextTop=std::min<size_t>(size_t(top),draft_.size()-1);
+      if(SendMessageW(controls_.at(list),LB_GETTOPINDEX,0,0)!=LRESULT(nextTop))ScreamSeq::NativeInputGate::present(controls_.at(list),LB_SETTOPINDEX,nextTop,0);}
     if(fields)loadFields();InvalidateRect(controls_.at(list),nullptr,FALSE);requestPaint();
   }
   bool collision(const Json &item,int except=-1)const{
@@ -71,11 +73,11 @@
     for(size_t i=0;i<draft_.size();++i)if(int(i)!=except&&draft_[i].at("position")==item.at("position")&&
       (draft_[i].at("note").get<unsigned>()<128)==(item.at("note").get<unsigned>()<128))return true;return false;
   }
-  Json edited(int except)const{
+  Json edited(int except,std::optional<unsigned> insertionPosition={})const{
     const auto chosen=selection(pitch);require(chosen>=0,"Choose a precise note");
     const auto note=unsigned(SendMessageW(controls_.at(pitch),CB_GETITEMDATA,chosen,0));
-    const auto amount=rowOffset();
-    Json event={{"channel",target_.channel},{"position",target_.row*unitsPerRow+std::min(65535u,unsigned(std::lround(amount*unitsPerRow)))},
+    const auto position=insertionPosition?*insertionPosition:target_.row*unitsPerRow+std::min(65535u,unsigned(std::lround(rowOffset()*unitsPerRow)));
+    Json event={{"channel",target_.channel},{"position",position},
       {"note",note},{"instrument",note<128?unsigned(numeric(instrument,0,255,true)):0u},{"velocity",note<128?unsigned(numeric(velocity,1,127,true)):127u}};
     if(note<128){const auto effect=selection(localEffect);require(effect>=0&&size_t(effect)<effects_.size(),"Choose a supported note-local effect");
       const auto raw=field(parameter);require(!raw.empty()&&raw.size()<=2&&raw.find_first_not_of(L"0123456789abcdefABCDEF")==std::wstring::npos,"Enter a supported hexadecimal effect parameter");
@@ -85,12 +87,32 @@
     require(!collision(event,except),"Another event of this kind already occupies that offset");return event;
   }
   void saveSelected(){if(selected_>=0&&size_t(selected_)<draft_.size())draft_[size_t(selected_)]=edited(selected_);}
+  void saveAutomatically(){
+    cancelAutomaticEdit();
+    if(draft_==original_&&pointRaw()==pointBaseline_)return;
+    apply(false);
+  }
+  void finishQueuedSelection(){
+    if(!automaticEdit_)return;
+    const auto generation=generation_;
+    saveAutomatically();
+    require(generation_==generation,"Newer note input retained before changing selection");
+  }
+  void queueSave(){
+    const auto document=document_;const auto target=target_;const auto generation=generation_;
+    queueAutomaticEdit([this,document,target,generation]{
+      require(document_==document&&target_==target&&generation_==generation,"Newer note edit retained");
+      // This is admission waiting only, never replay a failed/uncertain write.
+      if(context_().busy||pending_){queueSave();return;}
+      if(!dragging_)saveAutomatically();
+    },300);
+  }
   void fieldChanged(){
-    if(setting_)return;++generation_;
+    if(setting_)return;cancelAutomaticEdit();++generation_;
     if(!hasTarget()){status(L"Raw fields retained / choose a captured row before editing");return;}
     // A synthetic/pumped EN_CHANGE while disabled still marks a newer raw draft.
     if(pending_){status(L"Newer raw fields retained while the request completes");return;}
-    try{saveSelected();refresh(selected_>=0?draft_.at(size_t(selected_)):Json(),false);status(L"Draft / Apply saves all hits in one Undo");}
+    try{saveSelected();refresh(selected_>=0?draft_.at(size_t(selected_)):Json(),false);status(L"Changes apply automatically");if(selected_>=0)queueSave();}
     catch(const std::exception &e){error(e);}
   }
   struct Candidate {
@@ -137,21 +159,29 @@
     return result;
   }
   void adopt(Candidate next,Json selectionHint=nullptr){
+    cancelAutomaticEdit();
+    // A revision refresh changes music, not the last observed transport frame.
+    // Keep the cursor through clean Undo/Redo and unrelated edits to this row.
+    // A new document, stable pattern, slot or row must await fresh telemetry.
+    if(document_!=next.context.document||target_.patternID!=next.target.patternID||
+       target_.pattern!=next.target.pattern||target_.row!=next.target.row)
+      playbackOffset_.reset();
+    const bool changedEffects=effects_!=next.effects,changedNames=names_!=next.context.noteNames;
     // Candidate parsing and all context/generation guards finish before native fields change.
     target_=std::move(next.target);document_=std::move(next.context.document);revision_=std::move(next.context.revision);names_=std::move(next.context.noteNames);
     insertionInstrument_=next.context.insertionInstrument;rows_=next.rows;rowsPerBeat_=next.rowsPerBeat;events_=std::move(next.events);draft_=std::move(next.draft);effects_=std::move(next.effects);
     moveLegacyEffect_=next.moveLegacyEffect;initialized_=true;
-    {Setting guard(setting_);ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_RESETCONTENT,0,0);
+    {Setting guard(setting_);if(changedEffects){ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_RESETCONTENT,0,0);
       for(const auto &effect:effects_){const auto text=wide(effect.at("displayCode").get<std::string>()+"  "+effect.at("name").get<std::string>());ScreamSeq::NativeInputGate::present(controls_.at(localEffect),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));}
-      ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_RESETCONTENT,0,0);for(unsigned n=1;n<=122;++n){const auto value=n<=120?n:n==121?255:254;const auto text=noteName(value);
-        const auto index=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,index,value);}}
+      }if(changedNames){ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_RESETCONTENT,0,0);for(unsigned n=1;n<=122;++n){const auto value=n<=120?n:n==121?255:254;const auto text=noteName(value);
+        const auto index=ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text.c_str()));ScreamSeq::NativeInputGate::present(controls_.at(pitch),CB_SETITEMDATA,index,value);}}}
     // A successful explicit recapture resets row-conversion intent, but keeps
     // raw retrigger options and their baseline. Invalid option text stays dirty.
     toolsBaseline_["replaceLegacy"]=replaceLegacy_;
     Json selected=draft_.empty()?Json():draft_[0];
     if(!selectionHint.is_null())for(const auto &event:draft_)if(event.at("position")==selectionHint.at("position")&&event.at("note")==selectionHint.at("note")){selected=event;break;}
     refresh(std::move(selected));original_=draft_;++generation_;
-    status(moveLegacyEffect_?L"Draft / Apply moves the ordinary note and local effect together":L"Precise row draft / Apply creates one Undo step");
+    status(L"Double-click adds a hit · Backspace removes · edits apply automatically");
   }
   void load(const Context &before,Target target,bool follow){
     require(!before.busy&&!pending_&&!dragging_&&bool(before.cell),"Wait for the current document operation");
@@ -174,6 +204,7 @@
     load(before,resolve(before,*selected),true);
   }
   void apply(bool dryRun){
+    cancelAutomaticEdit();
     require(!pending_&&!dragging_&&!context_().busy,"Wait for the current document operation");
     require(current(),"Song changed / draft retained; Reload captured before applying");saveSelected();
     Json replacement=Json::array();for(const auto &event:events_)if(!belongs(event))replacement.push_back(event);for(const auto &event:draft_)replacement.push_back(event);
@@ -186,5 +217,5 @@
     // No automatic second read or write. Request adapter publishes its completed view before return.
     revision_=after.revision;if(!dryRun){events_=std::move(replacement);original_=submitted;moveLegacyEffect_=false;
       if(generation_==generation){pointBaseline_=raw;toolsBaseline_["replaceLegacy"]=replaceLegacy_;}}
-    status(generation_!=generation?L"Newer raw fields retained / Apply to save them":dryRun?L"Valid draft / Check does not play audio or save":L"Precise notes saved / document Undo available");
+    status(generation_!=generation?L"Newer raw fields retained / Save now to review and save":dryRun?L"Valid draft / Check does not play audio or save":L"Precise notes saved / document Undo available");
   }

@@ -6,6 +6,28 @@
 #include <limits>
 
 namespace Tracker {
+// Overlay one process-owned take on an independent project copy. Preserve
+// unknown/future archives verbatim; only this take/revision pair is replaced.
+// Prepare the complete array before adoption, including capacity/type checks,
+// so a failed recovery snapshot cannot partially modify its caller's tree.
+inline void overlayRecordedGestureRecovery(nlohmann::json &project,nlohmann::json archive) {
+  if(!project.is_object()||!archive.is_object()||!archive.contains("take")||!archive.at("take").is_string()||
+     !archive.contains("revision")||!archive.at("revision").is_string())
+    throw std::invalid_argument("Invalid plugin gesture recovery overlay");
+  constexpr auto key="screamseqPluginGestureRecovery";
+  auto archives=project.value(key,nlohmann::json());
+  if(archives.is_null())archives=nlohmann::json::array();
+  if(!archives.is_array())throw std::invalid_argument("Existing plugin gesture recovery archive is incompatible; retained");
+  auto found=std::find_if(archives.begin(),archives.end(),[&](const auto &old){
+    return old.is_object()&&old.value("take",nlohmann::json())==archive.at("take")&&
+      old.value("revision",nlohmann::json())==archive.at("revision");
+  });
+  if(found==archives.end()) {
+    if(archives.size()>=64)throw std::invalid_argument("Plugin gesture recovery archive capacity reached; retained input needs review");
+    archives.push_back(std::move(archive));
+  } else *found=std::move(archive);
+  project[key]=std::move(archives);
+}
 // Recovery archive only; not a public API request or a live-provider restore.
 // Keep original times as decimal strings and omit unmapped frames (plist has
 // no null). The retained array order is significant for same-frame gestures.

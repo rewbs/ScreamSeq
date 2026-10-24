@@ -52,6 +52,11 @@ private:
 public:
   bool pending()const {return std::any_of(entries_.begin(),entries_.end(),[](const auto &e){return e.state==State::Pending;});}
   bool needsReview()const {return lost_||std::any_of(entries_.begin(),entries_.end(),[](const auto &e){return e.state!=State::Pending;});}
+  std::string reviewMessage()const {
+    for(const auto &entry:entries_)if(entry.state!=State::Pending)
+      return entry.error.empty()?"Original parameter input needs review":entry.error;
+    return lost_?"Native parameter input was lost":std::string();
+  }
   size_t retained()const{return entries_.size();}
   uint64_t accepted()const{return accepted_;}
   uint64_t lost()const{return lost_;}

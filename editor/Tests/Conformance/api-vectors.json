@@ -534,7 +534,7 @@
       "params": {},
       "expected": {
         "windows": "success",
-        "macos": -32601
+        "macos": "success"
       },
       "difference": "API-NATIVE-PARAMETER-TAKE",
       "phase": "P4b/P6a"
@@ -547,7 +547,96 @@
       },
       "expected": {
         "windows": -32602,
-        "macos": -32601
+        "macos": -32602
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a"
+    },
+    {
+      "id": "parameter-take-empty-arm",
+      "method": "automation.recording.start",
+      "params": {
+        "plugins": []
+      },
+      "expected": {
+        "windows": -32602,
+        "macos": -32602
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-missing-stop",
+      "method": "automation.recording.stop",
+      "params": {
+        "take": "missing"
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-missing-commit",
+      "method": "automation.recording.commit",
+      "params": {
+        "take": "missing"
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-missing-discard",
+      "method": "automation.recording.discard",
+      "params": {
+        "take": "missing"
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-missing-capture",
+      "method": "automation.recording.capture",
+      "params": {
+        "take": "missing",
+        "plugin": "missing",
+        "parameter": 7,
+        "value": 0.5,
+        "timestamp": "1"
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
+      },
+      "difference": "API-NATIVE-PARAMETER-TAKE",
+      "phase": "P4b/P6a",
+      "guard": "fresh"
+    },
+    {
+      "id": "parameter-take-missing-events",
+      "method": "automation.recording.events",
+      "params": {
+        "take": "missing",
+        "plugin": "missing",
+        "parameter": 7
+      },
+      "expected": {
+        "windows": -32001,
+        "macos": -32001
       },
       "difference": "API-NATIVE-PARAMETER-TAKE",
       "phase": "P4b/P6a"

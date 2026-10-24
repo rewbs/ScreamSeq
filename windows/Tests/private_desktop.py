@@ -76,6 +76,23 @@ class PrivateDesktop:
         check(user.EnumDesktopWindows(self.desktop, visit, 0))
         assert len(found) == 1, found
         return found[0]
+    def exit_code(self, pid):
+        """Observe an owned handle; None means alive, even without a window.
+
+        A PID lookup or failed pipe request cannot establish termination. Wait
+        on the retained handle before reading its code (259 can be a real exit).
+        """
+        info = next((p for p in self.processes if p.dwProcessId == pid), None)
+        if info is None:
+            raise ValueError('Process is not owned by this private desktop')
+        state = kernel.WaitForSingleObject(info.hProcess, 0)
+        if state == 258:
+            return None
+        if state != 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        code = w.DWORD()
+        check(kernel.GetExitCodeProcess(info.hProcess, ctypes.byref(code)))
+        return code.value
     def focus(self, hwnd):
         info = GUI(cbSize=ctypes.sizeof(GUI))
         check(user.GetGUIThreadInfo(user.GetWindowThreadProcessId(hwnd, None), ctypes.byref(info)))
@@ -86,9 +103,13 @@ class PrivateDesktop:
         return output.value
     def __exit__(self, *_):
         for info in self.processes:
-            code = w.DWORD()
-            if kernel.GetExitCodeProcess(info.hProcess, ctypes.byref(code)) and code.value == 259:
-                check(kernel.TerminateProcess(info.hProcess, 0))
+            if self.exit_code(info.dwProcessId) is None:
+                if not kernel.TerminateProcess(info.hProcess, 0):
+                    failure = ctypes.get_last_error()
+                    # The owned process can exit between the wait and cleanup.
+                    # Preserve real termination errors for a still-live owner.
+                    if self.exit_code(info.dwProcessId) is None:
+                        raise ctypes.WinError(failure)
             assert kernel.WaitForSingleObject(info.hProcess, 10000) == 0
             kernel.CloseHandle(info.hProcess)
         check(user.SetThreadDesktop(self.original))

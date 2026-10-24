@@ -160,6 +160,7 @@ class ScratchEditorTests(unittest.TestCase):
         handle = state['lanes'][0]['handles'][1]
         self.mouse(0x201, handle, 1)
         self.mouse(0x200, dict(x=handle['x']+20, y=handle['y']+30), 1)
+        self.assertTrue(all(lane['renderedSamples']>=257 for lane in self.state()['lanes']))
         self.desktop.send(self.hwnd(), 0x100, 0x1B)
         self.assertEqual(self.bank()[0]['motion'], state['draft']['motion'])
         self.assertEqual(self.state()['draft']['motion'], state['draft']['motion'])

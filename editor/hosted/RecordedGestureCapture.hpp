@@ -192,6 +192,9 @@ public:
   const Key &key()const noexcept{return key_;}
   bool matchesBaseline(std::span<const ParameterChange> points)const noexcept{return sameBaseline(*before_,points);}
   std::span<const Event> events()const noexcept{return events_;}
+  RecordingFrameTimeline::Inspection inspectTime(uint64_t time)const noexcept {
+    return timeline_->inspect(time,key_.playbackEpoch);
+  }
   bool retired()const noexcept{return retired_;}
   bool sealed()const noexcept{return endTime_.has_value();}
   size_t retainedStorageBytes()const noexcept{return storageBytes();}

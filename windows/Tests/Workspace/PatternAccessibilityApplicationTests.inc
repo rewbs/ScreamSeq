@@ -44,7 +44,7 @@ void inspectForegroundNativeFocus(DWORD pid,HWND root,HWND field) {
     restoreCheck(hasFocus!=FALSE,"Global UIA element did not advertise keyboard focus");
     restoreCheck(GetGUIThreadInfo(fieldThread,&native)&&native.hwndFocus==field,"QA focus moved during the read-only assertion");
     std::cout<<RestoreJson{{"status","passed"},{"pid",pid},{"root",reinterpret_cast<uintptr_t>(root)},
-        {"field",reinterpret_cast<uintptr_t>(field)},{"globalFocusExact",true},{"nativeFocusExact",true},
+        {"field",reinterpret_cast<uintptr_t>(field)},{"controlId",GetDlgCtrlID(field)},{"globalFocusExact",true},{"nativeFocusExact",true},
         {"valuePattern",true},{"textPattern",true},{"selection",true},{"readOnly",true}}.dump()<<std::endl;
 }
 void patternAccessibilityClient(HWND root,HWND nativeChild,HWND namedField) {

@@ -293,6 +293,15 @@ protected:
     if(active&&bounds.w>4&&bounds.h>4)surface.outline(bounds.x+2,bounds.y+2,bounds.w-4,bounds.h-4,colors.focus);
   }
   virtual void action(int,unsigned)=0;
+  // Opt-in root entry for flat native forms. Ordinary child traversal remains
+  // GetNextDlgTabItem; a null starting HWND is not a valid endpoint contract.
+  HWND tabEntry(bool reverse=false)const{
+    auto control=GetWindow(window_,GW_CHILD);
+    if(reverse&&control)control=GetWindow(control,GW_HWNDLAST);
+    for(;control;control=GetWindow(control,reverse?GW_HWNDPREV:GW_HWNDNEXT))
+      if(IsWindowVisible(control)&&IsWindowEnabled(control)&&(GetWindowLongPtrW(control,GWL_STYLE)&WS_TABSTOP))return control;
+    return nullptr;
+  }
   virtual bool key(WPARAM,bool,bool){return false;}
   virtual bool keyUp(WPARAM){return false;}
   virtual bool controlScroll(UINT,WPARAM,HWND){return false;}

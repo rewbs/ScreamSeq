@@ -136,6 +136,10 @@ public:
     for(auto text:{L"This song · linked templates",L"App catalogue · independent copies"})ScreamSeq::NativeInputGate::present(controls_.at(scope),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));ScreamSeq::NativeInputGate::present(controls_.at(scope),CB_SETCURSEL,0,0);
     for(auto text:{L"Step",L"Linear",L"Smooth",L"Exponential",L"Logarithmic",L"Step at start",L"Exponential reversed",L"Logarithmic reversed",L"Scripted"})ScreamSeq::NativeInputGate::present(controls_.at(pointKind),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));ScreamSeq::NativeInputGate::present(controls_.at(pointKind),CB_SETCURSEL,1,0);
     finish();refresh();
+    // A docked source can sit at the right/bottom edge of its monitor. Offset
+    // placement alone would hide the bank's actions beyond the desktop.
+    // Clamp once; raising a retained bank must preserve the user's placement.
+    clampToOwnerWorkArea();
   }
   void refreshSourceState(){
     if(!ready_)return;

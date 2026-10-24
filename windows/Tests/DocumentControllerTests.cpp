@@ -724,16 +724,18 @@ void unifiedPluginHistoryTests(const std::filesystem::path &directory) {
 #include "TimelineControllerTests.inc"
 #include "PatternTransformControllerTests.inc"
 #include "ModuleExportControllerTests.inc"
+#include "AudioExportControllerTests.inc"
 #include "RecordedGestureCommitTests.inc"
 int main(int argc,char **argv) {
   try {
     if(argc==3 && std::string(argv[1])=="--module-export") {moduleExportControllerTests(std::filesystem::u8path(argv[2]));return 0;}
+    if(argc==3 && std::string(argv[1])=="--audio-export") {audioExportControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--pattern-transform") {patternTransformControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--timeline") {timelineControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--tracks") {trackControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--departure") {documentDepartureControllerTests(std::filesystem::u8path(argv[2]));documentCreationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--parameter-activity") {parameterActivityControllerTests(std::filesystem::u8path(argv[2]));return 0;}
-    if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();return 0;}
+    if(argc==2 && std::string(argv[1])=="--live-native") {liveNativeControllerTests();liveLoopControllerTests();livePreciseNoteControllerTests();return 0;}
     if(argc==3 && std::string(argv[1])=="--matrix") {matrixControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--annotations") {annotationControllerTests(std::filesystem::u8path(argv[2]));return 0;}
     if(argc==3 && std::string(argv[1])=="--arrangement") {arrangementControllerTests(std::filesystem::u8path(argv[2]));return 0;}

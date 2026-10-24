@@ -2,6 +2,7 @@
 #include "editor/ParameterPreviewOwner.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/hosted/RecipeParameterEdits.hpp"
+#include "editor/hosted/PluginBaselineVerification.hpp"
 #include "soundlib/ModInstrument.h"
 #include <algorithm>
 #include <array>
@@ -49,6 +50,9 @@ static void workflow(unsigned rate,unsigned block){
   const auto pcm=render(chain,2048,block);
   check(std::abs(pcm.back()-std::pow(10.f,-18.f/20))<1e-6f,"Preview did not affect real audio");
   check(chain.states()==original,"Captured opaque state baked in a preview");
+  check(chain.state(0)==original[0]&&chain.state(1)==original[1],"Single-provider capture baked in transient state");
+  bool missingRefused=false;try{(void)chain.state(2);}catch(const std::out_of_range &){missingRefused=true;}
+  check(missingRefused,"Single-provider state capture accepted a missing rack slot");
   check(parameter(chain,0,1).value==-12&&parameter(chain,1,1).value==-6,"Saving reset the audible preview");
   check(chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),"Capture consumed preview ownership");
   PluginChain reopened(chain.states(),rate,true);
@@ -70,6 +74,78 @@ static void workflow(unsigned rate,unsigned block){
   check(chain.states()==accepted,"Second preview changed a previously accepted state");
   check(chain.cancelParameterPreviews(1,id),"Second cancellation failed");render(chain,2048,block);
   check(parameter(chain,1,1).value==-3&&chain.states()==accepted,"Second cancellation ignored the current manual baseline");
+}
+static void stoppedVendorReplacement() {
+  NativePlugin original(gain("stopped-state"),48000,true),unrelated(gain("unrelated-state"),48000,true);
+  const auto initial=original.state(),other=unrelated.state();const auto source=original.editSource();
+  NativePlugin accepted(initial,48000,true);check(accepted.parameter(1,-9),"Prepare stopped accepted state");
+  const auto saved=accepted.state();
+  auto older=original.prepareStoppedReplacement(saved,true),plan=original.prepareStoppedReplacement(saved,true);
+  check(original.state()==initial&&original.editSource()==source,"Stopped preparation changed the audible vendor");
+  check(!unrelated.acceptsStoppedReplacement(*plan)&&!unrelated.adoptStoppedReplacement(*plan)&&unrelated.state()==other,
+    "Stopped replacement adopted another facade's plan");
+  auto invalid=saved;invalid.instanceID="different";bool refused=false;
+  try{(void)original.prepareStoppedReplacement(invalid,true);}catch(const std::invalid_argument &){refused=true;}
+  check(refused&&original.state()==initial,"Stopped replacement changed a persistent plugin identity");
+  check(original.adoptStoppedReplacement(*plan)&&plan->adopted&&original.state()==saved,
+    "Stopped replacement failed to restore accepted state");
+  check(original.editSource().incarnation!=source.incarnation&&plan->prepared->editSource()==source&&
+    plan->prepared->state()==initial&&unrelated.state()==other,"Stopped replacement lost native identity or retired its old owner early");
+  check(!original.adoptStoppedReplacement(*plan)&&!original.acceptsStoppedReplacement(*older)&&
+    !original.adoptStoppedReplacement(*older)&&original.state()==saved,"Stale stopped replacement replayed its old provider");
+  // Playback is prepared afresh after this stopped-only operation. No old
+  // schedule/voice/parameter cache is reused as a live replacement mechanism.
+  NativePlugin reopened(original.state(),48000,true);std::array<float,256> pcm;pcm.fill(1);
+  check(reopened.process(pcm.data(),128,0)&&std::abs(pcm.back()-std::pow(10.f,-9.f/20))<1e-6f,
+    "Reprepared stopped state did not render its accepted value");
+  // The published vendor can already belong to a completed live preset. Keep
+  // that stable facade and its retained preset owners intact during repair.
+  NativePlugin facade(initial,48000,true);auto preset=facade.preparePreset(saved,true,{});
+  facade.adoptPreset(*preset);refused=false;
+  try{(void)facade.prepareStoppedReplacement(initial,true);}catch(const std::runtime_error &){refused=true;}
+  check(refused,"Stopped repair entered an incomplete live vendor handoff");
+  std::array<float,2048> fade;fade.fill(1);check(facade.process(fade.data(),1024,0),"Finish prior live preset fixture");
+  const auto presetSource=facade.editSource();auto repair=facade.prepareStoppedReplacement(initial,true);
+  check(facade.adoptStoppedReplacement(*repair)&&facade.state()==initial&&repair->prepared->state()==saved&&
+    repair->prepared->editSource()==presetSource&&facade.editSource().incarnation!=presetSource.incarnation,
+    "Stopped repair failed behind a previously replaced stable scheduling facade");
+}
+static void stoppedGroupRepair() {
+  PluginChain chain({gain("repair-a"),gain("untouched"),gain("repair-c")},48000,true);
+  const auto accepted=chain.states();const auto middle=chain.editSource(1);
+  const std::array<ParameterChange,2> diverged{{{0,1,-9,0},{2,1,-12,0}}};
+  check(chain.enqueueParameters(diverged),"Prepare grouped repair divergence");chain.applyPending();
+  const auto before=chain.states();const auto first=chain.editSource(0),last=chain.editSource(2);
+  const std::array<PluginState,2> saved{accepted[0],accepted[2]};
+  auto bad=saved;bad[1].instanceID="missing";bool refused=false;
+  try{(void)chain.prepareStoppedRepair(bad);}catch(const std::invalid_argument &){refused=true;}
+  check(refused&&chain.states()==before&&chain.editSource(0)==first&&chain.editSource(2)==last,
+    "Invalid later repair target changed a valid prefix");
+  auto stale=chain.prepareStoppedRepair(saved);
+  const std::array<ParameterChange,1> later{{{1,1,-3,0}}};
+  check(chain.enqueueParameters(later),"Prepare intervening accepted write");chain.applyPending();
+  const auto newer=chain.states();
+  check(!chain.adoptStoppedRepair(*stale)&&chain.states()==newer&&chain.editSource(0)==first&&chain.editSource(2)==last,
+    "Stale grouped repair overwrote an intervening accepted write");
+  const std::array<ParameterChange,1> preview{{{2,1,-24,0}}};
+  check(chain.previewParameters(preview),"Prepare grouped repair transient refusal");chain.applyPending();
+  refused=false;try{(void)chain.prepareStoppedRepair(saved);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&chain.hasParameterPreview(2,1)&&chain.editSource(0)==first,"Opaque group discarded another transient owner");
+  const std::array<uint32_t,1> ids{1};check(chain.cancelParameterPreviews(2,ids),"Restore preview before explicit repair");chain.applyPending();
+  auto plan=chain.prepareStoppedRepair(saved);auto superseded=chain.prepareStoppedRepair(saved);
+  check(chain.states()==newer&&chain.adoptStoppedRepair(*plan)&&plan->adopted,"Adopt complete stopped native group");
+  const auto restored=chain.states();
+  check(restored[0]==accepted[0]&&restored[2]==accepted[2]&&restored[1]==newer[1]&&chain.editSource(1)==middle&&
+    chain.editSource(0).incarnation!=first.incarnation&&chain.editSource(2).incarnation!=last.incarnation,
+    "Group restoration changed an unrelated provider or lost accepted state");
+  check(parameter(chain,0,1).manualValue==0&&parameter(chain,2,1).manualValue==0&&parameter(chain,1,1).manualValue==-3,
+    "Group restoration left stale manual values");
+  check(plan->items[0].replacement->prepared->state()==before[0]&&plan->items[1].replacement->prepared->state()==before[2],
+    "Group restoration retired an old native owner before cleanup");
+  check(!chain.adoptStoppedRepair(*plan)&&!chain.adoptStoppedRepair(*superseded)&&chain.states()==restored,
+    "Old group replayed after native replacement");
+  PluginChain reopened(restored,48000,true);const auto pcm=render(reopened,512,128);
+  check(std::abs(pcm.back()-std::pow(10.f,-3.f/20))<1e-6f,"Reopened grouped repair changed unrelated accepted gain");
 }
 static void refusal(){
   PluginChain chain({gain("preview-a"),gain("preview-b")},48000,true);
@@ -164,6 +240,106 @@ static void recipeBlock(PluginChain &chain,Renderer &renderer,float *pcm,unsigne
 #endif
   check(okay,"Recipe preview render failed");
 }
+static void trackedCancellation(unsigned rate,unsigned block) {
+  using Target=PluginChain::ParameterPreviewTarget;
+  using State=PluginChain::PreviewCancellationState;
+  PluginChain chain({gain("tracked-a"),gain("tracked-b"),gain("unrelated")},rate,true);
+  PluginChain other({gain("tracked-a"),gain("tracked-b")},rate,true);
+  const auto original=chain.states();
+  const std::array<Target,3> targets{{{0,1},{1,1},{0,1}}};
+  const auto clean=chain.cancelParameterPreviewsTracked(targets);
+  check(clean&&chain.parameterPreviewCancellationState(*clean)==State::Processed,
+    "Clean cancellation invented pending vendor work");
+  check(other.parameterPreviewCancellationState(*clean)==State::Invalid,
+    "Cancellation receipt crossed a chain owner");
+  const std::array<ParameterChange,3> preview{{{0,1,-6,0},{1,1,-12,0},{2,1,-3,0}}};
+  check(chain.previewParameters(preview),"Tracked preview fixture failed");
+  check(chain.parameterPreviewCancellationState(*clean)==State::Invalid,"New preview left an old receipt valid");
+  render(chain,2048,block);
+  const auto receipt=chain.cancelParameterPreviewsTracked(targets);
+  check(receipt&&chain.parameterPreviewCancellationState(*receipt)==State::Pending,
+    "Queued cancellation was acknowledged before processing");
+  check(!chain.hasParameterPreview(0,1)&&!chain.hasParameterPreview(1,1)&&chain.hasParameterPreview(2,1),
+    "Tracked cancellation changed unrelated preview ownership");
+  chain.applyPending();
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,
+    "Host queue consumption was mistaken for vendor processing");
+  std::array<float,2> empty{1,1};process(chain,empty.data(),0);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,"Empty processing acknowledged cancellation");
+  const auto pcm=render(chain,2048,block);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Processed&&
+    std::abs(pcm.back()-std::pow(10.f,-3.f/20))<1e-6f,"Processed group did not restore accepted PCM");
+  check(chain.states()[0]==original[0]&&chain.states()[1]==original[1],"Tracked cancellation changed accepted saved state");
+  // A clean target can still have an accepted write waiting for the vendor.
+  check(chain.parameter(1,1,-9),"Queue newer accepted baseline");
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Invalid,"New accepted input left receipt valid");
+  const auto accepted=chain.cancelParameterPreviewsTracked(targets);
+  check(accepted&&chain.parameterPreviewCancellationState(*accepted)==State::Pending,"Clean target hid its pending accepted value");
+  chain.applyPending();
+  check(chain.parameterPreviewCancellationState(*accepted)==State::Pending,"Accepted queue delivery acknowledged processing");
+  render(chain,2048,block);
+  check(chain.parameterPreviewCancellationState(*accepted)==State::Processed&&parameter(chain,1,1).manualValue==-9,
+    "Cancellation overwrote a newer accepted baseline");
+  // Invalid later targets and full queues must preserve all preview ownership.
+  check(chain.previewParameters(preview),"Prepare tracked cancellation refusal");render(chain,2048,block);
+  const std::array<Target,2> invalid{{{0,1},{1,999}}};
+  check(!chain.cancelParameterPreviewsTracked(invalid)&&chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),
+    "Invalid later tracked target reset a valid prefix");
+  std::vector<ParameterChange> crowded(4095,{2,1,-3,0});
+  check(chain.enqueueParameters(crowded)&&!chain.cancelParameterPreviewsTracked(targets)&&
+    chain.hasParameterPreview(0,1)&&chain.hasParameterPreview(1,1),"Tracked queue refusal partially restored a group");
+  render(chain,2048,block);
+  const auto recovered=chain.cancelParameterPreviewsTracked(targets);check(bool(recovered),"Tracked restore did not recover after queue drain");
+  render(chain,2048,block);check(chain.parameterPreviewCancellationState(*recovered)==State::Processed,"Recovered cancellation never completed");
+  // Retain an opaque receipt across replacement, but never accept it for the
+  // replacement provider merely because the stable document ID is unchanged.
+  auto repair=chain.prepareStoppedRepair(std::span(original.data(),2));
+  check(chain.adoptStoppedRepair(*repair)&&chain.parameterPreviewCancellationState(*recovered)==State::Invalid,
+    "Replaced provider inherited an old processing acknowledgement");
+}
+static void cancellationBacklog() {
+  using State=PluginChain::PreviewCancellationState;
+  PluginChain chain({gain("backlog-a"),gain("backlog-b")},48000,true);
+  const std::array<ParameterChange,1> preview{{{0,1,-12,0}}};
+  check(chain.previewParameters(preview),"Prepare cancellation backlog preview");render(chain,512,128);
+  for(unsigned n=0;n<128;++n)check(chain.parameter(1,1,0),"Prepare separate pending control batches");
+  const std::array<PluginChain::ParameterPreviewTarget,1> targets{{{0,1}}};
+  const auto receipt=chain.cancelParameterPreviewsTracked(targets);check(bool(receipt),"Queue restore behind ordinary traffic");
+  render(chain,128,128);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Pending,"Unconsumed restore was acknowledged by another processor");
+  render(chain,1024,128);
+  check(chain.parameterPreviewCancellationState(*receipt)==State::Processed,"Restore was not acknowledged after its own processing");
+}
+static void processingAcknowledgement() {
+  NativePlugin plugin(gain("acknowledgement"),48000,true);
+  std::array<float,256> pcm;pcm.fill(1);
+  check(plugin.parameter(1,-6),"Prepare native acknowledgement control");plugin.queuedControl(31);
+  check(!plugin.processedControl(31),"Native parameter queue acknowledged delivery");
+  check(plugin.process(pcm.data(),0,0)&&!plugin.processedControl(31),"Zero-frame vendor path acknowledged delivery");
+  check(!plugin.process(pcm.data(),4097,0)&&!plugin.processedControl(31),
+    "Rejected vendor processing acknowledged delivery");
+  check(plugin.process(pcm.data(),128,0)&&plugin.processedControl(31)&&!plugin.processedControl(32),
+    "Successful processing failed to distinguish its control serial");
+}
+static void privateBaselineVerification() {
+  NativePlugin baseline(gain("private-baseline"),48000,true);
+  const auto accepted=baseline.state();
+  NativePlugin changed(accepted,48000,true);check(changed.parameter(1,-9),"Prepare private baseline verification difference");
+  const auto observed=changed.state();
+  unsigned guards=0;verifyPluginParameterBaseline(accepted,observed,48000,[&]{++guards;});
+  check(guards>4&&changed.state()==observed&&baseline.state()==accepted,"Private verification changed an original provider or omitted revalidation");
+  auto wrong=observed;wrong.instanceID="another-provider";bool refused=false;
+  try{verifyPluginParameterBaseline(accepted,wrong,48000);}catch(const std::runtime_error &){refused=true;}
+  check(refused&&changed.state()==observed,"Private baseline verification accepted another stable identity");
+  wrong=observed;wrong.midiChannel=2;refused=false;
+  try{verifyPluginParameterBaseline(accepted,wrong,48000);}catch(const std::runtime_error &){refused=true;}
+  check(refused,"Private baseline verification accepted changed musical routing");
+  guards=0;refused=false;
+  try{verifyPluginParameterBaseline(accepted,observed,48000,[&]{if(++guards==3)throw std::runtime_error("Fixture context changed");});}
+  catch(const std::runtime_error &){refused=true;}
+  check(refused&&guards==3&&changed.state()==observed&&baseline.state()==accepted,
+    "Reentrant verification refusal continued vendor work or changed original state");
+}
 static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
   auto doc=Document::demo();
   doc->transaction([&](OpenMPT::CSoundFile &song){
@@ -209,9 +385,13 @@ static void recipePreview(unsigned rate,unsigned block,bool sampleCopies){
   check(accepted.signal.library[0].nodes[1].plugin.state==initial.signal.library[0].nodes[1].plugin.state&&doc->native()==untouched,"Recipe preview altered opaque state or the owning document");
 }
 int main(){try{
+  stoppedVendorReplacement();
+  stoppedGroupRepair();
   ownership();
+  processingAcknowledgement();cancellationBacklog();privateBaselineVerification();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})workflow(rate,block);
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})takeCancellation(rate,block);
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})trackedCancellation(rate,block);
   refusal();
   for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,511u})for(bool samples:{false,true})recipePreview(rate,block,samples);
   std::cout<<"PASS transient parameter PCM, manual/opaque state isolation, reopen, current-baseline cancel, atomic refusal and callback audit\n";

@@ -73,3 +73,139 @@ palette layout. Repeat scratch drag/release/status and visible Main Undo/Redo.
 Retain prior unaffected resize/parameter observations where inputs match. This
 does not replace a Narrator/high-contrast/DPI journey or temporal flicker/audio
 measurement. No new production package or main merge is approved yet.
+
+## Prepared combined checkpoint
+
+`bin/mac-gesture-20261022/palette-availability/` now contains parsed, unexecuted
+build/check/package scripts and a fresh isolated foreground launcher. Its
+`freeze.json` pins source `077e35f290c335226ff13655a5d8706df6fc3da3` and the
+15:07:58UTC gate. It builds the three targets together, selects the five native
+groups above and all eight actual-app cases, and retains source/hash checks and
+strict automated/foreground package guards. The earlier `scratch-status/`
+preparation is superseded and must not be executed separately. The qualification
+checkout remains on96b until its retained-binary checks are finished; advance it
+only to the frozen candidate before the single next build. Backup source is
+pushed on `codex/mac-gesture-intake`; PR #6 remains96b until that checkpoint.
+
+At15:01UTC, after the96b retained x64 replay finished, the clean qualification
+checkout was fast-forwarded to077e. Build/check receipts are still absent in the
+new folder: preparation and source alignment do not mean a build has started.
+Later Mac-only intake/restore source on the backup branch is intentionally
+outside this freeze and needs its own coherent qualification checkpoint.
+
+## Executed 15:08 checkpoint
+
+Frozen077e built once at15:08:30–15:10:49UTC. ARM64 Release executable SHA256:
+`13bf7e429db3d6555635a17ef3247f77320a857369aff0b5c70d29611f9dae08`.
+All five native groups passed in109.36s (command-results74.63s,
+scratch11.74s); all eight selected actual-app cases passed in29.117s.
+Original failed96b aggregate evidence is retained. Source/hash checks passed.
+
+Fresh Computer Use on owned PID38224 observed default-size Commands, unavailable
+Edit/Plugins Undo explanations and disabled Run. After a scratch edit, Edit Undo
+was available; selecting it and clicking Run executed history and closed the
+palette. Scratch middle-point drag changed0.5/100 to0.5625/71.4656290531777,
+kept the curve visible at release and reported a successful phrase save. Main
+Ctrl+Z/Ctrl+Y refreshed the retained curve correctly. Dock search accepted gain,
+Backspace to gai, Tab/Shift+Tab and subsequent n back to gain during playback.
+The disposable copy was saved and the QA process exited normally; original F04
+hash remained unchanged. No musician process or audio route was changed.
+
+Computer Use still exposes floating windows only as related UI. Typing targeted
+at Main reactivates Main; it did not qualify direct palette/floating-field typing.
+Later UIA set_value attempts reported cached-element unavailability; coordinate
+selection worked. Dock focus was proven by the caret and actual text changes,
+but Computer Use's focused_element reported Main: exact accessible-focus reporting
+needs follow-up. Native keyboard/caret assertions passed. These limits are
+recorded in `palette-availability/foreground-check.json`; no Narrator, compact
+resized palette, high-DPI or temporal flicker claim is made.
+
+Silent WASAPI ran350.2746093s at48kHz/480frames:29 deadline overruns,
+zero device errors/starvation/processor faults. Realtime audit and sustained
+presentation qualification are false. This remains functional UI evidence.
+
+A separate candidate package is available at
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-077e35f29/ScreamSeq.exe`.
+Its copied executable/scanner hashes, ARM64 PE machines, runtime and notices were
+verified. BuildInfo and ReleaseProvenance record frozen source; it is not a full
+parity release. The newer Mac intake/restoration source is excluded.
+
+PR#6 now points at077e. Windows run39802007518 and Mac run39802008354 are
+the paired checkpoint, still running at15:15UTC; do not restart them. The latest
+compile start was15:09:04UTC, so no next coordinated build before16:09:04UTC.
+Main has not been merged. CI and current native audio evidence still require
+review before integration; retained96b reciprocal exchange is recorded separately.
+
+### 15:50UTC CI review and exact-binary audio replay
+
+Windows39802007518/job119904965173 built successfully and passed158 portable/
+worker registrations,50 native editor/preference/recovery registrations, scratch,
+vendor-ownership and conformance gates. The93-case app group failed15 times across
+12 distinct playback/startup cases (three additional teardown records), with two
+skips. Transport cases explicitly reported that a WASAPI endpoint was required;
+other failures occurred before a live playback clock or app startup. This is
+consistent with the preceding runner-device limitation, not proof by itself
+that every assertion would pass with a device. The CI result remains failed.
+
+Downloaded artifact12437828292 was verified against GitHub ZIP SHA256
+`ba52de3bee720e98a7ea5f5143a2e0d9b027cdd97348b369420a737d92d6a485`.
+Its retained x64 executable SHA256 is
+`70a9afa713eaeaf7df5815a41df29c69b99fd9a8dfd43b33b06f2cd282259947`.
+Build receipt source5159720f4f2355c0a8f16ed6d433ff625d4d9f06 is the synthetic
+PR merge; its tree was checked equal to077e before execution. Archive, nested
+bundle, executable and build-receipt hashes and the x64 PE machine were verified.
+
+All12 affected cases then passed unchanged in34.950s using that exact executable
+on this Windows ARM64 host under x64 emulation, silent private desktops and the
+available endpoint. No rebuild, broader rerun, assertion/timeout relaxation or
+system route change. This replay kept the preceding local12-case order; it is
+not a rerun of all93 tests in their CI order or native x64 hardware qualification.
+Receipts and original CI logs are under
+`bin/mac-gesture-20261022/palette-availability/ci/windows-x64/`, particularly
+`verified-identity.json`, `device-order-diagnostic.json` and its log. Executable
+hash remained unchanged. All owned replay processes were closed by the harness.
+
+Mac ARM job119904967607 passed all gates. Intel119904968198 built successfully
+and remained in its test phase at the last check. No CI job was restarted.
+Main integration remains pending; a merge-triggered CI run also counts toward
+the coordinated16:09:04UTC gate. Newer session code is outside this candidate.
+
+### 16:02UTC exact search-focus observation
+
+A fresh owned077e process29036 used another disposable F04 copy. Computer Use
+clicked dock search, typed `gain`, moved forward with Tab and returned with
+Shift+Tab. The existing read-only `qualify_foreground_focus.ps1` observer passed
+after the click and after Shift+Tab: native GUI-thread focus and global UIA
+GetFocusedElement both identified the exact search HWND, with ValuePattern,
+TextPattern and selection available. The observer supplied no input or activation.
+Receipts: `palette-availability/focus-observer/search-click.json` and
+`search-shift-tab.json` (including observer/binary hashes and process creation).
+
+Computer Use's `focused_element` still said Main in the same sequence. The
+earlier discrepancy is therefore a tool reporting observation for this field,
+not a demonstrated application accessible-focus defect. This does not establish
+Narrator behavior or floating-window typing. Alt+F4 closed only the QA process,
+normal exit0, original F04 unchanged. Its103.526s silent48kHz/480-frame diagnostic
+reported8 deadline overruns and no device/starvation/processor errors; realtime
+and temporal-presentation qualification remain false.
+
+Both Mac job logs now show all scheduled gates passed, including Intel's native
+interface and fixture stages ending15:49UTC. The run reports success; the jobs
+listing briefly retained an in-progress Intel status despite all steps complete.
+PR#6's description now names077e and this bounded evidence, and is ready for
+review. It contains no later Mac take session/restoration source. Do not trigger
+its merge build before16:09:04UTC.
+
+## Integration at the next checkpoint
+
+At16:09UTC both Mac job statuses were confirmed terminal success. PR#6 was
+merged normally as `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, after the gate,
+with an expected-head guard on077e. Its tree matches077e exactly. Local main
+fast-forwarded cleanly; later unbuilt Mac recording work remains on its temporary
+branch, which now includes main. No unqualified source was added to this merge.
+
+The normal main push starts the coordinated checkpoint: Windows39811540714,
+Mac39811541170. Latest observed build start16:09:52UTC sets the next earliest
+checkpoint to17:09:52UTC. Neither an additional local build nor a CI rerun was
+requested. The read-only main receipts live in
+`bin/mac-gesture-20261022/main-0fe8f3400/ci-checkpoint.json`.

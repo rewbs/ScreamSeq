@@ -19,12 +19,13 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   need(gesture!=nullptr,"Parameter recording gesture export missing");
   const auto rejected=[&](auto work){bool refused=false;try{work();}catch(const std::exception &){refused=true;}need(refused,"Parameter recording allowed an unsafe lifecycle operation");};
   const auto refusedStart=[&](const char *message) {
-    const auto revision=c.view()->session.revision;bool classified=false;
+    const auto revision=c.view()->session.revision;bool classified=false;std::string diagnostic="No refusal returned";
     try{invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});}
-    catch(const Api::ApiError &error){classified=error.code==-32002&&error.outcome&&
+    catch(const Api::ApiError &error){diagnostic=error.what();classified=error.code==-32002&&error.outcome&&
       error.outcome->state==Tracker::CommitOutcome::NotCommitted&&!error.completed&&
       std::string(error.what()).find(message)!=std::string::npos;}
-    need(classified&&c.view()->session.revision==revision&&
+    if(!classified)throw std::runtime_error(std::string("Recording start refusal must be classified before intake; expected ")+message+", received "+diagnostic);
+    need(c.view()->session.revision==revision&&
       call(c,"automation.recording.get",Json::object()).at("retained")==false&&
       call(c,"plugin.state.get",{{"plugin",id}})==baseline,
       "Refused recording start retained an uncertain write, take, or changed baseline/history");
@@ -33,18 +34,29 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   auto *playback=c.prepare(48000,Json::object(),true,true).get();active=true;
   uint64_t origin=hostTime100ns();std::array<float,8192> pcm{};
   refusedStart("first timed buffer");
-  // A native device may still report a valid correlation after the musical
-  // frame timeline has rejected a boundary. Do not offer an endless startup
-  // retry, or leave native close/Record protected by a nonexistent take.
+  // An unstable native presentation estimate is an unmapped interval, not a
+  // proven device discontinuity. Keep those two admission contracts distinct.
   need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false})&&
     playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false}),
-    "Rejected-clock fixture failed to render");
-  refusedStart("host-end-regression");
+    "Presentation-estimate fixture failed to render");
+  const auto timeline=playback->recordingTimeline();
+  need(timeline->unmappedCorrelations.load()==1&&timeline->absoluteFrames.generation()==41&&
+    timeline->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::None,
+    "Unmapped presentation estimate invalidated otherwise valid recording coverage");
+  // A real device discontinuity remains terminal even if the next native
+  // notification carries a syntactically valid timestamp. Start must reject
+  // before publishing any take/provider owner or changing musical history.
+  need(playback->render(pcm.data(),4096,RenderTime{origin,42,48000,true,true,false}),
+    "Discontinuous-clock fixture failed to render");
+  need(timeline->absoluteFrames.generation()==0&&
+    timeline->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::Invalidated,
+    "True device discontinuity did not invalidate recording admission");
+  refusedStart("playback-invalidated");
   active=false;playback=c.prepare(48000,Json::object(),true,true).get();active=true;origin=hostTime100ns();
   const auto renderAhead=[&]{
     const auto limit=hostTime100ns()+1000000;
     for(unsigned n=0;origin<=limit&&n<1024;++n) {
-      need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false}),"Parameter recording timed render failed");
+      need(playback->render(pcm.data(),4096,RenderTime{origin,41,48000,true,false,false,true}),"Parameter recording timed render failed");
       origin+=uint64_t(4096)*hostTicksPerSecond/48000;
     }
     need(origin>limit,"Parameter recording fixture could not cover its clock");
@@ -53,6 +65,13 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   auto take=invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});
   need(take.at("capturing")==true&&take.at("retained")==true,"Worker did not retain an armed parameter take");
   const auto token=take.at("take");const auto beforeRevision=c.view()->session.revision;
+  for(const auto &flag:Json::array({true,1,"true",nullptr})) {
+    rejected([&]{invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",flag}});});
+    need(c.view()->session.revision==beforeRevision&&
+      call(c,"automation.recording.get",Json::object()).at("completed")==false&&
+      call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+      "Saved-state recovery accepted an unkept take or malformed flag, or changed history/baseline");
+  }
   rejected([&]{invoke(c,"document.patch",{{"title","Must not change"}});});
   rejected([&]{c.prepare(48000,Json::object(),true,true).get();});
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.25)>0,"Parameter recording input failed");});
@@ -83,6 +102,16 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
     first.at("events")[0].at("timestamp")==std::to_string(controlTime)&&first.at("events")[0].at("value")==.75&&
     second.at("events")[0].at("value")==.25&&!first.at("events")[0].at("frame").is_null(),
     "Paginated take review lost original event time, value or mapped frame");
+  const Json timingRequest={{"take",token},{"plugin",id},{"parameter",7},{"limit",1},{"includeTiming",true}};
+  auto inspected=call(c,"automation.recording.events",timingRequest);
+  need(inspected.at("events")[0].at("timing").at("status")=="retained-frame",
+    "Worker omitted the shared read-only timing projection");
+  inspected["events"][0].erase("timing");
+  need(inspected==first&&c.view()->session.revision==beforeRevision,"Timing inspection changed event/history");
+  auto invalidTiming=timingRequest;invalidTiming["includeTiming"]=1;
+  rejected([&]{call(c,"automation.recording.events",invalidTiming);});
+  invalidTiming=timingRequest;invalidTiming["limit"]=17;
+  rejected([&]{call(c,"automation.recording.events",invalidTiming);});
   const auto recovery=recoveryCapture(c);
   need(recovery->hasRecording&&recovery->needsProtection,"Worker parameter take was omitted from recovery");
   const Json delivery={{"version",1},{"reviewOnly",true},{"document",c.view()->session.documentId},{"revision",beforeRevision},
@@ -107,13 +136,44 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   take=invoke(c,"automation.recording.stop",{{"take",token}});
   need(take.at("capturing")==false&&!take.contains("intakeError"),"Worker Stop failed its fixed native drain");
   const auto stopped=stops;
+  Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.875)>0,"Post-Stop recovery input failed");});
   take=invoke(c,"automation.recording.commit",{{"take",token},{"acknowledgeLoss",false}});
-  need(take.at("completed")==true&&take.at("retained")==false&&take.at("changed")==true&&
-    !take.contains("restorationError")&&stops==stopped&&active,"Worker parameter commit failed or stopped playback");
+  need(take.at("completed")==true&&take.at("retained")==true&&take.at("changed")==true&&
+    take.contains("restorationError")&&stops==stopped&&active,"Worker Keep lost later input, failed to commit or stopped playback");
   const auto recorded=call(c,"automation.get",Json::object());
   need(recorded!=baselineAutomation&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter commit lost points or changed opaque manual state");
+  const auto keptRevision=c.view()->session.revision;
+  const auto refusedKeptDiscard=[&] {
+    bool refused=false;
+    try{invoke(c,"automation.recording.discard",{{"take",token}});}
+    catch(const Api::ApiError &e){refused=e.code==-32002;}
+    const auto retained=call(c,"automation.recording.get",Json::object());
+    need(refused&&retained.at("retained")==true&&retained.at("completed")==true&&
+      c.view()->session.revision==keptRevision&&call(c,"automation.get",Json::object())==recorded&&
+      call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+      "Discard bypassed completed-take recovery or changed retained input, music or history");
+  };
+  refusedKeptDiscard();
+  rejected([&]{invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});});
+  active=false;playback->chain().applyPending();
+  take=invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});
+  need(take.at("retained")==true&&take.at("changed")==false&&take.contains("restorationError")&&
+    c.view()->session.revision==keptRevision,"Explicit recovery replaced an open editor or changed kept history");
+  invoke(c,"plugin.editor.close",{{"slot",0}});
+  refusedKeptDiscard();
+  take=invoke(c,"automation.recording.commit",{{"take",token}});
+  need(take.at("retained")==true&&take.at("changed")==false,
+    "Ordinary Finish restoration silently abandoned post-Stop input after closing its editor");
+  take=invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});
+  need(take.at("retained")==false&&take.at("completed")==true&&take.at("changed")==false&&
+    !take.contains("restorationError")&&c.view()->session.revision==keptRevision&&
+    call(c,"automation.get",Json::object())==recorded&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+    "Explicit closed-editor recovery lost kept points/manual state or inserted history");
   rejected([&]{invoke(c,"automation.recording.commit",{{"take",token}});});
+  invoke(c,"plugin.editor.open",{{"slot",0}});call(c,"flushPluginEditors",{{"force",true}});
+  need(c.view()->session.revision==keptRevision,"Reopening restored editor introduced another history edit");
+  active=true; // Resume the existing deterministic test clock, not a new host.
   renderAhead();take=invoke(c,"automation.recording.start",{{"plugins",Json::array({id})}});
   const auto discardedToken=take.at("take");const auto discardRevision=c.view()->session.revision;
   Tracker::WindowsVST3::pluginMainCall([&]{need(gesture(.75)>0,"Discard parameter input failed");});

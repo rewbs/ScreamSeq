@@ -16,6 +16,7 @@
 #endif
 #include <cmath>
 #include <windows.h>
+#include <commctrl.h>
 #include <algorithm>
 #include <string>
 #include <array>
@@ -117,10 +118,38 @@ extern "C" __declspec(dllexport) int FixtureViews(int what) {
 }
 class View final : public IPlugView {
  std::atomic<uint32> refs{1}; HWND child=nullptr; IPlugFrame *frame=nullptr;
+ HWND slider=nullptr,label=nullptr; IEditController *controller;
  IComponentHandler *handler; ViewRect size{0,0,460,180};
+ static constexpr UINT_PTR subclassID=0x56535433;
+ void showValue(double value) {
+  const auto text=L"Gain: "+std::to_wstring(int(std::lround(value*1000)))+L" / 1000";
+  SetWindowTextW(label,text.c_str());
+ }
+ void editSlider() {
+  const double value=double(SendMessageW(slider,TBM_GETPOS,0,0))/1000.;
+  // A real vendor-owned control: no fixture export or host API manufactures
+  // the gesture. Native input reaches IComponentHandler on the UI owner.
+  if(handler)handler->beginEdit(7);
+  controller->setParamNormalized(7,value);
+  if(handler){handler->performEdit(7,value);handler->endEdit(7);}
+  showValue(value);
+ }
+ static LRESULT CALLBACK notifications(HWND window,UINT message,WPARAM w,LPARAM l,UINT_PTR id,DWORD_PTR data) {
+  auto &self=*reinterpret_cast<View *>(data);
+  if(message==WM_HSCROLL&&reinterpret_cast<HWND>(l)==self.slider){
+   if(LOWORD(w)!=TB_ENDTRACK)self.editSlider();return 0;
+  }
+  if(message==WM_SIZE){
+   const int width=std::max(1,int(LOWORD(l))-24);
+   if(self.label)MoveWindow(self.label,12,12,width,24,TRUE);
+   if(self.slider)MoveWindow(self.slider,12,44,width,40,TRUE);
+  }
+  if(message==WM_NCDESTROY)RemoveWindowSubclass(window,notifications,id);
+  return DefSubclassProc(window,message,w,l);
+ }
 public:
- View(IComponentHandler *h,double initial):handler(h){initialViewParameter=initial;if(handler)handler->addRef();reviewView=this;}
- ~View(){if(child)removed();setFrame(nullptr);if(handler)handler->release();reviewView=nullptr;}
+ View(IComponentHandler *h,IEditController *c,double initial):controller(c),handler(h){initialViewParameter=initial;controller->addRef();if(handler)handler->addRef();reviewView=this;}
+ ~View(){if(child)removed();setFrame(nullptr);if(handler)handler->release();controller->release();reviewView=nullptr;}
  tresult PLUGIN_API queryInterface(const TUID id,void **out) override {
   *out=nullptr;if(same(id,IPlugView::iid)||same(id,FUnknown::iid)){*out=this;addRef();return kResultOk;}return kNoInterface;
  }
@@ -130,11 +159,18 @@ public:
  tresult PLUGIN_API attached(void *parent,FIDString p) override {
   if(isPlatformTypeSupported(p)!=kResultOk||!IsWindow((HWND)parent))return kResultFalse;
   child=CreateWindowExW(0,L"STATIC",L"VST3 plugin-owned gain",WS_CHILD|WS_VISIBLE,0,0,460,180,(HWND)parent,nullptr,GetModuleHandleW(nullptr),nullptr);
-  if(!child)return kResultFalse;++attachedViews;
+  if(!child)return kResultFalse;
+  INITCOMMONCONTROLSEX common{sizeof(common),ICC_BAR_CLASSES};InitCommonControlsEx(&common);
+  label=CreateWindowExW(0,L"STATIC",L"Gain",WS_CHILD|WS_VISIBLE,12,12,436,24,child,reinterpret_cast<HMENU>(7000),GetModuleHandleW(nullptr),nullptr);
+  slider=CreateWindowExW(0,TRACKBAR_CLASSW,L"Plugin-owned Gain",WS_CHILD|WS_VISIBLE|WS_TABSTOP|TBS_HORZ|TBS_NOTICKS,12,44,436,40,child,reinterpret_cast<HMENU>(7001),GetModuleHandleW(nullptr),nullptr);
+  if(!label||!slider||!SetWindowSubclass(child,notifications,subclassID,reinterpret_cast<DWORD_PTR>(this))){DestroyWindow(child);child=slider=label=nullptr;return kResultFalse;}
+  SendMessageW(slider,TBM_SETRANGE,TRUE,MAKELPARAM(0,1000));SendMessageW(slider,TBM_SETPAGESIZE,0,100);
+  SendMessageW(slider,TBM_SETPOS,TRUE,625);showValue(.625);
+  ++attachedViews;
   ViewRect r{0,0,520,220};if(frame)frame->resizeView(this,&r);
   if(handler){handler->beginEdit(7);handler->performEdit(7,.625);handler->endEdit(7);}return kResultOk;
  }
- tresult PLUGIN_API removed() override{if(child){DestroyWindow(child);child=nullptr;++removedViews;}return kResultOk;}
+ tresult PLUGIN_API removed() override{if(child){DestroyWindow(child);child=slider=label=nullptr;++removedViews;}return kResultOk;}
  tresult PLUGIN_API onWheel(float) override{return kResultFalse;}
  tresult PLUGIN_API onKeyDown(char16,int16,int16) override{return kResultFalse;}
  tresult PLUGIN_API onKeyUp(char16,int16,int16) override{return kResultFalse;}
@@ -456,7 +492,7 @@ public:
   tresult PLUGIN_API selectUnit(UnitID id) override{return id==0||id==7?kResultOk:kInvalidArgument;}
   tresult PLUGIN_API getUnitByBus(MediaType,BusDirection,int32,int32,UnitID &) override{return kNotImplemented;}
   tresult PLUGIN_API setUnitProgramData(int32,int32,IBStream *) override{return kNotImplemented;}
-  IPlugView *PLUGIN_API createView(FIDString) override { return new View(handler, gain.load()); }
+  IPlugView *PLUGIN_API createView(FIDString) override { return new View(handler, this, gain.load()); }
 };
 class Factory final : public IPluginFactory2 {
 public:

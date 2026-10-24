@@ -1,6 +1,7 @@
 #include "windows/Session/HostedProject.hpp"
 #include "windows/Project/NativeProject.hpp"
 #include "editor/NativeEffects.hpp"
+#include "editor/hosted/RecordedGestureCapture.hpp"
 #include "windows/Audio/RealtimeAudit.hpp"
 #include <new>
 #include <cmath>
@@ -57,6 +58,114 @@ static void recordingTiming(Tracker::Document &doc,const Project::ProjectState &
   check(!timeline->stopped.load()&&!timeline->locate(origin+1000,7)&&!timeline->locate(origin+1000,8)&&timeline->locate(origin+1001000,8).has_value(),"a pinned take cannot join a new live device stream");
   check(playback.render(audio.data(),4096),"legacy untimed render");
   check(!timeline->locate(origin+1001000,8)&&timeline->generation.load()==0,"offline legacy render explicitly clears hardware origin");
+  // A forward raw device correlation can project behind the preceding buffer.
+  // Preserve valid coverage, but never manufacture musical time for that gap.
+  HostedProjectPlayback jitter(doc,state,48000,{},true),untimed(doc,state,48000,{},true);
+  const auto retained=jitter.recordingTimeline();std::vector<float> reference(audio.size());
+  auto renderCorrelation=[&](unsigned count,uint64_t start){
+    bool mapped=false,plain=false;
+    {AudioAudit::Scope scope;
+      mapped=jitter.render(audio.data(),count,RenderTime{start,9,48000,true});
+      plain=untimed.render(reference.data(),count);}
+    check(mapped&&plain,"correlation fixture renders both paths");
+    check(std::equal(audio.begin(),audio.begin()+count*2,reference.begin(),[](float a,float b){return std::abs(a-b)<1e-6f;}),
+      "unmapped correlations do not alter PCM");
+  };
+  renderCorrelation(480,origin);
+  check(retained->locateFrame(origin+1000,9)==4,"initial absolute frame coverage");
+  renderCorrelation(576,origin-69313); // Observed 6.93ms backwards projection.
+  check(retained->unmappedCorrelations.load()==1&&retained->absoluteFrames.generation()==9,
+    "native projection refusal retains the valid take epoch");
+  check(retained->endHostTime.load()==origin+100000&&retained->locateFrame(origin+1000,9)==4,
+    "refusal leaves prior coverage and bounds exact");
+  renderCorrelation(17,origin+1000); // Start advances; end alone regresses.
+  check(retained->unmappedCorrelations.load()==2,"end-only projection regression is also unmapped");
+  renderCorrelation(480,origin+220000);
+  check(!retained->locateFrame(origin+150000,9)&&!retained->locate(origin+150000,9),
+    "neither absolute nor row time interpolates across the unmapped gap");
+  check(retained->locateFrame(origin+221000,9)==1077,
+    "resumed coverage retains actual frames including rendered timing holes");
+  check(retained->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::None,
+    "strict shared timeline remains healthy without receiving invalid native intervals");
+  {AudioAudit::Scope scope;jitter.render(audio.data(),480,RenderTime{0,10,48000,false,true});}
+  check(retained->absoluteFrames.generation()==0&&
+    retained->absoluteFrames.failureDetails().reason==Tracker::RecordingFrameTimeline::Failure::Invalidated,
+    "proven hardware discontinuity still invalidates the retained absolute timeline");
+  {AudioAudit::Scope scope;jitter.render(audio.data(),480,RenderTime{origin+500000,10,48000,true});}
+  check(!retained->locateFrame(origin+501000,10),"a failed hardware epoch cannot be revived by later estimates");
+  HostedProjectPlayback sliced(doc,state,48000,{},true);
+  const auto slicedClock=sliced.recordingTimeline();
+  {AudioAudit::Scope scope;sliced.render(audio.data(),8193,RenderTime{origin,11,48000,true});}
+  const auto backwardsSlice=RenderTime{origin,11,48000,true}.offset(4096);
+  {AudioAudit::Scope scope;sliced.render(audio.data(),8193,backwardsSlice);}
+  check(slicedClock->unmappedCorrelations.load()==1&&slicedClock->absoluteFrames.generation()==11,
+    "large callbacks reject only the backwards internal slice");
+  const auto resumed=backwardsSlice.offset(4100).hostTime+1;
+  const auto resumedFrame=slicedClock->locateFrame(resumed,11);
+  check(resumedFrame&&*resumedFrame>=12292&&*resumedFrame<=12293,
+    "large callback recovery preserves actual frame origin across its rejected first slice");
+  // Exercise the native WASAPI boundary contract through the actual renderer,
+  // including its internal slices. Absolute plugin frames wait for the next
+  // correlation; exact nominal-clock callers above retain their own contract.
+  for(unsigned rate:{44100u,48000u,96000u})for(unsigned block:{17u,128u,4096u,8193u}) {
+    HostedProjectPlayback correlated(doc,state,rate,{},true),plain(doc,state,rate,{},true);
+    const auto clock=correlated.recordingTimeline();
+    const auto duration=uint64_t(block)*10000000/rate;
+    const auto boundary=[&](uint64_t start){return RenderTime{start,13,rate,true,false,false,true};};
+    auto renderBoth=[&](RenderTime time) {
+      bool a=false,b=false;
+      {AudioAudit::Scope scope;a=correlated.render(audio.data(),block,time);b=plain.render(reference.data(),block);}
+      check(a&&b,"correlated playback renders");
+      check(std::equal(audio.begin(),audio.begin()+block*2,reference.begin(),[](float a,float b){return std::abs(a-b)<1e-6f;}),
+        "delayed frame correlation changes neither audio nor callback partition");
+    };
+    renderBoth(boundary(origin));
+    check(clock->absoluteFrames.generation()==0,"unconfirmed first boundary publishes no estimated absolute interval");
+    const auto second=origin+duration+2266;
+    renderBoth(boundary(second));
+    const auto input=origin+duration+647;
+    const auto expected=uint64_t(static_cast<long double>(input-origin)*block/(second-origin)*48000/rate);
+    check(clock->locateFrame(input,13)==expected,"input in observed nominal-duration gap maps to its actual rendered interval");
+    check(!clock->absoluteFrames.locate(second,13),"current pending boundary has no invented future coverage");
+    const auto third=second+duration;
+    auto unavailable=boundary(third);unavailable.valid=false;renderBoth(unavailable);
+    renderBoth(boundary(third+duration));
+    check(!clock->absoluteFrames.locate(second+1,13)&&!clock->absoluteFrames.locate(third+1,13),
+      "actual host leaves missing-correlation buffers unmapped");
+    renderBoth(boundary(third+2*duration));
+    check(clock->absoluteFrames.locate(third+duration,13)==uint64_t(3)*block*48000/rate,
+      "resumed absolute coverage includes frames rendered during timing holes");
+    const auto stop=third+duration+duration/2;
+    {AudioAudit::Scope scope;correlated.render(audio.data(),0,RenderTime{stop,13,rate,false,false,true});}
+    check(clock->absoluteFrames.locate(stop-1,13).has_value()&&!clock->absoluteFrames.locate(stop,13)&&
+      !clock->absoluteFrames.locate(third+2*duration,13),"Stop cuts published coverage and never finalizes queued pending audio");
+  }
+  {
+    HostedProjectPlayback delayed(doc,state,48000,{},true);
+    const auto clock=delayed.recordingTimeline();
+    constexpr uint64_t start=3201302326615,input=3201302427262,end=3201302428881;
+    const auto renderBoundary=[&](uint64_t timestamp){bool ok=false;
+      {AudioAudit::Scope scope;ok=delayed.render(audio.data(),480,RenderTime{timestamp,17,48000,true,false,false,true});}
+      check(ok,"pending native gesture fixture renders");};
+    renderBoundary(start-100000);renderBoundary(start);
+    const auto rack=projectPluginStates(state);const auto catalog=delayed.chain().parameters(0);
+    const auto before=projectAbsoluteAutomation(state);
+    const std::shared_ptr<const Tracker::RecordingFrameTimeline> absolute(clock,&clock->absoluteFrames);
+    Tracker::RecordedGestureCapture capture({"native-pending","revision",rack.at(0).instanceID,2,17,1,start},
+      absolute,rack,before,doc.native(),catalog,0);
+    check(capture.append({2,38,input},17,1)&&capture.loss().unmapped==1&&capture.events()[0].hostTime==input,
+      "original native input remains pending until its real second boundary");
+    capture.seal(input+1); // Stop recording before the next callback supplies coverage.
+    renderBoundary(end);capture.resolve();
+    check(!capture.loss().any()&&capture.events()[0].frame==952&&capture.events()[0].hostTime==input,
+      "late boundary resolves a stopped take without changing its original timestamp");
+    const auto candidate=capture.prepare("revision",17,1,rack,doc.native(),catalog);
+    check(!candidate.loss().any()&&candidate.changed()&&candidate.points().size()==before.size()+1&&
+      candidate.points().back().id==2&&candidate.points().back().frame==952&&candidate.points().back().value==38,
+      "resolved native input prepares ordinary loss-free Keep at its correlated frame");
+    renderBoundary(end+100000);capture.resolve();
+    check(capture.events()[0].frame==952,"later device correlations never move an already resolved input");
+  }
   std::cout<<"PASS retained presentation timeline, Stop/restart, 3 rates and 4 callback partitions\n";
 }
 static std::vector<float> audition(Tracker::Document &doc,const Project::ProjectState &state,unsigned rate,unsigned block){
@@ -75,6 +184,7 @@ static std::vector<float> audition(Tracker::Document &doc,const Project::Project
   return output;
 }
 #include "PreparedNativeUpdates.inc"
+#include "RenderStageEvidenceTests.inc"
 int main(){try{
   {AudioAudit::Scope scope;auto p=::operator new(8);::operator delete(p);
     auto aligned=::operator new(64,std::align_val_t{64});::operator delete(aligned,std::align_val_t{64});}
@@ -101,8 +211,10 @@ int main(){try{
   auto automation=projectAbsoluteAutomation(state);check(automation.size()==1&&automation[0].frame==48000,"canonical 48-kHz automation not rescaled twice");
   state.preserved["automation"]=Json::array();
   preparedNativeUpdates(state);
+  preparedPreciseNotes(state);
   preparedColumnMutes(state);
   recordingTiming(*doc,state);
+  renderStageChecks(*doc,state);
   for(unsigned rate:{44100u,48000u,96000u}){
     const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;
     for(unsigned block:{17u,4096u,8193u}){auto other=audition(*doc,state,rate,block);for(size_t i=0;i<baseline.size();++i)worst=std::max(worst,std::abs(double(other[i])-baseline[i]));}

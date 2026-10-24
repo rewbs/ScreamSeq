@@ -47,6 +47,10 @@ static bool fixturePitchMode=false,fixtureVelocityMode=false;
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureVelocityMode(bool enabled){fixtureVelocityMode=enabled;}
 static bool fixtureLargeCatalog=false,fixtureStepped=false;
 static std::atomic<uint64_t> fixtureSingleSampleCalls{0};
+static std::atomic<uint64_t> fixtureProcessCalls{0};
+extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureProcessCalls(){return fixtureProcessCalls.load();}
+static void (*fixtureStateReadHook)()=nullptr;
+extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStateReadHook(void (*hook)()){fixtureStateReadHook=hook;}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureStepped(bool enabled){fixtureStepped=enabled;fixtureSingleSampleCalls=0;}
 extern "C" __attribute__((visibility("default"))) uint64_t ResonanceFixtureSingleSampleCalls(){return fixtureSingleSampleCalls.load();}
 extern "C" __attribute__((visibility("default"))) void ResonanceFixtureLargeCatalog(bool enabled){fixtureLargeCatalog=enabled;}
@@ -336,6 +340,7 @@ public:
     return kResultOk;
   }
   tresult PLUGIN_API getState(IBStream *s) override {
+    const auto hook=fixtureStateReadHook;fixtureStateReadHook=nullptr;if(hook)hook();
     float value = gain;
     if (s->write(&value,4)!=kResultOk) return kResultFalse;
     if (programs && (s->write(programValues.data(),8)!=kResultOk || s->write(unitGains.data(),8)!=kResultOk)) return kResultFalse;
@@ -355,6 +360,7 @@ public:
   tresult PLUGIN_API setProcessing(TBool value) override { processing = value; return kResultOk; }
   uint32 PLUGIN_API getTailSamples() override { return delayed&&!instrument?32:0; }
   tresult PLUGIN_API process(ProcessData &d) override {
+    fixtureProcessCalls.fetch_add(1,std::memory_order_relaxed);
     if(appliedLatency!=fixtureLatency.load()){appliedLatency=fixtureLatency.load();dynamicDelay.fill(0);dynamicPosition=0;}
     if(d.numSamples==1)fixtureSingleSampleCalls.fetch_add(1,std::memory_order_relaxed);
     if (d.numOutputs != getBusCount(kAudio, kOutput) || d.numInputs != getBusCount(kAudio, kInput) || !outputsActive[0])

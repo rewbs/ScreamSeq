@@ -8,6 +8,15 @@ stopped input performs cursor step entry. Native Stop finishes one document Undo
 while API Stop retains the take. Loss or a stale base retains review. Fixed input
 boundaries prevent queued events from crossing Finish, Discard or song replacement.
 MIDI and keyboard holds share current audition voices without changing Live keys.
+The native Arm/Disarm action immediately uses the accepted settings; it does not
+submit an unfinished timing or connection draft. The button names the next action
+from the acknowledged state. Numeric/source drafts retain an explicit Apply,
+their original settings revision and raw text. A successful arm-only change
+advances that draft's revision only when it matched the preceding accepted
+settings; unrelated conflicts remain visible. Commands arriving during a short
+worker read retain one guarded intent, canceled on new edits, Hide or changed
+document/settings. Submitted failures are not retried. These newest arm-control
+changes await the next hourly native qualification checkpoint.
 See `../Api/recording.schema.json`, `../Api/midi.schema.json` and
 `../RECORDING_PROGRESS.md` for contracts and qualification limits.
 
@@ -330,14 +339,34 @@ Validated topology changes stop/join playback before committing. This is not
 live structural graph replacement.
 
 The precise-note dock keeps a captured row draft with row/beat offsets, snap,
-velocity, note-local effects, off/cut, duplicates and retriggers. Check validates;
-Apply merges untouched pattern events and creates one document Undo step. A stale
-draft stays visible and cannot overwrite newer music. Use target explicitly
+velocity, note-local effects, off/cut, duplicates and retriggers. Double-click
+inserts at the clicked position even on a populated row. Backspace/Delete removes
+the selected timeline/list hit; native text fields keep text deletion. Insert,
+remove, duplicate, retrigger, arrow nudges and completed drags save immediately;
+valid field edits save after a 300 ms typing pause. Check validates; Save now
+flushes/retries retained edits. Native project Save finishes an already queued
+valid precise field edit first; it never retries an uncertain field write.
+Canceling a drag resumes an earlier queued field edit without keeping the drag.
+Each save merges untouched pattern events and
+creates one document Undo step. A white playback cursor uses renderer telemetry
+only inside the captured row, independently of editing selection/focus. Clean
+captured rows refresh after history or other edits, retaining their stable target
+even when pinned or focused. Unchanged selected values keep their raw formatting
+and caret; changed values update in place. A stale unsaved draft stays visible
+and cannot overwrite newer music. Use target explicitly
 reloads the notes inspector's pinned/follow target. In-flight completions preserve
 newer fields and navigation focus. The hit list is virtual; dense canvas rows
 draw 256 cached bins plus the selected event. Sparse grid lookup uses binary
 search and displays a precise-hit marker. Delete on a note with precise hits
 clears that row's note events and ordinary note fields together, preserving FX.
+Precise-row edits use prepared shared schedules with up to 512 companion cell
+edits per live publication. A bounded FIFO adopts the schedule and ordinary-row
+conversion together at a render boundary; history admission precedes publication.
+Queue/epoch rejection preserves playback and music. Precise conversion Undo/Redo
+uses the same path. Past onsets wait for a later pass; changing a schedule does
+not restart held voices. Large API conversions beyond the live bound require
+stopped playback. Qualification is tracked in
+`../../doc/windows-parity-plan-2026-10-09/PRECISE-NOTE-LIVE-2026-10-23.md`.
 
 Pattern clipboard text matches Mac's Pattern 2 payload and legacy Pattern 1
 import. Stable parameter bindings remap by target, and pasted FX expand the
@@ -557,6 +586,18 @@ preparation/render path at three rates and four partitions without a device.
 `--audio-test-silent --seconds <duration> --project <copy> --report <json>` runs
 the actual device callback and mutes only after DSP; it changes no system volume
 or route. Normal playback retains the explicitly labeled -20 dB monitor gain.
+
+For a separate diagnostic run, add `--audio-test-cycles` with a duration and
+report. This opts into two `QueryThreadCycleTime` calls per device callback;
+normal playback and ordinary qualification do not call them. The stopped report
+retains valid/failed sample counts and CPU cycles for each bounded deadline event
+plus its immediately preceding callback. Zero with an invalid flag is unavailable,
+not zero CPU work. Counts include query overhead and must not be converted to
+elapsed time or used alone to infer scheduler preemption; see Microsoft's
+[QueryThreadCycleTime contract](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime).
+The existing wall-time deadline thresholds remain unchanged. Profiled runs cannot
+qualify sustained release performance. `wasapi-diagnostic --silence 3 500 --cycles`
+checks opt-in counter delivery separately from the ordinary silent hardware gate.
 
 See `../RESUME_PROGRESS.md` for current source/build evidence and open gates.
 

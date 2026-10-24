@@ -102,11 +102,13 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   private var draft = [String: Any](), commitWanted = false
   private var controlRequestInFlight = false
   private var committingControls = [String: Any]()
-  // "The document is busy" (-32002) is a request to retry, not a rejection.
-  // The draft and a pending fader commit survive it.
+  // Only explicit notCommitted admission receipts authorize write retries.
+  // Uncertain results retain the target/draft until an explicit fresh read.
   var busyRetryDelay = 0.25, busyRetryLimit = 12
-  private var deferredRetry = Date.distantFuture
-  var hasPendingControls: Bool { !draft.isEmpty || !committingControls.isEmpty }
+  private var reloadButton: ActionButton?
+  private(set) var needsReload = false { didSet { reloadButton?.isHidden = !needsReload } }
+  private var cleanupKeys = Set<String>()
+  var hasPendingControls: Bool { needsReload || !draft.isEmpty || !committingControls.isEmpty }
   // Text and popup choices last written for the selected bus. Anything that
   // differs is an uncommitted edit and survives refreshes of that same bus.
   private var shownBus: String?, shownText = [ObjectIdentifier: String]()
@@ -195,9 +197,14 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     routingScroll.heightAnchor.constraint(equalTo: contentRow.heightAnchor).isActive = true
     let body = NSView(); contentRow.fill(body); strips.fill(body)
     enableButton = ActionButton("Enable mixer") { [weak self] in self?.mutate("mixer.enable", [:]) }
+    reloadButton = ActionButton("Reload saved state") { [weak self] in self?.reload() }
+    reloadButton?.isHidden = true
+    reloadButton?.setContentCompressionResistancePriority(.required, for: .horizontal)
+    status.lineBreakMode = .byWordWrapping; status.maximumNumberOfLines = 2
+    status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     let content = stack(.vertical, [
       stack(.horizontal, [heading, NSView(), viewMode, ActionMenuButton { [weak self] in self?.busMenu() ?? NSMenu() }]),
-      body, status,
+      body, stack(.horizontal, [status, NSView(), reloadButton!]),
       Theme.label("Faders audition smoothly · one Undo per gesture. Edit connections in Graph.", size: 11, color: Theme.muted)
     ], spacing: 14)
     content.stretchAcrossAxis(); content.fill(self, inset: 20)
@@ -212,7 +219,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   @discardableResult func selectBus(_ id: String) -> Bool {
     guard buses.contains(where: { $0["id"] as? String == id }) else { return false }
     if id != selectedID {
-      guard !loading, draft.isEmpty else { status.stringValue = "Finish the current mixer edit before changing buses."; return false }
+      guard !loading, !hasPendingControls else { status.stringValue = "Finish the current mixer edit before changing buses."; return false }
       selectedID = id
       if let index = buses.firstIndex(where: { $0["id"] as? String == id }) { table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
       showSelected(); refreshStrips()
@@ -239,30 +246,52 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     strips.update(current, selected: selectedID)
   }
   func load() {
-    guard !loading, draft.isEmpty else { return }
+    guard !loading, !hasPendingControls else { return }
     request("mixer.get", ["includeImplicit": true]) { self.update($0) }
   }
-  /// Reload and drop uncommitted fader, text and popup edits.
+  private func reloadDraftSnapshot() -> NSDictionary {
+    let snapshot: [String: Any] = ["bus": selectedID ?? "", "draft": draft,
+     "text": [name, color, timing, sendGain].map(\.stringValue) + controls.map { $0.value.stringValue },
+     "choices": [output, insert, effect, send, sendTarget, source].map { chosen($0) ?? "" },
+     "checks": [mute, solo, preSend, sendEnabled].map { $0.state.rawValue }]
+    return snapshot as NSDictionary
+  }
+  /// Explicitly read the accepted state before releasing retained edits or
+  /// cancelling an audition. An uncertain commit may already have succeeded.
   func reload() {
     guard !loading else { return }
-    shownBus = nil; deferredRetry = .distantFuture
-    let abandoned = Set(draft.keys); draft = [:]; commitWanted = false
-    if abandoned.isEmpty { load() } else { showSelected(); refreshStrips(); resyncEngine(abandoned) { [weak self] in self?.load() } }
+    let target = selectedID
+    let captured = reloadDraftSnapshot()
+    cleanupKeys.formUnion(draft.keys); cleanupKeys.formUnion(committingControls.keys)
+    needsReload = true
+    request("mixer.get", ["includeImplicit": true]) { [weak self] data in
+      guard let self else { return }
+      let finish = { [weak self] in
+        guard let self else { return }
+        guard captured.isEqual(self.reloadDraftSnapshot()) else {
+          self.status.stringValue = "Newer mixer fields kept. Reload saved state again to resolve them."; return
+        }
+        self.draft = [:]; self.committingControls = [:]; self.commitWanted = false
+        self.cleanupKeys = []; self.needsReload = false; self.shownBus = nil
+        self.update(data)
+      }
+      guard let buses = data["buses"] as? [[String: Any]] else {
+        self.status.stringValue = "Mixer readback is incomplete. Fields kept; Reload saved state to try again."; return
+      }
+      let current = buses.first { $0["id"] as? String == target }
+      guard !self.cleanupKeys.isEmpty, let target, let current else { finish(); return }
+      var params: [String: Any] = ["bus": target, "expectedRevision": self.revision, "preview": true]
+      for key in self.cleanupKeys {
+        params[key] = current[key] ?? (key == "width" ? 1.0 : key == "mute" || key == "solo" ? false : 0.0)
+      }
+      // Use only the newly read baseline. A failed cancellation retains the
+      // keys and raw fields for another explicit read, never a blind resend.
+      self.request("mixer.bus.set", params) { _ in finish() }
+    }
   }
   func synchronize(_ token: String) {
-    if !loading, !draft.isEmpty, commitWanted, deferredRetry <= Date() { deferredRetry = .distantFuture; sendControls(); return }
+    guard !needsReload else { return }
     if token != revision && !loading && draft.isEmpty { load() }
-  }
-  // After a rejected edit the engine still plays the auditioned values.
-  // Preview the saved ones so that sound and document agree again.
-  private func resyncEngine(_ keys: Set<String>, then: (() -> Void)? = nil) {
-    guard !loading, !keys.isEmpty, let selectedID, let bus = selected else { then?(); return }
-    var p: [String: Any] = ["bus": selectedID, "expectedRevision": revision, "preview": true]
-    for key in keys { p[key] = bus[key] ?? (key == "width" ? 1.0 : key == "mute" || key == "solo" ? false : 0.0) }
-    controlRequestInFlight = true
-    request("mixer.bus.set", p, resync: true) { [weak self] _ in
-      then?(); guard let self, !self.loading, !self.draft.isEmpty else { return }; self.sendControls()
-    }
   }
   func update(_ data: [String: Any]) {
     implicit = data["implicit"] as? Bool ?? false
@@ -284,49 +313,41 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     refreshStrips()
     status.stringValue = active ? "\(buses.count) buses · choose a track, group or return" : "Enable the mixer to add groups, sends and track effects."
   }
-  private func request(_ method: String, _ params: [String: Any], attempt: Int = 0, resync: Bool = false, done: @escaping ([String: Any]) -> Void) {
+  private func request(_ method: String, _ params: [String: Any], attempt: Int = 0, done: @escaping ([String: Any]) -> Void) {
     guard !loading, let onRequest else { return }; loading = true
     onRequest(method, params) { [weak self] reply in
       guard let self else { return }
       let failure = reply["error"] as? [String: Any]
-      if reply["result"] as? [String: Any] == nil, failure?["code"] as? Int == -32002 {
+      let readOnly = method == "mixer.get"
+      let mayRetry = readOnly ? (failure?["code"] as? Int == -32002) : NativeRequestOutcome.canRetryWrite(reply)
+      if reply["result"] as? [String: Any] == nil, mayRetry {
         if attempt < self.busyRetryLimit {
           // Still loading: the bus stays pinned and later control changes queue in the draft.
           self.status.stringValue = "The document is busy · retrying…"
           DispatchQueue.main.asyncAfter(deadline: .now() + self.busyRetryDelay) { [weak self] in
             guard let self else { return }; self.loading = false
-            self.request(method, params, attempt: attempt + 1, resync: resync, done: done)
+            self.request(method, params, attempt: attempt + 1, done: done)
           }
           return
         }
-        self.loading = false; self.controlRequestInFlight = false
-        if resync { done([:]); return }
-        if !self.committingControls.isEmpty {
-          self.draft = self.committingControls.merging(self.draft) { _, newer in newer }; self.commitWanted = true
-        }
-        self.committingControls = [:]
-        if self.draft.isEmpty { self.status.stringValue = failure?["message"] as? String ?? "The document is busy. Try again shortly." }
-        else {
-          self.deferredRetry = Date().addingTimeInterval(1)
-          self.status.stringValue = "The document is still busy. Your mixer change is kept and is saved when it is free · Reload discards it."
-        }
-        self.refreshStrips(); return
       }
       self.loading = false; self.controlRequestInFlight = false
       let committing = self.committingControls; self.committingControls = [:]
       guard let result = reply["result"] as? [String: Any] else {
-        if resync { done([:]); return }
-        let abandoned = Set(committing.keys).union(self.draft.keys)
-        self.draft = [:]; self.commitWanted = false; self.deferredRetry = .distantFuture
-        self.status.stringValue = failure?["message"] as? String ?? "Mixer edit failed. Reload and try again."
-        self.showSelected(); self.refreshStrips(); self.resyncEngine(abandoned); return
+        if !readOnly {
+          self.draft = committing.merging(self.draft) { _, newer in newer }
+          self.commitWanted = false; self.needsReload = true
+        }
+        let message = failure?["message"] as? String ?? "Mixer result is uncertain."
+        self.status.stringValue = message + (self.needsReload ? " · Edit kept. Reload saved state to continue." : " · Reload to try reading again.")
+        self.refreshStrips(); return
       }
       self.revision = result["revision"] as? String ?? self.revision
       done(result["data"] as? [String: Any] ?? [:])
     }
   }
   func mutate(_ method: String, _ values: [String: Any]) {
-    guard !loading, draft.isEmpty else { return }
+    guard !loading, !hasPendingControls else { return }
     var p = values; p["expectedRevision"] = revision
     request(method, p) { data in
       if method == "mixer.bus.add" { self.selectedID = data["bus"] as? String }
@@ -335,14 +356,18 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   }
   func control(_ key: String, value: Any, final: Bool) {
     guard selected != nil else { return }
+    if needsReload {
+      draft[key] = value; refreshStrips()
+      status.stringValue = "Edit kept. Reload saved state to resolve the earlier result before continuing."; return
+    }
     guard !loading || controlRequestInFlight else {
       status.stringValue = "Wait for the mixer to finish loading before adjusting controls."; showSelected(); refreshStrips(); return
     }
     draft[key] = value; commitWanted = commitWanted || final || implicit; refreshStrips(); sendControls()
   }
-  func finishGesture() { guard !draft.isEmpty else { return }; commitWanted = true; sendControls() }
+  func finishGesture() { guard !draft.isEmpty, !needsReload else { return }; commitWanted = true; sendControls() }
   private func sendControls() {
-    guard !loading, !draft.isEmpty, let selectedID else { return }
+    guard !loading, !needsReload, !draft.isEmpty, let selectedID else { return }
     let values = draft, final = commitWanted
     var p = values; p["bus"] = selectedID; p["expectedRevision"] = revision; p["preview"] = !final
     if final { committingControls = values; draft = [:]; commitWanted = false }
@@ -453,9 +478,9 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     if peak.stringValue != text { peak.stringValue = text }
   }
   func numberOfRows(in tableView: NSTableView) -> Int { buses.count }
-  func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { !loading && draft.isEmpty }
+  func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { !loading && !hasPendingControls }
   func tableViewSelectionDidChange(_ notification: Notification) {
-    guard buses.indices.contains(table.selectedRow), draft.isEmpty else { return }
+    guard buses.indices.contains(table.selectedRow), !hasPendingControls else { return }
     selectedID = buses[table.selectedRow]["id"] as? String; showSelected(); refreshStrips()
   }
   func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -496,7 +521,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     menu.addItem(ContextAction("Add group") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "group"]) })
     menu.addItem(ContextAction("Add return") { [weak self] in self?.mutate("mixer.bus.add", ["kind": "return"]) })
     menu.addItem(ContextAction("Remove bus", enabled: selected?["kind"] as? String == "group" || selected?["kind"] as? String == "return") { [weak self] in self?.removeBus() })
-    menu.addItem(ContextAction("Reload") { [weak self] in self?.load() })
+    menu.addItem(ContextAction("Reload saved state") { [weak self] in self?.reload() })
     return menu
   }
   @objc private func fieldChanged(_ sender: NSTextField) {
@@ -532,7 +557,7 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     guard let selectedID else { return }; mutate("mixer.bus.set", ["bus": selectedID, "inserts": values])
   }
   func openInsert(controls: Bool = false) {
-    guard !loading, draft.isEmpty else { return }
+    guard !loading, !hasPendingControls else { return }
     let values = selected?["inserts"] as? [String] ?? []
     guard let id = chosen(insert), values.contains(id) else { return }
     guard plugins.contains(where: { $0["id"] as? String == id }) else { return }

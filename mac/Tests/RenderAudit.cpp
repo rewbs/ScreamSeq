@@ -4,10 +4,12 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
+#include <vector>
 extern "C" void tracker_audit_begin();
 extern "C" void tracker_audit_end(uint64_t *, uint64_t *, uint64_t *);
 int main(int argc, char **argv) {
-  if (argc < 4 || argc > 6)
+  if (argc < 4 || argc > 7)
     return 2;
   try {
     // Prove instrumentation can detect a real allocation and a lock before trusting it.
@@ -31,9 +33,11 @@ int main(int argc, char **argv) {
     file.read(reinterpret_cast<char *>(bytes.data()), bytes.size());
     int rate = std::stoi(argv[3]);
     Tracker::Renderer renderer(bytes, rate, argc >= 5 ? std::stoi(argv[4]) : 0, false, {},
-                               argc == 6 ? std::stoi(argv[5]) : 0);
+                               argc >= 6 ? std::stoi(argv[5]) : 0);
     std::ofstream output(argv[2], std::ios::binary);
-    std::array<float, 1024> buffer{};
+    const auto block = argc == 7 ? std::stoi(argv[6]) : 512;
+    if (block < 1 || block > 4096) throw std::invalid_argument("Block size must be 1..4096");
+    std::vector<float> buffer(size_t(block) * 2);
     size_t total = 0;
     uint64_t allocations = 0, deallocations = 0, locks = 0;
     double maxTime = 0;
@@ -41,7 +45,7 @@ int main(int argc, char **argv) {
     while (total < size_t(rate) * 30) {
       auto start = std::chrono::steady_clock::now();
       tracker_audit_begin();
-      auto n = renderer.render(buffer.data(), 512);
+      auto n = renderer.render(buffer.data(), block);
       tracker_audit_end(&a, &d, &l);
       allocations += a;
       deallocations += d;
@@ -57,7 +61,7 @@ int main(int argc, char **argv) {
       output.write(reinterpret_cast<const char *>(buffer.data()), n * 2 * sizeof(float));
       total += n;
     }
-    std::cout << "{\"frames\":" << total << ",\"callbacks\":" << callbacks << ",\"allocations\":" << allocations
+    std::cout << "{\"frames\":" << total << ",\"blockFrames\":" << block << ",\"callbacks\":" << callbacks << ",\"allocations\":" << allocations
               << ",\"deallocations\":" << deallocations << ",\"locks\":" << locks << ",\"maxMicros\":" << maxTime
               << "}\n";
     return (allocations || deallocations || locks || renderer.faulted()) ? 1 : 0;

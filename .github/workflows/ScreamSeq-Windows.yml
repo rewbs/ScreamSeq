@@ -102,6 +102,12 @@ jobs:
         run: |
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
           $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
+          # The full composing journey uses the mandatory scanned VST3 synth,
+          # not an optional installed vendor. Reuse the worker gate's cache.
+          $env:SCREAMSEQ_TEST_PROVIDER_CACHE = (Resolve-Path bin/windows-ci/plugin-edit-cache.json).Path
+          # Keep the original/recorded projects and PCM after test cleanup,
+          # including partial journeys when a required assertion fails.
+          $env:SCREAMSEQ_COMPOSING_EVIDENCE_DIR = Join-Path $env:GITHUB_WORKSPACE 'bin/windows-ci/recording-composing'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
           # The hosted Server image may leave both native audio services stopped.
@@ -133,6 +139,16 @@ jobs:
               test_plugin_edit_parity.PluginEditParityTests `
               test_plugin_recording.PluginRecordingTests `
               test_absolute_automation_ui.AbsoluteAutomationUITests.test_clear_all_recordings_preserves_stale_and_field_drafts_and_one_undo `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_native_seconds_frames_history_noop_and_reopen `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_stale_fields_target_removal_close_and_replacement_preserve_drafts `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_live_automatic_point_history_and_save_preserve_playback `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_mouse_keyboard_zoom_and_native_controls_fit_minimum `
+              test_absolute_automation_ui.AbsoluteAutomationUITests.test_activity_recorded_selection_survives_value_time_history_and_reopen `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_native_save_finishes_pattern_point_during_playback_and_reopens_exact_lanes `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_native_points_guards_verify_history_and_reopen `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_search_target_stale_close_and_independent_cursor `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_transform_preview_copy_paste_and_local_keyboard_zoom `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_formula_bank_linked_guard_and_last_touched_rack `
               test_graph_mixer_app.GraphMixerAppTests.test_linked_envelope_admission_retains_bank_and_history `
               test_graph_editor.GraphEditorTests `
               test_context_menus.WorkspaceContextMenuTests.test_graph_node_wire_menu_selection_draft_and_history `
@@ -152,6 +168,8 @@ jobs:
               test_recording.RecordingTests `
               test_midi_recording_ui.MidiRecordingUITests `
               test_sample_capture_ui.SampleCaptureUiTests `
+              test_instrument_context_ui.InstrumentContextUITests.test_canvas_add_delete_automatic_history_and_native_save `
+              test_instrument_context_ui.InstrumentContextUITests.test_bank_handoff_saves_properties_and_keeps_separate_history `
               test_recovery.RecoveryTests.test_native_browser_save_reload_restore_and_file_save_cleanup `
               test_recovery.RecoveryTests.test_close_drains_pending_native_recovery_write `
               test_recovery.RecoveryTests.test_pending_write_allows_edits_and_save_cleanup_cannot_resurrect_old_copies `
@@ -162,7 +180,9 @@ jobs:
               test_audition.AuditionTests.test_keyup_during_document_wait_never_starts_a_late_voice `
               test_pattern_performance.PatternPerformanceTests.test_typed_native_inline_slots_and_musical_unit_draft `
               test_pattern_performance.PatternPerformanceTests.test_inline_nudge_decimal_fields_commit_once_history_and_persistence `
-              test_precise_note_host.PreciseNoteHostTests.test_simultaneous_hosts_compact_focus_and_saved_layout_retain_native_drafts `
+              test_precise_note_editor.PreciseNoteEditorTests `
+              test_precise_note_host.PreciseNoteHostTests `
+              test_precise_note_live.PreciseNoteLiveTests `
               test_graph_curve_host.GraphCurveHostTests.test_routing_and_curve_keep_independent_raw_drafts_and_targets *>&1 | Tee-Object $integrationLog
             if ($LASTEXITCODE -ne 0) { throw 'Merged command and editor paths failed.' }
           } finally { Pop-Location }
@@ -205,6 +225,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: screamseq-windows-logs
+          # Retain the already-built provider for replay on a real-device host.
           path: |
             screamseq-windows.log
             screamseq-windows-model.log
@@ -218,11 +239,15 @@ jobs:
             bin/windows-ci/BuildInfo.json
             bin/windows-ci/native-app.zip
             bin/windows-ci/native-app-identity.json
+            bin/windows-ci/Release/ScreamSeqVST3Fixture.vst3
+            bin/windows-ci/plugin-edit-cache.json
             bin/windows-ci/CMakeCache.txt
             bin/windows-ci/test-registration.json
             bin/windows-ci/test-schedule.json
             bin/windows-ci/audio-services.json
             bin/windows-ci/audio-environment/**
+            bin/windows-ci/recording-composing/**
+            bin/windows-ci/recording-composing-layered-instrument/**
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

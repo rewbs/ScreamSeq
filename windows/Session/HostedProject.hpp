@@ -2,6 +2,7 @@
 #include "windows/Project/NativeProject.hpp"
 #include "editor/hosted/HostedAudio.hpp"
 #include "windows/Audio/PresentationClock.hpp"
+#include "windows/Audio/RenderStageEvidence.hpp"
 namespace ScreamSeq {
 using Json=nlohmann::json;
 // Decode persisted project records without loading a vendor or changing them.
@@ -25,13 +26,16 @@ class HostedProjectPlayback final {
   std::unique_ptr<Tracker::Renderer> renderer_; // Dies before its borrowed chain.
   std::shared_ptr<RecordingTimeline> timeline_;
   std::uint32_t rate_=0;
+  uint64_t mappedStart_=0,mappedEnd_=0; // Audio owner; accepted native presentation bounds.
+  PresentedFrameIntervals presentedFrames_; // Two correlated WASAPI boundaries per interval.
   uint64_t nativeUpdateGeneration_=0; // Serialized control owner only.
+  RenderStageEvidence *renderEvidence_=nullptr; // Optional, borrowed until the stopped owner detaches it.
 public:
   // Owns all preparation until the document's beforeCommit callback publishes
   // it. Rendering never owns this wrapper and no live Document is retained.
   struct PreparedNativeUpdate {
-    enum class Kind { GraphControls, Routing, Scratch, ColumnMutes };
-    Kind kind() const noexcept {return columnMutes_?Kind::ColumnMutes:scratch_?Kind::Scratch:controls_?Kind::GraphControls:Kind::Routing;}
+    enum class Kind { GraphControls, Routing, Scratch, ColumnMutes, PreciseNotes };
+    Kind kind() const noexcept {return preciseNotes_?Kind::PreciseNotes:columnMutes_?Kind::ColumnMutes:scratch_?Kind::Scratch:controls_?Kind::GraphControls:Kind::Routing;}
   private:
     friend class HostedProjectPlayback;
     HostedProjectPlayback *owner_=nullptr;
@@ -40,6 +44,7 @@ public:
     std::unique_ptr<Tracker::GraphControlPlan> controls_;
     std::unique_ptr<Tracker::ScratchGestureLibrary> scratch_;
     std::unique_ptr<Tracker::ColumnMuteFrame> columnMutes_;
+    std::unique_ptr<Tracker::PreciseNoteUpdate> preciseNotes_;
     std::unique_ptr<Tracker::MixerTransition::Plan> routing_;
   };
   HostedProjectPlayback(Tracker::Document &,const Project::ProjectState &,uint32_t rate,
@@ -56,7 +61,7 @@ public:
   // live edit; the caller preserves active playback and asks for a stopped edit.
   // Graph topology/physical port/latency changes retain the shared restrictions.
   std::unique_ptr<PreparedNativeUpdate> prepareNativeUpdate(
-    const Tracker::NativeSong &before,const Tracker::NativeSong &next);
+    const Tracker::NativeSong &before,const Tracker::NativeSong &next,const std::vector<Tracker::Edit> &cells = {});
   // Invoke only after the host rechecks the same playback identity/generation.
   // A refusal publishes nothing and must abort the enclosing document commit.
   bool publishNativeUpdate(PreparedNativeUpdate &);
@@ -64,6 +69,9 @@ public:
   // Preparation and destruction remain on a stopped control owner.
   bool render(float *stereo,uint32_t frames) noexcept;
   bool render(float *stereo,uint32_t frames,const RenderTime &) noexcept;
+  // Stopped control owner only. Evidence must outlive rendering and may only
+  // be read/reset after the device has joined. Normal playback leaves this null.
+  void renderEvidence(RenderStageEvidence *evidence) noexcept {renderEvidence_=evidence;}
   std::shared_ptr<const RecordingTimeline> recordingTimeline() const noexcept {return timeline_;}
   std::shared_ptr<const Tracker::RecordingClock> recordingClock() const noexcept {return timeline_->clock;}
   bool failed() const noexcept;

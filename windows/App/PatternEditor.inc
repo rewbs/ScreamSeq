@@ -243,8 +243,9 @@
     template<class Place> void layoutEffectControls(Place finalPlace) {
         std::map<int,std::array<float,5>> placements;
         auto place=[&](int id,float x,float y,float w,float h,bool visible=true){placements[id]={x,y,w,h,visible?1.0f:0.0f};};
-        const auto r=effectEditorRect();const bool show=effectEditorVisible();const auto pattern=geometry().pattern;
-        place(effectsCommand,pattern.x+pattern.w-254,pattern.y+3,78,24,trackerWorkspaceVisible());
+        const auto r=effectEditorRect();const bool show=effectEditorVisible();
+        // Pattern header placement is shared with its other actions in
+        // layoutControls; using the wider graph-lane host overlapped controls.
         for(int id:{effectValue,effectOffset,effectDuration,effectRange,effectBinding})place(id,0,0,1,1,false);
         for(int i=0;i<10;++i){place(effectFieldBase+i,0,0,1,1,false);place(effectChoiceBase+i,0,0,1,1,false);}
         place(effectReload,r.x+r.w-152,r.y+4,82,24,show);place(effectApply,r.x+r.w-64,r.y+4,58,24,show);

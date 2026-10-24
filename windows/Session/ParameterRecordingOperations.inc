@@ -1,26 +1,13 @@
 // Windows lifecycle adapter for the shared gesture take. Application admission
 // owns pending native controls; this worker owns timing, musical edits and Undo.
 Json DocumentController::parameterRecordingSummary()const {
-  if(!parameterRecording_)return {{"take",""},{"capturing",false},{"retained",false}};
-  const auto &take=*parameterRecording_->take;Json targets=Json::array();
-  for(size_t i=0;i<take.targetCount();++i) {
-    const auto &target=take.target(i);const auto loss=target.loss();
-    targets.push_back({{"plugin",target.key().plugin},{"parameter",target.key().parameter},
-      {"eventCount",target.events().size()},{"unmapped",loss.unmapped},{"overflow",loss.overflow}});
-  }
-  Json sources=Json::array();for(const auto &provider:take.providers())
-    sources.push_back({{"plugin",provider.plugin},{"lost",take.sourceLoss(provider.plugin)}});
+  if(!parameterRecording_)return Tracker::recordedGestureSummary(nullptr);
+  const auto &take=*parameterRecording_->take;
   const bool compatible=take.completed()||(take.revision()==revision()&&playback_.get()==parameterRecording_->host&&
     parameterRecording_->timeline->absoluteFrames.generation()==take.playbackEpoch()&&
     take.failure()!=Tracker::RecordedGestureTake::Failure::Context&&take.failure()!=Tracker::RecordedGestureTake::Failure::Provider&&
     take.failure()!=Tracker::RecordedGestureTake::Failure::Target);
-  return {{"take",take.token()},{"baseRevision",take.revision()},
-    {"startTime",std::to_string(take.startTime())},{"endTime",take.endTime()?Json(std::to_string(*take.endTime())):Json()},
-    {"playbackEpoch",std::to_string(take.playbackEpoch())},
-    {"capturing",!take.endTime()&&!take.completed()},{"completed",take.completed()},{"retained",true},
-    {"compatible",compatible},{"eventCount",take.eventCount()},
-    {"rejected",take.rejectedEvents()},{"failure",unsigned(take.failure())},
-    {"targets",std::move(targets)},{"sources",std::move(sources)}};
+  return Tracker::recordedGestureSummary(&take,compatible);
 }
 void DocumentController::pollParameterRecording(bool stop) {
   if(!parameterRecording_||parameterRecording_->take->completed())return;
@@ -53,27 +40,16 @@ bool DocumentController::restoreParameterRecordingPreview() {
 Json DocumentController::parameterRecordingOperation(const std::string &method,const Json &params) {
   if(!params.is_object())throw Api::ApiError(-32602,"Parameter recording expects an object");
   if(method=="automation.recording.events") {
-    keys(params,{"take","plugin","parameter","offset","limit"});
+    keys(params,{"take","plugin","parameter","offset","limit","includeTiming"});
     if(!parameterRecording_||recordingText(params.at("take"),80)!=parameterRecording_->take->token())
       throw Api::ApiError(-32001,"Parameter take changed; read automation.recording.get");
     const auto plugin=recordingText(params.at("plugin"),128);
     const auto parameter=uint32_t(recordingInteger(params.at("parameter"),0,UINT32_MAX));
-    const Tracker::RecordedGestureCapture *target=nullptr;
-    for(size_t i=0;i<parameterRecording_->take->targetCount();++i) {
-      const auto &candidate=parameterRecording_->take->target(i);
-      if(candidate.key().plugin==plugin&&candidate.key().parameter==parameter){target=&candidate;break;}
-    }
-    if(!target)throw Api::ApiError(-32602,"Parameter take has no captured input for this target");
-    const auto offset=recordingInteger(params.value("offset",Json(0)),0,target->events().size());
-    const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);Json events=Json::array();
-    const auto stopped=parameterRecording_->timeline->absoluteFrames.stoppedEndTime(parameterRecording_->take->playbackEpoch());
-    for(size_t i=size_t(offset);i<std::min<uint64_t>(target->events().size(),offset+limit);++i) {
-      const auto &event=target->events()[i];
-      events.push_back({{"timestamp",std::to_string(event.hostTime)},{"value",event.value},
-        {"frame",event.frame&&(!stopped||event.hostTime<*stopped)?Json(std::to_string(*event.frame)):Json()}});
-    }
-    return {{"take",parameterRecording_->take->token()},{"plugin",plugin},{"parameter",parameter},
-      {"offset",offset},{"total",target->events().size()},{"events",std::move(events)},{"sampleRate",48000}};
+    const auto offset=recordingInteger(params.value("offset",Json(0)),0,SIZE_MAX);
+    const auto limit=recordingInteger(params.value("limit",Json(128)),1,512);
+    const bool timing=flag(params,"includeTiming");
+    try{return Tracker::recordedGestureEvents(*parameterRecording_->take,plugin,parameter,size_t(offset),size_t(limit),timing);}
+    catch(const std::invalid_argument &e){throw Api::ApiError(-32602,e.what());}
   }
   if(method=="automation.recording.get") {
     keys(params,{});std::string warning;
@@ -95,7 +71,7 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   if(!start&&!stop&&!commit&&!discard&&!capture)throw Api::ApiError(-32601,"Unknown parameter recording method");
   keys(params,start?std::initializer_list<const char *>{"expectedRevision","plugins"}:
     capture?std::initializer_list<const char *>{"expectedRevision","take","plugin","parameter","value","timestamp"}:
-    commit?std::initializer_list<const char *>{"expectedRevision","take","acknowledgeLoss"}:
+    commit?std::initializer_list<const char *>{"expectedRevision","take","acknowledgeLoss","restoreSavedState"}:
       std::initializer_list<const char *>{"expectedRevision","take"});
   if(!params.contains("expectedRevision")||!params.at("expectedRevision").is_string())
     throw Api::ApiError(-32602,"expectedRevision is required");
@@ -125,7 +101,8 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     auto next=std::make_unique<ParameterRecordingSession>();next->host=playback_.get();
     next->hostGeneration=feedback.generation;next->timeline=playback_->recordingTimeline();
     auto frames=std::shared_ptr<const Tracker::RecordingFrameTimeline>(next->timeline,&next->timeline->absoluteFrames);
-    if(!frames->generation()) {
+    const auto startTime=hostTime100ns();
+    if(!frames->hasStartedAt(startTime,frames->generation())) {
       const auto failure=frames->failureDetails().reason;
       const auto message=failure==Tracker::RecordingFrameTimeline::Failure::None?
         std::string("Playback timing is not available yet; retry after the first timed buffer"):
@@ -137,7 +114,7 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
     }
     std::vector<Tracker::RecordedGestureTake::Provider> sources;
     for(const auto &id:identities)sources.push_back({id,plugins_->parameterEditSource(id)});
-    next->take=std::make_shared<Tracker::RecordedGestureTake>(recordingIdentity(),revision(),hostTime100ns(),frames,
+    next->take=std::make_shared<Tracker::RecordedGestureTake>(recordingIdentity(),revision(),startTime,frames,
       projectPluginStates(project_),projectAbsoluteAutomation(project_),sources);
     auto *session=next.get();
     plugins_->beginRecordedEditors(next->take,[this,session]{
@@ -179,6 +156,11 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   }
   auto &take=*parameterRecording_->take;
   const bool loss=commit&&flag(params,"acknowledgeLoss");
+  const bool restoreSaved=commit&&flag(params,"restoreSavedState");
+  if(discard&&take.completed())
+    throw Api::ApiError(-32002,"This take is already kept; retry Commit to finish native restoration, then use Undo to change the music");
+  if(restoreSaved&&(!take.completed()||playbackFeedback().playing||playbackFeedback().audioActive))
+    throw Api::ApiError(-32002,"Restore saved plugin state requires an already-kept take and stopped playback");
   // A changed clock/context may prevent a normal fixed Stop cut. Explicit
   // discard after transport has stopped can seal the retained evidence without
   // accepting its input; the vendor release still requires an empty/open or
@@ -194,7 +176,11 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   }
   Json result=parameterRecordingSummary();result["changed"]=changed;
   try {
-    if(plugins_->releaseRecordedEditors(discard,[this]{return restoreParameterRecordingPreview();})) {
+    if(plugins_->releaseRecordedEditors(discard,[this,restoreSaved]{
+      if(restoreSaved&&(playbackFeedback().playing||playbackFeedback().audioActive))
+        throw Api::ApiError(-32002,"Playback restarted during saved-state recovery; take retained");
+      return restoreParameterRecordingPreview();
+    },restoreSaved)) {
       parameterRecording_.reset();result["retained"]=false;result["capturing"]=false;
     } else result["restorationError"]="Preview restoration is busy; retry this retained take";
   }catch(const std::exception &e){result["restorationError"]=e.what();}

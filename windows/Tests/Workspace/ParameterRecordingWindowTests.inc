@@ -5,23 +5,43 @@ void applicationParameterRecordingReview() {
     RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);const auto music=songState(app);
     Json take={{"retained",false},{"capturing",false},{"take",""}},delivery={{"retained",0},{"pending",false},{"needsReview",false},{"lost",0},{"events",Json::array()}};
     std::vector<std::pair<std::string,Json>> writes;unsigned saves=0,reconciled=0,nameReads=0;bool failAfterKeep=false;
-    bool deferKeepReceipt=false,failReconcile=false,refuseStart=false;
+    bool deferKeepReceipt=false,failReconcile=false,refuseStart=false,failAfterPlaybackStop=false;
+    bool deferRestoration=false;
+    unsigned playbackReconciled=0;
+    Json openedAutomation=Json::array();
+    std::function<void()> duringRead;
+    std::function<void()> duringPageRead;
+    std::function<void()> duringDeliveryPage;
+    std::string contextRevision;
+    bool available=true;
+    bool inputProtected=false;
+    std::optional<Json> rackOverride;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
     std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
-    callbacks.context=[&]{return std::pair(app.documentId,app.view->session.revision);};
-    callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
-    callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&parameter==1,"Review looked up another parameter name");++nameReads;return L"Gain";};
-    callbacks.available=[]{return true;};callbacks.saveRecovery=[&]{++saves;};
-    callbacks.reconcile=[&](const Call &call){restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
+    callbacks.context=[&]{return std::pair(app.documentId,contextRevision.empty()?app.view->session.revision:contextRevision);};
+    callbacks.rack=[&]{return rackOverride?*rackOverride:app.view->session.document.at("nativePlugins");};
+    callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&(parameter==1||parameter==2),"Review looked up another parameter name");++nameReads;return parameter==1?L"Gain":L"Balance";};
+    callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
+    callbacks.inputProtected=[&]{return inputProtected;};
+    callbacks.recordedAutomation=[&](const std::string &identity,uint32_t parameter){openedAutomation.push_back({identity,parameter});};
+    callbacks.reconcile=[&](const Call &call){if(call.method=="transport.stop"){
+      restoreCheck(call.result.at("playing")==false,"Review accepted an invalid playback Stop receipt");++playbackReconciled;return;}
+      restoreCheck(call.method=="automation.recording.commit"&&call.result.at("retained")==false,
       "Native review reconciled the wrong completion");
       if(std::exchange(failReconcile,false))throw std::runtime_error("Owned readback failure");++reconciled;};
-    callbacks.delivery=[&](size_t offset,size_t limit){auto page=delivery;page["events"]=Json::array();
+    callbacks.delivery=[&](size_t offset,size_t limit){
+      if(limit==128)if(auto hook=std::exchange(duringDeliveryPage,{}))hook();
+      auto page=delivery;page["events"]=Json::array();
       for(size_t i=offset;i<std::min(delivery.at("events").size(),offset+limit);++i)page["events"].push_back(delivery.at("events")[i]);return page;};
     callbacks.read=[&](const std::string &method,const Json &params)->Json {
-      if(method=="automation.recording.get")return take;
-      restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&params.at("parameter")==1,
+      if(method=="automation.recording.get"){
+        if(auto hook=std::exchange(duringRead,{}))hook();
+        return take;
+      }
+      restoreCheck(method=="automation.recording.events"&&params.at("take")==take.at("take")&&params.at("plugin")==plugin&&(params.at("parameter")==1||params.at("parameter")==2),
         "Review read a different recording take or target");
+      if(auto hook=std::exchange(duringPageRead,{}))hook();
       Json rows=Json::array();const auto offset=params.at("offset").get<size_t>(),limit=params.at("limit").get<size_t>();
       for(size_t i=offset;i<std::min(size_t(130),offset+limit);++i)rows.push_back({{"timestamp",std::to_string(9007199254740993ull+i)},{"value",double(i)},
         {"frame",i==129?Json():Json(std::to_string(i*48))}});
@@ -35,45 +55,163 @@ void applicationParameterRecordingReview() {
           Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
         take={{"retained",true},{"capturing",true},{"take","review-owned-take"},{"compatible",true},{"eventCount",130},{"failure",0},
           {"targets",Json::array({{{"plugin",plugin},{"parameter",1},{"unmapped",1},{"overflow",0}}})},{"sources",Json::array()}};
+      }else if(method=="transport.stop"){
+        restoreCheck(!params.contains("take")&&params.size()==1,"Playback Stop leaked recording-only arguments");
+        take["transportPlaying"]=false;take["discardable"]=true;
       }else {
         restoreCheck(params.at("take")==take.at("take"),"Recording action targeted a different retained take");
         if(method=="automation.recording.stop")take["capturing"]=false;
         else if(method=="automation.recording.commit"){
-          restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");take={{"retained",false},{"capturing",false},{"take",""}};
+          if(params.value("restoreSavedState",false)) {
+            restoreCheck(take.at("completed")==true&&take.at("transportPlaying")==false&&!params.contains("acknowledgeLoss"),
+              "Explicit recovery bypassed completed/stopped guards or acknowledged musical loss");
+            take["retained"]=false;take["capturing"]=false;take.erase("restorationError");
+          }else {
+            restoreCheck(params.at("acknowledgeLoss")==true,"Keep recording failed to pass explicit loss acknowledgement");
+            if(std::exchange(deferRestoration,false)){
+              take["completed"]=true;take["restorationError"]="Owned pending native restoration";
+            }else take={{"retained",false},{"capturing",false},{"take",""}};
+          }
         }else if(method=="automation.recording.discard")take={{"retained",false},{"capturing",false},{"take",""}};
         else throw std::runtime_error("Unexpected review write");
       }
-      const Call result{method,app.documentId,app.view->session.revision,take};
+      const Call result{method,app.documentId,app.view->session.revision,method=="transport.stop"?Json{{"playing",false}}:take};
       if(method=="automation.recording.commit"&&std::exchange(deferKeepReceipt,false)){
         lateReceipt=receipt;lateCompletion=std::make_shared<const Call>(result);
         throw std::runtime_error("Owned missing native completion");
       }
       receipt->publish(std::make_shared<const Call>(result));
+      if(method=="transport.stop"&&std::exchange(failAfterPlaybackStop,false))throw std::runtime_error("Owned post-Stop presentation failure");
       if(method=="automation.recording.commit"&&std::exchange(failAfterKeep,false))throw std::runtime_error("Owned post-commit presentation failure");return result;
     };
     ScreamSeq::ParameterRecordingWindow tool(app.window,std::move(callbacks));tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto control=[&](int id){return GetDlgItem(window,id);};const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(control(id)));};
     restoreCheck(GetNextDlgTabItem(window,control(9720),FALSE)==control(9721),"Recording scope and Record are not adjacent in Tab order");
+    const auto rootEntry=[&](int first,int last){
+      struct Keyboard {BYTE before[256]{};
+        Keyboard(){restoreCheck(GetKeyboardState(before),"Read recording review keyboard state");}
+        ~Keyboard(){SetKeyboardState(before);}
+      } keyboard;
+      const auto before=tool.snapshot();const auto oldFocus=GetFocus();const auto oldWrites=writes.size();
+      for(bool reverse:{false,true}){BYTE keys[256]{};std::copy(std::begin(keyboard.before),std::end(keyboard.before),std::begin(keys));
+        for(int modifier:{VK_CONTROL,VK_LCONTROL,VK_RCONTROL,VK_SHIFT,VK_LSHIFT,VK_RSHIFT,VK_MENU,VK_LMENU,VK_RMENU})keys[modifier]&=0x7f;
+        if(reverse)keys[VK_SHIFT]|=0x80;
+        restoreCheck(SetKeyboardState(keys),"Set recording review keyboard modifiers");SetFocus(window);
+        SendMessageW(window,WM_KEYDOWN,VK_TAB,0);SendMessageW(window,WM_KEYUP,VK_TAB,0);
+        restoreCheck(GetFocus()==control(reverse?last:first),"Recording review root did not enter the first/last available control");
+      }
+      restoreCheck(tool.snapshot()==before&&writes.size()==oldWrites&&songState(app)==music,
+        "Recording review root navigation changed the take, pending action or music");
+      if(oldFocus&&IsWindow(oldFocus)&&IsWindowEnabled(oldFocus))SetFocus(oldFocus);
+    };
+    rootEntry(9720,9725);
+    // A completed input may leave only its owner, with no visible event row.
+    // This is still protected by application admission until reconciliation.
+    inputProtected=true;click(9725);SetFocus(control(9720));click(9721);
+    restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&GetFocus()==control(9720)&&
+      tool.snapshot().at("error").get<std::string>().find("Original parameter input")!=std::string::npos&&songState(app)==music,
+      "Record ignored retained original input ownership or submitted a refused replacement take");
+    inputProtected=false;
+    const auto emptyDelivery=delivery;
+    for(const auto *flag:{"pending","needsReview"}){
+      delivery[flag]=true;click(9725);click(9721);
+      restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&songState(app)==music,
+        "Record bypassed unresolved native input delivery");delivery=emptyDelivery;
+    }
+    delivery["lost"]=1;click(9725);click(9721);
+    restoreCheck(!IsWindowEnabled(control(9721))&&writes.empty()&&songState(app)==music,
+      "Record bypassed retained native input loss without a visible event row");
+    delivery=emptyDelivery;click(9725);
+    restoreCheck(IsWindowEnabled(control(9721))&&writes.empty(),"Resolved original input did not restore Record availability");
+    duringRead=[&]{click(9721);inputProtected=true;};click(9725);
+    restoreCheck(tool.snapshot().at("queuedAction")=="automation.recording.start"&&writes.empty(),
+      "Record reentered its observation read");
+    SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(tool.snapshot().at("queuedAction").is_null()&&writes.empty()&&!IsWindowEnabled(control(9721))&&songState(app)==music,
+      "Queued Record bypassed original input protection discovered during readback");
+    inputProtected=false;click(9725);
     SendMessageW(control(9720),CB_SETCURSEL,1,0);click(9721);
     restoreCheck(writes.size()==1&&tool.snapshot().at("take").at("capturing")==true&&IsWindowEnabled(control(9722))&&!IsWindowEnabled(control(9723)),
         "Record did not enter the retained capture state or allowed Keep while capturing");
+    rootEntry(9722,9725);
+    click(9741);restoreCheck(openedAutomation.empty()&&!IsWindowEnabled(control(9741)),
+        "An active take offered committed song automation navigation");
     restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
         "New captured music stayed hidden behind an empty native delivery page");
     restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find("Gain")!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos&&
       (GetWindowLongPtrW(control(9739),GWL_STYLE)&ES_READONLY)&&
       GetNextDlgTabItem(window,control(9732),FALSE)==control(9739),
       "Recording details are not readable, read-only or adjacent to the list in Tab order");
+    // The same target and identical-looking rows in another take are a new
+    // page. Ordinary polling retains the current event; take replacement must
+    // not silently reinterpret its row as input from the new recording.
+    ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::setItemState(control(9732),71,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::ensureVisible(control(9732),71,FALSE);const auto previousTop=ListView_GetTopIndex(control(9732));
+    restoreCheck(previousTop>0,"Recording fixture did not scroll beyond the first original input");
+    SetFocus(control(9732));SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==71&&ListView_GetTopIndex(control(9732))==previousTop,
+      "Unchanged take polling replaced the selected original input or scroll position");
+    take["take"]="replacement-with-identical-page";SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&ListView_GetTopIndex(control(9732))==0&&GetFocus()==control(9732)&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&!tool.snapshot().at("target").get<std::string>().empty()&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos&&writes.size()==1&&songState(app)==music,
+      "New take retained a previous take's row selection or changed musical data");
     const std::string refusal="Disable this parameter's pattern automation before recording absolute automation. The original input remains available for review.";
-    delivery["events"]=Json::array({{{"plugin",plugin},{"parameter",1},{"value",-6.5},{"hostTime","9007199254740993"},
-      {"state","refused"},{"error",refusal}},{{"plugin",plugin},{"parameter",1},{"value",-12.5},{"hostTime","9007199254740994"},
-      {"state","unknown"},{"error","Original delivery is uncertain; inspect current state before retrying."}}});
-    delivery["retained"]=2;delivery["needsReview"]=true;
+    // Use the live producer's wire shape, not a hand-written recovery archive:
+    // the two intentionally have different timestamp field names.
+    ScreamSeq::ParameterControlDelivery originalInput;
+    const auto retainFailure=[&](double value,uint64_t timestamp,bool refused) {
+      bool caught=false;
+      try {
+        originalInput.enqueue({app.documentId,app.view->session.revision,take.at("take").get<std::string>(),plugin,1,value,timestamp},
+          [&](const Json &,const std::shared_ptr<ScreamSeq::NativeCallReceipt> &)->std::future<Call> {
+            if(refused)throw ScreamSeq::Api::ApiError(-32002,refusal,Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+            throw std::runtime_error("Original delivery is uncertain; inspect current state before retrying.");
+          });
+      }catch(const ScreamSeq::Api::ApiError &){caught=true;restoreCheck(refused,"Unknown submission became a known refusal");}
+       catch(const std::runtime_error &){caught=true;restoreCheck(!refused,"Known refusal lost its outcome");}
+      restoreCheck(caught,"Original input fixture unexpectedly accepted a failed submission");
+    };
+    retainFailure(-6.5,9007199254740993ull,true);retainFailure(-12.5,9007199254740994ull,false);
+    delivery=originalInput.snapshot();
+    restoreCheck(delivery.at("retained")==2&&delivery.at("needsReview")==true&&
+      delivery.at("events")[0].at("state")=="refused"&&delivery.at("events")[1].at("state")=="unknown",
+      "Original input fixture did not retain both delivery outcomes");
     SendMessageW(control(9728),CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
-    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos,
+    restoreCheck(tool.snapshot().at("inputDetails").get<std::string>().find(refusal)!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740993")!=std::string::npos,
       "Recording review truncated the actionable refusal reason");
     SetFocus(control(9732));SendMessageW(control(9732),WM_KEYDOWN,VK_DOWN,0);
-    restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos,
+    restoreCheck(GetFocus()==control(9732)&&tool.snapshot().at("inputDetails").get<std::string>().find("Original delivery is uncertain")!=std::string::npos&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254740994")!=std::string::npos,
       "Arrow-key selection did not update the complete recording input details");
+    const auto originalDelivery=delivery;const auto originalDetails=tool.snapshot().at("inputDetails");
+    SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
+    delivery["events"].erase(delivery["events"].begin());delivery["retained"]=1;
+    SendMessageW(window,WM_TIMER,7,0);
+    DWORD keptFirst=0,keptLast=0;SendMessageW(control(9739),EM_GETSEL,WPARAM(&keptFirst),LPARAM(&keptLast));
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&tool.snapshot().at("inputDetails")==originalDetails&&
+      GetFocus()==control(9739)&&keptFirst==2&&keptLast==9,"Delivery reconciliation redirected selected input or reset details selected for copying");
+    delivery["events"][0]["state"]="refused";delivery["events"][0]["error"]="Later confirmed refusal";
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==0&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Later confirmed refusal")!=std::string::npos,
+      "Delivery outcome update discarded the original selected input");
+    delivery["events"]=Json::array({originalDelivery.at("events")[0]});SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Select an input")!=std::string::npos,
+      "Expired delivery selection silently moved to another original input");
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1,"Polling silently reselected an expired input");
+    ScreamSeq::NativeReportList::setItemState(control(9732),0,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    delivery["events"].push_back(delivery["events"][0]);delivery["retained"]=2;SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1,"Ambiguous duplicate original inputs fabricated stable selection");
+    delivery=originalDelivery;SendMessageW(window,WM_TIMER,7,0);
+    ScreamSeq::NativeReportList::setItemState(control(9732),1,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    restoreCheck(writes.size()==1&&songState(app)==music,"Delivery selection maintenance wrote or replayed musical input");
+    SetFocus(control(9732));
     SendMessageW(control(9732),WM_KEYDOWN,VK_UP,0);
     SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
     SendMessageW(window,WM_TIMER,7,0);restoreCheck(tool.snapshot().at("target")=="",
@@ -100,20 +238,113 @@ void applicationParameterRecordingReview() {
     restoreCheck(!tool.snapshot().at("acknowledgeLoss").get<bool>()&&!IsWindowEnabled(control(9723)),"New loss reused acknowledgement of an earlier review");
     SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
     take["completed"]=true;SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(!IsWindowEnabled(control(9724))&&restoreText(control(9723))==L"Finish keeping",
+    restoreCheck(!IsWindowEnabled(control(9724))&&restoreText(control(9723))==L"Finish restoring",
         "Already committed take offered Discard as if it could undo accepted music");
     take["completed"]=false;SendMessageW(window,WM_TIMER,7,0);
     failAfterKeep=true;click(9723);restoreCheck(writes.size()==3&&!tool.snapshot().at("completion").is_null(),"Post-commit error lost its original receipt");
+    click(9741);restoreCheck(openedAutomation.empty()&&!IsWindowEnabled(control(9741)),
+        "Unreviewed Keep outcome enabled song automation navigation");
     click(9723);restoreCheck(writes.size()==3,"Retry duplicated an uncertain recording commit");click(9725);
     restoreCheck(writes.size()==3&&reconciled==1&&tool.snapshot().at("completion").is_null()&&tool.snapshot().at("take").at("retained")==false,
         "Review resent a completed action or retained the old take after receipt reconciliation");
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",1}})&&IsWindowEnabled(control(9741)),
+        "Confirmed Keep forgot the selected stable automation target");
+    const auto beforeNavigation=tool.snapshot();click(9741);
+    restoreCheck(openedAutomation==Json::array({Json::array({plugin,1})})&&tool.snapshot()==beforeNavigation&&writes.size()==3&&songState(app)==music,
+        "Opening kept automation replayed input, wrote music or changed recording review");
+    {
+      const auto expected=tool.snapshot().at("keptTarget");const auto beforeOpens=openedAutomation.size();
+      rackOverride=Json::array({{{"instanceID","replacement-plugin"},{"name","Replacement at the same rack position"}}});click(9725);click(9741);
+      restoreCheck(!IsWindowEnabled(control(9741))&&openedAutomation.size()==beforeOpens&&tool.snapshot().at("keptTarget")==expected,
+        "A removed kept plugin enabled navigation to a replacement rack slot");
+      rackOverride.reset();click(9725);
+      restoreCheck(IsWindowEnabled(control(9741))&&tool.snapshot().at("keptTarget")==expected,
+        "Restoring the same stable plugin did not restore its kept automation action");
+      available=false;click(9741);available=true;rackOverride=Json::array();click(9725);
+      SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(!IsWindowEnabled(control(9741))&&tool.snapshot().at("queuedKept").is_null()&&openedAutomation.size()==beforeOpens&&
+        writes.size()==3&&songState(app)==music,"Queued kept navigation followed a removed plugin or changed music");
+      rackOverride.reset();click(9725);
+    }
+    {
+      const auto beforeOpens=openedAutomation.size();const auto expected=tool.snapshot().at("keptTarget");
+      duringRead=[&]{click(9741);click(9741);restoreCheck(openedAutomation.size()==beforeOpens,
+        "Kept automation navigation reentered its background read");};
+      SendMessageW(window,WM_TIMER,7,0);
+      restoreCheck(tool.snapshot().at("queuedKept")==expected&&!IsWindowEnabled(control(9741)),
+        "Background review lost the enabled Song automation click");
+      available=false;SendMessageW(window,WM_TIMER,10,0);available=true;
+      restoreCheck(openedAutomation.size()==beforeOpens,"Kept navigation bypassed another editor's worker read");
+      SendMessageW(window,WM_TIMER,10,0);SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+1&&openedAutomation.back()==Json::array({plugin,1})&&
+        tool.snapshot().at("queuedKept").is_null()&&IsWindowEnabled(control(9741))&&writes.size()==3&&songState(app)==music,
+        "Deferred kept navigation was lost, repeated, retargeted or changed music");
+      available=false;click(9741);
+      restoreCheck(tool.snapshot().at("queuedKept")==expected&&openedAutomation.size()==beforeOpens+1,
+        "Idle kept navigation was dropped while another editor owned the worker");
+      available=true;SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+2,"Idle queued kept navigation did not finish");
+      duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);
+      contextRevision="changed-before-kept-navigation";SendMessageW(window,WM_TIMER,10,0);contextRevision.clear();
+      restoreCheck(openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Kept navigation crossed a changed song revision");click(9725);
+      duringRead=[&]{click(9741);throw std::runtime_error("Owned navigation refresh failure");};
+      SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Failed recording refresh authorized its queued navigation");click(9725);
+      duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);tool.hide();SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(!tool.visible()&&openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Closing review retained a navigation that reopened another editor");tool.show();
+    }
+    duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);const auto beforeReplacementOpens=openedAutomation.size();
     take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
-      {"transportPlaying",false},{"discardable",true},{"targets",Json::array()},{"sources",Json::array()}};
+      {"transportPlaying",true},{"discardable",false},{"targets",Json::array()},{"sources",Json::array()}};
     SendMessageW(window,WM_TIMER,7,0);
-    restoreCheck(IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&
+    SendMessageW(window,WM_TIMER,10,0);
+    restoreCheck(openedAutomation.size()==beforeReplacementOpens&&tool.snapshot().at("queuedKept").is_null(),
+        "A replacement take opened the preceding take's queued automation destination");
+    restoreCheck(tool.snapshot().at("keptTarget").is_null()&&!IsWindowEnabled(control(9741)),
+        "A new external take retained a previous take's navigation shortcut");
+    restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&IsWindowEnabled(control(9740))&&IsWindowVisible(control(9740))&&
+      restoreText(control(9734)).find(L"stop playback")!=std::wstring::npos,
+      "Failed live clock still claimed to record or hid the safe recovery action");
+    MINMAXINFO minimum{};SendMessageW(window,WM_GETMINMAXINFO,0,reinterpret_cast<LPARAM>(&minimum));
+    restoreCheck(SetWindowPos(window,nullptr,0,0,minimum.ptMinTrackSize.x,minimum.ptMinTrackSize.y,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE),"Resize compact recording recovery");
+    RECT client{},previousBounds{};GetClientRect(window,&client);
+    for(int id:{9721,9722,9740}) {
+      RECT bounds{};GetWindowRect(control(id),&bounds);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&bounds),2);
+      restoreCheck(bounds.left>=previousBounds.right&&bounds.right<=client.right&&bounds.top>=0&&bounds.bottom<=client.bottom,
+        "Compact recording and playback buttons overlap or leave the client");previousBounds=bounds;
+    }
+    restoreCheck(GetNextDlgTabItem(window,control(9722),FALSE)==control(9740),"Playback recovery is missing from adjacent keyboard navigation");
+    // A stop arriving during a polling read is retained once; completion may
+    // only stop playback, never implicitly Keep or Discard the original input.
+    const auto beforePlaybackStop=writes.size();
+    duringRead=[&]{click(9740);click(9740);restoreCheck(writes.size()==beforePlaybackStop,
+      "Playback Stop reentered the worker during a recording refresh");};
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(tool.snapshot().at("queuedAction")=="transport.stop","Refresh lost explicit playback Stop");
+    failAfterPlaybackStop=true;SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforePlaybackStop+1&&!tool.snapshot().at("completion").is_null()&&
+      !IsWindowEnabled(control(9740))&&tool.protectsClose(),"Uncertain playback Stop lost its receipt or allowed an immediate retry");
+    click(9740);click(9724);restoreCheck(writes.size()==beforePlaybackStop+1,"Uncertain playback Stop allowed a second write");
+    SetFocus(control(9725));click(9725);
+    restoreCheck(playbackReconciled==1&&tool.snapshot().at("completion").is_null()&&GetFocus()==control(9725),
+      "Playback Stop review did not reconcile its receipt while preserving keyboard focus");
+    restoreCheck(writes.size()==beforePlaybackStop+1&&writes.back().first=="transport.stop"&&take.at("retained")==true&&
+      take.at("capturing")==true&&take.at("take")=="failed-clock-take"&&tool.protectsClose()&&
+      IsWindowEnabled(control(9724))&&!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9740))&&
       restoreText(control(9734)).find(L"Playback stopped")!=std::wstring::npos,
-      "Stopped transport with a failed Stop cut trapped the retained take behind disabled Discard");
-    click(9724);restoreCheck(writes.size()==4&&writes.back().first=="automation.recording.discard"&&
+      "Explicit playback Stop lost the failed take, duplicated a write or failed to offer safe Discard");
+    click(9740);restoreCheck(writes.size()==beforePlaybackStop+1,"Disabled playback Stop submitted again");
+    // Eligibility can change without changing the take or musical revision.
+    take["transportPlaying"]=true;take["discardable"]=false;SendMessageW(window,WM_TIMER,7,0);
+    duringRead=[&]{click(9740);take["transportPlaying"]=false;take["discardable"]=true;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforePlaybackStop+1&&tool.snapshot().at("queuedAction").is_null()&&
+      tool.snapshot().at("error").get<std::string>().find("Playback changed during refresh")!=std::string::npos,
+      "Queued playback Stop ignored changed transport eligibility");
+    click(9724);restoreCheck(writes.size()==5&&writes.back().first=="automation.recording.discard"&&
       writes.back().second.at("take")=="failed-clock-take"&&!tool.protectsClose(),
       "Discard of a stopped failed-context take lost its identity or retained a false close barrier");
     // A read of the present take is not a receipt for an earlier write. Even
@@ -154,6 +385,44 @@ void applicationParameterRecordingReview() {
       "Explicit Record after a pure refusal could not start a fresh take");
     click(9722);click(9724);
     restoreCheck(!tool.protectsClose()&&songState(app)==music,"Refusal/retry left native protection or changed music");
+    // Background reads pump native messages. A real Stop click during that
+    // read must survive exactly once, and never target a changed take/revision.
+    click(9721);const auto beforeQueuedStop=writes.size();
+    duringRead=[&]{click(9722);click(9722);restoreCheck(writes.size()==beforeQueuedStop,
+      "Recording Stop reentered the worker during a background read");};
+    SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(tool.snapshot().at("queuedAction")=="automation.recording.stop"&&tool.protectsClose(),
+      "Background refresh lost the original Stop intent");
+    available=false;SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeQueuedStop&&!tool.snapshot().at("queuedAction").is_null(),
+      "Another editor's worker read dropped or prematurely submitted the retained Stop");available=true;
+    SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeQueuedStop+1&&!take.at("capturing").get<bool>()&&tool.snapshot().at("queuedAction").is_null(),
+      "Queued Stop was lost or submitted more than once");click(9724);
+    click(9721);const auto beforeChangedTake=writes.size();
+    duringRead=[&]{click(9722);take["take"]="replacement-during-read";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeChangedTake&&take.at("capturing").get<bool>()&&
+      tool.snapshot().at("error").get<std::string>().find("changed during refresh")!=std::string::npos,
+      "Deferred Stop retargeted a different recording");click(9722);click(9724);
+    click(9721);const auto beforeChangedRevision=writes.size();
+    duringRead=[&]{click(9722);contextRevision="newer-song-revision";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeChangedRevision&&take.at("capturing").get<bool>(),
+      "Deferred recording action silently rebased to a later song revision");
+    contextRevision.clear();click(9722);click(9724);
+    click(9721);const auto beforeFailedRefresh=writes.size();
+    duringRead=[&]{click(9722);throw std::runtime_error("Owned interrupted recording refresh");};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeFailedRefresh&&tool.snapshot().at("queuedAction").is_null()&&take.at("capturing").get<bool>(),
+      "Failed read authorized a deferred recording write");click(9722);click(9724);
+    click(9721);click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);
+    const auto beforeNewLoss=writes.size();
+    duringRead=[&]{click(9723);take["targets"][0]["unmapped"]=3;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==beforeNewLoss&&!tool.snapshot().at("acknowledgeLoss").get<bool>()&&
+      tool.snapshot().at("error").get<std::string>().find("input loss changed")!=std::string::npos,
+      "Queued Keep reused an acknowledgement after new input loss");click(9724);
     // API completion must update hidden departure protection without relying
     // on the disabled poll timer, fetching data or stealing another editor's focus.
     tool.hide();SetFocus(app.window);const auto hiddenFocus=GetFocus();const auto boundaryWrites=writes.size();
@@ -173,4 +442,188 @@ void applicationParameterRecordingReview() {
     restoreCheck(!tool.protectsClose()&&!tool.visible()&&tool.snapshot().at("take")==finished&&
       writes.size()==boundaryWrites&&GetFocus()==hiddenFocus,
       "Confirmed API Discard retained a hidden departure barrier, repeated a write or stole focus");
+    take={{"retained",false},{"capturing",false},{"take",""}};tool.show();click(9725);click(9721);
+    take["targets"].push_back({{"plugin",plugin},{"parameter",2},{"unmapped",0},{"overflow",0}});
+    SendMessageW(window,WM_TIMER,7,0);
+    const auto chooseTarget=[&](int selected){SendMessageW(control(9728),CB_SETCURSEL,selected,0);
+      SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));};
+    const auto gainTarget=Json({{"plugin",plugin},{"parameter",1}}).dump();
+    const auto balanceTarget=Json({{"plugin",plugin},{"parameter",2}}).dump();
+    const auto beforeTargetNavigation=writes.size();SetFocus(control(9728));
+    const auto beforeFailedTarget=tool.snapshot();
+    ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+    ScreamSeq::NativeReportList::setItemState(control(9732),17,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+    const auto beforeFailedDetails=tool.snapshot().at("inputDetails");
+    duringRead=[] {throw std::runtime_error("Owned target summary read failure");};chooseTarget(2);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&
+      tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
+      ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
+      "Failed target summary read relabelled old input or discarded selected details/focus");
+    duringPageRead=[] {throw std::runtime_error("Owned target event read failure");};chooseTarget(2);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1&&
+      tool.snapshot().at("events")==beforeFailedTarget.at("events")&&tool.snapshot().at("inputDetails")==beforeFailedDetails&&
+      ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9728),
+      "Failed target page read relabelled old input or discarded selected details/focus");
+    // A new take or a removed target cannot inherit the prior page when the
+    // new event read fails. Retain the observed lifecycle, not stale input rows.
+    const auto originalTake=take;
+    for(const bool newTake:{true,false}){
+      if(newTake)take["take"]="replacement-page-owner";
+      else take["targets"].erase(take["targets"].begin());
+      const auto failPage=[] {throw std::runtime_error("Owned replacement page failure");};
+      if(newTake)duringPageRead=failPage;else duringDeliveryPage=failPage;
+      SendMessageW(window,WM_TIMER,7,0);
+      restoreCheck(tool.snapshot().at("take")==take&&tool.snapshot().at("events").empty()&&
+        tool.snapshot().at("total")==0&&ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==-1&&
+        tool.snapshot().at("inputDetails").get<std::string>().find("900719925474") == std::string::npos&&
+        GetFocus()==control(9728)&&writes.size()==beforeTargetNavigation&&songState(app)==music,
+        "Failed replacement page displayed another take's inputs, rolled back lifecycle or changed focus/music");
+      take=originalTake;click(9725);chooseTarget(1);
+      ScreamSeq::NativeReportList::setItemState(control(9732),-1,0,LVIS_SELECTED|LVIS_FOCUSED);
+      ScreamSeq::NativeReportList::setItemState(control(9732),17,LVIS_SELECTED|LVIS_FOCUSED,LVIS_SELECTED|LVIS_FOCUSED);
+      restoreCheck(tool.snapshot().at("events")==beforeFailedTarget.at("events")&&
+        tool.snapshot().at("inputDetails")==beforeFailedDetails&&GetFocus()==control(9728),
+        "Review did not recover the exact original inputs after a replacement-page failure");
+    }
+    // A long take crosses native review pages. Polls may pump these clicks just
+    // like target selection; failed reads must retain the displayed page and
+    // its exact original input, including text selected for copying.
+    SetFocus(control(9739));SendMessageW(control(9739),EM_SETSEL,2,9);
+    const auto pageBefore=tool.snapshot();
+    for(const bool eventPage:{false,true}){
+      if(eventPage)duringPageRead=[] {throw std::runtime_error("Owned next-page event read failure");};
+      else duringRead=[] {throw std::runtime_error("Owned next-page summary failure");};
+      click(9730);DWORD first=0,last=0;SendMessageW(control(9739),EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("total")==130&&
+        tool.snapshot().at("events")==pageBefore.at("events")&&tool.snapshot().at("inputDetails")==pageBefore.at("inputDetails")&&
+        ListView_GetNextItem(control(9732),-1,LVNI_SELECTED)==17&&GetFocus()==control(9739)&&first==2&&last==9&&
+        !IsWindowEnabled(control(9729))&&IsWindowEnabled(control(9730)),
+        "Failed recording page navigation advanced metadata, changed selected input/caret or disabled the retry direction");
+    }
+    duringRead=[&]{click(9730);restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset")==128,
+      "Next page reentered summary polling or lost its bounded destination");};
+    SendMessageW(window,WM_TIMER,7,0);available=false;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset")==128,
+      "Recording page navigation bypassed a busy document owner");available=true;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==128&&tool.snapshot().at("events").size()==2&&
+      tool.snapshot().at("queuedTarget").is_null()&&tool.snapshot().at("target")==gainTarget&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Original host time: 9007199254741121")!=std::string::npos&&
+      GetFocus()==control(9739)&&IsWindowEnabled(control(9729))&&!IsWindowEnabled(control(9730)),
+      "Deferred next page lost its original timestamps, target, focus or page boundary");
+    click(9730);restoreCheck(tool.snapshot().at("offset")==128&&tool.snapshot().at("events").size()==2,
+      "Next at the final page selected an empty page");
+    {
+      struct RestoreKeys{BYTE state[256]{};RestoreKeys(){restoreCheck(GetKeyboardState(state),"Read private page keyboard state");}~RestoreKeys(){SetKeyboardState(state);}} restore;
+      BYTE ctrl[256]{};std::copy(std::begin(restore.state),std::end(restore.state),std::begin(ctrl));ctrl[VK_CONTROL]|=0x80;
+      restoreCheck(SetKeyboardState(ctrl),"Set private Ctrl modifier");
+      SendMessageW(window,WM_KEYDOWN,VK_PRIOR,0);restoreCheck(tool.snapshot().at("offset")==0,"Ctrl+Page Up did not review previous inputs");
+      SendMessageW(window,WM_KEYDOWN,VK_NEXT,0);restoreCheck(tool.snapshot().at("offset")==128,"Ctrl+Page Down did not review next inputs");
+    }
+    duringPageRead=[&]{click(9729);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("events").size()==128,
+      "Previous page arriving during the event read was lost");
+    duringRead=[&]{click(9730);click(9730);click(9729);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null(),
+      "Rapid review page clicks did not preserve their bounded latest destination");
+    available=false;click(9730);contextRevision="page-navigation-stale";available=true;SendMessageW(window,WM_TIMER,9,0);contextRevision.clear();
+    restoreCheck(tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null(),
+      "Page navigation crossed its captured revision");
+    duringRead=[&]{click(9730);click(9727);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(!tool.visible()&&tool.snapshot().at("offset")==0&&tool.snapshot().at("queuedOffset").is_null()&&
+      writes.size()==beforeTargetNavigation&&songState(app)==music,"Closed review adopted a pending page or page navigation changed music");
+    tool.show();SetFocus(control(9728));
+    duringRead=[&]{chooseTarget(2);chooseTarget(0);chooseTarget(2);
+      restoreCheck(tool.snapshot().at("pending")==true&&tool.snapshot().at("target")==gainTarget&&
+        SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,
+        "Pumped target choice reentered a read or mismatched the displayed rows");};
+    SendMessageW(window,WM_TIMER,7,0);available=false;SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("queuedTarget")==balanceTarget&&tool.snapshot().at("target")==gainTarget,
+      "Busy owner lost the latest recording target choice");available=true;
+    SendMessageW(window,WM_TIMER,9,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("queuedTarget").is_null()&&tool.snapshot().at("target")==balanceTarget&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==2&&GetFocus()==control(9728)&&
+      tool.snapshot().at("inputDetails").get<std::string>().find("Balance")!=std::string::npos&&writes.size()==beforeTargetNavigation,
+      "Deferred target navigation lost identity, details or focus, or wrote music");
+    // The event-page read can pump input too, after the catalogue is loaded.
+    duringPageRead=[&]{chooseTarget(1);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&SendMessageW(control(9728),CB_GETCURSEL,0,0)==1,
+      "Target choice arriving during event pagination was lost");
+    available=false;chooseTarget(2);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget")==balanceTarget,
+      "Another editor's busy read lost recording navigation");available=true;
+    // A later direct choice supersedes the deferred choice, even if its timer
+    // message was already posted before the owner became idle.
+    chooseTarget(0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==""&&tool.snapshot().at("queuedTarget").is_null()&&
+      SendMessageW(control(9728),CB_GETCURSEL,0,0)==0,"Older queued target replaced a newer explicit delivery choice");chooseTarget(1);
+    duringRead=[&]{chooseTarget(2);contextRevision="later-target-revision";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);contextRevision.clear();
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation silently rebased a stale revision");
+    duringRead=[&]{chooseTarget(2);take["take"]="changed-during-target-choice";};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation redirected a choice into another take");
+    const auto secondTarget=take["targets"][1];
+    duringRead=[&]{chooseTarget(2);take["targets"].erase(take["targets"].begin()+1);};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Recording navigation adopted a removed target");
+    take["targets"].push_back(secondTarget);SendMessageW(window,WM_TIMER,7,0);
+    duringRead=[&]{chooseTarget(2);throw std::runtime_error("Owned target refresh failure");};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("target")==gainTarget&&tool.snapshot().at("queuedTarget").is_null(),
+      "Failed refresh retained a target navigation intent");
+    duringRead=[&]{chooseTarget(2);click(9727);};SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(!tool.visible()&&tool.snapshot().at("queuedTarget").is_null()&&writes.size()==beforeTargetNavigation&&songState(app)==music,
+      "Closing review retained navigation, reopened the window or changed music");tool.show();
+    click(9722);SendMessageW(control(9731),BM_SETCHECK,BST_CHECKED,0);click(9731);deferRestoration=true;
+    duringRead=[&]{chooseTarget(2);click(9723);};SendMessageW(window,WM_TIMER,7,0);
+    SendMessageW(window,WM_TIMER,8,0);SendMessageW(window,WM_TIMER,9,0);
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&
+      tool.snapshot().at("queuedTarget").is_null()&&!IsWindowEnabled(control(9741)),
+      "Pending native restoration lost the originally kept target or enabled premature navigation");
+    SendMessageW(control(9728),CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(9728,CBN_SELCHANGE),reinterpret_cast<LPARAM>(control(9728)));
+    take["transportPlaying"]=false;click(9725);click(9742);
+    restoreCheck(tool.snapshot().at("keptTarget")==Json({{"plugin",plugin},{"parameter",2}})&&IsWindowEnabled(control(9741)),
+      "Keep substituted the first parameter for the selected recording target");
+    const auto finalWrites=writes.size();click(9741);
+    restoreCheck(openedAutomation.back()==Json::array({plugin,2})&&writes.size()==finalWrites&&songState(app)==music,
+      "Selected kept automation navigation changed music or used a different target");
+    available=false;click(9741);available=true;const auto beforeExternalOpens=openedAutomation.size();
+    auto externalNext=Json{{"take","next-external-take"},{"retained",true},{"capturing",true}};
+    tool.observeBoundary(app.documentId,"automation.recording.start",externalNext);
+    restoreCheck(tool.snapshot().at("keptTarget").is_null()&&tool.snapshot().at("queuedKept").is_null(),
+      "External Record retained an earlier Keep destination or queued navigation");
+    tool.hide();externalNext["retained"]=false;externalNext["capturing"]=false;
+    tool.observeBoundary(app.documentId,"automation.recording.discard",externalNext);take=externalNext;tool.show();click(9725);click(9741);
+    restoreCheck(openedAutomation.size()==beforeExternalOpens&&!IsWindowEnabled(control(9741))&&
+      tool.snapshot().at("keptTarget").is_null()&&writes.size()==finalWrites&&songState(app)==music,
+      "Reopened review offered old kept music after a newer external take was discarded");
+    take={{"take","completed-recovery"},{"retained",true},{"capturing",false},{"completed",true},
+      {"compatible",false},{"transportPlaying",true},{"targets",Json::array()}, {"sources",Json::array()}};
+    click(9725);click(9742);
+    restoreCheck(writes.size()==finalWrites&&!IsWindowEnabled(control(9742))&&IsWindowVisible(control(9742))&&!IsWindowVisible(control(9724))&&
+      IsWindowEnabled(control(9723))&&restoreText(control(9723))==L"Finish restoring"&&!IsWindowEnabled(control(9731)),
+      "Saved-state recovery must replace Discard only for completed takes and refuse active playback");
+    take["transportPlaying"]=false;click(9725);SetFocus(control(9742));
+    restoreCheck(IsWindowEnabled(control(9742)),"Stopped kept take does not expose explicit state recovery");
+    GetClientRect(window,&client);
+    for(int id:{9723,9742,9726}) {
+      RECT bounds{};GetWindowRect(control(id),&bounds);MapWindowPoints(nullptr,window,reinterpret_cast<POINT *>(&bounds),2);
+      restoreCheck(bounds.left>=0&&bounds.top>=0&&bounds.right<=client.right&&bounds.bottom<=client.bottom,
+        "Completed-take recovery action clipped outside native review");
+    }
+    duringRead=[&]{click(9742);take["transportPlaying"]=true;};
+    SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,8,0);
+    restoreCheck(writes.size()==finalWrites&&tool.snapshot().at("queuedAction").is_null(),
+      "Queued recovery abandoned input after playback restarted during its read");
+    take["transportPlaying"]=false;click(9725);deferKeepReceipt=true;click(9742);
+    restoreCheck(writes.size()==finalWrites+1&&writes.back().second.at("restoreSavedState")==true&&tool.protectsClose(),
+      "Explicit recovery lost its intent or unresolved completion protection");
+    click(9725);click(9742);SendMessageW(window,WM_TIMER,7,0);
+    restoreCheck(writes.size()==finalWrites+1&&tool.protectsClose(),"Uncertain recovery replayed or lost its completion receipt");
+    lateReceipt->publish(lateCompletion);click(9725);
+    restoreCheck(!tool.protectsClose()&&writes.size()==finalWrites+1&&songState(app)==music,
+      "Confirmed recovery changed music, repeated its action or retained stale protection");
 }

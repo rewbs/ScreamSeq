@@ -46,7 +46,40 @@
             throw std::runtime_error("Editor target changed while navigation was open; choose it again");
         command(selected);
     }
+    static constexpr int patternHeaderColumnsFirst=10001,patternHeaderColumnsLast=10008;
+    Json patternHeaderTarget() {
+        return {{"document",documentId},{"revision",view->session.revision},{"context",contextRevision},
+            {"pattern",workspaceMenuTarget("pattern")}};
+    }
+    std::vector<ScreamSeq::NativeContextMenu::Item> patternHeaderItems()const {
+        using Item=ScreamSeq::NativeContextMenu::Item;
+        const bool edit=!presentationBusy()&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained();
+        std::vector<Item> columns;
+        for(unsigned count=1;count<=8;++count)columns.push_back({patternHeaderColumnsFirst+int(count)-1,
+            std::to_wstring(count)+L" FX columns",edit,view->effectColumns.at(channel)==count});
+        return {{noteColumnMuteCommand,noteColumn(channel).at("mute").get<bool>()?L"Unmute current note column":L"Mute current note column",edit},
+            {0,L"Effect columns",edit,false,std::move(columns)},
+            {effectsCommand,L"Pattern effects panel",!busy},{graphCommandsCommand,L"Pattern graph commands…",!busy},
+            {scratchGesturesCommand,L"Scratch phrases…",!busy}};
+    }
+    void dispatchPatternHeaderAction(const Json &target,int selected) {
+        if(!workspaceMenuAllows(patternHeaderItems(),selected)||busy||GetCapture()||!trackerWorkspaceVisible()||target!=patternHeaderTarget())
+            throw std::runtime_error("Pattern menu target changed; reopen it for the current selection");
+        if(selected>=patternHeaderColumnsFirst&&selected<=patternHeaderColumnsLast){
+            edit("pattern.effects.set",{{"pattern",patternIndex},{"columns",Json::array({{{"channel",channel},{"count",selected-patternHeaderColumnsFirst+1}}})}});
+            ensureCursorVisible();layoutControls();
+        }else command(selected);
+    }
+    void patternHeaderMenu() {
+        if(!trackerWorkspaceVisible())throw std::runtime_error("Show Pattern before opening its header actions");
+        setWorkspaceCanvasFocus("pattern");SetFocus(window);releaseTypedNotes();
+        const auto target=patternHeaderTarget();auto items=patternHeaderItems();workspaceMenuShortcuts(items,"pattern");
+        RECT anchor{};GetWindowRect(controls.at(patternHeaderMenuCommand),&anchor);
+        const auto selected=ScreamSeq::NativeContextMenu::show(window,{anchor.left,anchor.bottom},items);
+        if(selected)dispatchPatternHeaderAction(target,selected);
+    }
     bool navigationCommand(int id){
+        if(id==patternHeaderMenuCommand){patternHeaderMenu();return true;}
         if(id==allEditorsCommand||id==navigationWindowsCommand||id==navigationLayoutsCommand){navigationMenu(id);return true;}
         if(id==navigationPatternCommand){revealWorkspacePattern();setWorkspaceCanvasFocus("pattern");layoutControls();ensureCursorVisible();SetFocus(window);return true;}
         if(id>=floatInstrumentCommand&&id<=floatCurveCommand){

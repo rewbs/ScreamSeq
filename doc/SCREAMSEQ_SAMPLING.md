@@ -15,7 +15,7 @@ You can edit the song while recording. Closing the recorder stops input and reta
 
 Recording uses the selected device's current rate without changing the system's input/output defaults. Mono and stereo capture are supported. There is no input monitoring, so recording will not create a speaker-to-microphone feedback loop. If the meter reports clipping, reduce the level on your input device. Samples use the engine's native 16-bit storage; values outside full scale saturate, without automatic normalization.
 
-The default limit is 60 seconds. The macOS recorder also offers five minutes; the Windows recorder currently uses 60 seconds. Both platforms' API accepts up to 300 seconds. Storage is bounded to 16,777,216 frames, so very high input rates may have a shorter effective limit, shown while recording. Reaching the limit, losing the device or receiving invalid audio stops capture and retains the valid frames. Device and permission errors leave the song unchanged.
+The default limit is 60 seconds. Both native recorders also offer five minutes; on Windows, choose **New take limit** before recording. The choice cannot change a retained take's limit. Both platforms' API accepts up to 300 seconds. Storage is bounded to 16,777,216 frames, so very high input rates may have a shorter effective limit, shown while recording. Reaching the limit, losing the device or receiving invalid audio stops capture and retains the valid frames. Device and permission errors leave the song unchanged.
 
 ## Record a pattern selection
 
@@ -40,6 +40,14 @@ Use the current document revision from a read. Coordinates are zero-based and bo
 ```
 
 `dryRun:true` validates the selection and destination capacity without instantiating plugins or estimating audio frames. The successful result includes the sample/instrument indices, selected/warm-up/tail/latency frame counts, clipping count and source-isolation description.
+
+Use a 120-second client timeout for offline selection rendering. Windows retains
+a five-second queue-admission deadline, then allows an admitted render the same
+120-second total reply budget as full-song export and the Mac socket. A timeout
+after execution begins leaves the outcome uncertain: inspect the document and
+retained completion before retrying, and never automatically repeat the write
+with a new request ID. These reply budgets do not change audio, memory or history
+bounds.
 
 Microphone methods:
 

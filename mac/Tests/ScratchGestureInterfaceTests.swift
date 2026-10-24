@@ -105,6 +105,11 @@ extension InterfaceTests {
     editor.fader.selected=0;editor.activeLane=1;editor.fader.replaceSelected(position:0,value:0.2,curve:"linear");editor.save()
     replies.removeFirst()(["error":["code":-32001,"message":"Song changed"]])
     try require(editor.hasDraft && editor.fader.points[0].value==0.2 && editor.status.stringValue.contains("retained"),"Rejected stale writes keep the original draft visible")
+    editor.save();let uncertainCount=writes.count
+    replies.removeFirst()(["error":["code":-32002,"message":"Completion unknown","data":["writeOutcome":"unknown"]]])
+    pumpMainRunLoop(0.2)
+    try require(writes.count==uncertainCount && !editor.pending && editor.hasDraft && editor.fader.points[0].value==0.2 && editor.status.stringValue.contains("Completion unknown"),
+      "An uncertain scratch save is retained without replay or timestamp/value replacement")
     let previous=writes.count;stored["name"]="Edited elsewhere";readRevision="song:9";editor.retry()
     try require(writes.count==previous && editor.hasDraft && editor.status.stringValue.contains("changed elsewhere"),"Retry refuses to overwrite a phrase that changed externally")
     let scripted=EnvelopePoint(position:0,value:0,curve:"linear",formula:"sin(t)")

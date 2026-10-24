@@ -82,6 +82,10 @@
         if(right>horizontalScroll+available)horizontalScroll=right-available;
         horizontalScroll=std::clamp(horizontalScroll,0.0f,std::max(0.0f,channelStart(view->channels)-available));
 	}
+    float patternHeaderTextWidth()const {
+        const auto width=patternGridRect().w;
+        return std::max(0.f,width-(width>=570?462.f:width>=440?348.f:width>=220?170.f:88.f));
+    }
 	void layoutControls() {
 		frameRequested=true;
 		if(controls.empty()) return;
@@ -93,6 +97,10 @@
 		if(controlDpi!=dpi) {
 			HFONT next=CreateFontW(-int(12*s),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
 			for(auto [id,h]:controls) SendMessageW(h,WM_SETFONT,reinterpret_cast<WPARAM>(next),TRUE);
+            // The dropdown rows remain 22 DIP, but its closed selection belongs
+            // in the 23-DIP Pattern header band. Owner-drawn combos otherwise
+            // retain the taller row height plus native borders at high DPI.
+            SendMessageW(controls.at(effectColumnChooser),CB_SETITEMHEIGHT,WPARAM(-1),MulDiv(16,dpi,96));
 			if(controlFont) DeleteObject(controlFont);controlFont=next;controlDpi=dpi;
 		}
 		auto place=[&](int id,float x,float y,float w,float h,bool visible=true) {
@@ -121,16 +129,25 @@
         }
         place(dockToggle,g.lowerTabs.x+g.lowerTabs.w-102,g.lowerTabs.y+3,96,24,!hasWorkspaceDock()&&workspaceState.layout!="Pattern focus");
         ScreamSeq::NativeControls::text(controls.at(dockToggle),dock?L"Collapse dock":L"Show dock");
-        const auto grid=patternGridRect();place(effectColumnChooser,grid.x+grid.w-82,grid.y+3,76,230,trackerWorkspaceVisible());
+        const auto grid=patternGridRect();const bool header=trackerWorkspaceVisible(),fullHeader=grid.w>=440;
+        const auto headerFocus=GetFocus();
+        place(effectColumnChooser,grid.x+grid.w-(fullHeader?82:160),grid.y+3,76,230,header&&grid.w>=220);
+        place(patternHeaderMenuCommand,grid.x+grid.w-78,grid.y+3,72,23,header&&!fullHeader);
         place(positionRulerCommand,grid.x+1,grid.y+gridHeader-24,gutter-3,23,trackerWorkspaceVisible());
         ScreamSeq::NativeControls::text(controls.at(positionRulerCommand),positionMode=="rows"?L"Row":positionMode=="beats"?L"Beat":positionMode=="patternTime"?L"Pattern time":L"Song time");
-        place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,trackerWorkspaceVisible());
-        place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,trackerWorkspaceVisible());
+        place(graphCommandsCommand,grid.x+grid.w-172,grid.y+3,84,23,header&&fullHeader);
+        place(noteColumnMuteCommand,grid.x+grid.w-254,grid.y+3,76,23,header&&fullHeader);
+        place(effectsCommand,grid.x+grid.w-338,grid.y+3,78,23,header&&fullHeader);
         const bool columnMuted=noteColumn(channel).at("mute").get<bool>();
         ScreamSeq::NativeControls::text(controls.at(noteColumnMuteCommand),(columnMuted?L"Unmute ":L"Mute ")+std::to_wstring(channel+1));
         ScreamSeq::NativeControls::active(controls.at(noteColumnMuteCommand),columnMuted);
         EnableWindow(controls.at(noteColumnMuteCommand),!presentationBusy()&&!recoveryRestoring&&view->session.document.value("editable",false)&&!nativeCommandCompletion.retained());
-        place(scratchGesturesCommand,grid.x+grid.w-368,grid.y+3,108,23,trackerWorkspaceVisible()&&grid.w>540);
+        place(scratchGesturesCommand,grid.x+grid.w-452,grid.y+3,108,23,header&&grid.w>=570);
+        // If resizing hides a focused header action, keep keyboard input in the
+        // same Pattern header instead of leaving focus on an invisible child.
+        if(header)for(int id:{effectColumnChooser,graphCommandsCommand,noteColumnMuteCommand,effectsCommand,scratchGesturesCommand,patternHeaderMenuCommand})
+            if(headerFocus==controls.at(id)&&!IsWindowVisible(headerFocus))
+                SetFocus(controls.at(fullHeader?effectColumnChooser:patternHeaderMenuCommand));
 		place(notesInspectorCommand,g.inspector.x+6,g.inspector.y+4,104,24,show);
 		place(samplesCommand,g.inspector.x+114,g.inspector.y+4,128,24,show);
 		place(pinCommand,g.inspector.x+6,g.inspector.y+34,100,24,show);
@@ -198,7 +215,7 @@
             {midiRecordingCommand,L"MIDI…"},
             {arrangementCommand,L"Arrange…"},{songTimingCommand,L"Timing…"},
             {songPropertiesCommand,L"Settings…"},
-            {noteColumnMuteCommand,L"Mute column"},
+            {noteColumnMuteCommand,L"Mute column"},{patternHeaderMenuCommand,L"More ▾"},
             {layoutsCommand,L"Layouts…"},{dockNotes,L"Precise notes"},{dockSamples,L"Samples"},{dockEffects,L"Pattern FX"},
             {editorTrackerTab,L"Tracker"},{editorAutomationTab,L"Automation"},{editorInstrumentTab,L"Instrument"},{editorGraphCurveTab,L"Graph curve"},{editorPreciseNotesTab,L"Precise notes"},{editorFloatCommand,L"Float"},{editorHideCommand,L"Hide"},{editorPinCommand,L"Pinned"},{editorCursorCommand,L"Cursor"},{editorReturnCommand,L"Return"},
             {dockPlugins,L"Plugins"},{dockMixer,L"Mixer"},{dockGraph,L"Graph recipes"},{dockToggle,L"Collapse dock"},
@@ -317,8 +334,14 @@
             else if(id==soundChooser)selectTypingSound();
             else if(id==graphLanesFocus){if(!view->graphPattern->lanes.empty()){workspaceState.focus="graphLanes";revealGraphLane();}else{openGraphCommands();return;}}
             else if(id==openCommand) openFile();
-            else if(id==saveCommand || id==saveAsCommand) saveFile(id==saveAsCommand);
-            else if(id==exportModuleCommand) exportModuleFile();
+            else if(id==saveCommand || id==saveAsCommand) {
+                saveFile(id==saveAsCommand);layoutControls();
+                // Save is not navigation. Keep the active editor and text caret,
+                // including after flushing a queued precise-note field edit.
+                return;
+            }
+            else if(id==exportModuleCommand) {exportModuleFile();return;}
+            else if(id==exportAudioCommand) {exportAudioFile();return;}
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
             else if(id==copyCommand) copyCells();
             else if(id==pasteCommand) pasteCells();

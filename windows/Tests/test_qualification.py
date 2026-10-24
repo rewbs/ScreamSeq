@@ -76,6 +76,8 @@ class QualificationTests(unittest.TestCase):
             ("audio", "maxCallbackMicros", 10001),
             ("audio", "maxCallbackMicros", math.inf),
             ("audio", "realtimeAuditPassed", False),
+            ("audio", "deadlineEvidence", {"diagnosticThreadCycles": True}),
+            ("audio", "renderStageEvidence", {"enabled": True}),
         ]
         for section, key, value in changes:
             report = copy.deepcopy(self.synthetic_report())

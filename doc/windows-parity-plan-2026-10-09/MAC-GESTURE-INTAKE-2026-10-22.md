@@ -385,3 +385,1960 @@ last delivery and loss on an empty provider. These are prepared source tests,
 not executed results. Mac still requires a session take owner and guarded
 preview/baseline restoration before replacing its legacy recording consumer;
 the raw rack adapter and shared drain are prerequisites, not API parity closure.
+
+## Following source batch: atomic Mac take preview restoration — unbuilt
+
+`AudioDevice::cancelPluginParameterPreviews` now accepts a complete set of
+stable plugin IDs, parameter IDs and process-local provider incarnations,
+plus the captured whole-chain epoch. It resolves current slots on the control
+owner and delegates the all-or-nothing cancellation to the existing shared
+`PluginChain::cancelParameterPreviews`. This avoids restoring one plugin and
+then failing on another, and leaves accepted manual baselines independent of
+transient preview values. The existing single-parameter preview API is unchanged.
+
+Source inspection found that `publishLiveRack` can reorder the control rack
+without incrementing `pluginEpoch_`; that epoch protects whole-chain replacement,
+not positional identity. The new adapter therefore resolves stable IDs and
+checks native incarnations both before the stopped handoff and after applying
+already-accepted pending work. An old take cannot use a new epoch to bypass a
+replaced provider's identity. It never calls `pluginStates()` (which stops the
+device), reconstructs a vendor, opens an output device or closes a native editor.
+Active publication uses the existing bounded parameter queue. Native input
+leases, fixed Stop cuts and provider rechecks remain required in the future
+session owner; this helper alone does not establish that lifecycle.
+
+`NativePluginTests.mm::stoppedTakePreviewRestoration` adds one mixed AU/VST3
+case to the existing `native-plugins` executable. It checks two-target restoration
+in reverse request order, stale epoch, missing later plugin, foreign provider,
+invalid later parameter, unchanged manual baselines and clock/provider identity,
+idempotent restoration, and a reordered replacement rack with a new preview.
+The shared `ParameterPreviewTests.cpp::takeCancellation` already covers queue
+capacity refusal, invalid suffixes, duplicates, unrelated preview ownership and
+rendered PCM; those assertions remain unchanged. No new build or test has run
+for this adapter. Both Mac architectures must execute the native case before
+this source is qualified; active callback/natural-end behavior and full
+Keep/Discard UI/API/history/recovery integration remain open.
+
+This follow-up is on the backup branch after the Windows palette freeze077e.
+Do not silently include it in the prepared `palette-availability/` candidate or
+start another build for it. Group it with the subsequent coherent Mac take
+owner batch and its required Mac gates, preserving the hourly build cadence.
+
+## Following source batch: native Mac take intake adapter — unbuilt
+
+`mac/Bridge/NativeParameterTake.hpp` now coordinates the Mac control-owner
+portion of a retained take. It delegates fresh-arm/Stop validation to shared
+`RecordedGestureBoundary`, bounded original-time polling and latest-value
+selection to `RecordedGestureDrain`, and event/time/range/conflict/recovery
+state to `RecordedGestureTake`. Native catalogues, stable-ID-to-slot lookup,
+Mach clock reads and Core Audio preview publication stay in the Mac adapter.
+The owner is noncopyable and rejects reentrant entry, changed document/clock
+context and a replaced audio host. Arming rechecks context after fallible
+catalogue work and refuses earlier queued manual input without consuming it.
+
+Live polls capture a bounded native prefix; Stop retains one fixed cut and
+repeated Stop cannot move it. Later native notifications remain queued. A
+preview queue refusal retains the original take and retries its latest values
+on the next poll. Recovery reads a bounded prefix without sealing a live take
+or publishing preview values. Explicit host controls retain their original
+past Mach timestamp and reject future times before intake. Audible restoration
+uses the identity-guarded multi-target adapter above.
+
+The native-plugin fixture adds closed AU/VST3 host-control cases and a visible
+VST3 slider case to `--ui`. They assert original-time mapping after delayed
+clock coverage, full-queue refusal/retry without duplicated input, repeated
+Stop, changed-context refusal, a post-Stop suffix, refusal to arm over that
+suffix, baseline restoration under a native lease, and retained provider/window
+identity. These are prepared assertions, not executed results. Original native
+and rendered shared queue assertions remain mandatory.
+
+The session does **not** instantiate this owner yet. It still needs exclusive
+manual-consumer admission, grouped native restoration leases and opaque-state
+verification, commit into the existing unified history, recovery storage, the
+seven API contracts and native controls/review UI. `restorePreview` alone is not
+release: the caller must hold input leases, recheck fixed cuts and verify vendor
+state before dropping ownership. In particular, Mac's rendering vendor is also
+its editor vendor; copying Windows' isolated-vendor state replacement would be
+incorrect. This source must not be described as completed recording parity.
+
+## Following source batch: guarded native restoration — unbuilt
+
+`NativeParameterTake::restoreRetained` now acquires the full group's native
+input leases before restoring audible previews or invoking the session's saved
+state verification callback. It checks the immutable Stop queue positions,
+provider incarnations, loss counters and empty pending prefixes before leases,
+after acquiring them, after verification and after releasing them. A later
+native edit refuses restoration without consuming it. Even explicitly consuming
+that later edit elsewhere cannot silently rebase the original Stop position.
+
+Partial lease acquisition cleans up acquired tokens; a failed cleanup retains
+its token in the take for retry. Opaque verification failure retains the take
+and releases ordinary input where possible. The owner is never reset by this
+method: session history/recovery publication and explicit ownership release
+still follow successful native verification. It rejects reentrant intake while
+restoration runs and never replaces Mac's shared editor/render vendor. The
+low-level `restorePreview` remains separately documented for a caller already
+holding verified native leases; it is not a release operation.
+
+Prepared `native-plugins` assertions cover mixed AU/VST3 partial group lease
+refusal without prefix restoration, successful retry, live-take refusal,
+verification failure/retry, provider/value/input retention and a post-Stop suffix
+that remains protected even after an explicit fixture-only consume. The `--ui`
+fixture additionally covers a successful retained VST3 window with its slider
+disabled during verification and enabled after failure and success. Existing
+original-time, queue-capacity, fixed-Stop and shared rendered assertions remain.
+No build/test has run for this source. Both Mac architectures and the visible
+native fixture must pass at a future coordinated checkpoint, no earlier than
+16:09:04UTC on22October. The077e Windows package deliberately excludes it.
+
+Remaining session work: supply real opaque saved-state/manual-baseline
+verification (not just the test callback), exclude manual consumers and state
+mutations while the take owns a provider, coordinate unified Keep history and
+recovery publication, and connect all seven lifecycle API methods/native controls.
+Closed-editor explicit abandonment needs its own retained-evidence policy; this
+strict helper does not implement it or silently drop queued vendor callbacks.
+
+## Following source batch: atomic Keep adapter — unbuilt
+
+`NativeParameterTake::commit` now performs the native orchestration around
+`RecordedGestureTake::commit` and `RecordedGestureCapture::prepareBatch` /
+`publishBatch`. It validates the captured rack identities and point baseline,
+refreshes native catalogues and provider loss observations, rechecks context
+after vendor calls, and submits the complete membership to one synchronous
+session publication callback. The callback owns staged history, persistence
+and Core Audio publication; false/exception retires no target. A completed
+retry returns accepted without invoking publication again. An empty take
+completes without creating a history callback. No UI/device model is shared.
+
+The mixed native AU/VST3 fixture now prepares assertions for stale point and
+revision rejection, whole-take refusal/retry, unrelated point preservation,
+reentrant intake refusal, actual stopped `AudioDevice` timeline publication,
+all-target retirement, completed retry after revision advancement, retained
+restoration, and empty no-op. These are source assertions, not executed proof;
+the test callback does not establish real session Undo or persistence.
+
+Next integration step is to call this adapter from TrackerSession's unified
+EffectSnapshot history owner, reserving history and point storage before
+`publishRecordedAutomation`, then no-throw swapping accepted model state.
+Session admission must exclude legacy `collectPluginEdits` and manual state
+capture for owned providers before exposing any lifecycle API. The existing
+legacy recording path still timestamps at polling time and remains a confirmed
+gap until that migration is complete. No public lifecycle claim is added yet.
+
+Catalogue observation additionally pairs the native slot/provider before and
+after each vendor query. A live rack reorder does not change the whole-chain
+epoch; resolving only the stable ID after a pumped catalogue call could pair
+another plugin's range metadata with the original target. Arming and Keep now
+reject that changed observation before using its catalogue. This guard remains
+part of the unbuilt Mac batch and does not change the frozen077e candidate.
+
+## Following source batch: session ownership, Keep and recovery — unbuilt
+
+`TrackerSession` now owns a `NativeParameterTake` through the internal
+`ParameterTakeSession.inc`. The internal start path validates distinct stable
+plugins, rejects a concurrent arm, drains preceding manual input, rechecks the
+captured revision, folds accepted manual values, requires an actual playing
+Core Audio frame timeline, and installs the owner only after native catalogue
+and fresh-cut checks. Its context reader uses a weak session reference and
+the exact retained timeline; it does not keep the session alive in a cycle.
+
+When this owner exists, `collectPluginEdits` uses its bounded raw-input path
+instead of the legacy manual consumer. Transport Stop captures the fixed native
+cut before stopping audio. Internal Keep requires an already stopped take,
+prepares a complete recorded timeline plus `EffectSnapshot`, reserves Undo
+capacity before native publication, and adopts points/revision/history only
+after that publication succeeds. One complete take creates one history step;
+a completed retry retains ownership and cannot publish it again. It does not
+release ownership or claim native state restoration is finished.
+
+Recovery captures available original input without sealing a live take. A
+refused further drain records the warning while preserving already retained
+evidence. The typed archive overlay runs **after** `ProjectMetadata::merge`,
+so imported opaque recovery arrays are not replaced by a Foundation projection.
+Ordinary save/export is refused while a take is retained. Saved-baseline reads
+and recovery no longer capture live `pluginStates()` for that owner. New/open,
+device/playback restart, rack changes, manual parameter writes, history and
+preview/audition entry points have native guards; API mutations are admitted
+conservatively until the lifecycle methods are installed. Shutdown drops the
+owner before its audio reference, after the application's recovery phase.
+
+The recovery-array overlay is now shared with Windows in
+`editor/hosted/RecordedGestureRecovery.hpp`. It stages the complete array,
+replaces only the same take/revision, preserves independent/future archives and
+binary payloads, refuses incompatible collections, and enforces the existing
+64-archive bound. Windows retains its existing API error code. Prepared shared
+tests cover replacement, separate revisions, typed preservation, full-capacity
+update/refusal and unchanged incompatible input. `SessionTests.mm` adds real
+session admission refusal checks (empty/duplicate/missing/stopped/stale), with
+unchanged revision and serialized baseline. Neither set has run yet.
+
+**Not exposed or complete:** no public API or native Record control calls the
+new internal start yet. The old poll-time recording flow remains in place for
+existing users. Native opaque-state verification/restoration and explicit
+post-Stop suffix abandonment remain prerequisites for exposing the seven API
+operations and replacing that UI flow. The direct session edit paths still
+need the final admission audit when capture/review controls are connected.
+Do not treat internal ownership and a prepared history callback as successful
+session lifecycle qualification.
+
+Next required tests at a coordinated build: both Mac architectures' existing
+native-plugin, session and recorded-automation gates; Windows recorded-automation
+and actual-app recovery tests for the shared overlay; then new real session and
+socket cases covering multi-target Keep, no-op, queue refusal, original-time
+input, single Undo/Redo, recovery while live, save/reopen and protected vendor
+restoration. Those end-to-end successful session cases await the release/API
+integration. No new build was started for this source; the next eligible start
+remains 2026-10-22 16:09:04UTC, with no obligation to build an incomplete batch.
+
+## Following source batch: real stopped vendor verification — unbuilt
+
+Source inspection found a specific live-release hazard: Mac
+`VST3Plugin::state()` flushes pending changes with a zero-frame `process` call
+and synchronizes controller values. Calling it concurrently with the same
+rendering vendor is unsafe. `AudioDevice::pluginStates()` additionally stops
+transport. Neither is suitable for an unnoticed live release.
+
+`AudioDevice::restoreStoppedPluginBaselines` now provides the quiescent part of
+release. It rejects active playback, joins a naturally stopped callback without
+changing the retained frame clock, validates the entire group's native sources,
+prepares canonical accepted state and writable values using isolated providers,
+then restores those values in bounded batches. It rechecks all stable slots and
+provider/loss identities across vendor calls, pending work and each publication.
+The actual retained vendors' opaque bytes and audio layouts must match the
+canonical accepted baselines. A failure retains the take even after a partial
+vendor restoration; saved plugin blobs and musical history are never rewritten.
+The outer take still owns native leases and fixed-cut checks before and after.
+
+Shared `PluginChain::state(slot)` supplies the existing quiescent capture policy
+for one provider, avoiding serialization of unrelated vendors. `states()` uses
+the same policy; transient preview exclusion and the audio-block guard remain.
+The captured rack entry is retained across vendor calls. Prepared shared preview
+tests check per-provider accepted-state capture and missing-slot refusal.
+
+`NativeParameterTake::restoreStopped` composes this with grouped leases, and
+the internal session releases ownership only after success. Mixed AU/VST3
+fixtures now include real saved-baseline verification after Keep, opaque AU
+hidden-state mismatch, retained ownership after refusal and successful retry.
+They remain unexecuted. Existing visible lease, suffix, timing and history
+assertions are retained, with both Mac architectures and shared Windows/Mac
+parameter-preview/recorded gates required at the next source checkpoint.
+
+This is a prerequisite, **not a substitute for the requested final behavior**.
+Release during playback, closed-editor opaque replacement/explicit suffix
+abandonment, and full native controls/API/session qualification remain open.
+Public Mac recording is still the legacy flow; no new lifecycle UI is exposed.
+
+## Following source batch: direct native admission and real session gate — unbuilt
+
+The API guard alone does not protect direct AppKit editing. `TrackerSession.mm`
+now refuses retained-take edits at the native pattern/cell/order/sequence,
+song settings, sample processing/import/settings, instrument import/settings
+and device refresh entry points, before stopping audio or touching the song.
+Previously prepared native history/rack/manual guards remain. Read-only
+inspectors and ordinary live note input remain available. These conservative
+guards apply only while the new internal owner exists; the legacy public
+recording flow remains unchanged.
+
+New Song now has `createSong:error:`. It prepares the new document and identity
+before replacing audio/document state and reports refusal through NSError.
+`main.swift` uses the throwing Swift bridge, so failure does not run the success
+completion that clears the document URL, recovery identity and edited status.
+The old `newSong:` convenience entry remains nonthrowing for existing native
+callers, preserving the old song and surfacing the failure in `pluginWarning`.
+The existing note/sample departure policy is unchanged. Full UI admission and
+departure integration is still required before exposing retained parameter takes.
+
+Internal `captureParameterTake` retains original control timestamps and returns
+acceptance before any fallible preview/poll. `parameterTakeReview` returns a
+detached shared review without consuming input. These remain internal methods,
+not additional advertised API operations.
+
+`mac/Tests/ParameterTakeSessionTests.inc`, included by `native-plugin-tests`,
+adds an actual session/clock/vendor path: two native VST3 fixture providers,
+direct-mutation refusal, original-time control capture, recovery during playback,
+fixed Stop while transport continues, whole-take Keep, completed retry, refusal
+of stopped verification during active playback, stopped native release, exact
+manual/opaque state, one-step Undo/Redo, save/reopen, empty no-op and Discard.
+It uses the existing **explicit** `--ui --loopback-record` path, selects
+BlackHole 2ch and reuses that device's current buffer size. It neither opens a
+default physical output nor changes a system default. Ordinary `--ui` CI does
+not execute this new device case. Initial clock readiness has a bounded retry
+only for the specific pre-arm timing absence; other failures are not retried.
+
+No compilation or execution evidence yet. At the next coherent source checkpoint
+run both Mac architecture builds, the existing session/history/native-host gates,
+and this explicit virtual-device case on a provisioned Mac; a missing device is
+an unmet qualification requirement. New/shared Windows gates from the preceding
+sections also remain necessary. The socket and native take UI are still to be
+connected; this test does not replace their coverage or qualify live release.
+
+PR#6's earlier077e tree is integrated as main0fe8f3400. Its push CI is the current
+hourly checkpoint (Windows39811540714, Mac39811541170). Latest build start
+16:09:52UTC gives **17:09:52UTC** as the earliest following checkpoint. Source
+work and backup pushes on this temporary branch do not dispatch another build.
+
+## Following source batch: explicit failed-context discard — unbuilt
+
+`NativeParameterTake::abandonStopped` adds a separate, explicit stopped Discard
+path. Every owned native editor must already be closed, and the host and actual
+provider incarnations must still belong to the take. It can seal an otherwise
+unsealable take after a clock/document-context failure without accepting any
+music. It preserves an existing Stop boundary. Ordinary Keep/restoration still
+requires the original fixed cut and never invokes this path implicitly.
+
+The complete group is protected against native editor input. Saved baselines
+are restored and verified before consuming any abandoned notification. The
+discard uses one bounded native cut per provider, checks for intervening input,
+and never routes that input into the legacy manual consumer. Source changes,
+reopened editors, unsupported barriers and opaque-state mismatch retain the
+owner. A failure after an explicitly authorized drain may have consumed a
+prefix of abandoned input; it cannot promise to restore those notifications.
+The owner and its already captured review remain until successful release.
+`discardStoppedParameterTake` resets the session owner only after success.
+
+Prepared native AU/VST3 checks cover changed clock/revision, refusal before
+touching an open editor, a real post-Stop slider suffix, missing saved baseline
+without consuming notifications, successful closed-editor restoration, retry,
+unchanged provider/host identities and refusal of a replaced host. Device-mode
+session checks also cover the explicit release's history/state contract.
+They are unbuilt. The native checks join the existing `native-plugins` and
+owned `--ui` gates on both Mac architectures; the real-session case still
+requires the explicit virtual-device mode described above.
+
+Remaining release work is substantive: hidden state that cannot be reconstructed
+through parameters still refuses, even with an editor closed. A safe opaque
+replacement path must preserve unrelated processors and routing. Live release
+must avoid concurrent VST3 state serialization/zero-frame process calls and
+retain editor usability; a stopped-only escape does not close that requirement.
+Full native controls, seven API contracts and socket qualification remain open.
+
+## Following source batch: prepared stopped opaque replacement primitive — unbuilt
+
+`NativePlugin::prepareStoppedReplacement` prepares a fresh native backend from
+the accepted opaque blob without serializing or resetting the old vendor.
+It rejects an open editor, an unsettled preset handoff, changed persistent
+identity/assignments/bypass, ports, latency or parameter catalogue. It captures
+the current provider and canonical replacement state before returning.
+`adoptStoppedReplacement` exchanges backend ownership behind the existing
+scheduling facade, changes the native notification incarnation, and retains
+the old backend in the plan. Its input lease must be released through that
+retained old provider. Stale and double adoption are refused. All of this is
+quiescent control-owner work; playback must be prepared afresh before rendering.
+It is **not** an audio-boundary/live-preset replacement.
+
+This is an internal building block with no session caller yet. Before wiring
+closed-editor opaque Discard, add complete-group preparation and validation,
+combined retained/prepared storage accounting, revision/queue guards and
+retryable old-provider lease cleanup. No successful prefix may escape a failed
+group. A new provider cannot inherit the old take's input cut. The ordinary
+scalar restoration path and public recording behavior are unchanged.
+
+The shared parameter-preview registration now covers builtin state/identity
+preservation, unrelated/stale/double-adoption refusal, reopened PCM, and repair
+behind a completed live preset. `mac/Tests/StoppedPluginRepairTests.inc` adds
+native VST3 effect/instrument and AU opaque-hidden-state coverage, old-lease
+cleanup against the correct provider, save-state reconstruction, effect PCM
+comparison and the existing host realtime allocation/free/lock audit. These
+are source assertions, not execution evidence. Run them with the next coherent
+both-Mac-architecture/shared-Windows checkpoint; no build was started for this
+source batch. It does not close live release, native take UI or socket coverage.
+
+The following unbuilt group layer, `PluginChain::prepareStoppedRepair`, prepares
+every selected provider before adoption, rejects an outstanding preview, and
+guards the retained rack entries, manual queue fence, graph/recorded revisions
+and settled routing plan. It bounds one complete preparation plus retained host
+storage at 256 MB, conservatively counting shared graph/preset storage again.
+A native owner must retain at most one such preparation; this is not a general
+unbounded draft cache. `MixerTransition::stoppedStorageBytes` collects completed
+transitions and refuses unfinished ones before the final guards. Adoption then
+has no native call or fallible operation between providers. It swaps the complete
+group's backend/manual catalogue and retains old backends and queues in the plan
+for explicit native cleanup. No unrelated rack entry or routing identity changes.
+
+Prepared shared checks cover invalid later targets without a successful prefix,
+intervening writes, retained previews, manual catalogue restoration, unrelated
+providers, stale/double adoption and reopened PCM. A mixed AU/VST3 test adds an
+invalid later AU blob, real hidden-state repair and old-provider lease cleanup.
+These have not run. Session integration still needs a retained repair/cleanup
+receipt so cleanup failure after adoption cannot cause duplicate replacement or
+lose the take; input-cut checks remain the native owner's responsibility. No
+public lifecycle/API changes or live-release claim follow from this layer.
+
+## Next source batch after frozen da8c89f07 — unbuilt
+
+`AudioDevice::StoppedPluginRepair` now carries the shared group preparation,
+audio-owner identity, host epoch and original native provider identities. Its
+prepare/adopt methods require stopped processing and closed original editors,
+join the output callback, validate complete saved membership, and reject a
+replacement audio host or repeated adoption. Old native backends remain in the
+receipt for lease cleanup. `play()` always prepares a fresh renderer/chain,
+which meets the primitive's prohibition on resuming old scheduling state.
+
+The device-free Mac native fixture prepares AU/VST3 repairs without configuring
+an output device, checks stale epoch/missing baseline refusal without a prefix,
+complete restoration, retired lease cleanup, no audio activation, repeated
+adoption refusal and a host replacement. It has not run and is not part of the
+da8c89f07 checkpoint currently building. The retained take still needs its
+retryable post-adoption cleanup state before this wrapper can be wired to
+explicit opaque Discard; do not release ownership based on preparation alone.
+
+## Explicit opaque Discard integration after 93cec81c3 — unbuilt
+
+`NativeParameterTake::abandonStopped` now uses the complete stopped repair
+receipt. This is the explicit **stopped, closed-editor Discard** path already
+owned by `discardStoppedParameterTake`; normal Keep/verification does not
+silently choose replacement. It cancels owned parameter previews, prepares the
+entire accepted AU/VST3 group, checks every original input cut again, and adopts
+only the fully prepared group. Stable project identities, accepted blobs,
+unrelated processors, routing and history remain unchanged. Notification
+incarnations intentionally change; old cuts must never be used on the new ones.
+
+The take retains `StoppedPluginRepair` after adoption. Its old vendor backends
+still own the abandoned queues and input leases. Cleanup resolves each lease
+by stable identity **in the retained receipt**, never by a current rack slot.
+Successful cleanup entries are erased individually; a later refusal leaves the
+remaining entries and old backends available for retry. A repeat Discard finishes
+cleanup and validates the adopted receipt instead of rebuilding a second group.
+Changing the accepted saved state, replacing/activating the host, reopening an
+editor, or delivering new input on a repaired provider refuses release and
+retains the original take. No new-provider input is consumed as old take input.
+The internal session stops polling the original providers after adoption;
+autosave serializes the original detached review without attempting intake.
+The existing session admission guard prevents playback/replacement/model edits
+until ownership is released.
+
+`AudioDevice` now captures both original and prepared-provider input fences.
+Adoption checks the original queues again after native editor observation;
+completion checks the prepared provider's original empty fence. The shared
+`PluginChain::StoppedRepair::Item` retains the exact requested state for retry
+validation separately from canonical native state and the swapped baseline.
+Its extra blob capacity is included in the existing combined 256 MB bound.
+This changes no project format, public API or callback work. Reopening playback
+still constructs a fresh chain; the old scheduler is not resumed.
+
+New source checks cover a genuinely divergent hidden AU setting alongside VST3
+and an unrelated vendor; invalid later state rejects the group without changing
+an earlier provider; successful Discard restores opaque/manual state, leaves
+take evidence and original Stop time intact, and changes only owned native
+incarnations. Retry keeps those new incarnations. An owned native editor check
+delivers an event on the repaired provider and confirms cleanup retry preserves
+it instead of discarding or attributing it to the old take. Device-receipt tests
+exercise a successful first lease release, a wrong later token, successful
+retry and unknown identity refusal. Reopened mixed-vendor PCM is compared with
+the accepted baseline under the existing allocation/free/lock audit.
+
+These are **source assertions, not passing evidence**. Run shared Windows
+parameter-preview, both Mac `native-plugins` and owned native-editor `--ui`
+gates in the next coordinated checkpoint, no earlier than 18:11:23 UTC. The
+real-session BlackHole lifecycle test must still run separately; it exercises
+the unchanged no-history/save-state contract through the updated session path.
+Both prior Mac jobs failed the same private-helper test call at da8c89f07; the
+2f89631d3 correction has not been compiled. Windows x64 job119969865402 finished
+building at 17:39:38 UTC and is still qualifying; do not restart it.
+
+Remaining work includes live native release, full UI/API/socket contracts and
+the session-owned resolution of **new** input arriving during an adopted
+repair's failed cleanup. This path preserves/refuses such input; it does not
+yet present a new recovery/review choice for it. Do not claim complete recording
+parity or expose an unconditional successful Discard UI from these changes.
+
+## Shared take reads and Mac API lifecycle after ac9d672e6 — unbuilt
+
+`editor/hosted/RecordedGestureRead.hpp` owns the summary and bounded event-page
+projections used by both native API adapters. Original host times and mapped
+48 kHz frames remain decimal strings. Events at/after the playback Stop cut
+remain visible with null projected frames; reads never rewrite retained input.
+Pagination validates the target and uses subtraction before adding a bounded
+page length. `RecordedGestureReadTests.inc` covers times above 2^53, exact Stop
+boundaries, empty/end pages, invalid limits/targets and unchanged raw evidence.
+
+`mac/Bridge/ParameterRecordingAPI.inc` exposes get/events/start/capture/stop/
+commit/discard with strict fields, original mach timestamps, stable plugin and
+parameter identities, take tokens and current revision guards. Get returns the
+mach timebase and bounded intake warnings. Stop seals capture without stopping
+music. Keep publishes one musical/history transaction; a successful publication
+with failed native restoration returns completed/retained plus restorationError.
+Retry cannot publish the points twice. Release remains stopped-only and explicit
+opaque Discard requires closed owned editors. These limits are advertised in
+api.describe and the guide; they are not completed live-release parity.
+
+The AppKit request dispatcher bypasses its preliminary manual drain for these
+lifecycle requests. Otherwise a refused intake could prevent Get or Discard from
+ever reaching the retained owner. The API handler remains responsible for its
+own intake, errors and retry status. Native Record controls still use the legacy
+flow; they have not been connected to this API or advertised as qualified.
+
+Required checks: shared recorded-automation on Windows and both Mac architectures;
+native session strict/stale/empty admission; actual private socket admission and
+schema inventory; explicit BlackHole real-session two-target capture, exact event
+timestamps/frames, live Keep with deferred release, stopped retry, one Undo/Redo
+and native save/reopen. The latter is in `ParameterTakeSessionTests.inc` and only
+runs through the explicit virtual-device gate, not ordinary native-editor `--ui`.
+Socket live success, native controls, live release and new-provider cleanup input
+review remain outstanding. No API presence count closes those requirements.
+
+Cheap source checks parsed both changed Python fixtures and the JSON schema,
+confirmed all seven methods agree with the dispatcher, and passed git diff
+whitespace validation. The local Python runtime lacks jsonschema, so full schema
+validation was not claimed. None of the new C++/Objective-C++ assertions has run.
+
+Read-only CI inspection at 17:57 UTC found Windows job119969865402 terminal
+failure after a successful build: its recorded audio catalogue has zero devices,
+and 12 unique live playback tests account for 15 failure entries (three teardown
+failures repeat failed launches). Preserve these failures; no skips or weaker
+assertions were added. Both Mac jobs failed the same already-corrected private
+helper call. No CI rerun was dispatched. Next coordinated build remains no
+earlier than 18:11:23 UTC, subject to rechecking actual build starts.
+
+### Completion and client retry correction — source only
+
+The Mac API now refuses Discard of an already-kept take. Commit retries finish
+restoration; musical reversal uses Undo. A failed restoration recomputes the
+summary after cleanup so `discardCleanupPending` describes the current owner.
+The real-session fixture checks that refusing Discard does not change playback,
+revision or the kept take.
+
+The AppKit lifecycle audit also found that graph, graph-envelope, scratch and
+pattern-envelope request helpers treated every -32002 as pre-dispatch busy.
+`NativeRequestOutcome.swift` now requires the existing explicit
+`data.writeOutcome:notCommitted` receipt before retrying a write. Captured
+revision/target/payload stay unchanged; unknown, committed, noChange and missing
+outcomes report their original error and retain the draft. Pattern automation's
+previously unbounded loop is limited to five retries. Read-only parameter and
+port polling retain their existing bounded behavior. Other native clients still
+need a separate admission audit before a blanket retry-safety claim.
+
+Native interface regressions cover accepted busy receipts, unchanged captured
+payload, bounded exhaustion, unknown graph/curve/scratch results and uncertain
+envelope deletion. The detector-routing refusal fixture now requires exactly
+one call, not six repeated attempts at a native precondition failure. It still
+requires unchanged cables and a persistent, readable reason. The interface
+compile command explicitly includes the new helper. These checks are unbuilt;
+run the signal-graph, scratch, and automation-tools groups with the next normal
+Mac interface checkpoint. No standalone compiler invocation was made early.
+
+### Following frozen 019803275 — sample-loop retry source only
+
+The next source batch applies the same explicit pre-dispatch receipt to Mac
+sample-loop writes and bounds each automatic chain at five retries. Unknown
+outcomes cancel queued automatic loop saves, preserve raw fields and captured
+revision, and show the original error. New interface cases require no replay
+after an unknown outcome and bounded exhaustion with an editable draft. This is
+not part of frozen 019803275 or its upcoming build. Mixer request/reconciliation
+still needs its own retained-draft audit; a plain code check is not sufficient.
+
+### 18:12 UTC checkpoint failure and conformance correction
+
+Frozen 019803275 was pushed to PR#7 alongside the local ARM64 build, which
+started 18:11:42 UTC. Both Mac jobs stopped **before compiling**: the API
+inventory preflight correctly found the seven newly shared schema methods
+missing from `doc/api/platform-differences.json`. This was an omitted expected
+inventory update, not an unavailable Mac compiler or passing native result.
+Keep failed run39829213878/job120000567927 (ARM) and job120000567435 (Intel).
+Do not rerun the build or alter the frozen checkout to hide this failure.
+
+The following source correction reviews exactly the seven additions, updates
+Mac expected reads/writes, recomputes each platform's schema delta and the LF
+schema hash, and preserves earlier binary receipts. The Mac review is explicitly
+source-only. Two existing take read vectors now require the implemented success/
+strict-unknown-field outcomes. Six additional vectors cover empty arming and
+missing-owner events/capture/Stop/Keep/Discard without changing music. Matching
+read/admission expectations are historical regressions, not an open method-name
+gap; the contract remains `implemented-pending-qualification-live-release-open`.
+Live release/UI/input cleanup and full lifecycle/socket/device checks remain.
+
+All six portable inventory tests passed on the corrected source in 3.144 s,
+including refusal of unreviewed methods before any document access. Runtime
+vectors and both native Mac builds still need the next hourly checkpoint.
+This correction is subsequent to 019803275 and is not included in its binary.
+
+Local 019803275 compiled and linked `ScreamSeq.exe` and its scanner, then failed
+building `workspace-restore-tests` at NavigationApplicationTests.inc:121.
+The new local name `small` collided with a Windows RPC header macro expanding
+to `char`. The following source correction names it `overviewSnapshot` and
+preserves every selection/no-edit/readable-focus assertion. No second compile
+was run. Build receipt remains exit1 with no qualifying executable hash.
+Separate diagnostic app/foreground receipts may inspect the completed product
+link, but cannot substitute for the failed native test gate or permit packaging.
+All three CI jobs stopped on the API inventory preflight; their build steps are
+skipped. Conservative next checkpoint is **19:12:11 UTC / 12:12:11 Pacific**
+from the recorded CI timeline; no early rerun or PR-head push is permitted.
+
+### 18:25 UTC bounded diagnosis and recording action correction
+
+The completed product link (SHA256
+`86fedb64c50422a29aac6de732a86b79abd3884ebf48997f2fb87577068bd816`)
+was used **only for diagnosis**. `take-api/diagnostic-app.json` preserves the
+failed build and exit1. Eight of ten selected app cases passed: both dense graph
+cases, all four scratch cases, detached recovery review, and retained editor
+keyboard/focus. Two failures remain recorded: immediate recording-window
+visibility after its opening command, and native Stop leaving a one-event take
+capturing. No broad suite or second build was run.
+
+Foreground Computer Use on private silent F04 copy/PID36764 confirmed the
+Windows menu entry, one-click opening, empty-take Record/Stop/Keep with playback
+continuing, default readable graph nodes, complete compact Group/Return labels,
+and readable/overview menu framing. The process exited normally with original
+fixture and executable hashes unchanged. Detailed limits are recorded in
+`take-api/foreground-diagnostic/observations.json`: this did not establish a
+captured-parameter lifecycle or field typing continuity. Ctrl+A after the gain
+click selected Pattern; the helper exposes Main rather than child edit focus,
+so neither a field-focus pass nor an application defect is inferred from it.
+Screenshots cannot qualify temporal flicker. The 354.84-second silent run at
+48 kHz/480 frames reported 22 deadline overruns, max callback 12.289 ms, no
+processor/device faults, and `realtimeAuditPassed:false`; not a performance pass.
+
+Current-source corrections (unbuilt):
+
+- The discoverability fixture waits for the actual view-opening queue and
+  visible window, without resending the command or relaxing the result.
+- `ParameterRecordingWindow.hpp` previously dropped every action while its
+  polling read pumped messages. It now retains one lifecycle intent during
+  that read, including original document/revision/take, scope and explicit loss
+  acknowledgement. It submits once after a successful refresh. A changed take,
+  capture state, revision or loss evidence refuses that intent; failed reads
+  never authorize it. Existing completion receipts still block uncertain
+  resubmission. No audio callback, musical model, or persistence format changes.
+- `Workspace/ParameterRecordingWindowTests.inc` deterministically injects Stop
+  during a read, duplicate clicks, replacement take, changed revision, failed
+  refresh and new loss before Keep. It requires exact write counts, unchanged
+  targets and visible refusal. These native regressions and the failed actual
+  app lifecycle must run on the next hourly build; foreground empty-take success
+  does not replace them.
+
+No package or merge from this candidate. Preserve the 19:12:11 UTC gate. Required
+Mac native/interface/socket/device and reciprocal project gates remain open.
+
+### Subsequent source batch — retained Mac mixer outcomes
+
+`mac/App/MixerEditor.swift` completes the previously noted mixer admission
+audit. A busy code alone no longer permits write replay: retries require the
+shared Swift `NativeRequestOutcome` helper's explicit `notCommitted` receipt,
+preserve the original payload/revision and stop at the configured bound. The
+old display-tick path restarting exhausted chains has been removed. Reads keep
+their bounded retry behavior. A failed/uncertain write preserves raw controls,
+stable bus, queued newer values and revision, blocks dependent writes, and
+shows a contextual **Reload saved state** action. Normal successful gestures
+still apply immediately with one durable commit.
+
+Explicit Reload now reads the accepted mixer before cancelling preview values.
+It never sends pre-request saved values after a commit that might have succeeded.
+Failed reads/cancellation retain the draft and cleanup keys; a later explicit
+Reload reads again. Fields changed while readback is in flight survive its late
+completion. This is native AppKit presentation/reconciliation only; no model,
+DSP, metadata, or public protocol change. Existing Windows receipt guards remain.
+
+`EditorDraftInterfaceTests.swift` covers exact bounded retry payloads, no
+display-tick retry restart, absent/unknown/committed/noChange error receipts,
+fresh-baseline cancellation, failed readback/release and newer raw fields.
+`MixerStripsInterfaceTests.swift` requires an uncertain successful width commit
+to remain visible and survive reconciliation. Earlier assertions expecting
+blind resends or stale baseline rollback have been replaced with stricter
+single-commit/retained-state requirements. Existing normal coalescing, prior
+commit preservation, typed values, stable bus and bounded strip allocation
+assertions remain. **Unbuilt**: include editor draft and mixer strip interface
+groups on both Mac architectures at the next coordinated checkpoint.
+
+### Following source batch — retained-take autosave admission
+
+The next candidate is frozen at `69fe8bf206049c163742ad10105a1de87afde24b`
+in the clean qualification checkout. `bin/mac-gesture-20261022/take-review/`
+contains prepared, source/time-pinned build/check/package scripts; none has run.
+Do not include later source implicitly or start before 19:12:11 UTC.
+
+Source inspection found two application-level gaps above the already implemented
+session recovery serializer: autosave considered only MIDI ownership, so plugin
+input could be skipped at an unchanged musical revision; strict preliminary
+plugin polling could prevent recovery after a provider refused further intake.
+`TrackerSession.parameterRecordingTakeID` now exposes retained ownership through
+Stop and kept-but-unrestored completion. `RecoverySnapshotPolicy` schedules each
+retained snapshot and one after release. `RecoveryIntegration` lets the existing
+best-effort session serializer collect recovery input, while ordinary manual
+plugin edits retain their strict preflight. Recovery API status/list/save remain
+available during retained-input failure. Restore and native close/replacement
+reject a retained plugin owner before replacing the song.
+
+No audio callback, musical transaction, file format or public method change.
+The existing `hasRecording` metadata still means resumable MIDI; plugin input
+remains detached `automation.recovery.*` evidence after reopening. Tests added
+to `RecoveryTests.swift` exercise unchanged-revision input and final-release
+scheduling. The explicit-device `ParameterTakeSessionTests.inc` now checks owner
+identity, consecutive recovery evidence at the same musical revision, detached
+save/reopen with preserved plugin baselines, and kept-but-unrestored lifetime.
+**Unbuilt and unexecuted**: these changes are after frozen69fe8 and belong to the
+following coordinated checkpoint. Required checks: both Mac builds, recovery
+store tests, actual-app recovery regression, native parameter take admission,
+and the explicit BlackHole real-session lifecycle. A real-app timed recovery
+check with captured plugin input remains necessary; the pure scheduling and
+session tests do not establish the full app timer/socket path.
+
+### Following source batch — native Mac take review
+
+`mac/App/PluginRecording.swift` adds an AppKit review component for the existing
+shared lifecycle API. `PluginRecordingIntegration.swift` retains one window;
+Window → Plugin Automation Take, the plugin action menu, and the command palette
+reach it without navigating away from Pattern. Close/replacement protection
+raises this review. Closing only the review window leaves input retained and
+does not implicitly Keep, Discard or stop transport. The window polls only while
+visible; the existing session intake and recovery remain independent of it.
+
+Record captures stable selected/all-rack identities and a revision. Stop ends
+the take; Keep uses one shared history transaction; committed-but-unrestored
+results expose **Finish restoration** and disable Discard. A lifecycle action
+clicked during polling retains one intent. The completed read must match its
+original document, take, revision, capture/completion state and acknowledged
+loss before submission. Read failure cancels the unsubmitted intent. Writes
+are never replayed automatically; errors retain the review and require an
+explicit readback before another action. Malformed readback cannot re-enable
+Record. Incompatible context cannot be bypassed by acknowledging loss. Provider
+loss is shown even when no parameter event survived. Unchanged reads preserve
+target selection and native table focus; ordinary polling keeps action controls
+enabled rather than blinking them off.
+
+The `plugin-recording` interface group covers those ordering/failure cases,
+scope retention, duplicates, exact write counts, new loss, completed restoration,
+all ambiguous receipt variants, source-only loss, native focus and compact
+layout. It is registered in the full isolated interface runner and compile list.
+The actual-app workspace fixture requires menu/command-palette discoverability.
+**Source only; after frozen69fe8, not built or run.** Required later gates include
+both Mac architectures, the new interface group and the complete interface run,
+actual-app workspace, real native AU/VST3 input and Keep/restoration/reopen, and
+visible keyboard/resize checks on Mac. Counts and offscreen interface tests do
+not qualify real vendor input, presentation or accessibility.
+
+This window currently describes recording from native plugin windows. Generic
+Mac rack controls still use their older immediate/manual delivery path and
+cannot safely join this retained take until original timestamps, stable targets,
+pending/refused/uncertain input recovery and worker completion are wired through.
+That is the next required integration step; do not package or call this a
+complete Mac recording workflow yet. Windows's equivalent retained native input
+delivery already exists in `App/ParameterControlDelivery.hpp`. Live Mac release
+without stopped transport, native device evidence and reciprocal project gates
+also remain open.
+
+### Following source batch — original native-control delivery journal
+
+`mac/App/PluginControlDelivery.swift` prepares the missing main-owner handoff.
+Each input retains stable plugin/parameter, native value and original UInt64
+host timestamp under a fixed document/base-revision/take owner. It holds up to
+1024 entries, counts overflow without replacing older inputs, submits one event
+at a time when the caller makes the session available, and never retries a
+refused/unknown event. Completion must match the original callback, revision,
+take and a strict Boolean accepted result. Duplicate or late callbacks cannot
+count twice or retire a different event. Accepted entries leave the pending
+queue; loss, refused/unknown original inputs and preview warnings remain owned
+until explicit completion/discard and a guarded release. Recovery uses the
+shared `ControlInputRecovery.hpp` version-1 detached format with exact decimal
+times/counters and bounded UTF-8 diagnostics. This is native request scheduling,
+not a second musical recording implementation; capture, timing, validation and
+commit still use the existing shared engine/API.
+
+The session's new internal `recoveryDataWithNativeInput:error:` validates that
+archive through the shared decoder, matches the native document ID, take token
+and original take revision, and overlays it on the existing typed recovery copy.
+It does not mutate imported preservation state or replay the evidence. The
+virtual-device session case now verifies all three owner guards, unchanged music
+and event count, and detached archive/plugin-state preservation across reopening.
+The new `plugin-control-delivery` interface group covers waiting and serial
+submission, timestamps beyond 2^53, exact payloads, duplicate/late completion,
+receipt variants, numeric-Boolean rejection, bounded overflow, owner isolation,
+plist serialization and UTF-8 diagnostic bounds. **Not built or run.**
+
+`PluginEditor.onOriginalParameter` now offers each snapped slider/text value,
+stable identity and `mach_absolute_time()` to an optional retained-input owner
+before the existing busy/coalescing path. Handling it prevents a duplicate legacy
+manual write. The new interface case exercises three distinct busy-time inputs,
+exact timestamps beyond 2^53, stale-row rejection and ordinary manual fallback.
+This hook is not connected to AppController yet.
+
+Still to wire before qualification/package: use a main-owned cached
+take context rather than reading session internals while its worker is busy;
+submit through the existing serialized application API; wait for pending native
+input before Stop/Keep/Discard; bind loss acknowledgement to the delivery review;
+include an immutable delivery archive in `RecoveryIntegration` snapshots; release
+only after the matching session take is resolved. The existing `onGesture`
+manual-history callback must yield to retained take ownership rather than
+touching worker-owned session flags during delivery. The journal's document must
+be `_automationDocumentID` (the first component of the API revision), not the
+separate AppController recovery-file grouping UUID. Existing generic controls
+must keep their ordinary non-recording behavior. Frozen69fe8 and its hourly gate
+are unchanged; this later source belongs to a following coordinated checkpoint.
+
+### 19:12 checkpoint and unlocked foreground diagnosis, 22 October
+
+Frozen source `69fe8bf206049c163742ad10105a1de87afde24b` was built exactly once
+at 19:12:27 UTC, completing 19:15:20. Executable SHA256:
+`91fbd8d47637cd373c65a0394b4e4a60f76c8626816833ec62ef2e66e44fe2bb`.
+The original `take-review/build.json` and `checks.json` are retained. Native
+registrations passed 12/13: departure, scratch editor, parameter-preview workspace,
+context/navigation, automation dock, graph workflow, graph curve, short instrument
+dock, plugin notifications, parameter preview, recorded automation and hosted
+project. `workspace-mixer-hosted-tests` failed **Stale assignment was replayed or
+redirected**. The bounded check script correctly stopped before app checks.
+
+An explicitly separate `diagnostic-app.ps1` then exercised the already-built
+product: 29 cases, **28 passed / 1 skipped** (optional installed Surge XT).
+The full routing, scratch-editor and plugin-recording classes plus retained graph
+navigation and global field-focus cases passed. This includes actual parameter
+capture, Stop/Keep/Discard, exactly-one Undo, save/reopen and detached input review.
+These results do not overwrite or qualify the failed native receipt. Diagnostic
+source and executable fingerprints remained unchanged.
+
+Source diagnosis of the failed assignment fixture found a timing ambiguity: the
+clean chooser's normal 250 ms refresh can adopt the new revision while the
+worker pumps messages, before the test edits the supposedly old presentation.
+`InstrumentPluginApplicationTests.inc` now checks that clean refresh explicitly,
+then stops/drains only the chooser's own refresh timer and proves the old revision
+is still presented before editing. Original refusal/no-redirection assertions
+remain, with a full failure snapshot. This is a **test-premise correction**, not
+proof that the failure is resolved; the corrected fixture is unbuilt.
+
+After the user unlocked the desktop, a new persistent diagnostic launcher started
+owned PID27232 with the exact frozen binary, copied F04, isolated recovery directory,
+silent output and 600-second duration. Computer Use observations:
+
+- Windows menu clearly exposes Plugin automation take. Record, close review,
+  click the actual Gainer Enabled control, reopen review: one captured input,
+  parameter Enabled, value 0.0, song time 56.8616 seconds, no reported input loss.
+  Stop retained it and playback continued; Keep released the take and enabled Undo.
+- Rack search accepted `Gain` without losing text; Backspace produced `Gai`.
+  Tab visibly focused the parameter selector and Shift+Tab returned the caret
+  to search. The helper's accessibility focus string remained the root window,
+  so this evidence uses actual text/caret/focus-ring changes, not that string.
+- Docked graph started at readable scale. Whole overview and Home restored
+  readable scale; explicit Float/Dock and maximize/restore retained the graph.
+  One tiny-body overview click did not yield sufficiently clear selection
+  evidence; retain native/app hit-target assertions, do not count that click
+  as a foreground selection pass. Compact Group/Return labels were readable.
+- Ctrl+Alt+P returned to Pattern, Down moved the edit cursor from row 0 to 1
+  and detached following. The scratch phrase editor opened from Windows.
+  Dragging its middle motion point left the curve rendered after release.
+  Read-only `workspace.get` confirmed position 36864, value
+  0.7172503242542153, `dirty:false`, `pending:false`, `saveQueued:false`,
+  and 1024 preview/rendered samples for both lanes. Snapshot is retained under
+  `take-review/foreground-partial-diagnostic/workspace-after-scratch-drag.json`.
+
+The process exited 0 normally; original F04 and executable hashes are unchanged.
+Its silent run reports 600.042 seconds, 48 kHz/480 frames, 59989 callbacks,
+35 deadline overruns, maximum callback 12269.2 microseconds, no starvation/device
+errors or processor faults. `realtimeAuditPassed:false` and
+`sustainedPresentationQualified:false` remain explicit failures/limits. This was
+loaded interactive diagnosis while CI was running, not an idle benchmark.
+Screenshots do not qualify temporal flicker, and floating-field typing continuity
+was not established by this helper. No package or main merge was made.
+
+Fresh diagnosis also found two presentation defects, now corrected in **unbuilt
+source**:
+
+1. The narrow Pattern header positioned three fixed buttons relative to a grid
+   narrower than their combined width; Pattern FX used the wider host including
+   graph lanes. This let controls overlap one another and the context sidebar.
+   `WorkspaceView.inc` now owns every header placement. At compact width a native
+   More menu retains mute, FX count, FX panel, graph-command and scratch actions;
+   direct controls return when space permits. `WorkspaceDraw.inc` uses the same
+   reserved title width. `WorkspaceNavigation.inc` captures document/revision/
+   selection and rejects a menu whose target changed. Musical commands continue
+   through existing shared edits/history; no project format changes. A newly
+   hidden focused action yields to the same header's visible replacement.
+   The context-panel native group adds control containment/non-overlap, target
+   refusal, one-step FX-count Undo, cursor/selection and resize-focus checks.
+2. Main retained “Recording original parameter input” after Stop/Keep even though
+   the review was correct. `finishDocumentOperation` now advances only those
+   recording-specific status messages on confirmed lifecycle results, preserving
+   unrelated errors/status. Existing actual-app recording checks assert the stale
+   recording prompt is gone after Stop and Keep.
+
+CI run IDs remain Windows39838064564 and Mac39838064576. At 19:26 UTC all three
+native jobs had passed portable preflight and were still building. Latest actual
+build start was Intel 19:13:13 UTC: **next build no earlier than 20:13:13 UTC**.
+Inspect existing run/receipt state before any follow-up; do not restart them.
+The new source needs the next bounded context-panel/mixer-hosted native groups,
+affected actual-app routing/recording checks and fresh compact-header Computer
+Use. Mac autosave/window/input-journal source after frozen69fe8 still needs its
+own compile/interface/session gates and the remaining AppController wiring above.
+
+### 22 October 19:52 UTC — native control integration, unbuilt source
+
+The next source batch now wires `PluginRecordingInput.swift` into AppController.
+The adapter owns native lifecycle admission and the existing bounded
+`PluginControlDelivery` journal on the main thread; musical capture still uses
+the shared `automation.recording.capture` operation on the serial session worker.
+Generic rack controls retain each original stable plugin/parameter/value/host
+timestamp while busy. Stop waits for earlier input completions and prevents
+new controls from extending the queue. Refused/uncertain completions are retained
+without replay. Keep captures the exact native-loss census and refuses a changed
+census before dispatch. A release must identify the same take/document before
+retiring evidence. Known validation/conflict/pre-dispatch refusals preserve
+ownership; unknown lifecycle completion requires explicit readback.
+
+`PluginEditor` restores a refused row's prior value. Manual gestures outside a
+take synchronize their begin/end state only when the worker and inspector reads
+are idle. Start refuses an active/deferred manual gesture instead of letting old
+manual input enter a new take. AppController processes pending original input
+at worker/read completion and on its normal tick. Collected take-input counts
+do not mark the song dirty; Keep's actual revision change still does.
+
+The native review displays accepted/waiting/in-flight/refused/uncertain/overflow
+counts and provides **Save recovery copy**. Native loss participates in the
+existing explicit acknowledgement and captured intent. Recovery captures an
+immutable journal on main, then uses the existing guarded native-input recovery
+bridge on the worker. Save, close, replace and recovery-restore paths protect an
+unresolved journal even when a malformed/uncertain reply leaves its shared take
+unverified. No new musical format or live replay of recovered input is introduced.
+
+Added coordinator cases join `plugin-control-delivery`: FIFO original timestamps,
+Stop behind input, stopped-control refusal, matching release, unknown outcome,
+no-take/wrong-take readback, new loss during Keep, and shared validation ownership.
+`plugin-recording` gains native-loss acknowledgement/recovery/compact-layout
+checks; the actual-app workspace socket test also invokes the existing strict
+recording admission contract (the windowless host alone cannot cover this).
+`mac/test-interface.sh` explicitly includes the new source and tests.
+
+Existing checkpoint CI was inspected, not restarted:
+
+- Windows run39838064564/job120031512710 compiled successfully. The merged
+  private-desktop suite ran93 tests, with15 failures and2 skips. Its audio probe
+  reports `devices: []`; failures include fixture startup/playback-clock admission,
+  recording, loop/shortcut/audition checks and failed cleanup of exited fixtures.
+  Preserve this failure; no-device results are not native device qualification.
+- Mac run39838064576 ARM job120031513056 compiled successfully, then its graph
+  interface group failed “Port reads retry busy rejection…”. Source inspection
+  found `requestGraph` applying the write-only explicit-receipt rule to catalogue
+  reads. The correction permits bounded busy retries for an explicit read-only
+  method list, while writes/preset saves retain the strict no-uncertain-replay rule.
+  The existing assertion is preserved; its offscreen wait now uses the established
+  short-turn run-loop pump with the same150ms deadline.
+- Intel job120031513179 was still building at19:44 UTC. Latest actual build start
+  remains19:13:13 UTC; **no next build before20:13:13 UTC**. Inspect its final state
+  before starting a coordinated checkpoint.
+
+Only source review, `git diff --check` and Python syntax inspection are appropriate
+before that gate. This new Mac source is **not compiled or qualified** yet.
+Next checkpoint must include the existing13 Windows registrations (especially
+context-panel and mixer-hosted), affected actual-app classes, fresh compact-header
+Computer Use, Mac plugin-recording/plugin-control-delivery/signal-graph interface
+groups and parameter-take/recovery session gates. Actual Mac generic-control
+worker contention, manual Undo grouping, recovery timer, native playback and
+reciprocal typed save/reopen remain required before a parity-completion claim.
+No production package or main merge follows from this source checkpoint.
+
+### 22 October 20:51 UTC — composed-song recording and original-input review
+
+The coordinated checkpoint froze **337fcfdac7b6056684e9b5fa7280d83d70a481e8**.
+Local ARM64 Release compiled once at20:31:08–20:33:11 UTC, SHA256
+`341c7ecfe05a709f7b925e75cedb099636b2ccf041f8bb1bb606f7cc84f3657b`.
+Receipts are in `bin/mac-gesture-20261022/native-control-integration/`.
+The13 native registrations passed12 and failed `workspace-context-panel-tests`:
+the new Pattern-header containment assertion failed at200% DPI. Do not overwrite
+`checks.json` or treat the separate diagnostic runs as a qualification pass.
+The preceding stale instrument-assignment regression now passed.
+
+`diagnostic-app.json` records28 actual-app passes plus one optional installed
+Surge XT skip, with frozen source/binary unchanged. The required CI runs are
+Mac39849557952 (Intel120071747522, ARM120071747873) and
+Windows39849557976/job120071747426. At20:45 UTC all three were still building.
+Latest actual build start20:31:35 UTC makes **21:31:35 UTC /14:31:35 Pacific**
+the next allowed coordinated checkpoint; inspect current jobs before proceeding.
+PR#7 is at337fcfda; the backup branch may advance without another CI checkpoint.
+
+The new `test_composed_fixture_records_without_losing_cross_domain_edits` first
+runs the exact shared F04 six-domain composing contract: note, sample loop,
+instrument pan envelope, plugin value, graph edge and mixer send; dry runs,
+stale/no-op behavior, full chronological Undo/Redo, branch fork and typed
+save/reopen comparison. It then opens that edited project in an owned silent
+WASAPI process and exercises native parameter recording, Keep, one-step Undo,
+Redo, a second-take Discard and reopening. Its final typed comparison permits
+only the expected recorded-automation change; plugin state and all other music
+remain exact. Outputs persist beside the receipts for reciprocal exchange.
+
+Two initial runs (`composing-journey` and `composing-diagnosis`) failed because
+the reused blank-song test incorrectly expected Gain capture to succeed: F04
+has an enabled Gain envelope. The diagnostic preserved the real refused event,
+original value/timestamp and shared reason “Disable this parameter's envelopes
+before recording gestures”. This is the intended shared conflict guard, not
+permission to disable existing music. The corrected journey explicitly asserts
+that refusal and unchanged song/plugin/automation state, stops/discards that
+take, then records the unoccupied Balance parameter. `composing-conflict.json`
+passed against frozen337fcfda in23.9s; all typed unrelated-data comparisons passed.
+The current source additionally requires the new editor-level refusal message,
+so that new assertion awaits the next executable. No assertion on conflict or
+data preservation has been relaxed.
+
+Fresh Computer Use on owned PID41072 observed Windows→Plugin automation take,
+Record during silent F04 playback, opening Gainer Params, a gain-slider drag,
+the same envelope refusal with exact retained input in the review, and Stop
+preserving playback. This exposed misleading editor text: the parameter window
+still said Recording after asynchronous refusal. Search/Tab observations reported
+root focus, so this session does **not** qualify keyboard continuity. The process
+exited normally after600s; original fixture and binary hashes are unchanged.
+`foreground-diagnostic.json` is explicitly failed/diagnostic. The audio receipt
+reported43 deadline overruns at48kHz/480 frames, no starvation/device errors and
+no processor fault. Concurrent diagnostic work and screenshots do not qualify
+realtime performance, temporal flicker or sustained presentation.
+
+Source following337fcfda, **unbuilt**:
+
+- Windows `PluginParametersWindow.hpp`, `ParameterControlDelivery.hpp`,
+  `MixerEditor.inc`, `Main.cpp`: asynchronous refused/uncertain input is surfaced
+  in the retained parameter editor without rewriting text/caret/focus. A native
+  **Recording…** footer action opens the existing take owner directly. Queued
+  input is labelled queued, not accepted. Original values are never replayed.
+  Native cases cover foreign-document refusal, focus/caret retention and opening
+  review without another input. The actual composed-song case checks the real
+  worker refusal reaches the editor.
+- Windows `WorkspaceView.inc`: explicitly sizes the owner-drawn FX combo's
+  closed selection to16DIP while preserving22DIP popup rows, to fit the23DIP
+  header controls. `NavigationApplicationTests.inc` prints the offending control
+  rectangle before the unchanged containment assertion. The exact failed
+  rectangle was not in the old receipt; this diagnosis remains unconfirmed
+  until rebuilt, not a claimed fix.
+- Mac `PluginControlDelivery.swift` exposes bounded, read-only original-input
+  pages with stable UUID rows and decimal UInt64 host times. `PluginRecording.swift`
+  adds native review-mode and paging controls, selectable complete details,
+  unchanged-selection polling and the existing captured-parameter summary.
+  It is wired through `PluginRecordingIntegration.swift`. No new capture API,
+  replay path, project format or audio-callback work is introduced. Tests cover
+  exact timestamps beyond2^53, bounded pages, unchanged recovery evidence,
+  stable selection as accepted rows retire, last-page navigation and compact
+  action containment. These Swift changes are not compiled yet.
+
+Next bounded checkpoint: retain the13 native registrations, add the composed-song
+actual-app case to the28-case selection, and run Mac plugin-control-delivery,
+plugin-recording and existing session/recovery gates in the coordinated CI build.
+Fresh Windows Computer Use must check the rebuilt header at200% DPI and compact
+width, direct Recording action, visible refusal, Balance capture and keyboard
+focus. Preserve prior receipts; no package/merge until required checks pass.
+Mac live Keep/Discard restoration still requires stopped transport and opaque
+Discard requires closed editors: safely removing that restriction needs a
+separate host-state/preview-restoration batch, not removal of its guard. Native
+vendor/device checks, Mac real-control recording, reciprocal edited-project
+exchange and the complete A01–A18 composing journeys remain open.
+
+## 22 October 21:35 checkpoint: composing passes; sustained recording fails
+
+Frozen `9195204aaceb59e38ad22007b1bd231d7da93c86` was pushed to PR#7 and
+built once in the clean qualification checkout. Local ARM64 Release started
+21:35:59 UTC and completed21:38:02. Executable SHA256:
+`695e820a0f003bc85c08fb6272cd4c30bb1eebedf403a1982d5bc506b51fc0ba`.
+`bin/mac-gesture-20261022/recording-journey/build.json` and `checks.json`
+are successful, immutable evidence for that candidate. All13 selected native
+groups passed, including the previously failing200% DPI header containment.
+The actual-app selection passed29 cases with one optional installed-Surge-XT
+skip. F04 composing and recording passed the occupied-Gain refusal, Balance
+capture, Keep/Undo/Redo/Discard, exact unrelated typed-tree preservation and
+save/reopen. Do not repeat those recorded runs.
+
+That automated result **does not qualify this candidate for packaging**.
+Fresh Computer Use on isolated silent PID36976 observed the corrected closed
+FX header, Params → Recording, and a visible Gain-envelope refusal beside the
+parameter controls with retained original delivery evidence. No existing Gain
+automation was disabled. During longer playback the absolute recording timeline
+became terminally invalid with `host-start-regression`, while the raw device
+correlation remained valid and playback continued. Stop could not seal that
+take, and the review misleadingly still said Recording. Balance Keep was not
+qualified in this foreground session.
+
+`foreground/gain-refusal.json` preserves the original readback: generation1,
+48kHz, contiguous musical frame4465440, new host start3065724205794 versus
+previous3065724275107, and new end3065724325794 versus previous3065724375107.
+The projection moved backwards6.93ms at its start, with no raw device
+discontinuity reported. This establishes the adapter/shared-clock mismatch; it
+does not establish why the device correlation varied or prove physical timing.
+Microsoft's [IAudioClock::GetPosition contract](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition)
+distinguishes precise/delayed results and defines the device/QPC correlation.
+The native adapter must not publish a backwards estimate as valid musical time.
+
+Main-dock search accepted `Balance`, Backspace produced `Balanc`, and visible
+Tab/Shift+Tab focus moved between search and parameter selection with text
+retained. Computer Use's accessibility report still named the root window;
+there was no fresh exact native/global focus observer, so these observations
+are not complete focus qualification. Compact More/resize and floating typing
+continuity remain open on this executable. PID36976 exited normally after600s,
+with source fixture and executable hashes unchanged. Its audio report contains
+39 deadline overruns,48kHz/480-frame period, no starvation/device errors or
+processor fault. Performance and temporal flicker remain unqualified.
+`foreground-check.json` records **failed**, so the prepared package script
+refuses it. No production package or main merge was performed.
+
+CI was dispatched only with the same checkpoint: Mac39858573202
+(Intel120103039731, ARM120103040135) and Windows39858573190
+(x64120103039342). At21:54 UTC all three were building. Actual latest build
+start21:36:29 UTC makes **22:36:29 UTC the earliest next checkpoint**, subject
+to later starts and final job inspection. The preceding337fcfda ARM job passed;
+Intel compiled but timed out one cabinet test and the run later canceled;
+Windows compiled but failed its required live suite with no enumerated WASAPI
+device. Those failures/skips are not replaced by local success.
+
+### Follow-on source batch, unbuilt
+
+- `windows/Session/HostedProject.{hpp,cpp}` admits monotonic native presentation
+  intervals to the row and absolute clocks. A backwards projected interval is
+  rendered normally but contributes no timing coverage. Subsequent valid
+  intervals retain their actual frame origins, including frames rendered in
+  the gap. No clamping, retiming, interpolation across holes or relaxation of
+  `editor/RecordingFrameClock.hpp` is introduced. Proven device discontinuities
+  remain terminal for the retained absolute timeline. This is a proposed
+  correction pending executable validation, not a claim that sustained capture
+  is fixed or that device timing is accurate.
+- `PresentationClock.hpp` and `Main.cpp` add the read-only
+  `transport.get.recordingClock.frameTimeline.unmappedCorrelations` diagnostic.
+  It counts excluded render slices, not lost input. Existing take loss and
+  acknowledgement semantics still apply to input outside valid coverage.
+- `HostedProjectTests.cpp` adds deterministic backwards-start/end-only cases,
+  exact prior coverage, explicit row/frame gaps, actual resumed frames, unchanged
+  PCM,4096-frame slicing, and terminal hardware-discontinuity assertions under
+  the existing callback allocation/free audit. No shared-clock assertion changes.
+- `test_plugin_recording.py` adds real native input before and after a95-second
+  recording hold, continuous context/clock checks, and the existing strict Keep,
+  one-step Undo, Redo, Discard and save/reopen journey. The owned process receives
+  a180-second bound; ordinary test processes retain their120-second limit.
+- `ParameterRecordingWindow.hpp` explains that an incompatible live take needs
+  playback stopped before safe discard/recovery. Its native regression retains
+  disabled Keep/Discard until stopped; no lifecycle safety guard is removed.
+- Mac `PluginControlDelivery.swift`, `PluginEditor.swift`, `main.swift` and
+  `PluginControlDeliveryTests.swift` add asynchronous refusal/loss feedback
+  beside parameters and a native **Review take…** action. Status changes retain
+  original input, values, search text, field editor and selection. Tests cover
+  bounded/refused diagnostics, repeated status publication, compact containment,
+  direct review and clearing only the released take's notice. Both Mac builds
+  and native interface tests are still required.
+
+Next validation batch: one build of the candidate and existing targets plus
+`recording-device-tests`;14 native groups (the previous13 plus device-clock
+regressions),31 app cases (previous30 plus sustained capture). Reuse completed
+919 evidence only for unaffected behavior; new clock/UI inputs require the new
+candidate. Fresh isolated Computer Use must include sustained silent playback,
+Gain refusal, Balance Record/Stop/Keep, Params review, compact More, resize and
+exact native focus observations after typing/Tab/Shift+Tab/Backspace. Preserve
+the existing failed foreground receipt. Mac native interface/session gates,
+reciprocal edited-project exchange and device/audio qualification remain before
+merge or complete parity claims. Keep Mac stopped restoration and closed-editor
+opaque Discard guards. Backup-only source pushes between coordinated checkpoints.
+
+## 22 October 23:14 checkpoint and recovery-flow continuation
+
+The prior9195204 CI completed: **both Mac ARM and Intel jobs passed** in
+run39858573202. Windows x64 compiled but its required private-desktop/live-audio
+stage failed16 cases with two skips. The retained log confirms
+`audio.devices.get` returned an empty device list; do not call that suite passed
+or remove its assertions. Read-only recent-run inspection found no newer builds
+or concurrent checkpoint before proceeding.
+
+Frozen `cc6da0bd314344dd89a692b61734e2fc2fa631c2` was pushed to PR#7 alongside
+one local ARM64 build at23:14:45 UTC. It compiled successfully at23:17:36;
+SHA256 `9ecbe9994dbc71b9ecf6aada5afeb35f2fa24eb286f45d9e73720d4ab0e94901`.
+All14 native groups passed, including strict native correlation gaps, unchanged
+PCM, callback allocation/free audit and terminal hardware discontinuity. The
+actual-app run was still progressing at this report entry; later receipts,
+not this intermediate statement, determine its result. Evidence is under
+`bin/mac-gesture-20261022/clock-recovery/`. Never repeat its build/check scripts
+when their receipts exist.
+
+Current coordinated CI: Mac39870506422 (ARM120143455474,
+Intel120143455255), Windows39870506136 (x64120143454737). Actual latest
+start23:15:10 UTC makes **2026-10-23 00:15:10 UTC** the earliest next build,
+subject to later starts and current-job inspection. Qualification checkout
+remains frozen atcc6da0bd3 while primary source work proceeds independently.
+
+### Recovery usability source following cc6da0bd3, unbuilt
+
+- Mac `PluginRecording.swift` now honors the API's `discardable:true` after
+  stopped playback even if a failed recording cut leaves `capturing:true`.
+  The prior UI required `!capturing` unconditionally and could trap a take which
+  the backend explicitly permitted the musician to discard. Keep remains
+  disabled for incompatible context; opaque Discard still requires closed
+  editors and preserves every backend safety check.
+- The same native view adds a distinct **Stop playback** action for failed
+  capture or stopped-take restoration. It sends one captured, revision-guarded
+  `transport.stop`, reads the take after confirmed completion, and never commits
+  or discards automatically. Queued actions recheck take identity, revision,
+  capture/completion state and current eligibility. Uncertain completion
+  requires explicit readback without replay. `PluginRecordingInterfaceTests.swift`
+  covers these transitions, changed eligibility, duplicates and compact bounds.
+- Source inspection found that `AutomationIntegration.swift` performed
+  `collectPluginEdits` before `transport.stop/panic`; with a retained failed
+  take, that function calls `pollParameterTake` and can throw before Stop ever
+  reaches the session. These two explicit transport exits now bypass that
+  preliminary drain while a take owns input. Session Stop already catches a
+  failed drain and stops audio while preserving the take. Actual Mac failed-clock
+  AppController/device qualification remains required; the view harness alone
+  does not prove that integration path.
+- Windows `ParameterRecordingWindow.hpp` now includes the exact decimal
+  original host timestamp in its copyable read-only details for both captured
+  events and refused/uncertain deliveries. Previously the backing snapshot
+  retained the timestamp but rendered only value, song time and status. Native
+  assertions use9007199254740993/994, preserve read-only text and keep existing
+  focus/selection checks. No timestamp conversion, replay, schema or history
+  change is introduced.
+- `mac/AUTOMATION.md` now describes the implemented generic-control intake,
+  recovery eligibility and explicit playback Stop. It removes the obsolete
+  claim that the retained native UI was unconnected. Live native restoration,
+  vendor/device evidence and complete composing qualification remain open.
+
+Next source batch gates: reuse unaffected clock/PCM receipts atcc6da0bd3;
+rebuild changed native UI/application paths at the next coordinated checkpoint.
+Run Mac plugin-recording/interface, session and actual AppController admission
+checks; Windows workspace-departure and recording app cases; then fresh native
+recovery/focus UI inspection. Preserve exact failed-clock evidence and do not
+substitute UI harness success for real device/context recovery.
+
+### 23:35 UTC: clock candidate qualified for targeted workflows; next batch unbuilt
+
+Compiled source `cc6da0bd314344dd89a692b61734e2fc2fa631c2` passed all 14 selected
+native groups and 30 actual-app cases; one optional installed-Surge case skipped.
+The 95-second capture test and F04 six-domain composing/recording journey passed.
+Receipts are in `bin/mac-gesture-20261022/clock-recovery/`; do not rerun them.
+
+Fresh Computer Use targeted PID 19476 only, with the disposable F04 project and
+silent WASAPI output. The process exited normally after 600.038 seconds; the
+original fixture and executable hashes were unchanged. At native DPI 192:
+
+- Params opened Recording directly. Balance slider gestures produced four
+  retained inputs across a 99.566-second capture interval. Stop retained
+  playback; Keep released the take and advanced musical history once. Exact
+  one-step Undo/Redo and save/reopen have separate automated app evidence.
+- A second Gain gesture was refused because F04 already has its enabled
+  envelope. Params displayed the actionable refusal and Recording link. The
+  project revision remained unchanged; existing Gain automation was not disabled.
+- Dock search typed `Balance`, Backspace produced `Balanc`, Tab reached the
+  selector and Shift+Tab returned. Three read-only native/global focus receipts
+  passed for the actual search HWND. Computer Use's root-focus report was not
+  treated as an application failure or used as the sole focus evidence.
+- Compact resize exposed the Pattern More menu, with commands readable after
+  its native animation settled. The closed FX selector remained inside the
+  header. Maximize/restore retained the search. Floating typing continuity
+  remains unverified; targeting Main can reactivate it.
+
+The run had 22 deadline overruns at 48 kHz/480 frames, maximum callback
+11754.8 microseconds, zero starvation/device errors and no processor fault.
+Realtime performance and temporal flicker are **not qualified**. The foreground
+receipt's pass is explicitly limited to functional UI checks. Its packaged
+copy retains that scope and these limits. No main merge is justified by it.
+
+Usable optimized ARM64 candidate:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-cc6da0bd3/ScreamSeq.exe`.
+SHA256 `9ecbe9994dbc71b9ecf6aada5afeb35f2fa24eb286f45d9e73720d4ab0e94901`.
+Scanner, ARM64 CRT, OpenMPT/VST3 notices, source manifest and copied hashes are
+included. This package excludes the later unbuilt recovery changes above.
+
+The next source batch also adds a mandatory native VST3 composing journey to
+`windows/Tests/test_plugin_recording.py`: use the bundled instrument class
+`5245534F4E414E43494E535452550001`, preserve F04's sample instrument/keymap and
+envelopes, assign MIDI channel 3 with Undo/Redo/no-op checks, route its main
+output to a new group, then capture parameter 7 through actual Params controls.
+Keep/Undo/Redo, Discard and save/reopen must preserve opaque state, aliases,
+routing and every unrelated typed project field. Values are .25/.75/.5 for the
+fixture's normalized parameter; existing built-in tests retain their original
+negative-value assertions. This does not replace optional vendor tests or claim
+layered PCM proof by checking only metadata. Pair it with native-audio-bus's
+existing layered stem/ordinary/precise/audition checks and hosted instrument UI
+coverage at the next checkpoint. Only syntax/static review has run for this new
+test so far.
+
+At 23:34:58, exact-source Mac ARM and Windows x64 compilation had passed;
+their remaining jobs and Mac Intel were still running. CI runs are 39870506422
+and 39870506136. Do not repeat/restart them. Next build is no earlier than
+2026-10-23 00:15:10 UTC and only after current jobs finish and later starts are
+checked. Required Mac native recovery/device checks, reciprocal edited-project
+preservation and Windows native audio gates remain open before merge/parity
+claims. Keep full scope active; no recurring automation is requested.
+
+### Follow-up source: explicit Windows playback recovery and Mac CI diagnosis
+
+The cc6da0bd3 Mac ARM application compiled, but job120143455474 failed the
+`plugin-control-delivery` native interface group's compound asynchronous-refusal
+assertion. `plugin-recording` passed. The failure did not identify whether
+focus, selection, text, musical preservation or compact geometry failed. The
+fixture now lays out the initially zero-sized editor and requires a real search
+field editor before capturing focus. Separate, equally strict assertions report
+each condition and actual geometry. This is an unbuilt fixture correction and
+diagnostic improvement, **not proof that the Mac regression is fixed**.
+
+Windows x64 job120143454737 compiled and completed with required live-app
+failures: its audio-environment evidence reports an empty WASAPI device list,
+and the app suite reports missing playback clocks/owned audio startup failures.
+The required vendor ownership step also failed. Preserve those failures;
+neither successful compilation nor local ARM64 evidence qualifies x64 hardware.
+Mac Intel was still building at23:47UTC. Raw exact-source logs are retained in
+`bin/mac-gesture-20261022/clock-recovery/current-job-*.log`.
+
+Windows `ParameterRecordingWindow.hpp` now exposes a separate **Stop playback**
+button for stopped-take restoration or failed capture context. It keeps Record,
+Stop recording and playback Stop distinct, fits the compact header, and places
+the new action immediately after Stop recording in keyboard navigation. A
+queued action captures document/revision/take/capture/completion state and
+rechecks current transport eligibility. It never automatically Keeps or
+Discards. The button stays visible but disabled after playback stops so the
+recovery layout remains stable until the take is resolved.
+
+`ParameterRecordingIntegration.inc` routes this action through the native
+`SessionHost::stop` owner, since `transport.stop` is not a DocumentController
+worker method. It validates the captured revision and argument domain, publishes
+a matching native completion receipt before fallible presentation readback,
+and reconciles that receipt without stopping any subsequently restarted
+playback. The existing ordinary transport API remains unchanged. This is a
+native presentation/ownership change, with no new musical operation or storage.
+
+New mandatory checks in the existing workspace plugin-search group cover
+compact bounds and Tab order, duplicate Stop during a polling read, changed
+transport eligibility, retained failed-clock take identity, dependent-write
+blocking after a presentation failure, and explicit readback with retained
+focus. The actual application fixture exercises native Stop dispatch, stale/
+wrong-domain rejection and post-Stop presentation failure receipts. The full
+plugin composing journey now also presses this native action after its second
+take stops recording, checking stopped transport, exact retained original
+events, unchanged song/history, then explicit Discard and save/reopen. The
+mock failure state is not substituted for a real failed-device test.
+
+These changes, the prior Mac recovery batch and mandatory sample-plus-VST3
+journey remain unbuilt. Reuse unaffected cc6da0bd3 evidence; the next coordinated
+checkpoint must rebuild native UI/application paths, run the prepared bounded
+native/app selections and the full Mac interface gates, then inspect the fresh
+binary with Computer Use. No build before00:15:10UTC on October23, and no overlap
+with the preceding CI. Do not rerun recorded attempts or merge from partial
+diagnostic evidence.
+
+### Recording playback oracle added before the same hourly checkpoint
+
+`editor/Tests/Conformance/recording_render.py` extends the mandatory layered
+VST3 journey beyond parameter counts and metadata. On the isolated actual-app
+socket, it compares saved projects differing only in the committed automation,
+renders all channels of pattern0 through `sample.renderSelection`, and reads
+the complete canonical 48kHz stereo PCM in bounded pages. At least64
+unsaturated sample values must change by more than2 signed16 units. A second
+fresh reopen/render of the recorded project must be byte-exact. Clipping is
+retained in each render's `clippedValues` report, not silently normalized.
+
+Each render is capped to the F04 evidence window of20seconds; it checks dry-run
+purity and uses one Undo followed by an exact saved typed-tree comparison to
+prove the appended sample did not damage the source project. Original saved
+inputs are hash-checked, PCM files and failures are retained, and the test
+restores the recorded song after success. The reusable helper contains no
+Windows UI logic, but only the Windows journey currently invokes it. This is
+unexecuted acceptance code, not new qualification. It measures pattern-local
+recording replay; independent sample/plugin stems, native callback timing,
+vendor-private behavior and device performance remain separate gates.
+
+### Separate x64 vendor-gate failure identified from retained artifact
+
+The exact cc6da0bd3 artifact12466454878 was downloaded without rerunning CI.
+Its `screamseq-vendor-ownership.log` shows that native vendor notification and
+recorded-editor ownership checks passed, then the worker start-refusal assertion
+failed. This is **not** the missing-WASAPI failure. The fixture rendered two
+identical native timestamps and still expected `host-end-regression`, although
+cc6da0bd3 intentionally turns that unstable presentation estimate into an unmapped
+interval while preserving earlier valid coverage.
+
+`windows/Tests/ParameterRecordingControllerTests.inc` now requires the repeated
+estimate to preserve generation41 with exactly one unmapped interval and no
+shared-clock failure. It then injects an explicit hardware discontinuity and
+requires a terminal invalidated timeline. Start must still return a classified
+NotCommitted refusal, preserve revision and opaque baseline, and retain no take.
+The previous compound failure now reports admission diagnostics separately.
+No product assertion or genuine clock failure is relaxed. Rebuilt execution is
+required; add `document-controller-tests` to the same next build and the owned
+`test_recovery.RecoveryControllerTests.test_manual_vendor_editor_overlay_and_late_protection_guard`
+case to its actual-app selection.
+
+The CI composing selection also now receives the already-scanned deterministic
+provider cache before invoking its mandatory layered journey. Missing cache is
+still a failure. The old x64 receipts remain failed and immutable; the changed
+test/setup has no passing execution evidence yet.
+
+Source review before execution corrected the new render oracle's identity
+expectation: `Document::undo` at `editor/TrackerDocument.cpp` preserves
+`max(previous.nextID,current.nextID)`. Each sample-only render must allocate
+exactly the original `nextID`; its Undo must leave exactly `nextID+1` and restore
+every other typed project field. The oracle now asserts the allocated sample's
+actual stable ID and that one predicted allocator change. It does not ignore
+allocator values or accept arbitrary differences. Source input files remain
+byte-exact. This is a correction to new unexecuted acceptance code, not a relaxed
+failed gate or a change to stable-identity behavior.
+
+The sampling guide also now reflects current Windows source: its existing
+`New take limit` selector offers60/300seconds and is locked while a take is
+retained. No duplicate duration feature was implemented based on the stale
+guide's earlier sixty-second-only claim.
+
+### Retained composing evidence for the next checkpoint
+
+Windows CI now sets `SCREAMSEQ_COMPOSING_EVIDENCE_DIR` to a workspace path
+outside each disposable test session. Its always-run artifact step retains both
+the built-in composing journey and the sample-layered VST3 journey, including
+saved projects, typed comparisons and PCM replay reports when those stages run.
+Partial artifacts remain diagnostic evidence, never a passing receipt. This
+supports diagnosis and subsequent reciprocal edited-project checks without
+rebuilding or repeating a completed native run. Execution remains pending.
+
+Mac recovery layout now retains its explicit Stop playback button, disabled after
+transport stops, until verified take release. Previously hiding it on the Stop
+readback shifted the action row while original input remained under review.
+The native compact-window regression requires unchanged button bounds, table
+focus/selection, disabled Stop and removal only after release. This is an unbuilt
+presentation correction; it does not change transport admission or take semantics.
+
+### October 23 recovery checkpoint and composing replay evidence
+
+Frozen `7c2a6c1e1affb19d73af0e6b65b501e3d42c96af` built locally at
+00:15:29–00:18:13 UTC. The ARM64 executable SHA256 is
+`3a801c342559063748df3fe7e4fde202746ed7a3434dd7a38e426bf0001db959`.
+PR7 was advanced at the same checkpoint. Receipts are under
+`bin/mac-gesture-20261022/recovery-journey/`; neither `build.ps1` nor
+`check.ps1` may be repeated. The three selected native groups passed. The
+seven actual-app cases produced five passes and two failures:
+
+* The sample-layered VST3 journey used command304, which opens a vendor editor
+  for VST3. Built-ins use that command for native Params, so the shared fixture
+  accidentally depended on plugin format. Product command335 is the explicit
+  native Parameter controls action. The corrected fixture uses it and waits
+  for the visible editor to match the selected stable plugin identity.
+* The 95-second recording retained two original inputs, one unmapped. Keep
+  correctly refused unacknowledged loss. This remains an intermittent open
+  defect; a later passing diagnostic run does not erase this failure. No
+  timestamp clamp, automatic loss acknowledgement or weakened Keep assertion
+  was introduced.
+
+The new test-only diagnostic attempt reused the exact binary at00:33:19 UTC;
+`corrected-test-diagnosis/receipt.json` pins both executable and test hashes.
+It did not rebuild or rerun the preceding check receipt. The corrected layered
+journey passed instrument/sample preservation, group routing history, native
+VST3 input, Keep/Undo/Redo, playback Stop/Discard and exact saved-project
+preservation before reaching the new replay oracle. That oracle initially
+failed while changing its **expected tree**, not while parsing a saved file:
+`UniqueDictionary` intentionally refuses replacing an existing key. The saved
+render-Undo project independently passed the strict reader and exact comparison.
+The helper now constructs new expectation dictionaries with precisely
+`nextID + 1`; it still requires every other typed field to match.
+
+`saved-replay-diagnosis/receipt.json` records the corrected oracle against the
+retained before/recorded projects in a fresh isolated process. All three
+370120-frame,48kHz stereo16 renders passed: recording changed11641 unsaturated
+sample values by more than2 units (maximum difference27); freshly reopened
+recorded PCM was byte-exact. Each render Undo preserved every project field
+except the one predicted allocator advance. Original input hashes were
+unchanged. This is pattern-local replay evidence; it does not replace native
+device, independent-layer, Mac reciprocal or performance qualification.
+
+The instrumented 95-second case passed in the diagnostic attempt. Both original
+timestamps mapped, Keep was one Undo, and history/Discard/reopen passed. New
+`recording-clock/*.jsonl` files retain take summaries, exact event timestamps
+and frames, and transport clock statistics before/after input, every five
+seconds during the hold, at Stop and after Keep. Reads are sequential, not
+atomic audio snapshots. The original failed run lacked this detail; its cause
+is still unproven. The trace is retained by the existing CI composing-artifact
+path and must be examined if the loss recurs. Do not rerun repeatedly until
+green or describe the passing diagnostic as a timing fix.
+
+Fresh Computer Use on owned PID11740 independently opened native Params for
+the bundled synth, moved its Gain slider, recorded two original inputs, stopped
+recording while playback continued, explicitly stopped playback, inspected
+exact timestamp details and kept the take. Playback Stop remained disabled
+in place until release. Native read-only focus probes passed for timestamp
+details and dock search. Typing `Gain`, Backspace to `Gai`, and Tab/Shift+Tab
+returned native/global focus to search. The intervening Tab destination was
+not independently asserted because the accessibility tree was unavailable.
+`diagnostic-foreground/observations.json` is deliberately **not** a qualification
+receipt. This600-second process exited normally; do not reuse its handles.
+At48kHz/480frames it recorded21 deadline overruns and no device/processor
+failure. Neither performance nor temporal flicker is qualified by this run.
+
+At00:37 UTC, Mac ARM CI compiled successfully; required tests, Intel and Windows
+CI were still running. Exact runs39877034587/39877034497 and jobs are recorded
+by `inspect-recovery-journey-ci.py`. The latest observed build start was
+00:15:55 UTC: **no next build before01:15:55 UTC**, and later starts/unfinished
+checkpoints must be inspected first. No package or main merge was made from
+these partial results. The previous usable cc6da0bd3 package remains unchanged.
+
+Next source work should use the new diagnostic evidence to resolve intermittent
+input mapping without fabricating coverage, inspect the new Mac strict focus/
+recovery gates, and finish reciprocal edited-project replay. Reuse the passing
+unchanged product/native receipts and saved replay artifacts. A single coherent
+next checkpoint should cover any resulting product changes and the corrected
+composing fixture; unrelated full suites need not be repeated.
+
+### Shared timing diagnosis and confirmed Mac compact-layout correction
+
+New source adds optional `includeTiming:true` to `automation.recording.events`
+on both native adapters. It requires an explicit page limit of1–16; default
+pages remain byte-for-value equivalent in shape. API discovery, both request
+schemas and guides describe the option. `editor/RecordingFrameClock.hpp` shares
+the version-checked atomic slot read between mapping and inspection. Inspection
+returns only actual published neighbouring intervals, bounded by the4096-slot
+ring; it cannot bridge gaps or resolve input. `RecordedGestureRead.hpp` presents
+exact decimal host times/device frame origins and distinguishes retained frames,
+observed gaps, pending/expired coverage, Stop cuts and invalidated generations.
+The clock remains fixed-storage and its publisher is unchanged. Observations
+are not an atomic snapshot of a running stream and do not authorize Keep.
+
+New shared tests cover exact >2^53 timestamps, holes, Stop cuts, ring eviction,
+concurrent overwrite, unavailable generations, non-mutating delayed coverage
+inspection and later ordinary owner resolution. Windows worker and Mac native
+session tests require the same projection, strict boolean/page admission and
+unchanged history. The actual Windows composing lifecycle and95-second trace
+exercise it through the application API. This is diagnostic capability, **not
+a claimed correction for the intermittent missing mapping**. It enables the
+next failing event to identify its surrounding real intervals before eviction.
+
+The terminal Mac ARM job120165015496 at7c2a6c1e1 compiled and passed its
+plugin-recording interface group and exact API preservation baseline. Its sole
+reported interface failure was now specific: at700×500 the recording message
+ended atx440 while Review began atx439. Earlier focus/text/selection/no-replay
+assertions passed. `mac/App/PluginEditor.swift` now gives the native Review
+button required horizontal hugging/compression resistance and16-point stack
+spacing to accommodate AppKit alignment-rect/bezel overhang. The message takes
+the remaining wrapping width. The original no-overlap assertion remains, with
+additional520/900/700-width checks for containment and exact retained search
+focus/selection. Rebuilt Mac execution is required; there is no local Mac UI
+qualification from this source inspection.
+
+Python AST and JSON syntax checks pass; `git diff --check` passes. A full local
+JSON Schema validator was unavailable (`jsonschema` is not bundled), so no
+schema-validation pass is claimed. All new native assertions remain unbuilt.
+At the next coordinated checkpoint include `recorded-automation-tests` and
+`hosted-project-tests` alongside the native workspace/audio targets and the
+bounded actual-app recording/composing cases. The shared clock reader change
+requires its rate/partition, concurrent overwrite and realtime allocation/free
+gates. Mac must rerun native session/API plus recording/control-delivery UI
+gates on both architectures. Fresh Windows Computer Use must inspect recording,
+original-input review and keyboard focus on that executable. Reuse unrelated
+unchanged UI and project evidence. Earliest build remains01:15:55 UTC on
+October23, subject to later starts and completion of preceding CI; no additional
+build or CI dispatch occurred while preparing this batch.
+
+### Owned-process startup evidence
+
+The preceding x64 job120165015082 compiled, but its actual-app suite reported
+18 failures among96 cases and one optional skip. The retained artifact12469519980
+confirms both Windows audio services were Running while `audio.devices.get`
+returned an empty device list on that candidate. This is an unavailable native
+audio gate, not a passing recording test. The separate vendor ownership case
+passed. The artifact retains the native app and identity for bounded reuse.
+
+`windows/Tests/test_song_routing.py` now observes its exact owned process handle
+while waiting for readiness. A terminal child fails immediately with its exit
+code; a live but unready child still fails at the existing deadline. Failure
+evidence retains the arguments, last observed transport and, when available,
+device information from the preceding owned inspection process. Composing or
+routing evidence directories receive a uniquely named JSON receipt. The helper
+does not retry, skip or change audio defaults. Five fixture-only checks covered
+terminal-child, timeout, live-audio readiness, inspection readiness and failed
+process observation with unavailable diagnostic input. They passed without
+launching ScreamSeq or running a build. Native/application checks remain pending.
+
+The cheap API inventory preflight initially rejected the old reviewed schema
+fingerprint. Exact structural comparison against7c2a6c1e1 confirmed the only
+shared schema delta is the optional boolean `includeTiming` plus its conditional
+explicit page limit of16. The reviewed source fingerprint is now
+`ff70dfa8adaa66fd40efaef89c7787b32cd24bb4cc81e4565916ee02a3b325f2`.
+All six preflight cases then passed; method inventories, expected native
+outcomes and the pending-runtime-qualification status are unchanged. The first
+failed receipt remains. This is not general JSON Schema validation. A final
+source review also corrected the diagnostic reader to acquire Stop before
+loading its final bound, avoiding a newly observed Stop with a stale live end.
+Existing exact-cut and concurrent clock gates remain required after rebuilding.
+
+### Next checkpoint and Intel fixture correction
+
+Candidate `a80945ab6baa577806cc701667cc32f0725836b2` started its single local
+checkpoint at01:17:54 UTC on October23 and was pushed to PR7. Corresponding
+Mac/Windows runs are39883199120/39883199090. The latest observed CI build start
+is01:18:25 UTC, so no further checkpoint may begin before02:18:25 UTC; inspect
+later starts and completion first. No production package or main merge follows
+from these pending checks. The dispatcher initially refused before any build
+or push because PowerShell7.6 had converted JSON UTC strings into DateTime
+objects which Parse reinterpreted as local time. The prepared scripts now
+retain date strings explicitly; the UTC gate itself is unchanged.
+
+The preceding Intel job120165015779 finished compilation, passed133/134 native
+tests and failed `cabinet` by its120-second timeout. It also failed two native
+interface groups: the same compact recording-notice overlap as ARM, and the
+parameter-activity clamp assertion. The job reached its60-minute limit during
+conformance; incomplete steps are not passes. The app archive was retained
+before qualification. Do not relax the timeout or restart that job.
+
+The activity fixture consumed over2.8 seconds on Intel. Its final `poll()` can
+therefore issue the legitimate two-second catalogue refresh, but the fixture
+answered every request as if it were a trace read. Source now explicitly
+refreshes the unchanged catalogue and asserts target/parameter/token retention
+and the exact next requested method before delivering contribution samples.
+The existing1.1 clamp-total assertion remains unchanged. This fixture-only
+correction is **after** the frozen candidate and needs the next Mac checkpoint;
+no pass is claimed from source inspection. The cabinet timeout remains open.
+Its next-source test now flushes named phase starts and elapsed completion times
+around the seven existing groups, outside realtime audits. All workloads,
+independent numerical assertions and the120-second CTest timeout are retained.
+This will distinguish a slow phase from a hang without repeated whole-suite
+runs or an unsupported timeout increase; it does not fix or qualify that failure.
+
+### Correlated-boundary diagnosis and next source batch (October23)
+
+Candidate `a80945ab6baa577806cc701667cc32f0725836b2` completed the local build
+at01:21:31 UTC. Its executable SHA256 is
+`acbf7cbe91edcc7fca884e292169de861d7ddd6f9d44c03b6331ee71da49e40e`.
+All four selected native groups and seven actual-app cases passed, including
+the95-second recording, composed-song preservation, rendered saved replay and
+vendor ownership case. Immutable receipts are under
+`bin/mac-gesture-20261022/timing-inspection/`. Do not repeat those checks or
+turn their pass into a foreground qualification claim.
+
+**Fresh Computer Use failed recording qualification.** Owned silent QA PID42240
+ran for600seconds and exited normally. Params opened Recording; changing Gain
+correctly refused capture because F04 already enables its envelope. After
+explicitly stopping/discarding that refused take and rearming, a native Balance
+slider drag retained two inputs but left one unmapped. Recording and playback
+were stopped with loss unacknowledged. No Keep, package or merge followed.
+`foreground-check.json` records failure, and `foreground/balance-input.json`
+retains the exact original API observations:
+
+- Unmapped input host timestamp: `3201302427262`.
+- Before: `[3201302326615,3201302426615)`, device frame13742208,480frames.
+- After: `[3201302428881,3201302528881)`, device frame13742688,480frames.
+- Gap:2266 ×100ns =226.6microseconds between **consecutive** rendered frames.
+- The stream reported no discontinuity, no absolute-timeline failure and no
+  rejected native correlation. The nominal-duration endpoints caused the hole.
+
+The final audio report recorded33deadline overruns, one starvation indicator,
+48kHz/480-frame periods and maximum callback17617.7microseconds. This is not
+performance, temporal-flicker or native-audio qualification. Keyboard continuity
+on this candidate was not qualified. Process/fixture/binary identities remained
+unchanged; PID42240 is closed and must not be reused.
+
+The same foreground run exposed a separate UI defect: live refused input
+timestamp`3200164840145` displayed as “Unavailable”. Live delivery uses
+`timestamp`; only detached recovery archives use`hostTime`. The native review
+now reads the live field. Its native regression creates refused/unknown inputs
+through `ParameterControlDelivery` and consumes that owner's real snapshot,
+retaining exact >2^53 timestamps, keyboard selection, read-only text and focus
+assertions. The composing refusal case also requires its actual original
+timestamp and complete reason in `inputDetails`. Recovery storage is unchanged.
+
+**Proposed clock correction, implemented in source but not yet built:**
+`windows/Audio/PresentationClock.hpp` marks WASAPI readings as correlated
+first-frame boundaries. `PresentedFrameIntervals` retains one successfully
+rendered buffer and finalizes it only when the next contiguous buffer supplies
+the second correlation. `windows/Session/HostedProject.cpp` publishes that
+interval to the existing shared absolute frame timeline. Published intervals
+are immutable; original event timestamps are never changed. The shared reader
+does not bridge holes. Missing/inaccurate readings, regressing boundaries,
+noncontiguous frames, stream changes and Stop drop the unconfirmed interval.
+Short music tails cover only their rendered fraction. No callback allocation,
+lock, API/history change or project-format migration is introduced.
+
+This uses the existing native submitted-frame/QPC correlation at both endpoints,
+not a guarantee that a vendor device clock is perfect. The Windows contract is
+documented by [IAudioClock::GetPosition](https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudioclock-getposition):
+position and its QPC reading are correlated, and inaccurate readings return
+S_FALSE. The existing accuracy/startup/regression checks remain. Finalization
+adds one callback of publication delay; retained plugin inputs already support
+later resolution. Stop never invents coverage for a pending tail.
+
+Scope is deliberately the plugin absolute-frame timeline. The existing
+row-position/MIDI clock still uses nominal per-buffer musical segments; it is
+not newly qualified or claimed fixed by this batch. Explicit nominal timing
+callers retain their existing test/offline contract. Mac correlation and shared
+clock-reader semantics are unchanged. A later row-clock unification must
+preserve precise-note positions and held-note Stop behavior rather than
+round-trip them through quantized canonical plugin frames.
+
+Next checkpoint must build `recording-device-tests` as well as the current
+app/workspace/worker/hosted-audio targets. Its native gates must include the
+observed timestamps and expected frame13742680, >2^53 timestamps, missing
+correlation and regression holes, restart, Stop, short tails,44.1/48/96kHz,
+17/128/4096/8193-frame callbacks and realtime allocation/free audits. Actual
+hosted rendering compares PCM against unchanged untimed playback. Repeat the
+bounded actual-app composing/recording lifecycle because timing inputs changed,
+including refused Gain, Balance Keep/Undo/Redo/Discard and exact save/reopen.
+Fresh Computer Use must check a native Balance drag with every input mapped,
+the original-time display and keyboard focus. Keep assertions/loss admission
+strict. The existing Mac layout/activity/cabinet corrections require their
+next architecture gates; Mac reciprocal edited-project preservation and native
+audio remain required before merge. No next build before02:18:25 UTC, subject
+to later CI starts and completion; no build was run for this source batch yet.
+
+At01:44 UTC, Mac ARM job120185181811 completed successfully:134/134 native
+tests,37/37 native interface groups (including recording and control delivery),
+and its remaining required workflow steps passed. Its log is retained at
+`timing-inspection/job-120185181811.log`; artifact12471834980 retains224files.
+This qualifies that Mac candidate's automated gates, not the unbuilt Windows
+boundary correction or foreground/audio behavior. Intel was still compiling;
+Windows x64 compilation passed and its worker tests were running. No old job
+was restarted.
+
+The next composing fixture also exercises25 native Balance trackbar notifications
+without waiting for the worker after each input. It requires their original
+order/values/count (including no duplicate EndTrack input), no unmapped or
+overflowed event after Stop, and the existing single Keep/Undo/Redo and exact
+cross-domain save/reopen assertions. This follows the foreground slider failure;
+the earlier field-entry journey alone did not reproduce it. Its native worker
+fixture now uses the same two-boundary presentation contract. These assertions
+are source-only until the next checkpoint, not a new passing receipt.
+
+A further renderer/capture regression covers the one-callback delay explicitly:
+retain the observed native input, Stop recording before its second boundary,
+render that boundary, resolve to frame952 in the short fixture, and prepare
+loss-free Keep without changing the timestamp. Later callbacks must leave that
+resolved frame unchanged. This exercises the actual native renderer and shared
+capture owner together, rather than only testing interval arithmetic.
+
+The previously unfinished keyboard portion was inspected separately on the
+unchanged a809binary in fresh disposable PID15300. Computer Use clicked dock
+search ID328, typed`gain`, moved to parameter selector ID311 with Tab, returned
+with Shift+Tab and used Backspace to produce`gai`. The visible border/caret and
+field contents followed those actions. Alt+F4 closed only that process with
+exit0; original fixture and binary were unchanged. This is bounded keyboard
+evidence, **not** a reversal of the failed recording qualification. The tool's
+focused-element summary still reported Main; independent global/native focus
+was not measured for PID15300. No floating-field, Narrator, DPI or temporal claim.
+Receipt: `timing-inspection/focus-followup/keyboard-observation.json`.
+
+For the next built candidate, the existing read-only focus probe also accepts
+an observed direct control ID alongside the exact Computer Use root and owned
+PID. It resolves only that root's direct child and retains the same global UIA,
+native focus, Value/Text/selection and ownership assertions. This avoids separate
+ad-hoc handle discovery. It performs no input or activation. Existing HWND-based
+calls remain supported. The source and wrapper syntax are reviewed; the new
+control-ID path requires rebuilt foreground execution.
+
+The same keyboard observation exposed a presentation mismatch: the focused dock
+search retained its text/caret while the footer advertised `FOCUS pattern`.
+`WorkspaceDocking.inc::workspacePresentationFocus` now recognizes Main-owned
+native editor controls through the existing visible-body ownership check.
+Footer, workspace inspection and contextual actions use that single result;
+the retained Main canvas intent and command routing do not change. The native
+plugin-search regression checks search focus, return to the Pattern canvas,
+and preservation of the incomplete parameter draft, target and musical history.
+This correction is source-only until the next checkpoint.
+
+Windows x64 job120185181473 completed with a failed actual-app gate after a
+successful build and native worker/UI tests. Its96-case app run reported18
+failures and one optional skip. Recording launch diagnostics explicitly report
+`devices: []`; transport could not establish WASAPI and audition processes
+exited before their checks. Preserve these failures and qualify the affected
+paths with an available native endpoint; do not turn absent devices into a
+passing playback result. Mac Intel was still in its interface harness at02:01
+UTC. The next checkpoint remains gated by completion and actual build starts.
+
+### Correlated-boundary checkpoint result (23 October, 04:50 UTC)
+
+Compiled source `68c2d177e84d52827b22df30e7f4a2185552eb8d` passed the
+coordinated checkpoint started locally at02:26:21 UTC (last CI build start
+02:26:49). No second build was used for the following checks or package.
+Evidence root: `bin/mac-gesture-20261022/correlated-boundaries/`.
+
+- `build.json`: optimized native ARM64 Release succeeded. Executable SHA256
+  `b6ea2a26f0b55a67b6103a4e9c19a7e7085cafc49a71e2d8e94214fe5437f269`.
+- `checks.json`, `native.xml`, `app.log`: five native groups and seven actual-app
+  cases passed, including the complete cross-domain composing journey, layered
+  sample plus VST3 instrument,25 original slider notifications, sustained95s
+  capture, Keep/Undo/Redo/Discard, saved replay PCM and vendor ownership.
+  These are bounded checks, not a claim that every parity matrix entry passed.
+- Fresh Computer Use PID39884: Params opened Recording; Gain's occupied-envelope
+  refusal appeared in Params and review with exact original timestamp
+  `3240752559625`. Existing Gain automation stayed enabled. After explicit
+  Stop/Discard, a fresh Balance slider take captured two deliveries with zero
+  unmapped/overflow/source loss. Stop recording retained playback; Keep succeeded
+  without acknowledging loss, released the owner and enabled Undo. Readbacks are
+  `foreground/{refused-take,stopped-balance,kept-balance}.json`.
+- The renderer regression now has native and foreground confirmation of the
+  earlier boundary-gap correction. The first Balance original timestamp was
+  `3241916420232`, resolved frame12916636. Neither timestamp rewriting nor a
+  permissive Keep policy was used to obtain that result.
+- Keyboard continuity was split over two owned processes because PID39884's
+ 600s timeout expired during an interrupted agent turn. Fresh PID35612 typed
+  `gain`, Tab selected the parameter control, Shift+Tab returned to search and
+  Backspace produced `gai`. Read-only native/global focus probes passed exactly
+  on control328 after click and Shift+Tab; Value/Text/selection patterns were
+  present. Footer correctly showed `FOCUS plugins`. Native maximize1440x853 and
+  restore1285x760 retained search text and readable controls. Both processes
+  exited0; fixtures and binary remained unchanged. No dead handle was reused.
+- `foreground-check.json` qualifies these functional checks only. The600.056s
+  silent48000Hz/480-frame audio run reported48 deadline overruns, maximum service
+ 13012.6us, zero starvation indicators/device errors and `realtimeAuditPassed`
+  false. Performance remains unqualified. No temporal-flicker, Narrator, fresh
+ 200percent DPI or floating-field typing claim follows from these screenshots.
+
+Both current Mac jobs passed: ARM120205821455 and Intel120205821078 in run
+39889571242. Terminal logs are retained beside the checkpoint. Windows x64
+job120205821061 built successfully and passed native gates, vendor ownership
+and conformance, but its96-case app gate failed19 assertions with one optional
+skip. Playback/recording/audition failures show no WASAPI endpoint (`devices:[]`)
+or their resulting startup/clock failure; duplicated audition teardown failures
+are retained. **One failure is separate:** MIDI settings Ctrl+Enter did not arm
+recording in `test_keyboard_settings_keep_document_and_owned_focus`. The same
+single case passed on the unchanged local candidate in
+`midi-ci-diagnosis/test.log`; that does not clear its x64 CI failure. Next-source
+assertion diagnostics retain settings, draft/pending/error and Main status to
+identify the intermittent refusal. Do not broadly attribute that failure to
+missing audio or retry writes to make it pass.
+
+The passing functional ARM64 candidate is separately packaged at
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-68c2d177e/ScreamSeq.exe`.
+`ReleaseProvenance.json`, `BuildInfo.json` and `TargetedQualification.json`
+retain source/hash and limits. Scanner and application PE machines are ARM64;
+copied executable/runtime/notice hashes were verified. This package is suitable
+for functional evaluation, not a performance-qualified or complete parity release.
+No main merge occurred.
+
+A no-build reciprocal exchange was dispatched at04:50:33 UTC using these exact
+Mac and Windows retained artifacts, both Mac architectures, extended edited
+fixtures. `mac-exchange-dispatch.json` records its one accepted request. Inspect
+its result before any return leg; do not repeat the dispatch or infer success
+from acceptance. Required reciprocal preservation, Windows x64 failure closure,
+native vendor/device and Mac live-restoration qualification remain before merge.
+
+### Source follow-up after the packaged candidate
+
+Foreground review found Main still saying `Plugin automation take discarded`
+after a subsequent successful Params-originated Keep. The take/history state was
+correct. `Application::finishDocumentOperation` previously changed the footer
+only when it matched four hard-coded intermediate messages written by the dock.
+Confirmed Start/Stop/Keep/Discard now publish their own lifecycle feedback across
+all native input sources. Capture/read polling does not overwrite it; ownership
+and loss guards stay intact. The existing actual-app composing fixture now checks
+exact Discard, fresh Record, Stop and Keep messages rather than merely checking
+that an older message is absent. This source follow-up is **not included in the
+68c2d177e package and has not been rebuilt**. Batch its compilation with the next
+coherent recording changes; do not spend another full checkpoint just on footer
+text. The MIDI diagnostic change adds failure context without weakening or
+retrying its assertion.
+
+### Retained MIDI settings command (23 October, source follow-up)
+
+Inspection found a concrete dropped-command path in `MidiRecordingWindow`:
+Ctrl+Enter was consumed by `key()` even when `begin(Apply)` immediately returned
+because the host was busy. This is a source defect; it is not yet proof of the
+intermittent x64 CI failure's precise cause. The correction retains one validated
+settings intent while the host is busy, then invokes it once after readiness.
+It preserves the original settings revision, raw-draft generation/values and
+host document identity. New text, Use saved settings, Hide or document/settings
+changes cancel or reject the intent. A submitted callback failure is never
+retried. Pending state and a visible waiting message expose the intent.
+
+`RecordingIntegration.inc` supplies document identity to the native snapshot.
+The UI's existing MIDI API and musical-history paths are unchanged. New native
+cases exercise repeated Ctrl+Enter while busy, exactly one deferred arm/value
+write, new invalid text, settings conflict, replacement document, hide/reopen,
+callback refusal and focus. They must run with the next build; source inspection
+alone does not qualify them. The next bounded checkpoint combines this correction
+with the previously committed plugin lifecycle footer fix. Compile the app,
+workspace fixture and MIDI window fixture once; run their affected native groups,
+the actual composed and sample-layered plugin journeys, and the four MIDI-window
+app cases. Reuse unchanged audio-renderer tests from68c2d177e. Fresh Computer Use
+must verify MIDI Arm/Apply keyboard behavior and plugin Discard→Record→Stop→Keep
+feedback without losing focus. Broaden on any failure; do not hide the x64 issue.
+
+The first no-build exchange run39902478513 completed successfully for both Mac
+architectures. Return legs using each Mac artifact and the exact retained Windows
+binary were separately accepted at04:55 UTC; `correlated-return-{arm,intel}`
+receipts identify each request. They are not new builds. Inspect each terminal
+result and artifact hashes/reports before claiming reciprocal preservation.
+
+### Recording feedback checkpoint and reciprocal completion (23 October, 05:12 UTC)
+
+The next coordinated checkpoint compiled `c900d2b2e3a8b96bc6b32d72ebd69e0eb70fef4f`
+once locally, starting04:57:47 UTC, with the PR7 push at the same checkpoint.
+Local ARM64 Release build and both targeted native groups passed (workspace
+plugin controls and MIDI recording window, including retained busy Apply).
+All six actual-app cases passed: the composed fixture, sample-layered VST3
+composing/recording journey and four MIDI window cases. Exact lifecycle footer
+assertions passed, as did occupied-envelope protection, recording/history and
+save/reopen assertions. No prior audio-renderer suite was repeated: renderer
+inputs are unchanged from68c2d177e. Receipts are under
+`bin/mac-gesture-20261022/recording-feedback/{build,checks}.json`.
+
+Fresh isolated PID29216, on this exact executable, completed Params → Recording,
+Discard → fresh Record, Balance slider capture, Stop recording and Keep. Two
+inputs were retained with original timestamp3329972293430 and value44.8; no
+loss acknowledgment was required. Stop recording retained playback; Keep
+released the take and enabled Undo. Closing the two review windows visibly
+confirmed the corrected Main footer, `Plugin automation take kept`. API reads
+are retained in `foreground/{discarded,stopped,kept}.json`.
+
+After stopping playback, visible MIDI Arm/Apply and Disarm/Apply succeeded.
+Computer Use exposes this floating window only as related UI; sending Ctrl+Enter
+to Main reactivated Main instead of applying the floating draft. This is **not**
+a fresh live MIDI keyboard pass or evidence that the application dropped the
+command. Native and actual-app keyboard gates passed separately. Docked search
+keyboard continuity was checked live on this executable: `gain`, Tab to the
+parameter selector, Shift+Tab back and Backspace to `gai`, retaining `FOCUS plugins`.
+The owned process closed normally with exit0, the original fixture and binary
+unchanged, and no musician process or audio default changed.
+
+The508.167s foreground session used silent48000Hz/480-frame output and reported
+17 deadline overruns, max service14073.8us, zero device errors/starvation and
+`realtimeAuditPassed=false`. It remains performance-unqualified. No temporal
+flicker, Narrator, fresh200percent DPI or floating-field keyboard claim is made.
+The functional receipt explicitly retains these limits. The separately packaged
+candidate is:
+`C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-plugin-c900d2b2e/ScreamSeq.exe`
+with SHA256 `df848545b6d6c3aacaa72b562e1f2f18280801b6b899c2d479829acd0861da90`.
+Scanner/runtime/notices/provenance are included; copied hashes and both ARM64
+PE machine identities were verified. No main merge occurred.
+
+The reciprocal preservation exchange is now **verified**, not merely dispatched.
+Run39902478513 passed Windows → Mac ARM and Intel; return runs39902945778 and
+39902967160 passed each edited Mac artifact back through the retained Windows
+application. Four legs each passed ten fixture checks across no-edit, edited,
+metadata, history and envelope-bank reports. The verifier checked GitHub archive
+digests, every report digest, unchanged binary/input records and exact prior
+exchange receipt hashes. Evidence is
+`correlated-boundaries/reciprocal-verification.json` plus the downloaded archives.
+CI compiled merge object9fc716a12cbcdf55d96f01dab488b88589e0b584, whose Git tree
+c95080df090b85b42ce246adc78274ef8f984460 is identical to source68c2d177e; this
+distinction corrects shorthand references to the compiled head above. These
+results apply to that source and to unchanged persistence code, not to unrelated
+native UI or device behavior.
+
+At05:12 UTC the current Windows run39903133025 and Mac run39903133011 are still
+building. Do not restart them. Their latest actual start was04:58:20 UTC, so the
+next build cannot start before05:58:20 UTC, subject to checking later starts and
+avoiding overlapping checkpoints. In particular, do not declare the prior x64
+MIDI failure closed until the new job result is inspected. Required remaining
+integration work includes that Windows gate, native device/vendor qualification,
+Mac guarded restoration and the audio performance investigation. Mac stopped-only
+release and closed-editor opaque Discard guards remain in place.
+
+### Next source batch: immediate native MIDI Arm and composing journey
+
+The foreground MIDI check exposed a misleading interaction: `Record notes: on`
+represented an unapplied draft, while actual capture remained disarmed. The next
+source batch changes this to an immediate `Arm notes` / `Disarm notes` action
+whose label follows acknowledged settings. It deliberately uses accepted settings
+and never applies a draft connection, timing adjustment or channel count as a side
+effect. In particular, an incomplete `-` timing field cannot prevent Disarm.
+The retained fields still have explicit Apply/Ctrl+Enter, and their status explains
+that Arm uses saved values. The successful arm-only settings revision can advance
+an otherwise matching draft's base; a pre-existing settings conflict stays a
+conflict. No API, musical history, storage or audio-callback contract changes.
+
+The same bounded pending-command owner now handles Arm during short worker reads.
+It captures document, settings revision, desired arm state and draft generation;
+repeated requests coalesce, new text/Hide cancel, changed settings/document reject,
+and a submitted callback failure is not retried. Nested callback actions cannot
+reenter. Holding Space/Enter on Arm suppresses repeat toggles; a fresh key press
+remains a new explicit command. The UI never displays a requested arm as accepted.
+
+New native regressions cover immediate Arm/Disarm with an invalid timing field and
+a different draft source, explicit later Apply preserving the chosen arm state,
+reentrant calls, refusal, pre-existing settings conflicts, held activation keys,
+and queued Arm cancellation/identity/failure cases. Existing keyboard assertions
+now require Arm to apply once without Ctrl+Enter; Ctrl+Enter afterward must create
+no second settings write. A new actual-app case checks raw draft retention across
+Arm and Disarm. The timestamped-chord journey now starts capture from native Arm,
+then retains its existing two-track input timing, loss, dry-run, one Undo/Redo and
+save/reopen assertions. No safety assertion was removed to obtain a pass.
+
+Only source review, diff whitespace validation and Python AST parsing have run.
+This batch is **not in the c900d2b2e package and has not been compiled or executed**.
+At the next eligible coordinated checkpoint, build app/scanner and the native MIDI
+window fixture once. Run `midi-recording-window-tests`, all five
+`test_midi_recording_ui.MidiRecordingUITests`, and the actual-app timestamped-chord,
+stopped step-entry and queue-loss/retained-review recording journeys. Reuse the
+c900d2b2e plugin composing and feedback results because those inputs are unchanged.
+Fresh Computer Use must check Arm/Disarm with retained invalid timing, saved-state
+labels, typing/Tab/Shift+Tab/Backspace, and no unexpected playback/history change.
+Retain the known floating-window targeting limit explicitly. Do not compile before
+05:58:20 UTC on23 October or overlap still-running current CI; inspect actual starts
+again first. Mac live vendor restoration remains guarded: source inspection found
+state verification can execute vendor processing, so simply allowing it during
+playback would be unsafe and is not part of this UI batch.

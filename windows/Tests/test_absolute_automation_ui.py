@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import time
+import types
 import unittest
 import private_desktop
 import test_parameter_automation_ui as support
@@ -41,16 +42,34 @@ class AbsoluteAutomationUITests(unittest.TestCase):
     def start(self):
         self.idle();self.desktop.send(self.desktop.hwnd(self.pid),0x111,504);self.idle();self.assertTrue(self.state()['visible'])
     def saved(self):return [dict(frame=p['frame'],value=p['value']) for p in self.read('automation.get',limit=4096)['points'] if p['slot']==self.state()['slot'] and p['id']==self.state()['parameter']]
+    def wait_saved(self,points):
+        deadline=time.monotonic()+12
+        while time.monotonic()<deadline:
+            state=self.state();saved=self.saved()
+            if saved==points and not any(state.get(key) for key in ('pending','dirty','fieldDraft')):return
+            time.sleep(.025)
+        self.fail(dict(expected=points,saved=saved,state=state))
     def setup_curve(self):
-        plugin=self.add_gain();self.start();self.select(4603,1);self.assertEqual(self.state()['parameter'],1);self.field(4608,0);self.field(4609,-18);self.press(4610);self.press(4611);self.field(4608,.5);self.field(4609,-3);self.press(4610);return plugin
+        plugin=self.add_gain();self.start();self.select(4603,1);self.assertEqual(self.state()['parameter'],1)
+        self.field(4608,0);self.field(4609,-18);self.press(4610)
+        self.wait_saved([dict(frame=0,value=-18)])
+        self.press(4611);self.field(4608,.5);self.field(4609,-3);self.press(4610)
+        self.wait_saved([dict(frame=0,value=-18),dict(frame=24000,value=-3)])
+        return plugin
     def mouse(self,message,x,y):return support.ParameterAutomationUITests.mouse(self,message,x,y)
     def key(self,key):self.desktop.send(self.window(),0x100,key);self.idle()
 
     def test_native_seconds_frames_history_noop_and_reopen(self):
-        self.setup_curve();self.assertEqual(self.saved(),[]);self.press(4614);saved=self.saved();self.assertEqual(saved,[dict(frame=0,value=-18),dict(frame=24000,value=-3)]);before=self.doc();self.press(4614);self.assertEqual(self.doc(),before)
-        self.select(4604,1);self.field(4608,24001);self.press(4610);self.press(4614);self.assertEqual(self.saved()[-1]['frame'],24001);self.press(4631);self.assertEqual(self.saved(),saved);self.press(4632);self.assertEqual(self.saved()[-1]['frame'],24001)
+        self.setup_curve();saved=self.saved();self.assertEqual(saved,[dict(frame=0,value=-18),dict(frame=24000,value=-3)])
+        before=self.doc();self.press(4610);self.wait_saved(saved);self.assertEqual(self.doc(),before)
+        self.select(4604,1);self.field(4608,24001)
+        changed=[saved[0],dict(frame=24001,value=-3)];self.wait_saved(changed)
+        self.press(4631);self.assertEqual(self.saved(),saved);self.press(4632);self.assertEqual(self.saved(),changed)
         self.field(4608,1.5);self.press(4610);self.assertTrue(self.state()['fieldDraft']);self.assertIn('whole frames',self.state()['status']);self.key(0x1B);self.field(4609,25);self.press(4610);self.assertTrue(self.state()['fieldDraft']);self.key(0x1B)
-        path=self.folder/'native-absolute.screamseq';saved=self.saved();self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4625);self.select(4603,1);self.assertEqual(self.saved(),saved);self.press(4613);self.assertTrue(self.state()['dirty']);self.press(4614);self.assertEqual(self.saved(),[])
+        path=self.folder/'native-absolute.screamseq';saved=self.saved();self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        # Opening a document retires its native tools; open the new song's owner.
+        self.start();self.select(4603,1);self.assertEqual(self.saved(),saved)
+        self.press(4613);self.wait_saved([]);self.press(4631);self.assertEqual(self.saved(),saved)
 
     def test_clear_all_recordings_preserves_stale_and_field_drafts_and_one_undo(self):
         first=self.add_gain();second=self.add_gain()
@@ -68,9 +87,23 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.press(4632);self.assertEqual(self.read('automation.get')['total'],0)
 
     def test_stale_fields_target_removal_close_and_replacement_preserve_drafts(self):
-        first=self.setup_curve();self.press(4614);self.add_gain();self.press(4615);self.field(4609,-6);self.select(4601,1);self.assertEqual(self.state()['plugin'],first);self.assertTrue(self.state()['fieldDraft']);self.press(4624);self.start();self.assertTrue(self.state()['fieldDraft']);self.press(4610);draft=self.state()['points']
-        self.write('document.patch',title='Outside edit');before=self.doc();self.press(4614);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.state()['points'],draft);self.press(4615);self.write('plugin.remove',slot=0);self.press(4615);self.assertEqual(self.state()['plugin'],first);self.assertIn('removed',self.state()['status']);self.press(4625);self.assertNotEqual(self.state()['plugin'],first)
-        self.select(4603,1);self.field(4609,-6);self.press(4610);draft=self.state()['points'];path=self.folder/'replacement.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4615);self.assertEqual(self.state()['points'],draft);self.assertTrue(self.state()['stale'])
+        first=self.setup_curve();second=self.add_gain();self.press(4615)
+        self.field(4609,-6);self.select(4601,1)
+        self.assertEqual(self.state()['plugin'],second);self.assertFalse(self.state()['fieldDraft'])
+        self.select(4601,0);self.wait_saved([dict(frame=0,value=-18),dict(frame=24000,value=-6)])
+        self.press(4631);baseline=self.saved();self.assertEqual(baseline,[dict(frame=0,value=-18),dict(frame=24000,value=-3)])
+        self.field(4609,'invalid');self.select(4601,1)
+        self.assertEqual(self.state()['plugin'],first);self.assertTrue(self.state()['fieldDraft']);self.assertEqual(self.saved(),baseline)
+        self.press(4624);self.start();self.assertTrue(self.state()['fieldDraft']);self.assertEqual(self.saved(),baseline)
+        self.key(0x1B);self.field(4609,-9);self.write('document.patch',title='Outside edit');before=self.doc()
+        self.press(4614);self.assertEqual(self.doc(),before);self.assertTrue(self.state()['stale']);self.assertEqual(self.saved(),baseline)
+        self.assertTrue(self.state()['fieldDraft'] or self.state()['dirty']);self.press(4615)
+        self.write('plugin.remove',slot=0);self.press(4615);self.assertEqual(self.state()['plugin'],first);self.assertIn('removed',self.state()['status'])
+        self.press(4625);self.assertEqual(self.state()['plugin'],second);self.select(4603,1)
+        self.field(4608,0);self.field(4609,-6);self.press(4610);self.wait_saved([dict(frame=0,value=-6)])
+        path=self.folder/'replacement.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True)
+        self.assertFalse(self.state()['visible']);self.start();self.select(4603,1)
+        self.assertFalse(self.state()['stale']);self.assertEqual(self.saved(),[dict(frame=0,value=-6)])
 
     def test_last_touched_cross_view_and_pattern_conflict(self):
         plugin=self.setup_curve();self.press(4614);self.press(4618);pattern='ScreamSeq.ParameterAutomation';local=self.read('workspace.get')['parameterAutomation'];self.assertTrue(local['visible']);self.assertEqual((local['plugin'],local['parameter']),(plugin,1));self.press(4212,pattern);before=self.doc();self.press(4215,pattern);self.assertEqual(self.doc(),before);self.assertIn('absolute',self.read('workspace.get')['parameterAutomation']['status'].lower())
@@ -78,6 +111,9 @@ class AbsoluteAutomationUITests(unittest.TestCase):
 
     def test_mouse_keyboard_zoom_and_native_controls_fit_minimum(self):
         self.setup_curve();p=self.state()['handles'][0];self.mouse(0x201,p['x'],p['y']);self.mouse(0x202,p['x'],p['y']);self.key(0x27);self.assertEqual(self.state()['points'][0]['frame'],480);before=self.state()['points'];p=self.state()['handles'][0];self.mouse(0x201,p['x'],p['y']);self.mouse(0x200,p['x']+20,p['y']+15);self.key(0x1B);self.assertEqual(self.state()['points'],before)
+        # Fit now frames short saved takes. Select a known eight-second view
+        # explicitly before asserting a midpoint insertion at four seconds.
+        self.field(4627,0);self.field(4628,8);self.press(4629)
         x,y,w,h=self.state()['canvas'];self.mouse(0x203,x+w/2,y+h/2);self.assertTrue(any(p['frame']==4*48000 for p in self.state()['points']));self.key(0x2E);self.assertFalse(any(p['frame']==4*48000 for p in self.state()['points']));self.press(4621);self.assertLess(self.state()['endSeconds']-self.state()['startSeconds'],8);self.field(4627,2);self.field(4628,3);self.press(4629);self.assertEqual((self.state()['startSeconds'],self.state()['endSeconds']),(2,3))
         user=private_desktop.user;user.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT];user.GetClientRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)];user.GetWindowRect.argtypes=user.GetClientRect.argtypes;user.MapWindowPoints.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.POINTER(wintypes.POINT),wintypes.UINT];scale=self.read('workspace.get')['dpi']/96;private_desktop.check(user.SetWindowPos(self.window(),None,0,0,int(1040*scale),int(700*scale),0x16));client=wintypes.RECT();user.GetClientRect(self.window(),ctypes.byref(client));rects=[]
         for identifier in range(4601,4633):
@@ -106,24 +142,326 @@ class AbsoluteAutomationUITests(unittest.TestCase):
     def test_native_gain_absolute_lane_changes_audio_and_keeps_partitioning(self):self.audio_curve(None,1,'absolute-gainer',[(0,-18),(9600,-6),(24000,0)])
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit short silent WASAPI qualification')
-    def test_live_reads_noop_invalid_preserve_playback_and_native_apply_stops(self):
+    def test_live_automatic_point_history_and_save_preserve_playback(self):
         plugin=self.setup_curve();self.press(4614);self.route_master(plugin);saved=[dict(frame=p['frame'],value=p['value']) for p in self.read('automation.get')['points']];path=self.folder/'live-absolute.screamseq';self.write('document.save',path=str(path));self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop','--automation','--seconds','120','--project',str(path),'--vst3-test-cache',str(self.cache)]);self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        last_transport=None
         for _ in range(100):
+            code=self.desktop.exit_code(self.pid)
+            if code is not None:self.fail(dict(reason='Owned silent app exited before audio readiness',pid=self.pid,
+                exitCode=code,transport=last_transport))
             try:
-                if self.read('transport.get')['audioActive']:break
+                last_transport=self.read('transport.get')
+                if last_transport['audioActive']:break
             except TransportError:pass
             time.sleep(.1)
         else:self.fail('silent automation app did not start')
-        before=self.read('transport.get');self.read('automation.get');self.write('automation.replaceLane',slot=0,id=1,points=list(reversed(saved)))
+        before=self.read('transport.get');self.assertTrue(before['playing']);self.read('automation.get');self.write('automation.replaceLane',slot=0,id=1,points=list(reversed(saved)))
         with self.assertRaises(ApiError):self.write('automation.replaceLane',slot=0,id=1,points=[saved[0],saved[0]])
-        self.start();self.select(4603,1);self.press(4614);time.sleep(.1);playing=self.read('transport.get');self.assertTrue(playing['audioActive']);self.assertGreater(playing['frames'],before['frames']);self.assertFalse(playing['fault']);self.assertEqual(playing['overruns'],0)
-        self.field(4609,-12);self.press(4610);self.press(4614);self.assertFalse(self.read('transport.get')['audioActive']);self.assertEqual(self.saved()[0]['value'],-12)
+        self.start();self.select(4603,1);time.sleep(.1)
+        snapshots=[]
+        def continuing():
+            playing=self.read('transport.get');snapshots.append(playing)
+            self.assertTrue(playing['audioActive'] and playing['playing'])
+            self.assertEqual(playing['playbackEpoch'],before['playbackEpoch'])
+            self.assertGreater(playing['frames'],before['frames']);self.assertFalse(playing['fault']);self.assertEqual(playing['overruns'],0)
+            return playing
+        continuing();opaque=self.read('plugin.state.get',slot=0)
+        self.field(4609,-12);changed=[dict(frame=0,value=-12),saved[1]];self.wait_saved(changed);continuing()
+        field=self.control(4609)
+        self.desktop.send(field,0x201,1,4|(4<<16));self.desktop.send(field,0x202,0,4|(4<<16))
+        self.desktop.send(field,0xB1,1,2)
+        before_view=self.state()
+        self.field(4627,'12.');self.field(4628,'unfinished')
+        for operation,expected in [('history.undo',saved),('history.redo',changed)]:
+            self.write(operation)
+            self.assertEqual(self.saved(),expected)
+            local=self.state()
+            self.assertEqual(local['points'],expected,'Shared history must update the visible recorded lane without Reload')
+            self.assertFalse(local['stale'],local)
+            self.assertEqual((local['plugin'],local['parameter']),(plugin,1))
+            self.assertEqual(self.desktop.focus(field),field,'History refresh must retain the native value field focus')
+            self.assertEqual(self.desktop.send(field,0xB0),1|(2<<16),'History refresh must retain the selected text range')
+            self.assertEqual((local['startSeconds'],local['endSeconds']),
+                             (before_view['startSeconds'],before_view['endSeconds']))
+            for identifier,text in ((4627,'12.'),(4628,'unfinished')):
+                raw=ctypes.create_unicode_buffer(80);self.desktop.send(self.control(identifier),0xD,80,ctypes.addressof(raw))
+                self.assertEqual(raw.value,text,'History must retain unfinished view-range text without applying it')
+            continuing()
+        self.press(4631);self.assertEqual(self.saved(),saved);continuing()
+        self.press(4632);self.assertEqual(self.saved(),changed);continuing()
+        destination=self.folder/'live-edited.screamseq';self.write('document.save',path=str(destination));continuing()
+        self.assertEqual(self.read('plugin.state.get',slot=0),opaque)
+        # Reopen is an intentional document replacement, after the live-edit
+        # assertions. It must preserve the accepted lane and opaque plugin state.
+        self.write('transport.stop');self.write('document.open',path=str(destination),discard=True)
+        self.start();self.select(4603,1);self.assertEqual(self.saved(),changed)
+        self.assertEqual(self.read('plugin.state.get',slot=0),opaque)
         if os.environ.get('SCREAMSEQ_ABSOLUTE_EVIDENCE_DIR'):
-            folder=Path(os.environ['SCREAMSEQ_ABSOLUTE_EVIDENCE_DIR']);folder.mkdir(parents=True,exist_ok=True);(folder/'absolute-live.json').write_text(json.dumps(dict(before=before,playing=playing,after=self.read('transport.get'),workspace=self.state())),encoding='utf-8')
+            folder=Path(os.environ['SCREAMSEQ_ABSOLUTE_EVIDENCE_DIR']);folder.mkdir(parents=True,exist_ok=True);(folder/'absolute-live.json').write_text(json.dumps(dict(before=before,snapshots=snapshots,after=self.read('transport.get'),workspace=self.state())),encoding='utf-8')
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'),'private VST3 gain fixture')
     def test_vst3_absolute_lane_changes_audio_and_preserves_opaque_state(self):
         descriptor=next(p for p in self.read('plugin.discover',format='VST3') if p['classID']=='5245534F4E414E434546464543540001');self.audio_curve(descriptor,7,'absolute-vst3',[(0,.125),(9600,.75),(24000,.5)])
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_activity_recorded_selection_survives_value_time_history_and_reopen(self):
+        plugin=self.add_gain();self.route_master(plugin)
+        points=[dict(frame=24000,value=-12),dict(frame=36000,value=-6),dict(frame=48000,value=-3)]
+        self.write('automation.replaceLane',slot=0,id=1,points=points)
+        self.write('automation.replaceLane',slot=0,id=2,points=[dict(frame=12000,value=25)])
+        source=self.folder/'activity-source.screamseq';self.write('document.save',path=str(source))
+        self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop','--automation','--seconds','120','--project',str(source),'--vst3-test-cache',str(self.cache)])
+        self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        last_transport=None
+        for _ in range(100):
+            code=self.desktop.exit_code(self.pid)
+            if code is not None:self.fail(dict(reason='Owned silent app exited before audio readiness',pid=self.pid,
+                exitCode=code,transport=last_transport))
+            try:
+                last_transport=self.read('transport.get')
+                if last_transport['audioActive']:break
+            except TransportError:pass
+            time.sleep(.1)
+        else:self.fail('silent activity app did not start')
+        # Device activation precedes publication of prepared processor targets.
+        # Qualify that readiness explicitly; do not reopen a failed observer.
+        deadline=time.monotonic()+10;prepared={}
+        while time.monotonic()<deadline:
+            prepared=self.read('parameter.activity.targets')
+            if prepared['active'] and any(t['plugin']==plugin for t in prepared['targets']):break
+            time.sleep(.025)
+        else:self.fail(dict(reason='prepared activity target did not become ready',prepared=prepared,transport=self.read('transport.get')))
+        transport=self.read('transport.get');baseline=self.read('automation.get');opaque=self.read('plugin.state.get',plugin=plugin)
+        self.idle()
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,575)
+        kind='ScreamSeq.ParameterActivity';owner=self.window(kind)
+        state=lambda:self.read('workspace.get')['parameterActivity']
+        control=lambda identifier:self.control(identifier,kind)
+        # The untouched Enabled parameter is a constant, active trace. It must
+        # remain visible inside the plot, rather than vanish on its clipped edge.
+        self.assertEqual(state()['parameter'],0,state())
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            trace=state()['trace']
+            if trace['nativePoints']>=2:break
+            time.sleep(.025)
+        self.assertGreaterEqual(trace['nativePoints'],2,trace)
+        self.assertEqual((trace['minimum'],trace['maximum']),(1,1))
+        x,y,width,height=trace['plot'];point_x,point_y=trace['lastPoint']
+        self.assertGreater(point_x,x);self.assertLess(point_x,x+width)
+        self.assertAlmostEqual(point_y,y+height/2,delta=.01)
+        def choose(identifier,index):
+            handle=control(identifier);self.desktop.send(handle,0x186 if identifier==11007 else 0x14E,index)
+            self.desktop.send(owner,0x111,identifier|(1<<16),handle)
+        def press(identifier):self.desktop.send(owner,0x111,identifier,control(identifier))
+        def accepted(expected):
+            deadline=time.monotonic()+12
+            while time.monotonic()<deadline:
+                current=self.read('automation.get');local=state()
+                if current==expected and not local['fieldDraft'] and not local['pending']:return
+                time.sleep(.025)
+            self.fail(dict(expected=expected,actual=current,activity=local))
+        def visible_lane(expected):
+            expected_lane=[dict(frame=p['frame'],value=p['value']) for p in expected['points'] if p['slot']==0 and p['id']==1]
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline:
+                local=state()
+                if local['recorded']==expected_lane and not local['pending'] and not local['stale']:return local
+                time.sleep(.025)
+            self.fail(dict(expected=expected_lane,activity=local))
+        # Search is presentation-only, including while observation polls. Keep
+        # Enabled visible as the current target until Gain is explicitly chosen.
+        observer=state()
+        self.field(11021,'gAiN',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['search']=='gAiN':break
+            time.sleep(.025)
+        self.assertEqual(filtered['parameterChoices'],[0,1],filtered)
+        self.assertEqual(filtered['searchMatches'],1)
+        self.assertEqual((filtered['parameter'],filtered['token'],filtered['generation']),
+                         (observer['parameter'],observer['token'],observer['generation']))
+        self.assertEqual(self.read('automation.get'),baseline)
+        self.field(11021,'no such parameter',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['searchMatches']==0:break
+            time.sleep(.025)
+        self.assertEqual(filtered['parameterChoices'],[0],filtered)
+        self.assertEqual(filtered['parameter'],0)
+        self.field(11021,'dB',kind)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            filtered=state()
+            if not filtered['searchPending'] and filtered['search']=='dB':break
+            time.sleep(.025)
+        parameter=filtered['parameterChoices'].index(1)
+        choose(11001,parameter)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            current=state();trace=current['trace']
+            if current['parameter']==1 and trace['nativePoints']>=2:break
+            time.sleep(.025)
+        self.assertEqual(current['parameter'],1,current)
+        self.assertEqual(current['search'],'dB')
+        self.assertGreaterEqual(trace['nativePoints'],2,trace)
+        px,py=trace['lastPoint'];scale=self.read('workspace.get')['dpi']/96
+        self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
+        self.desktop.send(owner,0x202,0,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
+        self.assertTrue(state()['frozen']);self.assertIsNotNone(state()['trace']['selectedSequence'])
+        frozen=state();frozen_music=self.read('automation.get')
+        press(11020)
+        self.assertFalse(state()['visible'])
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,575)
+        reopened=state()
+        self.assertTrue(reopened['visible'])
+        for key in ('document','expectedRevision','target','plugin','parameter','token','cursor',
+                    'pointCount','sources','recorded','selectedPoint','fieldDraft','generation',
+                    'rawTime','rawValue','frozen','page','traceMode','trace','seconds','search'):
+            self.assertEqual(reopened[key],frozen[key],(key,frozen,reopened))
+        self.assertEqual(self.read('automation.get'),frozen_music)
+        sequence=state()['trace']['selectedSequence']
+        observed=self.read('parameter.activity.get',after=0,limit=2048)
+        selected_event=next(p for p in observed['points'] if p['sequence']==sequence)
+        source_kind=selected_event['source']['kind']
+        self.assertIn(source_kind,('baseline','recorded'),selected_event)
+        press(11008)
+        # Playback can cross a recorded point while the native search is being
+        # exercised. Qualify the actual selected event, never a timing guess.
+        main=self.desktop.hwnd(self.pid)
+        parameter_control=private_desktop.user.GetDlgItem(main,311)
+        parameter_text=ctypes.create_unicode_buffer(256)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            linked_workspace=self.read('workspace.get')
+            self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))
+            linked=linked_workspace['absoluteAutomation']
+            if source_kind=='recorded':
+                if linked['visible'] and (linked['plugin'],linked['parameter'])==(plugin,1):break
+            elif parameter_text.value=='Gain / dB' and linked_workspace['lowerEditor']=='plugins':break
+            time.sleep(.025)
+        if source_kind=='recorded':
+            self.assertTrue(linked['visible'],linked_workspace)
+            self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+            self.assertEqual(linked['points'],points)
+            self.press(4624)
+        else:
+            self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
+            self.assertEqual(parameter_text.value,'Gain / dB',linked_workspace)
+            self.assertFalse(linked['visible'])
+        self.assertEqual(self.read('automation.get'),baseline)
+        # Explicitly select manual provenance to cover the rack destination as
+        # well, regardless of which source the live trace just selected.
+        sources=state()['sources'];manual=next(i for i,s in enumerate(sources) if s['kind']=='baseline')
+        choose(11007,manual);self.assertIsNone(state()['trace']['selectedSequence'])
+        press(11008)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))
+            linked_workspace=self.read('workspace.get')
+            if parameter_text.value=='Gain / dB' and linked_workspace['lowerEditor']=='plugins':break
+            time.sleep(.025)
+        self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
+        self.assertEqual(parameter_text.value,'Gain / dB',linked_workspace)
+        self.assertFalse(linked_workspace['absoluteAutomation']['visible'])
+        self.assertEqual(self.read('automation.get'),baseline)
+        press(11009) # Explicit Song automation destination, independent of source.
+        linked=self.read('workspace.get')['absoluteAutomation']
+        self.assertTrue(linked['visible'],state())
+        self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+        self.assertEqual(self.read('automation.get'),baseline)
+        self.press(4624);press(11002)
+        choose(11006,2);choose(11007,1)
+        self.assertEqual(state()['selectedPoint'],1)
+        self.field(11016,-9,kind) # Existing points apply automatically; no Save click.
+        edited=json.loads(json.dumps(baseline))
+        for point in edited['points']:
+            if point['id']==1 and point['frame']==36000:point['value']=-9
+        # Open the connected lane immediately: it must capture the accepted
+        # value, without requiring Save or waiting for the edit debounce.
+        press(11009)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            linked=self.read('workspace.get')['absoluteAutomation']
+            if linked['visible'] and not linked['pending']:break
+            time.sleep(.025)
+        self.assertTrue(linked['visible'],state())
+        self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+        self.assertEqual(linked['points'],[dict(frame=p['frame'],value=p['value'])
+                         for p in edited['points'] if p['slot']==0 and p['id']==1],linked)
+        self.press(4624)
+        accepted(edited);self.assertEqual(state()['selectedPoint'],1,state())
+        self.field(11015,1.25,kind)
+        # Leave the edited point immediately, without Save or a debounce wait.
+        # The first point retains its identity on either side of the reorder;
+        # the native fixture also exercises a clicked row whose index changes.
+        choose(11007,0)
+        moved=json.loads(json.dumps(edited))
+        for point in moved['points']:
+            if point['id']==1 and point['frame']==36000:point['frame']=60000
+        moved['points'].sort(key=lambda p:p['frame'])
+        accepted(moved)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            navigated=state()
+            if navigated['selectedPoint']==0 and not navigated['pending']:break
+            time.sleep(.025)
+        self.assertEqual(navigated['selectedPoint'],0,navigated)
+        self.assertEqual(navigated['recorded'][0],dict(frame=24000,value=-12))
+        self.assertEqual(float(navigated['rawTime']),.5)
+        self.assertEqual(float(navigated['rawValue']),-12)
+        choose(11007,2)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            navigated=state()
+            if navigated['selectedPoint']==2 and not navigated['pending']:break
+            time.sleep(.025)
+        self.assertEqual(state()['selectedPoint'],2);self.assertEqual(state()['recorded'][2],dict(frame=60000,value=-9))
+        self.assertEqual(state()['rawTime'],'1.25');self.assertEqual(float(state()['rawValue']),-9)
+        self.write('history.undo');self.assertEqual(self.read('automation.get'),edited)
+        self.write('history.redo');self.assertEqual(self.read('automation.get'),moved)
+        press(11002) # Re-read the current revision after external Undo/Redo.
+        refreshed=visible_lane(moved)
+        self.assertEqual(refreshed['selectedPoint'],0,refreshed)
+        point_list=control(11007)
+        self.desktop.send(point_list,0x201,1,8|(8<<16))
+        self.desktop.send(point_list,0x202,0,8|(8<<16))
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        self.assertEqual(state()['selectedPoint'],0,state())
+        self.desktop.send(point_list,0x100,0x08)
+        deleted=json.loads(json.dumps(moved))
+        deleted['points']=[p for p in deleted['points'] if not (p['id']==1 and p['frame']==24000)]
+        deleted['total']=len(deleted['points'])
+        accepted(deleted)
+        self.assertEqual(state()['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        # Use the real app keyboard queue on this owned private desktop. Lists
+        # have no text Undo stack; configured song history must receive Ctrl+Z/Y.
+        import test_workspace_shortcuts as shortcuts
+        keyboard=types.SimpleNamespace(desktop=self.desktop,ready=self.idle)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
+        accepted(moved)
+        self.assertEqual(self.read('automation.get'),moved,state())
+        self.assertEqual(visible_lane(moved)['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Y'),hwnd=point_list,ctrl=True)
+        accepted(deleted)
+        self.assertEqual(self.read('automation.get'),deleted,self.read('workspace.get'))
+        self.assertEqual(visible_lane(deleted)['selectedPoint'],-1)
+        shortcuts.WorkspaceShortcutTests.key(keyboard,ord('Z'),hwnd=point_list,ctrl=True)
+        accepted(moved)
+        self.assertEqual(self.read('automation.get'),moved,state())
+        self.assertEqual(visible_lane(moved)['selectedPoint'],-1)
+        self.assertEqual(self.desktop.focus(owner),point_list)
+        destination=self.folder/'activity-edited.screamseq';self.write('document.save',path=str(destination))
+        after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive'])
+        self.assertEqual(after['playbackEpoch'],transport['playbackEpoch']);self.assertGreater(after['frames'],transport['frames'])
+        self.assertFalse(after['fault']);self.assertEqual(after['overruns'],0)
+        self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
+        self.write('transport.stop');self.write('document.open',path=str(destination),discard=True)
+        self.assertEqual(self.read('automation.get'),moved);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
 
 
 if __name__=='__main__':unittest.main()
