@@ -307,6 +307,34 @@
         retainedNativeCommand("export","document.exportModule",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
             {{"path",utf8Path(path)}},[&](const Json &){status=L"Module exported / native project save state retained";});
     }
+    virtual std::filesystem::path chooseAudioExportFile() {
+        ModalScope modal(modalDepth);return ScreamSeq::chooseAudioExport(window);
+    }
+    void exportAudioFile() {
+        if(nativeCommandCompletion.retained()){reviewNativeCommand();return;}
+        if(busy)throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
+        if(!protectRecordingTake())return;
+        // Finish accepted native field edits just as Save does. The export API
+        // itself is read-only and must never capture mutable vendors implicitly.
+        if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
+        if(parameterAutomationWindow)parameterAutomationWindow->flushForProjectSave();
+        if(absoluteAutomationWindow)absoluteAutomationWindow->flushForProjectSave();
+        if(parameterActivityWindow)parameterActivityWindow->flushForProjectSave();
+        documentOperation("flushPluginEditors",{{"force",true}});
+        const auto document=documentId,revision=view->session.revision;
+        const auto focus=GetFocus();const bool text=menuTextControl(focus);DWORD first=0,last=0;
+        if(text)SendMessageW(focus,EM_GETSEL,reinterpret_cast<WPARAM>(&first),reinterpret_cast<LPARAM>(&last));
+        const auto path=chooseAudioExportFile();
+        if(documentId==document&&view->session.revision==revision&&IsWindow(focus)&&IsWindowVisible(focus)) {
+            SetFocus(focus);if(text)SendMessageW(focus,EM_SETSEL,first,last);
+        }
+        if(path.empty())return;
+        if(documentId!=document||view->session.revision!=revision)
+            throw ScreamSeq::Api::ApiError(-32001,"Song changed while choosing Export; no file was written",Tracker::WriteOutcome{Tracker::CommitOutcome::NotCommitted});
+        status=L"Rendering audio…";frameRequested=true;
+        retainedNativeCommand("audioExport","document.exportAudio",{{"expectedRevision",revision},{"path",utf8Path(path)},{"overwrite",true}},
+            {{"path",utf8Path(path)}},[&](const Json &){status=L"Audio exported / native project save state retained";});
+    }
     bool saveFile(bool saveAs=false) {
         if(nativeCommandCompletion.retained()){reviewNativeCommand();return false;}
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");

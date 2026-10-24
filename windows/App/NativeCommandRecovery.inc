@@ -57,6 +57,14 @@
             auto layout=documentOperation("track.get",Json::object());
             if(!layout.at("columns").is_array()||!layout.at("noteTracks").is_array())throw std::runtime_error("Track readback is unavailable / result retained");
             observed["layout"]=std::move(layout);
+        }else if(domain=="audioExport"){
+            const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
+            observed["file"]=await(std::async(std::launch::async,[path]{
+                Json info={{"path",utf8Path(path)},{"exists",std::filesystem::exists(path)},
+                  {"limitation","File presence and size cannot confirm the earlier export outcome; do not automatically retry."}};
+                if(std::filesystem::is_regular_file(path))info["bytes"]=std::filesystem::file_size(path);
+                return info;
+            }));
         }else if(domain=="export"){
             const auto path=std::filesystem::u8path(nativeCommandTarget.at("params").at("path").get<std::string>());
             observed["file"]=await(std::async(std::launch::async,[path]{return inspectSavedCommandFile(path,true);}));

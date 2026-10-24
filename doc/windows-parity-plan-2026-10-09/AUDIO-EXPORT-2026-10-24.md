@@ -70,14 +70,20 @@ qualify this changed rendering source.
    checks. Mac publication now accepts an optional explicit no-overwrite mode,
    using link or exclusive rename as its existing project-save implementation
    does, with a retained-destination regression. All native tests are unbuilt.
-3. Add Windows File > Export audio… and command-palette entry using a native
+3. Windows File > Export audio… and command-palette entry now use a native
    chooser, asynchronous worker status, explicit failure message and retained
-   originating focus. Mac should use the same guarded contract.
+   originating focus. Mac now uses the same guarded contract, capturing revision
+   before its chooser. Windows finishes queued precise/automation fields before
+   choosing, retains caret on chooser return and treats export as non-navigation.
+   Its retained command owner never retries an uncertain file write; readback
+   reports file existence/size as observations, not proof of a successful export.
+   Native `command-results` adds chooser cancel/stale and pending-note/caret/Save
+   destination assertions. The real chooser and actual app path are untested.
 4. Compose/record/Keep/Undo/Redo/Save/export/reopen journey: assert unrelated
    music and native project stay exact, epoch advances continuously, and compare
    exported audio using shared fixtures. Test invalid/stale/overwrite failures.
 
-No Windows export control is present yet; the API is source-only and unqualified.
+Both native controls and the API are now source-only and unqualified.
 Cheap reviewed inventory tests passed (6 tests); this is not execution evidence
 for either native export implementation. Fresh Mac `export`, shared
 `audio-export-stream`, Windows `atomic-output-stream`, worker export and both

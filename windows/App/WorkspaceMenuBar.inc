@@ -78,7 +78,7 @@
         using Item=ScreamSeq::NativeMenuBar::Item;
         const auto commands=[](std::initializer_list<int> ids){std::vector<Item> result;for(const auto id:ids)result.push_back({id,id?L"Command":L""});return result;};
         std::vector<Item> menus={
-            {0,L"&File",true,false,commands({newDocumentCommand,openCommand,openDemoCommand,0,saveCommand,saveAsCommand,exportModuleCommand,0,recoveryCommand,documentLoadReportCommand,0,exitCommand})},
+            {0,L"&File",true,false,commands({newDocumentCommand,openCommand,openDemoCommand,0,saveCommand,saveAsCommand,exportAudioCommand,exportModuleCommand,0,recoveryCommand,documentLoadReportCommand,0,exitCommand})},
             {0,L"&Edit",true,false,commands({undoCommand,redoCommand,0,cutFocusedCommand,copyFocusedCommand,pasteFocusedCommand,deleteFocusedCommand,selectAllFocusedCommand,selectChannelCommand,selectRowCommand,selectPatternCommand,0,patternToolsCommand})},
             {0,L"&Song",true,false,commands({arrangementCommand,arrangementMatrixCommand,songTimingCommand,songPropertiesCommand,0,noteTrackCreateCommand,noteTrackGroupCommand,noteTrackUngroupCommand,0,newPatternCommand,duplicatePatternCommand,editSectionCommand})},
             {0,L"&Playback",true,false,commands({togglePlaybackCommand,stopCommand,0,playCursorCommand,playSelectionCommand,playSelectionCursorCommand,0,playbackLoopCommand,followCommand,liveKeysCommand,0,auditionCommand,midiRecordingCommand,parameterRecordingCommand})},
@@ -114,7 +114,7 @@
         case liveKeysCommand:return current.at("live")==menuGuard.at("live");
         case followCommand:return current.at("position").at("following")==menuGuard.at("position").at("following");
         case togglePlaybackCommand:return current.at("playing")==menuGuard.at("playing");
-        case newDocumentCommand:case openCommand:case openDemoCommand:case saveCommand:case saveAsCommand:case exportModuleCommand:case recoveryCommand:case documentLoadReportCommand:
+        case newDocumentCommand:case openCommand:case openDemoCommand:case saveCommand:case saveAsCommand:case exportModuleCommand:case exportAudioCommand:case recoveryCommand:case documentLoadReportCommand:
         case undoCommand:case redoCommand:case songPropertiesCommand:case songTimingCommand:return current.at("revision")==menuGuard.at("revision");
         default:return current==menuGuard;
         }

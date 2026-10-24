@@ -1108,23 +1108,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func exportAudio() {
     guard !busy else { return }
+    let revision = session.automationRevision
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.wav]
     panel.nameFieldStringValue = model.title + ".wav"
     panel.beginSheetModal(for: window) { [weak self] response in
       guard response == .OK, let self, let url = panel.url else { return }
-      self.perform(
-        "Rendering audio…", refresh: false,
-        {
-          let data = self.session.serializedData()
-          guard !data.isEmpty else {
-            throw NSError(
-              domain: "ScreamSeq", code: 1,
-              userInfo: [NSLocalizedDescriptionKey: "This module could not be prepared for export."]
-            )
-          }
-          try TrackerSession.export(data, path: url.path)
-        }, completion: { self.statusLabel.stringValue = "Exported \(url.lastPathComponent)" })
+      self.handleAutomation("document.exportAudio", params: [
+        "expectedRevision": revision, "path": url.path, "overwrite": true
+      ]) { [weak self] response in
+        if let error = response["error"] as? [String: Any] {
+          self?.statusLabel.stringValue = error["message"] as? String ?? "Audio export failed"
+        } else {
+          self?.statusLabel.stringValue = "Exported \(url.lastPathComponent)"
+        }
+      }
     }
   }
   @objc func audioSettings() {

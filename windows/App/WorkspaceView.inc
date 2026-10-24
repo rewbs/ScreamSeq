@@ -341,6 +341,7 @@
                 return;
             }
             else if(id==exportModuleCommand) exportModuleFile();
+            else if(id==exportAudioCommand) {exportAudioFile();return;}
             else if(id==undoCommand || id==redoCommand) edit(id==undoCommand ? "history.undo" : "history.redo",{{"domain","document"}});
             else if(id==copyCommand) copyCells();
             else if(id==pasteCommand) pasteCells();

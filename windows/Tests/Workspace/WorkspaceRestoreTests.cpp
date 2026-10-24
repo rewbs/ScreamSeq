@@ -94,6 +94,11 @@ struct RestoreApplication final:Application {
     }
     std::function<std::vector<std::filesystem::path>(bool)> sampleImportChooser;
     std::function<std::filesystem::path(const std::wstring &)> moduleExportChooser;
+    std::function<std::filesystem::path()> audioExportChooser;
+    std::filesystem::path chooseAudioExportFile()override {
+        if(!audioExportChooser)throw std::runtime_error("Fixture requires an owned audio export chooser");
+        return audioExportChooser();
+    }
     std::filesystem::path chooseModuleExportFile(const std::wstring &format)override {
         if(!moduleExportChooser)throw std::runtime_error("Fixture requires an owned module export chooser");
         return moduleExportChooser(format);
@@ -1292,6 +1297,7 @@ int wmain(int argc,wchar_t **argv) {
                 }
                 if(length<std::size(group)&&std::wstring_view(group)==L"command-results") {
                     timedRestoreCase("module export command and captured picker",applicationModuleExport);
+                    timedRestoreCase("audio export command and captured picker",applicationAudioExport);
                     timedRestoreCase("native command recovery",applicationNativeCommandRecovery);
                     return;
                 }

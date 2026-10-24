@@ -1,3 +1,30 @@
+void applicationAudioExport() {
+    RestoreFixture fixture;auto &app=*fixture.app;
+    app.restoreLayoutConfiguration(layoutFor(app,"notes"));
+    app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
+    const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
+    const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
+    const auto output=fixture.folder/L"composed.wav";
+    restoreCheck(app.menuCommandState(exportAudioCommand).enabled,"Audio export missing from File menu");
+    app.audioExportChooser=[] {return std::filesystem::path{};};
+    const auto beforeCancel=songState(app);app.command(exportAudioCommand);
+    restoreCheck(songState(app)==beforeCancel&&!std::filesystem::exists(output),"Cancelled audio chooser changed song");
+    app.audioExportChooser=[&]{app.edit("document.patch",{{"title","Changed during audio chooser"}});return output;};
+    bool stale=false;try{app.exportAudioFile();}catch(const ScreamSeq::Api::ApiError &error){stale=error.code==-32001;}
+    restoreCheck(stale&&!std::filesystem::exists(output),"Audio chooser silently rebased its revision");
+    app.edit("history.undo",{{"domain","all"}});
+    rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
+    app.audioExportChooser=[&]{return output;};
+    const auto path=app.view->path;
+    app.command(exportAudioCommand);
+    DWORD start=0,end=0;SendMessageW(field,EM_GETSEL,reinterpret_cast<WPARAM>(&start),reinterpret_cast<LPARAM>(&end));
+    restoreCheck(std::filesystem::exists(output)&&app.view->path==path&&app.view->dirty&&
+        app.preciseNoteWindow->snapshot().at("selectedEvent").at("velocity")==94&&
+        !app.preciseNoteWindow->retainedDraft()&&GetFocus()==field&&start==1&&end==2,
+        "Audio export lost pending precise edit, native save state or field caret");
+    const auto bytes=ScreamSeq::Project::readProjectBytes(output);
+    restoreCheck(bytes.size()>44&&std::memcmp(bytes.data(),"RIFF",4)==0,"Native audio command did not create WAV");
+}
 void applicationModuleExport() {
     RestoreFixture fixture;auto &app=*fixture.app;
     Tracker::Document imported(Tracker::Document::demo(OpenMPT::MOD_TYPE_IT)->serialize());
