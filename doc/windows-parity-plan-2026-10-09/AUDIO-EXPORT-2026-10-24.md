@@ -485,3 +485,39 @@ At07:40 the Intel compilation had passed and its tests were running. Windows
 was still testing. The next build remains no earlier than08:02:41 UTC, pending
 terminal CI and later starts. No additional build or test execution was made
 for this source continuation.
+
+### Next frozen batch and terminal Windows evidence
+
+The observation fix is committed/backed up as
+`244a5549ca5f8fc1a2d5a6709f185686b2ad8a71`. The clean qualification checkout is
+fast-forwarded to that source; its retained previous executable is still6a.
+`bin/mac-gesture-20261022/recording-observation/freeze.json` pins this boundary.
+Prepared `checkpoint.ps1` rechecks prior CI, the hourly gate and the clean source,
+pushes only the frozen PR head, dispatches one exact-ref manual stock PCM job,
+then invokes one local build. An uncertain dispatch or existing receipt must be
+inspected, never automatically repeated. These scripts have only been parsed,
+not executed. No build may start before08:02:41 UTC, or later actual starts;
+Intel CI was still live at07:46.
+
+The local batch builds the app/scanner plus three changed test owners. Its
+bounded checks are `audio-export-stream`, `document-controller-live-parameters`
+and `native-tool-window-tests`, plus the declared scratch setup. Two actual-app
+cases exercise sample-recorder draft/departure/reopen ownership without opening
+a microphone and the cross-domain plugin-recording composing journey. The ten
+passing6a native groups and other two composing journeys retain their bounded
+evidence for unchanged inputs. Fresh Computer Use on the new executable remains
+required; recording status polling is covered by the injected native read tests,
+not by an idle recorder screenshot. Sustained audio and reciprocal edited saves
+are still unresolved; this batch alone cannot authorize a production package.
+
+Windows x64 CI job120808941221 is terminal: compilation passed,161/162 portable
+and worker checks passed (sole failure `audio-export-stream`), all53 native
+editor groups passed, and the separate scratch/editor-vendor and pipe/typed
+gates passed. The122-case application suite reported25 failures and one skip:
+22 distinct playback-startup failures and three secondary audition teardown
+failures. Recording/routing diagnostics show an empty device catalogue; no
+application test was relaxed or reclassified as a pass. The local6a composing
+journeys did run successfully with WASAPI, but do not turn this remote gate
+green. Full log SHA256:
+`3edf8d40ec046345bbb17efd878b2282ba96cbe00415013ce6e0f91b43e99d5b`, pinned in
+`audio-export-followup/completed-ci.json`. No CI job was restarted.

@@ -8,6 +8,18 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 07:47 UTC:** Next frozen source is
+`244a5549ca5f8fc1a2d5a6709f185686b2ad8a71`, backed up and fast-forwarded into the
+clean qualification checkout. Prepared `recording-observation/checkpoint.ps1`
+has not run. It coordinates the PR push, one manual pinned-stock PCM job and one
+local build, no earlier than08:02:41 UTC and only after current CI is terminal.
+The local checks select three changed native groups plus scratch setup and two
+actual-app cases; unchanged passing6a evidence is retained. Intel CI remains
+live. Windows is terminal:161/162 worker/portable and53/53 native groups passed;
+export PCM failed. App122 had25 failures/one skip:22 distinct playback-startup
+failures and three secondary teardown failures, with empty audio-device
+diagnostics. No false green gate, package or merge. See the export report.
+
 **24 October 07:43 UTC source continuation:** Sample recording status polls
 now leave the name and Keep-as fields enabled, with pending departure and
 mutation guards retained. Success/busy focus, caret and newer-draft assertions
