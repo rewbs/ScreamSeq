@@ -1,0 +1,60 @@
+# Full-song audio export parity
+
+## Observed boundary
+
+Current Windows source has **Export module** (`EditingView.inc`,
+`WorkspaceCommands.inc`, `WorkspaceMenuBar.inc`, `DocumentController.cpp`).
+The old matrix's missing-module-export entries are historical, not current proof.
+There is no Windows user-facing audio export command. Mac `main.swift` has
+`exportAudio()`, using `TrackerSession` and `mac/Audio/AudioExport.mm` to write
+48 kHz stereo float32 WAV. Neither host currently has `document.exportAudio`.
+This is a remaining composing journey: record/Keep, Save, export audible song.
+
+## Source continuation (not built or qualified)
+
+`editor/hosted/AudioExportStream.{hpp,cpp}` now owns the full-song private
+renderer, plugin chain, recorded/musical automation, native column mutes,
+latency trim, bounded tail and WAV stream encoding. Mac keeps its existing
+temporary-file/fsync/rename wrapper and public signature. No project format,
+stable identity, plugin recipe or Undo semantics change. Private renderer and
+chain stay on the heap for small document-worker stacks.
+
+The shared writer takes an immutable module, plugin states, recorded points,
+optional native song and sequence, plus a fresh seekable output stream. It
+returns stereo frames written. Default partition remains 512 frames; tests
+can supply 17 or 4096. This is offline worker code, never the audio callback.
+It rejects invalid partitions, nonzero stream position and nonfinite/negative
+plugin latency/tail (latency capped at 60 seconds). Write failures stop promptly.
+It retains the existing one-hour total render bound and 60-second tail cap.
+Native file owners must discard incomplete staging output on every failure.
+
+New `audio-export-stream` is registered on both platforms and included in the
+Windows worker target. Assertions cover exact independent dry core PCM and
+duration, WAV headers, callback partitions, audible hosted/recorded processing,
+native column mutes, injected stream failures and unchanged source/history.
+These assertions have **not executed**. Existing Mac `export` additionally
+covers actual AU latency/tails, a 512 KiB worker stack and failed-destination
+preservation; it remains required after extraction. Prior Mac passes do not
+qualify this changed rendering source.
+
+## Next cohesive implementation batch
+
+1. Windows native streaming staging writer: hold an exclusively created handle,
+   render without accumulating the WAV in memory, flush/close, atomically publish
+   with explicit overwrite policy. Test failure and concurrent-destination
+   preservation. Project byte-buffer saving is not suitable for a one-hour WAV.
+2. Add `document.exportAudio` to both native dispatchers, describe/schema/guide
+   and actual-app tests. Require current document revision and absolute `.wav`
+   destination; preserve recovered source protection. Define accepted plugin
+   snapshot and unkept-take admission explicitly. Export does not add history,
+   change the song's Save destination or stop the existing transport.
+3. Add Windows File > Export audio… and command-palette entry using a native
+   chooser, asynchronous worker status, explicit failure message and retained
+   originating focus. Mac should use the same guarded contract.
+4. Compose/record/Keep/Undo/Redo/Save/export/reopen journey: assert unrelated
+   music and native project stay exact, epoch advances continuously, and compare
+   exported audio using shared fixtures. Test invalid/stale/overwrite failures.
+
+No Windows export control or API is claimed implemented yet. The frozen
+`retained-reveal` candidate 24788ebc34f35a94f24138d63a1df248cddff445 deliberately
+excludes this continuation; its evidence must never be attributed to this code.
