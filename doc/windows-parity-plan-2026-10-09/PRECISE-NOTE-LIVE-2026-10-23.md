@@ -622,3 +622,20 @@ copied hashes accompany it. It does not include the later shared observation
 adapter. PR7 was pushed at the coordinated checkpoint; no main merge occurred.
 CI's latest observed build start is 10:02:24 UTC, making the next checkpoint no
 earlier than 11:02:24 UTC, subject to checking subsequent actual starts.
+
+## 24 October: cursor retention during clean revision refresh (unbuilt)
+
+Source inspection found `PreciseNoteWindow::adopt` cleared the playback cursor
+on every successful captured-row read, including unrelated edits and clean
+Undo/Redo refresh. It now retains the last observed cursor when the document,
+stable pattern, current pattern slot and row are unchanged. Playback observation
+continues to clear it when stopped or outside the row; changing the captured
+document/pattern/row still requires fresh telemetry. No transport, musical data,
+history or persistence semantics change.
+
+The existing native owner registration adds assertions for cursor retention
+alongside exact field text, caret, focus and unrelated music preservation, plus
+four recapture boundaries. Build/select `precise-note-window-tests` with the
+pending audio-export correction checkpoint. Include live Undo/Redo cursor and
+field continuity in fresh Computer Use; do not infer temporal presentation from
+snapshots alone. The source and new assertions have not yet run.

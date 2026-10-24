@@ -160,7 +160,12 @@
   }
   void adopt(Candidate next,Json selectionHint=nullptr){
     cancelAutomaticEdit();
-    playbackOffset_.reset();
+    // A revision refresh changes music, not the last observed transport frame.
+    // Keep the cursor through clean Undo/Redo and unrelated edits to this row.
+    // A new document, stable pattern, slot or row must await fresh telemetry.
+    if(document_!=next.context.document||target_.patternID!=next.target.patternID||
+       target_.pattern!=next.target.pattern||target_.row!=next.target.row)
+      playbackOffset_.reset();
     const bool changedEffects=effects_!=next.effects,changedNames=names_!=next.context.noteNames;
     // Candidate parsing and all context/generation guards finish before native fields change.
     target_=std::move(next.target);document_=std::move(next.context.document);revision_=std::move(next.context.revision);names_=std::move(next.context.noteNames);

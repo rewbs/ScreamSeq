@@ -35,8 +35,9 @@ Backspace edited text, Tab/Shift+Tab traversed correctly. All receipts are under
 That stage includes native instruments/routing; it is not individual-processor
 or CPU-time attribution. No performance, temporal-flicker or release claim.
 
-Prepared correction is frozen at `209f65464b9b978aa7b655fe602e2ea443b8b586`,
-backed up to `codex/mac-gesture-next-checkpoint` and clean in qualification.
+Resolve the latest correction in `audio-export-followup/freeze.json`, backed
+up to `codex/mac-gesture-next-checkpoint` and clean in qualification. Earlier
+unbuilt manifests are retained separately; do not build their superseded hashes.
 Use `audio-export-followup/checkpoint.ps1` only after inspecting its receipts;
 none exists yet. Its check runner retains all failures and collects independent
 app diagnostics without turning a failed aggregate green. At06:29 the preceding
@@ -49,9 +50,23 @@ actual starts and blocked until preceding CI is terminal. At06:17 current CI
 40068553924 (Mac) and40068553934 (Windows) was still building; never restart it.
 Read `inspect-audio-export-ci.py` for status. Add ApiTests to the next local build
 and native selection, retain all nine original groups plus required setup and
-three complete composing journeys. Mac export/PCM/socket, reciprocal edited
+three complete composing journeys. The current continuation additionally builds
+and selects `precise-note-window-tests` (eleven native groups total): clean row
+refresh must retain the last observed playback cursor, while recapturing another
+document, stable pattern, pattern slot or row clears it. These assertions are
+unbuilt. Mac export/PCM/socket, reciprocal edited
 projects and sustained Windows qualification remain before package/main merge.
 See [export findings and exact hashes](AUDIO-EXPORT-2026-10-24.md).
+
+At06:44 UTC all preceding dbb CI jobs were terminal. Mac ARM and Intel each
+passed134/135 CTests, with only the exact dry partition assertion failing;
+both passed native interface, socket, sample-library and plugin lifecycle gates.
+Windows passed161/162 portable/worker groups and52/53 native groups, retaining
+the same export and module-Undo failures. Its122-case actual-app run reported
+24 failures, one error and one optional skip, principally absent-endpoint
+startup; the error also occurred during owned-app readiness. These are failed
+results, not waived gates. Downloaded logs/hashes are in
+`audio-export/completed-ci.json`. No jobs were restarted.
 
 ## Historical checkpoint notes
 

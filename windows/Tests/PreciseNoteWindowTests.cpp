@@ -308,6 +308,25 @@ void automaticAdmissionAndUncertainReply(Owner &owner){
     require(!f.tool.retainedDraft()&&f.tool.snapshot().at("selectedEvent").at("velocity")==94,"Explicit recapture did not reconcile the acknowledged song state");
   }
 }
+void playbackCaptureIdentity(Owner &owner){
+  for(int variant=0;variant<4;++variant){
+    Fixture f(owner.window);f.dock(owner.window);
+    f.tool.playback("doc-a",0,2*256+64,true);
+    const auto saved=f.saved;const auto writes=f.writes;
+    if(variant==0)f.current.selected->row=3;
+    if(variant==1)f.current.document="other-document";
+    if(variant==2){f.current.patterns[0]["index"]=4;f.current.selected->pattern=4;}
+    if(variant==3){
+      f.current.patterns[0]["id"]="replacement-pattern";
+      f.current.selected->patternID="replacement-pattern";
+      f.saved["replacement-pattern"]=f.saved.at("pattern-a");
+    }
+    ++f.current.selectionGeneration;f.tool.loadSelection();
+    require(f.tool.snapshot().at("playbackOffset").is_null(),"Recapture borrowed telemetry from another row, document or pattern identity");
+    require(f.writes==writes&&f.saved.at("pattern-a")==saved.at("pattern-a")&&f.saved.at("pattern-b")==saved.at("pattern-b"),
+      "Playback recapture changed music");
+  }
+}
 void cleanCapturedRevisionRefresh(Owner &owner){
   Fixture f(owner.window);f.dock(owner.window);f.field(Tool::velocity,L"093");
   SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
@@ -315,16 +334,19 @@ void cleanCapturedRevisionRefresh(Owner &owner){
     const auto found=std::find_if(events.begin(),events.end(),[&](const auto &event){return event.at("channel")==0&&event.at("position")==position;});
     require(found!=events.end(),"Revision refresh fixture lost its addressed event");return *found;};
   const auto field=f.control(Tool::velocity);SendMessageW(field,EM_SETSEL,1,2);
+  f.tool.playback("doc-a",0,2*256+64,true);
   f.selectB(); // Pinned/focused refresh must keep pattern A, row 2.
   hit(3*units+100)["velocity"]=51;f.current.revision="r"+std::to_string(++f.revision);
   const auto reads=f.reads,writes=f.writes;
   require(f.tool.refreshCleanCaptured()&&f.reads==reads+1&&f.writes==writes&&f.tool.capturedCurrent(),"Clean capture did not refresh its replacement baseline without writing");
   require(text(field)==L"093"&&caret(field)==std::pair<DWORD,DWORD>{1,2}&&GetFocus()==field&&!f.tool.retainedDraft(),"Unrelated revision reformatted the clean focused field or lost its caret");
   require(f.tool.capturedTarget()->patternID=="pattern-a"&&f.tool.capturedTarget()->row==2,"Revision refresh followed the unrelated pattern cursor");
+  require(f.tool.snapshot().at("playbackOffset")==.25,"Unrelated revision erased the captured-row playback cursor");
   // Undo/Redo changes the selected event's musical value, and its visible field
   // follows without requiring Reload captured or stealing keyboard ownership.
   hit(2*units+16384)["velocity"]=71;f.current.revision="r"+std::to_string(++f.revision);
   require(f.tool.refreshCleanCaptured()&&text(field)==L"71"&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},"Clean history refresh left stale music or lost native field focus");
+  require(f.tool.snapshot().at("playbackOffset")==.25,"History refresh erased the captured-row playback cursor");
   f.field(Tool::velocity,L"72");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
   require(hit(2*units+16384).at("velocity")==72&&hit(3*units+100).at("velocity")==51&&!f.tool.retainedDraft(),"Editing after refresh required reload or overwrote another row");
   f.tool.hide();hit(3*units+100)["velocity"]=52;f.current.revision="r"+std::to_string(++f.revision);
@@ -707,6 +729,7 @@ int wmain(int argc,wchar_t **argv){try{
     nativePageTabOrder(owner);std::cout<<"PASS precise-note native forward/reverse Tab in visible reading order\n";
     immediateTimelineAndPlayback(owner);std::cout<<"PASS precise-note immediate populated-row insertion, Backspace, field focus and playback cursor\n";
     automaticAdmissionAndUncertainReply(owner);std::cout<<"PASS precise-note deferred busy admission and no retry after uncertain publication\n";
+    playbackCaptureIdentity(owner);std::cout<<"PASS precise-note playback cursor cannot cross captured row, document or pattern identity\n";
     cleanCapturedRevisionRefresh(owner);std::cout<<"PASS precise-note clean history refresh, fixed target, raw formatting and invalid-draft isolation\n";
     projectSaveFlushesOnlyQueuedIntent(owner);std::cout<<"PASS project save flushes one queued precise edit without replaying uncertain or invalid input\n";
     cancellingDragRetainsEarlierAutomaticEdit(owner);std::cout<<"PASS cancelled precise drag retains an earlier queued field save exactly once\n";
