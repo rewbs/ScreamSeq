@@ -281,12 +281,41 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.desktop.send(owner,0x202,0,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.assertTrue(state()['frozen']);self.assertIsNotNone(state()['trace']['selectedSequence'])
+        sequence=state()['trace']['selectedSequence']
+        observed=self.read('parameter.activity.get',after=0,limit=2048)
+        selected_event=next(p for p in observed['points'] if p['sequence']==sequence)
+        source_kind=selected_event['source']['kind']
+        self.assertIn(source_kind,('baseline','recorded'),selected_event)
         press(11008)
-        # Playback has not reached the recorded points yet. The observed event
-        # is the manual baseline, whose source is the rack (not the lane).
+        # Playback can cross a recorded point while the native search is being
+        # exercised. Qualify the actual selected event, never a timing guess.
         main=self.desktop.hwnd(self.pid)
         parameter_control=private_desktop.user.GetDlgItem(main,311)
         parameter_text=ctypes.create_unicode_buffer(256)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            linked_workspace=self.read('workspace.get')
+            self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))
+            linked=linked_workspace['absoluteAutomation']
+            if source_kind=='recorded':
+                if linked['visible'] and (linked['plugin'],linked['parameter'])==(plugin,1):break
+            elif parameter_text.value=='Gain / dB' and linked_workspace['lowerEditor']=='plugins':break
+            time.sleep(.025)
+        if source_kind=='recorded':
+            self.assertTrue(linked['visible'],linked_workspace)
+            self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+            self.assertEqual(linked['points'],points)
+            self.press(4624)
+        else:
+            self.assertEqual(linked_workspace['lowerEditor'],'plugins',linked_workspace)
+            self.assertEqual(parameter_text.value,'Gain / dB',linked_workspace)
+            self.assertFalse(linked['visible'])
+        self.assertEqual(self.read('automation.get'),baseline)
+        # Explicitly select manual provenance to cover the rack destination as
+        # well, regardless of which source the live trace just selected.
+        sources=state()['sources'];manual=next(i for i,s in enumerate(sources) if s['kind']=='baseline')
+        choose(11007,manual);self.assertIsNone(state()['trace']['selectedSequence'])
+        press(11008)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
             self.desktop.send(parameter_control,0xD,256,ctypes.addressof(parameter_text))

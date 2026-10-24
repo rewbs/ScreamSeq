@@ -111,6 +111,17 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
       for(size_t i=0;i<std::min(size_t(4),target.events.size());++i){const auto &event=target.events[i];
         std::cerr<<"RECOVERY_INPUT index="<<i<<" originalTime="<<event.hostTime
           <<" frame="<<stamp(event.frame)<<" value="<<event.value<<"\n";}
+      // This existing read does not poll or resolve the take. Inspect original
+      // timestamp coverage after capturing the failed review, without changing
+      // its result or manufacturing a clock for a slow native device startup.
+      NSError *timingError=nil;
+      NSDictionary *timing=[session automationMethod:@"automation.recording.events"
+        params:@{@"take":retainedID,@"plugin":@(target.key.plugin.c_str()),
+          @"parameter":@(target.key.parameter),@"offset":@0,@"limit":@4,@"includeTiming":@YES}
+        error:&timingError];
+      NSData *timingJSON=timing?[NSJSONSerialization dataWithJSONObject:timing options:0 error:&timingError]:nil;
+      if(timingJSON){std::cerr<<"RECOVERY_CLOCK ";std::cerr.write(static_cast<const char *>(timingJSON.bytes),timingJSON.length);std::cerr<<"\n";}
+      else std::cerr<<"RECOVERY_CLOCK_UNAVAILABLE "<<(timingError.localizedDescription.UTF8String?:"No timing projection")<<"\n";
     }
   }
   check(recoveryIntact,"Real-session recovery lost original-time input or sealed the live take");

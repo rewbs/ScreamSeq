@@ -29,7 +29,10 @@ after history and Reload. The next gate is four native groups and two complete
 app journeys, followed by fresh Computer Use. Windows1071 CI passed159 portable/
 worker and52/53 native groups, retaining24 app failures/one skip. Mac ARM1071
 passed134 CTests, native interface/socket/typed gates and the BlackHole live take
-lifecycle; Intel compiled and was still testing at00:34UTC on24 October.
+lifecycle. Intel passed compilation/model/interface/socket gates but failed
+the actual-session recovery assertion: both inputs were retained, with the
+first timestamp unmapped. Failure-only clock coverage diagnostics are prepared;
+the assertion and original timestamps remain unchanged.
 The prior350.554-second Windows foreground workload had32 deadline overruns;
 there is no newer qualified package or sustained-performance claim.
 Reciprocal preservation passed both Mac

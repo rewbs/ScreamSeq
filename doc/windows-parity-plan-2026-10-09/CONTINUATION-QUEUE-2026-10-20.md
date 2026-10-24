@@ -8,6 +8,17 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 00:42 UTC continuation:** the current Windows source also finishes
+queued Activity edits before opening their captured source. The old1071 binary
+failed the new exact destination-value assertion (-6 displayed after typing -9).
+A separate fixture timing assumption was corrected: selected trace provenance
+is read by sequence, then manual provenance is explicitly selected for the rack
+check. Intel1071 CI is terminal failed because its first retained timestamp had
+no frame mapping; both original inputs remain present and the take is unsealed.
+Failure-only existing-API clock diagnostics are added for the next Mac execution.
+No new build, package or merge. Four native groups/two app journeys remain the
+next local gate. See the latest report for exact receipts and unchanged assertions.
+
 **24 October checkpoint1071 failed qualification:** compilation passed;
 menu-bar and workspace-plugin-search native groups passed; Activity's queued
 selection/Delete assertion failed. The separate144-input composing diagnostic
@@ -1430,7 +1441,7 @@ the newer source or a visual review.
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |
 | 1 / M | Current correction addresses Activity focus, source/history queues, finishing point edits before source navigation, clean recorded-page history refresh, the Recording Keep-to-edit handoff and stable recorded-point selection after history. Last1071 compilation passed; native gate passed2/3 and failed Activity. Separate144-input composing passed; Activity diagnostics retain mixed failures/passes. | Resolve `activity-history-correction/freeze.json`. No build before24 October00:57:22UTC or while1071 CI remains live; inspect later starts. Require4 native groups,2 exact app journeys and fresh Computer Use. Reuse only validated unchanged inputs; no package/merge from diagnostic evidence. |
-| 2 / L | Mac live VST3 restoration uses processing acknowledgements and non-flushing verification.063 passed both architectures; later3408 ARM passed but Intel failed the strict actual-session input/timestamp/frame/ownership assertion.1071 adds failure-only captured-review diagnostics. | Inspect1071 CI40042447613 to establish the actual failing condition or fresh pass; never substitute an older pass for the3408 failure. AU still retains stopped restoration; divergent opaque state requires explicit stopped, closed-editor recovery. Preserve input cuts, ownership and exact history/save checks. |
+| 2 / L | Mac live VST3 restoration uses processing acknowledgements and non-flushing verification.1071 ARM passed; Intel preserved both inputs but its first timestamp had no frame mapping. The take remained open, with no provider loss/overflow. | Next Mac run adds failure-only clock coverage through the existing read API to distinguish startup, gap and pending coverage. Do not approximate original timestamps, relax the assertion or infer a product fix before that evidence. AU retains stopped restoration; divergent opaque state requires explicit stopped, closed-editor recovery. Preserve input cuts, ownership and exact history/save checks. |
 | 3 / M | Earlier paired CI executed the shared API contracts, integer/replay and Mac dry-run corrections. The obsolete B3 source-only/fresh-request-ID labels are not current gaps. | Reuse exact unchanged contract evidence; inspect current CI to qualify changed dependencies. Retain strict outcome, stale, no-op, partial-failure and Redo assertions; do not substitute method inventory for behavior. |
 | 4 / M–L | The latest retained exchange passed Mac ARM/Intel and both Windows return legs for no-edit, edited render/import, metadata, composing history and envelope-bank preservation. Actual CI merge7a375c3f has the identical tree as reviewed4d1fa80fe. | Reuse `recorded-viewport/reciprocal-exchange.json` only for unchanged codec/persistence inputs. Native Save/field-navigation changes have separate current app gates. Any later codec or native ownership change requires fresh reciprocal edited outputs; retain binary/input/report hashes. |
 | 5 / M–L | Mixer, tracks, graph gestures, sample/plugin layering, automatic fields and capture duration are implemented. F04 six-domain composing plus native recording and sample-layered VST3 recording/PCM journeys have bounded c900 evidence. Precise live editing and interleaved note/take history have newer diagnostic evidence. These do not close all117 rows. | Continue A02–A14/A17 with exact source/input provenance: qualify the changed precise/MIDI path first, then address specific failures found in complete composing journeys. Preserve occupied Gain automation in F04; record Balance for the successful take. Reuse unchanged sample/graph/persistence results rather than rerunning broad suites per UI edit. |

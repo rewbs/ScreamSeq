@@ -1637,3 +1637,49 @@ lane, then continues its time move, keyboard Undo/Redo, playback epoch and
 save/reopen checks. This adds assertions to the existing case, not another test
 run or build target. Python syntax and whitespace checks passed; execution awaits
 the combined candidate.
+
+The00:39UTC old1071 source-handoff diagnostic stopped before its new assertion:
+its selected trace was at0.789979s, with source`recorded`, and correctly opened
+Song automation. The fixture incorrectly expected manual-baseline/rack navigation
+before the first0.5s recorded point. Exact failed receipt/log remain in
+`activity-history-correction/source-handoff-diagnostic/`; do not classify this
+particular failure as swallowed navigation or evidence of the new handoff bug.
+Earlier source-navigation failures likewise require their actual selected-event
+provenance before attributing a cause. The source-level pending-handler omission
+and new deterministic native queue tests remain independently valid.
+
+The app fixture now reads the exact selected trace sequence from the existing
+activity API and asserts its corresponding stable destination and unchanged
+music. It then explicitly selects baseline provenance and asserts Gain in the
+rack, covering both trace and manual-source navigation without assuming CPU
+speed or elapsed playback time. The original source, field, history and
+preservation assertions remain. This fixture correction needs execution.
+
+At00:40:54UTC the provenance-corrected old1071 diagnostic reached and failed the
+new handoff assertion: the destination still displayed frame36000/value-6 after
+Activity typed-9. Other points remained exact. This directly reproduces opening
+the old lane before the queued edit, independent of the earlier trace-source
+fixture assumption. Retain `activity-history-correction/provenance-diagnostic/`
+receipt/log and fixture hash; do not rerun this unchanged diagnostic.
+
+### Intel recovery failure narrowed; clock observation still required
+
+1071 Intel job120716413791 is terminal failed. Compilation,134 CTests, native
+interface, socket and typed gates passed; the real-device take recovery assertion
+failed. The original two inputs and their timestamps were retained; the take had
+no end time, failure0 and rejected0. First input2159082267366 had no mapped frame
+and unmapped1. Second input2159246541109 mapped to frame7703. Thus the result is
+not loss of the original input, a sealed take, provider drop or overflow. The
+existing strict frame/order assertion remains failed. Log SHA256 is
+e87d02c5fc0f80baad3d5731a9434173514bcae242dfc9b5e95c622cf82a24f9.
+
+A failure-only addition in `mac/Tests/ParameterTakeSessionTests.inc` reads the
+existing `automation.recording.events(includeTiming:true)` projection for each
+captured target. That method does not poll or resolve input. It reports retained
+frame or original-time coverage (before-start, gap, pending, generation/failure
+and bounding intervals). The already captured failed review and assertion are
+unchanged; no retry, sleep, timestamp approximation or product change is added.
+The next Mac run must establish the actual coverage reason before changing
+admission or clock behavior. Mac ARM's pass does not supersede Intel's failure.
+All preceding1071 jobs are now terminal; the hourly gate still requires a fresh
+later-start check and no build before00:57:22UTC.
