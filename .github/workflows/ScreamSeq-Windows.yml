@@ -225,6 +225,7 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: screamseq-windows-logs
+          # Retain the already-built provider for replay on a real-device host.
           path: |
             screamseq-windows.log
             screamseq-windows-model.log
@@ -238,6 +239,8 @@ jobs:
             bin/windows-ci/BuildInfo.json
             bin/windows-ci/native-app.zip
             bin/windows-ci/native-app-identity.json
+            bin/windows-ci/Release/ScreamSeqVST3Fixture.vst3
+            bin/windows-ci/plugin-edit-cache.json
             bin/windows-ci/CMakeCache.txt
             bin/windows-ci/test-registration.json
             bin/windows-ci/test-schedule.json

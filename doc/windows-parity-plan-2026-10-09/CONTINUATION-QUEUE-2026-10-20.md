@@ -6,6 +6,25 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October21:37 UTC:** Windows946 CI is terminal:162/162 portable/worker,
+53/53 native groups passed. App124 has25 failures/one optional skip:22 unique
+live-startup failures plus3 secondary teardown failures; recorded devices are
+empty despite both audio services running. Retain this failed run40131518388.
+Its exact x64 app was downloaded and verified, including merge source19f0f608
+whose complete tree equals946, archive/build/executable hashes and PE machine.
+An owned real-device replay of21 affected cases is running in session10727;
+inspect `recording-root/ci-x64/local-live-checks.json` and the live handle before
+doing anything. The mandatory VST3 layering case cannot run from this artifact:
+CI omitted its x64 provider. Do not call that case passed or substitute ARM64 DLLs.
+
+The next batch now also retains the already-built VST3 fixture and cache in CI
+artifacts, without changing any assertion or adding a build. The old bank-placement
+waiter92956/PID36056 was verified waiting and stopped before any build at21:36.
+Its terminal receipt remains. Prepare the replacement checkpoint in
+`bank-placement-retained/` with the new committed workflow, same21:50:05 gate,
+same bank native/app checks and fresh Computer Use. Never restart the old waiter
+or build the superseded c9 freeze. Intel remains live; re-observe, do not restart.
+
 **24 October21:30 UTC:** PR7 title/body now describe the actual live composing,
 recording and editor scope; it remains draft/unmerged at946 with no review threads.
 Windows946 portable/worker and native editor/preference/recovery steps passed;
