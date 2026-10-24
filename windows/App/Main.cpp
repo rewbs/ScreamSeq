@@ -1171,10 +1171,15 @@ public:
                 {"wakeGapNs",e.wakeGapNanoseconds},{"preCallbackNs",e.preCallbackNanoseconds},
                 {"callbackNs",e.callbackNanoseconds},{"postCallbackNs",e.postCallbackNanoseconds},{"serviceNs",e.serviceNanoseconds},
                 {"renderBudgetNs",e.renderBudgetNanoseconds},{"periodNs",e.periodNanoseconds},
-                {"frames",e.frames},{"padding",e.padding},{"sampleRate",e.sampleRate}});
+                {"frames",e.frames},{"padding",e.padding},{"sampleRate",e.sampleRate},
+                {"threadCycles",std::to_string(e.threadCycles)},{"threadCyclesValid",e.threadCyclesValid},
+                {"previousThreadCycles",std::to_string(e.previousThreadCycles)},{"previousThreadCyclesValid",e.previousThreadCyclesValid},
+                {"previousCallbackNs",e.previousCallbackNanoseconds},{"previousFrames",e.previousFrames}});
         }
         const Json deadlineReport={{"availableAfterJoin",deadlineAvailable},{"capacity",ScreamSeq::DeadlineEvidence::capacity},
-            {"omitted",deadlines.omitted},{"clock","QPC ticks; timing durations in nanoseconds"},{"events",std::move(deadlineEvents)}};
+            {"omitted",deadlines.omitted},{"clock","QPC ticks; timing durations in nanoseconds"},{"events",std::move(deadlineEvents)},
+            {"diagnosticThreadCycles",audioOptions.diagnosticThreadCycles},{"cycleSamples",deadlines.cycleSamples},{"cycleFailures",deadlines.cycleFailures},
+            {"cycleInterpretation","Optional CPU cycles include query overhead; do not convert to duration or infer preemption from cycles alone. When enabled, this is a profiling run, not release performance qualification."}};
 		std::ofstream out(path, std::ios::binary);
 		out << std::setprecision(12) << "{\"durationSeconds\":" << seconds << ",\"drawnFrames\":" << cpuDraw.size()
             << ",\"textCacheEntries\":" << surface->textCacheSize() << ",\"textCacheHits\":" << surface->textHits() << ",\"textCacheMisses\":" << surface->textMisses()
@@ -1335,7 +1340,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 		int argc = 0; auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 		if(!argv) throw std::runtime_error("Cannot parse command line");
 		std::vector<std::wstring> args(argv, argv + argc); LocalFree(argv);
-        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false,midiTestInput=false;
+        bool offline = false, hostedOffline=false, inspection = false, audioTest = false, silentOutput=false, automation = false, audioTestAllowStop=false,midiTestInput=false,diagnosticThreadCycles=false;
         unsigned auditionSample=0,auditionInstrument=0,recoveryTestWriteDelay=0;
 		double seconds = 0; std::filesystem::path report,projectPath,pluginCache,catalogueOverride,libraryOverride,sampleLibraryOverride,recoveryOverride;
 		for(size_t i = 1; i < args.size(); ++i) {
@@ -1351,6 +1356,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else if(args[i] == L"--audio-test") audioTest = true;
             else if(args[i]==L"--audio-test-silent") {audioTest=true;silentOutput=true;}
             else if(args[i]==L"--audio-test-allow-stop") audioTestAllowStop=true;
+            else if(args[i]==L"--audio-test-cycles") diagnosticThreadCycles=true;
 			else if(args[i] == L"--seconds" && i + 1 < args.size()) seconds = std::stod(args[++i]);
 			else if(args[i] == L"--report" && i + 1 < args.size()) report = args[++i];
 			else if(args[i] == L"--project" && i + 1 < args.size()) projectPath = args[++i];
@@ -1364,6 +1370,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 			else throw std::runtime_error("Unknown/incomplete command-line argument");
 		}
 		if(seconds < 0 || seconds > 1800 || !std::isfinite(seconds)) throw std::runtime_error("Invalid test duration");
+        if(diagnosticThreadCycles&&(!audioTest||inspection||offline||hostedOffline||report.empty()||!seconds))throw std::runtime_error("Thread-cycle diagnostics require an audio test, duration and report");
         if(!recoveryOverride.empty()&&(!automation||!(inspection||audioTest)||offline||hostedOffline||!recoveryOverride.is_absolute()))throw std::runtime_error("An absolute private recovery directory requires an automated inspection or audio qualification session");
         if(recoveryTestWriteDelay&&(recoveryOverride.empty()||!inspection))throw std::runtime_error("A recovery write delay requires a private inspection recovery directory");
         if(midiTestInput&&(!automation||!(inspection||audioTest)||offline||hostedOffline))throw std::runtime_error("Private MIDI injection requires an automated inspection or audio qualification session");
@@ -1394,6 +1401,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             try{library=std::filesystem::path(local)/L"org.resonance.tracker"/L"plugin-library-v1.json";}catch(...){CoTaskMemFree(local);throw;}CoTaskMemFree(local);
         }
 		Application app(projectPath,inspection,std::move(catalogue),std::move(library));app.silentOutput=silentOutput;
+        app.audioOptions.diagnosticThreadCycles=diagnosticThreadCycles;
 		WindowOwner windowOwner{window};
         if(!inspection&&!audioTest){
             PWSTR local{};ScreamSeq::check(SHGetKnownFolderPath(FOLDERID_LocalAppData,KF_FLAG_DONT_VERIFY,nullptr,&local),"Find workspace directory");

@@ -2348,3 +2348,41 @@ Fresh Computer Use must check frozen close/reopen, blocked-target reveal,
 compact/maximize clean-note refresh, invalid drafts and native keyboard focus.
 Required Mac real-device results, reciprocal edited-project checks and sustained
 performance remain necessary before release/parity claims.
+
+
+### Opt-in callback cycle evidence (source continuation, same hourly batch)
+
+The existing failed WPR collection cannot supply stacks, and deadline wall time
+alone cannot separate processing from scheduling. New Windows-only diagnostics
+add `--audio-test-cycles`, requiring an audio-test duration/report. Only this
+explicit mode calls QueryThreadCycleTime before/after the callback. Fixed stopped
+storage retains successful/failed query counts, per-overrun cycles and the prior
+callback's cycles/wall time/frame count. Reset clears all counts; unavailable
+measurements have an invalid flag and no fabricated duration. No realtime file
+I/O, allocation, lock, serialization or renderer/plugin change is introduced.
+The pre-existing wall-time overrun thresholds and counts remain unchanged.
+
+[Microsoft's contract](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime)
+counts user/kernel CPU cycles and explicitly forbids converting them to elapsed
+time. Comparison against a nearby callback is diagnostic context, not proof of
+preemption or DSP attribution. The queries add profiling overhead. Normal
+playback leaves them disabled; the performance validator rejects reports marked
+as cycle-instrumented. Four validator unit cases passed in0.044s; this is synthetic
+validator evidence, not audio qualification. Native bounded-storage/counter/reset
+assertions and opt-in real silent delivery still require the next build.
+
+The pending `retained-reveal` checkpoint therefore grows to seven native groups
+(the six UI groups plus WASAPI lifecycle), five app journeys (the four composing
+cases plus actual audio-settings validation/reopen), the ordinary silent device
+audit and a separately labelled opt-in cycle-delivery probe. All fit one build.
+Do not reuse the previous Windows device result across these changed callback
+inputs. Shared renderer/Mac/codec sources are unchanged. A separate disposable
+full-song diagnostic process may collect cycle evidence after fresh Computer
+Use; it cannot replace the uninstrumented foreground performance gate.
+
+At04:28:32 aa008 Mac ARM job120773027172 completed successfully, including134
+CTests, native interface/socket/typed gates and owned AU/VST3 device lifecycle.
+Downloaded log SHA256:
+`21e17e86042129fffbc10ca49c449b46ea5e6a4f0c15d65548b0d7a330994f8e`.
+Intel compilation passed; remaining Intel checks/Windows were active. No job
+was restarted and no additional application build has run.

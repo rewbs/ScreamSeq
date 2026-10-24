@@ -19,32 +19,32 @@ flicker and broad performance remain unqualified; its audio run had zero deadlin
 overruns but one starvation indicator. See the
 [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
 
-Later source improves recorded-point editing, native Save/Close, restoration and
-short-take navigation. PR7 remains separate from main. The latest built6e4656d5c
-candidate passed compilation, menu and plugin-search native groups, and two
-separate diagnostic composing journeys (including144 original inputs). Its
-automatic-edit and Activity native groups failed on JSON fixture assumptions:
-an absent selection after Undo, and a trace cleared by Refresh. Test-only
-corrections explicitly establish each scenario and add selection/trace guards;
-they remain unbuilt. The next gate reruns both failed groups and validates reuse
-of unchanged passing inputs before fresh Computer Use. Preserve the failed gate;
-the diagnostic app passes do not qualify a package. Current6e CI remains active.
-Windows1071 CI passed159 portable/
-worker and52/53 native groups, retaining24 app failures/one skip. Mac ARM1071
-passed134 CTests, native interface/socket/typed gates and the BlackHole live take
-lifecycle. Intel passed compilation/model/interface/socket gates but failed
-the actual-session recovery assertion: both inputs were retained, with the
-first timestamp unmapped. Failure-only clock coverage diagnostics are prepared;
-the assertion and original timestamps remain unchanged.
-The prior350.554-second Windows foreground workload had32 deadline overruns;
-there is no newer qualified package or sustained-performance claim.
-Reciprocal preservation passed both Mac
-architectures and both Windows return legs on the retained4d source. These
-bounded passes do not close arbitrary vendor, device or full foreground parity.
-The [live parameter report](LIVE-PARAMETER-RELEASE-2026-10-23.md) and
-[current queue](CONTINUATION-QUEUE-2026-10-20.md) identify exact hashes, receipts,
-unbuilt corrections and the hourly gate. Do not execute old checkpoint commands
-or package new source using a previously built executable.
+Later source improves recording review, original-time admission, recorded-point
+editing, Save/Close, connected automation handoffs and clean history refresh.
+PR7 remains separate from main. The latest built candidate is
+`aa008f059cf43228bda7fe83e542653e58accf5d`: one local ARM64 build passed all nine
+native/shared groups, eight composing journeys and the short silent WASAPI
+audit. Fresh Computer Use confirmed precise gestures/Save caret and native
+plugin Record/slider/Stop/Keep with two exact mapped original inputs and
+continuing playback. Mac ARM CI passed completely; Intel compiled and was
+still testing at 24 October 04:28 UTC; Windows was still building. These results
+replace the older source-only labels, not the retained failed receipts.
+
+Fresh foreground review found frozen Activity capture loss on reopen and a
+clean precise row staying stale when resize revealed it after other edits.
+Both are corrected in source with native and app regressions, not yet rebuilt.
+The 606.133-second silent UI workload recorded38 deadline overruns, with no
+sustained presentation or realtime-audit pass. A separate opt-in CPU-cycle
+diagnostic is being added; profiling evidence cannot qualify release performance.
+No newer production package or main merge has been made.
+
+Reciprocal preservation passed both Mac architectures and both Windows return
+legs on retained4d source; reuse only where the relevant codec/persistence inputs
+remain unchanged. These bounded passes do not close arbitrary vendor, device or
+full foreground parity. The [live parameter report](LIVE-PARAMETER-RELEASE-2026-10-23.md)
+and [current queue](CONTINUATION-QUEUE-2026-10-20.md) identify exact receipts and
+remaining gates. Resolve the newest frozen checkpoint; do not execute historical
+commands or package new source using an older executable.
 
 **The overall 117-row parity inventory is not complete.** Original input,
 Undo/persistence, native UI/audio and reciprocal fixtures remain gates. The dated

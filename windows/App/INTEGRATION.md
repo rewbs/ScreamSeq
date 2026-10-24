@@ -587,6 +587,18 @@ preparation/render path at three rates and four partitions without a device.
 the actual device callback and mutes only after DSP; it changes no system volume
 or route. Normal playback retains the explicitly labeled -20 dB monitor gain.
 
+For a separate diagnostic run, add `--audio-test-cycles` with a duration and
+report. This opts into two `QueryThreadCycleTime` calls per device callback;
+normal playback and ordinary qualification do not call them. The stopped report
+retains valid/failed sample counts and CPU cycles for each bounded deadline event
+plus its immediately preceding callback. Zero with an invalid flag is unavailable,
+not zero CPU work. Counts include query overhead and must not be converted to
+elapsed time or used alone to infer scheduler preemption; see Microsoft's
+[QueryThreadCycleTime contract](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime).
+The existing wall-time deadline thresholds remain unchanged. Profiled runs cannot
+qualify sustained release performance. `wasapi-diagnostic --silence 3 500 --cycles`
+checks opt-in counter delivery separately from the ordinary silent hardware gate.
+
 See `../RESUME_PROGRESS.md` for current source/build evidence and open gates.
 
 Inspection disables audio, not editing. Its pattern clipboard is process-private

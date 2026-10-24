@@ -20,6 +20,7 @@ public:
   struct Options {
     std::wstring endpoint; // Empty selects the current multimedia default.
     std::uint32_t periodFrames=0; // Zero selects the lowest supported period.
+    bool diagnosticThreadCycles=false; // Opt-in profiling overhead; never a release benchmark.
   };
   struct Endpoint {std::wstring id,name;bool isDefault=false;};
   // Control-thread enumeration only. Never changes system routing or defaults.

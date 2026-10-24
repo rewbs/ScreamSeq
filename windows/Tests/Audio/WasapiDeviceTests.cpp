@@ -81,17 +81,21 @@ int main(int argc, char** argv) {
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
     ScreamSeq::AudioAudit::Scope scope;
 #endif
-    for(std::uint64_t i=0;i<40;++i)evidence.record({i+1,i*480,7,10000+i*100,10000000,10000000,
-      100,11000000+i,200,11000300+i,10000000,10000000,480,576,48000});
+    for(std::uint64_t i=0;i<40;++i){evidence.observeCycles(i%3!=0);evidence.record({i+1,i*480,7,10000+i*100,10000000,10000000,
+      100,11000000+i,200,11000300+i,10000000,10000000,480,576,48000,1000+i,900+i,9000000+i,480,i%3!=0,true});}
   }
   const auto evidenceSnapshot=evidence.snapshot();
   ok &= require(evidenceSnapshot.count==32&&evidenceSnapshot.omitted==8,"deadline evidence is bounded without overwriting earliest failures");
+  ok &= require(evidenceSnapshot.cycleSamples==26&&evidenceSnapshot.cycleFailures==14,"Cycle query failures were treated as valid zero measurements");
   for(std::size_t i=0;i<evidenceSnapshot.count;++i){const auto &e=evidenceSnapshot.events[i];
     ok &= require(e.callback==i+1&&e.frameOffset==i*480&&e.callbackNanoseconds==11000000+i&&
-      e.serviceNanoseconds==e.preCallbackNanoseconds+e.callbackNanoseconds+e.postCallbackNanoseconds&&e.frames+e.padding==1056,
+      e.serviceNanoseconds==e.preCallbackNanoseconds+e.callbackNanoseconds+e.postCallbackNanoseconds&&e.frames+e.padding==1056&&
+      e.threadCycles==1000+i&&e.previousThreadCycles==900+i&&e.previousCallbackNanoseconds==9000000+i&&
+      e.previousFrames==480&&e.threadCyclesValid==(i%3!=0)&&e.previousThreadCyclesValid,
       "deadline record mixes timing, ordinal or frame fields from different callbacks");
   }
-  evidence.reset();ok &= require(evidence.snapshot().count==0&&evidence.snapshot().omitted==0,"deadline reset retained old stream failures");
+  evidence.reset();ok &= require(evidence.snapshot().count==0&&evidence.snapshot().omitted==0&&evidence.snapshot().cycleSamples==0&&evidence.snapshot().cycleFailures==0,"deadline reset retained old stream failures");
+  ok &= require(!ScreamSeq::WasapiDevice::Options{}.diagnosticThreadCycles,"Normal playback enabled diagnostic cycle overhead");
   ScreamSeq::DeadlineEvidence::Snapshot stoppedEvidence;
   ok &= require(device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count==0,"new stopped device evidence unavailable or fabricated");
 #ifdef SCREAMSEQ_WASAPI_ALLOCATION_AUDIT
@@ -125,9 +129,11 @@ int main(int argc, char** argv) {
   }
   const int cycles = argc > 2 ? std::atoi(argv[2]) : 10;
   const int milliseconds = argc > 3 ? std::atoi(argv[3]) : 250;
+  const bool diagnosticCycles=argc>4&&std::strcmp(argv[4],"--cycles")==0;
+  if(argc>5||(argc>4&&!diagnosticCycles))return 2;
   if (cycles < 1 || cycles > 1000 || milliseconds < 50 || milliseconds > 60000) return 2;
   CallbackState state;
-  if (!device.open(silence, &state)) {
+  if (!device.open(silence, &state,{L"",0,diagnosticCycles})) {
     const auto s = device.stats();
     std::fprintf(stderr, "OPEN FAILED HRESULT=0x%08x (no simulated success)\n", static_cast<unsigned>(s.lastError));
     return 1;
@@ -166,11 +172,17 @@ int main(int argc, char** argv) {
   const auto s = device.stats();
   ok &= require(device.stoppedDeadlineEvidence(stoppedEvidence)&&stoppedEvidence.count+stoppedEvidence.omitted==s.deadlineOverruns,
     "joined deadline evidence does not account for every counted overrun");
+  ok &= require(diagnosticCycles?(stoppedEvidence.cycleSamples==s.callbackCount&&stoppedEvidence.cycleFailures==0):
+    (stoppedEvidence.cycleSamples==0&&stoppedEvidence.cycleFailures==0),"Opt-in cycle sampling missed callbacks or ran when disabled");
+  std::printf("diagnostic_cycles=%u cycle_samples=%llu cycle_failures=%llu (counts are not elapsed time)\n",unsigned(diagnosticCycles),
+    static_cast<unsigned long long>(stoppedEvidence.cycleSamples),static_cast<unsigned long long>(stoppedEvidence.cycleFailures));
   for(std::size_t i=0;i<stoppedEvidence.count;++i){const auto &e=stoppedEvidence.events[i];
     ok &= require(e.callback>0&&e.callback<=s.callbackCount&&e.frameOffset+e.frames<=s.framesRendered&&e.qpcFrequency>0&&
       e.frames+e.padding==s.bufferFrames&&e.sampleRate==device.sampleRate()&&
       (e.callbackNanoseconds>e.renderBudgetNanoseconds||e.serviceNanoseconds>e.periodNanoseconds),
       "actual deadline evidence has invalid identity, clock, buffer or deadline fields");
+    ok &= require(diagnosticCycles?e.threadCyclesValid:(!e.threadCyclesValid&&!e.previousThreadCyclesValid&&e.threadCycles==0&&e.previousThreadCycles==0),
+      "Deadline record cycle validity does not match the diagnostic mode");
   }
   std::printf("callbacks=%llu frames=%llu callback_max_ns=%llu service_max_ns=%llu wake_gap_max_ns=%llu deadline_overruns=%llu starvation_indicators=%llu wait_timeouts=%llu faults=%llu mmcss_error=%u last_hr=0x%08x\n",
     static_cast<unsigned long long>(s.callbackCount), static_cast<unsigned long long>(s.framesRendered),

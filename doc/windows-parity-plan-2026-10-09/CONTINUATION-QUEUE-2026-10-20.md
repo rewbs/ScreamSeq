@@ -9,6 +9,15 @@ must not override current source or the active goal.
 ## Current integration boundary
 
 
+**Current source continuation:** `retained-reveal` also adds optional callback
+CPU-cycle diagnostics; default playback remains uninstrumented. Profile runs
+are explicitly rejected by sustained-performance qualification. Next frozen
+gate is7 native groups/5 app journeys plus fresh ordinary WASAPI and separate
+cycle-delivery checks in the same single build. No earlier Windows audio pass
+qualifies changed callback inputs. See LIVE-PARAMETER-RELEASE's final section.
+The gate remains05:00:40UTC at earliest, after terminal CI/later-start inspection.
+
+
 **24 October 04:25 UTC current boundary:** aa008 built once; all9 native/shared
 and8 app journeys plus short silent WASAPI passed. Fresh Computer Use confirmed
 precise live gestures/Save caret and native plugin Record/slider/Stop/Keep.

@@ -5,6 +5,7 @@
 #include "PeriodSelection.hpp"
 #include "RealtimeAudit.hpp"
 #include <windows.h>
+#include <realtimeapiset.h>
 #include <audioclient.h>
 #include <avrt.h>
 #include <mmdeviceapi.h>
@@ -222,6 +223,9 @@ struct WasapiDevice::Impl {
     active.store(true); startResult.store(S_OK); SetEvent(startedEvent.value);
     HANDLE events[] = {stopEvent.value, audioEvent};
     std::uint64_t lastWake = 0;
+    std::uint64_t previousThreadCycles=0,previousCallbackNs=0;
+    std::uint32_t previousFrames=0;
+    bool previousCyclesValid=false;
     bool serviced = false;
     bool failedStream = false;
     for (;;) {
@@ -254,10 +258,16 @@ struct WasapiDevice::Impl {
       if (FAILED(hr)) { fail(hr);failedStream=true; break; }
       // Bounded, preallocated stereo scratch; no ownership/destruction in this path.
       std::memset(samples.data(), 0, static_cast<std::size_t>(available) * 2 * sizeof(float));
+      ULONG64 cycleStart=0,cycleEnd=0;
+      const bool cycleStartValid=options.diagnosticThreadCycles&&QueryThreadCycleTime(GetCurrentThread(),&cycleStart);
       const auto callbackStart = ticks();
       if(timedCallback)timedCallback(context,samples.data(),available,time);
       else callback(context, samples.data(), available);
       const auto callbackEnd=ticks();
+      const bool cycleEndValid=options.diagnosticThreadCycles&&QueryThreadCycleTime(GetCurrentThread(),&cycleEnd);
+      const bool cyclesValid=cycleStartValid&&cycleEndValid&&cycleEnd>=cycleStart;
+      const auto threadCycles=cyclesValid?cycleEnd-cycleStart:0;
+      if(options.diagnosticThreadCycles)deadlineEvidence.observeCycles(cyclesValid);
       const auto callbackNs = nanoseconds(callbackEnd - callbackStart);
       std::memcpy(output, samples.data(), static_cast<std::size_t>(available) * 2 * sizeof(float));
       hr = render->ReleaseBuffer(available, 0);
@@ -272,8 +282,10 @@ struct WasapiDevice::Impl {
         overruns.fetch_add(1, std::memory_order_relaxed);
         deadlineEvidence.record({callbackOrdinal,frameOffset,time.generation,serviceStart,qpcHz,wakeGapNs,
           nanoseconds(callbackStart-serviceStart),callbackNs,nanoseconds(serviceEnd-callbackEnd),serviceNs,
-          renderBudgetNs,periodNs,available,padding,hz});
+          renderBudgetNs,periodNs,available,padding,hz,threadCycles,previousThreadCycles,previousCallbackNs,
+          previousFrames,cyclesValid,previousCyclesValid});
       }
+      previousThreadCycles=threadCycles;previousCallbackNs=callbackNs;previousFrames=available;previousCyclesValid=cyclesValid;
       serviced = true;
       if (FAILED(hr)) { fail(hr);failedStream=true; break; }
       presentation.submitted(available);
