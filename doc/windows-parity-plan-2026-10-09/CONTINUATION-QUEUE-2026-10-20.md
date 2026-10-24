@@ -8,6 +8,47 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 06:25 UTC:** PR7 and the completed qualification build are
+`dbb15bfa07d6964cc06e0ca91ed422c784f2983b`. One local build passed; seven of nine
+native groups plus required scratch setup passed. The shared exact partition
+PCM assertion and new module-export Undo fixture failed. Three separate app
+journeys passed interleaved history but failed two full-song export replies at
+the server's five-second dispatch deadline. All failures are retained in
+`audio-export/qualified-checks.json` and `diagnostic-app.json`; do not repeat
+those attempts or package this candidate.
+
+Source corrections compare complete project bytes for Undo/Redo rather than
+revision wrappers, give only admitted audio exports the Mac120-second reply
+budget, preserve five-second queue cancellation, and wake active dispatches on
+close. The existing ApiTests registration adds real message/pipe lifecycle tests.
+Full export clients/process lifetimes are bounded for their actual workloads;
+ordinary edit/readiness deadlines and every musical assertion remain unchanged.
+The exact cross-partition PCM assertion is still mandatory, with independent
+full-song core comparisons and richer failure diagnostics now unbuilt. Inspect
+those before changing engine behavior or the test contract.
+
+Fresh diagnostic Computer Use on PID41068 (now exited0) produced a valid27-second
+WAV through File > Export audio; cancellation restored precise velocity caret,
+Backspace edited text, Tab/Shift+Tab traversed correctly. All receipts are under
+`audio-export/foreground-diagnostic`. Its300-second48k/480-frame silent run had
+25 overruns, zero starvation/errors;24 matched bounded engine-stage timings.
+That stage includes native instruments/routing; it is not individual-processor
+or CPU-time attribution. No performance, temporal-flicker or release claim.
+
+Next checkpoint **no earlier than2026-10-24 07:01:52 UTC**, extended by later
+actual starts and blocked until preceding CI is terminal. At06:17 current CI
+40068553924 (Mac) and40068553934 (Windows) was still building; never restart it.
+Read `inspect-audio-export-ci.py` for status. Add ApiTests to the next local build
+and native selection, retain all nine original groups plus required setup and
+three complete composing journeys. Mac export/PCM/socket, reciprocal edited
+projects and sustained Windows qualification remain before package/main merge.
+See [export findings and exact hashes](AUDIO-EXPORT-2026-10-24.md).
+
+## Historical checkpoint notes
+
+The entries below describe earlier source and evidence boundaries. They do not
+override the current frozen source, receipts, gate or unresolved audio failure.
+
 **24 October 05:39 UTC:** `retained-reveal` source24788 built once and passed
 all seven local native groups, five composing journeys and the short silent
 WASAPI gate. Fresh Computer Use passed precise insertion/deletion/live typing,
@@ -48,10 +89,6 @@ The final Intel log SHA256 is
 No CI job was restarted. `audio-export/stage-reader-synthetic.json` records only
 cheap reader-validation cases and Python parse checks; it is not app evidence.
 
-## Historical checkpoint notes
-
-The entries below describe earlier source and evidence boundaries. They do not
-override the current frozen source, receipts, gate or unresolved audio failure.
 
 
 **24 October 04:25 UTC current boundary:** aa008 built once; all9 native/shared

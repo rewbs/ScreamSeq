@@ -134,7 +134,7 @@ void applicationModuleExport() {
     app.workspaceEditorRequest({{"panel","preciseNotes"},{"focus",true}});
     const auto owner=app.preciseNoteWindow->window();ScreamSeq::Tests::ownGuiWindow(owner);
     const auto field=GetDlgItem(owner,ScreamSeq::PreciseNoteWindow::velocity);
-    const auto beforeIntent=songState(app);unsigned intentChoosers=0;
+    const auto beforeIntent=app.await(app.controller->captureRecovery(app.view->session.revision));unsigned intentChoosers=0;
     rawDraftText(field,L"94");SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);
     app.moduleExportChooser=[&](const auto &) {
         ++intentChoosers;
@@ -147,6 +147,17 @@ void applicationModuleExport() {
     restoreCheck(intentChoosers==1&&GetFocus()==field&&first==1&&last==2&&app.view->path==path&&
         ScreamSeq::Project::readProjectBytes(output)==external,
         "Cancelled module export lost field focus/caret, changed native save destination or wrote a file");
+    const auto acceptedIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    restoreCheck(*acceptedIntent->bytes!=*beforeIntent->bytes,"Automatic note edit did not change accepted project bytes");
     app.edit("history.undo",{{"domain","all"}});
-    restoreCheck(songState(app)==beforeIntent,"Module export changed or duplicated the automatic note's Undo history");
+    const auto undoneIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    // Undo restores music, not an old optimistic-concurrency token or old Redo
+    // availability. Compare every serialized project byte independently.
+    restoreCheck(*undoneIntent->bytes==*beforeIntent->bytes&&undoneIntent->revision!=acceptedIntent->revision&&
+        app.view->session.document.value("canRedo",false)&&app.view->path==path,
+        ("Module export note Undo changed music: before="+beforeIntent->fingerprint+" after="+undoneIntent->fingerprint).c_str());
+    app.edit("history.redo",{{"domain","all"}});
+    const auto redoneIntent=app.await(app.controller->captureRecovery(app.view->session.revision));
+    restoreCheck(*redoneIntent->bytes==*acceptedIntent->bytes&&!app.view->session.document.value("canRedo",false)&&app.view->path==path,
+        "Module export note Redo did not restore exactly one accepted edit");
 }

@@ -21,7 +21,7 @@ overruns but one starvation indicator. See the
 
 Later source improves recording review, original-time admission, recorded-point
 editing, Save/Close, connected automation handoffs and clean history refresh.
-PR7 remains separate from main. The latest built candidate is
+PR7 remains separate from main. The preceding built candidate was
 `24788ebc34f35a94f24138d63a1df248cddff445`: one local ARM64 build passed seven
 native groups, five composing journeys and the short silent WASAPI audit.
 Fresh Computer Use confirmed frozen Activity retention, clean precise-note
@@ -41,15 +41,22 @@ diagnostic retained15 slow callbacks;14 used more cycles than their preceding
 equal-frame callback. This is diagnostic context, not stack attribution or
 release qualification. No newer production package or main merge has been made.
 
-The next frozen source is `d67e31d1f5a4c84d53c5fa20fc8cca9c584389f8`, combining
-[full-song WAV export](AUDIO-EXPORT-2026-10-24.md) with opt-in prepared-render
-stage diagnostics, export focus/filename/result fixes and a full-song layered
-VST3 export journey. These are **unbuilt**. Its prepared `audio-export` checkpoint
-requires nine native groups, three app journeys, fresh ordinary audio and
-Computer Use, plus a separate diagnostic run. It must wait until06:01:19 UTC
-or any later actual build gate and until preceding CI is terminal. The shared
-export extraction requires new Mac export/PCM/socket gates; older passes do not
-qualify these changes.
+The latest built source is `dbb15bfa07d6964cc06e0ca91ed422c784f2983b`, now on
+PR7. Its [full-song export checkpoint](AUDIO-EXPORT-2026-10-24.md) passed seven
+of nine native groups plus setup; the exact partition PCM check and new native
+Undo fixture failed. Diagnostic composing runs passed interleaved note/take
+history but found the API's five-second dispatch limit interrupting both export
+replies. Source corrections preserve exact project-byte Undo checks and extend
+only admitted export replies to the Mac socket's120-second ceiling, retaining
+bounded queued cancellation and active-close handling. They are unbuilt; the
+exact cross-partition failure remains mandatory with expanded diagnostics.
+Fresh Computer Use completed native WAV export and confirmed chooser-cancel
+caret, automatic velocity typing, text Backspace and Tab/Shift+Tab. Its separate
+300-second instrumented run had25 overruns;24 matched engine-stage wall time,
+which includes routing/instruments. No processor-stack attribution, clean
+performance qualification, package or merge follows. Next build is no earlier
+than07:01:52 UTC, after checking later starts and terminal preceding CI. Required
+Mac gates, full composing exports and sustained Windows audio remain open.
 
 Reciprocal preservation passed both Mac architectures and both Windows return
 legs on retained4d source; reuse only where the relevant codec/persistence inputs

@@ -48,7 +48,28 @@ int main() {
       offset+=frames*2;
     }
     check(offset==dry.size(),"Dry WAV contains extra padding");
-    check(render(module,{}, {},nullptr,17)==dry&&render(module,{}, {},nullptr,4096)==dry,"Dry export depends on callback partition");
+    bool dryPartitionExact=true;
+    for(const uint32_t block:{17u,4096u}) {
+      const auto partitioned=render(module,{}, {},nullptr,block);
+      auto core=std::make_unique<Renderer>(module,48000);
+      std::vector<float> coreBuffer(size_t(block)*2);size_t at=0;
+      while(const auto frames=core->render(coreBuffer.data(),block)) {
+        check(at+frames*2<=partitioned.size(),"Partitioned WAV truncated independent core PCM");
+        check(std::equal(coreBuffer.begin(),coreBuffer.begin()+frames*2,partitioned.begin()+at),
+              "Partitioned WAV differs from independent core PCM at the same block size");
+        at+=frames*2;
+      }
+      check(at==partitioned.size(),"Partitioned WAV added padding absent from independent core PCM");
+      size_t changed=0,first=SIZE_MAX;double maximum=0;
+      for(size_t n=0;n<std::min(dry.size(),partitioned.size());++n)if(dry[n]!=partitioned[n]) {
+        if(first==SIZE_MAX)first=n;++changed;
+        maximum=std::max(maximum,std::abs(double(dry[n])-partitioned[n]));
+      }
+      std::cerr<<"DRY PARTITION block="<<block<<" frames="<<partitioned.size()/2
+        <<" baselineFrames="<<dry.size()/2<<" changedSamples="<<changed
+        <<" firstSample="<<first<<" maximumDelta="<<maximum<<" exactIndependentCore=true\n";
+      dryPartitionExact &= partitioned==dry;
+    }
     auto muted=native;for(const auto &[index,track]:muted.tracks)muted.columnMutes[track.id]=true;
     const auto quiet=render(module,{}, {},&muted);
     check(quiet.size()==dry.size()&&std::all_of(quiet.begin(),quiet.end(),[](float value){return value==0.f;}),
@@ -88,6 +109,9 @@ int main() {
     check(document->snapshotData()==module&&document->native()==native&&document->revision==revision&&
           document->historyHead(false)==undo&&document->historyHead(true)==redo&&plugins==pluginBefore&&points==pointBefore,
           "Export mutated source, plugin state, recording or history");
+    // Keep the failed exact assertion mandatory. Diagnose all later export
+    // behavior in the same bounded run before reporting this known failure.
+    check(dryPartitionExact,"Dry export depends on callback partition");
     std::cout<<"PASS shared WAV header, exact dry PCM, partitioned recorded DSP, failure and source preservation\n";
     return 0;
   }catch(const std::exception &error){std::cerr<<"FAIL: "<<error.what()<<'\n';return 1;}

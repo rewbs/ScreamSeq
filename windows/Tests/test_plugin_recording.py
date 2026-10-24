@@ -11,7 +11,7 @@ from ctypes import wintypes
 
 import private_desktop
 import test_song_routing as routing
-from client import ApiError
+from client import ApiError, Client
 
 private_desktop.user.IsWindowVisible.argtypes = [wintypes.HWND]
 private_desktop.user.IsWindowVisible.restype = wintypes.BOOL
@@ -178,7 +178,8 @@ class PluginRecordingTests(unittest.TestCase):
         plugin = before['plugins'][0]['instanceID']
         # F04 intentionally has a Gain envelope. Exercise that refusal first,
         # then record Balance without disabling or replacing existing music.
-        self.record_keep_history_reopen_and_discard(plugin, project, parameter=2, conflicting_parameter=1, slider_sweep=True)
+        self.record_keep_history_reopen_and_discard(plugin, project, parameter=2, conflicting_parameter=1, slider_sweep=True,
+                                                  session_seconds=180)
         saved = evidence / 'recorded-composing-journey.screamseq'
         self.write('document.save', path=str(saved))
         after = read_project(saved)
@@ -200,7 +201,9 @@ class PluginRecordingTests(unittest.TestCase):
         preview = self.client.call('document.exportAudio', dict(request, dryRun=True))
         self.assertFalse(preview['changed'])
         self.assertFalse(audio.exists())
-        rendered = self.client.call('document.exportAudio', request)
+        # Full-song DSP has a bounded 120-second API budget on both platforms;
+        # ordinary edits keep the existing short client and readiness deadlines.
+        rendered = Client(self.client.pipe, timeout=120).call('document.exportAudio', request)
         self.assertFalse(rendered['changed'])
         self.assertFalse(rendered['playbackStopped'])
         self.assertEqual(rendered['revision'], export_document['revision'])
@@ -287,7 +290,8 @@ class PluginRecordingTests(unittest.TestCase):
         project = evidence / 'layered-routed-source.screamseq'
         self.write('document.save', path=str(project))
         before = read_project(project)
-        self.record_keep_history_reopen_and_discard(plugin, project, parameter=7, values=(.25, .75, .5))
+        self.record_keep_history_reopen_and_discard(plugin, project, parameter=7, values=(.25, .75, .5),
+                                                  session_seconds=900)
         self.assertEqual(self.read('instrument.get', instrument=1), instrument)
         self.assertEqual(self.read('plugin.instruments.get', plugin=plugin), assigned)
         self.assertEqual(self.read('mixer.get')['instruments'], routed)
@@ -303,7 +307,10 @@ class PluginRecordingTests(unittest.TestCase):
         self.assertTrue(replay['passed'], replay)
         self.assertTrue(replay['independentLayersQualified'], replay)
         from audio_export import run as export_audio
-        exported = export_audio(self.client, project, saved, evidence / 'audio-replay', evidence / 'full-song-export')
+        # Six complete renders, each with the existing 120-second transport
+        # ceiling, share one owned process. No request is retried on timeout.
+        exported = export_audio(Client(self.client.pipe, timeout=120), project, saved,
+                                evidence / 'audio-replay', evidence / 'full-song-export')
         self.assertTrue(exported['passed'] and exported['inputFilesUnchanged'], exported)
         write_json(evidence / 'recording-journey.json', dict(
             passed=True, parityComplete=False, silentNativePlayback=True,
@@ -322,9 +329,9 @@ class PluginRecordingTests(unittest.TestCase):
                     'resample Undo preserves source project with exactly one allocated stable identity']))
 
     def record_keep_history_reopen_and_discard(self, plugin, project, parameter=1, conflicting_parameter=None, sustain_seconds=0,
-                                              values=(-6.5, -3.25, -12.25), slider_sweep=False):
+                                              values=(-6.5, -3.25, -12.25), slider_sweep=False, session_seconds=120):
         first_value, later_value, discard_value = values
-        self.launch(project, seconds=180 if sustain_seconds else 120)
+        self.launch(project, seconds=max(180 if sustain_seconds else 120, session_seconds))
         self.assertTrue(self.read('transport.get')['playing'])
         cursor = self.client.call('context.get')
         self.client.call('context.set', dict(expectedRevision=cursor['revision'],

@@ -168,3 +168,94 @@ must include both complete music and valid tails. Native state and history
 equality, independent layer assertions and every prior failed receipt remain
 unchanged. The added baseline makes six WAV exports within the one existing
 layered app journey.
+
+
+## 24 October 06:01 checkpoint and correction
+
+Observed candidate `dbb15bfa07d6964cc06e0ca91ed422c784f2983b` was pushed to PR7
+and built once locally at06:01:26–06:05:21 UTC. ARM64 executable SHA256:
+`11294b5330a6a918e418b0edff7f3f73461cff4de6f390048ca123b57a68bf94`.
+All receipts remain in `bin/mac-gesture-20261022/audio-export/`. No production
+package or main merge followed. The next checkpoint cannot start before
+**2026-10-24 07:01:52 UTC**, extended by any later actual CI build start; all
+preceding CI must be terminal. At06:17 both Mac architecture builds and Windows
+CI remained in progress. Never replay the recorded local build or old CI jobs.
+
+The original runner stopped at inventory admission without executing tests:
+CTest correctly included the required `document-controller-scratch` fixture.
+`qualified-checks.json` separately records the corrected inventory and actual
+execution: seven of nine native groups passed, plus setup. Worker audio/module
+exports, atomic publication, hosted-project/render-stage tests, menus,
+automatic edits and WASAPI lifecycle passed. The two failures are retained:
+
+- `workspace-command-result-tests`: the new module chooser/Undo fixture compared
+  a wrapper containing revision and Redo availability. Undo correctly advances
+  revision and creates Redo. Source correction instead compares **every serialized
+  project byte**, explicitly requires changed revision and Redo availability,
+  then verifies exact accepted bytes after Redo and unchanged native destination.
+  The subsequent audio chooser/result-review case was not reached; it still
+  requires execution.
+- `audio-export-stream`: dry512 PCM exactly matched an independent Renderer512,
+  but the exact cross-partition assertion failed. Existing CLI diagnostic on the
+  same executable reports finite PCM, `partitionExact:false`, maximum delta
+  `8.64267e-07` across rates44100/48000/96000 and blocks17/128/4096. That two-second
+  diagnostic does not explain complete-song duration or prove the WAV writer
+  correct. The **exact failing assertion remains mandatory**. Source now compares
+  each full-song partition with its own independent core rendering, reports frame
+  counts/first changed sample/max delta, and defers the existing failure until
+  after subsequent mute/precise/recorded-DSP/failure/preservation checks. No
+  tolerance was relaxed and no engine behavior changed. Investigate those fresh
+  results before deciding whether the failure is writer behavior or an invalid
+  assumption about stock-engine partition exactness.
+
+A distinct `diagnostic-app.json` ran the three composing journeys against the
+same frozen binary, retaining source and native VST3 provider hashes. The
+interleaved precise-note/plugin-take history case passed. Both full-song export
+journeys failed with the real pipe error "Request began but reply timed out;
+outcome uncertain, inspect before retry". Source inspection found a five-second
+**server dispatch** deadline, not a client readiness failure. The partial staging
+file from the first terminated owned fixture remains as diagnostic evidence.
+These failures are not relabeled as successful exports.
+
+Source correction gives admitted `document.exportAudio` requests the existing
+Mac socket's120-second total response budget, preserving five-second admission
+cancellation and ordinary-operation deadlines. Active jobs are now retained so
+native shutdown wakes the pipe owner before joining it; close during execution
+still reports uncertain outcome. Existing `ApiTests` adds actual message-owner
+and pipe coverage: export completion after5.25 seconds, exact request-ID replay
+without another host call, ordinary-operation timeout, queued export cancellation
+without later execution, and bounded close inside an active request. Its ordinary
+30-second test ceiling is unchanged. Build `ApiTests` and run its registration
+at the next checkpoint; this is new required coverage, not a substitute for the
+actual composing exports. Guide/describe document the budget and no-retry rule.
+Only full-song export requests use a120-second test client. The six-export
+journey owns a900-second process, matching six bounded renders plus setup;
+ordinary readiness and edit deadlines remain unchanged. No failed check was
+skipped or asserted away. These corrections are **unbuilt**.
+
+Fresh Computer Use used owned PID41068, now exited normally, with silent output
+and explicit diagnostic clocks. It verified native File > Export audio,
+filename suggestion, remembered folder, export completion, automatic velocity
+editing, chooser cancellation returning the visible caret, text Backspace
+(98→9 with all four hits retained), Tab to Save now and Shift+Tab back to velocity.
+The WAV was27.019708 seconds, finite stereo48k float32, peak0.245405; SHA256
+`7de090433c4948d53b3da0395309ddd9f5c821f42326043cb4820a532b698aac`.
+A subsequent API snapshot had playing=true, epoch1, accepted velocity9 and no
+retained draft. There was no paired pre-export epoch snapshot, so do not infer
+that this UI run proves epoch preservation. UIA omitted the docked fields;
+visible caret/value and existing native assertions provide the bounded evidence.
+No overwrite, module chooser, resize/float, Narrator or temporal flicker claim.
+See `foreground-diagnostic/ui-receipt.json` and `ui-observation.json`.
+
+The same300.0508357-second diagnostic at48k/480frames retained25 deadline
+overruns, zero starvation/device errors and no realtime-audit or presentation
+pass. Stage analysis matched24 prepared-render events to outer callbacks with
+no omitted or unmatched stage events; one outer overrun had no stage event.
+All24 had their largest measured stage in engine rendering, which includes
+native instruments and routing callbacks. This is QPC wall-time decomposition,
+not CPU duration or individual plugin/stack attribution. Do not optimize a
+particular processor from this alone. Report SHA256
+`c6e2f3ed90ffc920cbf4f8ca31e9b71ad43cdeaf358846452f95ece28ed18f52` and checked
+`foreground-diagnostic/analysis.json` preserve the evidence. Production remains
+held pending the native failures, full composing exports, Mac gates, reciprocal
+edited projects and sustained Windows performance qualification.
