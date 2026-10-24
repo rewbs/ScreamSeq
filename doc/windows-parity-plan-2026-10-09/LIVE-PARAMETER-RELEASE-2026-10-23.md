@@ -2386,3 +2386,21 @@ Downloaded log SHA256:
 `21e17e86042129fffbc10ca49c449b46ea5e6a4f0c15d65548b0d7a330994f8e`.
 Intel compilation passed; remaining Intel checks/Windows were active. No job
 was restarted and no additional application build has run.
+
+### 24 October terminal aa008 CI, before the retained-reveal gate
+
+At04:44:16 both preceding workflows were terminal. Mac ARM and Intel passed
+the complete jobs, including134 CTests, native interface/socket/typed checks and
+owned AU/VST3 lifecycle. Windows compilation,159 portable/worker tests and53
+native groups passed. Its122-case actual-app step failed25 assertions with one
+skip; the logs include live-startup process exits and teardown failures. The
+separate39-case vendor ownership and18-case typed/pipe steps passed. The overall
+Windows job remains **failed**; local device success cannot turn it green.
+
+`activity-refresh-history/completed-ci.json` pins downloaded logs and step states.
+Windows log SHA256 `eb92cb217e026203ee3b02acf1275ffa548b739d51c08977db49fd8a5b249982`;
+Intel `10a4326f2a1862b9e5c17f68ffc5b5afbe62072d1028ca76eba96a240f0e7bfa`.
+No job was restarted. Earliest next checkpoint remains05:00:40UTC and must
+recheck later starts. Qualification source24788 is frozen/clean. Primary source
+continued with separately backed-up audio-export changes; those are excluded
+from this candidate and cannot inherit its qualification.

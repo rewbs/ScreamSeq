@@ -8,6 +8,14 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October source continuation:** audio export now has a shared WAV renderer,
+native streaming/atomic publication, guarded API on both platforms and native
+File commands in source. Export commits after24788 are backed up only; they are
+excluded from the imminent `retained-reveal` checkpoint. No native export build,
+UI or PCM qualification has run. See [audio export](AUDIO-EXPORT-2026-10-24.md).
+The clean qualification checkout remains exactly24788; the primary may contain
+clean descendant commits. Checkpoint dispatch pushes/builds only the frozen hash.
+
 
 **Current source continuation:** `retained-reveal` also adds optional callback
 CPU-cycle diagnostics; default playback remains uninstrumented. Profile runs
