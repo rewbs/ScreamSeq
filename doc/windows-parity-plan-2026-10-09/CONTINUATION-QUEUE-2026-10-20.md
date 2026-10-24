@@ -18,10 +18,15 @@ cycle diagnostic retained15 overruns and is not performance qualification.
 Both owned QA processes exited normally. See the exact receipts and limitations
 in [live parameter release](LIVE-PARAMETER-RELEASE-2026-10-23.md).
 
-Next frozen source is **451f7f85c70aac0c5bfc74ba06d258c4cc101e2c**, backed up on
+Next frozen source is **d67e31d1f5a4c84d53c5fa20fc8cca9c584389f8**, backed up on
 `codex/mac-gesture-next-checkpoint` and checked out cleanly in qualification.
 It adds shared full-song WAV export, guarded APIs/native commands and an
-opt-in bounded render-stage diagnostic. These additions are **unbuilt**.
+opt-in bounded render-stage diagnostic. The completed native continuation
+preserves song filename suggestions, flushes automatic fields for both exports,
+retains chooser focus/caret on cancel/failure, and labels successful audio-result
+Review correctly without rewriting. Its layered VST3 journey now exports the
+processed song and the four verified layer-isolation derivatives. These additions
+are **unbuilt**. Earlier undispatched manifests are retained in the evidence folder.
 `audio-export/checkpoint.ps1` pushes/builds this exact hash; later clean primary
 documentation commits are excluded. Its nine native groups, three complete
 composing journeys and fresh ordinary/cycle WASAPI checks run in one build,
@@ -30,14 +35,18 @@ followed by Computer Use and a separate stage diagnostic. See
 the changed rendering inputs.
 
 The checkpoint cannot start before **2026-10-24 06:01:19 UTC**, after checking
-later actual build starts and completion of preceding CI. At05:39,24788 Mac ARM
-passed134 CTests plus native interface/socket/device gates; Intel compiled and
-was testing. Windows compiled and passed159 portable/worker,53 native, four
+later actual build starts and completion of preceding CI. At05:52,24788 Mac ARM
+and Intel both passed134 CTests plus native interface/socket/device gates.
+Windows compiled and passed159 portable/worker,53 native, four
 scratch,39 vendor-ownership and18 typed/pipe tests. Its122-case app run failed25
 assertions across22 tests, largely owned-app startup with no WASAPI endpoint
 (including three duplicate teardown failures), with one optional skip. Preserve
 that failed CI result; local passes do not turn it green. Downloaded terminal
 logs and hashes are in `retained-reveal/completed-ci.json`.
+The final Intel log SHA256 is
+`b05219ac8b684f0cdaefc9a88f5810ecf6b2495731a8a375b5163d3e947e0a6d`.
+No CI job was restarted. `audio-export/stage-reader-synthetic.json` records only
+cheap reader-validation cases and Python parse checks; it is not app evidence.
 
 ## Historical checkpoint notes
 

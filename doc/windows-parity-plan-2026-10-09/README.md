@@ -28,8 +28,8 @@ Fresh Computer Use confirmed frozen Activity retention, clean precise-note
 refresh after hidden Undo, gestures/Save caret, Float/Dock and native
 Record/slider/Stop/Keep with exact original inputs and continuous playback.
 These results close the two preceding retained-view failures within that scope.
-At 24 October 05:39 UTC Mac ARM CI had passed134 CTests and its native
-interface/socket/device gates. Intel had compiled and was testing. Windows
+At 24 October 05:52 UTC Mac ARM and Intel CI had each passed134 CTests and their
+native interface/socket/device gates. Windows
 compiled and passed159 portable/worker and53 native groups, but its122-case app
 run failed25 assertions across22 tests, largely startup failures on a runner
 without a WASAPI endpoint. Its original failed result remains intact; the
@@ -41,9 +41,10 @@ diagnostic retained15 slow callbacks;14 used more cycles than their preceding
 equal-frame callback. This is diagnostic context, not stack attribution or
 release qualification. No newer production package or main merge has been made.
 
-The next frozen source is `451f7f85c70aac0c5bfc74ba06d258c4cc101e2c`, combining
+The next frozen source is `d67e31d1f5a4c84d53c5fa20fc8cca9c584389f8`, combining
 [full-song WAV export](AUDIO-EXPORT-2026-10-24.md) with opt-in prepared-render
-stage diagnostics. Both are **unbuilt**. Its prepared `audio-export` checkpoint
+stage diagnostics, export focus/filename/result fixes and a full-song layered
+VST3 export journey. These are **unbuilt**. Its prepared `audio-export` checkpoint
 requires nine native groups, three app journeys, fresh ordinary audio and
 Computer Use, plus a separate diagnostic run. It must wait until06:01:19 UTC
 or any later actual build gate and until preceding CI is terminal. The shared
