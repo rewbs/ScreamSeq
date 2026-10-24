@@ -27,7 +27,7 @@ struct Form {
     {"loopStart",0},{"loopEnd",2},{"sustainPoint",0},{"sustainEnd",0},{"releaseNode",255}};
   Json properties={{"name","Held instrument"},{"volume",64},{"pan",128},{"fadeout",256},{"nna",0},{"dct",0},{"dna",0},{"mapping",Json::array()}};
   unsigned reads=0,writes=0,auditions=0,toolCalls=0;
-  Json lastTool;
+  Json lastTool,transformResult;
   std::function<void()> duringPatch,duringRead;
   ScreamSeq::InstrumentEnvelopeWindow tool;
   explicit Form(HWND owner):tool(owner,[this](const std::string &method,const Json &parameters){return request(method,parameters);},[this]{return current;},
@@ -44,7 +44,7 @@ struct Form {
       current.revision="r"+std::to_string(writes+1);return Json::object();
     }
     if(method=="instrument.envelope.copy")return {{"points",Json::array()}};
-    if(method=="instrument.envelope.transform"){++toolCalls;lastTool=parameters;return {{"wouldChange",false}};}
+    if(method=="instrument.envelope.transform"){++toolCalls;lastTool=parameters;return transformResult.is_null()?Json{{"wouldChange",false}}:transformResult;}
     throw std::runtime_error("Unexpected short instrument request: "+method);
   }
   HWND control(int id)const{const auto found=GetDlgItem(tool.window(),id);require(found,"Original instrument control is no longer a direct retained child");return found;}
@@ -163,6 +163,39 @@ void stagedAndPendingEdits(Owner &owner){
   require(!form.tool.snapshot().at("pending").get<bool>()&&form.tool.snapshot().at("status").get<std::string>().find("newer draft retained")!=std::string::npos,"Pumped Apply error did not retain a usable editor");
 }
 
+void explicitActionLabels(Owner &owner){
+  Form form(owner.window);form.open(owner.window);
+  require(!IsWindowVisible(form.control(4450))&&form.tool.snapshot().at("status").get<std::string>().find("automatically")!=std::string::npos,
+    "Ordinary instrument edits still advertise a separate Apply action");
+  const auto saved=form.envelope;auto preview=saved;preview["points"][0][1]=17;
+  form.transformResult={{"wouldChange",true},{"after",preview},{"clippedValues",0},{"roundedValues",0},{"reanchoredMarkers",0}};
+  form.page(2);form.press(4438);
+  for(const bool floating:{false,true}){
+    if(floating){form.tool.floatWindow();sizeClient(form.tool.window(),1200,840);}
+    else form.tool.dockBounds(0,0,440,300);
+    require(IsWindowVisible(form.control(4450))&&text(form.control(4450))==L"Use preview",
+      "Instrument layout replaced the explicit preview acceptance label");
+    SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);
+    require(form.writes==0&&form.envelope==saved&&form.tool.snapshot().at("envelope")==preview,
+      "Layout or automatic-save timer accepted a compound preview");
+  }
+  form.press(4450);require(form.writes==1&&form.envelope==preview&&!IsWindowVisible(form.control(4450)),
+    "Use preview did not commit exactly once and return to automatic editing");
+  form.field(4440,L"invalid volume");SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);
+  require(form.writes==1&&IsWindowVisible(form.control(4450))&&text(form.control(4450))==L"Retry changes"&&text(form.control(4440))==L"invalid volume",
+    "Rejected automatic instrument edit lost its raw value or explicit retry label");
+  form.tool.dock(owner.window);form.tool.dockBounds(0,0,440,300);
+  require(text(form.control(4450))==L"Retry changes"&&form.writes==1,"Compact layout replaced the retry action or replayed a rejected edit");
+  form.field(4440,L"42");form.duringPatch=[] {throw std::runtime_error("Owned refused instrument patch");};
+  SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);const auto attempts=form.writes;
+  require(IsWindowVisible(form.control(4450))&&text(form.control(4450))==L"Retry changes"&&form.properties.at("volume")==64,
+    "Refused patch lost retry or modified accepted instrument properties");
+  SendMessageW(form.tool.window(),WM_TIMER,0x5345,0);require(form.writes==attempts,"Refused instrument patch was replayed automatically");
+  form.duringPatch={};form.press(4450);
+  require(form.writes==attempts+1&&form.properties.at("volume")==42&&!IsWindowVisible(form.control(4450)),
+    "Successful explicit retry retained an obsolete retry action");
+}
+
 void hiddenInitialization(Owner &owner){
   Form existing(owner.window);existing.open(owner.window);existing.field(4413,L"existing raw draft");
   const auto externalFocus=existing.control(4413);SetFocus(externalFocus);SendMessageW(externalFocus,EM_SETSEL,2,6);
@@ -194,7 +227,7 @@ void hiddenInitialization(Owner &owner){
   require(!IsWindow(failedWindow)&&GetFocus()==externalFocus&&selection(externalFocus)==std::pair<DWORD,DWORD>{2,6}&&text(externalFocus)==L"existing raw draft"&&existing.tool.snapshot()==previous,"Destroying a failed staged tool affected the existing editor");
 }
 }
-int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqInstrumentShortDock",[]{Owner owner;allPagesAndActions(owner);rawDraftFocusAndPlacement(owner);revealFocusedWideSection(owner);zoomedCanvasMouseMapping(owner);stagedAndPendingEdits(owner);hiddenInitialization(owner);});
+int main(){try{SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGui(L"ScreamSeqInstrumentShortDock",[]{Owner owner;allPagesAndActions(owner);rawDraftFocusAndPlacement(owner);revealFocusedWideSection(owner);zoomedCanvasMouseMapping(owner);stagedAndPendingEdits(owner);explicitActionLabels(owner);hiddenInitialization(owner);});
   std::cout<<"PASS short instrument dock: five retained pages/options,100-DIP canvas, fixed actions, native bounds and unchanged floating minimum\n"
            <<"PASS short instrument drafts: raw/caret/generation, dock/float/hide, staged mapping/envelope and pumped Apply retention\n"
            <<"PASS short instrument interaction: focused wide detail reveal and DPI-scaled zoomed handle drag/insertion before guarded Apply\n"

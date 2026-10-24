@@ -57,7 +57,7 @@ private:
   bool reviewRequired_=false;
   bool displayControl(int id)const override{return id!=apply||reviewRequired_||automaticEditFailed_;}
   void queueInstrumentEdit(UINT delay=600){if(reviewRequired_)return;queueAutomaticEdit([this]{
-    if(pending_||creationWorking_||dragging_){queueInstrumentEdit();return;}
+    if(pending_||creationWorking_||dragging_||contextOpen_){queueInstrumentEdit();return;}
     if(creationFrozen())return;
     if(pointFields_&&selected_>=0)setPointFields();
     if(markerFields_)setMarkerFields();
@@ -92,10 +92,10 @@ private:
       if(chosen!=c.instruments.end()){identity=chosen->at("id");index=chosen->at("index");env=request_("instrument.envelope.get",{{"instrument",identity},{"envelope",kinds[size_t(selectedKind)]}});props=request_("instrument.get",{{"instrument",index}});}
       const auto after=context_();require(after.document==c.document&&after.revision==c.revision&&generation_==token,"Song or draft changed while loading / editor retained");
       const bool same=c.document==captured_.document&&identity_==identity&&kind_==selectedKind;captured_=c;identity_=identity;index_=index;kind_=selectedKind;envelope_=std::move(env);properties_=std::move(props);mapping_=properties_.value("mapping",Json::array());
-      selected_=same&&!points().empty()?std::clamp(selected_,-1,int(points().size()-1)):-1;reviewRequired_=false;envelopeDirty_=propertiesDirty_=mappingDirty_=mappingFields_=pointFields_=markerFields_=false;if(!same)selectedKey_=-1;++generation_;playbackTicks_.clear();choices();showPoint();showMarkers();showProperties();showKeymap();showMapFields();
+      selected_=same&&!points().empty()?std::clamp(selected_,-1,int(points().size()-1)):-1;reviewRequired_=false;automaticEditFailed_=false;envelopeDirty_=propertiesDirty_=mappingDirty_=mappingFields_=pointFields_=markerFields_=false;if(!same)selectedKey_=-1;++generation_;playbackTicks_.clear();choices();showPoint();showMarkers();showProperties();showKeymap();showMapFields();
       if(!same){fitCurve();setting_=true;set(rangeStart,L"0");set(rangeEnd,points().empty()?49u:points().back()[0].get<unsigned>()+1);setting_=false;toolFieldsDirty_=false;}else rebuild();
       set(targetLabel,identity_.empty()?L"Create an instrument from the current sample":std::to_wstring(index_)+L" · "+wide(properties_.at("name").get<std::string>())+L" · "+wide(kinds[size_t(kind_)])+L" · "+std::to_wstring(envelope_.at("maxPoints").get<unsigned>())+L" points maximum");pending_=false;
-      status(identity_.empty()?L"No instruments / New from sample preserves the song's existing sample assignments":editable()?L"Double-click to add / drag or use point fields / Apply saves the captured instrument":L"This envelope is unavailable in the current module format");
+      status(identity_.empty()?L"No instruments / New from sample preserves the song's existing sample assignments":editable()?L"Double-click to add / drag or use point fields / Changes save automatically":L"This envelope is unavailable in the current module format");
     }catch(...){pending_=false;layout();throw;}layout();
   }
   void setPointFields(){require(!markerFields_,"Set or discard pending marker fields first");require(editable(),"Choose an editable envelope");const int at=whole(tick,0,65535),amount=whole(value,0,64);auto next=points();
@@ -111,15 +111,22 @@ private:
   Json patch()const{Json values=Json::object();if(envelopeDirty_){values["envelope"]=kind_;for(const auto *key:{"points","enabled","sustain","loop","carry","loopStart","loopEnd","sustainPoint","sustainEnd","releaseNode"})values[key]=envelope_.at(key);if(kind_==2)values["filter"]=envelope_.at("filter");}
     if(propertiesDirty_){Json fields={{"name",utf8(field(name))},{"volume",whole(volume,0,64)},{"pan",whole(pan,0,256)},{"fadeout",whole(fade,0,32768)},{"nna",selection(nna)},{"dct",selection(dct)},{"dna",selection(dna)}};for(auto i=fields.begin();i!=fields.end();++i)if(i.value()!=properties_.at(i.key()))values[i.key()]=i.value();}
     if(mappingDirty_)values["mapping"]=mapping_;return values;}
-  void commit(){cancelAutomaticEdit();requireCurrent();require(!identity_.empty(),"Choose an instrument");require(!pointFields_&&!markerFields_&&!mappingFields_,"Complete or discard the unfinished point, marker or key range fields");auto values=patch();const auto token=generation_;pending_=true;layout();try{request_("instrument.patch",{{"expectedRevision",captured_.revision},{"instrument",index_},{"values",values}});pending_=false;require(context_().document==captured_.document&&generation_==token,"Source changed during Apply / newer draft retained");load(false);status(L"Instrument saved / document Undo restores its settings, points and markers");}catch(...){pending_=false;layout();throw;}layout();}
+  void commit(){cancelAutomaticEdit();requireCurrent();require(!identity_.empty(),"Choose an instrument");require(!pointFields_&&!markerFields_&&!mappingFields_,"Complete or discard the unfinished point, marker or key range fields");auto values=patch();const auto token=generation_;pending_=true;layout();try{request_("instrument.patch",{{"expectedRevision",captured_.revision},{"instrument",index_},{"values",values}});pending_=false;require(context_().document==captured_.document&&generation_==token,"Source changed while saving / newer draft retained");load(false);status(L"Instrument saved / document Undo restores its settings, points and markers");}catch(...){pending_=false;layout();throw;}layout();}
   #include "InstrumentCreation.inc"
   uint32_t seedValue()const{const auto n=number(toolValue2);require(n>=0&&n<=UINT32_MAX&&n==std::floor(n),"Seed must be a whole number from 0 to 4294967295");return uint32_t(n);}
   Json toolSignature()const{return Json::array({tool_,field(rangeStart),field(rangeEnd),field(toolValue0),field(toolValue1),field(toolValue2),field(toolValue3),field(toolValue4)});}
   void transform(bool copy){requireCurrent();require(editable()&&!draft(),"Finish or discard before copying or transforming saved envelope points");const auto first=whole(rangeStart,0,65535),last=(copy||tool_<7)?whole(rangeEnd,1,65536):first+1;require(first<last,"Choose a nonempty tick range");Json p={{"instrument",identity_},{"envelope",kinds[size_t(kind_)]},{"start",first}};
     if(copy)p["end"]=last;else{p["expectedRevision"]=captured_.revision;p["dryRun"]=true;p["operation"]=operations[size_t(tool_)];if(tool_<7)p["end"]=last;Json o=Json::object();if(tool_==2)o["amount"]=number(toolValue0);if(tool_==3)o={{"amount",number(toolValue0)},{"offset",number(toolValue1)}};if(tool_==4)o={{"from",number(toolValue0)},{"to",number(toolValue1)}};if(tool_==5)o={{"center",number(toolValue0)},{"amplitude",number(toolValue1)},{"cycles",number(toolValue2)},{"phase",number(toolValue3)},{"spacing",whole(toolValue4,1,65536)}};if(tool_==6)o={{"amount",number(toolValue0)},{"jitter",whole(toolValue1,0,65536)},{"seed",seedValue()}};if(tool_>=7){require(!clipboard_.is_null(),"Copy an instrument envelope range first");o={{"clip",clipboard_},{"repeats",whole(toolValue0,1,4096)}};}p["options"]=o;}
-    const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{const auto result=request_(copy?"instrument.envelope.copy":"instrument.envelope.transform",p);pending_=false;requireCurrent();require(token==generation_&&signature==toolSignature(),"Tool settings changed / preview discarded");if(copy){clipboard_=result;status(L"Instrument range copied privately / choose Paste or Insert paste");}else if(result.at("wouldChange").get<bool>()){envelope_=result.at("after");selected_=-1;changed(false);showPoint();showMarkers();fitCurve();status(L"Preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" clipped · "+std::to_wstring(result.at("roundedValues").get<unsigned>())+L" rounded · "+std::to_wstring(result.at("reanchoredMarkers").get<unsigned>())+L" markers reattached / Apply saves");}else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;}catch(...){pending_=false;layout();throw;}layout();}
+    const auto token=generation_;const auto signature=toolSignature();pending_=true;layout();try{const auto result=request_(copy?"instrument.envelope.copy":"instrument.envelope.transform",p);pending_=false;requireCurrent();require(token==generation_&&signature==toolSignature(),"Tool settings changed / preview discarded");if(copy){clipboard_=result;status(L"Instrument range copied privately / choose Paste or Insert paste");}else if(result.at("wouldChange").get<bool>()){envelope_=result.at("after");selected_=-1;changed(false);showPoint();showMarkers();fitCurve();status(L"Preview · "+std::to_wstring(result.at("clippedValues").get<unsigned>())+L" clipped · "+std::to_wstring(result.at("roundedValues").get<unsigned>())+L" rounded · "+std::to_wstring(result.at("reanchoredMarkers").get<unsigned>())+L" markers reattached / Use preview saves");}else status(L"The tool leaves this envelope unchanged");toolFieldsDirty_=false;}catch(...){pending_=false;layout();throw;}layout();}
   void toolFields(){static const std::array<std::vector<std::pair<const wchar_t *,const wchar_t *>>,9> fields={{{},{},{{L"Shift / ticks",L"1"}},{{L"Multiply",L"1"},{L"Add / 0–64",L"0"}},{{L"From / 0–64",L"0"},{L"To / 0–64",L"64"}},{{L"Center",L"32"},{L"Amplitude",L"32"},{L"Cycles",L"1"},{L"Phase / degrees",L"0"},{L"Spacing / ticks",L"4"}},{{L"Value jitter",L"3"},{L"Tick jitter",L"0"},{L"Seed",L"0"}},{{L"Repeats",L"1"}},{{L"Repeats",L"1"}}}};setting_=true;for(int i=0;i<5;++i)if(size_t(i)<fields[size_t(tool_)].size()){set(toolLabel0+i,fields[size_t(tool_)][size_t(i)].first);set(toolValue0+i,fields[size_t(tool_)][size_t(i)].second);}setting_=false;layout();}
-  void openBank(){if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}requireCurrent();require(editable()&&!pointFields_&&!markerFields_&&!propertiesDirty_&&!mappingDirty_&&!mappingFields_,"Set pending fields and apply instrument settings before opening the bank");
+  void openBank(){
+    if(bank_&&(bank_->visible()||bank_->retainedDraft())){bank_->show();return;}
+    // Complete ordinary edits before capturing a new bank. A retained bank and
+    // an explicit tool preview keep their independent drafts; opening either
+    // must not accept a preview or replay a rejected write.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_&&!creationFrozen(),"Wait for the pending instrument change before opening its bank");
+    requireCurrent();require(editable()&&!pointFields_&&!markerFields_&&!propertiesDirty_&&!mappingDirty_&&!mappingFields_,"Complete pending fields or review instrument changes before opening the bank");
     const auto document=captured_.document,id=identity_;const auto kind=kind_;auto token=std::make_shared<uint64_t>(generation_);auto source=[this,document,id,kind,token]{return context_().document==document&&captured_.document==document&&identity_==id&&kind_==kind&&generation_==*token&&!pointFields_&&!markerFields_&&!propertiesDirty_&&!mappingDirty_&&!mappingFields_;};
     auto dispatch=[this,source,token](const std::string &method,const Json &p,const std::shared_ptr<NativeCallReceipt> &receipt){const bool owned=source(),old=pending_;if(owned)pending_=true;Api::CompletedCall completed;Json result;try{if(receipt){completed=creationWrite_(method,p,receipt);if(!receipt->read())receipt->publish(std::make_shared<const Api::CompletedCall>(completed));result=completed.result;}else result=request_(method,p);}catch(...){pending_=old;throw;}pending_=old;if(p.contains("expectedRevision")&&owned&&source()){captured_.revision=context_().revision;if(method=="envelope.bank.apply"||((method=="envelope.bank.save"||method=="envelope.bank.unlink")&&!draft())){const auto before=generation_;load(false);if(generation_==before+1&&!draft())*token=generation_;}}if(receipt)return completed;return Api::CompletedCall{method,captured_.document,context_().revision,std::move(result)};};
     auto request=[dispatch](const auto &method,const auto &params){return dispatch(method,params,{}).result;};
@@ -153,14 +160,15 @@ private:
     menu.push_back({setPoint,L"Set point fields",edit&&pointFields_&&!markerFields_});
     menu.push_back({0,L""});menu.push_back({fit,L"Fit envelope\tHome",canvasVisible_&&!points().empty()});
     menu.push_back({pageTools,L"Envelope tools…",!identity_.empty()});
-    menu.push_back({bank,L"Envelope bank…",edit&&!rawPoints&&!propertiesDirty_&&!mappingDirty_&&!mappingFields_});
+    menu.push_back({bank,L"Envelope bank…",edit&&!mappingFields_});
     std::vector<Item> envelope;
     for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Enabled","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})
       envelope.push_back({id,title,edit&&(id!=filter||kind_==2)&&(!points().empty()||id==carry||id==filter),envelope_.value(key,false)});
     envelope.push_back({0,L""});envelope.push_back({adsr,L"ADSR preset",edit&&!rawPoints});envelope.push_back({clear,L"Clear points",edit&&!rawPoints&&!points().empty()});
     menu.push_back({0,L"Envelope",true,false,std::move(envelope)});
     menu.push_back({0,L"Instrument",true,false,{{pageProperties,L"Properties…"},{pageKeymap,L"Sample keymap…",!identity_.empty()},{0,L""},{newInstrument,L"New from sample",fresh&&!retainedDraft()},{importFile,L"Import instrument…",fresh&&!retainedDraft()}}});
-    menu.push_back({0,L""});menu.push_back({apply,L"Apply instrument\tCtrl+Enter",fresh&&!identity_.empty()&&!rawPoints&&!mappingFields_});
+    menu.push_back({0,L""});
+    if(reviewRequired_||automaticEditFailed_)menu.push_back({apply,reviewRequired_?L"Use preview\tCtrl+Enter":L"Retry changes\tCtrl+Enter",fresh&&!identity_.empty()&&!rawPoints&&!mappingFields_});
     menu.push_back({reload,L"Reload\tCtrl+R"});menu.push_back({fromCursor,L"From cursor"});menu.push_back({audition,L"Audition…",fresh&&!identity_.empty()});
     if(hasWorkspaceDockAction()){menu.push_back({0,L""});menu.push_back({contextDock,docked()?L"Float editor":L"Dock beside tracker"});}
     menu.push_back({close,L"Hide editor"});
@@ -169,6 +177,7 @@ private:
     releaseMusicalInput();contextOpen_=true;struct Guard{bool &value;~Guard(){value=false;}}guard{contextOpen_};
     const int command=NativeContextMenu::show(window_,screen,menu);if(!command)return true;
     const auto after=context_();require(visible()&&!pending_&&!dragging_&&before.document==after.document&&before.revision==after.revision&&document==captured_.document&&revision==captured_.revision&&identity==identity_&&kind==kind_&&generation==generation_&&tools==toolSignature()&&selected==selected_&&selectedKey==selectedKey_&&page==page_&&wasDocked==docked(),"Song, target or draft changed while the menu was open / action cancelled");
+    contextOpen_=false; // Tracking has ended; the chosen handoff may flush its queued edit.
     if(command==contextDock){toggleWorkspaceDock();return true;}
     if(command==contextAdd){selected_=-1;setting_=true;set(tick,at);set(value,amount);setting_=false;setPointFields();SetFocus(window_);}
     else if(command==contextEdit||command==contextDelete){selected_=hit;showPoint();if(command==contextDelete){removePoint();SetFocus(window_);}else{if(compact_)selectPage(pagePoints-pageEnvelope);layout();SetFocus(controls_.at(tick));}}
@@ -309,7 +318,6 @@ private:
     place(apply,18,h-52,148,28);place(reload,174,h-52,118,28);place(fromCursor,300,h-52,126,28);place(audition,434,h-52,126,28);place(close,w-118,h-52,100,28);place(statusLabel,18,h-22,w-36,20);
   }
   void layout()override{
-    if(ready_)set(apply,reviewRequired_?L"Use preview":L"Retry changes");
     if(bank_)bank_->refreshSourceState();
     const auto focus=GetFocus();const auto [w,h]=size();const bool wasShort=shortDock_;compact_=w<1080||h<780;shortDock_=docked()&&h<500;
     if(shortDock_&&!wasShort){
@@ -335,7 +343,7 @@ private:
     if(shortDock_)layoutShortDock(w,h);else if(compact_)layoutCompact(w,h);else layoutFull(w,h);
     if(focus&&IsChild(window_,focus)&&!IsWindowVisible(focus))SetFocus(controls_.at(compact_?pageEnvelope+page_:instrument));
     const bool inlinePoint=shortDock_&&page_==0&&!shortEnvelopeOptions_;
-    set(apply,shortDock_?L"Apply":L"Apply instrument");set(fromCursor,shortDock_?L"Cursor":L"From cursor");set(audition,shortDock_?L"Audition":L"Audition…");
+    set(apply,reviewRequired_?L"Use preview":L"Retry changes");set(fromCursor,shortDock_?L"Cursor":L"From cursor");set(audition,shortDock_?L"Audition":L"Audition…");
     set(nodeLabel,inlinePoint?L"Point":L"Selected node");set(tickLabel,inlinePoint?L"Tick":L"Tick / 0–65535");set(valueLabel,inlinePoint?L"Value":L"Value / 0–64");set(deletePoint,inlinePoint?L"Delete":L"Delete point");
     for(auto [id,title,key]:std::initializer_list<std::tuple<int,const wchar_t *,const char *>>{{enabled,L"Envelope","enabled"},{sustain,L"Sustain","sustain"},{loop,L"Loop","loop"},{carry,L"Carry","carry"},{filter,L"Filter","filter"}})set(id,std::wstring(inlinePoint&&id==enabled?L"Env":title)+(envelope_.value(key,false)?(inlinePoint?L" on":L" · on"):(inlinePoint?L" off":L" · off")));
     for(auto [id,control]:controls_)if(id>=instrument&&id<=keymap)EnableWindow(control,!pending_||id==close);for(int id=enabled;id<=previewTool;++id)EnableWindow(controls_.at(id),!pending_&&editable());for(int id=name;id<=apply;++id)EnableWindow(controls_.at(id),!pending_&&!identity_.empty());EnableWindow(controls_.at(keymap),!pending_&&!identity_.empty());EnableWindow(controls_.at(filter),!pending_&&editable()&&kind_==2);EnableWindow(controls_.at(bank),!pending_&&editable());

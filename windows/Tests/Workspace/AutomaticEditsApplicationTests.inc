@@ -654,5 +654,52 @@ void applicationAutomaticEdits(){
       restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Bank opening added extra point history");}
     fixture.close();
   }
+  for(const bool preview:{false,true}){
+    RestoreFixture fixture;auto &app=*fixture.app;createRestoreInstrument(app);
+    app.edit("instrument.patch",{{"instrument",1},{"values",{{"envelope",0},{"enabled",true},{"points",Json::array({Json::array({0,32}),Json::array({16,48}),Json::array({48,0})})}}}});
+    app.openInstrumentEnvelope();auto &instrument=*app.instrumentEnvelopeWindow;const auto window=instrument.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto identity=instrument.snapshot().at("instrument");
+    const auto before=app.documentOperation("instrument.get",{{"instrument",1}}),pcm=app.documentOperation("sample.pcm.get",{{"sample",1}});
+    const auto originalEnvelope=app.documentOperation("instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}});
+    const auto originalSong=songState(app);
+    if(preview){
+      const auto tool=GetDlgItem(window,4429);SendMessageW(tool,CB_SETCURSEL,1,0);
+      SendMessageW(window,WM_COMMAND,MAKEWPARAM(4429,CBN_SELCHANGE),LPARAM(tool));press(window,4438);
+      restoreCheck(instrument.snapshot().at("dirty").get<bool>()&&restoreText(GetDlgItem(window,4450))==L"Use preview","Instrument bank fixture has no explicit preview");
+    }else{
+      const auto name=GetDlgItem(window,4439),volume=GetDlgItem(window,4440);
+      press(window,4603);
+      SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(volume);SetWindowTextW(volume,L"invalid");SendMessageW(volume,EM_SETSEL,1,4);press(window,4404);
+      DWORD first=0,last=0;SendMessageW(volume,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+      restoreCheck(!instrument.snapshot().at("envelopeBank").at("visible").get<bool>()&&songState(app)==originalSong&&
+        GetFocus()==volume&&first==1&&last==4&&restoreText(volume)==L"invalid","Instrument bank opening lost invalid text/focus or changed music");
+      SetWindowTextW(volume,L"42");SetWindowTextW(name,L"Captured automatically");
+    }
+    press(window,4404);const auto captured=instrument.snapshot();
+    restoreCheck(captured.at("envelopeBank").at("visible").get<bool>()&&captured.at("envelopeBank").at("sourceCurrent").get<bool>()&&
+      captured.at("envelopeBank").at("expectedRevision")==app.view->session.revision&&captured.at("dirty").get<bool>()==preview,
+      "Instrument bank captured an old revision, omitted an automatic edit or accepted a tool preview");
+    auto expected=before,expectedEnvelope=originalEnvelope;if(!preview){expected["name"]="Captured automatically";expected["volume"]=42;expectedEnvelope["name"]="Captured automatically";}
+    restoreCheck(app.documentOperation("instrument.get",{{"instrument",1}})==expected&&app.documentOperation("sample.pcm.get",{{"sample",1}})==pcm&&
+      app.documentOperation("instrument.envelope.get",{{"instrument",identity},{"envelope","volume"}})==expectedEnvelope,
+      "Instrument bank handoff changed unrelated settings, samples or accepted envelope");
+    HWND bank=nullptr;EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM out)->BOOL{
+      wchar_t kind[96]{};GetClassNameW(h,kind,96);if(!wcscmp(kind,L"ScreamSeq.EnvelopeBank")){*reinterpret_cast<HWND *>(out)=h;return FALSE;}return TRUE;
+    },reinterpret_cast<LPARAM>(&bank));
+    restoreCheck(bank&&GetWindow(bank,GW_OWNER)==GetAncestor(window,GA_ROOT),"Find the owned instrument bank");ScreamSeq::Tests::ownGuiWindow(bank);
+    const auto revision=app.view->session.revision;press(window,4404);settle(window);
+    restoreCheck(app.view->session.revision==revision&&instrument.snapshot().at("envelopeBank")==captured.at("envelopeBank"),
+      "Reopening a retained instrument bank recaptured it or replayed an automatic edit");
+    press(bank,1005);const auto entries=app.documentOperation("envelope.bank.list",Json::object()).at("entries");
+    Json expectedPoints=Json::array();for(const auto &point:captured.at("envelope").at("points"))expectedPoints.push_back({{"position",point[0].get<unsigned>()*256},{"value",point[1].get<double>()/64},{"curve","linear"}});
+    restoreCheck(entries.size()==1&&entries[0].at("shape").at("points")==expectedPoints&&app.documentOperation("instrument.get",{{"instrument",1}})==expected,
+      "Instrument bank saved stale points or accepted its source preview");
+    app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+    restoreCheck(app.documentOperation("envelope.bank.list",Json::object()).at("entries").empty()&&app.documentOperation("instrument.get",{{"instrument",1}})==expected,
+      "Instrument bank save did not have its own history step");
+    if(!preview){app.documentOperation("history.undo",{{"expectedRevision",app.view->session.revision},{"domain","all"}});
+      restoreCheck(app.documentOperation("instrument.get",{{"instrument",1}})==before,"Instrument handoff saved its pending properties more than once");}
+    fixture.close();
+  }
   std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history/bank capture\n";
 }

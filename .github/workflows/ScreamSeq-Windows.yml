@@ -168,6 +168,8 @@ jobs:
               test_recording.RecordingTests `
               test_midi_recording_ui.MidiRecordingUITests `
               test_sample_capture_ui.SampleCaptureUiTests `
+              test_instrument_context_ui.InstrumentContextUITests.test_canvas_add_delete_automatic_history_and_native_save `
+              test_instrument_context_ui.InstrumentContextUITests.test_bank_handoff_saves_properties_and_keeps_separate_history `
               test_recovery.RecoveryTests.test_native_browser_save_reload_restore_and_file_save_cleanup `
               test_recovery.RecoveryTests.test_close_drains_pending_native_recovery_write `
               test_recovery.RecoveryTests.test_pending_write_allows_edits_and_save_cleanup_cannot_resurrect_old_copies `

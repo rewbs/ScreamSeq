@@ -1,6 +1,7 @@
 """Real native instrument menus, retained targets and guarded musical transactions."""
 import ctypes
 from ctypes import wintypes as w
+import time
 import unittest
 
 import private_desktop
@@ -28,7 +29,6 @@ class InstrumentContextUITests(unittest.TestCase):
     select = compact.InstrumentCompactUITests.select
     text = compact.InstrumentCompactUITests.text
     create = compact.InstrumentCompactUITests.create
-    preset = compact.InstrumentCompactUITests.preset
     resize_client = compact.InstrumentCompactUITests.resize_client
 
     def window(self, kind='ScreamSeq.InstrumentEnvelope'):
@@ -56,15 +56,28 @@ class InstrumentContextUITests(unittest.TestCase):
         return result
 
     def prepare(self):
-        self.preset()
+        self.create()
+        if self.state()['compactLayout']:
+            self.press(4600)
+        self.press(4410)
+        self.wait_saved()
+        self.assertEqual(len(self.saved()['points']), 5)
         self.resize_client(440, 500)
         self.press(4600)
 
-    def test_canvas_add_delete_apply_one_undo_and_native_save(self):
+    def wait_saved(self):
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            state = self.state()
+            if not state['dirty'] and not state['pending']:
+                return
+            time.sleep(.025)
+        self.fail(str(state))
+
+    def test_canvas_add_delete_automatic_history_and_native_save(self):
         self.prepare()
         instrument_index = self.state()['index']
         original = self.settings()
-        before = self.doc()
         x, y, width, height = self.state()['canvas']
         with self.menu(self.screen(x + width * .375, y + height * .75)) as menu:
             commands = self.commands(menu.items())
@@ -72,26 +85,70 @@ class InstrumentContextUITests(unittest.TestCase):
             menu.choose(4700)
         self.idle()
         self.assertIn([24, 16], self.state()['envelope']['points'])
-        self.assertEqual(self.doc(), before)
+        self.wait_saved()
+        added = self.settings()
+        expected_added = dict(original)
+        expected_added['envelopes'] = [dict(e) for e in original['envelopes']]
+        expected_added['envelopes'][0]['points'] = sorted(original['envelopes'][0]['points'] + [[24, 16]])
+        self.assertEqual(added, expected_added)
         with self.menu(self.point(1)) as menu:
             menu.choose(4702)
         self.idle()
         self.assertNotIn([2, 64], self.state()['envelope']['points'])
-        self.assertEqual(self.doc(), before)
+        self.wait_saved()
         with self.menu() as menu:
-            menu.choose(4450)
+            self.assertNotIn(4450, self.commands(menu.items()), 'Saved edits must not advertise Apply')
+            menu.cancel()
         self.idle()
         saved = self.settings()
+        expected_saved = dict(added)
+        expected_saved['envelopes'] = [dict(e) for e in added['envelopes']]
+        expected_saved['envelopes'][0]['points'] = [p for p in added['envelopes'][0]['points'] if p != [2, 64]]
+        self.assertEqual(saved, expected_saved)
         self.assertIn([24, 16], saved['envelopes'][0]['points'])
         self.assertNotIn([2, 64], saved['envelopes'][0]['points'])
         self.write('history.undo', domain='document')
+        self.assertEqual(self.settings(), added)
+        self.write('history.undo', domain='document')
         self.assertEqual(self.settings(), original)
+        self.write('history.redo', domain='document')
+        self.assertEqual(self.settings(), added)
         self.write('history.redo', domain='document')
         self.assertEqual(self.settings(), saved)
         path = self.folder / 'instrument-context.screamseq'
         self.write('document.save', path=str(path))
         self.write('document.open', path=str(path), discard=True)
         self.assertEqual(self.read('instrument.get', instrument=instrument_index), saved)
+
+    def test_bank_handoff_saves_properties_and_keeps_separate_history(self):
+        self.prepare()
+        original = self.settings()
+        self.press(4603)
+        self.field(4439, 'Automatic bank handoff')
+        with self.menu(self.screen(20, 20)) as menu:
+            self.assertTrue(self.commands(menu.items())[4404]['enabled'])
+            menu.choose(4404)
+        self.idle()
+        captured = self.state()
+        self.assertTrue(captured['envelopeBank']['visible'])
+        self.assertTrue(captured['envelopeBank']['sourceCurrent'])
+        self.assertFalse(captured['dirty'])
+        expected = dict(original, name='Automatic bank handoff')
+        self.assertEqual(self.settings(), expected)
+        bank = self.window('ScreamSeq.EnvelopeBank')
+        save = user.GetDlgItem(bank, 1005)
+        self.assertTrue(user.IsWindowVisible(save) and user.IsWindowEnabled(save))
+        self.desktop.send(save, 0xF5)
+        self.idle()
+        entries = self.read('envelope.bank.list')['entries']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['shape']['points'], [dict(position=tick*256, value=value/64, curve='linear') for tick, value in original['envelopes'][0]['points']])
+        self.assertEqual(self.settings(), expected)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.read('envelope.bank.list')['entries'], [])
+        self.assertEqual(self.settings(), expected)
+        self.write('history.undo', domain='document')
+        self.assertEqual(self.settings(), original)
 
     def test_point_hit_edit_and_cancel_preserve_retained_target_and_raw_fields(self):
         self.prepare()
