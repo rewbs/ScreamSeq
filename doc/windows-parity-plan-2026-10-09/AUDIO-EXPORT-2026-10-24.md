@@ -96,3 +96,23 @@ actual app transports are required. Preserve existing fixture PCM assertions.
 The frozen
 `retained-reveal` candidate 24788ebc34f35a94f24138d63a1df248cddff445 deliberately
 excludes this continuation; its evidence must never be attributed to this code.
+
+The native Mac export command now waits for the existing worker/read owner,
+directs retained takes to review, refuses an unfinished manual slider gesture,
+and collects already delivered vendor input before capturing the chooser's
+revision. This preserves the old native command's input boundary without making
+external API dry runs or invalid calls commit pending input. The chooser and
+native command remain unqualified; Mac compilation, API no-mutation assertions
+and native foreground review are required before claiming parity.
+
+Next bounded Windows checkpoint: shared `audio-export-stream`, native
+`atomic-output-stream`, worker `document-controller-audio-export` and existing
+module-export guards, plus workspace command-result/menu/automatic-edit groups.
+Run the composed recording journey with its new WAV stage and the layered VST3
+journey where the deterministic fixture is available. Inspect File > Export audio
+with a real native chooser, cancel/overwrite, queued precise edits and caret,
+then check the resulting WAV and unchanged song destination/playback epoch.
+Mac must run its existing AU latency/tail/small-stack export test, new shared
+writer test, socket saving journey and both architecture builds at the same
+coordinated checkpoint. Prior device evidence may be reused only for unchanged
+callback inputs; the failed sustained foreground run remains a release blocker.

@@ -1107,7 +1107,31 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   @objc func exportAudio() {
-    guard !busy else { return }
+    guard !busy, !sessionReading else {
+      statusLabel.stringValue = "Audio export will continue when the current operation finishes"
+      deferUntilIdle { [weak self] in self?.exportAudio() }
+      return
+    }
+    guard !pluginRecordingInput.protectsDocument else {
+      showPluginRecording()
+      statusLabel.stringValue = "Keep or discard the plugin take and finish restoration before exporting audio."
+      return
+    }
+    guard !pluginParameterGestureActive, !pluginManualGestureApplied,
+      !pluginEditor.hasDeferredParameterEdits else {
+      statusLabel.stringValue = "Finish the current parameter edit before exporting audio."
+      return
+    }
+    // The native command finishes already delivered vendor edits before it
+    // captures the chooser's revision. The external export API deliberately
+    // does not drain vendors: invalid requests and dry runs must stay read-only.
+    var pluginError: NSError?
+    let edits = session.collectPluginEdits(false, error: &pluginError)
+    if edits > 0 {
+      dirty = true
+      window.isDocumentEdited = true
+    }
+    if let pluginError { show(pluginError); return }
     let revision = session.automationRevision
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.wav]

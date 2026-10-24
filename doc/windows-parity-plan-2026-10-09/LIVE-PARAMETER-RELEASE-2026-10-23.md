@@ -2404,3 +2404,49 @@ No job was restarted. Earliest next checkpoint remains05:00:40UTC and must
 recheck later starts. Qualification source24788 is frozen/clean. Primary source
 continued with separately backed-up audio-export changes; those are excluded
 from this candidate and cannot inherit its qualification.
+
+### 24 October 05:00 checkpoint — retained views pass, sustained audio held
+
+Frozen `24788ebc34f35a94f24138d63a1df248cddff445` built once from
+05:00:52 to 05:03:19 UTC. ARM64 executable SHA256:
+`f9dfc215a67e3d7e2a31ec9f6089c7bcb585c7acbd3f69173fbe4494d4bd5c51`.
+`bin/mac-gesture-20261022/retained-reveal/` contains immutable build/check
+receipts: seven native groups and five actual-app journeys passed, as did the
+ordinary silent WASAPI audit and separate opt-in cycle-delivery diagnostic.
+
+Fresh Computer Use on owned PID41196 confirmed the previously failing frozen
+Activity close/reopen (exact visible range and selected point) and clean precise
+editor reveal after an Undo while hidden. It also confirmed double-click
+insertion, canvas/list Backspace, list Undo, left-border handle dragging,
+automatic velocity text, native Save retaining the caret, text Backspace,
+Tab/Shift+Tab, invalid raw text across maximize/restore and Float/return-to-dock.
+Native Balance Record/slider/Stop/Keep preserved both original input frame/value
+pairs, preexisting recorded points and the independent Gain lane. Four read-only
+snapshots retained playback epoch2 with increasing frames and no processor fault.
+The disposable project was saved and the process exited normally; no musician
+session or system audio defaults changed. `foreground-check.json` pins receipts.
+
+The functional journey passed, but **production packaging remains held**.
+The uninstrumented 634.5408613-second silent run at 48kHz/480 frames (1056-frame
+buffer) recorded45 deadline overruns over61245 callbacks, maximum service time
+12.2787ms, zero starvation/device errors. Realtime audit and sustained presentation
+qualification remain false. No temporal-flicker or Narrator claim follows from
+screenshots; floating-field typing continuity remains limited by Main-targeted
+helper activation. Retarget refusal and invalid-draft hide/reveal have native
+assertions but were not repeated manually in this run.
+
+A separate owned PID25740 ran the same binary with `--audio-test-cycles` for
+180.0518121 seconds and exited normally. It retained15 deadline events in18001
+callbacks, with18001 successful cycle samples and no query failures. Fourteen
+of15 slow callbacks used more cycles than the preceding equal-frame callback;
+median ratio2.5646 (range0.9011–3.4851). This motivates processing-stage attribution,
+not a speculative DSP change or a preemption claim. Cycle counts are not elapsed
+CPU time, and instrumentation makes this diagnostic evidence only. Input hash:
+`332c4ef5dd9d2b084efaf8c6c54aa48c5c2adc24dd59ff746ed6f1d8092b2415`;
+`cycle-diagnostic/analysis.json` records the bounded comparison.
+
+At05:19 UTC the new Mac ARM/Intel and Windows CI jobs were still building.
+Runs40064596154/40064596147 must be inspected to terminal results, without
+restarting them. Latest actual start05:01:19 makes the next checkpoint no earlier
+than06:01:19 UTC, subject to later starts and no overlapping jobs. The separately
+backed-up WAV-export continuation is unbuilt and cannot inherit these passes.
