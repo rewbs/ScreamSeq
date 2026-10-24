@@ -328,3 +328,14 @@ diagnostic fresh UI process after the entire automated attempt is terminal and
 the silent device/source/provider/binary checks pass. It uses ordinary callback
 timing, no cycle instrumentation. Its receipt cannot qualify a release; the
 normal passing-candidate launcher and package gate remain strict.
+
+The primary checkout now also contains an **unbuilt, post-freeze** worker
+acceptance extension in `windows/Tests/LiveParameterPreviewTests.inc`, selected
+by `document-controller-live-parameters`. Its demo song must export nonzero
+sample audio. A second complete export while Gainer's audible preview is held
+at-12dB must exactly match the earlier accepted0dB WAV and preserve the preview
+owner/value, manual/opaque baseline, immutable view/history and running host.
+This asserts the API's accepted-song contract; native File export intentionally
+finishes queued UI intent first. It is not part of frozen6a9d's current build or
+eleven-group attempt. Include the controller registration at a subsequent
+cohesive checkpoint; do not repeat the current build for this test addition.
