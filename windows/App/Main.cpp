@@ -1030,7 +1030,7 @@ public:
     }
     void openAbsoluteAutomation(std::string plugin={},std::optional<uint32_t> parameter={}){
         if(!absoluteAutomationWindow)absoluteAutomationWindow=std::make_unique<ScreamSeq::AbsoluteAutomationWindow>(window,[this](const auto &method,const auto &p){return documentOperation(method,p);},[this]{return ScreamSeq::AbsoluteAutomationWindow::Context{documentId,view->session.revision,selectedPlugin,selectedParameter,view->session.document.at("nativePlugins"),busy||(recoveryRestoring&&!departureRefreshing)};},[this](const auto &plugin,uint32_t parameter,bool pattern){
-            if(pattern){openParameterAutomation(plugin,parameter);return;}
+            if(pattern){openParameterAutomation(plugin,parameter,true);return;}
             if(pluginDraft||pluginPresetPending)throw std::runtime_error("Apply or discard the rack draft first");const auto &rack=view->session.document.at("nativePlugins");if(std::none_of(rack.begin(),rack.end(),[&](const auto &p){return p.at("instanceID")==plugin;}))throw std::runtime_error("Captured plugin is unavailable");selectedPlugin=plugin;selectedParameter=parameter;pluginDetailPage=0;pluginDetailsRevision.clear();command(pluginsCommand);
         });
         absoluteAutomationWindow->openAt(std::move(plugin),parameter);

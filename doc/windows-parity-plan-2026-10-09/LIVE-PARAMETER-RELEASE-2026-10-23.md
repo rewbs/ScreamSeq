@@ -1915,3 +1915,28 @@ compilation passed, Intel and Windows compilation were ongoing. Windows actually
 started at01:59:03, extending the next build gate to at least02:59:03 UTC. Require
 terminal preceding CI and recheck later actual starts before another checkpoint.
 Do not rerun or replace the executed 8a build/check receipts.
+
+### Connected recorded-automation navigation (same pending batch)
+
+Source review found that Song automation's Show in rack and Pattern curves
+buttons skipped the automatic-edit flush already used by its other navigation
+actions. They now finish a queued valid point before opening the destination;
+invalid or uncertain raw fields stay with the original editor. Pattern curves
+also uses the existing exact-target opening contract: an unrelated pinned/draft
+editor is retained with an explanation, and an unpinned clean editor opens the
+requested stable plugin/parameter instead of silently retaining another target.
+
+The automatic-edit native group adds both handoffs, exact unrelated-lane
+preservation, one-step Undo, invalid text/caret/focus retention and independent
+pin protection. The same four-native/two-app checkpoint covers this source-only
+addition; include both handoffs in fresh Computer Use. No model, storage, audio
+callback or public API change is involved.
+
+The existing 8a stopped audio evidence contains all19 overruns, with none omitted.
+Seventeen render480 frames and two render960 frames. All19 callback wall times
+exceed the10ms device period;17 also exceed their frame-duration budget. The
+largest combined pre/post-callback service time is31 microseconds. This narrows
+the measured delay to time inside the callback, but cannot distinguish DSP work
+from scheduler preemption there. Keep both doubled-frame events counted, retain
+the original thresholds, and do not infer a DSP cause. The read-only analysis
+and input hash are in `foreground-diagnostic/deadline-analysis.json`.

@@ -404,5 +404,47 @@ void applicationAutomaticEdits(){
     app.documentOperation("document.open",departureOpenRequest(app,path));
     restoreCheck(app.documentOperation("automation.get",Json::object())==saved,"Native Save/reopen omitted the pending recorded point");fixture.close();
   }
+  for(const int command:{4617,4618}){
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.replaceLane",{{"slot",0},{"id",1},{"points",Json::array({{{"frame",48000},{"value",-6.}},{{"frame",96000},{"value",-3.}}})}});
+    app.edit("automation.replaceLane",{{"slot",0},{"id",2},{"points",Json::array({{{"frame",12000},{"value",25.}}})}});
+    const auto baseline=app.documentOperation("automation.get",Json::object());
+    app.openAbsoluteAutomation(plugin,1);auto &lane=*app.absoluteAutomationWindow;const auto window=lane.window();ScreamSeq::Tests::ownGuiWindow(window);
+    const auto field=GetDlgItem(window,4609);SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(field);
+    SetWindowTextW(field,L"invalid");SendMessageW(field,EM_SETSEL,1,4);
+    const auto oldPlugin=app.selectedPlugin;const auto oldParameter=app.selectedParameter;
+    press(window,command);DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline&&restoreText(field)==L"invalid"&&
+      GetFocus()==field&&first==1&&last==4&&app.selectedPlugin==oldPlugin&&app.selectedParameter==oldParameter&&
+      !app.parameterAutomationWindow,"Connected navigation discarded invalid raw input, changed its target or opened another editor");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);SetWindowTextW(field,L"-9");
+    press(window,command);
+    auto edited=baseline;for(auto &point:edited["points"])if(point.at("id")==1&&point.at("frame")==48000)point["value"]=-9.;
+    restoreCheck(app.documentOperation("automation.get",Json::object())==edited&&!lane.queuedMusicalEdit()&&
+      !lane.snapshot().at("fieldDraft").get<bool>(),"Connected navigation omitted the pending point or changed unrelated automation");
+    if(command==4617)restoreCheck(app.selectedPlugin==plugin&&app.selectedParameter==1,"Show in rack opened another parameter");
+    else{
+      restoreCheck(bool(app.parameterAutomationWindow),"Pattern curves did not open");
+      const auto destination=app.parameterAutomationWindow->snapshot();
+      restoreCheck(destination.at("plugin")==plugin&&destination.at("parameter")==1&&
+        destination.at("expectedRevision")==app.view->session.revision,"Pattern curves captured the target before its pending point was accepted");
+    }
+    app.edit("history.undo",{{"domain","all"}});press(window,4615);
+    restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Connected navigation added more than the one point edit to history");
+    if(command==4618){
+      app.openParameterAutomation(plugin,2,true);SendMessageW(app.parameterAutomationWindow->window(),WM_TIMER,3,0);
+      app.workspaceEditors[0].pinned=true;
+      const auto pinned=app.parameterAutomationWindow->snapshot();press(window,command);
+      restoreCheck(app.parameterAutomationWindow->snapshot()==pinned&&app.workspaceEditors[0].pinned&&
+        app.documentOperation("automation.get",Json::object())==baseline,
+        "Recorded-to-pattern navigation retargeted an independently pinned editor");
+      app.workspaceEditors[0].pinned=false;press(window,command);
+      const auto destination=app.parameterAutomationWindow->snapshot();
+      restoreCheck(destination.at("plugin")==plugin&&destination.at("parameter")==1&&
+        app.documentOperation("automation.get",Json::object())==baseline,
+        "Recorded-to-pattern navigation silently retained a different unpinned target");
+    }
+    fixture.close();
+  }
   std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history\n";
 }

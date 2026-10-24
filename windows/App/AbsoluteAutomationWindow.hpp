@@ -109,7 +109,7 @@ private:
         selectParameter(wanted);filter();
       }catch(...){filter();throw;}return;
     }if(n!=BN_CLICKED)return;
-    if(id==fromRack||id==lastTouched||id==undo||id==redo){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before continuing");}
+    if(id==fromRack||id==lastTouched||id==undo||id==redo||id==openRack||id==openPattern){flushAutomaticEdit();require(!draft(),"Finish or discard the pending point before continuing");}
     if(id==apply)commit();else if(id==reload)load(false);else if(id==fromRack)load(true);else if(id==lastTouched)touch();else if(id==setPoint)setFields();
     else if(id==openRack||id==openPattern){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_,id==openPattern);}
     else if(id==undo||id==redo){requireCurrent();require(!draft(),"Finish or discard before using Undo/Redo");const auto token=generation_;pending_=true;layout();try{request_(id==undo?"history.undo":"history.redo",{{"expectedRevision",captured_.revision},{"domain","plugins"}});pending_=false;require(context_().document==captured_.document&&token==generation_,"Source changed during history operation / draft retained");load(false);}catch(...){pending_=false;layout();throw;}}
