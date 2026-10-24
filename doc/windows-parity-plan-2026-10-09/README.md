@@ -1,6 +1,6 @@
 # ScreamSeq Windows parity implementation plan
 
-**Current boundary (23 October UTC):** shared main remains
+**Current boundary (24 October UTC):** shared main remains
 `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, including the qualified navigation,
 flicker, plugin control/recording and command/scratch work from PR#6. Its tree
 matches077e. Both Mac architecture jobs passed. Windows CI retained12 distinct
@@ -20,13 +20,16 @@ overruns but one starvation indicator. See the
 [precise-note report](PRECISE-NOTE-LIVE-2026-10-23.md).
 
 Later source improves recorded-point editing, native Save/Close, restoration and
-short-take navigation. PR7 remains separate from main. The latest built1071
-candidate failed Activity's deferred-selection native gate; its separate
-144-input composing diagnostic passed. Further Activity focus/history,
-Keep-to-edit handoff and recorded-point selection corrections remain unbuilt.
-An old-binary diagnostic reproduced selection moving to the wrong timestamp
-after history and Reload. The next gate is four native groups and two complete
-app journeys, followed by fresh Computer Use. Windows1071 CI passed159 portable/
+short-take navigation. PR7 remains separate from main. The latest built6e4656d5c
+candidate passed compilation, menu and plugin-search native groups, and two
+separate diagnostic composing journeys (including144 original inputs). Its
+automatic-edit and Activity native groups failed on JSON fixture assumptions:
+an absent selection after Undo, and a trace cleared by Refresh. Test-only
+corrections explicitly establish each scenario and add selection/trace guards;
+they remain unbuilt. The next gate reruns both failed groups and validates reuse
+of unchanged passing inputs before fresh Computer Use. Preserve the failed gate;
+the diagnostic app passes do not qualify a package. Current6e CI remains active.
+Windows1071 CI passed159 portable/
 worker and52/53 native groups, retaining24 app failures/one skip. Mac ARM1071
 passed134 CTests, native interface/socket/typed gates and the BlackHole live take
 lifecycle. Intel passed compilation/model/interface/socket gates but failed

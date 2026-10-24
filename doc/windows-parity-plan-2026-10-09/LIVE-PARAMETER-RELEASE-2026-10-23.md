@@ -1683,3 +1683,58 @@ The next Mac run must establish the actual coverage reason before changing
 admission or clock behavior. Mac ARM's pass does not supersede Intel's failure.
 All preceding1071 jobs are now terminal; the hourly gate still requires a fresh
 later-start check and no build before00:57:22UTC.
+
+### 6e4656d5c checkpoint: build passed, native gate failed (24 October)
+
+The single coordinated checkpoint pushed PR7 to
+`6e4656d5ce2f974b0ab3e42d2ef763e367845426` and built locally from00:57:40.785Z
+to00:59:44.357Z. Configure/build exited0. Executable SHA256 is
+0aab9f26836d6322be61e2fc8620c7ecf199ddbff7eb44a4a38da18a75c98fe9.
+Exact build/checkpoint/native receipts are under
+`bin/mac-gesture-20261022/activity-history-correction/`; never repeat them.
+
+The native gate passed workspace-menu-bar and workspace-plugin-search, but
+failed automatic-edit and parameter-activity-window with JSON type errors.
+`checks.json` correctly retains nativeExit8/appExitnull. The two not-yet-run
+app journeys were then executed once as a separately labelled diagnostic on
+this exact executable: both passed in36.342s. This includes the144-input native
+composing/recording journey, surviving selected frame after deletion/history,
+queued field-to-source handoff, provenance-correct trace navigation, Activity
+list history, unchanged playback epoch and exact persistence. These bounded
+passes do not supersede the failed native gate; no foreground launch, package
+or merge was made.
+
+Source inspection located two fixture assumptions:
+
+- The newly inserted source-navigation Refresh clears Activity's watch, while
+  the following old draft-click fixture immediately indexes `trace.lastPoint`.
+  The new setup explicitly polls the fresh watch and asserts that a two-coordinate
+  point exists before the existing raw-field/focus/caret/appearance checks.
+- The automatic-edit fixture continued from a moved point's Undo/Redo/Undo and
+  indexed its selection without checking it. The new stable-frame semantics
+  correctly leave no selection when that timestamp disappears. The fixture now
+  asserts this result, explicitly chooses point0 for the next independent
+  parameter-navigation scenario, and range-checks the index before constructing
+  its exact expected lane. No musical equality, history or focus assertion is
+  removed or relaxed.
+
+These test-only corrections are unbuilt. The actual exception locations need
+confirmation from the next native execution; do not call the native gate fixed
+from source inspection alone. All failed logs remain intact. The existing
+four-native/two-app scope is sufficient unless new source broadens it.
+
+Current coordinated CI handles are Windows40047539078/job120732587753 and
+Mac40047539069/jobs120732586809(Intel),120732587023(ARM). At00:58:05UTC they were
+live; actual Mac starts were00:58:00/00:57:59UTC and Windows had not yet started
+its build step. The next gate is provisional, no earlier than01:58:00UTC, and
+must be extended from actual later starts. Do not restart jobs, overlap another
+checkpoint or infer completion from an observation timeout. Use
+`inspect-activity-history-correction-ci.py` and collect terminal logs with its
+matching collector. Mac's new clock-coverage diagnostic still needs execution.
+
+At01:06:47UTC Windows's actual build start was00:58:10UTC, establishing the
+next gate at01:58:10UTC. All three jobs remained live. If the correction stays
+test-only, rerun the two failed native groups and validate unchanged product,
+menu/search fixture and app-journey inputs before reusing their individual
+passing results. The old aggregate native gate remains failed. Fresh foreground
+inspection is required after the corrected native groups pass.

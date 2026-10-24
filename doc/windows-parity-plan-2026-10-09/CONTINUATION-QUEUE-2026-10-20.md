@@ -8,6 +8,23 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 01:10 UTC checkpoint:** PR7 and the clean qualification source are
+6e4656d5ce2f974b0ab3e42d2ef763e367845426. One local build passed. Menu-bar and
+plugin-search native groups passed; automatic-edit and Activity groups failed
+with JSON fixture errors. Two separate diagnostic app journeys passed in36.342s,
+including144 original inputs and exact history/reopen. These do not erase the
+failed native gate. Source-only test corrections now establish a fresh trace
+after Refresh, explicitly select the next scenario's point after history clears
+selection, and assert those preconditions. No product assertions were removed.
+The next bounded gate reruns both failed groups and validates unchanged inputs
+before reusing the two passing native groups and two app journeys. Fresh
+Computer Use is still required. No package or merge.
+
+Current CI40047539078/40047539069 is active; next checkpoint is no earlier than
+2026-10-24 01:58:10UTC, after terminal CI and later-start inspection. Preserve
+`activity-history-correction` receipts. Inspect the Mac failure-only clock
+diagnostic before changing recording timing. The entries below are historical.
+
 **24 October 00:42 UTC continuation:** the current Windows source also finishes
 queued Activity edits before opening their captured source. The old1071 binary
 failed the new exact destination-value assertion (-6 displayed after typing -9).

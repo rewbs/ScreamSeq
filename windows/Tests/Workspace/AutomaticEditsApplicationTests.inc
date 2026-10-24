@@ -237,6 +237,8 @@ void applicationAutomaticEdits(){
       restoreCheck(dragged!=baseline&&!lane.snapshot().at("dirty").get<bool>(),"Recorded drag did not automatically publish its changed point");
       app.edit("history.undo",{{"domain","all"}});press(window,4615);
       restoreCheck(app.documentOperation("automation.get",Json::object())==baseline,"Recorded drag did not restore exact unrelated music in one Undo");
+      restoreCheck(lane.snapshot().at("selectedPoint")==-1,
+        "Undo of a moved point silently selected a replacement timestamp");
       app.edit("history.redo",{{"domain","all"}});press(window,4615);
       restoreCheck(app.documentOperation("automation.get",Json::object())==dragged,"Recorded drag Redo did not restore the accepted lane");
       app.edit("history.undo",{{"domain","all"}});press(window,4615);
@@ -247,7 +249,12 @@ void applicationAutomaticEdits(){
       const auto parameterRow=[&](uint32_t id){const auto it=std::find_if(catalogue.begin(),catalogue.end(),[&](const auto &p){return p.at("id")==id;});
         restoreCheck(it!=catalogue.end(),"Recorded navigation fixture target is missing from its actual catalogue");return int(it-catalogue.begin());};
       const auto selectParameter=[&](uint32_t id){SetFocus(list);SendMessageW(list,LB_SETCURSEL,parameterRow(id),0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4603,LBN_SELCHANGE),LPARAM(list));};
+      // The preceding drag/history removes the selected timestamp. Choose the
+      // intended point explicitly for this independent navigation scenario.
+      SetWindowTextW(GetDlgItem(window,4605),L"0");press(window,4626);
+      restoreCheck(lane.snapshot().at("selectedPoint")==0,"Choose a point for parameter-navigation editing");
       SetFocus(valueField);SetWindowTextW(valueField,L"-9");const auto edited=lane.snapshot().at("selectedPoint").get<int>();
+      restoreCheck(edited>=0&&size_t(edited)<late.size(),"Parameter-navigation fixture has no selected point");
       auto expected=late;expected[size_t(edited)]["value"]=-9.;
       selectParameter(2);
       restoreCheck(lane.snapshot().at("parameter")==2&&!lane.snapshot().at("dirty").get<bool>()&&GetFocus()==list,

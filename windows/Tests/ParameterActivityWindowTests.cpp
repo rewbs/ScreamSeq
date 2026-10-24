@@ -262,6 +262,12 @@ void run(){
       click(11002);
     }
     choose(11006,2);require(tool.snapshot().at("recordedTotal")==1,"Recorded page missing");
+    // The preceding explicit Refresh starts a fresh watch. Populate its trace
+    // before the later retained-draft click test asks for a visible point.
+    SendMessageW(window,WM_TIMER,3,0);
+    require(tool.snapshot().at("trace").at("lastPoint").is_array()&&
+      tool.snapshot().at("trace").at("lastPoint").size()==2,
+      "Retained-draft trace fixture has no observed point to click");
     for(auto [id,name]:std::initializer_list<std::pair<int,const wchar_t *>>{
         {11000,L"Parameter activity processor copy"},{11021,L"Search activity parameters by name, unit or ID"},{11001,L"Parameter activity parameter"},
         {11005,L"Activity trace time range"},{11006,L"Parameter activity details page"},
