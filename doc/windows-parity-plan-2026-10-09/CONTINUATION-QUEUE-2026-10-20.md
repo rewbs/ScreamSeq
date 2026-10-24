@@ -8,6 +8,18 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**Next frozen candidate:** `d6da2520aac7ba5b7f854273d029396099834364`, committed,
+backed up to `codex/mac-gesture-next-checkpoint`, and fast-forwarded into the clean
+qualification checkout. `bin/mac-gesture-20261022/recording-root/` contains the
+new freeze and parsed-but-unexecuted checkpoint/build/check/validator scripts.
+They pin the source, preserve old outputs, recheck actual CI starts and terminal
+state, and prohibit a build before09:05:43 UTC. There is no build/check receipt
+for this candidate yet. PR7 remains066 until the next eligible checkpoint.
+The local build targets app/scanner, native-tool and workspace owners, and the
+shared export test. Three native groups plus two app journeys run; no stock job
+is redispatched because its relevant inputs are unchanged. The validator retains
+separate foreground/performance/CI requirements and does not permit packaging.
+
 **24 October 08:26 UTC source continuation:** The impossible dry cross-block
 equality assertion is explicitly corrected against the independently verified
 stock contract: exact per-partition PCM remains mandatory, equal duration is
