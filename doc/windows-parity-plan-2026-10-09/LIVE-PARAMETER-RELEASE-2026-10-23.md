@@ -1614,3 +1614,26 @@ in `activity-search/completed-ci.json`; no old job was restarted. The next gate
 remains no earlier than00:57:22UTC, after all preceding jobs are terminal and a
 fresh later-start inspection. No Windows CI, performance or overall parity pass
 is claimed.
+
+### Finish the point edit before source navigation (source only)
+
+`ParameterActivityWindow` source inspection found that Open source / Song
+automation could navigate before the current point's queued automatic edit.
+The destination could therefore capture the previous lane revision. Both idle
+and observation-pumped source navigation now finish the existing valid edit
+first, retaining the originally selected stable source descriptor across the
+save. Invalid, stale, newer or uncertain drafts use the existing guarded edit
+completion and remain in their original editor; navigation cannot retry them.
+No new point is implicitly added. The existing Activity native group now checks
+both buttons in both timing paths, exact music already present at the destination
+callback, one edit, stable plugin/parameter and invalid raw text/focus/caret.
+This remains within the four-native/two-app checkpoint, with no new build target.
+Include typing a point value and immediately opening Song automation in the
+fresh foreground journey. This source change has not been compiled or executed.
+
+The existing actual-app Activity journey also opens Song automation immediately
+after typing the selected point value and requires the destination's exact fresh
+lane, then continues its time move, keyboard Undo/Redo, playback epoch and
+save/reopen checks. This adds assertions to the existing case, not another test
+run or build target. Python syntax and whitespace checks passed; execution awaits
+the combined candidate.

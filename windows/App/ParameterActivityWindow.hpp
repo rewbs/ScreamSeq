@@ -291,6 +291,7 @@ private:
     const auto source=selectedSource(lane);const auto c=context_();const auto generation=generation_;
     pendingNavigation_=[this,source,c,generation]{
       guardRead(c,generation);require(visible(),"Activity source navigation was closed");
+      finishPointEditForNavigation();
       beginPending();try{inspect_(source);pending_=false;}catch(...){pending_=false;throw;}
     };
     SetTimer(window_,4,100,nullptr);
@@ -332,6 +333,8 @@ private:
       const bool processorChoice=id==processors&&notification==CBN_SELCHANGE;
       const bool parameterChoice=id==parameters&&notification==CBN_SELCHANGE;
       const bool pointChoice=id==items&&notification==LBN_SELCHANGE&&page_==2;
+      const bool sourceNavigation=notification==BN_CLICKED&&(id==openSource||id==openLane);
+      const auto wantedSource=sourceNavigation?selectedSource(id==openLane):Json();
       if(processorChoice){const auto i=selection(processors);require(i>=0,"Choose a processor");wantedTarget=targets_.at(size_t(i)).at("key");}
       if(parameterChoice){wantedParameter=selectedParameter();require(wantedParameter.has_value(),"Choose a parameter");}
       if(pointChoice){const auto i=int(SendMessageW(controls_.at(items),LB_GETCURSEL,0,0));
@@ -339,7 +342,7 @@ private:
         wantedFrame=recorded_[size_t(i)].at("frame").get<uint64_t>();samePoint=i==selected_;}
       const bool pointNavigation=processorChoice||parameterChoice||pointChoice||
         (notification==BN_CLICKED&&(id==previous||id==next||id==newPoint));
-      if(pointNavigation)finishPointEditForNavigation();
+      if(pointNavigation||sourceNavigation)finishPointEditForNavigation();
       beginPending();
       if(processorChoice)load(wantedTarget);
       else if(parameterChoice)load(target_,wantedParameter,false,true);
@@ -349,7 +352,7 @@ private:
       else if(notification==BN_CLICKED){
         if(id==refresh){load({}, {},true);frozen_=false;set(freeze,L"Freeze");}
         else if(id==clear){watch(true);list();requestPaint();}
-        else if(id==openLane||id==openSource)inspect_(selectedSource(id==openLane));
+        else if(id==openLane||id==openSource)inspect_(wantedSource);
         else if(id==previous||id==next){require(!fields_,"Save or Refresh before changing recorded pages");const auto wanted=id==previous?(offset_>=512?offset_-512:0):std::min(offset_+512,total_?((total_-1)/512)*512:0);recorded(wanted);list();}
         else if(id==newPoint){require(!fields_,"Save or Refresh the current point first");selected_=-1;showFields();list();SetFocus(controls_.at(time));}
         else if(id==savePoint||id==removePoint)commit(id==removePoint);

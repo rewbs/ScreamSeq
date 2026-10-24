@@ -37,7 +37,8 @@ void run(){
       if(method=="automation.recorded.edit"){require(p.at("expectedRevision")==context.revision,"Stale write reached callback");++edits;const auto original=p.at("frame");lane.erase(std::remove_if(lane.begin(),lane.end(),[&](const auto &v){return v.at("frame")==original;}),lane.end());if(!p.value("remove",false))lane.push_back({{"frame",p.value("newFrame",original)},{"value",p.at("value")}});std::sort(lane.begin(),lane.end(),[](const auto &a,const auto &b){return a.at("frame")<b.at("frame");});context.revision="r"+std::to_string(edits+2);return {{"wouldChange",true}};}
       throw std::runtime_error("Unexpected activity request");
     };
-    ScreamSeq::ParameterActivityWindow tool(owner,request,[&]{return context;},[&](const Json &v){navigation=v;});
+    Json navigationLane;
+    ScreamSeq::ParameterActivityWindow tool(owner,request,[&]{return context;},[&](const Json &v){navigation=v;navigationLane=lane;});
     tool.openAt();auto window=tool.window();toolWindow=window;const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};
     const auto choose=[&](int id,int index){SendMessageW(GetDlgItem(window,id),CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(GetDlgItem(window,id)));};
     require(tool.snapshot().at("targets").empty(),"Unprepared processors were fabricated");
@@ -526,6 +527,30 @@ void run(){
     {
       const auto selectPoint=[&](int row){SendMessageW(itemList,LB_SETCURSEL,row,0);
         SendMessageW(window,WM_COMMAND,MAKEWPARAM(11007,LBN_SELCHANGE),LPARAM(itemList));};
+      // A source handoff must display the point just typed, not the lane from
+      // before its debounce. Capture the source before the save reorders rows.
+      for(const bool pumped:{false,true})for(const int button:{11008,11009}){
+        const auto initial=lane;click(11002);selectPoint(0);const auto beforeEdits=edits;
+        navigation=nullptr;navigationLane=nullptr;SetWindowTextW(valueField,L"0.6875");
+        if(pumped){
+          pump=[&](const std::string &method){if(method=="parameter.activity.get")click(button);};
+          SendMessageW(window,WM_TIMER,3,0);pump={};SendMessageW(window,WM_TIMER,0x5345,0);
+          require(navigation.is_null()&&lane==initial&&edits==beforeEdits,
+            "Source handoff bypassed the observation read or pending navigation ordering");
+          SendMessageW(window,WM_TIMER,4,0);
+        }else click(button);
+        auto expected=initial;expected[0]["value"]=.6875;
+        require(lane==expected&&navigationLane==expected&&edits==beforeEdits+1&&
+          navigation.at("kind")=="recorded"&&navigation.at("plugin")=="a"&&navigation.at("parameter")==1&&
+          !tool.queuedMusicalEdit()&&!tool.snapshot().at("fieldDraft").get<bool>(),
+          "Source handoff opened before the accepted point edit or changed its stable target");
+        navigation=nullptr;SetFocus(valueField);SetWindowTextW(valueField,L"-");SendMessageW(valueField,EM_SETSEL,1,1);
+        click(button);DWORD start=0,end=0;SendMessageW(valueField,EM_GETSEL,WPARAM(&start),LPARAM(&end));
+        require(navigation.is_null()&&lane==expected&&edits==beforeEdits+1&&
+          tool.snapshot().at("rawValue")=="-"&&GetFocus()==valueField&&start==1&&end==1,
+          "Source handoff hid invalid input, changed music or moved its caret");
+        lane=initial;click(11002);
+      }
       const auto before=lane;const auto beforeEdits=edits;
       selectPoint(1);SetFocus(itemList);SendMessageW(window,WM_KEYDOWN,VK_BACK,0);
       auto removed=before;removed.erase(removed.begin()+1);

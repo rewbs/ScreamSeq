@@ -309,6 +309,19 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         edited=json.loads(json.dumps(baseline))
         for point in edited['points']:
             if point['id']==1 and point['frame']==36000:point['value']=-9
+        # Open the connected lane immediately: it must capture the accepted
+        # value, without requiring Save or waiting for the edit debounce.
+        press(11009)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            linked=self.read('workspace.get')['absoluteAutomation']
+            if linked['visible'] and not linked['pending']:break
+            time.sleep(.025)
+        self.assertTrue(linked['visible'],state())
+        self.assertEqual((linked['plugin'],linked['parameter']),(plugin,1))
+        self.assertEqual(linked['points'],[dict(frame=p['frame'],value=p['value'])
+                         for p in edited['points'] if p['slot']==0 and p['id']==1],linked)
+        self.press(4624)
         accepted(edited);self.assertEqual(state()['selectedPoint'],1,state())
         self.field(11015,1.25,kind)
         # Leave the edited point immediately, without Save or a debounce wait.
