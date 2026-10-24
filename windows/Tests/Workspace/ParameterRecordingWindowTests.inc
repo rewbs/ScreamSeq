@@ -14,11 +14,12 @@ void applicationParameterRecordingReview() {
     std::string contextRevision;
     bool available=true;
     bool inputProtected=false;
+    std::optional<Json> rackOverride;
     std::shared_ptr<ScreamSeq::NativeCallReceipt> lateReceipt;
     std::shared_ptr<const Call> lateCompletion;
     ScreamSeq::ParameterRecordingWindow::Callbacks callbacks;
     callbacks.context=[&]{return std::pair(app.documentId,contextRevision.empty()?app.view->session.revision:contextRevision);};
-    callbacks.rack=[&]{return app.view->session.document.at("nativePlugins");};
+    callbacks.rack=[&]{return rackOverride?*rackOverride:app.view->session.document.at("nativePlugins");};
     callbacks.parameterName=[&](const std::string &id,uint32_t parameter){restoreCheck(id==plugin&&(parameter==1||parameter==2),"Review looked up another parameter name");++nameReads;return parameter==1?L"Gain":L"Balance";};
     callbacks.available=[&]{return available;};callbacks.saveRecovery=[&]{++saves;};
     callbacks.inputProtected=[&]{return inputProtected;};
@@ -229,6 +230,20 @@ void applicationParameterRecordingReview() {
     const auto beforeNavigation=tool.snapshot();click(9741);
     restoreCheck(openedAutomation==Json::array({Json::array({plugin,1})})&&tool.snapshot()==beforeNavigation&&writes.size()==3&&songState(app)==music,
         "Opening kept automation replayed input, wrote music or changed recording review");
+    {
+      const auto expected=tool.snapshot().at("keptTarget");const auto beforeOpens=openedAutomation.size();
+      rackOverride=Json::array({{{"instanceID","replacement-plugin"},{"name","Replacement at the same rack position"}}});click(9725);click(9741);
+      restoreCheck(!IsWindowEnabled(control(9741))&&openedAutomation.size()==beforeOpens&&tool.snapshot().at("keptTarget")==expected,
+        "A removed kept plugin enabled navigation to a replacement rack slot");
+      rackOverride.reset();click(9725);
+      restoreCheck(IsWindowEnabled(control(9741))&&tool.snapshot().at("keptTarget")==expected,
+        "Restoring the same stable plugin did not restore its kept automation action");
+      available=false;click(9741);available=true;rackOverride=Json::array();click(9725);
+      SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(!IsWindowEnabled(control(9741))&&tool.snapshot().at("queuedKept").is_null()&&openedAutomation.size()==beforeOpens&&
+        writes.size()==3&&songState(app)==music,"Queued kept navigation followed a removed plugin or changed music");
+      rackOverride.reset();click(9725);
+    }
     {
       const auto beforeOpens=openedAutomation.size();const auto expected=tool.snapshot().at("keptTarget");
       duringRead=[&]{click(9741);click(9741);restoreCheck(openedAutomation.size()==beforeOpens,

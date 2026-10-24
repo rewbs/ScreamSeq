@@ -76,7 +76,8 @@ private:
   void requireContext()const{if(callbacks_.context().first!=document_)throw std::runtime_error("This recording window belongs to the previous song");}
   bool keptTargetAvailable()const {
     return callbacks_.recordedAutomation&&!keptTarget_.is_null()&&!retained()&&
-      !queuedAction_&&!completion_.retained();
+      !queuedAction_&&!completion_.retained()&&callbacks_.context().first==document_&&
+      std::any_of(rack_.begin(),rack_.end(),[&](const auto &plugin){return plugin.at("instanceID")==keptTarget_.at("plugin");});
   }
   bool canOpenKept()const{return keptTargetAvailable()&&!pending_&&!queuedKept_;}
   void cancelKeptNavigation(){queuedKept_.reset();KillTimer(window_,10);}

@@ -1798,3 +1798,12 @@ composing app journeys afresh. Only the unchanged6e menu native result and
 validated unchanged shared/audio evidence are reused. Do not reuse the6e app
 diagnostic passes for this new presentation behavior. The single-build hourly
 gate and fresh Computer Use requirement are unchanged.
+
+The same recording-review batch now disables kept Song automation navigation
+when its stable plugin is absent from the current rack or its document differs.
+The identity remains retained so restoring that same plugin can restore the
+action; another plugin in the old rack position never inherits it. Native
+coverage checks removal/replacement, restoration and removal while navigation
+is queued, with exact target, no callback to a replacement and unchanged music.
+This matches the existing Mac availability rule and does not add musical edits.
+The three-native/two-app scope is unchanged; these additions are unbuilt.
