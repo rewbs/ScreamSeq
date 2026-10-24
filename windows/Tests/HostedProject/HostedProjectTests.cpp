@@ -184,6 +184,7 @@ static std::vector<float> audition(Tracker::Document &doc,const Project::Project
   return output;
 }
 #include "PreparedNativeUpdates.inc"
+#include "RenderStageEvidenceTests.inc"
 int main(){try{
   {AudioAudit::Scope scope;auto p=::operator new(8);::operator delete(p);
     auto aligned=::operator new(64,std::align_val_t{64});::operator delete(aligned,std::align_val_t{64});}
@@ -213,6 +214,7 @@ int main(){try{
   preparedPreciseNotes(state);
   preparedColumnMutes(state);
   recordingTiming(*doc,state);
+  renderStageChecks(*doc,state);
   for(unsigned rate:{44100u,48000u,96000u}){
     const auto original=doc->snapshotData();auto baseline=audition(*doc,state,rate,128);double worst=0;
     for(unsigned block:{17u,4096u,8193u}){auto other=audition(*doc,state,rate,block);for(size_t i=0;i<baseline.size();++i)worst=std::max(worst,std::abs(double(other[i])-baseline[i]));}

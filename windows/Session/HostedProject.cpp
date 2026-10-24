@@ -151,6 +151,8 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames) noexcept {
   return render(stereo,frames,RenderTime{});
 }
 bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTime &time) noexcept {
+  RenderStageEvidence::Sample evidence(renderEvidence_,frames,rate_,
+    renderEvidence_?renderer_->telemetry().frames:0,time.generation);
   // One audio writer owns all timeline publication. Invalid callbacks must also
   // clear the renderer origin: offline rendering cannot reuse a hardware time.
   renderer_->recordingTime(0,0);
@@ -191,6 +193,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     presented->frame,presented->frames,presented->rate,presented->generation);
   uint32_t callbackReceived=0;
   for(uint32_t at=0;at<frames;) {
+    evidence.enter(RenderStageEvidence::Stage::Preparation);
     if(offline_&&chain_->latencyChangePending()) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo+size_t(at)*2,size_t(frames-at)*2,0.0f);return false;}
     const auto count=std::min(4096u,frames-at);auto *buffer=stereo+size_t(at)*2;
     const auto origin=time.offset(at),end=time.offset(at+count);
@@ -207,11 +210,14 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     renderer_->recordingTime(mapped?origin.hostTime:0,mapped?double(hostTicksPerSecond)/rate_:0);
     chain_->beginRenderBlock();chain_->syncTransport(*renderer_);
     const auto frame=renderer_->telemetry().frames;
+    evidence.enter(RenderStageEvidence::Stage::Engine);
     const auto received=renderer_->render(buffer,count);
     callbackReceived+=received;
+    evidence.enter(RenderStageEvidence::Stage::Hosted);
     // A notification inside the last slice must also fail an offline render;
     // there may be no next callback in which to detect its stale compensation.
     if(!chain_->process(buffer,count) || failed() || (offline_ && chain_->latencyChangePending())) {timeline_->generation.store(0,std::memory_order_release);timeline_->absoluteFrames.invalidate();std::fill_n(stereo,size_t(frames)*2,0.0f);return false;}
+    evidence.enter(RenderStageEvidence::Stage::Timing);
     if(mapped){
       if(captureFrames_&&received&&!time.correlatedBoundary) {
         const auto musicEnd=time.offset(at+received);
@@ -225,6 +231,7 @@ bool HostedProjectPlayback::render(float *stereo,uint32_t frames,const RenderTim
     at+=count;
   }
   presentedFrames_.rendered(callbackFrame,callbackReceived,frames);
+  evidence.completed();
   return true;
 }
 }

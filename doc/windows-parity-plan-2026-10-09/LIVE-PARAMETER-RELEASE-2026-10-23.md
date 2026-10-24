@@ -2450,3 +2450,31 @@ Runs40064596154/40064596147 must be inspected to terminal results, without
 restarting them. Latest actual start05:01:19 makes the next checkpoint no earlier
 than06:01:19 UTC, subject to later starts and no overlapping jobs. The separately
 backed-up WAV-export continuation is unbuilt and cannot inherit these passes.
+
+### Next source batch: attribute prepared-render stage cost
+
+The next candidate adds `windows/Audio/RenderStageEvidence.hpp`, a fixed32-event
+stopped-owner diagnostic with an injected monotonic clock. Only the explicit
+`--audio-test-cycles` app mode attaches it before device start. Ordinary playback
+does not query additional clocks. `HostedProjectPlayback::render` measures four
+coarse stages: preparation, engine rendering (including instrument work), hosted
+processing, and timing publication. Internal4096-frame slices accumulate into
+one event with original frame/generation identity. Zero-frame Stop is excluded;
+clock failures/regressions are counted without manufacturing valid durations.
+Evidence is read only after WASAPI has joined. Existing WASAPI failure counters
+and thresholds are unchanged; the new ring has its own whole-render frame budget.
+
+`RenderStageEvidenceTests.inc` extends the existing hosted-project test with
+bounded first-failure retention, disabled/failed clocks, timing decomposition,
+exact observed-versus-unobserved PCM, original-time preservation, detach and
+callback allocation assertions, including8193-frame callbacks crossing internal
+slices. These C++ assertions are **unbuilt**. Four lightweight qualification
+validator tests passed in0.043s; the validator rejects stage-clock reports even
+if their separate cycle flag is absent. This does not establish audio performance.
+
+Batch these diagnostics with the pending export checkpoint: add hosted-project
+and WASAPI-lifecycle native groups to the seven export/workspace groups. Fresh
+ordinary silent audio and composing UI checks remain required because the
+prepared callback source changed. Then run a separate short full-song diagnostic
+and use its stage evidence to select a concrete optimization. No DSP behavior or
+overrun threshold has been changed speculatively.

@@ -56,6 +56,9 @@ def validate(report):
         evidence = audio.get("deadlineEvidence", {})
         if isinstance(evidence, dict) and evidence.get("diagnosticThreadCycles"):
             failures.append("audio includes opt-in profiling overhead; use a separate uninstrumented qualification run")
+        stages = audio.get("renderStageEvidence", {})
+        if isinstance(stages, dict) and stages.get("enabled"):
+            failures.append("audio includes render-stage clock overhead; use a separate uninstrumented qualification run")
         numbers = ("sampleRate", "periodFrames", "durationSeconds", "callbackCount",
                    "renderedFrames", "maxCallbackMicros")
         valid = all(type(audio.get(key)) in (int, float) and math.isfinite(audio[key])

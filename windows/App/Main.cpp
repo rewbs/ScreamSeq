@@ -257,6 +257,10 @@ public:
     ScreamSeq::HostedProjectPlayback *preparedPlayback=nullptr; // Worker-owned, borrowed only until the next prepare.
 	Tracker::Renderer *renderer=nullptr;
 	ScreamSeq::WasapiDevice device;
+    ScreamSeq::RenderStageEvidence renderStageEvidence;
+    static uint64_t renderProbeTicks() noexcept {
+        LARGE_INTEGER value{};return QueryPerformanceCounter(&value)?uint64_t(value.QuadPart):0;
+    }
 	bool inspection = false, follow = true;
     bool silentOutput=false; // Explicit diagnostic mode; DSP still runs in full.
     bool frameRequested=true;
@@ -881,6 +885,15 @@ public:
             auto generation=stopGeneration;
 			preparedPlayback=await(controller->prepare(lastRate,settings,playbackLoop,false,audition));renderer=&preparedPlayback->renderer();
             if(generation!=stopGeneration) throw ScreamSeq::Api::ApiError(-32003,"Playback preparation cancelled by Stop");
+            // Extra stage clocks belong only to the explicit profiling run.
+            // Reset/attach before starting the device; no live observer races.
+            if(audioOptions.diagnosticThreadCycles) {
+                LARGE_INTEGER clockFrequency{};
+                if(!QueryPerformanceFrequency(&clockFrequency)||
+                   !renderStageEvidence.reset(renderProbeTicks,uint64_t(clockFrequency.QuadPart)))
+                    throw std::runtime_error("Cannot initialize render-stage diagnostic clock");
+                preparedPlayback->renderEvidence(&renderStageEvidence);
+            }
 			if(!device.start()) throw std::runtime_error("WASAPI start failed");
             auditionOnly=audition;
 			if(!audition){playbackLoop = settings.value("loop",playbackLoop); playbackRegion = settings;refreshPlaybackLoopControl();}
@@ -1164,6 +1177,20 @@ public:
 		auto sorted = cpuDraw; std::sort(sorted.begin(), sorted.end());
         ScreamSeq::DeadlineEvidence::Snapshot deadlines;
         const bool deadlineAvailable=device.stoppedDeadlineEvidence(deadlines);
+        Json stageReport={{"enabled",audioOptions.diagnosticThreadCycles},{"availableAfterJoin",deadlineAvailable},
+            {"diagnosticOnly",true},{"clock","QPC ticks; wall time, not CPU time"},
+            {"stageNames",{"preparation","engineIncludingInstruments","hostedProcessing","timingPublication"}},
+            {"limitation","Whole prepared-render stages, not per-plugin stacks. Extra clocks add overhead; no release-performance qualification."}};
+        if(deadlineAvailable&&audioOptions.diagnosticThreadCycles) {
+            const auto stages=renderStageEvidence.snapshot();Json events=Json::array();
+            for(size_t i=0;i<stages.count;++i){const auto &e=stages.events[i];
+                events.push_back({{"ordinal",e.ordinal},{"frameOffset",e.frameOffset},{"generation",e.generation},
+                    {"startTicks",std::to_string(e.startTicks)},{"totalTicks",e.totalTicks},{"stageTicks",e.stageTicks},
+                    {"frames",e.frames},{"sampleRate",e.rate},{"completed",e.completed}});
+            }
+            stageReport.update({{"frequency",stages.frequency},{"callbacks",stages.callbacks},{"capacity",ScreamSeq::RenderStageEvidence::capacity},
+                {"omitted",stages.omitted},{"invalidClocks",stages.invalidClocks},{"events",std::move(events)}});
+        }
         Json deadlineEvents=Json::array();
         for(size_t i=0;i<deadlines.count;++i){const auto &e=deadlines.events[i];
             deadlineEvents.push_back({{"callback",e.callback},{"frameOffset",e.frameOffset},{"generation",e.generation},
@@ -1201,7 +1228,8 @@ public:
 			<< ",\"fallbackError\":" << lastAudio.fallbackError << ",\"waitTimeouts\":" << lastAudio.waitTimeouts
 			<< ",\"deadlineOverruns\":" << lastAudio.deadlineOverruns << ",\"starvationIndicators\":" << lastAudio.starvationIndicators
 			<< ",\"deviceErrors\":" << lastAudio.deviceErrors << ",\"lastError\":" << lastAudio.lastError
-			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"deadlineEvidence\":" << deadlineReport.dump() << ",\"realtimeAuditPassed\":false}}";
+			<< ",\"mmcssError\":" << lastAudio.mmcssError << ",\"deadlineEvidence\":" << deadlineReport.dump()
+            << ",\"renderStageEvidence\":" << stageReport.dump() << ",\"realtimeAuditPassed\":false}}";
 		out.close(); if(!out) throw std::runtime_error("Cannot write application report");
 	}
 };

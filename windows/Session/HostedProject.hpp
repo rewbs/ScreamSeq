@@ -2,6 +2,7 @@
 #include "windows/Project/NativeProject.hpp"
 #include "editor/hosted/HostedAudio.hpp"
 #include "windows/Audio/PresentationClock.hpp"
+#include "windows/Audio/RenderStageEvidence.hpp"
 namespace ScreamSeq {
 using Json=nlohmann::json;
 // Decode persisted project records without loading a vendor or changing them.
@@ -28,6 +29,7 @@ class HostedProjectPlayback final {
   uint64_t mappedStart_=0,mappedEnd_=0; // Audio owner; accepted native presentation bounds.
   PresentedFrameIntervals presentedFrames_; // Two correlated WASAPI boundaries per interval.
   uint64_t nativeUpdateGeneration_=0; // Serialized control owner only.
+  RenderStageEvidence *renderEvidence_=nullptr; // Optional, borrowed until the stopped owner detaches it.
 public:
   // Owns all preparation until the document's beforeCommit callback publishes
   // it. Rendering never owns this wrapper and no live Document is retained.
@@ -67,6 +69,9 @@ public:
   // Preparation and destruction remain on a stopped control owner.
   bool render(float *stereo,uint32_t frames) noexcept;
   bool render(float *stereo,uint32_t frames,const RenderTime &) noexcept;
+  // Stopped control owner only. Evidence must outlive rendering and may only
+  // be read/reset after the device has joined. Normal playback leaves this null.
+  void renderEvidence(RenderStageEvidence *evidence) noexcept {renderEvidence_=evidence;}
   std::shared_ptr<const RecordingTimeline> recordingTimeline() const noexcept {return timeline_;}
   std::shared_ptr<const Tracker::RecordingClock> recordingClock() const noexcept {return timeline_->clock;}
   bool failed() const noexcept;
