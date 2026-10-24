@@ -40,6 +40,8 @@ private:
   std::optional<QueuedAction> queuedAction_;
   struct QueuedTarget {std::string document,revision,take,key;size_t offset=0;};
   std::optional<QueuedTarget> queuedTarget_;
+  struct QueuedKept {std::pair<std::string,std::string> context;Json target;};
+  std::optional<QueuedKept> queuedKept_;
   bool refreshing_=false;
   size_t offset_=0,total_=0,displayedOffset_=0;uint64_t generation_=0;
   bool pending_=false,setting_=false,presentingRows_=false,lossAcknowledged_=false,targetChosen_=false;
@@ -68,9 +70,24 @@ private:
       delivery_.value("needsReview",false),delivery_.value("lost",uint64_t(0)),delivery_.value("retained",size_t(0)),delivery_.value("pending",false)});
   }
   void requireContext()const{if(callbacks_.context().first!=document_)throw std::runtime_error("This recording window belongs to the previous song");}
-  bool canOpenKept()const {
-    return callbacks_.recordedAutomation&&!keptTarget_.is_null()&&!retained()&&!pending_&&
+  bool keptTargetAvailable()const {
+    return callbacks_.recordedAutomation&&!keptTarget_.is_null()&&!retained()&&
       !queuedAction_&&!completion_.retained();
+  }
+  bool canOpenKept()const{return keptTargetAvailable()&&!pending_&&!queuedKept_;}
+  void cancelKeptNavigation(){queuedKept_.reset();KillTimer(window_,10);}
+  void drainKeptNavigation(){
+    if(!queuedKept_||pending_||(callbacks_.available&&!callbacks_.available()))return;
+    const auto navigation=std::exchange(queuedKept_,{});KillTimer(window_,10);
+    if(!visible()||callbacks_.context()!=navigation->context||!keptTargetAvailable()||keptTarget_!=navigation->target)
+      throw std::runtime_error("Kept automation context changed / choose Song automation again");
+    callbacks_.recordedAutomation(navigation->target.at("plugin").get<std::string>(),navigation->target.at("parameter").get<uint32_t>());
+  }
+  void openKeptAutomation(){
+    requireContext();if(!keptTargetAvailable()||(pending_&&!refreshing_))return;
+    if(!queuedKept_)queuedKept_=QueuedKept{callbacks_.context(),keptTarget_};
+    if(pending_||(callbacks_.available&&!callbacks_.available())){SetTimer(window_,10,20,nullptr);if(!pending_)layout();}
+    else drainKeptNavigation();
   }
   void rememberKept(const Api::CompletedCall &call) {
     if(call.document!=document_)throw std::runtime_error("Kept automation belongs to another song");
@@ -264,7 +281,7 @@ private:
       self.pending_=self.refreshing_=false;
       // An incomplete refresh cannot authorize a later write. The normal
       // error path presents the read failure; no command has been submitted.
-      if(!succeeded){self.queuedAction_.reset();self.cancelTargetSelection();}
+      if(!succeeded){self.queuedAction_.reset();self.cancelTargetSelection();self.cancelKeptNavigation();}
       if(self.queuedAction_)SetTimer(self.window_,8,1,nullptr);
       if(self.queuedTarget_)SetTimer(self.window_,9,1,nullptr);
       self.layout();}}reset{*this,succeeded};
@@ -363,6 +380,7 @@ private:
   void action(int id,unsigned notification)override {
     if(setting_)return;
     if(id==close&&notification==BN_CLICKED){hide();return;}
+    if(id==openKept&&notification==BN_CLICKED){openKeptAutomation();return;}
     if(id==target&&notification==CBN_SELCHANGE){selectTarget();return;}
     if((id==previous||id==next)&&notification==BN_CLICKED){selectPage(id);return;}
     if(pending_){
@@ -370,10 +388,6 @@ private:
       return;
     }
     if(queuedAction_)return;
-    if(id==openKept&&notification==BN_CLICKED){
-      requireContext();if(!canOpenKept())return;
-      callbacks_.recordedAutomation(keptTarget_.at("plugin").get<std::string>(),keptTarget_.at("parameter").get<uint32_t>());return;
-    }
     if(id==acknowledge&&notification==BN_CLICKED){lossAcknowledged_=SendMessageW(controls_.at(id),BM_GETCHECK,0,0)==BST_CHECKED;layout();return;}
     if(notification!=BN_CLICKED)return;
     if(id==recovered&&callbacks_.recoveredInputs){callbacks_.recoveredInputs();return;}
@@ -396,6 +410,7 @@ private:
     if(key==VK_RETURN){wchar_t kind[20]{};GetClassNameW(GetFocus(),kind,20);if(!_wcsicmp(kind,L"Button")){action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}}return false;
   }
   void timer(UINT_PTR id)override{
+    if(id==10){if(pending_||(callbacks_.available&&!callbacks_.available()))return;drainKeptNavigation();layout();return;}
     if(id==9){
       if(queuedTarget_&&(pending_||(callbacks_.available&&!callbacks_.available()))){SetTimer(window_,9,20,nullptr);return;}
       KillTimer(window_,9);drainTargetSelection();return;
@@ -463,6 +478,12 @@ public:
     if(!state.is_object()||!state.contains("retained")||!state.contains("take"))return;
     // A late completion must not replace a newer take shown in this window.
     if(method!="automation.recording.start"&&retained()&&state.at("take")!=take())return;
+    if(method=="automation.recording.start"){
+      // A hidden review may see the entire next take through API boundaries,
+      // without a poll. Its previous Keep destination must not reappear after
+      // that newer take is discarded.
+      keptTarget_=Json();cancelKeptNavigation();
+    }
     if(state.at("take")!=take()){
       offset_=0;targetKey_.clear();targetChosen_=false;lossAcknowledged_=false;
     }
@@ -495,10 +516,11 @@ public:
   }
   ~ParameterRecordingWindow()override{if(window_)RemoveWindowSubclass(window_,notifications,notificationSubclass);if(controls_.contains(events))RemoveWindowSubclass(controls_.at(events),listNotifications,listSubclass);}
   void show(){const auto focused=GetFocus();NativeToolWindow::show();SetTimer(window_,7,250,nullptr);if(!owns(focused))SetFocus(controls_.at(retained()?target:scope));}
-  void hide()override{KillTimer(window_,7);cancelTargetSelection();NativeToolWindow::hide();}
+  void hide()override{KillTimer(window_,7);cancelTargetSelection();cancelKeptNavigation();NativeToolWindow::hide();}
   Json snapshot()const{return {{"document",document_},{"visible",visible()},{"pending",pending_},{"queuedAction",queuedAction_?Json(queuedAction_->method):Json()},{"take",state_},{"delivery",delivery_},
     {"queuedTarget",queuedTarget_?Json(queuedTarget_->key):Json()},
     {"queuedOffset",queuedTarget_?Json(queuedTarget_->offset):Json()},
+    {"queuedKept",queuedKept_?queuedKept_->target:Json()},
     {"target",targetKey_},{"offset",offset_},{"total",total_},{"events",rows_},{"inputDetails",utf8(field(inputDetails))},
     {"keptTarget",keptTarget_},{"canOpenKept",canOpenKept()},{"acknowledgeLoss",lossAcknowledged_},{"completion",completion_.snapshot()},{"error",error_}};}
 };

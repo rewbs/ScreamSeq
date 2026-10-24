@@ -1531,3 +1531,36 @@ building. Actual starts were23:57:22Z Windows,23:57:16Z Intel and23:57:09Z ARM.
 The next build is **no earlier than2026-10-24 00:57:22UTC**, after these jobs
 are terminal and a fresh inspection rules out later/concurrent checkpoints.
 No jobs were restarted; no foreground check is permitted for failed1071.
+
+### Recording-to-editing handoff continuation (source only)
+
+Source inspection found the same read-pumping gap in
+`ParameterRecordingWindow.hpp`: the enabled Song automation button after Keep
+was ignored during refresh. It now retains one read-only destination (stable
+plugin/parameter plus captured document/revision) until the owner is idle.
+Repeated clicks coalesce into that same navigation, never a musical write.
+Failed reads, Close, a new take or changed document/revision/kept target cannot
+open the old destination. Another editor owning the worker also defers the
+navigation rather than losing it. Native regressions in the existing
+workspace-plugin-search group cover busy/pumped reads, exactly one callback,
+stale rejection, read failure, Close and replacement-take boundaries.
+
+The confirmed external Record boundary now clears the preceding Keep destination
+even when the review is hidden. Previously, a whole external Record/Discard
+cycle between polls could leave the old destination visible on reopening. The
+new regression drives those existing confirmed-boundary callbacks, verifies
+the old button is unavailable and checks unchanged music and write count.
+Recording capture, original timestamps, history and restoration remain owned by
+the existing worker; no audio, codec, API or Mac product logic changes.
+
+The actual composing journey retains all exact target, music/history, cursor,
+epoch and save/reopen assertions. Its existing bounded waiter now observes the
+ready Keep destination and asynchronous opening. Activity keyboard-history
+checks likewise wait for the exact accepted song state before asserting its
+visible list, since the new command queue deliberately completes after a pumped
+read. No extra test groups or build targets are added: the next coherent local
+checkpoint still runs three native groups and two actual-app journeys, then
+fresh Computer Use. Include Keep → Song automation and original target retention
+in the foreground checklist. These additions are unbuilt; only Python syntax,
+UTF-8 and whitespace checks have run. Preserve1071 and338fa6f source/evidence;
+the prepared correction candidate will be advanced before any build starts.

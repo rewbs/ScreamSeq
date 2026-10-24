@@ -472,14 +472,16 @@ class PluginRecordingTests(unittest.TestCase):
             if sustain_seconds:
                 self.trace_recording_clock('after-keep', plugin, parameter)
         self.assertEqual(self.read('workspace.get')['status'], 'Plugin automation take kept')
-        kept = self.read('workspace.get')['parameterRecording']
+        kept = self.wait_for(lambda: self.read('workspace.get')['parameterRecording'],
+                             lambda s: not s['pending'] and s['canOpenKept'])
         self.assertEqual(kept['keptTarget'], dict(plugin=plugin, parameter=parameter))
         self.assertTrue(kept['canOpenKept'])
         before_navigation = self.doc()
         before_cursor = self.read('context.get')
         before_transport = self.read('transport.get')
         self.recording_button(9741)
-        lane = self.read('workspace.get')['absoluteAutomation']
+        lane = self.wait_for(lambda: self.read('workspace.get')['absoluteAutomation'],
+                             lambda s: s['visible'] and (s['plugin'], s['parameter']) == (plugin, parameter))
         self.assertTrue(lane['visible'])
         self.assertEqual((lane['plugin'], lane['parameter']), (plugin, parameter))
         self.assertGreater(lane['pointCount'], 0)

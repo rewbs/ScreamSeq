@@ -202,9 +202,43 @@ void applicationParameterRecordingReview() {
     const auto beforeNavigation=tool.snapshot();click(9741);
     restoreCheck(openedAutomation==Json::array({Json::array({plugin,1})})&&tool.snapshot()==beforeNavigation&&writes.size()==3&&songState(app)==music,
         "Opening kept automation replayed input, wrote music or changed recording review");
+    {
+      const auto beforeOpens=openedAutomation.size();const auto expected=tool.snapshot().at("keptTarget");
+      duringRead=[&]{click(9741);click(9741);restoreCheck(openedAutomation.size()==beforeOpens,
+        "Kept automation navigation reentered its background read");};
+      SendMessageW(window,WM_TIMER,7,0);
+      restoreCheck(tool.snapshot().at("queuedKept")==expected&&!IsWindowEnabled(control(9741)),
+        "Background review lost the enabled Song automation click");
+      available=false;SendMessageW(window,WM_TIMER,10,0);available=true;
+      restoreCheck(openedAutomation.size()==beforeOpens,"Kept navigation bypassed another editor's worker read");
+      SendMessageW(window,WM_TIMER,10,0);SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+1&&openedAutomation.back()==Json::array({plugin,1})&&
+        tool.snapshot().at("queuedKept").is_null()&&IsWindowEnabled(control(9741))&&writes.size()==3&&songState(app)==music,
+        "Deferred kept navigation was lost, repeated, retargeted or changed music");
+      available=false;click(9741);
+      restoreCheck(tool.snapshot().at("queuedKept")==expected&&openedAutomation.size()==beforeOpens+1,
+        "Idle kept navigation was dropped while another editor owned the worker");
+      available=true;SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+2,"Idle queued kept navigation did not finish");
+      duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);
+      contextRevision="changed-before-kept-navigation";SendMessageW(window,WM_TIMER,10,0);contextRevision.clear();
+      restoreCheck(openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Kept navigation crossed a changed song revision");click(9725);
+      duringRead=[&]{click(9741);throw std::runtime_error("Owned navigation refresh failure");};
+      SendMessageW(window,WM_TIMER,7,0);SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Failed recording refresh authorized its queued navigation");click(9725);
+      duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);tool.hide();SendMessageW(window,WM_TIMER,10,0);
+      restoreCheck(!tool.visible()&&openedAutomation.size()==beforeOpens+2&&tool.snapshot().at("queuedKept").is_null(),
+        "Closing review retained a navigation that reopened another editor");tool.show();
+    }
+    duringRead=[&]{click(9741);};SendMessageW(window,WM_TIMER,7,0);const auto beforeReplacementOpens=openedAutomation.size();
     take={{"retained",true},{"capturing",true},{"take","failed-clock-take"},{"compatible",false},{"completed",false},
       {"transportPlaying",true},{"discardable",false},{"targets",Json::array()},{"sources",Json::array()}};
     SendMessageW(window,WM_TIMER,7,0);
+    SendMessageW(window,WM_TIMER,10,0);
+    restoreCheck(openedAutomation.size()==beforeReplacementOpens&&tool.snapshot().at("queuedKept").is_null(),
+        "A replacement take opened the preceding take's queued automation destination");
     restoreCheck(tool.snapshot().at("keptTarget").is_null()&&!IsWindowEnabled(control(9741)),
         "A new external take retained a previous take's navigation shortcut");
     restoreCheck(!IsWindowEnabled(control(9723))&&!IsWindowEnabled(control(9724))&&IsWindowEnabled(control(9740))&&IsWindowVisible(control(9740))&&
@@ -471,6 +505,16 @@ void applicationParameterRecordingReview() {
     const auto finalWrites=writes.size();click(9741);
     restoreCheck(openedAutomation.back()==Json::array({plugin,2})&&writes.size()==finalWrites&&songState(app)==music,
       "Selected kept automation navigation changed music or used a different target");
+    available=false;click(9741);available=true;const auto beforeExternalOpens=openedAutomation.size();
+    auto externalNext=Json{{"take","next-external-take"},{"retained",true},{"capturing",true}};
+    tool.observeBoundary(app.documentId,"automation.recording.start",externalNext);
+    restoreCheck(tool.snapshot().at("keptTarget").is_null()&&tool.snapshot().at("queuedKept").is_null(),
+      "External Record retained an earlier Keep destination or queued navigation");
+    tool.hide();externalNext["retained"]=false;externalNext["capturing"]=false;
+    tool.observeBoundary(app.documentId,"automation.recording.discard",externalNext);take=externalNext;tool.show();click(9725);click(9741);
+    restoreCheck(openedAutomation.size()==beforeExternalOpens&&!IsWindowEnabled(control(9741))&&
+      tool.snapshot().at("keptTarget").is_null()&&writes.size()==finalWrites&&songState(app)==music,
+      "Reopened review offered old kept music after a newer external take was discarded");
     take={{"take","completed-recovery"},{"retained",true},{"capturing",false},{"completed",true},
       {"compatible",false},{"transportPlaying",true},{"targets",Json::array()}, {"sources",Json::array()}};
     click(9725);click(9742);
