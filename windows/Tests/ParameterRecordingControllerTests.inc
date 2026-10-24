@@ -144,12 +144,24 @@ void parameterRecordingControllerTests(const std::filesystem::path &scanner,cons
   need(recorded!=baselineAutomation&&call(c,"plugin.state.get",{{"plugin",id}})==baseline,
     "Worker parameter commit lost points or changed opaque manual state");
   const auto keptRevision=c.view()->session.revision;
+  const auto refusedKeptDiscard=[&] {
+    bool refused=false;
+    try{invoke(c,"automation.recording.discard",{{"take",token}});}
+    catch(const Api::ApiError &e){refused=e.code==-32002;}
+    const auto retained=call(c,"automation.recording.get",Json::object());
+    need(refused&&retained.at("retained")==true&&retained.at("completed")==true&&
+      c.view()->session.revision==keptRevision&&call(c,"automation.get",Json::object())==recorded&&
+      call(c,"plugin.state.get",{{"plugin",id}})==baseline,
+      "Discard bypassed completed-take recovery or changed retained input, music or history");
+  };
+  refusedKeptDiscard();
   rejected([&]{invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});});
   active=false;playback->chain().applyPending();
   take=invoke(c,"automation.recording.commit",{{"take",token},{"restoreSavedState",true}});
   need(take.at("retained")==true&&take.at("changed")==false&&take.contains("restorationError")&&
     c.view()->session.revision==keptRevision,"Explicit recovery replaced an open editor or changed kept history");
   invoke(c,"plugin.editor.close",{{"slot",0}});
+  refusedKeptDiscard();
   take=invoke(c,"automation.recording.commit",{{"take",token}});
   need(take.at("retained")==true&&take.at("changed")==false,
     "Ordinary Finish restoration silently abandoned post-Stop input after closing its editor");

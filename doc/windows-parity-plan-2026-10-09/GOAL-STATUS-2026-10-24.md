@@ -1,97 +1,69 @@
 # Goal status — 24 October 2026
 
-Snapshot: 14:43 Pacific / 21:43 UTC. This report uses current Git state,
-qualification receipts and a fresh read of CI and PR7. It supersedes older
-status snapshots for these facts. No build, test run or product edit was made
-to prepare this report.
+**22:12 UTC follow-up:** final review subsequently found a Windows API recovery
+guard missing for Discard of an already-kept take. The existing executable
+reproduced the missing refusal; a focused correction and regressions are now
+source-only. Release acceptance therefore also requires that correction's next
+eligible build. See [finding and evidence](KEPT-TAKE-DISCARD-2026-10-24.md).
 
-**The three priority streams are substantially implemented and functionally
-tested. The goal remains incomplete: final corrections, cross-platform
-acceptance, integration and production packaging are outstanding.**
+Snapshot: 15:07 Pacific / 22:07 UTC. Based on current Git state, qualification receipts and fresh GitHub PR/CI reads. This supersedes earlier status snapshots. No build, test, product edit, push or merge was performed to prepare this report.
 
-The active goal is to finish navigation/composing workspace, mixer/graph/plugin
-editing and the precise-note timeline, then converge on a production-ready
-build without unrelated refactors. The original 117-row macOS parity inventory
-is broader; completing this release scope will not establish full macOS parity.
-A percentage would obscure the distinction between implementation, verification
-and delivery, so this report uses explicit completion gates.
+**The three priority streams are implemented and have bounded functional acceptance. The goal remains incomplete: final cross-platform acceptance, review, main integration and production packaging remain.**
 
-## State of the requested workflows
+The active goal is to complete navigation/composing workspace, mixer/graph/plugin editing and the precise-note timeline without unrelated engineering, then deliver a production-ready build. The original 117-row macOS parity programme is broader. Shipping this scope will not establish complete macOS parity. A percentage would obscure the distinction between implementation, verification and delivery.
 
-| Stream | Implemented and observed | Remaining limits or work |
+## Requested workflows
+
+| Stream | Implemented and supported by evidence | Remaining boundary |
 | --- | --- | --- |
-| Navigation and composing workspace | Pattern-centred workspace; graph beside Pattern with Float/Dock; contextual hideable sidebar; clearer panel/window actions; retained inspectors. Fresh isolated UI checks covered navigation, maximize/restore, floating/docking and hiding context. Native/app checks cover placement and focus. | Envelope bank initially opens partly off-screen from a right-hand instrument panel. The focused correction and placement assertions are committed but unbuilt. Final-candidate visible placement/focus check remains. Exhaustive DPI, multi-monitor and accessibility qualification is not established. |
-| Mixer, graph and plugin editing | Gain, balance, pre-balance and width apply during playback. Nodes can be added/removed; sockets can be connected; selected connectors can be deleted with Backspace. Parameter sliders, ten-row pages and search work in the tested workflows. Graph tests preserve neighboring audio/modulation routes. | Final corrected binary needs a short visible composing check. Floating-field typing has a Computer Use targeting limitation, so that continuity is not claimed from the helper. No broad third-party plugin certification. |
-| Precise-note timeline | Double-click insertion; selected-hit Backspace; advancing playback cursor; immediate field/drag edits without Write note or restarting playback. Tested typing, text Backspace, Save caret, Tab/Shift+Tab, history and exact reopen. Playback snapshots retained the same epoch while frames advanced. | No outstanding functional failure in these tested journeys. Preserve them through the final correction; reuse unchanged evidence. Screenshots cannot establish absence of temporal flicker. |
-| Plugin recording and full composing journeys | Native Record/Stop/Keep/Discard, original-time capture, conflict refusal, recovery, unified history and persistence. Complete journeys combine edits across musical domains, recording, Undo/Redo, export and reopen. The ARM64 sample-plus-VST3 layering/recording journey has now passed. | Equivalent required x64 layering case still needs its matching x64 fixture. Opaque recovery retains stopped/closed-editor safeguards. Instrument property changes intentionally stop playback under the current source/test contract; this remains an ergonomics limitation, separate from live precise-note editing. |
-| Shared behavior and compatibility | Musical operations, history, timing, routing and persistence remain shared; UI and device integration remain native. Earlier reciprocal edited-project exchanges passed across both Mac architectures and Windows. | Fresh current-source Mac ARM exchange passed; its Windows return leg is still outstanding. Final platform acceptance must preserve identities, plugin state, metadata, project compatibility and OpenMPT attribution. |
+| Navigation and composing workspace | Pattern-centred connected workspace; directly reachable adjacent graph with Float/Dock; contextual hideable sidebar; clearer panel/window actions; retained inspectors. Fresh 200% DPI Computer Use covered compact/connected layouts, maximize/restore, navigation and instrument-to-envelope-bank handoff. The bank now opens entirely on-screen and retains its manually chosen position. | Final platform acceptance and release review. Exhaustive multi-monitor/DPI/accessibility coverage is not established. Floating-bank typing continuity cannot be claimed from the Main-targeted Computer Use helper. |
+| Mixer, graph and plugin editing | Live gain, balance, pre-balance and width; node removal and connection editing; connector Backspace; parameter sliders, up to ten editable rows, and search; instrument plugin assignment and sample/plugin layering. Tests cover unrelated route preservation, history and persistence. Fresh final-candidate smoke covered graph framing and live mixer edits; unchanged detailed wiring/parameter evidence is reused. | One mandatory x64 layered-instrument recording case needs its matching provider artifact. No broad third-party plugin certification or sustained presentation guarantee. |
+| Precise-note timeline | Double-click insertion; selected-hit Backspace; separate text Backspace; advancing playback cursor; immediate field/drag edits without Write note or restarting playback. Automated journeys cover exact history/reopen and unrelated music. Fresh UI checks covered insertion, deletion, typing, Save caret and Tab/Shift+Tab. Four snapshots retained playback epoch 3 while frames advanced. | No outstanding functional failure in tested journeys. Final integrated-source acceptance remains. These checks do not establish every input/layout combination or absence of temporal flicker. |
+| Supporting recording/composing journeys | Native Record/Stop/Keep/Discard, original-time capture, conflict refusal, retained recovery, unified history and persistence. Journeys combine note edits, recording, Undo/Redo, export and reopen. The mandatory sample-plus-VST3 journey passed on ARM64. | Equivalent x64 case pending. Opaque recovery retains stopped/closed-editor safeguards. Instrument property changes still stop playback under the current contract, a separate limitation from live precise-note editing. |
+| Shared behavior and compatibility | Editing, validation, history, timing, routing and persistence remain shared; UI/audio integration remains native. Latest Mac ARM save and Windows return passed extended reciprocal fixtures, including opaque state, composing history and bank data. | Reuse is justified because codec/shared/Mac inputs are unchanged by the final placement correction. Stable identities, plugin state, compatibility and OpenMPT attribution remain mandatory. |
 
-## What the evidence actually establishes
+## Verification status
 
-Latest built product source: `946c61af7a3dde87c87500a9837cdc81d69292d9`.
+Latest built product source: `82834c95bd7a06fc8f9ad62ca3cf1a1ac1d0bded`.
+ARM64 executable SHA256: `e4500fdb8bbb00939fc0be0533c0f32bbfdcd0c3d0d138c8fc31c6b4b4f5acbf`.
 
-| Evidence | Result and boundary |
+| Gate | Current result |
 | --- | --- |
-| Local Windows ARM64 Release | Compiled once at 20:49–20:53 UTC. Five targeted native groups and eleven actual-app cases passed. A subsequently completed mandatory sample/plugin layering journey also passed, giving twelve actual-app cases across these local receipts. |
-| Fresh Computer Use on that binary | At 200% DPI, exercised navigation, graph editing, parameter sliders/pages/search, mixer edits during playback and precise-note editing/Save/focus. Found the bank-placement defect. Foreground receipt remains `needs-correction`, not production-qualified. Disposable QA exited normally; musician session and system audio defaults were preserved. |
-| Mac ARM CI | Passed: 135 CTests plus native interface and socket/typed gates. |
-| Mac Intel CI | Compilation passed at 21:41 UTC; job still running at the report snapshot. Pending is not passing. |
-| Windows x64 CI | Compilation, 162 portable/worker tests and 53 native groups passed. The actual-app suite failed: 25 reported failures, consisting of 22 distinct live-startup failures and three secondary teardown failures, plus one optional skip. The runner reported no audio devices. Overall CI remains failed. |
-| Replay of the exact x64 CI executable with a real local audio endpoint | All 21 replayed affected cases passed without rebuilding. This ran under Windows x64 emulation on the ARM64 host. It is bounded real-device evidence, not a change to the failed CI result. The remaining mandatory layered VST3 case could not run because the artifact omitted its x64 fixture; it is uncovered, not passed or waived. |
-| Current-source reciprocal exchange | Retained Mac ARM run 40135099003 passed without rebuilding. Windows return validation is not yet recorded. |
+| Local final-candidate ARM64 Release | Passed once, 21:51–21:53 UTC. Changed-surface native automatic-edit group and actual-app instrument/bank handoff passed. Source and executable hashes remained unchanged. |
+| Unchanged local coverage | Reuses preceding source 946: five native groups and twelve actual-app cases, including layered VST3 composing/recording. Selective reuse, not a full rerun on 828. |
+| Fresh foreground Computer Use | Passed bounded functional scope on 828: bank placement/retention, connected navigation, precise-note gestures and focus, graph framing and live mixer controls. Disposable process exited normally. Production qualification remains separate. |
+| Current Mac ARM and Intel CI | Both still compiling at the fresh 22:06 UTC read. Prior 946 ARM passed 135 CTests plus interface/socket gates. Prior Intel compiled and passed several gates but was cancelled at the former 60-minute job boundary. Current overall allowance is 90 minutes; individual assertions/deadlines are unchanged. |
+| Current Windows x64 CI | Still compiling at the fresh read. Prior 946 compiled and passed 162 portable/worker tests and 53 native groups, but its app suite failed on a runner reporting no audio devices: 22 distinct live-startup failures, three secondary teardown failures and one optional skip. That run remains failed. |
+| Exact prior x64 artifact with real endpoint | 21 affected cases passed locally under x64 emulation on ARM64, without rebuilding. The mandatory layered VST3 case was not executed because the artifact omitted its provider. Current CI retains the matching provider for this outstanding check; no case is waived. |
+| Reciprocal save/reopen | Mac ARM save and Windows return passed on retained 946 binaries: fixtures 01–05, rendered/imported files, opaque state, composing history and envelope bank. Relevant inputs are unchanged in 828. |
+| Final review | In progress, with no recorded finding so far. Neither final acceptance nor an independent external review. |
+| Main integration and production package | Not done. Latest qualification candidate has not been delivered as the completed production package. |
 
-Evidence files, relative to the repository:
+Current runs: [Mac ARM/Intel](https://github.com/rewbs/ScreamSeq/actions/runs/40136080736) and [Windows x64](https://github.com/rewbs/ScreamSeq/actions/runs/40136080789). Reciprocal evidence: [Mac save](https://github.com/rewbs/ScreamSeq/actions/runs/40135099003) and [Windows return](https://github.com/rewbs/ScreamSeq/actions/runs/40135577303).
 
-- `bin/mac-gesture-20261022/recording-root/qualified-checks.json`
-- `bin/mac-gesture-20261022/recording-root/closure-checks.json`
-- `bin/mac-gesture-20261022/recording-root/layered-live/checks.json`
-- `bin/mac-gesture-20261022/recording-root/foreground-check.json`
-- `bin/mac-gesture-20261022/recording-root/ci-x64/local-live-checks.json`
-- `bin/mac-gesture-20261022/recording-root/ci-checkpoint.json`
+## Known limits and release risks
 
-CI: [platform run](https://github.com/rewbs/ScreamSeq/actions/runs/40131518375),
-[Windows run](https://github.com/rewbs/ScreamSeq/actions/runs/40131518388),
-[retained Mac exchange](https://github.com/rewbs/ScreamSeq/actions/runs/40135099003).
+The original fifteen-effect fixture still exceeds audio deadlines. Latest foreground QA lasted 232.5 seconds at 48 kHz / 480 frames and recorded 37 overruns, zero starvation indicators, zero device errors and no processor fault. It is not a sustained realtime pass. A matched earlier comparison reproduced this overload class on an integrated main ancestor: 14 overruns versus four in candidate 946 over 60 seconds. That establishes a pre-existing limitation, not a speedup or universal absence of regressions. Retain and disclose the failed timing evidence without expanding closure into an unrelated DSP rewrite. Still screenshots do not qualify temporal flicker or sustained presentation.
 
-## Audio and presentation limits
-
-The dense fifteen-effect fixture still produces measured deadline overruns.
-Fresh foreground QA recorded 36 overruns, zero starvation and zero device errors
-at 48 kHz / 480 frames. This is not a sustained timing pass.
-
-A matched 60-second comparison on the original fixture found 14 overruns in a
-previously integrated main ancestor and four in candidate 946, with no starvation
-or device errors in either. Relevant audio/render sources were checked against
-main. This establishes that this class of overload predates the batch; it does
-not prove a speedup or exclude every regression. A cabinet-isolation diagnostic
-also reduced callback load but cannot replace acceptance on the original song.
-
-The appropriate scope is to preserve continuous playback and live-edit/history
-correctness, disclose the existing dense-effects limit and avoid an unrelated
-DSP rewrite. Broad sustained realtime and temporal-flicker qualification remain
-unestablished. No failed assertion or threshold has been relaxed.
+The accumulated PR is large: 201 commits, 234 changed files, 22,342 additions and 922 deletions. Review is material remaining work. Compilation and mergeability alone are insufficient. Current CI may expose further defects, so one more build is not a defensible completion promise.
 
 ## Repository and delivery state
 
-- Primary branch: `codex/mac-gesture-intake`; local HEAD `c693e696dc787960d82d6eef7c2de5edb590c688`, backed up on `codex/mac-gesture-next-checkpoint`.
-- Built/PR head: `946c61af7a3dde87c87500a9837cdc81d69292d9`.
-- Main: `0fe8f34008fe6517d7598affc31a4948a2ab14b8`, also confirmed by the fresh PR read.
-- [PR7](https://github.com/rewbs/ScreamSeq/pull/7) is draft, open, mergeable and unmerged. It contains a substantial accumulated change: 195 commits and 229 changed files. Mergeability is not acceptance.
-- Committed since the built candidate: bank work-area placement correction and regression assertions; retention of the existing x64 VST3 fixture in CI artifacts; supporting evidence documentation.
-- One pre-existing uncommitted workflow edit increases the Intel job's overall allowance from 60 to 90 minutes. Individual test deadlines and assertions stay unchanged. This has not been validated by a new CI run.
-- No production package for the final corrected source has been delivered. The current ARM64 Release is a qualification candidate, not the completed release.
-- Prepared checkpoint waiters were stopped before building to combine the remaining small changes. No replacement build was started for this report. Earliest next checkpoint is 21:50:05 UTC, additionally subject to current jobs completing and no later build starts.
+- Main: `0fe8f34008fe6517d7598affc31a4948a2ab14b8`.
+- Built/PR source: `82834c95bd7a06fc8f9ad62ca3cf1a1ac1d0bded` on temporary branch `codex/mac-gesture-intake`.
+- Local HEAD: `abf3f01fd41fbb9756adbad670f4b2c2d4659f13`, a documentation-only continuation backed up on `codex/mac-gesture-next-checkpoint`. Working tree was clean before this report update.
+- [PR7](https://github.com/rewbs/ScreamSeq/pull/7) is open, draft, mergeable and unmerged. Its description reflects the current candidate and limitations.
+- Earlier usable package: `C:/Users/P14/Downloads/ScreamSeq-Windows-ARM64-composing-9c5c6ebb1/ScreamSeq.exe`. It predates the final recording/export/instrument/bank corrections and is not the completed release.
+- Production packaging is prepared but gated on platform, x64 live-case, reciprocal, review and foreground acceptance. No final package receipt exists.
 
-## Shortest path to completion
+## Shortest remaining path
 
-1. **Finish one cohesive correction batch:** bank placement plus the necessary CI artifact/job-budget fixes. Freeze one source and use one eligible coordinated build checkpoint. No further feature expansion.
-2. **Validate the changed surface:** automatic-edit native group, exact instrument-to-bank handoff and fresh Computer Use for right-dock bank placement, retained position/draft and keyboard focus. Run a short composing smoke; reuse valid unchanged navigation, graph, mixer and precise-note evidence.
-3. **Close platform and compatibility gates:** obtain the final Intel result, execute the missing x64 layered-instrument journey with the matching fixture, and finish reciprocal save/reopen return validation. Retain original CI failures and explain any environment-specific evidence substitution explicitly.
-4. **Review and integrate on main:** review the accumulated PR and final evidence, resolve genuine failures, then merge with both native platforms viable. Coordinate merge-triggered CI within the hourly cadence.
-5. **Deliver the exact qualified production package:** ARM64 Release with scanner, runtime, notices, source provenance and verified copied hashes, plus the executable path and honest remaining limits.
+1. Finish focused recording/recovery review while existing CI runs finish; add no unrelated features.
+2. Inspect final CI results. Verify the exact x64 app/provider artifact, then execute the missing mandatory layered-instrument journey with a real endpoint. Address genuine failures without weakening assertions or hiding environment failures.
+3. Record final platform and compatibility acceptance, reusing only unchanged evidence. Reciprocal exchange and the bank correction's foreground checks are already complete.
+4. Integrate reviewed source onto shared main, coordinating merge-triggered CI with the hourly cadence. Both native platforms must remain viable.
+5. Package the exact qualified ARM64 Release with scanner, runtime, notices, source provenance and verified copied hashes; deliver its executable path and known limitations.
 
-The remaining work is principally release validation and integration, with one
-known focused UI correction already written. It is too early to promise one more
-build will finish everything: Intel acceptance and the missing x64 case can still
-expose failures. No new product-design decision is currently required from the
-user. Full parity beyond these three streams remains a separate backlog.
+No new build may start before 22:52:17 UTC / 15:52:17 Pacific under the currently recorded checkpoint; later starts and active jobs must be rechecked. This report started no build or test. No product-design decision currently needs user input.
+
+Evidence anchors: `bin/mac-gesture-20261022/bank-closure/` contains `build.json`, `checks.json`, `foreground-check.json`, `review-progress.json` and the CI snapshot. `recording-root/` contains `qualified-checks.json`, `closure-checks.json`, `layered-live/checks.json`, `ci-x64/local-live-checks.json`, `reciprocal-exchange.json` and `main-ancestor-comparison/receipt.json`. The broader scope remains in [the original plan](README.md) and [parity matrix](parity-matrix.csv); this report does not mark that inventory complete.

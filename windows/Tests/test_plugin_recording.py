@@ -154,6 +154,70 @@ class PluginRecordingTests(unittest.TestCase):
         self.record_keep_history_reopen_and_discard(plugin, project)
 
     @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
+    def test_kept_take_discard_cannot_bypass_saved_state_recovery(self):
+        self.assertTrue(os.environ.get('SCREAMSEQ_TEST_PROVIDER_CACHE'), 'Native VST3 fixture cache is required')
+        descriptor = next(p for p in self.read('plugin.discover', format='VST3')
+                          if p['classID'] == '5245534F4E414E434546464543540001')
+        self.write('plugin.add', descriptor=descriptor)
+        plugin = self.doc()['data']['nativePlugins'][0]['instanceID']
+        project = self.folder / 'kept-recovery-source.screamseq'
+        self.write('document.save', path=str(project))
+        self.launch(project)
+        self.write('plugin.editor.open', slot=0)
+        # Opening this fixture emits a real native gesture. Save that preceding
+        # manual edit before capturing the take's accepted baseline.
+        self.read('plugin.state.get', plugin=plugin)
+        self.idle()
+        baseline = self.read('plugin.state.get', plugin=plugin)
+        original = self.read('automation.get')
+        take = self.write('automation.recording.start', plugins=[plugin])
+        timestamp = self.take()['hostTime']
+        captured = self.write('automation.recording.capture', take=take['take'], plugin=plugin,
+                              parameter=7, value=.25, timestamp=timestamp)
+        self.assertTrue(captured['accepted'])
+        self.wait_for(self.take, lambda s: s['eventCount'] == 1 and all(t['unmapped'] == 0 for t in s['targets']))
+        self.write('automation.recording.stop', take=take['take'])
+        owner = self.window('ScreamSeq.VST3.PrivateEditor')
+        sliders = []
+        private_desktop.user.GetDlgCtrlID.argtypes = [wintypes.HWND]
+        private_desktop.user.GetParent.argtypes = [wintypes.HWND]
+        private_desktop.user.GetParent.restype = wintypes.HWND
+        @private_desktop.callback
+        def child(hwnd, _):
+            if private_desktop.user.GetDlgCtrlID(hwnd) == 7001:
+                sliders.append(hwnd)
+            return True
+        private_desktop.user.EnumChildWindows(owner, child, 0)
+        self.assertEqual(len(sliders), 1)
+        slider = sliders[0]
+        self.desktop.send(slider, 0x405, 1, 875)  # TBM_SETPOS.
+        self.desktop.send(private_desktop.user.GetParent(slider), 0x114, 5, slider)
+        kept = self.write('automation.recording.commit', take=take['take'])
+        self.assertTrue(kept['completed'] and kept['retained'] and kept['changed'], kept)
+        self.assertIn('restorationError', kept)
+        points = self.read('automation.get')
+        self.assertNotEqual(points, original)
+        revision = self.doc()['revision']
+        for stopped in (False, True):
+            if stopped:
+                self.write('transport.stop')
+                self.write('plugin.editor.close', slot=0)
+            with self.assertRaises(ApiError, msg=f'Discard must reject an already-kept take (stopped={stopped})') as raised:
+                self.write('automation.recording.discard', take=take['take'])
+            self.assertEqual(raised.exception.code, -32002)
+            self.assertTrue(self.take()['completed'] and self.take()['retained'])
+            self.assertEqual(self.doc()['revision'], revision)
+            self.assertEqual(self.read('automation.get'), points)
+            self.assertEqual(self.read('plugin.state.get', plugin=plugin), baseline)
+        restored = self.write('automation.recording.commit', take=take['take'], restoreSavedState=True)
+        self.assertFalse(restored['retained'] or restored['changed'])
+        self.assertEqual(self.doc()['revision'], revision)
+        self.write('history.undo')
+        self.assertEqual(self.read('automation.get'), original)
+        self.write('history.redo')
+        self.assertEqual(self.read('automation.get'), points)
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit owned silent WASAPI qualification')
     def test_sustained_native_recording_keeps_clock_and_history(self):
         plugin = self.add_gain()
         project = self.folder / 'sustained-recording-source.screamseq'

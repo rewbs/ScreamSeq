@@ -157,6 +157,8 @@ Json DocumentController::parameterRecordingOperation(const std::string &method,c
   auto &take=*parameterRecording_->take;
   const bool loss=commit&&flag(params,"acknowledgeLoss");
   const bool restoreSaved=commit&&flag(params,"restoreSavedState");
+  if(discard&&take.completed())
+    throw Api::ApiError(-32002,"This take is already kept; retry Commit to finish native restoration, then use Undo to change the music");
   if(restoreSaved&&(!take.completed()||playbackFeedback().playing||playbackFeedback().audioActive))
     throw Api::ApiError(-32002,"Restore saved plugin state requires an already-kept take and stopped playback");
   // A changed clock/context may prevent a normal fixed Stop cut. Explicit

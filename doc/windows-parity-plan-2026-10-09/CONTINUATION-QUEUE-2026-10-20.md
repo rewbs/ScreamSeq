@@ -6,6 +6,24 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**24 October 22:12 UTC — review correction awaiting the next checkpoint:**
+Windows accepts `automation.recording.discard` for an already-kept retained take,
+unlike Mac. With closed editors this can select the abandon-later-input branch
+without explicit stopped saved-state recovery. A new actual-app regression on
+unchanged828 confirmed the missing refusal while playing (3.667s; failed receipt
+under `bank-closure/kept-discard-baseline/`). Its subtest also produced a secondary
+assertion-context error; that test-reporting defect is corrected. Product fix is
+the same two-line completed-take rejection as Mac. Native worker and actual-app
+assertions cover active and stopped/closed states, retained input, exact accepted
+music/baseline/history, explicit recovery and one Undo/Redo. CI already registers
+the entire PluginRecordingTests class. See `KEPT-TAKE-DISCARD-2026-10-24.md`.
+
+Do not package828 or call final review passed. Let its current CI finish; reuse
+only unchanged Mac/shared evidence. New Windows source needs one eligible build
+no earlier than22:52:17UTC, also subject to later starts and terminal preceding
+jobs. No extra build has run. Scope stays correction, acceptance, integration
+and packaging, without adding another feature stream.
+
 **24 October 22:00 UTC — current candidate:** Frozen82834c95bd7a06fc8f9ad62ca3cf1a1ac1d0bded
 is now PR7's head and built once in `bank-closure/`. Local build21:51:47–21:53:57
 passed; executableSHA256e4500fdb8bbb00939fc0be0533c0f32bbfdcd0c3d0d138c8fc31c6b4b4f5acbf.
