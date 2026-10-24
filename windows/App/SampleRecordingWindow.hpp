@@ -47,15 +47,6 @@ private:
   bool inputAvailable()const{const auto count=inputChannels();return count<=64&&!selectedDevice_.empty()&&input_.first<count&&input_.count<=count-input_.first;}
   void require(bool ok,const char *why)const{if(!ok)throw std::runtime_error(why);}
   void status(std::wstring value){status_=std::move(value);set(statusLabel,status_);requestPaint();}
-  HWND tabEntry(bool reverse=false)const{
-    // All recorder controls are direct children. Choose an actual reachable
-    // endpoint instead of passing a null starting HWND to GetNextDlgTabItem.
-    auto control=GetWindow(window_,GW_CHILD);
-    if(reverse&&control)control=GetWindow(control,GW_HWNDLAST);
-    for(;control;control=GetWindow(control,reverse?GW_HWNDPREV:GW_HWNDNEXT))
-      if(IsWindowVisible(control)&&IsWindowEnabled(control)&&(GetWindowLongPtrW(control,GWL_STYLE)&WS_TABSTOP))return control;
-    return nullptr;
-  }
   void focusEntry(){
     // A newly opened native tool can initially focus its root. Enter setup
     // without taking focus back from a child or another owner during a read.
@@ -249,8 +240,8 @@ private:
     if(id==acceptState){acknowledgeKeep();return;}
     if(id==reviewTake)reviewLifecycle();else if(id==refresh){requireResolved();loadDevices();}else if(id==record)begin();else if(id==stop)end();else if(id==keep)commit();else if(id==discard)discardTake();else if(id==close)hide();
   }
-  bool key(WPARAM value,bool,bool shift)override{
-    if(value==VK_TAB&&GetFocus()==window_){if(const auto next=tabEntry(shift))SetFocus(next);return true;}
+  bool key(WPARAM value,bool ctrl,bool shift)override{
+    if(value==VK_TAB&&!ctrl&&GetFocus()==window_){if(const auto next=tabEntry(shift))SetFocus(next);return true;}
     if(value==VK_ESCAPE){hide();return true;}
     if(value==VK_RETURN){wchar_t type[32]{};GetClassNameW(GetFocus(),type,32);if(_wcsicmp(type,L"Button")==0&&IsWindowEnabled(GetFocus()))action(GetDlgCtrlID(GetFocus()),BN_CLICKED);return true;}
     return false;

@@ -412,7 +412,8 @@ private:
     if(id==saveCopy){pending_=true;try{callbacks_.saveRecovery();pending_=false;error_="Recovery copy saved";refresh();}catch(...){pending_=false;throw;}return;}
     if(id==start||id==stop||id==keep||id==discard||id==stopPlayback||id==restoreSaved){queueAction(id);drainAction();}
   }
-  bool key(WPARAM key,bool ctrl,bool)override {
+  bool key(WPARAM key,bool ctrl,bool shift)override {
+    if(key==VK_TAB&&!ctrl&&GetFocus()==window_){if(const auto next=tabEntry(shift))SetFocus(next);return true;}
     if(key==VK_ESCAPE){hide();return true;}if(ctrl&&key=='R'){action(review,BN_CLICKED);return true;}
     if(ctrl&&(key==VK_PRIOR||key==VK_NEXT)){action(key==VK_PRIOR?previous:next,BN_CLICKED);return true;}
     if(ctrl&&key=='A'&&GetFocus()==controls_.at(inputDetails)){NativeInputGate::present(controls_.at(inputDetails),EM_SETSEL,0,-1);return true;}

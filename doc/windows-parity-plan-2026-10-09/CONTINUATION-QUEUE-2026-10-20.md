@@ -8,6 +8,25 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+**24 October 08:26 UTC source continuation:** The impossible dry cross-block
+equality assertion is explicitly corrected against the independently verified
+stock contract: exact per-partition PCM remains mandatory, equal duration is
+asserted, differences remain diagnostic, no epsilon or DSP change. The sample
+recorder root helper is shared with plugin recording, whose idle/capturing root
+Tab/Shift+Tab now has exact state/history preservation assertions. Unbuilt.
+Next local groups: `audio-export-stream`, `native-tool-window-tests`,
+`workspace-plugin-search-tests`; fresh sample-recorder and plugin-recording app
+journeys and foreground checks remain required. Reuse066's passed live-preview
+export test and unchanged prior musical/core/codec evidence only within scope.
+
+A60-second isolated opt-in profile on066 localized all5 overruns to engine
+rendering (including routed/instrument processing), not control preparation or
+timing publication. No specific DSP culprit or performance pass is established.
+See the export report and `recording-observation/stage-profile-corrected/`.
+Both native workflows were live at08:24. No build before09:05:43 UTC or while
+current CI is active; inspect actual later starts first. The old one-shot
+reminder was removed; the overall parity goal remains active.
+
 **24 October 08:13 UTC:** Frozen066 built once and is now PR7's head. Both
 actual-app composing/recording cases and live-preview export passed. Native
 recorder root entry and dry cross-block export equality failed; retain all

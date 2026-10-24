@@ -2,7 +2,7 @@
 
 This is a chronological implementation/evidence record. For the current frozen
 source and next gate, use [the continuation queue](CONTINUATION-QUEUE-2026-10-20.md)
-and `audio-export-followup/freeze.json`. The initial source-only statements below
+and the latest named checkpoint's freeze/receipts. The initial source-only statements below
 describe discovery, not the latest test results. The
 [06:01 checkpoint](#24-october-0601-checkpoint-and-correction) retains both failed
 qualification and diagnostic passes. Matrix rows41,42,58 now reflect those
@@ -633,3 +633,68 @@ next checkpoint to **09:05:43 UTC**, subject to any later actual starts and all
 current jobs becoming terminal. No package or main merge is permitted from this
 candidate. The next checkpoint must exercise the root-entry correction and the
 previously unreached polling assertions, plus fresh bounded foreground evidence.
+
+## Source continuation — correct the contradictory dry-export test
+
+The independent upstream result resolves the previous open question in favor of
+the repository's existing stock-compatibility requirement. The optional
+`blockFrames` argument explicitly selects the engine render partition, not an
+output-file chunk size; both production callers use512. Changing the engine or
+silently canonicalizing that argument would change the behavior being tested.
+
+`AudioExportStreamTests.cpp` now names the case `dry stock-compatible partitions`.
+It retains exact per-sample equality with the independently constructed core at
+each requested partition, exact WAV sizes, no padding, and the cross-partition
+diagnostic differences. It adds explicit equal duration across partitions. It
+removes the erroneous additional requirement that the two different stock
+outputs equal each other. This is an explicit correction to an impossible test
+expectation supported by the separately built upstream oracle; no epsilon is
+introduced and no product/DSP behavior changes. The recorded-gain partition,
+precise-note exactness, recorded-tail, failures and preservation assertions are
+unchanged. The public C++ header documents the existing render-partition contract.
+
+Keep the earlier failed receipts as failures. This changed test is unbuilt and
+must execute on all three native architectures at the next coordinated
+checkpoint. The independent90-case oracle evidence can be reused while renderer,
+retained engine, fixture generation, compiler inputs and oracle harness remain
+unchanged; a changed engine path requires fresh comparison. This test correction
+does not address the measured audio deadline failures.
+
+### Recording keyboard continuation and bounded stage profile
+
+The plugin recording window has the same source-level root Tab gap. It already
+sets initial focus and orders its children, but its root key handler did not
+handle Tab after root focus (for example, retained-work Review explicitly focuses
+the root). `NativeToolWindow::tabEntry` now provides an opt-in first/last available
+direct-child lookup shared by the sample and plugin recorders. Only those owners
+call it; there is no new global key fallback. Ctrl+Tab continues to other routing.
+The plugin review's existing native group now checks root Tab/Shift+Tab in idle
+and capturing states, skipping disabled scope/actions and preserving the complete
+take snapshot, write count and music. Existing child traversal and text-copy tests
+remain. Required local groups for the next batch are `native-tool-window-tests`,
+`workspace-plugin-search-tests` and `audio-export-stream`; reuse unchanged
+live-preview export/controller results from066, not its two failed registrations.
+All these source changes remain unbuilt.
+
+One60-second opt-in stage/cycle profile ran on the existing066 binary in a
+never-switched private desktop, using the same disposable song and silent output.
+PID5068 exited0, source/binary/fixture identities are pinned under
+`recording-observation/stage-profile-corrected/`. The initial launcher omitted
+`--automation` required by the private recovery-directory option; PID24784 exited1
+in0.23s without an audio report. That failed preparation is retained separately
+under `stage-profile/`, not counted as a measurement or retried in place.
+
+The valid profile had6,019 callbacks and5 deadline overruns,0 starvation/device
+errors, and0 failed cycle queries. All five retained stage events spent more
+than99.9% of measured render wall time in `engineIncludingInstruments`; preparation,
+outer hosted processing and timing publication were small. Maximum callback was
+11,755.4µs. This localizes the next investigation to engine/routed/instrument
+processing, but does not identify a particular plugin or distinguish CPU work
+from scheduling delays. Cycle counts are retained as counts, not converted into
+time. Instrumentation adds overhead, the private desktop does not test visible
+presentation, and no performance pass follows. Do not change DSP based only on
+these stage totals; obtain a narrower target-only profile before optimization.
+
+At08:24 both native workflows remained in progress; the stock job is terminal
+success. The09:05:43 UTC minimum gate is unchanged. No additional build, CI
+dispatch, package or main merge occurred during this continuation.

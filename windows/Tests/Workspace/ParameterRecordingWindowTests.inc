@@ -87,6 +87,24 @@ void applicationParameterRecordingReview() {
     ScreamSeq::ParameterRecordingWindow tool(app.window,std::move(callbacks));tool.show();const auto window=tool.window();ScreamSeq::Tests::ownGuiWindow(window);
     const auto control=[&](int id){return GetDlgItem(window,id);};const auto click=[&](int id){SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,BN_CLICKED),reinterpret_cast<LPARAM>(control(id)));};
     restoreCheck(GetNextDlgTabItem(window,control(9720),FALSE)==control(9721),"Recording scope and Record are not adjacent in Tab order");
+    const auto rootEntry=[&](int first,int last){
+      struct Keyboard {BYTE before[256]{};
+        Keyboard(){restoreCheck(GetKeyboardState(before),"Read recording review keyboard state");}
+        ~Keyboard(){SetKeyboardState(before);}
+      } keyboard;
+      const auto before=tool.snapshot();const auto oldFocus=GetFocus();const auto oldWrites=writes.size();
+      for(bool reverse:{false,true}){BYTE keys[256]{};std::copy(std::begin(keyboard.before),std::end(keyboard.before),std::begin(keys));
+        for(int modifier:{VK_CONTROL,VK_LCONTROL,VK_RCONTROL,VK_SHIFT,VK_LSHIFT,VK_RSHIFT,VK_MENU,VK_LMENU,VK_RMENU})keys[modifier]&=0x7f;
+        if(reverse)keys[VK_SHIFT]|=0x80;
+        restoreCheck(SetKeyboardState(keys),"Set recording review keyboard modifiers");SetFocus(window);
+        SendMessageW(window,WM_KEYDOWN,VK_TAB,0);SendMessageW(window,WM_KEYUP,VK_TAB,0);
+        restoreCheck(GetFocus()==control(reverse?last:first),"Recording review root did not enter the first/last available control");
+      }
+      restoreCheck(tool.snapshot()==before&&writes.size()==oldWrites&&songState(app)==music,
+        "Recording review root navigation changed the take, pending action or music");
+      if(oldFocus&&IsWindow(oldFocus)&&IsWindowEnabled(oldFocus))SetFocus(oldFocus);
+    };
+    rootEntry(9720,9725);
     // A completed input may leave only its owner, with no visible event row.
     // This is still protected by application admission until reconciliation.
     inputProtected=true;click(9725);SetFocus(control(9720));click(9721);
@@ -115,6 +133,7 @@ void applicationParameterRecordingReview() {
     SendMessageW(control(9720),CB_SETCURSEL,1,0);click(9721);
     restoreCheck(writes.size()==1&&tool.snapshot().at("take").at("capturing")==true&&IsWindowEnabled(control(9722))&&!IsWindowEnabled(control(9723)),
         "Record did not enter the retained capture state or allowed Keep while capturing");
+    rootEntry(9722,9725);
     click(9741);restoreCheck(openedAutomation.empty()&&!IsWindowEnabled(control(9741)),
         "An active take offered committed song automation navigation");
     restoreCheck(!tool.snapshot().at("target").get<std::string>().empty()&&tool.snapshot().at("events").size()==128,
