@@ -256,8 +256,21 @@ static void parameterTakeSessionLifecycle(const PluginDescriptor &descriptor,uin
     "API Stop dropped the take or stopped playback");
   for(NSUInteger index=0;index<identities.count;++index) {
     NSDictionary *page=api(@"automation.recording.events",@{@"take":token,@"plugin":identities[index],@"parameter":@7,@"limit":@1})[@"data"];
-    check([page[@"total"] unsignedIntegerValue]==1&&[page[@"events"][0][@"timestamp"] isEqual:timestamps[index]]&&
-      [page[@"events"][0][@"frame"] isKindOfClass:NSString.class],"API event paging lost original timestamps or frame mapping");
+    const bool pageIntact=[page[@"total"] unsignedIntegerValue]==1&&[page[@"events"][0][@"timestamp"] isEqual:timestamps[index]]&&
+      [page[@"events"][0][@"frame"] isKindOfClass:NSString.class];
+    if(!pageIntact) {
+      // Read-only failure evidence, before the unchanged strict gate. A missing
+      // frame alone cannot distinguish absent coverage from lost original input.
+      NSError *timingError=nil;
+      NSDictionary *timing=[session automationMethod:@"automation.recording.events"
+        params:@{@"take":token,@"plugin":identities[index],@"parameter":@7,@"limit":@1,@"includeTiming":@YES} error:&timingError];
+      NSDictionary *evidence=@{@"plugin":identities[index],@"expectedTimestamp":timestamps[index],@"page":page,
+        @"stopped":stopAPI,@"timing":timing?:@{},@"timingError":timingError.localizedDescription?:@""};
+      NSData *json=[NSJSONSerialization dataWithJSONObject:evidence options:0 error:&timingError];
+      if(json){std::cerr<<"API_PAGE_CLOCK ";std::cerr.write(static_cast<const char *>(json.bytes),json.length);std::cerr<<"\n";}
+      else std::cerr<<"API_PAGE_CLOCK_UNAVAILABLE "<<(timingError.localizedDescription.UTF8String?:"No timing projection")<<"\n";
+    }
+    check(pageIntact,"API event paging lost original timestamps or frame mapping");
     NSDictionary *inspection=api(@"automation.recording.events",@{@"take":token,@"plugin":identities[index],
       @"parameter":@7,@"limit":@1,@"includeTiming":@YES})[@"data"];
     NSMutableDictionary *original=[inspection[@"events"][0] mutableCopy];

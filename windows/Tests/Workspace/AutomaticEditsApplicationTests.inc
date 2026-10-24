@@ -446,5 +446,80 @@ void applicationAutomaticEdits(){
     }
     fixture.close();
   }
+  {
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",1},{"points",Json::array({
+      {{"position",0},{"value",.25},{"curve","linear"}},{{"position",8192},{"value",.75},{"curve","smooth"}}})}});
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",2},{"points",Json::array({{{"position",256},{"value",.5},{"curve","step"}}})}});
+    const auto baseline=app.documentOperation("automation.pattern.get",{{"pattern",0}});
+    const auto path=saveDepartureFixture(fixture);app.openParameterAutomation(plugin,1,true);
+    auto &curve=*app.parameterAutomationWindow;const auto window=curve.window();ScreamSeq::Tests::ownGuiWindow(window);
+    SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    restoreCheck(curve.snapshot().at("selectedPoint")==0,"Pattern Save fixture must select its first existing point");
+    const auto field=GetDlgItem(window,4208);SetFocus(field);SetWindowTextW(field,L"62.500");SendMessageW(field,EM_SETSEL,1,4);
+    restoreCheck(app.queuedMusicalEdit()&&!app.canRedoSong(),"Pending pattern point was omitted from shared history availability");
+    restoreCheck(app.saveFile(),"Native Save rejected a valid pending pattern point");
+    auto edited=baseline;for(auto &lane:edited["lanes"])if(lane.at("parameter")==1)lane["points"][0]["value"]=.625;
+    DWORD first=0,last=0;SendMessageW(field,EM_GETSEL,WPARAM(&first),LPARAM(&last));
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&!curve.queuedMusicalEdit()&&
+      !app.view->dirty&&restoreText(field)==L"62.500"&&GetFocus()==field&&first==1&&last==4,
+      "Pattern Save lost the queued value, unrelated lane, raw text, caret or focus");
+    const auto savedBytes=ScreamSeq::Project::readProjectBytes(path);
+    SetWindowTextW(field,L"invalid");restoreRejected([&]{app.saveFile();});
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&
+      ScreamSeq::Project::readProjectBytes(path)==savedBytes&&restoreText(field)==L"invalid",
+      "Invalid pattern point altered the saved project or lost its draft");
+    restoreRejected([&]{app.edit("history.undo",{{"domain","all"}});});
+    restoreCheck(app.saveFile()&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&restoreText(field)==L"invalid",
+      "Repeated Save retried a rejected pattern point");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern Save created more than one musical history step");
+    app.edit("history.redo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Pattern Redo failed to restore the accepted point");
+    SetFocus(field);SetWindowTextW(field,L"87.5");curve.hide();
+    auto closed=edited;for(auto &lane:closed["lanes"])if(lane.at("parameter")==1)lane["points"][0]["value"]=.875;
+    restoreCheck(!curve.visible()&&app.documentOperation("automation.pattern.get",{{"pattern",0}})==closed,
+      "Closing a pattern curve dropped its last automatic point edit");
+    curve.openAt(plugin,1);app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Closing a pattern curve added extra history");
+    // Compound transforms keep their explicit review contract across Save.
+    const auto tool=GetDlgItem(window,4230);SendMessageW(tool,CB_SETCURSEL,1,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(4230,CBN_SELCHANGE),LPARAM(tool));press(window,4238);
+    restoreCheck(curve.snapshot().at("dirty").get<bool>()&&!curve.queuedMusicalEdit(),"Transform fixture must retain an unaccepted preview");
+    const auto preview=curve.snapshot().at("points");restoreCheck(app.saveFile(),"Save rejected accepted music merely because a tool preview exists");
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&curve.snapshot().at("points")==preview&&
+      curve.snapshot().at("dirty").get<bool>(),"Save implicitly accepted or discarded a compound transform preview");
+    restoreRejected([&]{app.edit("history.undo",{{"domain","all"}});});press(window,4218);
+    app.documentOperation("document.open",departureOpenRequest(app,path));
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited,"Pattern Save/reopen omitted the automatic point or accepted the preview");fixture.close();
+  }
+  for(const int command:{4204,4224,4240}){
+    RestoreFixture fixture;auto &app=*fixture.app;const auto plugin=addRestoreGain(app);
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",1},{"points",Json::array({
+      {{"position",0},{"value",.25},{"curve","linear"}},{{"position",8192},{"value",.75},{"curve","smooth"}}})}});
+    app.edit("automation.pattern.set",{{"pattern",0},{"plugin",plugin},{"parameter",2},{"points",Json::array({{{"position",256},{"value",.5},{"curve","step"}}})}});
+    const auto baseline=app.documentOperation("automation.pattern.get",{{"pattern",0}});
+    app.openParameterAutomation(plugin,1,true);auto &curve=*app.parameterAutomationWindow;const auto window=curve.window();ScreamSeq::Tests::ownGuiWindow(window);
+    SetActiveWindow(GetAncestor(window,GA_ROOT));SetFocus(window);SendMessageW(window,WM_KEYDOWN,VK_TAB,0);
+    restoreCheck(curve.snapshot().at("selectedPoint")==0,"Pattern navigation fixture must select an existing point");
+    const auto field=GetDlgItem(window,4208),list=GetDlgItem(window,4204);
+    const auto navigate=[&]{if(command==4204){SendMessageW(list,LB_SETCURSEL,2,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(4204,LBN_SELCHANGE),LPARAM(list));}else press(window,command);};
+    SetFocus(field);SetWindowTextW(field,L"invalid");navigate();
+    restoreCheck(curve.snapshot().at("parameter")==1&&restoreText(field)==L"invalid"&&GetFocus()==field&&
+      app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline&&!app.absoluteAutomationWindow,
+      "Pattern navigation redirected an invalid field or opened another editor");
+    SendMessageW(window,WM_KEYDOWN,VK_ESCAPE,0);SetWindowTextW(field,L"62.5");if(command==4204)SetFocus(list);navigate();
+    auto edited=baseline;for(auto &lane:edited["lanes"])if(lane.at("parameter")==1)lane["points"][0]["value"]=.625;
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==edited&&!curve.queuedMusicalEdit(),
+      "Pattern navigation lost the pending value or changed another lane");
+    if(command==4204)restoreCheck(curve.snapshot().at("parameter")==2&&GetFocus()==list,"Parameter switch lost its chosen target or keyboard focus after save");
+    else if(command==4224)restoreCheck(app.selectedPlugin==plugin&&app.selectedParameter==1,"Pattern Show in rack opened another parameter");
+    else{restoreCheck(bool(app.absoluteAutomationWindow),"Pattern Song automation action did not open");
+      const auto destination=app.absoluteAutomationWindow->snapshot();
+      restoreCheck(destination.at("plugin")==plugin&&destination.at("parameter")==1&&destination.at("expectedRevision")==app.view->session.revision,
+        "Pattern Song automation opened another target or captured the pre-edit revision");}
+    app.edit("history.undo",{{"domain","all"}});press(window,4218);
+    restoreCheck(app.documentOperation("automation.pattern.get",{{"pattern",0}})==baseline,"Pattern navigation created extra history");fixture.close();
+  }
   std::cout<<"PASS automatic sample settings/loops, instrument properties, mixer fields/toggles, Undo, PCM, focus/caret, invalid and stale edits, recorded viewport navigation and pending-point Save/history\n";
 }

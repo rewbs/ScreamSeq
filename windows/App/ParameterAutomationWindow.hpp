@@ -58,6 +58,10 @@ private:
     if(pointFields_&&selected_>=0)setPointFields();
     if(dirty_&&!pointFields_)commit(false,points_.empty()&&!laneID_.empty());
   },delay);}
+  void finishAutomaticCurveEdit(){
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_&&!draft(),"Finish or discard the pending curve before continuing");
+  }
   void changed(bool automatic=true){if(!automatic){reviewRequired_=true;cancelAutomaticEdit();}dirty_=true;++generation_;values_=Json::array();schedule();rebuild();status(reviewRequired_?L"Tool preview / Use preview saves it":L"Saving curve changes…");if(!dragging_)queueCurveEdit();}
   std::wstring parameterName()const{for(const auto &p:catalog_)if(parameter_&&p.at("id")==*parameter_)return wide(p.at("name").get<std::string>());return L"No parameter";}
   void showPoint(){
@@ -193,9 +197,17 @@ private:
       if(id==pattern||id==plugin){const auto wanted=selection(id);try{flushAutomaticEdit();}catch(...){choices();throw;}choose(id,wanted);if(draft()){choices();throw std::runtime_error("Finish or discard the curve draft before changing target");}const auto index=selection(id);if(index<0)return;
         try{if(id==pattern)load(false,{},parameter_,captured_.patterns.at(size_t(index)).at("index").get<unsigned>());else load(false,plugins_.at(size_t(index)).at("instanceID"),std::nullopt);}catch(...){choices();throw;}return;}
     }
-    if(id==parameters&&notification==LBN_SELCHANGE){const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(draft()){filter();throw std::runtime_error("Finish or discard the curve draft before changing parameter");}if(index>=0&&size_t(index)<filtered_.size()){selectParameter(catalog_.at(filtered_[size_t(index)]).at("id"));filter();}return;}
+    if(id==parameters&&notification==LBN_SELCHANGE){
+      const auto index=SendMessageW(controls_.at(parameters),LB_GETCURSEL,0,0);if(index<0||size_t(index)>=filtered_.size())return;
+      const auto wanted=catalog_.at(filtered_[size_t(index)]).at("id").get<uint32_t>();
+      try{finishAutomaticCurveEdit();requireCurrent();
+        require(std::any_of(catalog_.begin(),catalog_.end(),[&](const auto &p){return p.at("id")==wanted;}),"Selected parameter is no longer available");
+        selectParameter(wanted);filter();
+      }catch(...){filter();throw;}return;
+    }
     if(id==parameters&&notification==LBN_DBLCLK&&compact_&&parameter_){choosePage(1);return;}
     if(notification!=BN_CLICKED)return;
+    if(id==fromCursor||id==lastTouched||id==openRack||id==absolute)finishAutomaticCurveEdit();
     if(id==reload||id==fromCursor){load(id==fromCursor);toolFieldsDirty_=false;}else if(id==lastTouched)touch();else if(id==bank)openBank();else if(id==expand)openFormula();
     else if(id==reference){if(!reference_)reference_=std::make_unique<FormulaWorkbenchWindow>(window_,L"Envelope formula reference","",Json::object(),-1,request_);reference_->show();}
     else if(id==openRack){requireCurrent();require(parameter_.has_value(),"Choose a parameter");inspect_(pluginID_,*parameter_);}
@@ -395,6 +407,20 @@ private:
     wchar_t label[160]{};swprintf_s(label,shortDock_?L"Rows %.2f–%.2f · %.1f–%.1f%%":L"Rows %.2f–%.2f · %.1f–%.1f%% · Ctrl+wheel zooms; Ctrl+Shift zooms values",canvas_.start/256,canvas_.end/256,canvas_.valueLow*100,canvas_.valueHigh*100);s.uiText(label,r.x,r.y-22,r.w,colors.text);
   }
 public:
+  bool queuedMusicalEdit()const{return bool(automaticEdit_)&&!reviewRequired_&&(dirty_||(pointFields_&&selected_>=0));}
+  void flushForProjectSave(){
+    // Save accepted music plus already requested automatic edits. A compound
+    // tool preview remains retained until the musician explicitly uses it.
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_&&!dragging_,"Wait for the pending pattern curve before saving the project");
+  }
+  void flushForHistory(){finishAutomaticCurveEdit();}
+  void hide()override{
+    cancelDrag();
+    if(automaticEdit_)flushAutomaticEdit();
+    require(!automaticEdit_&&!pending_,"Wait for the pending pattern curve before closing");
+    NativeToolWindow::hide();
+  }
   void bankWriter(NativeWriteCompletion::Write write){bankWrite_=std::move(write);}
   ParameterAutomationWindow(HWND owner,Request request,std::function<Cursor()> context,std::function<void(const std::string &,uint32_t)> inspect,std::function<void(const std::string &,uint32_t)> absoluteEditor):NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),inspect_(std::move(inspect)),absolute_(std::move(absoluteEditor)){
     bankWrite_=[this](const auto &method,const auto &params){const auto before=context_();auto result=request_(method,params);return Api::CompletedCall{method,before.document,context_().revision,std::move(result)};};

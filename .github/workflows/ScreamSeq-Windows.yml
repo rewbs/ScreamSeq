@@ -144,6 +144,7 @@ jobs:
               test_absolute_automation_ui.AbsoluteAutomationUITests.test_live_automatic_point_history_and_save_preserve_playback `
               test_absolute_automation_ui.AbsoluteAutomationUITests.test_mouse_keyboard_zoom_and_native_controls_fit_minimum `
               test_absolute_automation_ui.AbsoluteAutomationUITests.test_activity_recorded_selection_survives_value_time_history_and_reopen `
+              test_parameter_automation_ui.ParameterAutomationUITests.test_native_save_finishes_pattern_point_during_playback_and_reopens_exact_lanes `
               test_graph_mixer_app.GraphMixerAppTests.test_linked_envelope_admission_retains_bank_and_history `
               test_graph_editor.GraphEditorTests `
               test_context_menus.WorkspaceContextMenuTests.test_graph_node_wire_menu_selection_draft_and_history `

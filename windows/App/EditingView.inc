@@ -140,12 +140,14 @@
         ScreamSeq::NativeControls::text(window,title);
     }
     bool queuedMusicalEdit()const{return (preciseNoteWindow&&preciseNoteWindow->queuedMusicalEdit())||
+        (parameterAutomationWindow&&parameterAutomationWindow->queuedMusicalEdit())||
         (absoluteAutomationWindow&&absoluteAutomationWindow->queuedMusicalEdit())||
         (parameterActivityWindow&&parameterActivityWindow->queuedMusicalEdit());}
     bool canUndoSong()const{return view->session.document.value("canUndo",false)||queuedMusicalEdit();}
     bool canRedoSong()const{return view->session.document.value("canRedo",false)&&!queuedMusicalEdit();}
     Json edit(const std::string &method,Json params) {
         if(preciseNoteWindow&&(method=="history.undo"||method=="history.redo"))preciseNoteWindow->flushForHistory();
+        if(parameterAutomationWindow&&(method=="history.undo"||method=="history.redo"))parameterAutomationWindow->flushForHistory();
         if(absoluteAutomationWindow&&(method=="history.undo"||method=="history.redo"))absoluteAutomationWindow->flushForHistory();
         if(parameterActivityWindow&&(method=="history.undo"||method=="history.redo"))parameterActivityWindow->flushForHistory();
         params["expectedRevision"]=view->session.revision;
@@ -310,6 +312,7 @@
         if(busy) throw ScreamSeq::Api::ApiError(-32002,"Document worker busy");
         if(!protectRecordingTake())return false;
         if(preciseNoteWindow)preciseNoteWindow->flushForProjectSave();
+        if(parameterAutomationWindow)parameterAutomationWindow->flushForProjectSave();
         if(absoluteAutomationWindow)absoluteAutomationWindow->flushForProjectSave();
         if(parameterActivityWindow)parameterActivityWindow->flushForProjectSave();
         pluginEditorWarning.clear();

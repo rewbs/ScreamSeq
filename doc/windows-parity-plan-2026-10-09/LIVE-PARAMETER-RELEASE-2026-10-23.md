@@ -1940,3 +1940,57 @@ the measured delay to time inside the callback, but cannot distinguish DSP work
 from scheduler preemption there. Keep both doubled-frame events counted, retain
 the original thresholds, and do not infer a DSP cause. The read-only analysis
 and input hash are in `foreground-diagnostic/deadline-analysis.json`.
+
+### Pattern-curve completion boundaries (same pending checkpoint)
+
+The reverse composing path had the same omissions: changing the selected
+parameter, Show in rack and Song automation could reject or leave a valid queued
+point. From cursor could cancel it. These actions now finish only an already
+requested automatic edit and preserve the requested parameter by stable ID.
+Invalid/stale/uncertain fields and unaccepted compound previews are retained.
+
+Native Save and shared Undo/Redo previously included precise notes, absolute
+automation and Activity, but omitted pattern-curve automatic edits. They now
+include those edits and their history availability. Close finishes a queued
+valid point; repeated Save never retries a previously rejected write. Compound
+transform previews still require explicit Use preview: Save writes accepted
+music while retaining the preview, and history refuses an unresolved preview.
+
+The existing automatic-edit native group now checks these boundaries using two
+independent lanes, exact canonical snapshots, single-step Undo/Redo, raw field
+text/caret/focus, close/reopen and native Save/reopen. A new actual-app silent
+playback case types62.500 and immediately invokes native Save, requiring .625
+in the selected point, the other lane exact, retained text selection, unchanged
+playback epoch, history, opaque plugin state and saved-file reopen. The helper
+now discovers the same owned PID's docked children as well as floating windows;
+it still requires exactly one matching native editor.
+
+The new case reproduced the old executable's omission in2.840s: canonical value
+remained .25, with a retained field draft and no pending read. Selection preview
+was allowed to finish before typing; there is no wait between typing and Save.
+The preceding2.754s diagnostic also failed, but overlapped preview and is weaker
+evidence. Both logs are preserved under `activity-delete-correction/`; neither
+qualifies the new source. Python syntax and source whitespace checks pass.
+
+Expand the same build checkpoint to seven native groups: automatic edits,
+Activity, recording/search, menus, source navigation, parameter-automation dock
+and bank results. Add the dock test executable to the single build invocation.
+Run three actual-app cases: complete composing/recording, Activity editing and
+the new live pattern Save case. CI includes the new case in its existing single
+build integration step. Reuse unchanged shared/audio inputs only after the
+updated source-delta validator. Fresh foreground must cover both navigation
+directions and native pattern Save, alongside the queued Activity deletion.
+
+### 8a Mac ARM failure is retained
+
+Job120747070446 compiled successfully and passed134 CTests, the full native
+interface harness, recovery/picker, socket and typed gates. Its real-device
+plugin lifecycle failed at “API event paging lost original timestamps or frame
+mapping.” The earlier internal recovery phase reached this later API phase;
+this log alone does not identify which original field or timing projection
+failed. Log SHA256 is
+`a8e10631f8ab0742399c24a737d72170211378a766ba1a95b83cfd4556ce7015`.
+The existing strict API assertion now emits failure-only original page, expected
+timestamp, stopped review and read-only timing projection. No sleeps, retries,
+mapping or admission rules changed. This diagnostic addition still needs both
+Mac executions. At02:27UTC Intel compilation and Windows tests were ongoing.

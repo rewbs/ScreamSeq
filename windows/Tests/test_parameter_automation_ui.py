@@ -35,13 +35,19 @@ class ParameterAutomationUITests(unittest.TestCase):
     add_gain=api.ParameterAutomationTests.add_gain
     def state(self):return self.read('workspace.get')['parameterAutomation']
     def window(self,kind='ScreamSeq.ParameterAutomation'):
-        found=[]
+        found=set()
         @private_desktop.callback
         def visit(hwnd,_):
             pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));name=ctypes.create_unicode_buffer(100);private_desktop.user.GetClassNameW(hwnd,name,100)
-            if pid.value==self.pid and name.value==kind:found.append(hwnd)
+            if pid.value==self.pid and name.value==kind:found.add(int(hwnd))
             return True
-        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,visit,0));self.assertEqual(len(found),1,found);return found[0]
+        private_desktop.user.EnumChildWindows.argtypes=[wintypes.HWND,private_desktop.callback,wintypes.LPARAM]
+        @private_desktop.callback
+        def root(hwnd,unused):
+            visit(hwnd,unused);pid=wintypes.DWORD();private_desktop.user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
+            if pid.value==self.pid:private_desktop.user.EnumChildWindows(hwnd,visit,0)
+            return True
+        private_desktop.check(private_desktop.user.EnumDesktopWindows(self.desktop.desktop,root,0));self.assertEqual(len(found),1,found);return next(iter(found))
     def control(self,identifier,kind='ScreamSeq.ParameterAutomation'):
         value=private_desktop.user.GetDlgItem(self.window(kind),identifier);self.assertTrue(value);return value
     def idle(self):
@@ -88,6 +94,49 @@ class ParameterAutomationUITests(unittest.TestCase):
         self.field(4207,63.99609375);self.press(4210);self.assertIn('occupies',self.state()['status']);self.key(0x1B)
         self.press(4214);self.press(4215);self.assertFalse(self.saved()[0]['enabled']);self.write('history.undo',domain='document');self.assertEqual(self.saved(),saved);self.write('history.redo',domain='document');self.assertFalse(self.saved()[0]['enabled'])
         path=self.folder/'native-parameters.screamseq';self.write('document.save',path=str(path));self.write('document.open',path=str(path),discard=True);self.press(4219);self.select(4204,1);self.assertEqual(self.state()['points'],saved[0]['points']);self.assertFalse(self.state()['enabled']);self.press(4217);self.assertEqual(self.saved(),[])
+
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO')=='1','explicit silent WASAPI qualification')
+    def test_native_save_finishes_pattern_point_during_playback_and_reopens_exact_lanes(self):
+        plugin=self.add_gain();self.route_master(plugin)
+        self.write('automation.pattern.set',pattern=0,plugin=plugin,parameter=1,
+                   points=[dict(position=0,value=.25,curve='linear'),dict(position=8192,value=.75,curve='smooth')])
+        self.write('automation.pattern.set',pattern=0,plugin=plugin,parameter=2,
+                   points=[dict(position=256,value=.5,curve='step')])
+        path=self.folder/'pattern-live-save.screamseq';self.write('document.save',path=str(path))
+        self.pid=self.desktop.launch([os.environ['SCREAMSEQ_TEST_EXE'],'--audio-test-silent','--audio-test-allow-stop',
+            '--automation','--seconds','120','--project',str(path),'--vst3-test-cache',str(self.cache)])
+        self.client=Client(r'\\.\pipe\ScreamSeq.Api.'+str(self.pid),timeout=20)
+        for _ in range(100):
+            try:
+                if self.read('transport.get')['audioActive']:break
+            except TransportError:pass
+            time.sleep(.1)
+        else:self.fail('silent pattern automation app did not start')
+        before=self.read('transport.get');baseline=self.saved();opaque=self.read('plugin.state.get',plugin=plugin)
+        self.start();self.select(4204,1);handle=self.state()['handles'][0]
+        self.mouse(0x201,handle['x'],handle['y']);self.mouse(0x202,handle['x'],handle['y'])
+        self.assertEqual(self.state()['selectedPoint'],0)
+        self.idle() # Finish selection preview before beginning the timed edit.
+        field=self.control(4208)
+        self.desktop.send(field,0x201,1,4|(4<<16));self.desktop.send(field,0x202,0,4|(4<<16))
+        self.field(4208,'62.500');self.desktop.send(field,0xB1,1,4);selection=self.desktop.send(field,0xB0)
+        # Native Save with no debounce wait. Native owner coverage separately
+        # forces the queued state; this checks the actual process and saved file.
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,120)
+        edited=json.loads(json.dumps(baseline))
+        for lane in edited:
+            if lane['plugin']==plugin and lane['parameter']==1:lane['points'][0]['value']=.625
+        self.assertEqual(self.saved(),edited,self.state())
+        self.assertFalse(self.state()['retainedDraft']);self.assertEqual(self.desktop.focus(field),field)
+        self.assertEqual(self.desktop.send(field,0xB0),selection)
+        text=ctypes.create_unicode_buffer(64);self.desktop.send(field,0xD,64,ctypes.addressof(text));self.assertEqual(text.value,'62.500')
+        self.write('history.undo');self.assertEqual(self.saved(),baseline)
+        self.write('history.redo');self.assertEqual(self.saved(),edited)
+        after=self.read('transport.get');self.assertTrue(after['playing'] and after['audioActive']);self.assertFalse(after['fault'])
+        self.assertEqual(after['playbackEpoch'],before['playbackEpoch']);self.assertGreater(after['frames'],before['frames'])
+        self.assertEqual(after['overruns'],0);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
+        self.write('transport.stop');self.write('document.open',path=str(path),discard=True)
+        self.assertEqual(self.saved(),edited);self.assertEqual(self.read('plugin.state.get',plugin=plugin),opaque)
 
     def test_curve_stays_visible_and_tracks_drag_before_release(self):
         plugin=self.add_gain()
