@@ -6,6 +6,19 @@ fixture provenance remain in [README](README.md) and `parity-matrix.csv`.
 Historical “not implemented” or “paused” statements in dated phase reports
 must not override current source or the active goal.
 
+**Next frozen placement checkpoint:** `c9ed68551840e4197d5227d99685b3a232212c10`,
+committed, backed up to `codex/mac-gesture-next-checkpoint`, and fast-forwarded
+into the clean qualification checkout. PR7 remains946. Prepared
+`bin/mac-gesture-20261022/bank-placement/checkpoint.ps1` re-observes the live946
+CI before pushing/building once; gate is21:50:05 UTC or later actual starts.
+The parsed, unexecuted `build.ps1` builds app/scanner/workspace owner only.
+`check.ps1` requires the automatic-edit native group and exact bank handoff app
+case; reuse unchanged946 checks. Neither build nor check receipt exists yet.
+Fresh Computer Use must verify bank containment at200 percent DPI from the
+right dock, retained placement/draft and keyboard focus, then a short composing
+smoke. Production qualification still requires the unresolved audio and platform
+gates. Do not execute an old recording-root script or overwrite its receipts.
+
 **24 October 21:21 UTC diagnostic continuation:** `recording-root/cabinet-isolation/`
 contains a completed two-case comparison using the same946 executable and60s
 silent playback per case. Original15-effect fixture:6 overruns,0 starvation,
