@@ -1,6 +1,14 @@
 # Full-song audio export parity
 
-## Observed boundary
+This is a chronological implementation/evidence record. For the current frozen
+source and next gate, use [the continuation queue](CONTINUATION-QUEUE-2026-10-20.md)
+and `audio-export-followup/freeze.json`. The initial source-only statements below
+describe discovery, not the latest test results. The
+[06:01 checkpoint](#24-october-0601-checkpoint-and-correction) retains both failed
+qualification and diagnostic passes. Matrix rows41,42,58 now reflect those
+boundaries without changing the original Mac reference provenance.
+
+## Discovery boundary
 
 Current Windows source has **Export module** (`EditingView.inc`,
 `WorkspaceCommands.inc`, `WorkspaceMenuBar.inc`, `DocumentController.cpp`).
@@ -10,7 +18,7 @@ At discovery there was no Windows user-facing audio export command. Mac `main.sw
 48 kHz stereo float32 WAV. Neither host had `document.exportAudio` at discovery.
 This is a remaining composing journey: record/Keep, Save, export audible song.
 
-## Source continuation (not built or qualified)
+## Initial source continuation (historical; execution results below)
 
 `editor/hosted/AudioExportStream.{hpp,cpp}` now owns the full-song private
 renderer, plugin chain, recorded/musical automation, native column mutes,
@@ -42,7 +50,7 @@ covers actual AU latency/tails, a 512 KiB worker stack and failed-destination
 preservation; it remains required after extraction. Prior Mac passes do not
 qualify this changed rendering source.
 
-## Next cohesive implementation batch
+## Original implementation sequence (execution results below)
 
 1. Windows native streaming staging writer (source now present in
    `windows/Project/AtomicOutputStream.hpp`, not built): hold an exclusively created handle,
