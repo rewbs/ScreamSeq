@@ -583,7 +583,10 @@ void applicationAutomaticEdits(){
       "Bank opening accepted a compound preview or omitted an automatic point");
     HWND bank=nullptr;EnumThreadWindows(GetCurrentThreadId(),[](HWND h,LPARAM out)->BOOL{
       wchar_t name[96]{};GetClassNameW(h,name,96);if(!wcscmp(name,L"ScreamSeq.EnvelopeBank")){*reinterpret_cast<HWND *>(out)=h;return FALSE;}return TRUE;
-    },reinterpret_cast<LPARAM>(&bank));restoreCheck(bank&&GetWindow(bank,GW_OWNER)==window,"Find the owned pattern bank");
+    },reinterpret_cast<LPARAM>(&bank));
+    // User32 promotes an owned floating window's docked child owner to Main;
+    // captured target/revision and exact shape assertions check logical ownership.
+    restoreCheck(bank&&GetWindow(bank,GW_OWNER)==GetAncestor(window,GA_ROOT),"Find the owned pattern bank");
     ScreamSeq::Tests::ownGuiWindow(bank);press(bank,1005);
     const auto entries=app.documentOperation("envelope.bank.list",Json::object()).at("entries");
     restoreCheck(entries.size()==1&&entries[0].at("shape").at("points")==captured.at("points")&&
