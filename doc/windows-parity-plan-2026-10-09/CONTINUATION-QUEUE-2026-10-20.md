@@ -8,22 +8,41 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
-**24 October source continuation:** audio export now has a shared WAV renderer,
-native streaming/atomic publication, guarded API on both platforms and native
-File commands in source. Export commits after24788 are backed up only; they are
-excluded from the imminent `retained-reveal` checkpoint. No native export build,
-UI or PCM qualification has run. See [audio export](AUDIO-EXPORT-2026-10-24.md).
-The clean qualification checkout remains exactly24788; the primary may contain
-clean descendant commits. Checkpoint dispatch pushes/builds only the frozen hash.
+**24 October 05:39 UTC:** `retained-reveal` source24788 built once and passed
+all seven local native groups, five composing journeys and the short silent
+WASAPI gate. Fresh Computer Use passed precise insertion/deletion/live typing,
+Save caret, retained Activity reopen, clean hidden-row refresh and native
+Record/Stop/Keep. The ordinary634.541-second run still had45 deadline overruns;
+production packaging and main merge remain held. A separate180.052-second
+cycle diagnostic retained15 overruns and is not performance qualification.
+Both owned QA processes exited normally. See the exact receipts and limitations
+in [live parameter release](LIVE-PARAMETER-RELEASE-2026-10-23.md).
 
+Next frozen source is **451f7f85c70aac0c5bfc74ba06d258c4cc101e2c**, backed up on
+`codex/mac-gesture-next-checkpoint` and checked out cleanly in qualification.
+It adds shared full-song WAV export, guarded APIs/native commands and an
+opt-in bounded render-stage diagnostic. These additions are **unbuilt**.
+`audio-export/checkpoint.ps1` pushes/builds this exact hash; later clean primary
+documentation commits are excluded. Its nine native groups, three complete
+composing journeys and fresh ordinary/cycle WASAPI checks run in one build,
+followed by Computer Use and a separate stage diagnostic. See
+[audio export](AUDIO-EXPORT-2026-10-24.md). No earlier callback pass qualifies
+the changed rendering inputs.
 
-**Current source continuation:** `retained-reveal` also adds optional callback
-CPU-cycle diagnostics; default playback remains uninstrumented. Profile runs
-are explicitly rejected by sustained-performance qualification. Next frozen
-gate is7 native groups/5 app journeys plus fresh ordinary WASAPI and separate
-cycle-delivery checks in the same single build. No earlier Windows audio pass
-qualifies changed callback inputs. See LIVE-PARAMETER-RELEASE's final section.
-The gate remains05:00:40UTC at earliest, after terminal CI/later-start inspection.
+The checkpoint cannot start before **2026-10-24 06:01:19 UTC**, after checking
+later actual build starts and completion of preceding CI. At05:39,24788 Mac ARM
+passed134 CTests plus native interface/socket/device gates; Intel compiled and
+was testing. Windows compiled and passed159 portable/worker,53 native, four
+scratch,39 vendor-ownership and18 typed/pipe tests. Its122-case app run failed25
+assertions across22 tests, largely owned-app startup with no WASAPI endpoint
+(including three duplicate teardown failures), with one optional skip. Preserve
+that failed CI result; local passes do not turn it green. Downloaded terminal
+logs and hashes are in `retained-reveal/completed-ci.json`.
+
+## Historical checkpoint notes
+
+The entries below describe earlier source and evidence boundaries. They do not
+override the current frozen source, receipts, gate or unresolved audio failure.
 
 
 **24 October 04:25 UTC current boundary:** aa008 built once; all9 native/shared

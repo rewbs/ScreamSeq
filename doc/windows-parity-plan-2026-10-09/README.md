@@ -28,8 +28,12 @@ Fresh Computer Use confirmed frozen Activity retention, clean precise-note
 refresh after hidden Undo, gestures/Save caret, Float/Dock and native
 Record/slider/Stop/Keep with exact original inputs and continuous playback.
 These results close the two preceding retained-view failures within that scope.
-At 24 October 05:32 UTC Mac ARM CI had completed successfully; Intel was building
-and Windows had compiled successfully with later checks still running.
+At 24 October 05:39 UTC Mac ARM CI had passed134 CTests and its native
+interface/socket/device gates. Intel had compiled and was testing. Windows
+compiled and passed159 portable/worker and53 native groups, but its122-case app
+run failed25 assertions across22 tests, largely startup failures on a runner
+without a WASAPI endpoint. Its original failed result remains intact; the
+[current queue](CONTINUATION-QUEUE-2026-10-20.md) pins the downloaded evidence.
 
 The 634.541-second silent UI workload recorded45 deadline overruns, with no
 sustained presentation or realtime-audit pass. A separate180-second CPU-cycle
