@@ -217,6 +217,23 @@ void run(){
         "Trace click did not freeze and select the observed native-value event");
       require(tool.snapshot().at("cursor")==3&&tool.snapshot().at("pointCount")==3&&!tool.snapshot().at("pending").get<bool>(),
         "Pumped observation replaced the displayed trace after its click froze the view");
+      const auto frozenCapture=tool.snapshot();const auto frozenRequests=requests,frozenWatches=watches;
+      tool.hide();tool.openAt("different",9);
+      require(tool.snapshot()==frozenCapture&&requests==frozenRequests&&watches==frozenWatches&&lane==traceLane&&edits==0,
+        "Reopening a frozen trace cleared its capture, selection, source or watch");
+      // A rack shortcut must reveal the retained owner without retargeting it.
+      tool.hide();refuses("a",2);
+      require(tool.snapshot()==frozenCapture&&requests==frozenRequests&&watches==frozenWatches,
+        "Different-parameter refusal hid or replaced the frozen observer");
+      context.revision="frozen-reopen-revision";
+      const auto staleCapture=tool.snapshot();tool.hide();tool.openAt("different",9);
+      require(tool.snapshot()==staleCapture&&requests==frozenRequests&&watches==frozenWatches&&lane==traceLane&&edits==0,
+        "Frozen reopen silently rebased its captured revision");
+      context.document="another-song";
+      const auto otherDocumentCapture=tool.snapshot();tool.hide();tool.openAt("different",9);
+      require(tool.snapshot()==otherDocumentCapture&&requests==frozenRequests&&watches==frozenWatches,
+        "Frozen reopen crossed document identity or started another watch");
+      context.document="song";context.revision=traceRevision;SetFocus(window);
       SendMessageW(window,WM_KEYDOWN,VK_LEFT,0);
       require(tool.snapshot().at("trace").at("selectedSequence")==1,"Trace keyboard navigation selected a normalized contribution or wrong neighbour");
       SendMessageW(window,WM_KEYDOWN,VK_RIGHT,0);require(tool.snapshot().at("trace").at("selectedSequence")==3,"Trace Right lost the next native event");

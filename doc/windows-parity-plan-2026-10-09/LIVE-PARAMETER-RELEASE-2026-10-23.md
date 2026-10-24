@@ -2275,3 +2275,76 @@ their existing semantics. The native automatic-edit and existing live app
 history journey now assert partial/invalid range text, unchanged viewport,
 exact Undo/Redo, point-field caret and continuing playback together. This is
 source-only coverage, not a new runtime pass or additional test cycle.
+
+
+### 24 October 04:00 checkpoint: automated pass, foreground corrections required
+
+Frozen source `aa008f059cf43228bda7fe83e542653e58accf5d` built once from
+04:00:12.2902988 to 04:03:54.3295650 UTC. ARM64 executable SHA256:
+`5402fa79d4dd79a182aa2e8c95d3e90ed44d7da44a683b49a65dc6903a2d4fd5`.
+`bin/mac-gesture-20261022/activity-refresh-history/` retains build, source
+manifest, native XML, app log, checks and hashed evidence receipts. All nine
+native/shared groups and eight composing journeys passed; fresh silent WASAPI
+at 48 kHz / 480 frames reported zero deadline overruns, starvation, device
+faults and audited host C++ allocations/deallocations. This short device gate
+is bounded evidence, not sustained presentation or commercial-plugin capacity.
+
+Fresh isolated Computer Use on PID19052 at 200 percent DPI confirmed timeline
+double-click insertion, canvas Backspace, moving playback cursor, automatic
+velocity entry, native Save retaining visible caret, Tab/Shift+Tab and normal
+text Backspace. Pattern stationary handle selection kept its exact value;
+Backspace/Undo redrew the curve, and interior drag remained visible. Song
+point Delete/Undo preserved viewport and surviving selection. Native Params
+Record, Balance slider, Stop and Keep captured two original inputs, with zero
+reported rejected/unmapped/overflow/lost inputs and unchanged playback epoch2.
+Their exact timestamps4164609872282/4164610002039 map to retained frames
+22432550/22433150. Keep preserved the existing two recorded points and pattern
+Gain curve. Seven read-only snapshots retain continuing frames and playback.
+The QA process saved only its disposable song and exited0; executable unchanged.
+
+Qualification remains incomplete. Reopening a frozen Activity window cleared
+its plot while retaining its frozen flag. A clean precise editor hidden during
+other edits became visible after maximizing with an old revision. The snapshot
+explicitly has retainedDraft=false, visible=true and stale=true: this is a
+reveal-refresh defect, not an unsaved draft. Main-targeted Computer Use also
+reactivates Main before floating dropdown input, so floating typing/Tab
+continuity is unqualified. Docked child UIA absence is not Narrator coverage.
+Screenshots alone do not establish temporal flicker. The 606.1327774-second
+silent UI run recorded38 deadline overruns, maximum callback16.443ms at
+48 kHz / 480 frames; realtimeAuditPassed and sustainedPresentationQualified
+are false. Preserve this failed performance evidence alongside the short
+passing device audit. No package or merge. `foreground-check.json` records
+partial observations, failed conditions and exact evidence hashes.
+
+The next source batch addresses those two observed presentation defects:
+
+- Activity openAt retains frozen capture as well as raw point drafts. A
+  different rack target reveals a hidden retained owner before refusing the
+  retarget, without changing its trace, selected sequence, watch or music.
+  Existing native assertions now cover reopen, stale revision and replacement
+  document with exact snapshot/no-read/no-write checks. The existing app
+  Activity journey closes/reopens its selected frozen trace and requires exact
+  source, target, search, raw fields, page, geometry and musical preservation.
+- PreciseNoteWindow schedules one deferred clean-capture refresh when shown.
+  This avoids worker reads inside layout. Busy owners/dropdown interaction defer
+  it; hidden owners, dirty drafts and another document cancel it. The existing
+  stable-target refresh preserves raw accepted text and caret. Native coverage
+  requires one read/no writes, captured row retained despite a different cursor,
+  invalid raw text/caret retention and document-boundary refusal. The existing
+  interleaved note/take journey now hides the row during Undo, reveals it, checks
+  the exact current event without an extra history step, then Redoes during the
+  same playback epoch. Stale clean status no longer falsely says draft retained.
+
+These corrections are source-only. Python syntax and whitespace checks pass;
+no build or native/app suite has run again. Next checkpoint is no earlier than
+2026-10-24 05:00:40 UTC, after preceding CI is terminal and later starts checked.
+At04:21:37 Mac ARM compilation passed, remaining checks/Intel/Windows were active.
+The next bounded gate will run Activity and precise-owner native groups plus
+workspace automatic-edit/menu/source-navigation/bank groups, and four app cases:
+frozen Activity, interleaved note/take history, composed recording fixture and
+pattern-point native Save. Unchanged shared clock/audio inputs may reuse the
+hashed aa008 short device gate, but its sustained foreground failure stays open.
+Fresh Computer Use must check frozen close/reopen, blocked-target reveal,
+compact/maximize clean-note refresh, invalid drafts and native keyboard focus.
+Required Mac real-device results, reciprocal edited-project checks and sustained
+performance remain necessary before release/parity claims.

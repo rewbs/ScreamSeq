@@ -217,6 +217,29 @@ class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
             continuous()
         self.assertEqual(self.desktop.focus(field), field)
         self.assertEqual(self.field_text(field), '97')
+        # A retained row can be hidden by compact navigation while other editors
+        # change history. Revealing it must refresh the same clean row, without
+        # making the musician explicitly reload or changing playback/history.
+        self.native_panel(placement='hide')
+        self.assertFalse(self.editor()['visible'])
+        self.write('history.undo', domain='all')
+        self.assertEqual(self.read('pattern.notes.get', pattern=0), first_notes)
+        reveal_revision=self.doc()['revision']
+        self.native_panel(placement='secondary', pinned=True, focus=True)
+        deadline=time.monotonic()+5
+        while time.monotonic()<deadline:
+            revealed=self.editor()
+            if not revealed['pending'] and not revealed['stale']:break
+            time.sleep(.025)
+        self.assertFalse(revealed['stale'],revealed)
+        self.assertEqual((revealed['row'],revealed['channel']),(4,0))
+        self.assertEqual(revealed['selectedEvent']['velocity'],96)
+        self.assertEqual(self.doc()['revision'],reveal_revision)
+        self.assertEqual(self.read('automation.get'),recorded)
+        continuous()
+        self.write('history.redo',domain='all')
+        self.assertEqual(self.read('pattern.notes.get',pattern=0),final_notes)
+        continuous()
         self.write('transport.stop')
         path = self.folder / 'precise-plugin-history.screamseq'
         self.write('document.save', path=str(path))

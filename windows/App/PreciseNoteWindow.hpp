@@ -98,6 +98,20 @@ private:
 #include "PreciseNoteOwnerInteraction.inc"
 #include "PreciseNoteOwnerLayout.inc"
 
+  static constexpr UINT_PTR capturedRefreshTimer=3;
+  void resumeVisiblePresentation()noexcept override{
+    // Compact layout changes can reveal a row that was hidden during edits.
+    // Defer worker reads until native layout/placement has unwound.
+    if(window_)SetTimer(window_,capturedRefreshTimer,20,nullptr);
+  }
+  void timer(UINT_PTR id)override{
+    if(id!=capturedRefreshTimer)return;
+    if(!visible()||!hasTarget()||retainedDraft()||context_().document!=document_){KillTimer(window_,id);return;}
+    if(context_().busy)return;
+    for(int control:{pitch,units,snap,localEffect})if(SendMessageW(controls_.at(control),CB_GETDROPPEDSTATE,0,0))return;
+    KillTimer(window_,id);refreshCleanCaptured();
+  }
+
 public:
   PreciseNoteWindow(HWND owner,Request request,ContextProvider context,std::function<void()> returnToPattern)
     :NativeToolWindow(owner),request_(std::move(request)),context_(std::move(context)),return_(std::move(returnToPattern)){
@@ -200,7 +214,7 @@ public:
   }
   void observeContext(){const auto now=context_();if(now.document==observedDocument_&&now.revision==observedRevision_)return;
     observedDocument_=now.document;observedRevision_=now.revision;layout();requestPaint();}
-  void hide()override{cancelDrag();if(automaticEdit_)flushAutomaticEdit();
+  void hide()override{KillTimer(window_,capturedRefreshTimer);cancelDrag();if(automaticEdit_)flushAutomaticEdit();
     require(!automaticEdit_,"Wait for the pending note edit before closing");NativeToolWindow::hide();}
   void flushForProjectSave(){
     // Native Save must include a valid edit still inside its typing debounce.

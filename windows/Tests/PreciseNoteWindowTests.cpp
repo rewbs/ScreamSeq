@@ -327,11 +327,28 @@ void cleanCapturedRevisionRefresh(Owner &owner){
   require(f.tool.refreshCleanCaptured()&&text(field)==L"71"&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},"Clean history refresh left stale music or lost native field focus");
   f.field(Tool::velocity,L"72");SendMessageW(f.tool.window(),WM_TIMER,0x5345,0);
   require(hit(2*units+16384).at("velocity")==72&&hit(3*units+100).at("velocity")==51&&!f.tool.retainedDraft(),"Editing after refresh required reload or overwrote another row");
+  f.tool.hide();hit(3*units+100)["velocity"]=52;f.current.revision="r"+std::to_string(++f.revision);
+  const auto hiddenReads=f.reads,hiddenWrites=f.writes;
+  f.tool.show();require(f.reads==hiddenReads,"Revealing a precise row reentered the worker during native layout");
+  SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);f.current.busy=true;
+  SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==hiddenReads&&!f.tool.capturedCurrent(),"Revealed row bypassed the busy document owner");
+  f.current.busy=false;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==hiddenReads+1&&f.writes==hiddenWrites&&f.tool.capturedCurrent()&&
+    f.tool.capturedTarget()->patternID=="pattern-a"&&f.tool.capturedTarget()->row==2&&
+    text(field)==L"72"&&caret(field)==std::pair<DWORD,DWORD>{1,2}&&GetFocus()==field,
+    "Revealed clean row stayed stale, followed the cursor, wrote music or lost its field/caret");
+  SendMessageW(f.tool.window(),WM_TIMER,3,0);require(f.reads==hiddenReads+1,"Completed reveal refresh repeated a worker read");
   f.field(Tool::velocity,L"72x");const auto retainedDraft=retained(f.tool.snapshot());
   f.current.revision="r"+std::to_string(++f.revision);const auto draftReads=f.reads;
   require(!f.tool.refreshCleanCaptured()&&f.reads==draftReads&&retained(f.tool.snapshot())==retainedDraft,"Revision refresh rebased or discarded invalid raw input");
+  f.tool.hide();f.tool.show();SetFocus(field);SendMessageW(field,EM_SETSEL,1,2);SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==draftReads&&retained(f.tool.snapshot())==retainedDraft&&GetFocus()==field&&caret(field)==std::pair<DWORD,DWORD>{1,2},
+    "Revealing a row discarded invalid raw input or moved its caret");
   f.tool.reloadCaptured();const auto captured=retained(f.tool.snapshot());f.current.document="other-document";
   require(!f.tool.refreshCleanCaptured()&&retained(f.tool.snapshot())==captured,"Clean captured refresh crossed document identity");
+  f.tool.hide();f.tool.show();const auto otherReads=f.reads;SendMessageW(f.tool.window(),WM_TIMER,3,0);
+  require(f.reads==otherReads&&retained(f.tool.snapshot())==captured,"Revealed row crossed document identity");
   Fixture blank(owner.window,false);blank.saved.at("pattern-a")=Json::array();blank.current.insertionInstrument=2;blank.tool.openAt();blank.dock(owner.window);
   blank.current.insertionInstrument=3;blank.current.revision="r"+std::to_string(++blank.revision);
   require(blank.tool.refreshCleanCaptured()&&text(blank.control(Tool::instrument))==L"2","Unrelated revision changed the captured empty-row insertion sound");

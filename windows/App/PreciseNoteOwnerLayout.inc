@@ -3,7 +3,7 @@
   int tabOrderPage_=-1;
   std::wstring displayStatus()const{
     if(!hasTarget())return L"Choose a row / Tools → Load selection";
-    if(!current())return L"Song changed / draft retained / Reload captured before editing";
+    if(!current())return retainedDraft()?L"Song changed / draft retained / Reload captured before editing":L"Song changed / Reload captured before editing";
     return status_;
   }
   int pageForControl(int id)const{

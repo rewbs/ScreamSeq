@@ -311,6 +311,17 @@ class AbsoluteAutomationUITests(unittest.TestCase):
         self.desktop.send(owner,0x201,1,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.desktop.send(owner,0x202,0,(round(px*scale)&65535)|((round(py*scale)&65535)<<16))
         self.assertTrue(state()['frozen']);self.assertIsNotNone(state()['trace']['selectedSequence'])
+        frozen=state();frozen_music=self.read('automation.get')
+        press(11020)
+        self.assertFalse(state()['visible'])
+        self.desktop.send(self.desktop.hwnd(self.pid),0x111,575)
+        reopened=state()
+        self.assertTrue(reopened['visible'])
+        for key in ('document','expectedRevision','target','plugin','parameter','token','cursor',
+                    'pointCount','sources','recorded','selectedPoint','fieldDraft','generation',
+                    'rawTime','rawValue','frozen','page','traceMode','trace','seconds','search'):
+            self.assertEqual(reopened[key],frozen[key],(key,frozen,reopened))
+        self.assertEqual(self.read('automation.get'),frozen_music)
         sequence=state()['trace']['selectedSequence']
         observed=self.read('parameter.activity.get',after=0,limit=2048)
         selected_event=next(p for p in observed['points'] if p['sequence']==sequence)

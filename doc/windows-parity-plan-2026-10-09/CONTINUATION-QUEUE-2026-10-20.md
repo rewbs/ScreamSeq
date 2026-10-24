@@ -8,6 +8,19 @@ must not override current source or the active goal.
 
 ## Current integration boundary
 
+
+**24 October 04:25 UTC current boundary:** aa008 built once; all9 native/shared
+and8 app journeys plus short silent WASAPI passed. Fresh Computer Use confirmed
+precise live gestures/Save caret and native plugin Record/slider/Stop/Keep.
+It found frozen Activity capture loss on reopen and a clean hidden precise row
+remaining stale when resize revealed it. Both have source corrections and new
+assertions, not yet rebuilt. Foreground606.133s recorded38 deadline overruns;
+no sustained performance/flicker qualification. QA19052 exited0. No package or
+merge. See LIVE-PARAMETER-RELEASE's final section and
+`activity-refresh-history/foreground-check.json`. Next checkpoint no earlier
+than2026-10-24 05:00:40UTC, only after terminal CI/later-start inspection. The
+entries below describe older boundaries and do not override this one.
+
 **24 October presentation-start correction:**0f5 ARM device evidence proves
 its first accepted input preceded the first presentation interval. Both native
 recording Start adapters now use a shared first-presentation admission guard,
