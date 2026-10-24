@@ -1599,7 +1599,7 @@ case passed, and five subsequent keyboard/browser cases passed. See
 [context evidence](CONTEXT-PANEL-2026-10-19.md). This is not qualification of
 the newer source or a visual review.
 
-## Dependency-ordered remaining work
+## Historical dependency queue (superseded by the current integration boundary)
 
 | Priority / effort | Confirmed work or gap | Concrete next action and gate |
 | --- | --- | --- |

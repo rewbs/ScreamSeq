@@ -98,6 +98,37 @@ int main() {
     check(hosted.size()==dry.size()&&partitioned.size()==hosted.size(),"Zero-tail gain changed duration");
     check(hosted!=dry&&hosted!=render(module,plugins,{},&native),"Export ignored hosted DSP or recorded automation");
     for(size_t n=0;n<hosted.size();++n)check(std::abs(hosted[n]-partitioned[n])<2e-6f,"Recorded export depends on callback partition");
+    // A recorded decay increase must retain its audible tail. Compare the
+    // complete WAV with an independently scheduled native effect, including
+    // all samples after the shorter startup tail would have cut the export.
+    PluginState comb;comb.descriptor.format="Built-in";comb.descriptor.classID="resonance.comb-filter.v1";comb.instanceID="export-decay";
+    auto combSetup=std::make_unique<NativePlugin>(comb,48000,true);
+    check(combSetup->parameter(1,36)&&combSetup->parameter(3,0)&&combSetup->parameter(4,100)&&combSetup->parameter(5,5),
+          "Configure short comb decay");comb=combSetup->state();
+    auto independent=std::make_unique<NativePlugin>(comb,48000,true);
+    const uint64_t shortTail=uint64_t(std::ceil(independent->tail()*48000));
+    constexpr uint64_t decayChange=1024;
+    const auto decayed=render(module,{comb},{{0,3,90,decayChange}});
+    std::vector<float> expected;
+    uint64_t expectedEnd=UINT64_MAX,longTail=0;
+    for(uint64_t start=0;start<expectedEnd;) {
+      if(start==decayChange) {
+        check(independent->parameter(3,90),"Configure recorded comb feedback");
+        longTail=uint64_t(std::ceil(independent->tail()*48000));
+        check(longTail>shortTail+4800,"Recorded fixture must grow decay by more than 100 ms");
+        expectedEnd=dry.size()/2+longTail;
+      }
+      check(start<48000*120,"Independent decay fixture exceeded its two-minute bound");
+      const auto count=uint32_t(std::min<uint64_t>(512,expectedEnd-start));
+      buffer.fill(0);
+      for(size_t n=0;n<count*2&&start*2+n<dry.size();++n)buffer[n]=dry[size_t(start)*2+n];
+      check(independent->process(buffer.data(),count,start),"Independent comb render failed");
+      expected.insert(expected.end(),buffer.begin(),buffer.begin()+count*2);start+=count;
+    }
+    check(decayed.size()==expected.size(),"Recorded feedback growth truncated the exported plugin tail");
+    check(std::any_of(expected.begin()+dry.size()+shortTail*2,expected.end(),[](float v){return std::abs(v)>1e-6f;}),
+          "Decay regression fixture has no audible samples beyond its startup tail");
+    for(size_t n=0;n<expected.size();++n)check(std::abs(decayed[n]-expected[n])<2e-6f,"Recorded decay export differs from independent complete PCM");
     std::ostringstream invalid;rejects([&]{writeProjectAudio(module,{}, {},invalid,UINT32_MAX,nullptr,0);},"Zero block accepted");
     rejects([&]{writeProjectAudio(module,{}, {},invalid,UINT32_MAX,nullptr,4097);},"Oversize block accepted");
     check(invalid.str().empty(),"Invalid block wrote output");

@@ -283,3 +283,18 @@ settling the underlying engine-versus-writer contract. Its terminal log SHA256:
 still running; inspect their terminal evidence before the next checkpoint.
 The read-only `collect-audio-export-ci.py` downloads only completed native jobs
 and preserves already downloaded logs. No failed job was restarted.
+
+
+The next source continuation adds a complete recorded-decay PCM acceptance
+case inside the existing shared export test: built-in comb feedback changes at
+frame1024, then export duration and every sample are compared with an
+independently scheduled NativePlugin fed the dry core PCM. The fixture must
+contain audible samples beyond its short initial tail; the final advertised
+tail and a two-minute allocation bound remain exact requirements. This is
+additional coverage, not a reproduced product bug: PluginScheduling and the
+musical command/lane preparers reserve known parameter ranges before rendering,
+so recorded feedback already contributes to the initial tail budget. The
+suspected stale-tail writer change was removed after that source review.
+No export/DSP product code changed in this continuation. Resolve the newest
+`audio-export-followup/freeze.json`; its earlier unexecuted209 manifest is
+retained separately. The exact failed dry partition assertion remains required.
