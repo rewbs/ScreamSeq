@@ -342,7 +342,9 @@ The document stores source definitions and edges; control snapshots prepare all
 lookup tables, curves and storage outside the callback.
 
 `editor/ParameterProvenance` projects existing envelopes, pattern FX bindings and
-recorded automation as bounded read-only source references. These retain their
+recorded automation as bounded read-only source references. Parameter GT/GX commands
+resolve their native argument bindings and expose named gate parameters through
+the same references, including exact row and FX-column navigation. These retain their
 base-setting semantics and cannot be cut or repatched as additive graph wires.
 Both session adapters expose `graph.provenance.get`, even stopped or without a
 prepared vendor. The Mac graph loads one selected parameter's source cards

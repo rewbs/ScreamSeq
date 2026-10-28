@@ -26,6 +26,11 @@ int main(){try{
   CHECK(parameterProvenance(native,doc.song(),"unloaded",UINT32_MAX,{}, {},900,1).sources.empty());
   CHECK(parameterProvenance(native,doc.song(),"other",7).sources.empty());
   native.automation[0].points.clear();CHECK(parameterProvenance(native,doc.song(),"unloaded",UINT32_MAX).sources[0].count==0);
+  PatternCommand gate{pattern,track,42*65536,0,1,PatternCommandKind::Native};gate.native=NativePatternOp::Gate;gate.arguments=nativePatternDefaults(gate.native);gate.arguments[0]=3;setParameterBinding(gate,3);
+  auto stop=gate;stop.position=44*65536;stop.native=NativePatternOp::GateStop;stop.arguments=nativePatternDefaults(stop.native);stop.arguments[0]=3;setParameterBinding(stop,3);
+  native.performance.commands.push_back(gate);native.performance.commands.push_back(stop);
+  const auto gates=parameterProvenance(native,doc.song(),"unloaded",UINT32_MAX).sources[1];
+  CHECK(gates.count==4&&gates.commands[2]==gate&&gates.commands[3]==stop&&gates.binding==3&&gates.endPosition==44*65536);
   native.performance.commands.clear();for(uint32_t i=0;i<200;++i)native.performance.commands.push_back({pattern,track,i*256,0,1,PatternCommandKind::ParameterSet,3,.5});
   const auto bounded=parameterProvenance(native,doc.song(),"unloaded",UINT32_MAX).sources[1];CHECK(bounded.count==200&&bounded.commands.size()==128&&bounded.omittedCommands==72);
   rejects([&]{parameterProvenance(native,doc.song(),"",7);});rejects([&]{parameterProvenance(native,doc.song(),"unloaded",7,65535);});rejects([&]{parameterProvenance(native,doc.song(),"unloaded",7,{}, {},0,257);});rejects([&]{parameterProvenance(native,doc.song(),"unloaded",7,{}, {1,3,2});});

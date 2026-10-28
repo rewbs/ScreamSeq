@@ -1017,7 +1017,7 @@ public:
             if(parameterAutomationWindow){const auto s=parameterAutomationWindow->snapshot();if(s.value("retainedDraft",false)||s.value("pending",false))throw std::runtime_error("Apply or Reload the existing parameter curve draft first");}
             const auto pattern=sourcePattern();requireParameter();auto next=position();next["pattern"]=pattern;next["row"]=source.value("position",0u)/65536;next["following"]=false;navigate(next);const auto cursor=position();openParameterAutomation(plugin,parameter);unchanged(cursor);parameterAutomationWindow->openSourceAt(plugin,parameter);workspaceEditors[0].pinned=true;return;
         }
-        if(kind=="pattern-set"||kind=="pattern-slide"||kind=="pattern-commands"||kind=="graph-command") {
+        if(kind=="pattern-set"||kind=="pattern-slide"||kind=="pattern-gate"||kind=="pattern-commands"||kind=="graph-command") {
             if(effectDraftExists)throw std::runtime_error("Apply or Reload the existing FX draft first");
             if(kind=="graph-command"&&graphCommandsWindow){const auto s=graphCommandsWindow->snapshot();if(s.value("draft",false)||s.value("pending",false))throw std::runtime_error("Apply or Reload the existing graph command draft first");}
             const auto pattern=sourcePattern();

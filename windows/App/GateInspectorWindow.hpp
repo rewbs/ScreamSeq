@@ -42,10 +42,10 @@ private:
     for(auto [id,key]:{std::pair{riseShape,"riseShape"},std::pair{fallShape,"fallShape"}})choose(id,int(std::find(shapes.begin(),shapes.end(),fields_.value(key,std::string("linear")))-shapes.begin()));
     set(linked,fields_.value("linked",true)?L"Rise / fall linked":L"Rise / fall independent");setting_=false;layout();requestPaint();
   }
-  void loadParameters(int desired=-1){
+  void loadParameters(std::optional<uint32_t> desired={}){
     const int slot=selected(plugin);parameters_=Json::array();choices(parameter,{});if(slot<0||size_t(slot)>=plugins_.size())return;current();
     auto result=request_("plugin.parameters.get",{{"plugin",plugins_[slot].at("instanceID")}});current();
-    std::vector<std::wstring> names;int chosen=0;for(const auto &p:result)if(p.value("writable",false)){if(p.at("id")==desired)chosen=int(names.size());parameters_.push_back(p);names.push_back(wide(p.at("name")));}choices(parameter,names);choose(parameter,names.empty()?-1:chosen);
+    std::vector<std::wstring> names;int chosen=desired?-1:0;for(const auto &p:result)if(p.value("writable",false)){if(desired&&p.at("id")==*desired)chosen=int(names.size());parameters_.push_back(p);names.push_back(wide(p.at("name")));}choices(parameter,names);choose(parameter,names.empty()?-1:chosen);
   }
   void load(){if(pending_)return;auto candidate=capture_();if(!candidate)throw std::runtime_error("Choose an editable pattern FX cell");const auto revision=std::pair(candidate->document,candidate->revision);const auto generation=generation_;pending_=true;
     Json data;try{data=request_("pattern.effects.get",{{"pattern",candidate->pattern}});if(context_()!=revision||generation_!=generation)throw std::runtime_error("Song changed while reading the cell");}catch(...){pending_=false;throw;}pending_=false;
@@ -53,7 +53,7 @@ private:
     for(const auto &p:descriptor.parameters){if(p.type==Tracker::NativePatternFieldType::Choice)fields_[p.key]=p.choices[size_t(p.initial)];else if(p.type==Tracker::NativePatternFieldType::Boolean)fields_[p.key]=p.initial!=0;else fields_[p.key]=p.initial;}
     const auto command=candidate->command.is_object()?candidate->command:Json::object();if(command.value("native",std::string())=="gate")fields_.update(command.at("parameters"));fields_["offset"]=command.value("offset",0.0)/65536/candidate->rowsPerBeat;
     std::vector<std::wstring> names;for(const auto &p:plugins_)names.push_back(wide(p.at("name")));choices(plugin,names);
-    int desired=-1;for(const auto &b:bindings_)if(b.at("id")==fields_.at("binding")){for(size_t i=0;i<plugins_.size();++i)if(plugins_[i].at("instanceID")==b.at("plugin"))choose(plugin,int(i));desired=b.at("parameter").get<int>();}
+    std::optional<uint32_t> desired;if(fields_.at("binding")!=0)choose(plugin,-1);for(const auto &b:bindings_)if(b.at("id")==fields_.at("binding")){for(size_t i=0;i<plugins_.size();++i)if(plugins_[i].at("instanceID")==b.at("plugin"))choose(plugin,int(i));desired=b.at("parameter").get<uint32_t>();}
     showFields(true);if(fields_.at("target")=="parameter")loadParameters(desired);dirty_=false;++generation_;
     status(L"P"+std::to_wstring(candidate->pattern)+L" · row "+std::to_wstring(candidate->row)+L" · channel "+std::to_wstring(candidate->channel+1)+L" · FX "+std::to_wstring(candidate->column+1)+L" · Apply saves one Undo");
   }

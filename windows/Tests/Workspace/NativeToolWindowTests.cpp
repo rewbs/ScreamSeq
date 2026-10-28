@@ -1,4 +1,5 @@
 #include "../../App/NativeToolWindow.hpp"
+#include "../../App/GateInspectorWindow.hpp"
 #include "../../App/GraphTrimsWindow.hpp"
 #include "../../App/PatternSampleRenderWindow.hpp"
 #include "../../App/MultisampleImportWindow.hpp"
@@ -18,6 +19,22 @@ struct Window {
   ~Window(){if(value)DestroyWindow(value);}
   void close(){const auto window=value;require(DestroyWindow(window),"Destroy dock test host");value=nullptr;require(!IsWindow(window),"Dock test host survived destruction");}
 };
+void gateParameterIdentity(HWND owner){
+  using Json=ScreamSeq::Api::Json;
+  for(const auto wanted:{uint32_t(INT32_MAX)+1,UINT32_MAX,uint32_t(7)}){
+    ScreamSeq::ScratchPatternTarget target;target.document="gate-doc";target.revision="r1";target.rows=64;
+    target.command={{"native","gate"},{"parameters",{{"target","parameter"},{"binding",1}}}};
+    Json written;auto request=[&](const std::string &method,const Json &args)->Json{
+      if(method=="pattern.effects.get")return {{"commands",Json::array()},{"bindings",Json::array({{{"id",1},{"plugin","stable"},{"parameter",wanted}}})}};
+      if(method=="plugin.parameters.get")return Json::array({{{"id",2},{"name","First"},{"writable",true}},{{"id",wanted==7?9:wanted},{"name","Saved"},{"writable",true}}});
+      written=args;return Json::object();
+    };
+    ScreamSeq::GateInspectorWindow gate(owner,request,[]{return std::pair{std::string("gate-doc"),std::string("r1")};},[&]{return std::optional(target);},[]{return Json::array({{{"name","Fixture"},{"instanceID","stable"}}});});
+    ScreamSeq::Tests::ownGuiWindow(gate.window());gate.open();
+    require(SendMessageW(GetDlgItem(gate.window(),6103),CB_GETCURSEL,0,0)==(wanted==7?-1:1),"Saved gate parameter ID narrowed or unresolved binding silently retargeted");
+    if(wanted!=7){SendMessageW(gate.window(),WM_COMMAND,MAKEWPARAM(6107,BN_CLICKED),reinterpret_cast<LPARAM>(GetDlgItem(gate.window(),6107)));require(written["bindings"][0]["parameter"]==wanted,"Applying the gate changed its saved parameter identity");}
+  }
+}
 class Tool final:public ScreamSeq::NativeToolWindow {
 public:
   unsigned localKeys=0,deactivations=0,layouts=0,comboActions=0;
@@ -254,7 +271,7 @@ int wmain(int argc,wchar_t **argv){
   try{
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);ScreamSeq::Tests::runPrivateGuiProcess(L"ScreamSeqDockTest",argc,argv,[]{
     WNDCLASSW type{};type.lpfnWndProc=DefWindowProcW;type.hInstance=GetModuleHandleW(nullptr);type.lpszClassName=L"ScreamSeq.DockTest.Host";RegisterClassW(&type);
-    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);retainedThemeChange(main.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
+    HWND mainWindow{},hostWindow{};{Window main(type.lpszClassName);Window host(type.lpszClassName,main.value);mainWindow=main.value;hostWindow=host.value;ShowWindow(main.value,SW_SHOWNOACTIVATE);gateParameterIdentity(main.value);minimumClientBounds(main.value,host.value);retainedDock(main.value,host.value);retainedThemeChange(main.value);compactHeaderMeasurement();trimRequestRetention(main.value);renderRequestRetention(main.value);multisampleRequestRetention(main.value);pluginPathRequestRetention(main.value);recordingSetupRetention(main.value);host.close();main.close();}
     require(!IsWindow(mainWindow)&&!IsWindow(hostWindow),"Destroy owned dock test hosts");
     composedCanvasRetainsNativeChildren();
     {Window main(type.lpszClassName);completionClassification();pluginPathCompletionReview(main.value);pluginPathReadback(main.value);pluginLibraryCompletionReview(main.value);sampleBrowserCompletionReview(main.value);sampleLibraryRecovery(main.value);renderCompletionReview(main.value);importCompletionReview(main.value);recordingCompletionReview(main.value);recordingLifecycleReview(main.value);nativeOwnerRetirement(main.value);nativeInputGate(main.value);earlyNestedDraftOwner(main.value);}

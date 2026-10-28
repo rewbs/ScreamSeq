@@ -13,7 +13,7 @@
         if(s.lane)v["id"]=id(s.lane);
         if(s.track){v["track"]=id(s.track);v["channel"]=s.channel;v["column"]=s.column;v["binding"]=s.binding;}
         if(s.kind==ParameterProvenanceKind::Recorded){v["firstFrame"]=s.firstFrame;v["lastFrame"]=s.lastFrame;v["sampleRate"]=48000;}
-        v["commands"]=Json::array();for(const auto &c:s.commands)v["commands"].push_back({{"kind",c.kind==PatternCommandKind::ParameterSlide?"pattern-slide":"pattern-set"},{"position",c.position},{"duration",c.duration},{"value",c.value}});
+        v["commands"]=Json::array();for(const auto &c:s.commands){Json command={{"kind",isGate(c)?"pattern-gate":c.kind==PatternCommandKind::ParameterSlide?"pattern-slide":"pattern-set"},{"position",c.position},{"duration",c.duration},{"value",c.value}};PatternJSON::append(command,c);v["commands"].push_back(std::move(command));}
         v["orders"]=Json::array();for(const auto &[sequence,order]:s.orders)v["orders"].push_back({{"sequence",sequence},{"order",order}});sources.push_back(std::move(v));
       }
       return {{"sources",sources},{"total",page.total},{"offset",page.offset},{"unitsPerRow",65536},{"sampleRate",48000},{"rule","These are existing base-value controls, not additive modulation. Enabled envelopes, pattern parameter commands and recorded automation are mutually exclusive. Song modulation adds to the chosen baseline and clamps once."}};

@@ -28,16 +28,18 @@ final class GateValueControl:NSView,NSTextFieldDelegate {
   private(set) var isValid=true
   var lower=0.0,upper=1.0,scale=1.0,logarithmic=false,integral=false
   private(set) var scalar=0.0
+  private var representedText=""
   init(_ title:String){super.init(frame:.zero);label.stringValue=title;for v in [label,slider,value]{addSubview(v)};value.font = .monospacedDigitSystemFont(ofSize:11,weight:.regular);value.delegate=self;value.target=self;value.action=#selector(entered);slider.target=self;slider.action=#selector(slid);slider.isContinuous=true;slider.setAccessibilityLabel(title);value.setAccessibilityLabel(title+" exact value")}
   required init?(coder:NSCoder){fatalError()}
   override var isFlipped:Bool{true}
   override var intrinsicContentSize:NSSize{NSSize(width:280,height:35)}
   override func layout(){super.layout();let w=bounds.width;label.frame=NSRect(x:0,y:8,width:105,height:19);value.frame=NSRect(x:max(110,w-83),y:4,width:83,height:24);slider.frame=NSRect(x:105,y:5,width:max(12,w-197),height:24)}
   func configure(_ scalar:Double,min:Double,max:Double,scale:Double=1,log:Bool=false,integer:Bool=false){self.lower=min;self.upper=max;self.scale=scale;logarithmic=log;integral=integer;set(scalar)}
-  func set(_ scalar:Double){isValid=true;value.textColor=Theme.text;self.scalar=scalar;value.stringValue=String(format:"%.9g",scalar*scale);slider.doubleValue=position(scalar)}
+  func set(_ scalar:Double){isValid=true;value.textColor=Theme.text;self.scalar=scalar;value.stringValue=String(format:"%.9g",scalar*scale);representedText=value.stringValue;slider.doubleValue=position(scalar)}
   func position(_ v:Double)->Double {guard upper>lower else{return 0};if logarithmic{return max(0,min(1,log(max(lower,v)/lower)/log(upper/lower)))};return max(0,min(1,(v-lower)/(upper-lower)))}
-  @objc func slid(){isValid=true;value.textColor=Theme.text;var v=logarithmic ? lower*pow(upper/lower,slider.doubleValue) : lower+(upper-lower)*slider.doubleValue;if integral{v=v.rounded()};scalar=v;value.stringValue=String(format:"%.9g",v*scale);onChange?(v)}
-  @objc func entered(){guard let parsed=GateShapeModel.parse(value.stringValue) else{isValid=false;value.textColor = .systemRed;onInvalid?();return};isValid=true;let v=parsed/scale;guard v.isFinite else{return};value.textColor=Theme.text;scalar=v;slider.doubleValue=position(v);onChange?(integral ? v.rounded():v)}
+  @objc func slid(){isValid=true;value.textColor=Theme.text;var v=logarithmic ? lower*pow(upper/lower,slider.doubleValue) : lower+(upper-lower)*slider.doubleValue;if integral{v=v.rounded()};scalar=v;value.stringValue=String(format:"%.9g",v*scale);representedText=value.stringValue;onChange?(v)}
+  @objc func entered(){guard value.stringValue != representedText else{return};guard let parsed=GateShapeModel.parse(value.stringValue) else{isValid=false;value.textColor = .systemRed;onInvalid?();return};isValid=true;let v=parsed/scale;guard v.isFinite else{return};value.textColor=Theme.text;scalar=integral ? v.rounded():v;representedText=value.stringValue;slider.doubleValue=position(scalar);onChange?(scalar)}
+  func controlTextDidChange(_ obj:Notification){entered()}
   func controlTextDidEndEditing(_ obj:Notification){entered()}
 }
 
@@ -152,15 +154,16 @@ final class GateInspector:NSView {
   @objc private func pluginChanged(){selectedPlugin=plugin.selectedItem?.representedObject as? String;selectedParameter=nil;hasDraft=true;generation+=1;loadParameters()}
   @objc private func parameterChanged(){selectedParameter=parameter.selectedItem?.representedObject as? Int;hasDraft=true;generation+=1}
   private func loadParameters(){guard let onRequest else{return}
-    if selectedPlugin==nil{selectedPlugin=plugins.first?["instanceID"] as? String}
+    let chosen=selectedParameter;parameter.removeAllItems();selectedParameter=nil
+    if selectedPlugin==nil,model.number("binding")==0{selectedPlugin=plugins.first?["instanceID"] as? String}
     guard let id=selectedPlugin,let slot=plugins.firstIndex(where:{$0["instanceID"] as? String==id}) else{status.stringValue="Add an instrument or effect plugin to choose a parameter.";return}
-    plugin.selectItem(at:slot);let token=captureGeneration,chosen=selectedParameter
+    plugin.selectItem(at:slot);let token=captureGeneration
     onRequest("plugin.parameters.get",["slot":slot]){[weak self] reply in
       guard let self,self.captureGeneration==token,self.selectedPlugin==id else{return}
       guard let result=reply["result"] as? [String:Any],result["revision"] as? String==self.revision,let data=result["data"] as? [[String:Any]] else{self.failure(reply);return}
       self.parameters=data.filter{$0["writable"] as? Bool != false};self.parameter.removeAllItems()
       for p in self.parameters{self.parameter.addItem(withTitle:p["name"] as? String ?? "Parameter");self.parameter.lastItem?.representedObject=p["id"]}
-      if let chosen,let i=self.parameters.firstIndex(where:{$0["id"] as? Int==chosen}){self.parameter.selectItem(at:i)}
+      if let chosen{self.parameter.selectItem(at:self.parameters.firstIndex(where:{$0["id"] as? Int==chosen}) ?? -1)}
       self.selectedParameter=self.parameter.selectedItem?.representedObject as? Int
     }
   }

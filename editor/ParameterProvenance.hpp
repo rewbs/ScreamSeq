@@ -6,11 +6,7 @@ namespace Tracker {
 // Read-only control-thread projection. These are references to existing edits,
 // never an additional automation lane or an additive modulation connection.
 enum class ParameterProvenanceKind : uint8_t { Envelope, PatternCommands, Recorded };
-struct ParameterProvenanceCommand {
-  PatternCommandKind kind=PatternCommandKind::ParameterSet;
-  uint32_t position=0,duration=0;
-  double value=0;
-};
+using ParameterProvenanceCommand = PatternCommand;
 struct ParameterProvenanceSource {
   ParameterProvenanceKind kind=ParameterProvenanceKind::Envelope;
   std::string key,plugin;
