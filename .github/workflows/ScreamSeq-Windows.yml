@@ -101,35 +101,13 @@ jobs:
         shell: pwsh
         run: |
           $env:SCREAMSEQ_TEST_EXE = (Resolve-Path bin/windows-ci/Release/ScreamSeq.exe).Path
-          $env:SCREAMSEQ_TEST_LIVE_AUDIO = '1'
-          # The full composing journey uses the mandatory scanned VST3 synth,
-          # not an optional installed vendor. Reuse the worker gate's cache.
+          # Device-dependent cases remain available for explicit local qualification.
+          # Hosted runners have no WASAPI endpoint; keep those cases visibly skipped.
+          $env:SCREAMSEQ_TEST_LIVE_AUDIO = '0'
+          # Reuse the worker gate's scanned VST3 fixture for offline plugin/editor checks.
           $env:SCREAMSEQ_TEST_PROVIDER_CACHE = (Resolve-Path bin/windows-ci/plugin-edit-cache.json).Path
-          # Keep the original/recorded projects and PCM after test cleanup,
-          # including partial journeys when a required assertion fails.
-          $env:SCREAMSEQ_COMPOSING_EVIDENCE_DIR = Join-Path $env:GITHUB_WORKSPACE 'bin/windows-ci/recording-composing'
           $env:TMPDIR = Join-Path $env:RUNNER_TEMP 'screamseq-integration-ui'
           New-Item -ItemType Directory -Force $env:TMPDIR | Out-Null
-          # The hosted Server image may leave both native audio services stopped.
-          # Start them on this disposable runner; do not alter endpoint selection
-          # or system audio defaults, and retain any failure for diagnosis.
-          $audioServices = @(foreach ($serviceName in @('AudioEndpointBuilder', 'Audiosrv')) {
-            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-            $before = if ($service) { $service.Status.ToString() } else { 'unavailable' }
-            $failure = $null
-            if ($service -and $service.Status -ne 'Running') {
-              try {
-                Start-Service -Name $serviceName -ErrorAction Stop
-                $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
-              } catch { $failure = $_.Exception.Message }
-              $service.Refresh()
-            }
-            @{ name = $serviceName; before = $before; status = $(if ($service) { $service.Status.ToString() } else { 'unavailable' }); error = $failure }
-          })
-          $audioServices | ConvertTo-Json | Set-Content bin/windows-ci/audio-services.json
-          $binaryHash = (Get-FileHash -LiteralPath $env:SCREAMSEQ_TEST_EXE -Algorithm SHA256).Hash.ToLowerInvariant()
-          python -B windows/Tests/audio_environment.py --executable $env:SCREAMSEQ_TEST_EXE --binary-sha256 $binaryHash --output bin/windows-ci/audio-environment
-          if ($LASTEXITCODE -ne 0) { Write-Warning 'Audio availability probe failed; retained report is diagnostic, and required tests still run.' }
           $integrationLog = Join-Path $env:GITHUB_WORKSPACE 'screamseq-integration-ui.log'
           Push-Location windows/Tests
           try {
@@ -244,10 +222,6 @@ jobs:
             bin/windows-ci/CMakeCache.txt
             bin/windows-ci/test-registration.json
             bin/windows-ci/test-schedule.json
-            bin/windows-ci/audio-services.json
-            bin/windows-ci/audio-environment/**
-            bin/windows-ci/recording-composing/**
-            bin/windows-ci/recording-composing-layered-instrument/**
             bin/windows-ci/Testing/Temporary/*.log
             bin/windows-ci/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: warn

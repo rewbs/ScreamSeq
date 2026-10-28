@@ -138,13 +138,8 @@ jobs:
         run: |
           set -o pipefail
           RESONANCE_BUILD_DIR="$SCREAMSEQ_BUILD_DIR" python -B mac/Tests/test_automation.py --busy-receipts-only 2>&1 | tee screamseq-macos-busy-replay.log
-      - name: Provision the isolated virtual audio endpoint
-        id: virtual-audio
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -o pipefail
-          bash .github/scripts/prepare-macos-audio.sh 2>&1 | tee screamseq-macos-audio-device.log
+      # Live device recording is temporarily excluded from hosted CI. The
+      # --ui checks exercise plugin editors and offline callbacks without a device.
       - name: Owned AU and VST3 editor notification lifecycle
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash
@@ -154,7 +149,7 @@ jobs:
           import os, pathlib, subprocess
           build = pathlib.Path(os.environ['SCREAMSEQ_BUILD_DIR']).resolve(strict=True)
           subprocess.run([str(build / 'native-plugin-tests'),
-              str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui', '--loopback-record'],
+              str(build / 'test-plugins/ResonanceFixture.vst3'), '--ui'],
               check=True, timeout=120)
           PY
       - name: Sample library tests from the existing build

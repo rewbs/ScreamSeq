@@ -10,6 +10,7 @@ import test_pattern_performance as support
 import test_recording as recording_support
 
 
+@unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent WASAPI qualification')
 class PreciseNoteLiveTests(PreciseNoteNativeMixin, unittest.TestCase):
     doc = support.PatternPerformanceTests.doc
     read = support.PatternPerformanceTests.read

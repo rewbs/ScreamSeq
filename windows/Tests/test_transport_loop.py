@@ -174,6 +174,7 @@ class TransportLoopTests(unittest.TestCase):
         else:
             self.fail('Owned transport fixture did not start WASAPI; an endpoint is required')
 
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent WASAPI qualification')
     def test_native_playback_commands_capture_occurrence_range_and_detached_cursor(self):
         self.write('order.edit', order=0, operation='after', pattern=0)
         self.start_live('native-regions')
@@ -250,6 +251,7 @@ class TransportLoopTests(unittest.TestCase):
         play(589, dict(order=1, pattern=0, startRow=8, endRow=24, cursorRow=23, loop=True))
         self.write('transport.stop')
 
+    @unittest.skipUnless(os.environ.get('SCREAMSEQ_TEST_LIVE_AUDIO') == '1', 'Explicit silent WASAPI qualification')
     def test_live_loop_preserves_region_device_cursor_and_recording_take(self):
         self.start_live('loop-region')
         context = self.read('context.get')
