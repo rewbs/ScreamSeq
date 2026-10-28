@@ -53,6 +53,8 @@ final class AssetFieldDraft {
     }
     return value
   }
+  var snapshot:[String:String] {current}
+  func accept(_ keys:Dictionary<String,Any>.Keys,submitted:[String:String]){for key in keys{if let value=submitted[key]{baseline[key]=value}}}
   func reset() { baseline = [:]; index = nil }
   func accept(_ keys: Dictionary<String, Any>.Keys) { for key in keys { if let control = controls[key] { baseline[key] = value(control) } } }
   func accept(_ keys: [String]) { for key in keys { if let control = controls[key] { baseline[key] = value(control) } } }
@@ -600,8 +602,11 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   override var acceptsFirstResponder: Bool { true }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); super.mouseDown(with:event) }
 
-  lazy var settingsDraft = AssetFieldDraft(["name":name,"volume":volume,"pan":pan,"fadeout":fade,"nna":nna,"dct":dct,"dna":dna,"enabled":enabled,"sustain":sustain,"sustainPoint":sustainPoint,"sustainEnd":sustainEnd,"loop":looping,"loopStart":loopStart,"loopEnd":loopEnd,"filter":filter])
-  var hasDraft: Bool { settingsDraft.hasDraft }
+  lazy var settingsDraft = AssetFieldDraft(["name":name,"volume":volume,"pan":pan,"fadeout":fade,"nna":nna,"dct":dct,"dna":dna,"enabled":enabled,"sustain":sustain,"sustainPoint":sustainPoint,"sustainEnd":sustainEnd,"loop":looping,"loopStart":loopStart,"loopEnd":loopEnd,"filter":filter,"carry":carry,"releaseNode":releaseNode])
+  var hasDraft: Bool { settingsDraft.hasDraft || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping || pending }
+  private(set) var pending=false,capturedRevision="",capturedInstrument=""
+  var onCommit:(([String:Any],String,Int,String,@escaping([String:Any])->Void)->Void)?
+  private var nodeFieldsDirty=false,commitFailed=false,saveWork:DispatchWorkItem?,completionWaiters=[(Bool)->Void]()
   let picker = NSPopUpButton(), name = NSTextField(string: ""),
     volume = numberField(64, label: "Instrument volume"),
     pan = numberField(128, label: "Instrument pan"), fade = numberField(256, label: "Fade out"),
@@ -615,11 +620,12 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   let envelopeType = NSPopUpButton(),
     looping = NSButton(checkboxWithTitle: "Loop", target: nil, action: nil),
     filter = NSButton(checkboxWithTitle: "Filter envelope", target: nil, action: nil)
+  let carry=NSButton(checkboxWithTitle:"Carry envelope",target:nil,action:nil),releaseNode=numberField(255,width:70,label:"Envelope release node, 255 for none")
   let nodePicker = NSPopUpButton(), nodeTick = numberField(0, label: "Selected envelope node tick"),
     nodeValue = numberField(64, label: "Selected envelope node value")
   private var envelopeData = [[String: Any]]()
   private var displayedEnvelope: Int?
-  private var loadedPoints = [[Int]]()
+  private var loadedPoints = [[Int]](),loadedMapping=[Int](repeating:0,count:128)
   let envelope = EnvelopeView(frame: .zero), mapping = NSTextField(wrappingLabelWithString: ""),
     mapFrom = numberField(0, label: "Keymap first note"),
     mapTo = numberField(119, label: "Keymap last note"), mapSample = NSPopUpButton()
@@ -687,7 +693,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
           self.envelope.points = [[0, 0], [2, 64], [12, 48], [32, 48], [48, 0]]
           self.envelope.selectedNode = 0
           self.enabled.state = .on
-          self.onApply?([
+          self.submit([
             "envelope": self.envelopeType.indexOfSelectedItem,
             "points": self.envelope.points, "enabled": true,
           ])
@@ -704,7 +710,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
           let last = max(0, min(127, self.mapTo.integerValue))
           if first <= last {
             for i in first...last { self.keymap[i] = self.mapSample.selectedTag() }
-            self.onApply?(["mapping": self.keymap])
+            self.submit(["mapping": self.keymap])
           }
         },
       ], spacing: 16)
@@ -737,6 +743,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
         Theme.label(
           "Drag nodes or use the node fields. Double-click to add; Delete removes the selected node. Note numbers: 0–119.",
           size: 11, color: Theme.muted),
+        stack(.horizontal,[carry,labeled("RELEASE NODE (255 = NONE)",releaseNode)],spacing:12),
         ToolSection("Instrument settings & note behaviour", id: "instrument.settings", views: [props, actions]),
         ToolSection("Sample keymap", id: "instrument.keymap", views: [map, mapping]), NSView(),
       ], spacing: 8)
@@ -747,7 +754,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
     envelope.onChange = { [weak self] points in
       guard let self else { return }
-      self.onApply?(["envelope": self.envelopeType.indexOfSelectedItem, "points": points])
+      self.submit(["envelope": self.envelopeType.indexOfSelectedItem, "points": points])
     }
     envelope.onSelect = { [weak self] _ in self?.updateNodeFields() }
     envelope.onRemove = { [weak self] removed, points in
@@ -755,7 +762,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
       func shifted(_ index: Int) -> Int {
         min(max(0, points.count - 1), index > removed ? index - 1 : index)
       }
-      self.onApply?([
+      self.submit([
         "envelope": self.envelopeType.indexOfSelectedItem, "points": points,
         "enabled": !points.isEmpty && self.enabled.state == .on,
         "sustainPoint": shifted(self.sustainPoint.integerValue),
@@ -764,20 +771,21 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
         "loopEnd": shifted(self.loopEnd.integerValue),
       ])
     }
-    for field in [name, volume, pan, fade, nodeTick, nodeValue, sustainPoint, sustainEnd, loopStart, loopEnd] {
+    for field in [name, volume, pan, fade, nodeTick, nodeValue, releaseNode, sustainPoint, sustainEnd, loopStart, loopEnd] {
       field.delegate = self; field.target = self; field.action = #selector(commitControl(_:))
     }
     for control in [nna, dct, dna] { control.target = self; control.action = #selector(commitControl(_:)) }
-    for control in [sustain, looping, filter] { control.target = self; control.action = #selector(commitControl(_:)) }
+    for control in [sustain, looping, filter, carry] { control.target = self; control.action = #selector(commitControl(_:)) }
   }
   required init?(coder: NSCoder) { fatalError() }
   @objc func selectInstrument() {
+    if hasDraft {let selected=picker.selectedTag();picker.select(picker.menu?.item(withTag:index));finishAutomaticEdit{[weak self] accepted in guard let self,accepted else{return};self.index=selected;self.onSelect?(selected)};return}
     index = picker.selectedTag()
     onSelect?(index)
   }
   @objc func toggleEnvelopeEnabled() {
     guard envelope.canEdit() else { return }
-    onApply?(["envelope": envelopeType.indexOfSelectedItem, "enabled": enabled.state == .on])
+    submit(["envelope": envelopeType.indexOfSelectedItem, "enabled": enabled.state == .on])
   }
   func controlTextDidEndEditing(_ notification: Notification) {
     if let control = notification.object as? NSControl { commitControl(control) }
@@ -785,21 +793,22 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
   @objc private func commitControl(_ control: NSControl) {
     guard envelope.canEdit() else { return }
     if control === nodeTick || control === nodeValue {
-      guard let tick = Int(nodeTick.stringValue), let value = Int(nodeValue.stringValue) else { updateNodeFields(); return }
+      guard let tick = Int(nodeTick.stringValue), let value = Int(nodeValue.stringValue),(0...65535).contains(tick),(0...64).contains(value) else {nodeFieldsDirty=true;onMessage?("Use a whole tick from 0 to 65535 and value from 0 to 64; your draft is retained.");return}
+      nodeFieldsDirty=false
       if let node = envelope.selectedNode, envelope.points.indices.contains(node), envelope.points[node] != [tick, value] {
         envelope.updateNode(tick: tick, value: value)
       }
       return
     }
     var values = [String: Any]()
-    for (field, key) in [(name, "name"), (volume, "volume"), (pan, "pan"), (fade, "fadeout"), (sustainPoint, "sustainPoint"), (sustainEnd, "sustainEnd"), (loopStart, "loopStart"), (loopEnd, "loopEnd")] where control === field {
+    for (field, key) in [(name, "name"), (volume, "volume"), (pan, "pan"), (fade, "fadeout"), (sustainPoint, "sustainPoint"), (sustainEnd, "sustainEnd"), (loopStart, "loopStart"), (loopEnd, "loopEnd"), (releaseNode,"releaseNode")] where control === field {
       if key == "name" { values[key] = field.stringValue }
       else if let number = Int(field.stringValue) { values[key] = number }
     }
     for (popup, key) in [(nna, "nna"), (dct, "dct"), (dna, "dna")] where control === popup { values[key] = popup.indexOfSelectedItem }
-    for (button, key) in [(sustain, "sustain"), (looping, "loop"), (filter, "filter")] where control === button { values[key] = button.state == .on }
+    for (button, key) in [(sustain, "sustain"), (looping, "loop"), (filter, "filter"), (carry,"carry")] where control === button { values[key] = button.state == .on }
     guard !values.isEmpty else { return }
-    values["envelope"] = envelopeType.indexOfSelectedItem; onApply?(values)
+    values["envelope"] = envelopeType.indexOfSelectedItem; submit(values)
   }
   func updateCatalogue(_ model: PatternModel) {
     let next=model.instruments.map{AssetCatalogueEntry($0,fallback:"Instrument")}
@@ -829,6 +838,8 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
   }
   func update(_ info: [AnyHashable: Any], model: PatternModel) {
+    if pending || nodeFieldsDirty || envelope.points != loadedPoints {updateCatalogue(model);return}
+    if !settingsDraft.hasDraft {capturedRevision=model.revisionToken;capturedInstrument=model.instruments.first{$0["index"] as? Int==index}?["id"] as? String ?? ""}
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
     updateCatalogue(model)
     name.stringValue = info["name"] as? String ?? ""
@@ -844,13 +855,14 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
       envelopeType.selectItem(at: 0)
     }
     selectEnvelope()
-    keymap = info["mapping"] as? [Int] ?? [Int](repeating: 0, count: 128)
+    keymap = info["mapping"] as? [Int] ?? [Int](repeating: 0, count: 128);loadedMapping=keymap
     mapping.stringValue = stride(from: 0, to: 120, by: 12).map { start in
       "Oct \(start/12): "
         + keymap[start..<start + 12].map { String(format: "%02d", $0) }.joined(separator: " ")
     }.joined(separator: "   ")
   }
   @objc func selectEnvelope() {
+    if nodeFieldsDirty || pending {if let displayedEnvelope{envelopeType.selectItem(at:displayedEnvelope)};onMessage?("Finish the pending envelope point before switching envelopes.");return}
     let kind = max(0, envelopeType.indexOfSelectedItem)
     let info: [String: Any] = kind < envelopeData.count ? envelopeData[kind] : [:]
     envelope.points = info["points"] as? [[Int]] ?? []
@@ -870,14 +882,17 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     loopEnd.integerValue = info["loopEnd"] as? Int ?? 0
     filter.isEnabled = kind == 2
     filter.state = (info["filter"] as? Bool ?? false) ? .on : .off
-    if let displayedEnvelope, displayedEnvelope != kind { settingsDraft.accept(["enabled","sustain","sustainPoint","sustainEnd","loop","loopStart","loopEnd","filter"]) }
+    carry.state = info["carry"] as? Bool==true ? .on:.off;releaseNode.integerValue=info["releaseNode"] as? Int ?? 255
+    if let displayedEnvelope, displayedEnvelope != kind { settingsDraft.accept(["enabled","sustain","sustainPoint","sustainEnd","loop","loopStart","loopEnd","filter","carry","releaseNode"]) }
     displayedEnvelope = kind
   }
   @objc func selectNode() {
+    if nodeFieldsDirty || pending {let desired=nodePicker.indexOfSelectedItem;nodePicker.selectItem(at:envelope.selectedNode ?? -1);finishAutomaticEdit{[weak self] accepted in guard let self,accepted,self.envelope.points.indices.contains(desired) else{return};self.envelope.selectedNode=desired};return}
     envelope.selectedNode =
       nodePicker.indexOfSelectedItem >= 0 ? nodePicker.indexOfSelectedItem : nil
   }
   func updateNodeFields() {
+    guard !nodeFieldsDirty else{return}
     if nodePicker.numberOfItems != envelope.points.count {
       nodePicker.removeAllItems()
       for index in envelope.points.indices { nodePicker.addItem(withTitle: String(index)) }
@@ -905,12 +920,13 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     if changed.contains("name") { values["name"] = name.stringValue }
     let numbers: [(String, NSTextField, String)] = [("volume", volume, "Instrument volume"), ("pan", pan, "Instrument pan"), ("fadeout", fade, "Fade out"),
       ("sustainPoint", sustainPoint, "Sustain start node"), ("sustainEnd", sustainEnd, "Sustain end node"),
-      ("loopStart", loopStart, "Envelope loop start node"), ("loopEnd", loopEnd, "Envelope loop end node")]
+      ("loopStart", loopStart, "Envelope loop start node"), ("loopEnd", loopEnd, "Envelope loop end node"),("releaseNode",releaseNode,"Envelope release node")]
     for (key, field, label) in numbers where changed.contains(key) { values[key] = try AssetFieldDraft.integer(field, label) }
     for (key, picker) in [("nna", nna), ("dct", dct), ("dna", dna)] where changed.contains(key) { values[key] = picker.indexOfSelectedItem }
-    for (key, box) in [("enabled", enabled), ("sustain", sustain), ("loop", looping), ("filter", filter)] where changed.contains(key) { values[key] = box.state == .on }
+    for (key, box) in [("enabled", enabled), ("sustain", sustain), ("loop", looping), ("filter", filter),("carry",carry)] where changed.contains(key) { values[key] = box.state == .on }
     // Node edits are applied as they happen; resend them only if that did not reach the song.
     if envelope.points != loadedPoints { values["points"] = envelope.points }
+    if keymap != loadedMapping{values["mapping"]=keymap}
     return values
   }
   func apply() {
@@ -918,7 +934,47 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
       var values = try changedSettings()
       if values.isEmpty { onMessage?("No instrument settings have changed."); return }
       values["envelope"] = envelopeType.indexOfSelectedItem
-      onApply?(values)
+      submit(values)
     } catch { onMessage?(error.localizedDescription); NSSound.beep() }
+  }
+
+  func controlTextDidChange(_ notification:Notification){
+    if notification.object as? NSTextField === nodeTick || notification.object as? NSTextField === nodeValue{nodeFieldsDirty=true}
+    commitFailed=false;scheduleAutomaticEdit()
+  }
+  private func scheduleAutomaticEdit(){
+    guard onCommit != nil,!commitFailed else{return};saveWork?.cancel()
+    let task=DispatchWorkItem{[weak self] in self?.saveWork=nil;self?.finishAutomaticEdit{_ in}}
+    saveWork=task;DispatchQueue.main.asyncAfter(deadline:.now()+0.5,execute:task)
+  }
+  private func finishWaiters(_ accepted:Bool){let callbacks=completionWaiters;completionWaiters=[];for callback in callbacks{callback(accepted)}}
+  func finishAutomaticEdit(_ done:@escaping(Bool)->Void){
+    guard !commitFailed else{done(false);return};if pending{completionWaiters.append(done);return}
+    if !hasDraft{done(true);return}
+    do {
+      if nodeFieldsDirty {
+        let tick=try AssetFieldDraft.integer(nodeTick,"Envelope tick"),value=try AssetFieldDraft.integer(nodeValue,"Envelope value")
+        guard let node=envelope.selectedNode,envelope.points.indices.contains(node),(0...65535).contains(tick),(0...64).contains(value),node != 0 || tick==0,
+          (node==0 || tick>envelope.points[node-1][0]),(node+1==envelope.points.count || tick<envelope.points[node+1][0]) else{onMessage?("Use an ordered envelope tick and value from 0 to 64; your fields are retained.");done(false);return}
+        nodeFieldsDirty=false;envelope.points[node]=[tick,value]
+      }
+      var values=try changedSettings();if values.isEmpty{done(true);return};values["envelope"]=envelopeType.indexOfSelectedItem
+      completionWaiters.append(done);submit(values)
+    }catch{onMessage?(error.localizedDescription);done(false)}
+  }
+  private func submit(_ values:[String:Any]){
+    guard let onCommit else{onApply?(values);return}
+    guard !pending else{return}
+    saveWork?.cancel();saveWork=nil;pending=true;commitFailed=false
+    let oldIndex=index,oldKind=envelopeType.indexOfSelectedItem,submitted=settingsDraft.snapshot
+    onCommit(values,capturedRevision,oldIndex,capturedInstrument){[weak self] response in
+      guard let self else{return};self.pending=false
+      guard let result=response["result"] as? [String:Any],let revision=result["revision"] as? String,self.index==oldIndex,self.envelopeType.indexOfSelectedItem==oldKind else{self.commitFailed=true;self.onMessage?((response["error"] as? [String:Any])?["message"] as? String ?? "Instrument edit failed; draft retained. Apply retries it.");self.finishWaiters(false);return}
+      self.capturedRevision=revision;self.settingsDraft.accept(values.keys,submitted:submitted)
+      if let points=values["points"] as? [[Int]]{self.loadedPoints=points}
+      if let mapping=values["mapping"] as? [Int]{self.loadedMapping=mapping}
+      if self.hasDraft {let callbacks=self.completionWaiters;self.completionWaiters=[];self.finishAutomaticEdit{accepted in for callback in callbacks{callback(accepted)}}}
+      else{self.finishWaiters(true)}
+    }
   }
 }

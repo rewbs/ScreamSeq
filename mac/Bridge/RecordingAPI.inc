@@ -7,6 +7,7 @@
         const auto latency=number(p[@"latencyMS"]?:@0,-500,500);
         auto take=std::make_unique<NoteRecording>(_document->native(),song,std::move(channels),instrument,quantum);
         _recording=std::move(take);_recordingRevision=self.automationRevision;_recordingID=NSUUID.UUID.UUIDString;
+        _midi->discardPending();_recordingMidiDrops=_midi->dropped();
         _recordingLatencyMS=latency;_recordingLastTimestamp=0;_recordingStartTimestamp=mach_absolute_time();
       } else if([method isEqual:@"recording.get"]) {
         allowed(@[]);
@@ -28,9 +29,9 @@
           std::stable_sort(input.begin(),input.end(),[](const auto &a,const auto &b){return a.timestamp<b.timestamp;});
           for(const auto &event:input)[self captureRecordingEvent:event.timestamp status:event.status note:event.note velocity:event.velocity];
         } else if([method isEqual:@"recording.stop"]) {
-          allowed(@[@"take"]);[self stopRecordingCapture];
+          allowed(@[@"take"]);[self midiEvents];[self stopRecordingCapture];_midi->discardPending();
         } else if([method isEqual:@"recording.discard"]) {
-          allowed(@[@"take"]);_recording.reset();_recordingID=nil;_recordingRevision=nil;
+          allowed(@[@"take"]);_midi->discardPending();_recording.reset();_recordingID=nil;_recordingRevision=nil;
         } else if([method isEqual:@"recording.commit"]) {
           allowed(@[@"take",@"replaceRows",@"dryRun"]);
           require(!_recording->capturing,"Stop the take before committing it");
@@ -38,7 +39,7 @@
           const bool dry=p[@"dryRun"]?boolean(p[@"dryRun"]):false,replace=p[@"replaceRows"]?boolean(p[@"replaceRows"]):false;
           auto prepared=prepareNoteRecordingCommit(*_document,_recording->events,replace);
           const bool changed=prepared.changed;
-          if(!dry){if(changed){_audio->stop();_document->editNative(std::move(prepared.native),prepared.edits);}_recording.reset();_recordingID=nil;_recordingRevision=nil;}
+          if(!dry){_midi->discardPending();if(changed){_audio->stop();_document->editNative(std::move(prepared.native),prepared.edits);}_recording.reset();_recordingID=nil;_recordingRevision=nil;}
           result=@{@"dryRun":@(dry),@"wouldChange":@(changed)};
         }
       }

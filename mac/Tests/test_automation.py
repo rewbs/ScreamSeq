@@ -2383,8 +2383,11 @@ def main():
                 print("PASS command catalog socket: format metadata, extended prefixes, strict read, preview, field-preserving apply, stale rejection and undo")
                 schema = json.loads((ROOT / "mac/Tools/resonance-api.schema.json").read_text())
                 advertised = client.call("api.describe")["data"]
-                methods = {entry["properties"]["method"]["const"] for entry in schema["oneOf"]
-                           if "--app" in sys.argv or not entry.get("x-application-only")}
+                methods = set()
+                for entry in schema["oneOf"]:
+                    if "--app" in sys.argv or not entry.get("x-application-only"):
+                        declaration = entry["properties"]["method"]
+                        methods.update(declaration["enum"] if "enum" in declaration else [declaration["const"]])
                 assert methods == set(advertised["reads"] + advertised["writes"])
                 timeline=client.call("pattern.timeline.get",{"pattern":0})
                 assert not timeline["changed"] and timeline["data"]["positions"][0]["row"]==0

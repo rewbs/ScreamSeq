@@ -10,6 +10,8 @@ namespace Tracker {
 struct DeviceInfo {
   uint32_t id;
   std::string name;
+  std::string uid;
+  bool isDefault=false;
 };
 class AudioDevice {
   AudioUnit unit_ = nullptr;
@@ -45,7 +47,7 @@ class AudioDevice {
   static OSStatus propertyChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddress *, void *);
   void removeListeners();
   void addListeners();
-  void configureUnit(uint32_t deviceID); // Throws; configure() disposes the unit.
+  void configureUnit(AudioUnit unit, uint32_t deviceID, double sampleRate);
   static constexpr uint32_t maximumBlockFrames = 4096; // Prepared plugin/mixer block size.
   static OSStatus callback(void *, AudioUnitRenderActionFlags *, const AudioTimeStamp *, UInt32, UInt32,
                            AudioBufferList *);
@@ -220,6 +222,15 @@ public:
   }
   bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &plan) noexcept {
     return renderer_&&renderer_->publishScratchUpdate(plan);
+  }
+  std::unique_ptr<PreciseNoteUpdate> preparePreciseUpdate(const NativeSong &native,const std::vector<Edit> &cells) const {
+    if(!playing())return {};
+    if(!renderer_ || cells.size()>512)
+      throw std::runtime_error("This precise-note edit exceeds the live cell capacity; stop playback before applying it");
+    return std::make_unique<PreciseNoteUpdate>(native,cells);
+  }
+  bool publishPreciseUpdate(std::unique_ptr<PreciseNoteUpdate> &plan) noexcept {
+    return renderer_&&renderer_->publishPreciseNoteUpdate(plan);
   }
   void updateMusicalAutomation(const NativeSong &native) {if(active()&&plugins_)plugins_->updateMusicalAutomation(native);}
 

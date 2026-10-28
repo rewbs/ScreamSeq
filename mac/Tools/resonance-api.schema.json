@@ -14213,22 +14213,50 @@
           "const": "workspace.layout"
         },
         "params": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "enum": [
-                "Compose",
-                "Sound design",
-                "Pattern focus",
-                "Save custom",
-                "Restore custom"
-              ]
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "enum": [
+                    "Compose",
+                    "Pattern focus",
+                    "Sound design",
+                    "Connected",
+                    "Graph editing",
+                    "Reload saved"
+                  ]
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "enum": [
+                    "Save custom",
+                    "Restore custom",
+                    "Delete custom"
+                  ]
+                },
+                "savedName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "description": "Default Custom. UTF-8 Unicode name; no controls or leading/trailing whitespace. Up to 24 names, case sensitive."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": [
-            "name"
           ],
-          "additionalProperties": false
+          "description": "Presentation preferences only; up to 24 named layouts. Preserves editor pins, targets and drafts. Reload saved refreshes the catalogue before retrying a concurrent-session save or delete."
         }
       },
       "required": [
@@ -23420,6 +23448,205 @@
           "required": [
             "expectedRevision",
             "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "description": "Application-only CoreMIDI settings with an independent revision. Empty source selects virtual input only; device IDs are opaque and platform-specific.",
+      "type": "object",
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "enum": [
+            "midi.devices.get",
+            "midi.settings.get",
+            "midi.settings.set"
+          ]
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "midi.devices.get",
+                  "midi.settings.get"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "maxProperties": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "midi.settings.set"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "required": [
+                  "expectedMidiRevision",
+                  "source",
+                  "armed",
+                  "channelsCount",
+                  "quantization",
+                  "latencyMS"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "expectedMidiRevision": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^[^\\u0000]+$"
+                  },
+                  "source": {
+                    "type": "string",
+                    "maxLength": 4096,
+                    "pattern": "^[^\\u0000]*$",
+                    "description": "Opaque input device-interface ID from midi.devices.get; empty disconnects."
+                  },
+                  "armed": {
+                    "type": "boolean"
+                  },
+                  "channelsCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 127
+                  },
+                  "quantization": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65536
+                  },
+                  "latencyMS": {
+                    "type": "number",
+                    "minimum": -500,
+                    "maximum": 500
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "x-application-only": true
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "enum": [
+            "audio.devices.get",
+            "audio.settings.get"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "maxProperties": 0
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "method": {
+          "const": "audio.settings.set"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Opaque Core Audio UID from audio.devices.get; empty follows system default."
+            },
+            "periodFrames": {
+              "type": "integer",
+              "enum": [
+                0,
+                64,
+                128,
+                256,
+                512
+              ]
+            },
+            "expectedAudioRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "dryRun": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "endpoint",
+            "periodFrames",
+            "expectedAudioRevision"
           ],
           "additionalProperties": false
         }

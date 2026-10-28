@@ -407,6 +407,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   std::vector<PluginParameter> _recipePreviewCatalog;
   BOOL _parameterPreviewCommitting;
   std::unique_ptr<MidiInput> _midi;
+  uint32_t _recordingMidiDrops;
   std::unique_ptr<PluginInventory> _pluginInventory;
   std::unique_ptr<PluginLibrary> _pluginLibrary;
   std::vector<PluginState> _plugins;
@@ -657,6 +658,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     _automationDocumentID = NSUUID.UUID.UUIDString;
     _recording = std::move(recoveredTake);
     _recordingID = _recording ? NSUUID.UUID.UUIDString : nil;
+    _midi->discardPending();
     _recordingRevision = _recording ? (recoveredTakeCompatible ? self.automationRevision : @"unmatched-recovered-take") : nil;
     _lastTouchedPlugin.clear(); _touchSequence = 0; _lastTouchedSource = nil;
     return YES;
@@ -1019,10 +1021,13 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
   auto result = [NSMutableArray array];
   try {
     for (auto &d : AudioDevice::devices())
-      [result addObject:@{@"id" : @(d.id), @"name" : @(d.name.c_str())}];
+      [result addObject:@{@"id" : @(d.id), @"name" : @(d.name.c_str()), @"uid":@(d.uid.c_str()), @"default":@(d.isDefault)}];
   } catch (...) {
   }
   return result;
+}
+- (NSDictionary *)audioOutputInformation {
+  return @{@"device":@(_audio->deviceID()),@"sampleRate":@(_audio->sampleRate()),@"periodFrames":@(_audio->bufferSize()),@"bufferFrames":@(_audio->bufferSize()),@"active":@(_audio->active())};
 }
 - (NSDictionary *)listenTelemetry {
   NSDictionary *listen=@{@"port":NSNull.null,@"gainDB":@0,@"available":@YES,@"pending":@NO,@"transitionFrames":@0};
@@ -1260,6 +1265,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)undoDocument {
   if (!_document->canUndo()) return;
   const auto &next = _document->historyNative(false);
+  auto notesOnly=_document->native();notesOnly.preciseNotes=next.preciseNotes;
+  if(!_document->undoChangesStructure() && notesOnly==next && next.preciseNotes!=_document->native().preciseNotes) {
+    auto prepared=_audio->preparePreciseUpdate(next,_document->historyCells(false));
+    _document->undo([&]{if(prepared&&!_audio->publishPreciseUpdate(prepared))throw std::runtime_error("Precise-note publication is busy; retry Undo");},true);
+    return;
+  }
   std::unique_ptr<MixerTransition::Plan> routing;
   std::unique_ptr<GraphControlPlan> parameters;
   if (_document->undoChangesStructure() ||
@@ -1293,6 +1304,12 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (void)redoDocument {
   if (!_document->canRedo()) return;
   const auto &next = _document->historyNative(true);
+  auto notesOnly=_document->native();notesOnly.preciseNotes=next.preciseNotes;
+  if(!_document->redoChangesStructure() && notesOnly==next && next.preciseNotes!=_document->native().preciseNotes) {
+    auto prepared=_audio->preparePreciseUpdate(next,_document->historyCells(true));
+    _document->redo([&]{if(prepared&&!_audio->publishPreciseUpdate(prepared))throw std::runtime_error("Precise-note publication is busy; retry Redo");},true);
+    return;
+  }
   std::unique_ptr<MixerTransition::Plan> routing;
   std::unique_ptr<GraphControlPlan> parameters;
   if (_document->redoChangesStructure() ||
@@ -1645,11 +1662,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 - (BOOL)instrumentSettings:(NSInteger)index values:(NSDictionary *)v error:(NSError **)error {
   try {
     [self requireNoParameterTake];
-    _audio->stop();
-    _document->transaction([&](CSoundFile &s) {
+    const auto &s=_document->song();
       if (index < 1 || index > s.GetNumInstruments() || !s.Instruments[index])
         throw std::runtime_error("Select an instrument.");
-      auto &ins = *s.Instruments[index];
+      const auto &before=*s.Instruments[index];
+      auto ins=before;
       const int envelopeKind = [v[@"envelope"] intValue];
       if (envelopeKind < 0 || envelopeKind > 2)
         throw std::runtime_error("Invalid envelope type");
@@ -1722,7 +1739,11 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
         envelope.nReleaseNode = uint8_t(release);
       }
       envelope.Sanitize();
-    });
+      if(ins.GetName()==before.GetName()&&ins.nGlobalVol==before.nGlobalVol&&ins.nPan==before.nPan&&ins.dwFlags==before.dwFlags&&
+        ins.nFadeOut==before.nFadeOut&&ins.nNNA==before.nNNA&&ins.nDCT==before.nDCT&&ins.nDNA==before.nDNA&&ins.Keyboard==before.Keyboard&&
+        sameInstrumentEnvelope(ins.VolEnv,before.VolEnv)&&sameInstrumentEnvelope(ins.PanEnv,before.PanEnv)&&sameInstrumentEnvelope(ins.PitchEnv,before.PitchEnv))return YES;
+      _audio->stop();
+      _document->transaction([&](CSoundFile &song){*song.Instruments[index]=ins;});
     return YES;
   } catch (const std::exception &e) {
     failure(error, e);
@@ -2413,6 +2434,7 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
     [result addObject:@{@"id" : @(s.id), @"name" : @(s.name.c_str())}];
   return result;
 }
+- (NSUInteger)connectedMIDISource { return _midi->connectedSource(); }
 - (BOOL)connectMIDI:(NSUInteger)source error:(NSError **)error {
   try {
     _midi->connect(uint32_t(source));
@@ -2443,7 +2465,14 @@ void trimEffectHistory(std::vector<EffectSnapshot> &history) {
 }
 - (NSArray<NSDictionary *> *)midiEvents {
   auto result = [NSMutableArray array];
+  const bool disconnected = _midi->connectionLost();
   auto events=_midi->drainSafe();
+  if (_recording && _recording->capturing) {
+    const auto drops = _midi->dropped();
+    _recording->overflow += uint32_t(drops - _recordingMidiDrops); _recordingMidiDrops = drops;
+    if (disconnected) { _recording->inputError = "MIDI input disconnected"; [self stopRecordingCapture]; }
+  }
+  if (disconnected) events.push_back({0, 0xb0, 123, 0});
   std::stable_sort(events.begin(),events.end(),[](const auto &a,const auto &b){return a.timestamp<b.timestamp;});
   for (auto &e : events) {
     if((e.status&0xf0)==0xb0)_audio->graphController(e.note,e.velocity);

@@ -60,7 +60,7 @@ enum InspectorTabs {
   static let items: [(id:String, label:String, key:String)] = [
     ("notes","Notes","1"), ("samples","Samples","2"), ("instruments","Instruments","3"),
     ("plugins","Plugins","4"), ("mixer","Mixer","5"), ("graph","Graph","6"),
-    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0"), ("gate","Gate inspector","g")]
+    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0"), ("graphCurve","Graph curve","c"), ("gate","Gate inspector","g")]
 }
 final class WorkspaceTabs: NSView {
   let tabScroll = NSScrollView(), tabRow = NSView(), host = NSView()
@@ -212,6 +212,14 @@ final class DockWorkspace: NSView, NSWindowDelegate {
     if focusLayout { onLayout?(); return }
     if name == "Sound design" { show("samples"); show("automation") }
     if name == "Compose" { show("notes"); lower.isHidden = true }
+    if name == "Connected" {
+      place("notes",at:"right");place("graph",at:"bottom");place("automation",at:"secondary")
+      show("notes");show("graph");show("automation")
+    }
+    if name == "Graph editing" {
+      place("graph",at:"bottom");place("graphCurve",at:"right");place("automation",at:"secondary")
+      show("graph");show("graphCurve");show("automation")
+    }
     vertical.adjustSubviews(); upper.adjustSubviews(); lower.adjustSubviews()
     layoutGeneration += 1; let generation = layoutGeneration
     DispatchQueue.main.async { [weak self] in

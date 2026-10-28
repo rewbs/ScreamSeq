@@ -25,6 +25,9 @@ final class AutomationCanvas: NSView {
   var maximumPosition: Int { positionLimit ?? rows * 256 - 1 }
   var snap = 256, selected: Int?, curve = "linear"
   var onEdit: (() -> Void)?, onSelect: (() -> Void)?, onEditFinished: (() -> Void)?
+  var beforeInteraction: (() -> Bool)?, onCancelEdit: (() -> Void)?
+  var doubleClickAdds = false
+  private var dragBefore: ([EnvelopePoint], Int?)?, dragOrigin = NSPoint.zero
   var visibleStart = 0.0, visibleEnd: Double? = nil
   var valueLow = 0.0, valueHigh = 1.0
   var previewValues = [(Double,Double)]() { didSet { needsDisplay = true } }
@@ -132,7 +135,10 @@ final class AutomationCanvas: NSView {
         if pixel == 0 { path.move(to: point) } else { path.line(to: point) }
       }
       Theme.accent.setStroke(); path.stroke()
-      for (i, point) in points.enumerated() {
+      let visible = points.indices.filter { Double(points[$0].position)>=visibleStart && Double(points[$0].position)<=horizontalEnd }
+      let stride = max(1,(visible.count+2047)/2048)
+      for (ordinal, i) in visible.enumerated() where ordinal % stride == 0 || i == selected {
+        let point=points[i]
         let p = location(point)
         (i == selected ? Theme.gold : Theme.accent).setFill()
         NSBezierPath(ovalIn: NSRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)).fill()
@@ -166,9 +172,12 @@ final class AutomationCanvas: NSView {
     window?.makeFirstResponder(self)
     let p = convert(event.locationInWindow, from: nil)
     guard plot.insetBy(dx: -8, dy: -8).contains(p) else { return }
+    guard beforeInteraction?() ?? true else { return }
+    dragBefore=(points,selected);dragOrigin=p
     selected = points.indices.min { hypot(location(points[$0]).x - p.x, location(points[$0]).y - p.y) < hypot(location(points[$1]).x - p.x, location(points[$1]).y - p.y) }
     if let selected, hypot(location(points[selected]).x - p.x, location(points[selected]).y - p.y) > 9 { self.selected = nil }
     if selected == nil {
+      guard plot.contains(p), !doubleClickAdds || event.clickCount==2 else {needsDisplay=true;onSelect?();return}
       guard points.count < pointLimit else { return }
       dragging = true
       let position = snapped(p.x)
@@ -187,10 +196,13 @@ final class AutomationCanvas: NSView {
   override func mouseDragged(with event: NSEvent) {
     guard dragging, let selected else { return }
     let p = convert(event.locationInWindow, from: nil)
+    guard hypot(p.x-dragOrigin.x,p.y-dragOrigin.y)>=3 else{return}
     replaceSelected(position: snapped(p.x), value: normalizedValue(at:p.y), curve: points[selected].curve)
   }
-  override func mouseUp(with event: NSEvent) {let finished=dragging;dragging = false;if finished{onEditFinished?()}}
+  override func mouseUp(with event: NSEvent) {let finished=dragging;dragging = false;dragBefore=nil;if finished{onEditFinished?()}}
   override func keyDown(with event: NSEvent) {
+    if event.keyCode==53,dragging,let before=dragBefore {points=before.0;selected=before.1;dragging=false;dragBefore=nil;onCancelEdit?();onSelect?();return}
+    if [51,117,123,124,125,126,48].contains(event.keyCode),!(beforeInteraction?() ?? true){return}
     if event.keyCode == 51 || event.keyCode == 117 { removeSelected(); return }
     if event.keyCode == 48 {
       // Tab walks the points and then leaves the canvas, so keyboard focus is
@@ -235,6 +247,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   var preferredParameter: Int?, preferredPointPosition: Int?
   var selectedPluginID:String?, pendingPluginID:String?, autoSaveWork:DispatchWorkItem?
   var requestGeneration=0
+  private var completionWaiters=[(Bool)->Void](),pointFieldsDirty=false,automaticEditFailed=false
   var onPluginSelection: ((String)->Void)?
   func showPositions(editPattern:Int,row:Int,playPattern:Int?,position:Double?) {
     canvas.editPosition=editPattern==model.pattern ? Double(row*256):nil
@@ -266,6 +279,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     for field in [pointRow,pointValue] {field.delegate=self;field.target=self;field.action=#selector(setPoint)}
     enabled.state = .on; enabled.target = self; enabled.action = #selector(markDraft)
     canvas.onEdit = { [weak self] in self?.markDraft() }
+    canvas.onEditFinished = {[weak self] in self?.apply()}
     canvas.onSelect = { [weak self] in self?.showPoint() }
     canvas.onViewport = { [weak self] in
       guard let self else { return }
@@ -307,6 +321,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
   }
   required init?(coder: NSCoder) { fatalError() }
   func showBank(){
+    if hasDraft || loading {finishAutomaticEdit{[weak self] accepted in if accepted{self?.showBank()}};return}
     guard !loading,let parameterID,model.nativePlugins.indices.contains(pluginIndex),let plugin=model.nativePlugins[pluginIndex]["instanceID"] as? String,let onRequest else{return}
     let target:[String:Any]=["kind":"parameter","pattern":model.pattern,"plugin":plugin,"parameter":parameterID]
     if EnvelopeBankWindow.reuse(bankWindow,for:target,refused:{[weak self] in self?.status.stringValue=$0}){return}
@@ -349,7 +364,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     preferredPointPosition = canvas.selected.flatMap { canvas.points.indices.contains($0) ? canvas.points[$0].position : nil }
     if !samePattern { canvas.fit(); preferredPointPosition=nil }
     formulaPreviewGeneration += 1; formulaPreviewWork?.cancel()
-    model = context; hasDraft = false; parameterID = nil
+    model = context; hasDraft = false; pointFieldsDirty=false;automaticEditFailed=false;parameterID = nil
     if let selectedPluginID,let slot=model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==selectedPluginID}) {pluginIndex=slot}
     heading.stringValue = "Pattern \(model.pattern) · automation"
     plugin.removeAllItems()
@@ -376,17 +391,17 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
             guard let self,self.requestGeneration==generation else{return}
             self.loading=false;self.request(method,params,attempt:attempt+1,done:done)
           }
-        }
+        } else {self.automaticEditFailed=true;self.completeAutomaticEdit(false)}
         return
       }
       let token = result["revision"] as? String ?? self.revision
       if (method == "plugin.parameters.get" || method == "automation.pattern.copy") && token != self.revision {
-        self.status.stringValue = "Song changed while loading. Reload before editing."; return
+        self.status.stringValue = "Song changed while loading. Reload before editing."; self.completeAutomaticEdit(false);return
       }
       self.revision = token
       if let data = result["data"] as? [String: Any] { done(data) }
       else { done(["values": result["data"] as? [[String: Any]] ?? []]) }
-      self.finishPendingSelection()
+      self.finishPendingSelection();if !self.hasDraft && !self.loading{self.completeAutomaticEdit(true)}
     }
   }
   func loadParameters() {
@@ -424,7 +439,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     if notification.object as? NSTextField === formula {
       guard let selected=canvas.selected,canvas.points.indices.contains(selected) else{return}
       canvas.points[selected].formula=formula.stringValue;markDraft();FormulaCatalog.suggest(formula.currentEditor() as? NSTextView)
-    } else if notification.object as? NSTextField === pointRow || notification.object as? NSTextField === pointValue {setPoint()}
+    } else if notification.object as? NSTextField === pointRow || notification.object as? NSTextField === pointValue {pointFieldsDirty=true;markDraft()}
     else { filter() }
   }
   func filter() {
@@ -457,8 +472,9 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     canvas.selected = canvas.points.firstIndex { $0.position == preferredPointPosition };preferredPointPosition=nil;showPoint();previewFormula()
     status.stringValue = lane == nil ? "Click the graph or generate a ramp to create an envelope." : "\(canvas.points.count) points · changes save immediately."
   }
-  @objc func markDraft() {guard parameterID != nil else{return};draftGeneration += 1;hasDraft=true;status.stringValue="Saving changes…";previewFormula();saveSoon()}
+  @objc func markDraft() {guard parameterID != nil else{return};automaticEditFailed=false;draftGeneration += 1;hasDraft=true;status.stringValue="Saving changes…";previewFormula();saveSoon()}
   func saveSoon() {
+    guard !canvas.isDragging,!pointFieldsDirty else{return}
     guard autoSaveWork == nil else { return }
     let generation=requestGeneration
     let work=DispatchWorkItem{[weak self] in
@@ -473,6 +489,7 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
     if let selected = canvas.selected { let point = canvas.points[selected]; canvas.replaceSelected(position: point.position, value: point.value, curve: canvas.curve) }
   }
   func showPoint() {
+    guard !pointFieldsDirty else{return}
     let hasPoint = canvas.selected.map { canvas.points.indices.contains($0) } ?? false
     pointRow.isEnabled=hasPoint; pointValue.isEnabled=hasPoint
     pointRow.toolTip=hasPoint ? "Commits on Return or leaving this field" : "Click the curve or use Add at cursor first"
@@ -527,7 +544,10 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
       row.isFinite, value.isFinite, row >= 0, row < Double(canvas.rows), value >= 0, value <= 100 else {
       status.stringValue = "Enter a row inside the pattern and a value from 0 to 100%."; return
     }
-    canvas.replaceSelected(position: Int((row * 256).rounded()), value: value / 100, curve: curves[max(0, curve.indexOfSelectedItem)])
+    let position=Int((row*256).rounded())
+    guard !canvas.points.enumerated().contains(where:{$0.offset != canvas.selected && $0.element.position==position}) else{status.stringValue="Another point occupies this row; your fields are retained.";return}
+    pointFieldsDirty=false
+    canvas.replaceSelected(position: position, value: value / 100, curve: curves[max(0, curve.indexOfSelectedItem)])
   }
   func addPointAtCursor() {
     guard parameterID != nil, !loading else { return }
@@ -543,19 +563,28 @@ final class PatternAutomationEditor: NSView, NSTableViewDataSource, NSTableViewD
                      EnvelopePoint(position: canvas.rows * 256 - 1, value: down ? 0 : 1, curve: canvas.curve, formula: canvas.curve == "scripted" ? "mix(start, end, t)" : "")]
     canvas.selected = 0; markDraft(); showPoint()
   }
+  private func completeAutomaticEdit(_ accepted:Bool){let callbacks=completionWaiters;completionWaiters=[];for callback in callbacks{callback(accepted)}}
+  func finishAutomaticEdit(_ done:@escaping(Bool)->Void){
+    guard !automaticEditFailed,!canvas.isDragging else{done(false);return}
+    if pointFieldsDirty {setPoint();if pointFieldsDirty{done(false);return}}
+    if !hasDraft && !loading{done(true);return};completionWaiters.append(done);autoSaveWork?.cancel();autoSaveWork=nil;if !loading{apply()}
+  }
+  func controlTextDidEndEditing(_ notification:Notification){if pointFieldsDirty{setPoint()}}
   func apply() {
+    if pointFieldsDirty{setPoint()}
+    guard !pointFieldsDirty,!canvas.isDragging else{completeAutomaticEdit(false);return}
     guard hasDraft,!loading,let parameterID,model.nativePlugins.indices.contains(pluginIndex),
       let instance=model.nativePlugins[pluginIndex]["instanceID"] as? String else{return}
     let generation=draftGeneration,pattern=model.pattern,points=canvas.points,isEnabled=enabled.state == .on
     let removing=points.isEmpty
-    if removing && laneID==nil {hasDraft=false;finishPendingSelection();return}
+    if removing && laneID==nil {hasDraft=false;finishPendingSelection();completeAutomaticEdit(true);return}
     let params:[String:Any]=removing ? ["expectedRevision":revision,"lane":laneID!] :
       ["expectedRevision":revision,"pattern":pattern,"plugin":instance,"parameter":parameterID,"enabled":isEnabled,"points":points.map(\.dictionary)]
     request(removing ? "automation.pattern.remove":"automation.pattern.set",params) {data in
       self.lanes.removeAll{$0["plugin"] as? String==instance && $0["parameter"] as? Int==parameterID}
       self.laneID=removing ? nil:data["lane"] as? String
       if let id=self.laneID {self.lanes.append(["id":id,"plugin":instance,"parameter":parameterID,"enabled":isEnabled,"points":points.map(\.dictionary)])}
-      if self.draftGeneration==generation {self.hasDraft=false;self.status.stringValue="Saved · playback uses the current envelope."}
+      if self.draftGeneration==generation {self.hasDraft=false;self.automaticEditFailed=false;self.status.stringValue="Saved · playback uses the current envelope.";self.completeAutomaticEdit(true)}
       else {self.saveSoon()}
     }
   }

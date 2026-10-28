@@ -46,10 +46,28 @@ int main() {
       require(received[4].status == 0xb1 && received[4].note == 123, "All-notes-off control");
       for (const auto &event : received)
         require(event.timestamp == timestamp, "CoreMIDI timestamp preserved");
+      input.push({mach_absolute_time(), 0x90, 60, 100});
+      input.discardPending();
+      input.push({timestamp, 0x80, 60, 0}); // Delayed callback from the old take.
+      require(input.drainSafe().empty(), "Take boundaries quarantine queued and late old events");
+      input.push({mach_absolute_time() + 1, 0x90, 64, 100});
+      require(input.drainSafe().size() == 1, "New input remains usable after a take boundary");
+      for (int i = 0; i < 1100; ++i) input.push({mach_absolute_time() + 1, 0x90, 64, 100});
+      const auto overflow = input.drainSafe();
+      require(input.dropped() > 0 && overflow.size() == 1 && overflow[0].timestamp == 0 && overflow[0].status == 0xb0,
+              "Overflow releases pending MIDI holds without replaying stranded note-ons");
       input.connect(0);
       require(MIDIReceived(source, &packets) == noErr, "Send after disconnect");
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
       require(input.drainSafe().empty(), "Disconnected source delivers no further notes");
+      input.connect(source);
+      require(MIDIEndpointDispose(source) == noErr, "Remove the selected source");
+      bool lost = false;
+      for (int attempt = 0; attempt < 100 && !lost; ++attempt) {
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, false);
+        lost = input.connectionLost();
+      }
+      require(lost && input.connectedSource() == 0, "Endpoint removal reports input loss and clears its connection");
     }
     MIDIClientDispose(client);
     std::cout << "PASS CoreMIDI loopback, running status, clock interleave, note releases, timestamps and disconnect\n";

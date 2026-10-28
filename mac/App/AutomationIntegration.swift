@@ -57,6 +57,8 @@ extension AppController {
         cancel: { reply(AutomationServer.error(-32002, "The application is shutting down")) })
       return
     }
+    if handleAudioAutomation(method,params:params,reply:reply){return}
+    if handleMIDIAutomation(method, params: params, reply: reply) { return }
     let ownMultisampleReview = method == "instrument.importMultisample" && NSApp.modalWindow?.contentView is MultisampleImportView
     guard !busy, window.attachedSheet == nil, NSApp.modalWindow == nil || ownMultisampleReview else {
       reply(AutomationServer.notAdmittedBusy("The document is busy; retry shortly"))
@@ -141,6 +143,13 @@ extension AppController {
           self.refreshAll()
         }
         if let result {
+          if method == "transport.stop" || method == "recording.stop" {
+            self.recordingTakeID = self.session.recordingTakeID
+            self.recordingFinishing = self.recordingTakeID != nil
+          } else if method == "recording.commit" || method == "recording.discard" {
+            self.recordingTakeID = self.session.recordingTakeID
+            if self.recordingTakeID == nil { self.recordingFinishing = false }
+          }
           if method == "document.save", let saved = result["data"] as? [String: Any],
             saved["written"] as? Bool == true, let path = saved["path"] as? String {
             self.documentURL = URL(fileURLWithPath: path)
@@ -152,8 +161,8 @@ extension AppController {
             self.statusLabel.stringValue = "Saved \(self.documentURL!.lastPathComponent)"
           }
           if method == "api.describe", var described = result as? [String: Any], var data = described["data"] as? [String: Any] {
-            data["reads"] = (data["reads"] as? [String] ?? []) + ["workspace.commands.get", "workspace.get", "recovery.status", "recovery.list", "sample.library.get", "sample.library.search", "sample.library.inspect", "sample.library.multisample.get"]
-            data["writes"] = (data["writes"] as? [String] ?? []) + ["workspace.input", "workspace.ruler", "workspace.shortcut.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
+            data["reads"] = (data["reads"] as? [String] ?? []) + ["audio.devices.get", "audio.settings.get", "midi.devices.get", "midi.settings.get", "workspace.commands.get", "workspace.get", "recovery.status", "recovery.list", "sample.library.get", "sample.library.search", "sample.library.inspect", "sample.library.multisample.get"]
+            data["writes"] = (data["writes"] as? [String] ?? []) + ["audio.settings.set", "midi.settings.set", "workspace.input", "workspace.ruler", "workspace.shortcut.set", "workspace.panel", "workspace.layout", "recovery.save", "recovery.restore", "sample.library.roots.set", "sample.library.rescan", "sample.library.preview", "sample.library.preview.stop"]
             data["sampleLibrary"] = "Application only: cached local search of filenames and inherited folder tags. Library methods use libraryRevision, not the song revision. sample.importMany works in both hosts and is one atomic document Undo."
             data["recovery"] = "Application only: automatic recovery copies every 10 seconds; restore protects current unsaved edits and opens an unsaved song. Recordings reopen as stopped takes."
             described["data"] = data; reply(["result": described])

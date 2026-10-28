@@ -41,7 +41,9 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
       let win = NSPanel(contentRect:NSRect(x:0,y:0,width:780,height:510),styleMask:[.titled,.closable,.resizable],backing:.buffered,defer:false)
       win.title = "Commands"; win.isReleasedWhenClosed = false; win.delegate = self; window = win
       search.placeholderString = "Search commands, panels, layouts…"; search.delegate = self; search.setAccessibilityLabel("Search all commands")
-      let column = NSTableColumn(identifier:.init("command")); column.width = 720; table.addTableColumn(column); table.headerView = nil
+      for (id,title,width) in [("command","Command",390.0),("category","Category",190.0),("shortcut","Shortcut",155.0)] {
+        let column=NSTableColumn(identifier:.init(id));column.title=title;column.width=width;table.addTableColumn(column)
+      }
       table.dataSource = self; table.delegate = self; table.rowHeight = 28; table.target = self; table.doubleAction = #selector(run)
       table.setAccessibilityLabel("Commands and keyboard shortcuts")
       let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true
@@ -51,7 +53,7 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
         guard let self,self.window?.isKeyWindow == true else{return event}
         if event.keyCode == 53 { if self.recording {self.recording=false;self.status.stringValue="Shortcut unchanged"} else {self.close()};return nil }
         if self.recording {if self.capturingSequence{self.recordSequence(event)}else{self.bind(event)};return nil}
-        if event.keyCode == 125 || event.keyCode == 126 {guard !self.filtered.isEmpty else{return nil};let row=max(0,min(self.filtered.count-1,self.table.selectedRow+(event.keyCode==125 ? 1 : -1)));self.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);self.table.scrollRowToVisible(row);return nil}
+        if [125,126,116,121,115,119].contains(event.keyCode) {self.moveSelection(event.keyCode);return nil}
         if event.keyCode == 36 {self.run();return nil};return event
       }
     }
@@ -66,13 +68,37 @@ final class WorkspaceCommandPalette: NSObject, NSTableViewDataSource, NSTableVie
     NSApp.sendAction(action,to:fresh.item.target,from:fresh.item); return true
   }
   func controlTextDidChange(_ obj: Notification) {filter()}
-  func filter() {let words=search.stringValue.lowercased().split(separator:" ");filtered=entries.filter{entry in words.allSatisfy{entry.path.lowercased().contains($0)}};table.reloadData();if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)}}
+  func shortcutText(_ entry:Entry)->String {
+    if let sequence=sequences.bindings[entry.id] {return sequence.map(\.encoded).joined(separator:" → ")}
+    guard !entry.item.keyEquivalent.isEmpty else{return ""}
+    let mask=entry.item.keyEquivalentModifierMask
+    return (mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+entry.item.keyEquivalent.uppercased()
+  }
+  func filter() {
+    let selected=filtered.indices.contains(table.selectedRow) ? filtered[table.selectedRow].id : nil
+    let query=search.stringValue.lowercased().trimmingCharacters(in:.whitespacesAndNewlines),words=query.split(whereSeparator:{$0.isWhitespace})
+    filtered=entries.filter{entry in let text=(entry.path+" "+shortcutText(entry)).lowercased();return words.allSatisfy{text.contains($0)}}.sorted { a,b in
+      func rank(_ entry:Entry)->Int {let title=entry.item.title.lowercased();return title==query ? 0 : title.hasPrefix(query) ? 1 : title.contains(query) ? 2 : 3}
+      let x=rank(a),y=rank(b);return x==y ? a.path.localizedStandardCompare(b.path) == .orderedAscending : x<y
+    }
+    table.reloadData()
+    if !filtered.isEmpty {table.selectRowIndexes(IndexSet(integer:selected.flatMap{id in filtered.firstIndex{$0.id==id}} ?? 0),byExtendingSelection:false);table.scrollRowToVisible(table.selectedRow)}
+    else {table.deselectAll(nil)}
+    status.stringValue=filtered.isEmpty ? "No matching commands" : "\(filtered.count) commands · Return runs · ↑/↓ or Page Up/Down choose · Escape closes"
+  }
+  func moveSelection(_ code:UInt16) {
+    guard !filtered.isEmpty else{return}
+    let page=max(1,Int(table.visibleRect.height/max(1,table.rowHeight))),current=max(0,table.selectedRow)
+    let target=code==115 ? 0 : code==119 ? filtered.count-1 : current+(code==125 ? 1 : code==126 ? -1 : code==121 ? page : -page)
+    let row=max(0,min(filtered.count-1,target));table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false);table.scrollRowToVisible(row)
+  }
   func numberOfRows(in tableView:NSTableView)->Int{filtered.count}
   func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
-    guard filtered.indices.contains(row) else{return nil};let entry=filtered[row],mask=entry.item.keyEquivalentModifierMask
-    let shortcut=(mask.contains(.control) ? "⌃" : "")+(mask.contains(.option) ? "⌥" : "")+(mask.contains(.shift) ? "⇧" : "")+(mask.contains(.command) ? "⌘" : "")+entry.item.keyEquivalent.uppercased()
-    let label=tableView.makeView(withIdentifier:.init("command"),owner:self) as? NSTextField ?? Theme.label("",size:12)
-    let sequence=sequences.bindings[entry.id]?.map(\.encoded).joined(separator:" → ");label.identifier = .init("command");label.stringValue=entry.path+(sequence.map{"     "+$0} ?? (entry.item.keyEquivalent.isEmpty ? "" : "     "+shortcut));label.textColor=entry.item.isEnabled ? Theme.text:Theme.muted;label.toolTip=entry.item.toolTip;return label
+    guard filtered.indices.contains(row) else{return nil};let entry=filtered[row],id=tableColumn?.identifier ?? .init("command")
+    let label=tableView.makeView(withIdentifier:id,owner:self) as? NSTextField ?? Theme.label("",size:12)
+    label.identifier=id
+    label.stringValue=id.rawValue=="shortcut" ? shortcutText(entry) : id.rawValue=="category" ? entry.path.components(separatedBy:" / ").dropLast().joined(separator:" / ") : entry.item.title
+    label.textColor=entry.item.isEnabled ? Theme.text:Theme.muted;label.toolTip=entry.item.toolTip ?? entry.path;return label
   }
   // Menu items are only validated when their menu opens, so isEnabled can be
   // stale. Ask the object that would receive the action, as the menu would.

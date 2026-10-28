@@ -27,6 +27,8 @@ int main(){@autoreleasepool{try{
     check([preview[@"after"][@"points"] isEqual:@[@[@0,@64],@[@4,@0],@[@8,@32],@[@12,@64]]]&&[preview[@"wouldChange"] boolValue]&&[revision isEqual:session.automationRevision],"Dry run returns independently calculated native vertices without editing");
     call(@"instrument.envelope.transform",params,true);auto after=call(@"instrument.envelope.get",target)[@"data"];
     call(@"history.undo",@{@"domain":@"document"},true);check([call(@"instrument.envelope.get",target)[@"data"] isEqual:before],"Undo restores complete envelope");
+    const auto unchanged=call(@"instrument.patch",@{@"instrument":@1,@"values":@{@"envelope":@0,@"points":before[@"points"]}},true);
+    check(![unchanged[@"changed"] boolValue]&&session.canRedo,"An unchanged instrument patch preserves revision and Redo");
     auto noop=[params mutableCopy];noop[@"operation"]=@"scale";noop[@"options"]=@{@"amount":@1};
     check(![call(@"instrument.envelope.transform",noop,true)[@"changed"] boolValue]&&session.canRedo,"No-op retains pending Redo");
     call(@"history.redo",@{@"domain":@"document"},true);check([call(@"instrument.envelope.get",target)[@"data"] isEqual:after],"Redo restores transformed envelope");

@@ -1578,9 +1578,42 @@ retains the draft for review and manual placement. Closing/replacing the documen
 and saving require finishing or discarding the take first. Uncommitted takes remain
 in memory; automatic recovery copies resume after the take is resolved. Capturing does not itself change
 the document revision. Native UI recording starts with playback when armed and
-commits on stop. MIDI settings select timing grid, adjacent recording columns and
+commits complete takes on stop. Takes with missing timestamps, exhausted voices,
+overflow or disconnected input stay in **MIDI & recording** for explicit Finish
+or Discard. API Stop always retains its take. The review keeps event selection
+and unfinished settings while polling. MIDI settings select timing grid, adjacent recording columns and
 input adjustment. Physical MIDI latency and device behavior still require hardware
 qualification; automated tests inject the same host-clock timestamps silently.
+
+The native application also exposes `midi.devices.get {}`, `midi.settings.get {}`
+and `midi.settings.set`. Settings writes require the independent
+`expectedMidiRevision` from the settings read and the complete fields `source`,
+`armed`, `channelsCount` (1–127), `quantization` (0–65536 row units) and
+`latencyMS` (−500…500), with optional `dryRun`. Source is an opaque ID from the
+device read; the empty string selects virtual input only. IDs are platform local.
+Settings do not change song history. No-op writes keep the settings revision;
+stale or invalid writes reject. Rescan preserves the selected endpoint identity.
+Changing source or disarming stops and retains any active take. Input at a take,
+document or source boundary is quarantined, including delayed old callbacks.
+
+### Retained workspace layouts
+
+`workspace.layout` accepts Compose, Pattern focus, Sound design, Connected and
+Graph editing presets. Graph editing exposes routing, the independent
+`graphCurve` panel and pattern automation together. The curve panel supports the
+same placements, pinning and Return as other inspectors. Follow preserves drafts;
+use the editor's explicit reload/discard action to replace unfinished work.
+Panel Return resolves the original document, pattern and track identities and
+rejects a removed target.
+
+Save custom, Restore custom and Delete custom accept optional `savedName`
+(default Custom): 1–64 characters without controls or surrounding whitespace.
+Up to 24 named layouts are available through **Workspace → Layouts…** and
+`workspace.get.data.savedLayouts`. Restore preserves pins, targets and drafts.
+Reload saved refreshes the catalogue after another app session changes it;
+stale saves/deletes reject without replacing the file. Inspection and automation
+test sessions keep layouts in memory. The legacy single Custom layout migrates
+on first use without renaming its preference key.
 
 ### Autosave and crash recovery (native application)
 

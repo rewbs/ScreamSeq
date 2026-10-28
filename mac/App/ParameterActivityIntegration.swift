@@ -4,6 +4,7 @@ extension AppController {
   func installParameterActivity() {
     parameterActivity.onRequest = {[weak self] method,p,reply in self?.handleAutomation(method,params:p,reply:reply)}
     parameterActivity.onContext = {[weak self] in self?.model ?? PatternModel([:])}
+    parameterActivity.onBusy = {[weak self] in self?.busy != false || self?.sessionReading != false}
     parameterActivity.onRecordedNames = {[weak self] plugin,parameter in
       guard let self else{return(nil,nil)}
       let name=self.model.nativePlugins.first{$0["instanceID"] as? String==plugin}?["name"] as? String
@@ -28,7 +29,7 @@ extension AppController {
     guard !busy else{return}
     window.makeKeyAndOrderFront(nil)
     let kind=source["kind"] as? String ?? "baseline",plugin=source["plugin"] as? String ?? ""
-    if kind=="recorded",!plugin.isEmpty,let parameter=source["parameter"] as? Int{workspace?.show("parameterActivity",focus:true);parameterActivity.inspectRecorded(plugin:plugin,parameter:parameter);return}
+    if kind=="recorded",!plugin.isEmpty,let parameter=source["parameter"] as? Int{openSongAutomation(plugin:plugin,parameter:parameter);return}
     if kind=="envelope" {
       guard let pattern=source["pattern"] as? Int,let parameter=source["parameter"] as? Int,let slot=model.nativePlugins.firstIndex(where:{$0["instanceID"] as? String==plugin}),model.patterns.contains(where:{$0["index"] as? Int==pattern}) else{return}
       if workspaceAutomation.hasDraft || workspaceAutomation.loading {statusLabel.stringValue="Wait for the current envelope edit to finish before opening another source.";return}

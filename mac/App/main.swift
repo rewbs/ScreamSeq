@@ -17,10 +17,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var workspace: DockWorkspace?
   let workspaceNotes = PreciseNotesEditor(frame:.zero), workspaceAutomation = PatternAutomationEditor(frame:.zero)
   let parameterActivity=ParameterActivityEditor(frame:.zero)
+  var songAutomationWindow:SongAutomationWindow?
   var workspaceAutomationModel: PatternModel?
-  var workspaceReturnPoints = [String:EditorNavigation](), workspaceContextTokens = [String:String]()
+  var workspaceReturnPoints = [String:EditorReturnPoint](), workspaceContextTokens = [String:String]()
   let signalGraphEditor=SignalGraphEditor(frame:.zero), graphPluginBrowser=PluginBrowser(), graphCommandsEditor=GraphCommandsEditor(frame:.zero)
   let commandPalette = WorkspaceCommandPalette()
+  lazy var workspaceLayouts = WorkspaceLayouts(file: inspectionTest || automationTest ? nil : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("Resonance/workspace-layouts.json"), legacy: inspectionTest || automationTest ? nil : UserDefaults.standard.dictionary(forKey: "workspaceSavedLayout"))
+  lazy var layoutManager = WorkspaceLayoutManager()
   var workspaceContextMonitor: Any?
   var workspaceInputMonitor: Any?, workspaceHeldKeys = [UInt16:Int]()
   var liveKeyboard = false, liveKeyboardItem: NSMenuItem?, liveKeyboardButton: ActionButton?
@@ -89,6 +92,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var lastFrameCount: UInt64 = 0
   var lastFPS = 0.0
   var settingsWindow: NSWindow?
+  let audioSettingsEditor=AudioSettingsEditor(frame:.zero),audioSettingsIdentity=UUID().uuidString
+  var audioSettingsGeneration=0,audioEndpoint="",audioPeriod=128
+  var checkedAudio:[String:Any]?
   let worker = DispatchQueue(label: "org.resonance.document", qos: .userInitiated)
   let recoveryWriter = DispatchQueue(label: "org.resonance.recovery", qos: .utility)
   // Typing queued by the pattern grid while busy replays once the current
@@ -139,10 +145,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var assetToken = 0
   var workspaceAssetTokens = [String:Int]()
   var pendingNotes = [(Int, Int, Int, Bool, Int)]()
-  var heldAuditionTargets = [Int:(instrument:Int,channel:Int)]()
+  var auditionOwnership = AuditionOwnership()
   var midiArmed = false
   var midiNotes = [Int: Int]()
   var midiWindow: NSWindow?
+  let midiEditor = MIDIRecordingEditor(frame: .zero)
+  var midiSourceID = 0, midiSettingsGeneration = 0
+  let midiSettingsIdentity = UUID().uuidString
   var orderWindow: NSWindow?
   let matrixEditor = ArrangementMatrix(frame: .zero)
   var matrixWindow: NSWindow?
@@ -489,6 +498,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if documentLoadReport.requiresSaveAs { documentURL = nil; dirty = true }
     updateDocumentLoadReport()
     if previousDocument != model.revisionToken.split(separator:":").first {
+      auditionOwnership.clear();pendingNotes.removeAll();midiNotes.removeAll()
       sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
       (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
       gateInspector.invalidate()
@@ -663,6 +673,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     orderEditor.onSelect = { [weak self] order in
       guard let self, !self.busy, order < self.model.orders.count else { return }
       self.selectedOrder = order
+      guard self.model.patterns.contains(where: { $0["index"] as? Int == self.model.orders[order] }) else { return }
       self.model.pattern = self.model.orders[order]
       self.patternView.isFollowing = false
       self.refreshPattern()
@@ -687,14 +698,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
     }
     orderEditor.onMatrix = { [weak self] in self?.showArrangementMatrix() }
-    orderEditor.onAnnotate = { [weak self] params in
-      self?.runPatternCommand("song.annotate", params: params) { [weak self] response in
-        if let error = response["error"] as? [String: Any] {
-          self?.show(NSError(domain: "Arrangement", code: 1,
-            userInfo: [NSLocalizedDescriptionKey: error["message"] as? String ?? "Could not update annotations"]))
-        }
-      }
+    orderEditor.onAnnotate = { [weak self] params, reply in
+      self?.runPatternCommand("song.annotate", params: params) { response in reply(response) }
     }
+
     orderEditor.onChange = { [weak self] order, pattern, operation in
       guard let self else { return }
       var nextOrder = order
@@ -756,7 +763,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func stopPlayback() {
     guard !busy else { return }
     pendingNotes.removeAll()
-    heldAuditionTargets.removeAll()
+    auditionOwnership.clear()
     session.panic()
     session.stop()
     currentPlaying = false
@@ -805,6 +812,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if !dialog { UIWorkTrace.measure(.drainNotes){drainNotes()} }
     guard !busy else { return }
     if workspace?.visibleIDs.contains("parameterActivity")==true {parameterActivity.poll()}
+    if songAutomationWindow?.window?.isVisible==true {songAutomationWindow?.editor.refreshAfterHistory()}
     guard !busy else{return}
     if !dialog {UIWorkTrace.measure(.positionTimeline){updatePositionTimeline()}}
     guard !busy else {return}
@@ -812,6 +820,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     parameterActivity.showPositions(editPattern:patternView.navigation.pattern,row:patternView.cursorRow,playPattern:session.playing ? t["pattern"] as? Int:nil,position:(t["patternPosition"] as? NSNumber)?.doubleValue)
     workspaceAutomation.showPositions(editPattern:patternView.navigation.pattern,row:patternView.cursorRow,
       playPattern:session.playing ? t["pattern"] as? Int:nil,position:(t["patternPosition"] as? NSNumber)?.doubleValue)
+    workspaceNotes.showPlayback(document:String(model.revisionToken.split(separator:":").first ?? ""),
+      pattern:session.playing ? t["pattern"] as? Int:nil,position:(t["patternPosition"] as? NSNumber)?.doubleValue)
     let positions=t["voicePositions"] as? [[String:Any]] ?? []
     sampleEditor.waveform.playbackFrames=positions.filter{$0["sample"] as? Int==sampleEditor.index}.compactMap{($0["sampleFrame"] as? NSNumber)?.doubleValue}
     let envelopeKind=max(0,min(2,instrumentEditor.envelopeType.indexOfSelectedItem))
@@ -920,10 +930,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   @objc func undo() {
     if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: false) { return }
+    if finishPendingNotes({[weak self] in self?.undo()}) {return}
     perform("Undo…", markDirty: true, { try self.session.historyUndo(false) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   @objc func redo() {
     if EditorHistory.performTextHistory(in: (NSApp.keyWindow ?? window)?.firstResponder, redo: true) { return }
+    if finishPendingNotes({[weak self] in self?.redo()}) {return}
     perform("Redo…", markDirty: true, { try self.session.historyUndo(true) }, completion: { self.signalGraphEditor.historyDidComplete();self.refreshPreciseNotesAfterHistory() })
   }
   func refreshPreciseNotesAfterHistory() {
@@ -1014,6 +1026,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc func saveAs() { saveDocumentAs() }
   // `then` runs only after the song has actually been written.
   func saveDocument(then: (() -> Void)? = nil) {
+    if finishPendingNotes({[weak self] in self?.saveDocument(then:then)}) {return}
     if documentLoadReport.requiresSaveAs || !["screamseq", "resonance"].contains(documentURL?.pathExtension.lowercased() ?? "") {
       saveDocumentAs(then: then)
       return
@@ -1025,6 +1038,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     saveDocumentAs(then: then)
   }
   func saveDocumentAs(then: (() -> Void)? = nil) {
+    if finishPendingNotes({[weak self] in self?.saveDocumentAs(then:then)}) {return}
     guard !pluginRecordingInput.protectsDocument else {
       showPluginRecording(); statusLabel.stringValue = "Finish the plugin take before saving the song. Save a recovery copy from the take review to retain original input."; return
     }
@@ -1043,6 +1057,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   func save(to url: URL, then: (() -> Void)? = nil) {
+    if finishPendingNotes({[weak self] in self?.save(to:url,then:then)}) {return}
     guard !pluginRecordingInput.protectsDocument else {
       showPluginRecording(); statusLabel.stringValue = "Finish the plugin take before saving the song. Save a recovery copy from the take review to retain original input."; return
     }
@@ -1087,6 +1102,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       })
   }
   @objc func exportModule() {
+    if finishPendingNotes({[weak self] in self?.exportModule()}) {return}
     guard !busy else { return }
     let revision = session.automationRevision
     let ext = model.format.lowercased()
@@ -1109,6 +1125,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
   }
   @objc func exportAudio() {
+    if finishPendingNotes({[weak self] in self?.exportAudio()}) {return}
     guard !busy, !sessionReading else {
       statusLabel.stringValue = "Audio export will continue when the current operation finishes"
       deferUntilIdle { [weak self] in self?.exportAudio() }
@@ -1150,53 +1167,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
       }
     }
-  }
-  @objc func audioSettings() {
-    guard !busy else { return }
-    if let settingsWindow {
-      settingsWindow.makeKeyAndOrderFront(nil)
-      return
-    }
-    let win = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 460, height: 250), styleMask: [.titled, .closable],
-      backing: .buffered, defer: false)
-    win.title = "Audio settings"
-    win.isReleasedWhenClosed = false
-    win.delegate = self
-    settingsWindow = win
-    let device = NSPopUpButton()
-    device.addItem(withTitle: "System default")
-    device.lastItem?.tag = 0
-    for item in session.devices() {
-      device.addItem(withTitle: item["name"] as? String ?? "Device")
-      device.lastItem?.tag = item["id"] as? Int ?? 0
-    }
-    let buffer = NSPopUpButton()
-    for n in [64, 128, 256, 512] {
-      buffer.addItem(withTitle: "\(n) frames")
-      buffer.lastItem?.tag = n
-    }
-    buffer.selectItem(at: 1)
-    let apply = ActionButton("Apply") { [weak self] in
-      guard let self else { return }
-      do {
-        try self.session.configureDevice(
-          UInt(device.selectedTag()), buffer: UInt(buffer.selectedTag()))
-        self.statusLabel.stringValue = "Audio device configured"
-        win.close()
-      } catch { self.show(error) }
-    }
-    let content = stack(
-      .vertical,
-      [
-        Theme.label("Output device", size: 12, weight: .medium), device,
-        Theme.label("Buffer size", size: 12, weight: .medium), buffer,
-        Theme.label(
-          "Device sample rate is negotiated automatically.", size: 11, color: Theme.muted), apply,
-      ], spacing: 10)
-    content.fill(win.contentView!, inset: 24)
-    win.center()
-    win.makeKeyAndOrderFront(nil)
   }
   func connectEditors() {
     sampleEditor.onSelect = { [weak self] index in
@@ -1252,15 +1222,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self?.patternView.instrument = index
       self?.refreshAssets()
     }
-    instrumentEditor.onApply = { [weak self] values in
-      guard let self else { return }
-      let instrument = self.instrumentEditor.index
-      self.perform(
-        "Updating instrument…", refresh: false, markDirty: true,
-        { try self.session.instrumentSettings(instrument, values: values) }, completion: {
-          if self.instrumentEditor.index==instrument {self.instrumentEditor.settingsDraft.accept(values.keys)}
-          self.refreshAll()
-        })
+    instrumentEditor.onCommit = {[weak self] values,revision,index,identity,reply in
+      self?.submitInstrumentEdit(values,revision:revision,index:index,identity:identity,reply:reply)
     }
     pluginEditor.onPrograms = { [weak self] slot in self?.showPluginPrograms(slot) }
     pluginEditor.onInstruments = { [weak self] slot in self?.showPluginInstruments(slot) }
@@ -1355,7 +1318,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.perform("Reordering plugins…", markDirty: true, { try self.session.movePlugin(slot, direction: position - slot) })
       }
     }
-    patternView.onAudition = { [weak self] note, instrument, channel, on in self?.audition(note: note, on: on, instrument:instrument, channel:channel) }
+    patternView.onAudition = { [weak self] note, instrument, channel, on in self?.audition(note: note, on: on, instrument:instrument, channel:channel, source:"pattern:\(channel)") }
     patternView.canEdit = { [weak self] in self.map { !$0.busy && !$0.sessionReading && $0.model.editable } ?? false }
     patternView.onMessage = { [weak self] message in self?.statusLabel.stringValue = message }
     patternView.commandRevision = { [weak self] in self?.session.automationRevision ?? "" }
@@ -1601,29 +1564,28 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc func systemSleep() {
     guard !shuttingDown else { return }
     pendingNotes.removeAll()
-    heldAuditionTargets.removeAll()
+    auditionOwnership.clear()
     if busy { worker.async { self.session.stop() } } else { session.stop() }
   }
   @objc func systemWake() {
     guard !busy else { return }
     perform("Restoring audio device…", refresh: false, { try self.session.refreshDevice() })
   }
-  func audition(note: Int, velocity: Int = 100, on: Bool, instrument requestedInstrument:Int?=nil, channel requestedChannel:Int?=nil, prepare:Bool=true) {
-    var target=(instrument:requestedInstrument ?? patternView.instrument,channel:requestedChannel ?? patternView.cursorChannel)
-    if requestedChannel==nil {
-      if on {heldAuditionTargets[note]=target}
-      else if let held=heldAuditionTargets.removeValue(forKey:note) {target=held}
-    }
-    let instrument=target.instrument,channel=target.channel
-    if busy {
-      pendingNotes.append((note, instrument, velocity, on, channel))
-      return
-    }
-    if !session.note(note, instrument: instrument, velocity: velocity, on: on, channel:channel) {
-      pendingNotes.append((note, instrument, velocity, on, channel))
-      if prepare { perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() }) }
-    }
+  func audition(note: Int, velocity: Int = 100, on: Bool, instrument requestedInstrument:Int?=nil, channel requestedChannel:Int?=nil, prepare:Bool=true, source:String="keyboard") {
+    let key="\(source):\(note)"
+    let events = on ? auditionOwnership.press(key, voice: .init(note: note, instrument: requestedInstrument ?? patternView.instrument, channel: requestedChannel ?? patternView.cursorChannel)) : auditionOwnership.release(key)
+    sendAuditions(events, velocity: velocity, prepare: prepare)
   }
+  func sendAuditions(_ events: [AuditionOwnership.Event], velocity: Int = 100, prepare: Bool = true) {
+    for event in events {
+      let voice = event.voice
+      if busy || !session.note(voice.note, instrument: voice.instrument, velocity: velocity, on: event.on, channel: voice.channel) {
+        pendingNotes.append((voice.note, voice.instrument, velocity, event.on, voice.channel))
+      }
+    }
+    if !busy, prepare, !pendingNotes.isEmpty { perform("Preparing audition…", refresh: false, { try self.session.prepareAudition() }) }
+  }
+  func releaseMIDIAuditions() { sendAuditions(auditionOwnership.release(prefix: "midi:"), prepare: false); midiNotes.removeAll() }
   func drainNotes() {
     drainInspectorNotes()
     guard !busy, !pendingNotes.isEmpty else { return }
@@ -1640,32 +1602,40 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
   func handleMIDI(_ events: [[AnyHashable: Any]], telemetry: [AnyHashable: Any], allowEdits: Bool = true) {
     guard !events.isEmpty else { return }
-    var auditions = [(Int, Int, Bool)]()
+    var auditions = [(Int, Int, Bool, String)]()
     var edits = [[String: Any]]()
     for event in events {
       let status = (event["status"] as? Int ?? 0) & 0xf0
       let note = min(120, (event["note"] as? Int ?? 0) + 1)
       let velocity = event["velocity"] as? Int ?? 0
+      let midiChannel = (event["status"] as? Int ?? 0) & 0x0f
       if status == 0xb0 {
-        auditions.removeAll()
-        pendingNotes.removeAll()
-        heldAuditionTargets.removeAll()
-        midiNotes.removeAll()
-        session.panic()
+        let controller = event["note"] as? Int ?? 0
+        if controller == 120 || controller == 123 {
+          if event["timestamp"] as? UInt64 == 0 {
+            auditions.removeAll(); releaseMIDIAuditions()
+          } else {
+            auditions.removeAll { $0.3 == "midi:\(midiChannel)" }
+            sendAuditions(auditionOwnership.release(prefix: "midi:\(midiChannel):"), prepare: false)
+            midiNotes = midiNotes.filter { $0.key / 128 != midiChannel }
+          }
+        }
         continue
       }
+      guard status == 0x80 || status == 0x90 else { continue }
       let on = status == 0x90 && velocity > 0
-      auditions.append((note, velocity, on))
+      auditions.append((note, velocity, on, "midi:\(midiChannel)"))
       // Step entry waits out an application-modal dialog; the notes still sound.
       guard midiArmed, allowEdits else { continue }
       // Live input was timestamped and added to the take by the session. Poll
       // timing is used only for stopped, explicit step entry.
-      if currentPlaying || recordingTakeID != nil {continue}
+      if currentPlaying || session.recordingTakeID != nil {continue}
       let row =
         currentPlaying ? telemetry["row"] as? Int ?? patternView.cursorRow : patternView.cursorRow
       let pattern = currentPlaying ? telemetry["pattern"] as? Int ?? model.pattern : model.pattern
-      let channel = on ? patternView.cursorChannel : midiNotes[note] ?? patternView.cursorChannel
-      if on { midiNotes[note] = channel } else { midiNotes.removeValue(forKey: note) }
+      let key = midiChannel * 128 + note - 1
+      let channel = on ? patternView.cursorChannel : midiNotes[key] ?? patternView.cursorChannel
+      if on { midiNotes[key] = channel } else { midiNotes.removeValue(forKey: key) }
       // Live recording uses the separate timestamped take; this is stopped step entry.
       if on || currentPlaying {
         var values=model.cell(row,channel).map(Int.init)
@@ -1681,64 +1651,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         try session.editCells(edits)
         dirty = true
         refreshPattern()
-      } catch { show(error) }
+      } catch { releaseMIDIAuditions(); show(error); return }
     }
-    for event in auditions { audition(note: event.0, velocity: event.1, on: event.2, prepare: allowEdits && window.attachedSheet == nil) }
-  }
-  @objc func midiSettings() {
-    guard !busy else { return }
-    if let midiWindow {
-      midiWindow.makeKeyAndOrderFront(nil)
-      return
-    }
-    let win = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 520, height: 440), styleMask: [.titled, .closable],
-      backing: .buffered, defer: false)
-    win.title = "MIDI input"
-    win.isReleasedWhenClosed = false
-    win.delegate = self
-    midiWindow = win
-    let source = NSPopUpButton()
-    source.addItem(withTitle: "Virtual input only")
-    source.lastItem?.tag = 0
-    for item in session.midiSources() {
-      source.addItem(withTitle: item["name"] as? String ?? "MIDI source")
-      source.lastItem?.tag = item["id"] as? Int ?? 0
-    }
-    let armed = NSButton(
-      checkboxWithTitle: "Record notes into the current pattern", target: nil, action: nil)
-    armed.state = midiArmed ? .on : .off
-    let grid=NSPopUpButton(),columns=NSPopUpButton(),latency=NSTextField(string:String(midiLatencyMS))
-    for (title,units) in [("Keep exact timing",0),("1/16 row",4096),("1/4 row",16384),("Whole row",65536)] {grid.addItem(withTitle:title);grid.lastItem?.tag=units}
-    grid.selectItem(withTag:midiQuantization)
-    for count in 1...max(1,min(16,model.channels-patternView.cursorChannel)) {columns.addItem(withTitle:"\(count) note columns");columns.lastItem?.tag=count}
-    columns.selectItem(withTag:midiRecordColumns)
-    for (view,title) in [(grid as NSControl,"Recording grid"),(columns as NSControl,"Recording note columns"),(latency as NSControl,"Input adjustment milliseconds")] {view.setAccessibilityLabel(title)}
-    let apply = ActionButton("Apply") { [weak self] in
-      guard let self, !self.busy else { return }
-      do {
-        guard let adjustment=Double(latency.stringValue),adjustment.isFinite,(-500...500).contains(adjustment) else {self.statusLabel.stringValue="Input adjustment must be −500 to +500 ms";return}
-        try self.session.connectMIDI(UInt(source.selectedTag()))
-        self.midiQuantization=grid.selectedTag();self.midiLatencyMS=adjustment;self.midiRecordColumns=columns.selectedTag()
-        self.midiArmed = armed.state == .on
-        if self.currentPlaying {if self.midiArmed {self.startLiveRecordingIfArmed()} else {self.finishLiveRecording()}}
-        win.close()
-      } catch { self.show(error) }
-    }
-    let content = stack(
-      .vertical,
-      [
-        Theme.label("MIDI source", size: 14, weight: .semibold), source, armed,
-        stack(.horizontal,[Theme.label("Timing grid",size:12),grid]),
-        stack(.horizontal,[Theme.label("Recording columns",size:12),columns]),
-        stack(.horizontal,[Theme.label("Input adjustment (ms)",size:12),latency]),
-        Theme.label(
-          "Live recording starts at the selected channel and uses adjacent columns for chords. Positive adjustment places input earlier. A stopped take is one Undo step. Step entry uses the cursor row.",
-          size: 11, color: Theme.muted), apply,
-      ], spacing: 18)
-    content.fill(win.contentView!, inset: 24)
-    win.center()
-    win.makeKeyAndOrderFront(nil)
+    for event in auditions { audition(note: event.0, velocity: event.1, on: event.2, prepare: allowEdits && window.attachedSheet == nil, source: event.3) }
   }
   func perform(
     _ message: String, refresh: Bool = true, markDirty: Bool = false,
@@ -1784,7 +1699,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DispatchQueue.main.async {
           self.busy = false
           self.pendingNotes.removeAll()
-          self.heldAuditionTargets.removeAll()
+          self.auditionOwnership.clear()
           self.inspectorPendingNotes.removeAll()
           self.show(error)
         }
@@ -1828,6 +1743,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   // after a successful save when they choose Save. A cancelled or failed save
   // leaves the song open and unchanged.
   func confirmUnsavedChanges(_ proceed: @escaping () -> Void) {
+    if finishPendingNotes({[weak self] in self?.confirmUnsavedChanges(proceed)}){return}
     switch unsavedChoice() {
     case .proceed: proceed()
     case .save: saveDocument(then: proceed)
@@ -1864,6 +1780,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if shuttingDown { return .terminateLater }
+    if finishPendingNotes({[weak self] in self?.requestQuit()}){return .terminateCancel}
     let confirmed = terminateConfirmed; terminateConfirmed = false
     if busy {
       statusLabel.stringValue = "Still working: quit again when the current operation has finished"
@@ -1887,7 +1804,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     workspaceHeldKeys.removeAll()
     inspectorHeldKeys.removeAll()
     pendingNotes.removeAll()
-    heldAuditionTargets.removeAll()
+    auditionOwnership.clear()
     inspectorPendingNotes.removeAll()
     tickTimer?.invalidate()
     recoveryTimer?.invalidate()
@@ -2016,6 +1933,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     app.addItem(.separator())
     item(app, "Keyboard and Display…", #selector(keyboardPreferences), ",")
     item(app, "Audio Settings…", #selector(audioSettings))
+    item(app, "MIDI Input…", #selector(midiSettings))
     app.addItem(.separator())
     app.addItem(
       withTitle: "Quit ScreamSeq", action: #selector(NSApplication.terminate(_:)),
@@ -2044,6 +1962,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
     let automation = submenu("Automation")
     item(automation, "Pattern Automation…", #selector(showPatternAutomation))
+    item(automation, "Song Parameter Automation…", #selector(showSongAutomation))
     automation.addItem(.separator())
     item(automation, "Enable Local API", #selector(toggleAutomation))
     automationMenuItem = automation.items.last
@@ -2114,9 +2033,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     workspaceMenu.addItem(.separator())
     item(workspaceMenu, "Compose Layout", #selector(composeLayout), "2", [.command,.option])
     item(workspaceMenu, "Sound Design Layout", #selector(soundLayout), "3", [.command,.option])
+    item(workspaceMenu, "Graph Editing Layout", #selector(graphLayout))
     item(workspaceMenu, "Pattern Focus Layout", #selector(patternLayout), "4", [.command,.option])
     item(workspaceMenu, "Save Custom Layout", #selector(saveWorkspaceLayout))
     item(workspaceMenu, "Restore Custom Layout", #selector(restoreWorkspaceLayout))
+    item(workspaceMenu, "Layouts…", #selector(showWorkspaceLayouts), "w", [.control,.option])
     let win = submenu("Window")
     item(win, "Mixer…", #selector(showMixer), "m", [.command, .shift])
     item(win, "Plugin Automation Take…", #selector(showPluginRecording))

@@ -557,7 +557,7 @@ struct InterfaceFailure: Error { let message: String }
     let labels = OrderEditor(frame: .zero)
     labels.update(annotated, selected: 0)
     var annotation: [String: Any] = [:]
-    labels.onAnnotate = { annotation = $0 }
+    labels.onAnnotate = { params,reply in annotation=params;reply(["result":["revision":"metadata-revision"]]) }
     labels.sectionName.stringValue = "Opening"; labels.saveSection()
     try require(annotation["id"] as? String == "n3" && annotation["expectedRevision"] as? String == "metadata-revision", "Section edits target stable identity and displayed revision")
     labels.navigateSection(1)
@@ -791,7 +791,7 @@ struct InterfaceFailure: Error { let message: String }
       ("parameter-activity", parameterActivityChecks), ("mixer-strips", mixerStripsChecks),
       ("plugin-preset", pluginPresetChecks), ("song-timing", songTimingChecks),
       ("plugin-programs", pluginProgramsChecks), ("precise-notes", preciseNotesChecks),
-      ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
+      ("mac-parity", macParityChecks), ("workspace", workspaceChecks), ("signal-graph", signalGraphChecks),
       ("graph-actions", graphActionCatalogChecks), ("graph-ports", graphPortActionChecks),
       ("graph-preview", graphConnectionPreviewChecks), ("sample-browser", sampleBrowserChecks),
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),

@@ -17,6 +17,16 @@ extension AppController {
     add("plugins","Plugin controls",pluginEditor,"right",600)
     add("mixer","Mixer",mixerEditor,"bottom",340)
     add("graph","Audio & modulation graph",signalGraphEditor,"bottom")
+    let curveEditor = signalGraphEditor.envelopeEditor
+    if let parent = curveEditor.superview as? NSStackView { parent.removeArrangedSubview(curveEditor) }
+    curveEditor.removeFromSuperview();curveEditor.independent=true;curveEditor.isHidden=false
+    add("graphCurve","Graph curve",curveEditor,"hide",300)
+    curveEditor.followsSelection = { [weak self] in self?.workspace?.panels["graphCurve"]?.pinned != true }
+    curveEditor.onTargetChanged = { [weak self] in
+      guard let self,let panel=self.workspace?.panels["graphCurve"] else{return}
+      panel.target.stringValue = self.signalGraphEditor.envelopeEditor.node == nil ? "Select an envelope source" : "\(self.signalGraphEditor.envelopeEditor.heading.stringValue) · P\(self.signalGraphEditor.envelopeEditor.patternIndex)"
+      if self.signalGraphEditor.envelopeEditor.node != nil,self.workspace?.locations["graphCurve"]=="hide" {self.workspace?.place("graphCurve",at:"secondary",select:false)}
+    }
     add("graphPlugins","Graph effect browser",graphPluginBrowser,"right",660)
     add("graphCommands","Pattern graph commands",graphCommandsEditor,"right",450)
     graphCommandsEditor.onContext = {[weak self] in guard let self else{return (PatternModel([:]),0,0)};return (self.model,self.patternView.cursorRow,self.patternView.cursorChannel)}
@@ -75,7 +85,7 @@ extension AppController {
     installContextMenus()
     dock.onSelection = {[weak self] id in
       guard let self else{return}
-      if self.workspaceReturnPoints[id] == nil {self.workspaceReturnPoints[id]=self.patternView.navigation}
+      self.capturePanelReturn(id)
       if id=="samples" {self.editorMode=1} else if id=="instruments" {self.editorMode=2} else if id=="plugins" {self.editorMode=3}
       self.followWorkspacePanel(id,force:false,opening:true)
     }
@@ -180,7 +190,7 @@ extension AppController {
     }
     guard !busy,let dock=workspace,let panel=dock.panels[id],id=="graph" || force || workspaceContextTokens[id] == nil || (!panel.pinned && (opening || !dock.containsFocus(id))) else{return}
     let position=patternView.navigation
-    if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=position}
+    capturePanelReturn(id)
     let cursor="P\(model.pattern) · R\(position.row) · CH\(position.channel+1)"
     switch id {
     case "gate":
@@ -188,13 +198,16 @@ extension AppController {
       let token="\(position.pattern):\(position.row):\(position.channel):\(position.column):\(model.revisionToken)"
       guard !gateInspector.pending,force || workspaceContextTokens[id] != token else{return}
       workspaceContextTokens[id]=token;panel.target.stringValue=cursor;gateInspector.capture()
+    case "graphCurve":
+      if force { signalGraphEditor.envelopeEditor.context(graph: signalGraphEditor.graphID, node: signalGraphEditor.selectedNode, patterns: signalGraphEditor.data["patterns"] as? [[String:Any]] ?? [], revision: signalGraphEditor.revision, force: true) }
+      panel.target.stringValue = signalGraphEditor.envelopeEditor.node == nil ? "Select an envelope source" : "\(signalGraphEditor.envelopeEditor.heading.stringValue) · P\(signalGraphEditor.envelopeEditor.patternIndex)"
     case "notes":
-      if workspaceNotes.hasDraft && !force {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
+      if workspaceNotes.hasDraft {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let token="\(position.pattern):\(position.row):\(position.channel):\(model.revisionToken)"
       guard !workspaceNotes.pending,force || workspaceContextTokens[id] != token else{return}
       workspaceContextTokens[id]=token;panel.target.stringValue=cursor;workspaceNotes.capture()
     case "samples","instruments":
-      if !force && (id=="samples" ? sampleEditor.hasDraft : instrumentEditor.hasDraft) {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
+      if id=="samples" ? sampleEditor.hasDraft : instrumentEditor.hasDraft {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let cell=model.cell(position.row,position.channel),instrument=cell[1]>0 ? Int(cell[1]) : patternView.instrument
       let sample=instrument
       let token=WorkspaceAssetContext.token(panel:id,model:model,row:position.row,channel:position.channel,input:patternView.instrument)
@@ -207,7 +220,7 @@ extension AppController {
       if id=="samples" {
         if !model.instruments.isEmpty {
           handleAutomation("instrument.get",params:["instrument":instrument]){[weak self] reply in
-            guard let self,self.workspaceContextTokens[id]==token,force || !self.sampleEditor.hasDraft,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
+            guard let self,self.workspaceContextTokens[id]==token,!self.sampleEditor.hasDraft,let data=(reply["result"] as? [String:Any])?["data"] as? [String:Any],let mapping=data["mapping"] as? [Int] else{return}
             let key=max(0,min(127,Int(cell[0])-1));let mapped=mapping.indices.contains(key) ? mapping[key] : 0
             if mapped>0 {self.sampleEditor.index=mapped;self.workspace?.panels[id]?.target.stringValue="Sample \(mapped)";self.refreshWorkspaceAsset(id)}
           };return
@@ -216,7 +229,7 @@ extension AppController {
       } else {instrumentEditor.index=instrument}
       panel.target.stringValue="\(id=="samples" ? "Sample" : "Instrument") \(id=="samples" ? sample : instrument)";refreshWorkspaceAsset(id)
     case "automation":
-      guard !workspaceAutomation.loading,!workspaceAutomation.hasDraft || force else{panel.target.stringValue="Draft held";return}
+      guard !workspaceAutomation.loading,!workspaceAutomation.hasDraft else{panel.target.stringValue="Draft held";return}
       let token="\(model.pattern):\(pluginEditor.selected):\(model.revisionToken)"
       guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token
       workspaceAutomationModel=model;workspaceAutomation.selectedPluginID=model.nativePlugins.indices.contains(pluginEditor.selected) ? model.nativePlugins[pluginEditor.selected]["instanceID"] as? String:nil;workspaceAutomation.pluginIndex=max(0,pluginEditor.selected);panel.target.stringValue="Pattern \(model.pattern)";workspaceAutomation.load()
@@ -225,11 +238,11 @@ extension AppController {
     case "plugins":
       let token="\(pluginEditor.selected):\(model.revisionToken)";guard force || workspaceContextTokens[id] != token else{return};workspaceContextTokens[id]=token;refreshPlugins()
     case "graphCommands":
-      guard !graphCommandsEditor.pending,!graphCommandsEditor.hasDraft || force else{return}
+      guard !graphCommandsEditor.pending,!graphCommandsEditor.hasDraft else{return}
       let token="\(model.pattern):\(position.row):\(position.channel):\(model.revisionToken)"
       if force || workspaceContextTokens[id] != token {workspaceContextTokens[id]=token;graphCommandsEditor.preferredTarget=nil;graphCommandsEditor.preferredRow=position.row;graphCommandsEditor.capture()};panel.target.stringValue=cursor
     case "graph":
-      guard force || !signalGraphEditor.hasDraft else{panel.target.stringValue="Draft held · shared graph";return}
+      guard !signalGraphEditor.hasDraft else{panel.target.stringValue="Draft held · shared graph";return}
       if force || workspaceContextTokens[id] != model.revisionToken {workspaceContextTokens[id]=model.revisionToken;signalGraphEditor.load()}
       if panel.target.stringValue != "Shared song graph" {panel.target.stringValue="Shared song graph"}
     case "mixer":if force || workspaceContextTokens[id]==nil {workspaceContextTokens[id]="loaded";mixerEditor.load()}
@@ -241,10 +254,14 @@ extension AppController {
     for id in workspace.visibleIDs {followWorkspacePanel(id,force:false)}
   }
   func returnToPanel(_ id:String){
-    guard let target=workspaceReturnPoints[id],model.patterns.contains(where:{$0["index"] as? Int==target.pattern}) else{return}
+    guard let target=panelReturn(id) else{statusLabel.stringValue="The original panel pattern or track is no longer available";return}
     if target.pattern != model.pattern {model.pattern=target.pattern;refreshPattern()}
     var destination=target;destination.following=false;patternView.navigate(destination,clearSelection:true);window.makeKeyAndOrderFront(nil);window.makeFirstResponder(patternView)
   }
+  func capturePanelReturn(_ id:String) {
+    if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=EditorReturnPoint(navigation:patternView.navigation,revision:model.revisionToken,patterns:model.patterns,tracks:model.tracks)}
+  }
+  func panelReturn(_ id:String)->EditorNavigation? {workspaceReturnPoints[id]?.resolve(revision:model.revisionToken,patterns:model.patterns,tracks:model.tracks)}
   func openGraphCommand(target:String?=nil,column:Int=0,row:Int?=nil){
     workspaceContextTokens["graphCommands"]="\(model.pattern):\(patternView.cursorRow):\(patternView.cursorChannel):\(model.revisionToken)";workspace?.show("graphCommands",focus:true)
     graphCommandsEditor.preferredTarget=target;graphCommandsEditor.preferredColumn=column;graphCommandsEditor.preferredRow=row ?? patternView.cursorRow;graphCommandsEditor.capture()
@@ -273,10 +290,36 @@ extension AppController {
   @objc func dockFocusedPanel(){if let panel=workspace?.focusedPanel(){workspace?.place(panel.id,at:"right")}}
   @objc func toggleFollow(){patternView.isFollowing.toggle()}
   @objc func composeLayout(){workspace?.preset("Compose")}
+  @objc func graphLayout(){workspace?.preset("Graph editing")}
   @objc func soundLayout(){workspace?.preset("Sound design")}
   @objc func patternLayout(){workspace?.preset("Pattern focus");focusPattern()}
-  @objc func saveWorkspaceLayout(){if let state=workspace?.state{UserDefaults.standard.set(state,forKey:"workspaceSavedLayout");statusLabel.stringValue="Custom workspace layout saved"}}
-  @objc func restoreWorkspaceLayout(){if let state=UserDefaults.standard.dictionary(forKey:"workspaceSavedLayout"){workspace?.restore(state)}}
+  @objc func saveWorkspaceLayout(){statusLabel.stringValue=applyWorkspaceLayout("Save custom",savedName:"Custom") ?? "Custom workspace layout saved"}
+  @objc func restoreWorkspaceLayout(){statusLabel.stringValue=applyWorkspaceLayout("Restore custom",savedName:"Custom") ?? "Custom workspace layout restored"}
+  @objc func showWorkspaceLayouts(){
+    layoutManager.onNames = {[weak self] in self?.workspaceLayouts.names ?? []}
+    layoutManager.onAction = {[weak self] action,name in self?.applyWorkspaceLayout(action,savedName:name)}
+    if let error=workspaceLayouts.error {layoutManager.status.stringValue=error}
+    layoutManager.show()
+  }
+  func applyWorkspaceLayout(_ action:String,savedName:String?=nil)->String? {
+    let name=savedName ?? "Custom"
+    do {
+      switch action {
+      case "Save custom": try workspaceLayouts.save(name,state:workspace?.state ?? [:])
+      case "Delete custom": try workspaceLayouts.delete(name)
+      case "Reload saved": try workspaceLayouts.reload()
+      case "Restore custom":
+        guard var state=workspaceLayouts.layouts[name] else{return "Choose a saved layout"}
+        state.removeValue(forKey:"pins")
+        var focused=NSApp.keyWindow?.firstResponder as? NSView
+        if let field=focused as? NSTextView,let owner=field.delegate as? NSView {focused=owner}
+        workspace?.restore(state)
+        if let focused,let host=focused.window,!focused.isHiddenOrHasHiddenAncestor,host.isVisible {host.makeFirstResponder(focused)} else {focusPattern()}
+      default: workspace?.preset(action)
+      }
+      layoutManager.refresh();return nil
+    } catch {return error.localizedDescription}
+  }
   @objc func toggleLiveKeyboard(){liveKeyboard.toggle();if !liveKeyboard{releaseWorkspaceKeys()};liveKeyboardItem?.state=liveKeyboard ? .on : .off;liveKeyboardButton?.title=liveKeyboard ? "LIVE KEYS ON" : "Live keys";liveKeyboardButton?.contentTintColor=liveKeyboard ? Theme.gold : Theme.muted;statusLabel.stringValue=liveKeyboard ? "Live keys: musical typing stays active across panels · ⌘⌥L releases it" : "Keyboard follows panel focus"}
   func releaseWorkspaceKeys(){for note in workspaceHeldKeys.values{audition(note:note,on:false)};workspaceHeldKeys.removeAll()}
   func handleWorkspaceAutomation(_ method:String,params:[String:Any],reply:@escaping AutomationServer.Reply)->Bool{
@@ -311,6 +354,7 @@ extension AppController {
       guard Set(params.keys).isSubset(of:["panel","placement","pinned","focus","follow","return"]),let id=params["panel"] as? String,let panel=workspace?.panels[id] else{fail("Choose a known workspace panel");return true}
       if let raw=params["placement"] {guard let place=raw as? String,["right","bottom","secondary","float","hide"].contains(place) else{fail("Invalid panel placement");return true}}
       for key in ["pinned","focus","follow","return"] where params[key] != nil {guard let number=params[key] as? NSNumber,CFGetTypeID(number)==CFBooleanGetTypeID() else{fail("\(key) must be boolean");return true}}
+      if params["return"] as? Bool==true,panelReturn(id)==nil {reply(AutomationServer.error(-32001,"The panel's original pattern or track is no longer available"));return true}
       if params["follow"] as? Bool==true && (busy || sessionReading) {
         let document=model.revisionToken.split(separator:":").first
         deferUntilIdle({ [weak self] in
@@ -323,11 +367,13 @@ extension AppController {
       if let place=params["placement"] as? String{workspace?.place(id,at:place,select:false)}
       if let pin=params["pinned"] as? Bool{panel.pinned=pin};if params["follow"] as? Bool==true{panel.pinned=false;panel.onFollow?()};if params["return"] as? Bool==true{panel.onReturn?()};if params["focus"] as? Bool==true{workspace?.show(id,focus:true)}
     } else if method=="workspace.layout" {
-      guard Set(params.keys)==["name"],let name=params["name"] as? String,["Compose","Sound design","Pattern focus","Save custom","Restore custom"].contains(name) else{fail("Choose a workspace layout");return true}
-      if name=="Save custom"{saveWorkspaceLayout()}else if name=="Restore custom"{restoreWorkspaceLayout()}else{workspace?.preset(name)}
+      guard Set(params.keys).isSubset(of:["name","savedName"]),let name=params["name"] as? String,["Compose","Sound design","Connected","Graph editing","Pattern focus","Save custom","Restore custom","Delete custom","Reload saved"].contains(name) else{fail("Choose a workspace layout");return true}
+      if let raw=params["savedName"] {guard ["Save custom","Restore custom","Delete custom"].contains(name),let savedName=raw as? String,WorkspaceLayouts.validName(savedName) else{fail("savedName is a 1–64 character name for Save, Restore or Delete custom");return true}}
+      if let error=applyWorkspaceLayout(name,savedName:params["savedName"] as? String){reply(AutomationServer.error(-32001,error));return true}
     } else {reply(AutomationServer.error(-32601,"Unknown workspace method"));return true}
     var state=workspace?.state ?? [:];state["panels"]=workspace?.panels.keys.sorted() ?? [];state["visible"]=workspace?.visibleIDs ?? [];state["focus"]=workspace?.focusedPanel()?.id ?? "pattern";state["liveKeyboard"]=liveKeyboard;state["positionMode"]=patternView.positionMode.rawValue
     state["targets"]=workspace?.panels.mapValues{$0.target.stringValue};state["screens"]=NSScreen.screens.map{["name":$0.localizedName,"width":$0.visibleFrame.width,"height":$0.visibleFrame.height,"scale":$0.backingScaleFactor]}
+    state["savedLayouts"]=workspaceLayouts.names
     reply(["result":["revision":session.automationRevision,"data":state,"changed":false,"playbackStopped":false]]);return true
   }
 }
