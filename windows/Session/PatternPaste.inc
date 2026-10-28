@@ -81,6 +81,7 @@ Json pastePattern(Tracker::Document &document,const Json &p,
                 PatternCommand command{patternID,metadata.tracks.at(destinationChannel).id,uint32_t(position),uint32_t(integer(raw.value("duration",Json(0)),0,UINT32_MAX)),column,commandKind,binding,
                     number(raw.value("value",Json(0)),-96,96),uint8_t(integer(raw.value("pitchRange",Json(2)),1,96)),uint8_t(integer(raw.value("effect",Json(0)),0,MAX_EFFECTS-1)),uint8_t(integer(raw.value("parameter",Json(0)),0,255))};
                 decodeNativePatternAPI(command,raw);
+                if(const auto gate=gateBinding(command)){need(bindings.contains(gate),"Clipboard gate needs its stable parameter binding");setParameterBinding(command,bindings.at(gate));}
                 const bool scratching=command.kind==PatternCommandKind::Native&&command.native==NativePatternOp::Scratch;
                 if(scratching)need(scratch.source.contains(uint16_t(command.arguments[0])),"Clipboard scratch command needs its gesture phrase");
                 const auto r=uint16_t(position/performanceUnitsPerRow),ch=uint16_t(destinationChannel);const Key key{patternID,command.track,r,column};

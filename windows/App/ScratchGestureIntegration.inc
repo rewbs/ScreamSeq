@@ -28,13 +28,14 @@
     bool scratchDoubleClick(float x,float y){
         if(!patternGridRect().contains(x,y)||!gridClick(x,y,false)||column<3)return false;
         const auto effect=view->effect(patternIndex,row,channel,(column-3)/2);
+        if(effect&&effect->kind==Tracker::PatternCommandKind::Native&&effect->native==Tracker::NativePatternOp::Gate){openGateInspector();return true;}
         if(!effect||effect->kind!=Tracker::PatternCommandKind::Native||effect->native!=Tracker::NativePatternOp::Scratch)return false;
         openScratchGestures();return true;
     }
     bool scratchContextMenu(POINT screen){
         if(screen.x==-1&&screen.y==-1){if(workspaceState.focus!="pattern")return false;const auto r=patternGridRect();screen={LONG((r.x+gutter+20)*GetDpiForWindow(window)/96),LONG((r.y+gridHeader+20)*GetDpiForWindow(window)/96)};ClientToScreen(window,&screen);}
         else{POINT client=screen;ScreenToClient(window,&client);const float scale=96.f/GetDpiForWindow(window);if(!patternContextClick(client.x*scale,client.y*scale))return false;}
-        HMENU menu=CreatePopupMenu();if(!menu)return false;AppendMenuW(menu,MF_STRING,scratchGesturesCommand,L"Scratch phrases…");AppendMenuW(menu,MF_STRING,effectsCommand,L"Edit FX…");
+        HMENU menu=CreatePopupMenu();if(!menu)return false;AppendMenuW(menu,MF_STRING,gateInspectorCommand,L"Advanced gate…");AppendMenuW(menu,MF_STRING,scratchGesturesCommand,L"Scratch phrases…");AppendMenuW(menu,MF_STRING,effectsCommand,L"Edit FX…");
         AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
         if(directSampleRenderCompletion.retained())AppendMenuW(menu,MF_STRING,patternRenderSampleCommand,L"Review selection render result");
         else{

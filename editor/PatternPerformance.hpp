@@ -39,4 +39,8 @@ struct PatternPerformance {
   size_t bytes() const;
   bool operator==(const PatternPerformance &) const = default;
 };
+inline bool isGate(const PatternCommand &c){return c.kind==PatternCommandKind::Native&&(c.native==NativePatternOp::Gate||c.native==NativePatternOp::GateStop);}
+inline uint16_t gateBinding(const PatternCommand &c){return isGate(c)?uint16_t(c.arguments[c.native==NativePatternOp::Gate?11:1]):0;}
+inline uint16_t parameterBinding(const PatternCommand &c){return isGate(c)?gateBinding(c):c.binding;}
+inline void setParameterBinding(PatternCommand &c,uint16_t binding){if(isGate(c))c.arguments[c.native==NativePatternOp::Gate?11:1]=binding;else c.binding=binding;}
 }

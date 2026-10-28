@@ -104,16 +104,17 @@
       std::map<std::string,std::set<uint32_t>> targets;
       std::map<size_t,std::vector<PluginParameter>> parameterCache;
       for(const auto &command:performance.commands) {
-        if(command.kind!=PatternCommandKind::ParameterSet&&command.kind!=PatternCommandKind::ParameterSlide)continue;
-        const auto &binding=performance.bindings.at(command.binding);
+        if(command.kind!=PatternCommandKind::ParameterSet&&command.kind!=PatternCommandKind::ParameterSlide&&!gateBinding(command))continue;
+        const auto &binding=performance.bindings.at(parameterBinding(command));
         auto found=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==binding.plugin;});
-        const bool edited=changedBindings.contains(command.binding)||std::find(_document->native().performance.commands.begin(),_document->native().performance.commands.end(),command)==_document->native().performance.commands.end();
+        const bool edited=changedBindings.contains(parameterBinding(command))||std::find(_document->native().performance.commands.begin(),_document->native().performance.commands.end(),command)==_document->native().performance.commands.end();
         if(found==_plugins.end()){require(!edited,"Command binding is unresolved; repair the binding first");continue;}
         const auto slot=size_t(found-_plugins.begin());
         if(!parameterCache.contains(slot))parameterCache[slot]=_audio->pluginParameters(slot);
         const auto &parameters=parameterCache.at(slot);
         const auto parameter=std::find_if(parameters.begin(),parameters.end(),[&](const auto &v){return v.id==binding.parameter&&v.writable&&v.max>v.min;});
         if(parameter==parameters.end()){require(!edited,"Command parameter is unresolved; repair the binding first");continue;}
+        if(isGate(command)){targets[binding.plugin].insert(binding.parameter);require(targets[binding.plugin].size()<=64,"Use at most 64 pattern-command parameters per plugin");continue;}
         require(command.kind!=PatternCommandKind::ParameterSlide||parameter->continuous,"This parameter is discrete and cannot slide");
         require(std::none_of(next.automation.begin(),next.automation.end(),[&](const auto &lane){return lane.enabled&&lane.plugin==binding.plugin&&lane.parameter==binding.parameter;}),
           "Disable the envelope for this parameter before using pattern commands");

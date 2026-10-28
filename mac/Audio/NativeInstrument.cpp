@@ -368,14 +368,16 @@ void PluginChain::scheduleMusical(uint32_t pattern, double tickPosition, double 
   musicalPosition_ += frames;
 }
 void PluginChain::attachInstruments(Renderer &renderer, const NativeSong *native) {
+  if(native){renderer.prepareGates(*native);gateRuntime_=renderer.gates();}
   // Device playback, export and the Windows host must prepare the same implicit
   // topology when native routing is present. A bare song or simple rack keeps the original
   // integer summation path for bit-exact upstream/sample-export playback.
   // Materialization belongs to the playback copy, never the document.
   std::optional<NativeSong> implicit;
-  const bool needsRouting=native&&(!native->signal.trims.empty()||!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->mixer.detachedChains.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
+  const bool needsRouting=native&&((gateRuntime_&&gateRuntime_->size())||!native->signal.trims.empty()||!native->signal.noteRouting.empty()||!native->mixer.detached.empty()||!native->mixer.detachedChains.empty()||!native->signal.assignments.empty()||!native->signal.instrumentAssignments.empty()||!native->signal.commands.empty()||!native->signal.songSources.empty()||!native->signal.songModulation.empty());
   if(needsRouting && !native->mixer.active()){implicit=*native;implicit->ensureMixer();native=&*implicit;}
   auto &song = renderer.song();
+  song.nativeGateMixer=native&&native->mixer.active();
   for(size_t index=1;index<originalInstruments_.size()&&index<=song.GetNumInstruments();++index)if(auto *instrument=song.Instruments[index]){
     auto &original=originalInstruments_[index];original.instrument=instrument;original.keyboard=instrument->Keyboard;
     original.slot=instrument->nMixPlug;original.midiChannel=instrument->nMidiChannel;

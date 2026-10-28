@@ -150,6 +150,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var commandPickerWindow: NSWindow?
   var patternPerformanceWindow: NSWindow?
   var scratchGestureWindow: NSWindow?
+  let gateInspector=GateInspector(frame:.zero)
   var preciseNotesWindow:NSWindow?
   var recordingTakeID:String?,recordingFinishing=false
   var midiQuantization=0,midiLatencyMS=0.0,midiRecordColumns=1
@@ -490,6 +491,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if previousDocument != model.revisionToken.split(separator:":").first {
       sampleEditor.resetDocumentContext();instrumentEditor.settingsDraft.reset()
       (scratchGestureWindow?.contentView as? ScratchGestureEditor)?.invalidate()
+      gateInspector.invalidate()
       workspaceContextTokens.removeAll();workspaceReturnPoints.removeAll()
     }
     patternView.model = model

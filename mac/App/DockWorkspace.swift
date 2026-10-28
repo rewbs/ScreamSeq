@@ -60,7 +60,7 @@ enum InspectorTabs {
   static let items: [(id:String, label:String, key:String)] = [
     ("notes","Notes","1"), ("samples","Samples","2"), ("instruments","Instruments","3"),
     ("plugins","Plugins","4"), ("mixer","Mixer","5"), ("graph","Graph","6"),
-    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0")]
+    ("graphPlugins","FX library","7"), ("graphCommands","Graph lanes","8"), ("automation","Automation","9"), ("parameterActivity","Param activity","0"), ("gate","Gate inspector","g")]
 }
 final class WorkspaceTabs: NSView {
   let tabScroll = NSScrollView(), tabRow = NSView(), host = NSView()

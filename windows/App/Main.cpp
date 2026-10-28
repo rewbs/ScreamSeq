@@ -27,6 +27,7 @@
 #include "AutomationCanvas.hpp"
 #include "EnvelopeBankWindow.hpp"
 #include "ScratchGestureWindow.hpp"
+#include "GateInspectorWindow.hpp"
 #include "PluginInstrumentsWindow.hpp"
 #include "PluginParameterField.hpp"
 #include "PluginParametersWindow.hpp"
@@ -169,7 +170,7 @@ constexpr int playCommand=101, stopCommand=102, followCommand=103, composeComman
     curvePattern=480,curveKind=481,curveSnap=482,curveRow=483,curveValue=484,curveFormula=485,
     curveApply=486,curveReload=487,curveSetPoint=488,curveDelete=489,curveRamp=490,curveClear=491,
     curveFit=492,curveZoomIn=493,curveZoomOut=494,curvePreview=495,curveEnable=496,curveBank=497,curveExpand=498,curveReference=499,
-    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=576,
+    graphCommandsCommand=500,graphLanesFocus=501,parameterAutomationCommand=502,instrumentEnvelopeCommand=503,absoluteAutomationCommand=504,sampleDetailCommand=505,auditionCommand=506,sampleBrowseCommand=511,audioSettingsCommand=512,scratchGesturesCommand=576,gateInspectorCommand=665,
     sampleRecordCommand=577,patternRenderSampleCommand=578,patternRenderInstrumentCommand=579,patternRenderOptionsCommand=580,graphTrimsCommand=581;
 std::wstring wide(const std::string &text) {
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
@@ -939,6 +940,9 @@ public:
     #include "GraphPatternLanes.inc"
     #include "ScratchGestureIntegration.inc"
     #include "ParameterRecordingIntegration.inc"
+
+    std::unique_ptr<ScreamSeq::GateInspectorWindow> gateInspectorWindow;
+    void openGateInspector(){if(!gateInspectorWindow)gateInspectorWindow=std::make_unique<ScreamSeq::GateInspectorWindow>(window,[this](const auto &m,const auto &p){return documentOperation(m,p);},[this]{return std::pair(documentId,view->session.revision);},[this]{return scratchTargetAt(patternIndex,row,channel,column>=3?(column-3)/2:0);},[this]{return view->session.document.at("nativePlugins");});gateInspectorWindow->open();}
     #include "SampleCaptureIntegration.inc"
     #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;

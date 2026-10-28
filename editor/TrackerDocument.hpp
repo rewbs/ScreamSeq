@@ -16,6 +16,7 @@
 #include "RecordNudgeRuntime.hpp"
 #include "ScratchRuntime.hpp"
 #include "NativePatternRuntime.hpp"
+#include "PatternGateRuntime.hpp"
 #include "RecordingClock.hpp"
 #include "SampleProcessing.hpp"
 #include "SampleWaveform.hpp"
@@ -334,6 +335,7 @@ class Renderer
 	std::unique_ptr<RecordNudgeRuntime> recordNudges_;
 	std::unique_ptr<ScratchRuntime> scratches_;
 	std::unique_ptr<NativePatternRuntime> nativePatterns_;
+	std::shared_ptr<PatternGateRuntime> gates_;
 	std::shared_ptr<RecordingClock> recordingClock_ = std::make_shared<RecordingClock>();
 	uint64_t renderHostTime_ = 0;
 	double hostTicksPerSample_ = 0;
@@ -365,7 +367,9 @@ public:
 	Renderer(const std::vector<std::byte> &bytes, uint32_t sampleRate, uint32_t order = 0, bool preview = false, const std::string &sourcePath = {}, uint32_t sequence = 0, PlaybackRegion region = {}, const NativeSong *native = nullptr);
 	void loop(bool value) noexcept { loop_.store(value, std::memory_order_relaxed); }
 	CSoundFile &song() { return *song_; }
-	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); scratches_=std::make_unique<ScratchRuntime>(native); nativePatterns_=std::make_unique<NativePatternRuntime>(native,*song_); native.prepareEffects(*song_); }
+	void preparePreciseNotes(const NativeSong &native) { preciseNotes_=std::make_unique<PreciseNoteRuntime>(native); recordNudges_=std::make_unique<RecordNudgeRuntime>(native); scratches_=std::make_unique<ScratchRuntime>(native); nativePatterns_=std::make_unique<NativePatternRuntime>(native,*song_); native.prepareEffects(*song_); prepareGates(native); }
+	void prepareGates(const NativeSong &native) {if(!gates_)gates_=std::make_shared<PatternGateRuntime>(native,*song_);}
+	std::shared_ptr<PatternGateRuntime> gates()const{return gates_;}
 	std::unique_ptr<ScratchGestureLibrary> prepareScratchUpdate(const NativeSong &native) const { return ScratchRuntime::prepareUpdate(native); }
 	bool publishScratchUpdate(std::unique_ptr<ScratchGestureLibrary> &update) noexcept { return scratches_ && scratches_->publishUpdate(update); }
   bool publishPreciseNoteUpdate(std::unique_ptr<PreciseNoteUpdate> &update) noexcept;

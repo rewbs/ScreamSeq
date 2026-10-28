@@ -2757,3 +2757,23 @@ Recipe group extraction remaps boundary trim identities. Exporting a song group
 with boundary trims or song-scoped trim modulation currently rejects explicitly;
 keep it in the song, or clear those settings before converting it to a recipe.
 Independent rack-processor trims are copied during export.
+
+### Advanced gate: GT / GX
+
+A native `gate` command starts a persistent periodic signal on its channel. The destination is `volume` (multiplier, 0–4), `pitch` (additive semitones, −96–96), `pan` (absolute −1 left to +1 right), or `parameter` (normalized 0–1). Parameter targets use `parameters.binding`, a stable plugin/parameter binding from `pattern.effects.get`; the outer command `binding` remains zero. Independent destinations run simultaneously. A new definition replaces and restarts only that channel/destination. New notes and pattern boundaries do not reset it; revisiting its command does. A plugin parameter shared by multiple channel gates uses the most recently executed active definition, with channel/FX order breaking same-position ties.
+
+Parameters: `floor`, `ceiling`, `period` in beats (1/65536–256), `phase` in beats (positive advances, negative delays), `width` (0–1), `rise` and `fall` in beats (0–256), `riseShape` and `fallShape` (`direct`, `linear`, `ease-in`, `ease-out`, `ease-in-out`), `linked` (default true), `binding` and `pitchRange` (1–96 semitones, for plugin MIDI pitch). Linked transitions must have equal requested times/shapes; unlink before specifying different ones. Floor must not exceed ceiling.
+
+Rise begins at cycle zero; fall begins at `period * width`. Each transition shortens independently to fit before the next edge. Width describes edge placement, including transitions, rather than plateau duration. Width 0 holds the floor; width 1 holds the ceiling. Direct ignores transition time. Quadratic ease-in/out and smoothstep ease-in/out are deterministic across callback sizes. Beat timing follows tempo, groove and native row length.
+
+For example, this starts an eighth-note volume chop at the first row (in a song whose beat is a quarter note):
+
+```json
+{"method":"pattern.effect.set","params":{"pattern":0,"row":0,"channel":0,"column":0,"expectedRevision":"<current revision>","command":{"kind":"native","native":"gate","parameters":{"target":"volume","floor":0,"ceiling":1,"period":0.5,"phase":0,"width":0.5,"rise":0.03125,"fall":0.03125,"riseShape":"linear","fallShape":"linear","linked":true}}}}
+```
+
+Write `{"kind":"native","native":"gate-stop","parameters":{"target":"volume"}}` to remove that channel's volume gate, or use `target:"all"` to remove all its gates. A parameter stop includes its binding. The underlying note values, manual parameter value and automation continue to evolve beneath the gate; stop reveals their current values. Song modulation adds after the parameter gate. Discrete parameters are rounded to their catalogued steps. Missing plugins retain their definitions without blocking other audio.
+
+Gate volume/pan control the channel bus, including audio routed to it; a shared plugin output routed elsewhere is controlled by its own parameter gate or must be routed to that channel. Match a plugin instrument's configured MIDI bend range to `pitchRange`; a shared MIDI channel shares pitch-wheel state. Gates support up to 256 channel/destination combinations, 64 parameter targets per plugin and 16 pitch-controlled tracks.
+
+The native inspector previews two cycles and shows effective rise/fall lengths. Numeric controls include sliders and exact entries accepting beat fractions such as `3/8`. Apply and Write stop use the captured cell and revision; stale writes retain the draft. Like existing pattern edits, applying an effect stops playback. Direct edges deliberately preserve their rhythmic discontinuities; choose a short transition when a smoother chop is wanted.

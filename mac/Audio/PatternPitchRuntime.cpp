@@ -5,12 +5,13 @@ PatternPitchRuntime::PatternPitchRuntime(const NativeSong &native,OpenMPT::CSoun
  const std::vector<std::shared_ptr<NativePlugin>> &plugins,const std::vector<bool> &bypass,PluginChain *noteHost):noteHost_(noteHost) {
   std::map<uint16_t,size_t> targets;
   for(const auto &command:native.performance.commands) {
-    if(command.kind!=PatternCommandKind::PitchSet&&command.kind!=PatternCommandKind::PitchSlide)continue;
+    const bool gate=isGate(command)&&command.arguments[0]==1;
+    if(!gate&&command.kind!=PatternCommandKind::PitchSet&&command.kind!=PatternCommandKind::PitchSlide)continue;
     const auto track=std::find_if(native.tracks.begin(),native.tracks.end(),[&](const auto &v){return v.second.id==command.track;});
     const auto pattern=std::find_if(native.patterns.begin(),native.patterns.end(),[&](const auto &v){return v.second.id==command.pattern;});
     auto [found,inserted]=targets.emplace(track->first,targets_.size());
     if(inserted){targets_.emplace_back();targets_.back().channel=track->first;}
-    targets_[found->second].patterns[pattern->first].push_back({command.position,command.duration,command.column,command.value,command.pitchRange});
+    if(!gate)targets_[found->second].patterns[pattern->first].push_back({command.position,command.duration,command.column,command.value,command.pitchRange});
   }
   if(targets_.size()>16)throw std::invalid_argument("Use at most 16 tracks with native pitch commands");
   std::sort(targets_.begin(),targets_.end(),[](const auto &a,const auto &b){return a.channel<b.channel;});
@@ -39,6 +40,7 @@ bool PatternPitchRuntime::render(OpenMPT::CSoundFile &song,uint32_t count,uint64
   if(entering)for(auto &voice:song.m_PlayState.Chn)voice.nativeSamplePitch.Freeze();
   for(auto &target:targets_) {
     auto &channel=song.m_PlayState.Chn[target.channel];
+    const auto *gate=song.nativeGatePitches[target.channel];if(gate)target.used=true;
     auto &samplePitch=channel.nativeSamplePitch;const bool samplePlaying=channel.IsSamplePlaying()&&!channel.isPreviewNote;
     if(entering){const auto found=target.patterns.find(pattern_);target.events=found==target.patterns.end()?nullptr:&found->second;
       target.next=0;target.curve={target.current,target.current,begin,begin};}
@@ -60,12 +62,16 @@ bool PatternPitchRuntime::render(OpenMPT::CSoundFile &song,uint32_t count,uint64
           samplePitch={from,event.value,position-event.position,double(event.duration),true};
         }
       }
-      const auto semitones=target.curve.at(position);
+      const auto semitones=target.curve.at(position)+(gate?gate->value(frame):0);
       target.ratios[frame]=std::exp2(samplePitch.Value()/12.);
       if(samplePlaying)samplePitch.Advance(unitsPerSample);
       if(target.used&&!muted&&(noteHost_?routed:instrument!=instruments_.end())) {
-        const auto depth=target.pitchRange;
-        const int wheel=int(std::lround(std::clamp(semitones/depth,-1.,1.)*8192))+8192;
+        const auto depth=gate?gate->pitchRange:target.pitchRange;
+        double bend=std::clamp(semitones/depth,-1.,1.)*8192;
+        // Accumulating the beat clock in different chunks can straddle an
+        // exact half-wheel step by roundoff. Keep MIDI rounding deterministic.
+        if(gate){const auto half=std::round(bend*2)*.5;if(std::abs(bend-half)<1e-8)bend=half;}
+        const int wheel=int(std::lround(bend))+8192;
         if(wheel!=previousWheel) {
           const auto value=std::clamp(wheel,0,16383);
           if(noteHost_){if(!noteHost_->schedulePitchMIDI(routedSource,routedChannel,uint16_t(value),absoluteFrame+frame))return false;}

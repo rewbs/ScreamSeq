@@ -38,7 +38,7 @@ inline std::string patternClipboardText(const DocumentView &view,unsigned patter
             {"duration",c.duration},{"column",c.column},{"kind",Tracker::patternCommandKindName(c.kind)},{"binding",c.binding},{"value",c.value},
             {"pitchRange",c.pitchRange},{"effect",c.effect},{"parameter",c.parameter}});
         PatternJSON::append(effects.back(),c);
-        if(c.binding)used.insert(c.binding);
+        if(const auto binding=Tracker::parameterBinding(c))used.insert(binding);
         if(c.kind==Tracker::PatternCommandKind::Native&&c.native==Tracker::NativePatternOp::Scratch)scratchUsed.insert(uint16_t(c.arguments[0]));
     }
     for(const auto id:used) {

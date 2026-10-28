@@ -36,11 +36,11 @@ extension AppController {
       pluginEditor.selected=slot;workspaceAutomationModel=model;workspaceAutomation.selectedPluginID=plugin;workspaceAutomation.pluginIndex=slot;workspaceAutomation.parameterID=parameter;workspaceAutomation.search.stringValue=""
       workspace?.show("automation",focus:true);workspaceAutomation.load();return
     }
-    if kind=="pattern-set" || kind=="pattern-slide" {
+    if kind=="pattern-set" || kind=="pattern-slide" || kind=="pattern-gate" {
       guard let pattern=source["pattern"] as? Int,let channel=source["channel"] as? Int,channel<model.channels,model.patterns.contains(where:{$0["index"] as? Int==pattern}) else{return}
       if model.pattern != pattern{model.pattern=pattern;refreshPattern()}
       var navigation=patternView.navigation;navigation.pattern=pattern;navigation.row=(source["position"] as? Int ?? 0)/65536;navigation.channel=channel;navigation.column=3+2*(source["column"] as? Int ?? 0);navigation.following=false
-      patternView.navigate(navigation,clearSelection:true);window.makeFirstResponder(patternView);patternView.revealCursor();statusLabel.stringValue="Parameter command selected · Return edits its binding, value and duration";return
+      patternView.navigate(navigation,clearSelection:true);window.makeFirstResponder(patternView);patternView.revealCursor();statusLabel.stringValue="Parameter command selected · Return opens its editor";if kind=="pattern-gate"{showGateInspector()};return
     }
     if kind=="graph-command" {if let pattern=source["pattern"] as? Int,model.patterns.contains(where:{$0["index"] as? Int==pattern}),model.pattern != pattern{model.pattern=pattern;refreshPattern()};openGraphCommand(target:source["target"] as? String,column:source["column"] as? Int ?? 0,row:(source["position"] as? Int ?? 0)/65536);return}
     if source["scope"] as? String=="song",!plugin.isEmpty,let parameter=source["parameter"] as? NSNumber,parameter.uint64Value<=UInt32.max,

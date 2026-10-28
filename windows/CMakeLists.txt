@@ -62,7 +62,7 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
 set(EDITOR_SOURCES
   TrackLayout PatternTimeline PatternCommands NativePatternCommands AutomationTools TrackerDocument PatternTools NativeSong
   ArrangementTools MixerGraph MixerRuntime MixerTransition MixerDryBridge MixerPluginRouting NativeEffects SampleImport SongTiming
-  PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
+  PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime PatternGateRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
   Sampling SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
@@ -357,6 +357,9 @@ if(BUILD_TESTING)
   target_include_directories(pattern-field-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
   add_test(NAME pattern-fields COMMAND pattern-field-tests)
   add_executable(native-pattern-runtime-tests "${ROOT}/editor/Tests/NativePatternRuntimeTests.cpp")
+  add_executable(pattern-gate-tests "${ROOT}/editor/Tests/PatternGateTests.cpp")
+  target_link_libraries(pattern-gate-tests PRIVATE TrackerEditor)
+  add_test(NAME pattern-gate COMMAND pattern-gate-tests)
   target_link_libraries(native-pattern-runtime-tests PRIVATE TrackerEditor)
   add_test(NAME native-pattern-runtime COMMAND native-pattern-runtime-tests)
   add_executable(scratch-runtime-tests "${ROOT}/editor/Tests/ScratchRuntimeTests.cpp")

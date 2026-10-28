@@ -302,6 +302,7 @@
             else if(id==graphWorkflowCommand){openGraphWorkflow();return;}
             else if(id==parameterActivityCommand){openParameterActivity();return;}
             else if(id==graphTrimsCommand){openGraphTrims();return;}
+            else if(id==gateInspectorCommand){openGateInspector();return;}
             else if(id==scratchGesturesCommand){openScratchGestures();return;}
             else if(id==graphCommandsCommand){openGraphCommands(workspaceState.focus=="graphLanes");return;}
             else if(id==parameterAutomationCommand){openParameterAutomation();return;}

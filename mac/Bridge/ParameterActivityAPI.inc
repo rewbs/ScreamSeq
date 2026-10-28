@@ -24,7 +24,7 @@
       } else if([method isEqual:@"parameter.activity.get"]) {
         allowed(@[@"after",@"limit"]);const auto after=integer(p[@"after"]?:@0,0,9007199254740991ULL),limit=integer(p[@"limit"]?:@2048,1,8192);
         NSMutableArray *points=[NSMutableArray array];uint64_t cursor=after,oldest=0,latest=0;
-        static NSArray *origins=@[@"baseline",@"manual",@"plugin-editor",@"recorded",@"envelope",@"pattern-set",@"pattern-slide",@"graph",@"reset",@"graph-source"];
+        static NSArray *origins=@[@"baseline",@"manual",@"plugin-editor",@"recorded",@"envelope",@"pattern-set",@"pattern-slide",@"graph",@"reset",@"graph-source",@"pattern-gate"];
         if(activity) {const auto &history=activity->history();if(!history.empty()){oldest=history.front().sequence;latest=history.back().sequence;}
           for(const auto &v:history)if(v.sequence>after){if(points.count>=limit)break;cursor=v.sequence;const auto &s=v.source;
             [points addObject:@{@"sequence":@(v.sequence),@"frame":@(v.frame),@"seconds":@(v.frame/_audio->sampleRate()),@"value":@(v.value),@"minimum":@(v.minimum),@"maximum":@(v.maximum),@"pattern":@(v.pattern),@"order":@(v.order),@"position":@(v.position),@"audible":@(v.audible),
@@ -43,9 +43,9 @@
         if(!target.plugin.empty()) {
           for(const auto &lane:native.automation)if(lane.plugin==target.plugin&&lane.parameter==id)
             add(@{@"kind":@"envelope",@"title":[NSString stringWithFormat:@"Pattern %u envelope · %lu points",patternIndex(lane.pattern),lane.points.size()],@"id":nativeID(lane.id),@"pattern":@(patternIndex(lane.pattern)),@"enabled":@(lane.enabled),@"plugin":@(target.plugin.c_str()),@"parameter":@(id)});
-          for(const auto &c:native.performance.commands){auto b=native.performance.bindings.find(c.binding);if(b==native.performance.bindings.end()||b->second.plugin!=target.plugin||b->second.parameter!=id)continue;
+          for(const auto &c:native.performance.commands){auto b=native.performance.bindings.find(parameterBinding(c));if(b==native.performance.bindings.end()||b->second.plugin!=target.plugin||b->second.parameter!=id)continue;
             uint16_t channel=UINT16_MAX;for(const auto &[index,t]:native.tracks)if(t.id==c.track)channel=index;
-            add(@{@"kind":c.kind==PatternCommandKind::ParameterSlide?@"pattern-slide":@"pattern-set",@"title":[NSString stringWithFormat:@"%@ · Pattern %u · row %.3f · channel %u · FX %u",c.kind==PatternCommandKind::ParameterSlide?@"PL":@"PS",patternIndex(c.pattern),double(c.position)/65536,channel+1,c.column+1],@"pattern":@(patternIndex(c.pattern)),@"position":@(c.position),@"channel":@(channel),@"column":@(c.column),@"binding":@(c.binding),@"enabled":@YES});
+            add(@{@"kind":isGate(c)?@"pattern-gate":c.kind==PatternCommandKind::ParameterSlide?@"pattern-slide":@"pattern-set",@"title":[NSString stringWithFormat:@"%@ · Pattern %u · row %.3f · channel %u · FX %u",isGate(c)?(c.native==NativePatternOp::Gate?@"GT":@"GX"):c.kind==PatternCommandKind::ParameterSlide?@"PL":@"PS",patternIndex(c.pattern),double(c.position)/65536,channel+1,c.column+1],@"pattern":@(patternIndex(c.pattern)),@"position":@(c.position),@"channel":@(channel),@"column":@(c.column),@"binding":@(parameterBinding(c)),@"enabled":@YES});
           }
           const auto slot=std::find_if(_plugins.begin(),_plugins.end(),[&](const auto &v){return v.instanceID==target.plugin;})-_plugins.begin();
           const auto count=std::count_if(_automation.begin(),_automation.end(),[&](const auto &v){return v.slot==slot&&v.id==id;});

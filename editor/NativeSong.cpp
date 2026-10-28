@@ -432,6 +432,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,uint8_t>> cells;
   std::set<uint64_t> pitchTracks;
   std::set<uint64_t> scratchTracks;
+  std::set<std::tuple<uint64_t,int,std::string,uint32_t>> gateTargets;
   for(const auto &command:performance.commands){
     const auto columns=performance.columns.find(command.track);
     const bool parameter=command.kind==PatternCommandKind::ParameterSet||command.kind==PatternCommandKind::ParameterSlide;
@@ -441,6 +442,12 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
     const bool tracker=command.kind==PatternCommandKind::TrackerEffect;
     const bool native=command.kind==PatternCommandKind::Native;
     validateNativePatternCommand(command);
+    if(isGate(command)){
+      const auto binding=gateBinding(command);std::string plugin;uint32_t parameterID=0;
+      if(binding){const auto found=performance.bindings.find(binding);if(found==performance.bindings.end())throw std::invalid_argument("Gate references a missing parameter binding");plugin=found->second.plugin;parameterID=found->second.parameter;}
+      if(command.arguments[0]==1)pitchTracks.insert(command.track);
+      if(command.arguments[0]!=4)gateTargets.emplace(command.track,int(command.arguments[0]),plugin,parameterID);
+    }
     if(native && command.native==NativePatternOp::Scratch) {
       if(!scratchGestures.contains(uint16_t(command.arguments[0])))throw std::invalid_argument("Scratch command references a missing gesture; remove or change its uses first");
       scratchTracks.insert(command.track);
@@ -458,6 +465,7 @@ void NativeSong::validate(const OpenMPT::CSoundFile &s) const {
   }
   if(pitchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with native pitch commands");
   if(scratchTracks.size()>16)throw std::invalid_argument("Use at most 16 tracks with scratch gestures");
+  if(gateTargets.size()>256)throw std::invalid_argument("Use at most 256 channel/destination gate targets");
   if(preciseNotes.size()>maximumPreciseNotes)throw std::invalid_argument("Use at most 65536 precise note events");
   std::set<std::tuple<uint64_t,uint64_t,uint32_t,bool>> notePositions;
   for(const auto &note:preciseNotes) {

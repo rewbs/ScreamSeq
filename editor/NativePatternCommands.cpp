@@ -1,5 +1,6 @@
 #include "NativePatternCommands.hpp"
 #include "PatternPerformance.hpp"
+#include "GateSignal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -72,6 +73,27 @@ constexpr NativePatternField scratch[]{
   {"repeats","Repeats","count","integer",1,128,1,T::Integer,{},4},
   {"reverse","Reverse motion","boolean","boolean",0,1,0,T::Boolean,{},5,false}
 };
+constexpr std::string_view gateTargets[]{"volume","pitch","pan","parameter"},stopTargets[]{"volume","pitch","pan","parameter","all"};
+constexpr std::string_view gateShapes[]{"direct","linear","ease-in","ease-out","ease-in-out"};
+constexpr NativePatternField gate[]{
+  {"target","Target","choice","choice",0,3,0,T::Choice,gateTargets,9},
+  {"floor","Floor","gate-value","gate-value",-96,96,0,T::Number,{},8,false},
+  {"ceiling","Ceiling","gate-value","gate-value",-96,96,1,T::Number,{},8,false},
+  {"period","Period","beats","beats",minimumBeat,256,.5},
+  {"phase","Phase advance","beats","beats",-65536,65536,0,T::Number,{},8,false},
+  {"width","Gate width","normalized","percent",0,1,.5},
+  {"rise","Rise time","beats","beats",0,256,1./32,T::Number,{},8,false},
+  {"fall","Fall time","beats","beats",0,256,1./32,T::Number,{},8,false},
+  {"riseShape","Rise shape","choice","choice",0,4,1,T::Choice,gateShapes,11,false},
+  {"fallShape","Fall shape","choice","choice",0,4,1,T::Choice,gateShapes,11,false},
+  {"linked","Link transitions","boolean","boolean",0,1,1,T::Boolean,{},5,false},
+  {"binding","Parameter binding","binding","integer",0,255,0,T::Integer,{},4,false},
+  {"pitchRange","MIDI bend range","semitones","semitones",1,96,2,T::Integer,{},5,false}
+};
+constexpr NativePatternField gateStop[]{
+  {"target","Target","choice","choice",0,4,4,T::Choice,stopTargets,9},
+  {"binding","Parameter binding","binding","integer",0,255,0,T::Integer,{},4,false}
+};
 constexpr NativePatternCommandInfo commands[]{
   {NativePatternOp::GainSet,"gain-set","GS","Gain set","volume","Set exact sample gain; channel/song scope affects sample voices, not plugin outputs.","sample voice/channel/song","until replaced or scope reset","volume, channel volume, global volume",gain},
   {NativePatternOp::GainSlide,"gain-slide","GL","Gain slide","volume","Slide sample gain over the duration; channel/song scope affects sample voices, not plugin outputs.","sample voice/channel/song","duration then hold","volume slide, fine volume slide, channel/global volume slide",gain,D::Required},
@@ -95,7 +117,9 @@ constexpr NativePatternCommandInfo commands[]{
   {NativePatternOp::TempoSlide,"tempo-slide","TL","Tempo slide","timing","Move tempo to a precise target over musical time.","song","duration then hold","tempo slide",tempo,D::Required},
   {NativePatternOp::RowLength,"row-length","RL","Row length","timing","Set the current row length in beats; only valid at the row boundary.","row","one row","speed, pattern delay, fine pattern delay",rowLength},
   {NativePatternOp::Scratch,"scratch","SK","Scratch gesture","sound","Play a song-local record-motion and fader gesture on the current sample. Duration is total beats; travel follows the sample's captured pitch. Closed gestures return to their cue. The next note cancels it.","sample voice","duration or next note","record scratching",scratch},
-  {NativePatternOp::ScratchStop,"scratch-stop","SX","Stop scratch","sound","Release the current scratch gesture at an exact offset. Ordinary sample playback resumes from its current position and the fader opens smoothly.","sample voice","instant","stop record scratching",{},D::None,true}
+  {NativePatternOp::ScratchStop,"scratch-stop","SX","Stop scratch","sound","Release the current scratch gesture at an exact offset. Ordinary sample playback resumes from its current position and the fader opens smoothly.","sample voice","instant","stop record scratching",{},D::None,true},
+  {NativePatternOp::Gate,"gate","GT","Advanced gate","modulation","Start a beat-synced gate for volume, pitch, pan or a plugin parameter. Edges stay on the beat; transitions shorten to fit. New notes and pattern boundaries preserve phase.","channel / bound plugin parameter","until replaced for this target or stopped","rhythmic chopping",gate},
+  {NativePatternOp::GateStop,"gate-stop","GX","Stop gate","modulation","Remove one target's gate, or all gates on this channel, revealing current underlying values.","channel / bound plugin parameter","instant","stop rhythmic chopping",gateStop,D::None,true}
 };
 constexpr std::string_view kindNames[]{"parameter-set","parameter-slide","pitch-set","pitch-slide","note-cut","tracker","nudge-forward","nudge-reverse","native"};
 constexpr NativePatternField parameterFields[]{
@@ -151,6 +175,17 @@ void validateNativePatternCommand(const PatternCommand &c){
     throw std::invalid_argument("Sample offset must fit its selected unit");
   if(c.native==NativePatternOp::RowLength&&c.position%performanceUnitsPerRow)
     throw std::invalid_argument("Row length commands must start at a row boundary");
+  if(c.native==NativePatternOp::Gate||c.native==NativePatternOp::GateStop){
+    const bool start=c.native==NativePatternOp::Gate;const auto target=GateTarget(uint8_t(c.arguments[0]));
+    const auto binding=c.arguments[start?GateArgument::binding:1];
+    if((target==GateTarget::Parameter)!=(binding>0))throw std::invalid_argument("A parameter gate needs a binding; other gate targets use binding zero");
+    if(start){using namespace GateArgument;const auto &a=c.arguments;
+      const double lo=target==GateTarget::Pitch?-96:target==GateTarget::Pan?-1:0;
+      const double hi=target==GateTarget::Pitch?96:target==GateTarget::Volume?4:1;
+      if(a[floor]<lo||a[ceiling]>hi||a[floor]>a[ceiling])throw std::invalid_argument("Gate floor and ceiling must be ordered and fit the target's range");
+      if(a[linked]&&(a[rise]!=a[fall]||a[riseShape]!=a[fallShape]))throw std::invalid_argument("Linked gate transitions must have equal requested times and shapes");
+    }
+  }
 }
 std::string_view patternCommandKindName(PatternCommandKind kind){
   const auto index=size_t(kind);if(index>=std::size(kindNames))throw std::invalid_argument("Unknown pattern effect");return kindNames[index];

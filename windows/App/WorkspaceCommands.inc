@@ -64,6 +64,7 @@
             {patternRenderSampleCommand,directSampleRenderCompletion.retained()?L"Pattern / Review selection render result":L"Pattern / Render selection (or current row) to a sample",L""},
             {patternRenderInstrumentCommand,directSampleRenderCompletion.retained()?L"Pattern / Review selection render result":L"Pattern / Render selection (or current row) to a mapped instrument",L""},
             {patternRenderOptionsCommand,directSampleRenderCompletion.retained()?L"Pattern / Review selection render result":L"Pattern / Render selection options…",L""},
+            {gateInspectorCommand,L"Pattern / Advanced gate inspector",L""},
             {scratchGesturesCommand,L"Pattern / Scratch phrases, motion and fader",L""},
             {sampleBrowseCommand,L"Sample / Browse library, preview and import sample families",L""},
             {audioSettingsCommand,L"Audio / Output device and buffer settings",L""},

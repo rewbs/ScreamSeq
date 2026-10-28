@@ -8,12 +8,12 @@
 namespace Tracker {
 enum class PatternCommandKind : uint8_t;
 struct PatternCommand;
-inline constexpr size_t maximumNativePatternParameters = 8;
+inline constexpr size_t maximumNativePatternParameters = 16;
 enum class NativePatternOp : uint8_t {
   None, GainSet, GainSlide, PanSet, PanSlide, PitchRelative, TonePortamento,
   Vibrato, Tremolo, Panbrello, Arpeggio, Tremor, Retrigger, NoteRelease, NoteDelay,
   SampleOffset, SampleDirection, EnvelopePosition, EnvelopeEnable,
-  TempoSet, TempoSlide, RowLength, Scratch, ScratchStop
+  TempoSet, TempoSlide, RowLength, Scratch, ScratchStop, Gate, GateStop
 };
 enum class NativePatternFieldType : uint8_t { Number, Integer, Boolean, Choice };
 enum class NativePatternDuration : uint8_t { None, Optional, Required };
