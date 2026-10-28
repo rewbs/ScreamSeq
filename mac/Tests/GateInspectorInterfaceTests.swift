@@ -10,6 +10,11 @@ extension InterfaceTests {
     exact.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:exact.value))
     exact.entered()
     try require(exact.scalar==0.123456789123 && exactChanges==0,"Focusing, leaving or pressing Return in an untouched rounded display preserves the exact stored value")
+    let displayed=exact.value.stringValue
+    exact.value.stringValue="";exact.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:exact.value))
+    try require(!exact.isValid,"Clearing an exact field marks its draft invalid")
+    exact.value.stringValue=displayed;exact.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:exact.value))
+    try require(exact.isValid && exact.scalar==0.123456789123 && exactChanges==1,"Pasting the original text restores validity without rounding the preserved value")
     let view=GateInspector(frame:NSRect(x:0,y:0,width:440,height:850))
     let model=PatternModel(["pattern":0,"rows":64,"channels":2,"rowsPerBeat":4,"revision":"gate:1","effectColumns":[2,1]])
     var calls=[(String,[String:Any])](),replies=[([String:Any])->Void]()
