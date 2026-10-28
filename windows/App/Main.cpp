@@ -942,7 +942,7 @@ public:
     #include "ParameterRecordingIntegration.inc"
 
     std::unique_ptr<ScreamSeq::GateInspectorWindow> gateInspectorWindow;
-    void openGateInspector(){if(!gateInspectorWindow)gateInspectorWindow=std::make_unique<ScreamSeq::GateInspectorWindow>(window,[this](const auto &m,const auto &p){return documentOperation(m,p);},[this]{return std::pair(documentId,view->session.revision);},[this]{return scratchTargetAt(patternIndex,row,channel,column>=3?(column-3)/2:0);},[this]{return view->session.document.at("nativePlugins");});gateInspectorWindow->open();}
+    void openGateInspector(){if(!gateInspectorWindow||gateInspectorWindow->retired())gateInspectorWindow=std::make_unique<ScreamSeq::GateInspectorWindow>(window,[this](const auto &m,const auto &p){return documentOperation(m,p);},[this]{return std::pair(documentId,view->session.revision);},[this]{return scratchTargetAt(patternIndex,row,channel,column>=3?(column-3)/2:0);},[this]{return view->session.document.at("nativePlugins");});gateInspectorWindow->open();}
     #include "SampleCaptureIntegration.inc"
     #include "DocumentDrafts.inc"
     std::unique_ptr<ScreamSeq::InstrumentEnvelopeWindow> instrumentEnvelopeWindow;

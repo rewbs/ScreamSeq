@@ -24,8 +24,8 @@ private:
   bool setting_=false,dirty_=false,pending_=false;uint64_t generation_=0;
   std::array<bool,9> valid_{};
   int selected(int id)const{return int(SendMessageW(controls_.at(id),CB_GETCURSEL,0,0));}
-  void choose(int id,int index){SendMessageW(controls_.at(id),CB_SETCURSEL,index,0);}
-  void choices(int id,const std::vector<std::wstring> &items){SendMessageW(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &s:items)SendMessageW(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));choose(id,items.empty()?-1:0);}
+  void choose(int id,int index){NativeInputGate::present(controls_.at(id),CB_SETCURSEL,index,0);}
+  void choices(int id,const std::vector<std::wstring> &items){NativeInputGate::present(controls_.at(id),CB_RESETCONTENT,0,0);for(const auto &s:items)NativeInputGate::present(controls_.at(id),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(s.c_str()));choose(id,items.empty()?-1:0);}
   double value(const char *key)const{return fields_.value(key,0.0);}
   void status(const std::wstring &s){status_=s;set(statusLabel,s);requestPaint();}
   void error(const std::exception &e)override{status(wide(e.what())+L" · Draft retained");}
@@ -36,7 +36,7 @@ private:
     if(i<2)return {t=="pitch"?-96:t=="pan"?-1:0,t=="pitch"?96:t=="volume"?4:1};
     if(i==2)return {1./64,16};if(i==3)return {-period,period};if(i==4)return {0,1};if(i==7)return {1,96};if(i==8)return {0,(1.-1./65536)/(captured_?captured_->rowsPerBeat:4)};return {0,period*2};
   }
-  void sliders(){for(size_t i=0;i<numeric.size();++i){const auto [low,high]=range(i);const double position=i==2?std::log(std::max(low,value(numeric[i]))/low)/std::log(high/low):(value(numeric[i])-low)/(high-low);SendMessageW(controls_.at(sliderBase+int(i)),TBM_SETPOS,TRUE,LPARAM(std::lround(std::clamp(position,0.,1.)*10000)));}}
+  void sliders(){for(size_t i=0;i<numeric.size();++i){const auto [low,high]=range(i);const double position=i==2?std::log(std::max(low,value(numeric[i]))/low)/std::log(high/low):(value(numeric[i])-low)/(high-low);NativeInputGate::present(controls_.at(sliderBase+int(i)),TBM_SETPOS,TRUE,LPARAM(std::lround(std::clamp(position,0.,1.)*10000)));}}
   void showFields(bool reset=false){setting_=true;for(size_t i=0;i<numeric.size();++i)if(reset||valid_[i]){set(fieldBase+int(i),value(numeric[i])*scale(i));valid_[i]=true;}sliders();
     choose(target,int(std::find(targets.begin(),targets.end(),fields_.value("target",std::string("volume")))-targets.begin()));
     for(auto [id,key]:{std::pair{riseShape,"riseShape"},std::pair{fallShape,"fallShape"}})choose(id,int(std::find(shapes.begin(),shapes.end(),fields_.value(key,std::string("linear")))-shapes.begin()));
@@ -95,11 +95,12 @@ private:
 public:
   GateInspectorWindow(HWND parent,Request request,Context context,Capture capture,std::function<Json()> rack):NativeToolWindow(parent),request_(std::move(request)),context_(std::move(context)),capture_(std::move(capture)),rack_(std::move(rack)){
     minimumWidth_=450;minimumHeight_=830;create(L"ScreamSeq.GateInspector",L"Advanced gate",520,860);for(auto id:{target,plugin,parameter,riseShape,fallShape})combo(id);choices(target,{L"Volume multiplier",L"Pitch offset / semitones",L"Absolute pan",L"Plugin parameter"});for(auto id:{riseShape,fallShape})choices(id,{L"Direct",L"Linear",L"Ease in",L"Ease out",L"Ease in/out"});
-    for(int i=0;i<9;++i){label(labelBase+i,labels[size_t(i)]);edit(fieldBase+i,L"0",48);add(sliderBase+i,TRACKBAR_CLASSW,labels[size_t(i)],TBS_HORZ|TBS_NOTICKS);SendMessageW(controls_.at(sliderBase+i),TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));}
+    for(int i=0;i<9;++i){label(labelBase+i,labels[size_t(i)]);edit(fieldBase+i,L"0",48);add(sliderBase+i,TRACKBAR_CLASSW,labels[size_t(i)],TBS_HORZ|TBS_NOTICKS);NativeInputGate::present(controls_.at(sliderBase+i),TBM_SETRANGE,TRUE,MAKELPARAM(0,10000));}
     label(heading,L"Advanced gate · two cycles · time in beats");label(shapeLabel,L"");label(statusLabel,L"");button(linked,L"Link rise / fall");button(apply,L"Apply gate");button(stop,L"Write stop");button(stopAll,L"Stop all");button(reload,L"Use cursor");button(done,L"Close");finish();clampToOwnerWorkArea();
   }
   void open(){const bool retained=visible()||dirty_;show();if(!retained)load();}
   bool retainedDraft()const{return dirty_||pending_;}
+  std::optional<Tracker::DocumentDraft> documentDraft()const override {if(!captured_)return {};return describeDraft(captured_->document,captured_->revision,Json::array({captured_->pattern,captured_->row,captured_->channel,captured_->column}).dump(),generation_,dirty_,pending_);}
   Json snapshot()const{return {{"visible",visible()},{"retainedDraft",dirty_},{"pending",pending_},{"generation",generation_},{"revision",captured_?captured_->revision:""},{"parameters",fields_}};}
 };
 }

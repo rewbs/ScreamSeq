@@ -82,7 +82,7 @@
         preciseNoteWindow.reset();graphCurveWindow.reset();parameterAutomationWindow.reset();instrumentEnvelopeWindow.reset();
         graphTrimsWindow.reset();graphCommandsWindow.reset();graphWorkflowWindow.reset();songRoutingWindow.reset();mixerStrips.reset();
         pluginInstruments.reset();pluginPathWindow.reset();sampleDetailWindow.reset();absoluteAutomationWindow.reset();parameterActivityWindow.reset();
-        sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();
+        sampleRecordingWindow.reset();patternSampleRenderWindow.reset();arrangementWindow.reset();arrangementMatrixWindow.reset();songTimingWindow.reset();scratchGestureWindow.reset();gateInspectorWindow.reset();
         parameterRecordingWindow.reset();pluginRecoveryReviewWindow.reset();parameterTakeState={{"retained",false},{"capturing",false}};parameterTakeDocument.clear();
         createNoteTrackWindow.reset();groupNoteTrackWindow.reset();
         patternToolsWindow.reset();
