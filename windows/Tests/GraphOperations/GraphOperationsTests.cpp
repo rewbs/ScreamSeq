@@ -584,9 +584,11 @@ void graphProvenance() {
   Fixture f;auto metadata=f.doc->native();const auto pattern=metadata.patterns.at(0).id,track=metadata.tracks.at(0).id;
   MusicalAutomationLane lane;lane.id=metadata.makeEntity().id;lane.pattern=pattern;lane.plugin="unloaded";lane.parameter=77;lane.enabled=false;lane.points={{0,.1},{256,.7}};metadata.automation.push_back(lane);
   metadata.performance.bindings[1]={"unloaded",77,"Mix"};metadata.performance.commands.push_back({pattern,track,16*65536,65536,0,PatternCommandKind::ParameterSlide,1,.8});
+  PatternCommand gate{pattern,track,20*65536,0,0,PatternCommandKind::Native};gate.native=NativePatternOp::Gate;gate.arguments=nativePatternDefaults(gate.native);gate.arguments[0]=3;setParameterBinding(gate,1);metadata.performance.commands.push_back(gate);
   f.doc->annotate([&](NativeSong &n){n=metadata;});const auto before=f.doc->native();const auto revision=f.doc->revision;const auto history=f.doc->historyBytes();
   ScreamSeq::GraphHostHooks hooks;hooks.cachedRecordings[{"unloaded",77}]={2,48000,96000};GraphOperations api(*f.doc,[&]{f.stops++;},hooks);
   const auto page=api.invoke("graph.provenance.get",{{"plugin","unloaded"},{"parameter",77}});CHECK(page.at("sources").size()==3&&page.at("total")==3);CHECK(page["sources"][0]["kind"]=="envelope"&&!page["sources"][0]["enabled"].get<bool>());CHECK(page["sources"][1]["commands"][0]["kind"]=="pattern-slide");CHECK(page["sources"][2]["sampleRate"]==48000);
+  const auto &gateSource=page["sources"][1]["commands"][1];CHECK(gateSource["kind"]=="pattern-gate"&&gateSource["native"]=="gate"&&gateSource["parameters"]["binding"]==1&&gateSource["parameters"]["target"]=="parameter");
   CHECK(api.invoke("graph.provenance.get",{{"plugin","unloaded"},{"parameter",77},{"offset",1},{"limit",1}})["sources"].size()==1);CHECK(f.doc->native()==before&&f.doc->revision==revision&&f.doc->historyBytes()==history&&f.stops==0);
   bool rejected=false;try{api.invoke("graph.provenance.get",{{"plugin","unloaded"},{"parameter",true}});}catch(const ScreamSeq::Api::ApiError &e){rejected=e.code==-32602;}CHECK(rejected);
 }

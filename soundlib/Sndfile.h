@@ -11,6 +11,7 @@
 
 #pragma once
 #ifdef OPENMPT_EDITOR_CORE
+#include "../editor/GateSignal.hpp"
 #include <functional>
 #include <map>
 #include <tuple>
@@ -1074,6 +1075,8 @@ public:
 	// Prepared host pitch curves for this mix chunk. Only explicitly controlled
 	// channels use the per-sample path; legacy songs keep their normal mixer.
 	std::array<const double *, MAX_BASECHANNELS> nativePitchRatios{};
+	std::array<const Tracker::GateSnapshot *,MAX_BASECHANNELS> nativeGateVolumes{},nativeGatePans{},nativeGatePitches{};
+	bool nativeGateMixer=false; // Hosted channel buses own volume/pan when present.
 	std::array<mixsample_t,MIXBUFFERSIZE*2> nativePatternMixScratch{};
  NativePatternCurve nativePatternMasterGain;
  std::array<NativePatternCurve,MAX_BASECHANNELS> nativePatternChannelGains{};

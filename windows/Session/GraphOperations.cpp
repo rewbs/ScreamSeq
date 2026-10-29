@@ -2,6 +2,7 @@
 #include "NoteActivityJson.hpp"
 #include "windows/Api/SessionAdapter.hpp"
 #include "windows/Project/NativeMetadata.hpp"
+#include "windows/Project/NativePatternJSON.hpp"
 #include "editor/TrackerDocument.hpp"
 #include "editor/GraphEditing.hpp"
 #include "editor/GraphTrims.hpp"

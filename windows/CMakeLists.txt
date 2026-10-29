@@ -62,7 +62,7 @@ target_link_libraries(OpenMPTCore PUBLIC TrackerFLAC ScreamSeqBuildOptions
 set(EDITOR_SOURCES
   TrackLayout PatternTimeline PatternCommands NativePatternCommands AutomationTools TrackerDocument PatternTools NativeSong
   ArrangementTools MixerGraph MixerRuntime MixerTransition MixerDryBridge MixerPluginRouting NativeEffects SampleImport SongTiming
-  PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
+  PreciseNoteRuntime RecordNudgeRuntime ScratchGesture ScratchRuntime NativePatternRuntime PatternGateRuntime NativeTimingRuntime NoteRecording InstrumentEnvelopeTools EnvelopeBank
   StateVariableFilter FractionalDelay Distortion LofiMat CabinetVoicing CabinetSimulator
   Dynamics Maximizer SampleProcessing SampleWaveform SampleDocument SampleArchive
   Sampling SampleClipboard SampleSplice SampleCopy SampleDrawing SampleSnap SampleLoopCrossfade
@@ -321,8 +321,8 @@ if(BUILD_TESTING)
   add_test(NAME recovery-window-tests COMMAND recovery-window-tests)
   set_tests_properties(recovery-window-tests PROPERTIES LABELS "recovery;native-ui;private-desktop" TIMEOUT 60)
   add_executable(native-tool-window-tests Tests/Workspace/NativeToolWindowTests.cpp)
-  target_include_directories(native-tool-window-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
-  target_link_libraries(native-tool-window-tests PRIVATE ScreamSeqBuildOptions ScreamSeqNativeUiOptions d3d11 d2d1 dwrite dxgi dwmapi comctl32 comdlg32)
+  target_include_directories(native-tool-window-tests PRIVATE "${ROOT}" "${ROOT}/include/nlohmann-json/include")
+  target_link_libraries(native-tool-window-tests PRIVATE TrackerEditor ScreamSeqNativeUiOptions d3d11 d2d1 dwrite dxgi dwmapi comctl32 comdlg32)
   add_test(NAME native-tool-window-tests COMMAND native-tool-window-tests)
   set_tests_properties(native-tool-window-tests PROPERTIES LABELS "native-ui;private-desktop" TIMEOUT 30)
   add_executable(command-palette-tests Tests/CommandPaletteTests.cpp)
@@ -357,6 +357,9 @@ if(BUILD_TESTING)
   target_include_directories(pattern-field-tests PRIVATE "${ROOT}/include/nlohmann-json/include")
   add_test(NAME pattern-fields COMMAND pattern-field-tests)
   add_executable(native-pattern-runtime-tests "${ROOT}/editor/Tests/NativePatternRuntimeTests.cpp")
+  add_executable(pattern-gate-tests "${ROOT}/editor/Tests/PatternGateTests.cpp")
+  target_link_libraries(pattern-gate-tests PRIVATE TrackerEditor)
+  add_test(NAME pattern-gate COMMAND pattern-gate-tests)
   target_link_libraries(native-pattern-runtime-tests PRIVATE TrackerEditor)
   add_test(NAME native-pattern-runtime COMMAND native-pattern-runtime-tests)
   add_executable(scratch-runtime-tests "${ROOT}/editor/Tests/ScratchRuntimeTests.cpp")
@@ -376,10 +379,10 @@ if(BUILD_TESTING)
   add_executable(sampling-tests "${ROOT}/editor/Tests/SamplingTests.cpp")
   target_link_libraries(sampling-tests PRIVATE TrackerEditor)
   add_test(NAME sampling COMMAND sampling-tests)
-  foreach(target IN ITEMS native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests)
+  foreach(target IN ITEMS native-pattern-command-tests pattern-field-tests native-pattern-runtime-tests pattern-gate-tests scratch-runtime-tests native-timing-tests native-delay-tests sampling-tests)
     target_link_options(${target} PRIVATE /STACK:8388608)
   endforeach()
-  set_tests_properties(native-pattern-commands pattern-fields native-pattern-runtime scratch-runtime native-timing native-delay sampling PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 120)
+  set_tests_properties(native-pattern-commands pattern-fields native-pattern-runtime pattern-gate scratch-runtime native-timing native-delay sampling PROPERTIES LABELS "portable;functional;no-realtime-audit" TIMEOUT 120)
   add_executable(native-control-tests Tests/NativeControlTests.cpp)
   add_executable(parameter-edit-tests "${ROOT}/editor/Tests/ParameterEditTests.cpp")
   add_executable(integer-validation-tests "${ROOT}/editor/Tests/IntegerValidationTests.cpp")

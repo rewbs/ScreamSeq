@@ -25,6 +25,7 @@ namespace OpenMPT {class CSoundFile;struct ModInstrument;}
 namespace Tracker {
 class PatternCommandRuntime;
 class PatternPitchRuntime;
+class PatternGateRuntime;
 class NativeSignalGraph;
 class SongGroupRuntime;
 struct SignalSampleSource;
@@ -38,6 +39,9 @@ struct PluginSongModulation {
   uint64_t frame=0;
   struct Target {uint32_t parameter;size_t index;double minimum,maximum;};
   std::vector<Target> targets;
+  PatternGateRuntime *gateRuntime=nullptr;
+  struct Gate {uint32_t parameter;double minimum,maximum,step;std::vector<size_t> sources;};
+  std::vector<Gate> gates;
 };
 // Borrowed for one synchronous processor call; at most64 targets with32
 // normalized values each. The graph runtime owns all sample arrays.
@@ -222,6 +226,8 @@ class NativePlugin {
   bool effectiveParameter(uint32_t,double,uint64_t,ParameterSource,uint32_t=0) noexcept;
   bool modulationParameter(uint32_t) const noexcept;
   double baselineAt(uint32_t,uint64_t) const noexcept;
+  double gatedBaselineAt(uint32_t,uint64_t) const noexcept;
+  bool gateParameter(uint32_t) const noexcept;
   uint64_t musicalSequence_ = 0;
   std::unique_ptr<PluginParameterQueue> initialMusicalEvents_; // Prepared before the first callback.
   PluginParameterQueue *musicalEvents_=nullptr; // Audio-owned; later queues belong to GraphPluginState.
@@ -387,6 +393,7 @@ public:
   PluginFailure failure() const noexcept {const auto *p=publishedVendor();return p->backend_ ? p->backend_->failure() : PluginFailure{};}
 };
 class PluginChain {
+  std::shared_ptr<PatternGateRuntime> gateRuntime_;
   struct MusicalLane {
     std::shared_ptr<NativePlugin> plugin;
     uint32_t parameter;

@@ -294,6 +294,7 @@ const float *MixerRuntime::finishBus(size_t bus) noexcept {
   float peakL = 0, peakR = 0;
   for (uint32_t i = 0; i < frames_; ++i) {
     auto v = at(node,i);
+    if(gateControls_)gateControls_(gateContext_,bus,i,v.gain,v.pan);
     float left = node.work[i * 2], right = node.work[i * 2 + 1];
     if (!std::isfinite(left) || !std::isfinite(right)) { failed_ = true; left = right = 0; }
     const auto trim=node.trims.gain(1,position_+i);left*=trim;right*=trim;
@@ -325,7 +326,8 @@ const float *MixerRuntime::finishBus(size_t bus) noexcept {
   return bus==plan_.master?masterOutput():node.work.data();
 }
 void MixerRuntime::dryBusGain(size_t bus,bool pre,uint32_t frame,float &left,float &right,bool outputTrim) const noexcept {
-  if(bus>=nodes_.size())return;const auto value=at(*nodes_[bus],frame);
+  if(bus>=nodes_.size())return;auto value=at(*nodes_[bus],frame);
+  if(gateControls_)gateControls_(gateContext_,bus,frame,value.gain,value.pan);
   if(outputTrim){const auto trim=nodes_[bus]->trims.gain(1,position_+frame);left*=trim;right*=trim;}
   if(pre){left*=value.audible;right*=value.audible;return;}
   if(value.width!=1){const float mid=(left+right)*.5f,side=(left-right)*.5f*value.width;left=mid+side;right=mid-side;}

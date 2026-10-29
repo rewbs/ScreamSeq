@@ -526,6 +526,9 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 {
 #ifdef OPENMPT_EDITOR_CORE
 	const CHANNELINDEX nativeParent = chn.nMasterChn ? chn.nMasterChn - 1 : channel;
+	const auto *gateVolume=!nativeGateMixer&&!chn.isPreviewNote&&nativeParent<nativeGateVolumes.size()?nativeGateVolumes[nativeParent]:nullptr;
+	const auto *gatePan=!nativeGateMixer&&!chn.isPreviewNote&&nativeParent<nativeGatePans.size()?nativeGatePans[nativeParent]:nullptr;
+	const auto *gatePitch=!chn.isPreviewNote&&nativeParent<nativeGatePitches.size()?nativeGatePitches[nativeParent]:nullptr;
 	const double *nativeRatios = channel < nativePitchRatios.size() && !chn.isPreviewNote ? nativePitchRatios[channel] : nullptr;
 	const bool backgroundPitch = chn.nMasterChn && !chn.isPreviewNote && chn.nativeSamplePitch.active;
 	const auto backgroundCurve = chn.nativeSamplePitch;
@@ -537,8 +540,8 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 	const bool scratchFilter=scratchPositions || chn.nativeScratchFilter.wet>0;
 	const double scratchDCCoefficient=scratchFilter?std::exp(-2*3.14159265358979323846*20/GetSampleRate()):0;
 	const double scratchFilterStep=scratchFilter?1./std::max(1u,uint32(std::lround(GetSampleRate()*.0005))):0;
-	const bool nativePattern=!chn.isPreviewNote&&(scratchFilter||scratchGains||chn.nativePatternVoice.Active()||nativePatternMasterGain.active||(nativeParent<nativePatternChannelGains.size()&&nativePatternChannelGains[nativeParent].active));
- const bool nativePatternPitch=chn.nativePatternVoice.pitch.active||chn.nativePatternVoice.vibrato.active||chn.nativePatternVoice.arpeggio.active||chn.nativePatternVoice.envelopes[2].active;
+	const bool nativePattern=!chn.isPreviewNote&&(gateVolume||gatePan||gatePitch||scratchFilter||scratchGains||chn.nativePatternVoice.Active()||nativePatternMasterGain.active||(nativeParent<nativePatternChannelGains.size()&&nativePatternChannelGains[nativeParent].active));
+ const bool nativePatternPitch=gatePitch||chn.nativePatternVoice.pitch.active||chn.nativePatternVoice.vibrato.active||chn.nativePatternVoice.arpeggio.active||chn.nativePatternVoice.envelopes[2].active;
  const bool nativePatternEnvelope=chn.nativePatternVoice.envelopes[0].active||chn.nativePatternVoice.envelopes[1].active||chn.nativePatternVoice.envelopes[2].active;
  const auto unpitchedIncrement = chn.increment;
 	int nudgeDirection = chn.increment.IsNegative() ? -1 : 1;
@@ -564,7 +567,7 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 
 		uint32 functionNdx = MixFuncTable::ResamplingModeToMixFlags(static_cast<ResamplingMode>(chn.resamplingMode));
 #ifdef OPENMPT_EDITOR_CORE
-		if(scratchPositions || nativeRatios || backgroundPitch || chn.nativePatternVoice.pitch.active || chn.nativePatternVoice.vibrato.active || chn.nativePatternVoice.arpeggio.active || chn.nativePatternVoice.envelopes[2].active || chn.nativeNudgeInterpolating) functionNdx = MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
+		if(scratchPositions || nativeRatios || backgroundPitch || nativePatternPitch || chn.nativeNudgeInterpolating) functionNdx = MixFuncTable::ResamplingModeToMixFlags(m_Resampler.m_Settings.SrcMode);
 #endif
 		if(chn.dwFlags[CHN_16BIT]) functionNdx |= MixFuncTable::ndx16Bit;
 		if(chn.dwFlags[CHN_STEREO]) functionNdx |= MixFuncTable::ndxStereo;
@@ -646,6 +649,7 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
 				}
 				double ratio = nativeRatios ? nativeRatios[count-nsamples] : backgroundPitch ? std::exp2(backgroundCurve.Value((count-nsamples) * nativePitchUnitsPerFrame) / 12.) : 1;
     if(nativePatternPitch){double pitch=chn.nativePatternVoice.Pitch();if(chn.nativePatternVoice.envelopes[2].active){if(chn.PitchEnv.flags[ENV_FILTER])SetupChannelFilter(chn,!chn.dwFlags[CHN_FILTER],int((nativeEnvelopePitch-.5)*512));else pitch+=(nativeEnvelopePitch-.5)*32;}if(pitch!=0)ratio*=std::exp2(std::clamp(pitch,-192.,192.)/12.);if(chn.nativePatternVoice.envelopes[2].active&&chn.nativePatternVoice.legacyPitchRatio>0)ratio/=chn.nativePatternVoice.legacyPitchRatio;}
+				if(gatePitch)ratio*=std::exp2(gatePitch->value(count-nsamples)/12.);
 				const double direction = nudgeForces ? nudgeDirection : (chn.increment.IsNegative() ? -1 : 1);
 				const auto raw = std::clamp(std::abs(double(unpitchedIncrement.GetRaw())) * ratio * (direction+nudge), -double(uint64(1)<<60), double(uint64(1)<<60));
 				chn.increment = SamplePosition(static_cast<int64>(raw));
@@ -745,16 +749,18 @@ bool CSoundFile::MixChannel(int count, ModChannel &chn, CHANNELINDEX channel, bo
       if(chn.nRampLength){chn.rampLeftVol+=chn.leftRamp;chn.rampRightVol+=chn.rightRamp;l=double(chn.rampLeftVol)/(1<<VOLUMERAMPPRECISION);r=double(chn.rampRightVol)/(1<<VOLUMERAMPPRECISION);chn.leftVol=chn.rampLeftVol>>VOLUMERAMPPRECISION;chn.rightVol=chn.rampRightVol>>VOLUMERAMPPRECISION;}
       if(v.envelopes[0].active){if(v.legacyVolumeFactor>0){l/=v.legacyVolumeFactor;r/=v.legacyVolumeFactor;}else{l=v.neutralLeft;r=v.neutralRight;}}
       double gain=v.Gain()*nativeEnvelopeGain;
+      if(gateVolume)gain*=gateVolume->value(count-nsamples+f);
       if(scratchGains)gain*=scratchGains[count-nsamples+f];
       const double offset=(count-nsamples+f)*nativePatternRowsPerFrame;
       if(nativePatternMasterGain.active)gain*=nativePatternMasterGain.Value(offset);
       if(nativeParent<nativePatternChannelGains.size()&&nativePatternChannelGains[nativeParent].active)gain*=nativePatternChannelGains[nativeParent].Value(offset);
-      if(v.pan.active||v.panbrello.active||v.envelopes[1].active) {
+      if(gatePan||v.pan.active||v.panbrello.active||v.envelopes[1].active) {
        const double original=chn.nRealPan/128.-1;
        const double neutral=chn.pModInstrument?v.legacyPanBefore+original-v.legacyPanAfter:original;
        double pan=v.pan.active?v.pan.Value()+neutral-(chn.nPan/128.-1):v.envelopes[1].active?neutral:original;
        if(v.pan.active&&!v.envelopes[1].active){pan=std::clamp(pan,-1.,1.);pan+=v.legacyPanEnvelope*(1-std::abs(pan));}
        pan=std::clamp(pan+v.panbrello.Value()+(nativeEnvelopePan-.5)*2*(1-std::abs(pan)),-1.,1.);
+       if(gatePan)pan=gatePan->value(count-nsamples+f);
        const auto mode=m_PlayConfig.getPanningMode();
        const bool soft=mode==PanningMode::SoftPanning||(mode==PanningMode::Undetermined&&(m_MixerSettings.MixerFlags&SNDMIX_SOFTPANNING));
        auto weights=[&](double p){const double t=(p+1)*.5;return mode==PanningMode::FT2Panning?std::pair(std::sqrt(1-t),std::sqrt(t)):soft?std::pair(std::min(.5,1-t),std::min(.5,t)):std::pair(1-t,t);};

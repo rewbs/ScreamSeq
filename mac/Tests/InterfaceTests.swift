@@ -799,7 +799,7 @@ struct InterfaceFailure: Error { let message: String }
       ("parameter-boundary", parameterBoundaryChecks),
       ("pattern-performance", patternPerformanceChecks), ("plugin-instruments", pluginInstrumentsChecks),
       ("instrument-envelope", instrumentEnvelopeChecks), ("envelope-bank", envelopeBankChecks),
-      ("scratch", scratchGestureChecks), ("navigation", navigationChecks),
+      ("scratch", scratchGestureChecks), ("gate", gateInspectorChecks), ("navigation", navigationChecks),
       ("pattern-grid", patternGridChecks), ("note-tracks", noteTrackChecks),
       ("plugin-browser", pluginBrowserChecks)]
   }

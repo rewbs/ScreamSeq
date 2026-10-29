@@ -7,6 +7,7 @@ extension AppController {
   func openPatternPerformance(context:(PatternModel,Int,Int,Int)?=nil,kind:String?=nil,target:(plugin:String,parameter:Int)?=nil) {
     guard !busy,model.editable else{return}
     let cursor=context ?? (model,patternView.cursorRow,patternView.cursorChannel,patternView.column)
+    if target==nil,kind==nil,cursor.0.nativeCommand(cursor.1,cursor.2,max(0,(cursor.3-3)/2))?.native=="gate" {patternView.cursorRow=cursor.1;patternView.cursorChannel=cursor.2;patternView.column=max(3,cursor.3);showGateInspector();return}
     if target==nil,kind==nil,cursor.0.nativeCommand(cursor.1,cursor.2,max(0,(cursor.3-3)/2))?.native=="scratch" {showScratchGestures();return}
     if target==nil,kind==nil,cursor.0.nativeCommand(cursor.1,cursor.2,max(0,(cursor.3-3)/2))?.kind=="native" {
       guard session.automationRevision==cursor.0.revisionToken,patternView.model.pattern==cursor.0.pattern else {

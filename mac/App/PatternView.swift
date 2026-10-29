@@ -1053,7 +1053,7 @@ final class PatternView: MTKView, MTKViewDelegate {
       for row in firstRow...lastRow {for channel in firstChannel...lastChannel {
         cells.append(snapshot.cell(row,channel).map(Int.init))
         for fx in 0..<snapshot.effectCount(channel) {if let c=snapshot.nativeCommand(row,channel,fx),!(fx==0 && c.kind=="tracker") {
-          var command=c.dictionary;command["channel"]=channel-firstChannel;command["position"]=c.position-firstRow*65536;effects.append(command);if c.binding>0 {usedBindings.insert(c.binding)};if c.native=="scratch",let id=(c.parameters["gesture"] as? NSNumber)?.intValue {usedScratchGestures.insert(id)}
+          var command=c.dictionary;command["channel"]=channel-firstChannel;command["position"]=c.position-firstRow*65536;effects.append(command);if c.parameterBinding>0 {usedBindings.insert(c.parameterBinding)};if c.native=="scratch",let id=(c.parameters["gesture"] as? NSNumber)?.intValue {usedScratchGestures.insert(id)}
         }}
       }}
       let notes=snapshot.preciseNotes.values.flatMap{$0}.filter{$0.row>=firstRow && $0.row<=lastRow && $0.channel>=firstChannel && $0.channel<=lastChannel}.map { event -> [String:Int] in

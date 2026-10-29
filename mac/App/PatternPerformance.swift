@@ -105,6 +105,7 @@ struct NativePatternCommand {
   let effect:Int, parameter:Int, pitchRange:Int
   let code:String,valueText:String
   var row: Int { position / 65536 }
+  var parameterBinding:Int {native=="gate" || native=="gate-stop" ? (parameters["binding"] as? NSNumber)?.intValue ?? 0 : binding}
   init(_ raw: [String: Any]) {
     self.raw=raw;native=raw["native"] as? String;parameters=raw["parameters"] as? [String:Any] ?? [:]
     kind=raw["kind"] as? String ?? ""

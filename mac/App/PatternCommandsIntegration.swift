@@ -16,6 +16,7 @@ extension AppController {
       guard self.session.automationRevision==model.revisionToken else{picker?.status.stringValue="The song changed. Close and reopen this list to choose a new target.";return}
       guard self.patternView.model.pattern==model.pattern else {picker?.status.stringValue="The displayed pattern changed. Close and reopen this list to edit that pattern.";return}
       self.commandPickerWindow?.close()
+      if entry.nativeName=="gate" {self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=max(3,column);self.showGateInspector();return}
       if entry.nativeName=="scratch" {self.patternView.cursorRow=row;self.patternView.cursorChannel=channel;self.patternView.column=max(3,column);self.showScratchGestures();return}
       if model.commands.schema(kind:kind,native:entry.nativeName) != nil {
         self.window.makeKeyAndOrderFront(nil)

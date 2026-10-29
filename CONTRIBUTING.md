@@ -40,6 +40,15 @@ musician session, its bundle, unsaved work and system audio defaults. Run the
 relevant model, API, persistence and platform tests for the change. Audio changes
 need rendered-audio evidence; UI and presentation claims need native observation.
 
+Hosted CI temporarily excludes tests that require an audio device. Offline PCM,
+hosted plugin rendering, model/API tests and native editor tests still run.
+Windows CI sets `SCREAMSEQ_TEST_LIVE_AUDIO=0`, so device-dependent Python cases
+report explicit skips; set it to `1` when running those cases locally with a
+WASAPI endpoint. Mac CI runs `native-plugin-tests <fixture> --ui` without
+`--loopback-record`; add that flag locally with BlackHole 2ch installed to run
+the device recording checks. Passing CI does not qualify device playback or
+recording while these exclusions are in place.
+
 Report the exact checks performed, failures and untested boundaries in the pull
 request. Distinguish automated tests from live audio, visible UI and sustained
 performance qualification. Dated reports describe their recorded executable;

@@ -131,7 +131,17 @@ void NativePlugin::prepareBaselines(){
 }
 bool NativePlugin::modulationParameter(uint32_t id) const noexcept {
   if(processingModulation_)for(const auto &p:processingModulation_->targets)if(p.parameter==id)return true;
-  return false;
+  return gateParameter(id);
+}
+bool NativePlugin::gateParameter(uint32_t id)const noexcept {
+  if(processingModulation_&&processingModulation_->gateRuntime)for(const auto &g:processingModulation_->gates)if(g.parameter==id)for(auto source:g.sources)if(processingModulation_->gateRuntime->snapshot(source).active)return true;return false;
+}
+double NativePlugin::gatedBaselineAt(uint32_t id,uint64_t frame)const noexcept {
+  if(processingModulation_&&processingModulation_->gateRuntime)for(const auto &g:processingModulation_->gates)if(g.parameter==id){
+    const GateSnapshot *current=nullptr;for(auto source:g.sources){const auto &s=processingModulation_->gateRuntime->snapshot(source);if(s.active&&(!current||s.serial>current->serial))current=&s;}
+    if(current){double v=current->value(frame>=processingModulation_->frame?frame-processingModulation_->frame:0);if(g.step>0)v=std::clamp(std::round(v/g.step)*g.step,0.,1.);return g.minimum+(g.maximum-g.minimum)*v;}
+  }
+  return baselineAt(id,frame);
 }
 double NativePlugin::baselineAt(uint32_t id,uint64_t frame) const noexcept {
   for(const auto &r:parameterRamps_)if(r.active && r.id==id)return r.ramp.value(frame);

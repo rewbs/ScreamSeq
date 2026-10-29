@@ -13,7 +13,7 @@
 
 namespace Tracker {
 // Host-visible values only: a plugin's internal modulators are not observable.
-enum class ParameterOrigin : uint8_t { Baseline, Manual, PluginEditor, Recorded, Envelope, PatternSet, PatternSlide, Graph, Reset, GraphSource };
+enum class ParameterOrigin : uint8_t { Baseline, Manual, PluginEditor, Recorded, Envelope, PatternSet, PatternSlide, Graph, Reset, GraphSource, PatternGate };
 struct ParameterSource {
   ParameterOrigin kind = ParameterOrigin::Manual;
   uint64_t id = 0;

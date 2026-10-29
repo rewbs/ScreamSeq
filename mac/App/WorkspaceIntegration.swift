@@ -10,6 +10,8 @@ extension AppController {
       dock.register(panel,location:location)
     }
     add("notes","Note inspector",workspaceNotes,"right",570)
+    add("gate","Gate inspector",gateInspector,"hide",800)
+    installGateInspector()
     add("samples","Sample & loops",sampleEditor,"right",620)
     add("instruments","Instrument & envelopes",instrumentEditor,"right",560)
     add("plugins","Plugin controls",pluginEditor,"right",600)
@@ -27,9 +29,9 @@ extension AppController {
     signalGraphEditor.onReveal = {[weak self] in self?.workspace?.show("graph")}
     signalGraphEditor.onSourceReference = {[weak self] source in
       guard let self else{return};self.openParameterSource(source)
-      let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":"graph"
+      let kind=source["kind"] as? String ?? "",panel=kind=="envelope" ? "automation":kind=="recorded" ? "parameterActivity":kind=="pattern-gate" ? "gate":"graph"
       self.workspace?.panels[panel]?.onBack={[weak self] in self?.signalGraphEditor.returnToProvenance()}
-      if kind=="pattern-set" || kind=="pattern-slide"{self.statusLabel.stringValue+=" · ⌘K → Back to graph"}
+      if kind=="pattern-set" || kind=="pattern-slide" || kind=="pattern-gate"{self.statusLabel.stringValue+=" · ⌘K → Back to graph"}
     }
     signalGraphEditor.onAddSongEffect = { [weak self] target in self?.addPlugin(target: target) }
     signalGraphEditor.rackControls.onGesture={[weak self] active in self?.session.parameterGesture(active)}
@@ -181,6 +183,11 @@ extension AppController {
     if workspaceReturnPoints[id]==nil {workspaceReturnPoints[id]=position}
     let cursor="P\(model.pattern) · R\(position.row) · CH\(position.channel+1)"
     switch id {
+    case "gate":
+      if gateInspector.hasDraft && !force {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
+      let token="\(position.pattern):\(position.row):\(position.channel):\(position.column):\(model.revisionToken)"
+      guard !gateInspector.pending,force || workspaceContextTokens[id] != token else{return}
+      workspaceContextTokens[id]=token;panel.target.stringValue=cursor;gateInspector.capture()
     case "notes":
       if workspaceNotes.hasDraft && !force {panel.target.stringValue="Draft held · "+panel.target.stringValue.replacingOccurrences(of:"Draft held · ",with:"");return}
       let token="\(position.pattern):\(position.row):\(position.channel):\(model.revisionToken)"

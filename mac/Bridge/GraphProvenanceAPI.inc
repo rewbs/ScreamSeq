@@ -17,7 +17,7 @@
         if(s.track){v[@"track"]=nativeID(s.track);v[@"channel"]=@(s.channel);v[@"column"]=@(s.column);v[@"binding"]=@(s.binding);}
         if(s.kind==ParameterProvenanceKind::Recorded){v[@"firstFrame"]=@(s.firstFrame);v[@"lastFrame"]=@(s.lastFrame);v[@"sampleRate"]=@48000;}
         NSMutableArray *commands=[NSMutableArray array],*orders=[NSMutableArray array];
-        for(const auto &c:s.commands)[commands addObject:@{@"kind":c.kind==PatternCommandKind::ParameterSlide?@"pattern-slide":@"pattern-set",@"position":@(c.position),@"duration":@(c.duration),@"value":@(c.value)}];
+        for(const auto &c:s.commands){auto command=[@{@"kind":isGate(c)?@"pattern-gate":c.kind==PatternCommandKind::ParameterSlide?@"pattern-slide":@"pattern-set",@"position":@(c.position),@"duration":@(c.duration),@"value":@(c.value)} mutableCopy];appendNativePattern(command,c);[commands addObject:command];}
         for(const auto &[sequence,order]:s.orders)[orders addObject:@{@"sequence":@(sequence),@"order":@(order)}];v[@"commands"]=commands;v[@"orders"]=orders;[sources addObject:v];
       }
       result=@{@"sources":sources,@"total":@(page.total),@"offset":@(page.offset),@"unitsPerRow":@65536,@"sampleRate":@48000,@"rule":@"These are existing base-value controls, not additive modulation. Enabled envelopes, pattern parameter commands and recorded automation are mutually exclusive. Song modulation adds to the chosen baseline and clamps once."};

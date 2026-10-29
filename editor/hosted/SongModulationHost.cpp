@@ -23,6 +23,14 @@ struct PluginChain::HostedMixerPlan::SongControls {
   std::vector<Notes> notes;
   std::array<uint8_t,128> controllers{};
   SignalClock clock;
+  const OpenMPT::CSoundFile *gateSong=nullptr;
+  std::vector<uint16_t> gateChannels;
+  static void gateControls(void *opaque,size_t bus,uint32_t frame,float &gain,float &pan)noexcept {
+    const auto &self=*static_cast<SongControls *>(opaque);if(!self.gateSong||bus>=self.gateChannels.size())return;
+    const auto channel=self.gateChannels[bus];if(channel>=self.gateSong->nativeGateVolumes.size())return;
+    if(const auto *g=self.gateSong->nativeGateVolumes[channel])gain*=float(g->value(frame));
+    if(const auto *g=self.gateSong->nativeGatePans[channel])pan=float(g->value(frame));
+  }
   std::array<float,8192> groupFollower{};
   static bool readTrim(void *context,uint64_t id,uint64_t frame,double &value,bool &enabled) noexcept {
     auto &self=*static_cast<SongControls *>(context);for(size_t i=0;i<self.runtime->sourceCount();++i)if(self.runtime->source(i).node.id==id){enabled=!self.runtime->source(i).node.muted;return self.runtime->contribution(i,frame,value);}return false;
@@ -96,6 +104,28 @@ std::shared_ptr<PluginChain::HostedMixerPlan::SongControls> PluginChain::prepare
 
   for(size_t i=0;i<result->runtime->sourceCount();++i){result->followerTrims.emplace_back(std::vector<std::string>{"i:0"},result->runtime->source(i).node.trims,sampleRate_);result->followerTrims.back().sourceReader(HostedMixerPlan::SongControls::readTrim,result.get());plan.processorStorage+=result->followerTrims.back().bytes();}
   result->processors.resize(plan.catalog.size());
+  if(gateRuntime_&&gateRuntime_->size()){
+    result->gateSong=musicalSong_;result->gateChannels.assign(plan.runtime->graph().buses.size(),UINT16_MAX);
+    for(size_t bus=0;bus<result->gateChannels.size();++bus)for(const auto &[channel,track]:native.tracks)if(track.id==plan.runtime->graph().buses[bus].id)result->gateChannels[bus]=channel;
+    plan.runtime->gateControls(HostedMixerPlan::SongControls::gateControls,result.get());
+    plan.processorStorage+=gateRuntime_->storageBytes()+result->gateChannels.capacity()*sizeof(uint16_t);
+    for(size_t source=0;source<gateRuntime_->size();++source){const auto &target=gateRuntime_->target(source);if(target.kind!=GateTarget::Parameter)continue;
+      const auto slot=processor(target.plugin);if(!scheduled(slot))continue;
+      const auto entry=std::find_if(hosted.rack.begin(),hosted.rack.end(),[&](const auto &p){return p->baseline.instanceID==target.plugin;});
+      if(entry==hosted.rack.end())continue;
+      const auto p=std::find_if((*entry)->parameters.begin(),(*entry)->parameters.end(),[&](const auto &p){return p.id==target.parameter&&p.writable&&p.max>p.min;});if(p==(*entry)->parameters.end())continue;
+      auto &binding=result->processors[slot];binding.gateRuntime=gateRuntime_.get();
+      auto gate=std::find_if(binding.gates.begin(),binding.gates.end(),[&](const auto &g){return g.parameter==target.parameter;});
+      if(gate==binding.gates.end()){
+        double step=p->continuous?0:p->step/(p->max-p->min);if(!p->continuous&&step<=0){if(p->choices.size()>1)step=1./(p->choices.size()-1);else if(p->unit==2)step=1;else throw std::invalid_argument("Discrete gate parameter has no step metadata");}
+        binding.gates.push_back({p->id,p->min,p->max,step,{}});gate=binding.gates.end()-1;
+        if(binding.gates.size()>64)throw std::invalid_argument("Use at most 64 gated parameters per plugin");
+        (*entry)->plugin->includeParameterRange(p->id,p->min,p->max);
+      }
+      gate->sources.push_back(source);
+    }
+    for(const auto &p:result->processors){plan.processorStorage+=p.gates.capacity()*sizeof(PluginSongModulation::Gate);for(const auto &g:p.gates)plan.processorStorage+=g.sources.capacity()*sizeof(size_t);}
+  }
   for(size_t index=0;index<result->runtime->targets().size();++index){const auto &target=result->runtime->targets()[index];const auto slot=processor(target.plugin);
     const auto entry=std::find_if(hosted.rack.begin(),hosted.rack.end(),[&](const auto &p){return p->baseline.instanceID==target.plugin;});
     const auto p=std::find_if((*entry)->parameters.begin(),(*entry)->parameters.end(),[&](const auto &p){return p.id==target.parameter;});

@@ -44,7 +44,7 @@ The current native project wrapper is a versioned binary property list containin
 
 ## Typed native pattern commands
 
-`NativePatternCommands` defines stable native operation IDs and an ordered field catalog with types, units, ranges, defaults and scope. `PatternCommandKind::Native` stores one operation plus eight bounded numeric argument slots; both APIs and metadata expose named parameters, including string choices and boolean switches. The existing seven precise command kinds and tracker byte commands retain their representation. Metadata stays at version 17 during this unreleased extension; readers that do not know the new kind reject it.
+`NativePatternCommands` defines stable native operation IDs and an ordered field catalog with types, units, ranges, defaults and scope. `PatternCommandKind::Native` stores one operation plus sixteen bounded numeric argument slots; both APIs and metadata expose named parameters, including string choices and boolean switches. The existing seven precise command kinds and tracker byte commands retain their representation. Metadata stays at version 17 during this unreleased extension; readers that do not know the new kind reject it.
 
 `NativePatternRuntime` prepares sample-voice controls and precise note actions; `NativeTimingRuntime` prepares tempo and row-length events against the shared musical clock. Native fields do not reuse tracker effect memory. Numeric sample controls do not write opaque plugin polyphonic state. Plugin parameter/bend commands retain their existing host protocols, and note actions use normal instrument note delivery. The complete legacy-family mapping and discrete/import boundaries are in [Native pattern precision map](NATIVE_PATTERN_PRECISION.md).
 
@@ -342,7 +342,9 @@ The document stores source definitions and edges; control snapshots prepare all
 lookup tables, curves and storage outside the callback.
 
 `editor/ParameterProvenance` projects existing envelopes, pattern FX bindings and
-recorded automation as bounded read-only source references. These retain their
+recorded automation as bounded read-only source references. Parameter GT/GX commands
+resolve their native argument bindings and expose named gate parameters through
+the same references, including exact row and FX-column navigation. These retain their
 base-setting semantics and cannot be cut or repatched as additive graph wires.
 Both session adapters expose `graph.provenance.get`, even stopped or without a
 prepared vendor. The Mac graph loads one selected parameter's source cards
@@ -400,3 +402,9 @@ candidate copies, then retain their native atomic publication/history paths.
 Routing and plugin identities remain stable. Windows rack and reusable-recipe
 parameter windows share one retained native owner; the target determines the
 existing rack or graph API, without adding another musical state representation.
+
+### Persistent gate pattern commands
+
+`GT` (`gate`) and `GX` (`gate-stop`) use the native command catalog and named-parameter storage. `PatternGateRuntime` prepares bounded channel/destination slots and ordered subrow events; it evaluates in musical beats, retains phase across notes/orders, and chases preceding definitions when starting at an order/row. `GateSignal` defines fixed rhythmic edges with independently shortened rising/falling transitions. Sample pitch is evaluated in the shared mixer; native channel volume/pan use the prepared channel bus when present, including its routed plugin audio. Rack parameter gates overlay the current automation baseline before song modulation; stopping removes that overlay. VST3 values use bounded sample-offset queues. No callback preparation or allocation is involved.
+
+The Mac Gate inspector is a dockable AppKit panel with a two-cycle waveform, continuous sliders, exact fraction-capable fields and a captured cell/revision. The Windows Gate inspector uses native controls and Direct2D in a retained modeless window. Both write the existing guarded pattern API and share its Undo, clipboard binding and persistence semantics.

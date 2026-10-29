@@ -8022,7 +8022,9 @@
                       "tempo-slide",
                       "row-length",
                       "scratch",
-                      "scratch-stop"
+                      "scratch-stop",
+                      "gate",
+                      "gate-stop"
                     ]
                   },
                   "parameters": {
@@ -12679,7 +12681,9 @@
                       "tempo-slide",
                       "row-length",
                       "scratch",
-                      "scratch-stop"
+                      "scratch-stop",
+                      "gate",
+                      "gate-stop"
                     ]
                   },
                   "parameters": {
@@ -17767,7 +17771,9 @@
                       "tempo-slide",
                       "row-length",
                       "scratch",
-                      "scratch-stop"
+                      "scratch-stop",
+                      "gate",
+                      "gate-stop"
                     ]
                   },
                   "parameters": {
@@ -18118,7 +18124,9 @@
                         "tempo-slide",
                         "row-length",
                         "scratch",
-                        "scratch-stop"
+                        "scratch-stop",
+                        "gate",
+                        "gate-stop"
                       ]
                     },
                     "parameters": {
@@ -24259,7 +24267,9 @@
             "tempo-slide",
             "row-length",
             "scratch",
-            "scratch-stop"
+            "scratch-stop",
+            "gate",
+            "gate-stop"
           ]
         },
         "parameters": {
@@ -25204,6 +25214,308 @@
                 "type": "object",
                 "properties": {},
                 "additionalProperties": false
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "enum": [
+                      "volume",
+                      "pitch",
+                      "pan",
+                      "parameter"
+                    ],
+                    "default": "volume"
+                  },
+                  "floor": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 0
+                  },
+                  "ceiling": {
+                    "type": "number",
+                    "minimum": -96,
+                    "maximum": 96,
+                    "default": 1
+                  },
+                  "period": {
+                    "type": "number",
+                    "minimum": 1.52587890625e-05,
+                    "maximum": 256,
+                    "default": 0.5
+                  },
+                  "phase": {
+                    "type": "number",
+                    "minimum": -65536,
+                    "maximum": 65536,
+                    "default": 0
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0.5
+                  },
+                  "rise": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 256,
+                    "default": 0.03125
+                  },
+                  "fall": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 256,
+                    "default": 0.03125
+                  },
+                  "riseShape": {
+                    "enum": [
+                      "direct",
+                      "linear",
+                      "ease-in",
+                      "ease-out",
+                      "ease-in-out"
+                    ],
+                    "default": "linear"
+                  },
+                  "fallShape": {
+                    "enum": [
+                      "direct",
+                      "linear",
+                      "ease-in",
+                      "ease-out",
+                      "ease-in-out"
+                    ],
+                    "default": "linear"
+                  },
+                  "linked": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "binding": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255,
+                    "default": 0
+                  },
+                  "pitchRange": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 96,
+                    "default": 2
+                  }
+                },
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "target"
+                      ],
+                      "properties": {
+                        "target": {
+                          "const": "parameter"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "binding"
+                      ],
+                      "properties": {
+                        "binding": {
+                          "minimum": 1
+                        }
+                      }
+                    },
+                    "else": {
+                      "properties": {
+                        "binding": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "target": {
+                          "const": "volume"
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "floor": {
+                          "minimum": 0,
+                          "maximum": 4
+                        },
+                        "ceiling": {
+                          "minimum": 0,
+                          "maximum": 4
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "target": {
+                          "const": "pitch"
+                        }
+                      },
+                      "required": [
+                        "target"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "floor": {
+                          "minimum": -96,
+                          "maximum": 96
+                        },
+                        "ceiling": {
+                          "minimum": -96,
+                          "maximum": 96
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "target": {
+                          "const": "pan"
+                        }
+                      },
+                      "required": [
+                        "target"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "floor": {
+                          "minimum": -1,
+                          "maximum": 1
+                        },
+                        "ceiling": {
+                          "minimum": -1,
+                          "maximum": 1
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "target": {
+                          "const": "parameter"
+                        }
+                      },
+                      "required": [
+                        "target"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "floor": {
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "ceiling": {
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "duration": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "native": {
+                "const": "gate-stop"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "enum": [
+                      "volume",
+                      "pitch",
+                      "pan",
+                      "parameter",
+                      "all"
+                    ],
+                    "default": "all"
+                  },
+                  "binding": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255,
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false,
+                "allOf": [
+                  {
+                    "if": {
+                      "required": [
+                        "target"
+                      ],
+                      "properties": {
+                        "target": {
+                          "const": "parameter"
+                        }
+                      }
+                    },
+                    "then": {
+                      "required": [
+                        "binding"
+                      ],
+                      "properties": {
+                        "binding": {
+                          "minimum": 1
+                        }
+                      }
+                    },
+                    "else": {
+                      "properties": {
+                        "binding": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  }
+                ]
               },
               "duration": {
                 "const": 0

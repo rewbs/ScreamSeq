@@ -25,18 +25,19 @@ ParameterProvenancePage parameterProvenance(const NativeSong &native,const OpenM
   using Column=std::tuple<uint64_t,uint64_t,uint8_t,uint16_t>;
   std::map<Column,size_t> columns;
   for(const auto &c:native.performance.commands) {
-    if(c.kind!=PatternCommandKind::ParameterSet&&c.kind!=PatternCommandKind::ParameterSlide)continue;
-    const auto binding=native.performance.bindings.find(c.binding);
+    if(c.kind!=PatternCommandKind::ParameterSet&&c.kind!=PatternCommandKind::ParameterSlide&&!isGate(c))continue;
+    const auto bindingID=parameterBinding(c);
+    const auto binding=native.performance.bindings.find(bindingID);
     if(binding==native.performance.bindings.end()||binding->second.plugin!=plugin||binding->second.parameter!=parameter||!visible(c.pattern)||!tracks.contains(c.track))continue;
-    const Column key{c.pattern,c.track,c.column,c.binding};auto found=columns.find(key);
+    const Column key{c.pattern,c.track,c.column,bindingID};auto found=columns.find(key);
     if(found==columns.end()) {
       ParameterProvenanceSource s;s.kind=ParameterProvenanceKind::PatternCommands;
-      s.key="pattern:n"+std::to_string(c.pattern)+":n"+std::to_string(c.track)+":"+std::to_string(c.column)+":"+std::to_string(c.binding);
-      s.pattern=c.pattern;s.patternIndex=patterns.at(c.pattern);s.track=c.track;s.channel=tracks.at(c.track);s.column=c.column;s.binding=c.binding;s.enabled=true;
+      s.key="pattern:n"+std::to_string(c.pattern)+":n"+std::to_string(c.track)+":"+std::to_string(c.column)+":"+std::to_string(bindingID);
+      s.pattern=c.pattern;s.patternIndex=patterns.at(c.pattern);s.track=c.track;s.channel=tracks.at(c.track);s.column=c.column;s.binding=bindingID;s.enabled=true;
       s.position=c.position;s.endPosition=c.position;found=columns.emplace(key,all.size()).first;all.push_back(std::move(s));
     }
     auto &s=all[found->second];s.count++;s.position=std::min(s.position,c.position);s.endPosition=std::max(s.endPosition,c.position);
-    const ParameterProvenanceCommand item{c.kind,c.position,c.duration,c.value};
+    const auto &item=c;
     const auto where=std::lower_bound(s.commands.begin(),s.commands.end(),item.position,[](const auto &a,uint32_t p){return a.position<p;});
     s.commands.insert(where,item);if(s.commands.size()>128){s.commands.pop_back();s.omittedCommands++;}
   }

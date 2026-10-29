@@ -934,9 +934,11 @@ Renderer::Renderer(const std::vector<std::byte> &bytes, uint32_t rate, uint32_t 
 		auto &renderer=*static_cast<Renderer *>(context);auto &song=*renderer.song_;
 		if(renderer.preciseNotes_)count=renderer.preciseNotes_->prepare(song,count);
 		if(renderer.scratches_)count=renderer.scratches_->limit(song,count);
+		if(renderer.gates_)count=renderer.gates_->limit(song,count);
 		if(renderer.nativePatterns_)count=renderer.nativePatterns_->prepare(song,count);
 		if(renderer.scratches_)count=renderer.scratches_->prepare(song,count);
 		if(renderer.recordNudges_)renderer.recordNudges_->prepare(song,count);
+		if(renderer.gates_)renderer.gates_->prepare(song,count);
 		const auto &state=song.m_PlayState;
 		if(renderer.renderHostTime_&&renderer.hostTicksPerSample_>0&&!state.m_flags[SONG_PAUSED|SONG_FADINGSONG]&&state.m_nSamplesPerTick&&state.TicksOnRow()) {
 			const double units=state.NativeRowStep(performanceUnitsPerRow);

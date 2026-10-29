@@ -16,7 +16,7 @@
         case openGraphCurveCommand:case dockGraphCurveCommand:case graphEditingWorkspaceCommand:case editorGraphCurveTab:
         case dockPreciseNotesCommand:case editorPreciseNotesTab:
         case connectedWorkspaceCommand:case dockAutomationCommand:case dockInstrumentCommand:case editorAutomationTab:case editorInstrumentTab:
-        case sampleRecordCommand:case patternRenderOptionsCommand:case scratchGesturesCommand:case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
+        case sampleRecordCommand:case patternRenderOptionsCommand:case gateInspectorCommand:case scratchGesturesCommand:case sampleDetailCommand:case sampleBrowseCommand:case audioSettingsCommand:case instrumentEnvelopeCommand:case auditionCommand:return true;
         default:return false;
         }
     }

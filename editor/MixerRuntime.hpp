@@ -95,6 +95,8 @@ private:
   ObserveRoute routeObserver_=nullptr;
   void *routeObserverContext_=nullptr;
   TransformRoute routeTransform_=nullptr;void *routeTransformContext_=nullptr;
+  void *gateContext_=nullptr;
+  void (*gateControls_)(void *,size_t,uint32_t,float &,float &) noexcept=nullptr;
   bool addRoute(Delay &,const float *,float *,float,RouteKind,size_t) noexcept;
   // Each route is observed synchronously before scratch is reused; no buffer
   // per cable and no alteration of the existing destination summing order.
@@ -112,6 +114,7 @@ public:
   void observer(Observe callback,void *context) {observer_=callback;observerContext_=context;} // Before rendering.
   void routeObserver(ObserveRoute callback,void *context) {routeObserver_=callback;routeObserverContext_=context;}
   void routeTransform(TransformRoute callback,void *context) {routeTransform_=callback;routeTransformContext_=context;}
+  void gateControls(void (*callback)(void *,size_t,uint32_t,float &,float &) noexcept,void *context){gateControls_=callback;gateContext_=context;}
   void updateLatencyPlan(MixerPlan); // Control thread; topology is unchanged.
   // Control thread, before publication. The source's ownership/bindings must be
   // stable (its delay contents may be rendering). Retain source until activate.

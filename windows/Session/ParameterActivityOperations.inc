@@ -43,7 +43,7 @@ Json DocumentController::parameterActivityOperation(const std::string &method,co
       result={{"token",std::to_string(activity->identity)+":"+std::to_string(activity->generation())},{"target",processorObject(target)},{"parameter",parameter}};
     } else if(method=="parameter.activity.get") {
       keys(p,{"after","limit"});const auto after=integer(p.value("after",Json(0)),0,9007199254740991ULL),limit=integer(p.value("limit",Json(2048)),1,8192);
-      static constexpr const char *origins[]={"baseline","manual","plugin-editor","recorded","envelope","pattern-set","pattern-slide","graph","reset","graph-source"};
+      static constexpr const char *origins[]={"baseline","manual","plugin-editor","recorded","envelope","pattern-set","pattern-slide","graph","reset","graph-source","pattern-gate"};
       Json points=Json::array();uint64_t cursor=after,oldest=0,latest=0;
       if(activity){const auto &history=activity->history();if(!history.empty()){oldest=history.front().sequence;latest=history.back().sequence;}
         for(const auto &v:history)if(v.sequence>after){if(points.size()>=limit)break;cursor=v.sequence;const auto &s=v.source;
@@ -66,11 +66,11 @@ Json DocumentController::parameterActivityOperation(const std::string &method,co
         for(const auto &lane:native.automation)if(lane.plugin==target.plugin&&lane.parameter==parameter)
           add({{"kind","envelope"},{"title","Pattern "+std::to_string(patternIndex(lane.pattern))+" envelope · "+std::to_string(lane.points.size())+" points"},{"id",id(lane.id)},
             {"pattern",patternIndex(lane.pattern)},{"enabled",lane.enabled},{"plugin",target.plugin},{"parameter",parameter}});
-        for(const auto &c:native.performance.commands){const auto binding=native.performance.bindings.find(c.binding);if(binding==native.performance.bindings.end()||binding->second.plugin!=target.plugin||binding->second.parameter!=parameter)continue;
+        for(const auto &c:native.performance.commands){const auto binding=native.performance.bindings.find(Tracker::parameterBinding(c));if(binding==native.performance.bindings.end()||binding->second.plugin!=target.plugin||binding->second.parameter!=parameter)continue;
           uint16_t channel=UINT16_MAX;for(const auto &[index,track]:native.tracks)if(track.id==c.track)channel=index;
           const bool slide=c.kind==Tracker::PatternCommandKind::ParameterSlide;
-          add({{"kind",slide?"pattern-slide":"pattern-set"},{"title",std::string(slide?"PL":"PS")+" · Pattern "+std::to_string(patternIndex(c.pattern))+" · row "+decimal(double(c.position)/65536,3)+" · channel "+std::to_string(unsigned(channel)+1)+" · FX "+std::to_string(unsigned(c.column)+1)},
-            {"pattern",patternIndex(c.pattern)},{"position",c.position},{"channel",channel},{"column",c.column},{"binding",c.binding},{"enabled",true}});
+          add({{"kind",Tracker::isGate(c)?"pattern-gate":slide?"pattern-slide":"pattern-set"},{"title",std::string(Tracker::isGate(c)?(c.native==Tracker::NativePatternOp::Gate?"GT":"GX"):slide?"PL":"PS")+" · Pattern "+std::to_string(patternIndex(c.pattern))+" · row "+decimal(double(c.position)/65536,3)+" · channel "+std::to_string(unsigned(channel)+1)+" · FX "+std::to_string(unsigned(c.column)+1)},
+            {"pattern",patternIndex(c.pattern)},{"position",c.position},{"channel",channel},{"column",c.column},{"binding",Tracker::parameterBinding(c)},{"enabled",true}});
         }
         const auto &rack=project_.preserved.at("plugins");const auto found=std::find_if(rack.begin(),rack.end(),[&](const auto &v){return v.at("instanceID")==target.plugin;});const auto slot=size_t(found-rack.begin());
         const auto &automation=project_.preserved.at("automation");const auto count=std::count_if(automation.begin(),automation.end(),[&](const auto &v){return v.at(0)==slot&&v.at(1)==parameter;});

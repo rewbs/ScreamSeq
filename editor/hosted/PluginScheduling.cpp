@@ -99,7 +99,10 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     // Stream dense source values into bounded per-parameter queues. VST3 gets
     // up to sixteen sample-offset points per audio call, never a scheduled
     // buffer's worth of future points or a one-sample audio-call workaround.
-    bool denseModulation=false;
+    bool denseModulation=false,activeGate=false;
+    if(modulation)for(const auto &g:modulation->gates)if(gateParameter(g.parameter)){activeGate=true;break;}
+    if(activeGate)count=std::min(count,renderBackend()&&renderBackend()->supportsSampleOffsetParameters()?16u:1u);
+    denseModulation=activeGate;
     if(modulation && !modulation->targets.empty()){
       auto clock=modulation->clock;const auto elapsed=position+consumed-modulation->frame;
       clock.beat+=clock.playing?elapsed*clock.tempo/(60*rate_):0;clock.position+=elapsed*clock.unitsPerFrame;
@@ -109,7 +112,7 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
       // Clamping a linear sum creates corners. Sample those segments densely
       // instead of interpolating through a saturation boundary.
       if(!denseModulation && count>1)for(const auto &target:modulation->targets)for(auto frame:{position+consumed,position+consumed+count-1}){
-        double raw=(baselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum);
+        double raw=(gatedBaselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum);
         for(const auto &source:modulation->runtime->targets()[target.index].contributions){double value;if(!modulation->runtime->scaledContribution(source,frame,value))return false;raw+=value;}
         if(raw<0 || raw>1)denseModulation=true;
       }
@@ -127,9 +130,14 @@ bool NativePlugin::process(float *buffer, uint32_t frames, uint64_t position, st
     // value at each sample. Dense VST3 points live inside ordinary sub-blocks;
     // AU/builtins split only at an actual discrete value change.
     for(const auto &target:sampled){const bool offsets=renderBackend()&&renderBackend()->supportsSampleOffsetParameters();for(uint32_t i=0;i<(offsets?count:1u);++i){const auto value=target.values[consumed+i];if(!std::isfinite(value)||value<0||value>1||!appliedParameter(target.parameter,target.minimum+(target.maximum-target.minimum)*value,position+consumed+i,target.source,i))return false;}}
+    if(activeGate)for(const auto &g:modulation->gates){
+      if(!gateParameter(g.parameter)||std::any_of(modulation->targets.begin(),modulation->targets.end(),[&](const auto &t){return t.parameter==g.parameter;}))continue;
+      const bool offsets=renderBackend()&&renderBackend()->supportsSampleOffsetParameters();
+      for(uint32_t i=0;i<(offsets?count:1u);++i){const auto frame=position+consumed+i;if(!effectiveParameter(g.parameter,gatedBaselineAt(g.parameter,frame),frame,{ParameterOrigin::PatternGate},i))return false;}
+    }
     if(modulation)for(const auto &target:modulation->targets){
       for(uint32_t offset=0;offset<count;offset=denseModulation?offset+1:offset==0&&count>1?count-1:count){const auto frame=position+consumed+offset;
-        const auto base=(baselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum);double value;
+        const auto base=(gatedBaselineAt(target.parameter,frame)-target.minimum)/(target.maximum-target.minimum);double value;
         if(!modulation->runtime->overlay(target.index,frame,base,value) || !effectiveParameter(target.parameter,target.minimum+(target.maximum-target.minimum)*value,frame,{ParameterOrigin::Graph},offset))return false;
       }
       const auto frame=position+consumed+count-1;

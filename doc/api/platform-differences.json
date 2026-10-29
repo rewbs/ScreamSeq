@@ -3,7 +3,7 @@
   "policy": "Evidence ratchet only. Baseline matches are not parity passes, loss waivers, or permission to skip release gates. Intentional changes require reviewing exact vectors, inventory and native behavior on both platforms.",
   "schema": {
     "path": "mac/Tools/resonance-api.schema.json",
-    "sha256": "70c70aa2ab41f7834d94d681103384ae2a8b462756ef6cfddf6b9a52b5d36406",
+    "sha256": "c97c151be78ebb5b9f37d547eb18e08ee98e45aa58bb213053ef183d023a74bd",
     "review20261023": "Source review f4d0fb7a4/a33b7dca9: seven native-take descriptions now describe guarded Mac VST3 processing verification; Commit adds strict optional boolean restoreSavedState with completed/stopped/closed-editor guards. Method inventory and expected vector outcomes are unchanged. New behavior awaits native qualification; see doc/windows-parity-plan-2026-10-09/LIVE-PARAMETER-RELEASE-2026-10-23.md.",
     "methods": [
       "api.describe",
@@ -258,7 +258,8 @@
       "workspace.ruler",
       "workspace.shortcut.set"
     ],
-    "review20261024": "Source adds guarded accepted-state document.exportAudio on both platforms, with shared WAV rendering and native atomic publication. Inventory reviewed; runtime qualification pending. See AUDIO-EXPORT-2026-10-24.md. No parity/performance gate is waived."
+    "review20261024": "Source adds guarded accepted-state document.exportAudio on both platforms, with shared WAV rendering and native atomic publication. Inventory reviewed; runtime qualification pending. See AUDIO-EXPORT-2026-10-24.md. No parity/performance gate is waived.",
+    "review20261028": "Advanced gate PR: the five native-command enumerations and nativePatternCommand definition accept gate/gate-stop, with typed target, range, timing, shape and binding constraints. The method inventory and existing vector expectations are unchanged. Both adapters use the shared command validator and stable parameter-binding rules. Gate session, socket, persistence and rendered-audio tests were added; Windows native runtime qualification remains pending."
   },
   "platforms": {
     "windows": {

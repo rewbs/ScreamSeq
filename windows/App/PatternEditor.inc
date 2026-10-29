@@ -102,7 +102,7 @@
         const auto h=controls.at(id);const int count=GetWindowTextLengthW(h);std::wstring value(size_t(count)+1,0);
         GetWindowTextW(h,value.data(),count+1);value.resize(count);return value;
     }
-    bool isEffectControl(int id)const{return (id>=effectKind&&id<=effectUnits)||(id>=effectFieldBase&&id<effectFieldBase+10)||(id>=effectChoiceBase&&id<effectChoiceBase+10);}
+    bool isEffectControl(int id)const{return (id>=effectKind&&id<=effectUnits)||(id>=effectFieldBase&&id<effectFieldBase+16)||(id>=effectChoiceBase&&id<effectChoiceBase+16);}
     double effectNumber(int id,double low,double high,bool whole=false) const {
         const auto text=effectField(id);size_t used=0;double number=0;
         try {number=std::stod(text,&used);}catch(...){throw std::runtime_error("Enter a numeric FX value");}
@@ -122,7 +122,7 @@
         auto edit=[&](int id){controls[id]=CreateWindowExW(WS_EX_CLIENTEDGE,L"EDIT",L"",WS_CHILD|WS_TABSTOP|ES_AUTOHSCROLL,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),GetModuleHandleW(nullptr),nullptr);SendMessageW(controls.at(id),EM_SETLIMITTEXT,id==effectSearch?128:48,0);};
         for(int id:{effectKind,effectBinding,effectUnits})combo(id);
         for(int id:{effectValue,effectOffset,effectDuration,effectRange,effectSearch})edit(id);
-        for(int i=0;i<10;++i){edit(effectFieldBase+i);combo(effectChoiceBase+i);}
+        for(int i=0;i<16;++i){edit(effectFieldBase+i);combo(effectChoiceBase+i);}
         for(const auto *unit:{L"Beats",L"Rows"})ScreamSeq::NativeInputGate::present(controls.at(effectUnits),CB_ADDSTRING,0,reinterpret_cast<LPARAM>(unit));
         ScreamSeq::NativeInputGate::present(controls.at(effectUnits),CB_SETCURSEL,0,0);
         for(auto [id,h]:controls)if((id==effectsCommand||isEffectControl(id))&&!h)throw std::runtime_error("Cannot create pattern FX controls");
@@ -175,6 +175,8 @@
         SetFocus(controls.at(target));ScreamSeq::NativeInputGate::present(controls.at(target),EM_SETSEL,0,-1);
     }
     void openEffectEditor(const std::string &code="",bool reload=false) {
+        const auto gateCell=view->effect(patternIndex,row,channel,column>=3?(column-3)/2:0);
+        if(code=="GT"||(code.empty()&&gateCell&&gateCell->kind==Tracker::PatternCommandKind::Native&&gateCell->native==Tracker::NativePatternOp::Gate)){openGateInspector();return;}
         if(code=="SK"&&view->nativePattern->scratchGestures.empty()){openScratchGestures();return;}
         graphEditorOpen=false;mixerEditorOpen=false;
         if(busy)throw std::runtime_error("Wait for the document worker before opening an FX draft");effectInline=false;revealWorkspaceMainEditor("effects");
@@ -200,6 +202,7 @@
     void openInlineEffect() {
         if(effectDraftExists&&effectDraftDirty){openEffectEditor();return;}
         const auto c=column>=4?view->effect(patternIndex,row,channel,(column-3)/2):std::optional<Tracker::PatternCommand>{};
+        if(c&&c->kind==Tracker::PatternCommandKind::Native&&c->native==Tracker::NativePatternOp::Gate){openGateInspector();return;}
         if(!c||c->kind==Tracker::PatternCommandKind::TrackerEffect||currentEffectFields().empty()){openEffectEditor();return;}
         openEffectEditor("",true);effectInline=true;effectEditorOpen=false;effectInlineControl=0;revealWorkspacePattern();workspaceState.focus="pattern";
         const auto fields=currentEffectFields();if(!fields.empty())for(size_t i=0;i<effectFieldsDraft.size();++i)if(effectFieldsDraft[i].at("storage")==fields[std::min(effectFieldIndex,fields.size()-1)].at("storage")){effectInlineControl=effectFieldControl(i);effectInlineField=std::min(effectFieldIndex,fields.size()-1);}
@@ -213,7 +216,7 @@
         for(size_t i=0;i<effectFieldsDraft.size();++i)if(effectFieldsDraft[i].at("key")=="rateMode"&&id==effectFieldControl(i)){
             try{effectDraftCommand=readEffectFields();fillEffectFields();effectFieldChanged();}catch(const std::exception&e){effectEditorStatus=wide(e.what());}return true;
         }
-        if(id==effectKind){const auto selected=SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0);if(selected>=0&&size_t(selected)<visibleEffectChoices.size()){effectSelected=int(visibleEffectChoices[size_t(selected)]);selectEffectFields(ScreamSeq::PatternFields::defaults(effectChoices.at(effectSelected)));effectFieldChanged();}return true;}
+        if(id==effectKind){const auto selected=SendMessageW(controls.at(effectKind),CB_GETCURSEL,0,0);if(selected>=0&&size_t(selected)<visibleEffectChoices.size()){effectSelected=int(visibleEffectChoices[size_t(selected)]);if(effectChoices.at(effectSelected).value("native",std::string())=="gate"){openGateInspector();return true;}selectEffectFields(ScreamSeq::PatternFields::defaults(effectChoices.at(effectSelected)));effectFieldChanged();}return true;}
         if(id==effectApply) {
             try {
                 if(effectDraftDocument!=documentId||effectDraftRevision!=view->session.revision)throw std::runtime_error("Document changed / draft retained. Use cursor to reload before applying");
@@ -247,7 +250,7 @@
         // Pattern header placement is shared with its other actions in
         // layoutControls; using the wider graph-lane host overlapped controls.
         for(int id:{effectValue,effectOffset,effectDuration,effectRange,effectBinding})place(id,0,0,1,1,false);
-        for(int i=0;i<10;++i){place(effectFieldBase+i,0,0,1,1,false);place(effectChoiceBase+i,0,0,1,1,false);}
+        for(int i=0;i<16;++i){place(effectFieldBase+i,0,0,1,1,false);place(effectChoiceBase+i,0,0,1,1,false);}
         place(effectReload,r.x+r.w-152,r.y+4,82,24,show);place(effectApply,r.x+r.w-64,r.y+4,58,24,show);
         const float x=r.x+12,w=std::max(0.0f,r.w-24);place(effectSearch,x,r.y+47,std::min(170.0f,w*.26f),25,show);
         place(effectKind,x+std::min(180.0f,w*.28f),r.y+47,w-std::min(180.0f,w*.28f)-92,260,show);place(effectUnits,r.x+r.w-94,r.y+47,82,160,show);

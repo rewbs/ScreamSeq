@@ -686,6 +686,7 @@
               if(binding){require(bindings.contains(binding),"Clipboard parameter effect needs its stable binding");binding=bindings.at(binding);}
               PatternCommand command{patternID,metadata.tracks.at(destChannel).id,uint32_t(position),uint32_t(integer(c[@"duration"]?:@0,0,UINT32_MAX)),col,kind,binding,number(c[@"value"]?:@0,-96,96),uint8_t(integer(c[@"pitchRange"]?:@2,1,96)),uint8_t(integer(c[@"effect"]?:@0,0,MAX_EFFECTS-1)),uint8_t(integer(c[@"parameter"]?:@0,0,255))};
               decodeNativePattern(command,c);
+              if(const auto gate=gateBinding(command)){require(bindings.contains(gate),"Clipboard gate needs its stable parameter binding");setParameterBinding(command,bindings.at(gate));}
               if(command.kind==PatternCommandKind::Native&&command.native==NativePatternOp::Scratch)require(scratchDefinitions.contains(uint16_t(command.arguments[0])),"Clipboard SK command needs its scratch phrase");
               auto old=std::find_if(metadata.performance.commands.begin(),metadata.performance.commands.end(),[&](const auto &x){return x.pattern==patternID&&x.track==command.track&&x.position/performanceUnitsPerRow==position/performanceUnitsPerRow&&x.column==col;});
               if(old!=metadata.performance.commands.end()){if([mode isEqual:@"mix"])continue;metadata.performance.commands.erase(old);}
