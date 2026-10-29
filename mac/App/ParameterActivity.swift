@@ -53,11 +53,11 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     table.remove = {[weak self] in self?.deletePoint()}
     pointTime.fixed(width:85);pointValue.fixed(width:90);pointTime.setAccessibilityLabel("Recorded point seconds");pointValue.setAccessibilityLabel("Recorded point value")
     pointTime.delegate=self;pointValue.delegate=self;pointTime.target=self;pointValue.target=self;pointTime.action = #selector(commitPointFields);pointValue.action = #selector(commitPointFields)
-    loadMore=ActionButton("Next page"){[weak self] in guard let self else{return};self.recordedOffset=self.recordedOffset+512<self.recordedTotal ? self.recordedOffset+512:0;self.loadRecorded()}
+    loadMore=ActionButton("Next page"){[weak self] in self?.nextRecordedPage()}
     recordBar=stack(.horizontal,[Theme.label("Seconds",size:11),pointTime,Theme.label("Value",size:11),pointValue,ActionButton("Add / update"){[weak self] in self?.addPoint()},ActionButton("Delete point"){[weak self] in self?.deletePoint()},loadMore!],spacing:6)
     recordBar.isHidden=true
     let content=stack(.vertical,[
-      stack(.horizontal,[ActionButton("Last touched"){[weak self] in self?.lastTouched()},NSView(),ActionButton("Refresh copies"){[weak self] in self?.recordedInspection=nil;self?.reloadTargets()}]),
+      stack(.horizontal,[ActionButton("Last touched"){[weak self] in self?.lastTouched()},NSView(),ActionButton("Refresh copies"){[weak self] in self?.refreshCopies()}]),
       processor,stack(.horizontal,[search,parameter]),reading,
       stack(.horizontal,[freezeButton!,clear,NSView()]),stack(.horizontal,[viewMode,pass]),
       stack(.horizontal,[ActionButton("Play / capture pattern"){[weak self] in guard let self,!self.pending else{return};self.onCapture?()},NSView(),ActionButton("−"){[weak self] in self?.trace.zoom(0.5)},ActionButton("+"){[weak self] in self?.trace.zoom(2)},ActionButton("Fit"){[weak self] in self?.trace.fit()}]),trace,
@@ -168,7 +168,7 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
   func control(_ control:NSControl,textView:NSTextView,doCommandBy selector:Selector)->Bool {if selector==#selector(NSResponder.cancelOperation(_:)),pointDraft {pointWork?.cancel();pointWork=nil;pointDraft=false;pointFailed=false;pointOwner=nil;showRecordedSelection();return true};return false}
   @objc func selectParameter(){if needsCompletion {let wanted=filtered.indices.contains(parameter.indexOfSelectedItem) ? filtered[parameter.indexOfSelectedItem]["id"] as? Int:nil;filterParameters();finishAutomaticEdit{[weak self] accepted in guard let self,accepted,let wanted,let i=self.filtered.firstIndex(where:{$0["id"] as? Int==wanted}) else{return};self.parameter.selectItem(at:i);self.selectParameter()};return};generation+=1;token="";parameterID=filtered.indices.contains(parameter.indexOfSelectedItem) ? filtered[parameter.indexOfSelectedItem]["id"] as? Int:nil;if !pending{watch()}}
   func watch(clear:Bool=false){if recordedInspection != nil{status.stringValue="Select Refresh copies to capture a live processor.";return};guard let id=parameterID,!targetKey.isEmpty else{return};request("parameter.activity.watch",["target":targetKey,"parameter":id,"clear":clear]){[weak self] data in guard let self else{return};let token=data["token"] as? String ?? "";if token != self.token {self.token=token;self.cursor=0;self.samples=[];self.audit=[];self.contributions=[:];self.passes=[];self.selectedSource=nil;self.trace.samples=[]};self.lastSourceRevision="";self.loadSources()}}
-  func loadSources(){guard let id=parameterID else{return};request("parameter.activity.sources",["target":targetKey,"parameter":id]){[weak self] data in guard let self else{return};let sources=data["sources"] as? [[String:Any]] ?? [];let changed = !(self.sources as NSArray).isEqual(sources as NSArray);self.sources=sources;var rule=data["rule"] as? String ?? "";self.lastSourceRevision=self.revision;let omitted=data["omitted"] as? Int ?? 0;if omitted>0{rule+=" · \(omitted) further command sources omitted; trace links remain available."};if self.rule.stringValue != rule {self.rule.stringValue=rule};if changed && self.detailMode.selectedSegment==0 {self.reloadTableKeepingSelection()};if self.detailMode.selectedSegment==2{self.loadRecorded()}}}
+  func loadSources(){guard let id=parameterID else{return};let freezeToken=freezeGeneration;request("parameter.activity.sources",["target":targetKey,"parameter":id]){[weak self] data in guard let self,self.freezeGeneration==freezeToken else{return};let sources=data["sources"] as? [[String:Any]] ?? [];let changed = !(self.sources as NSArray).isEqual(sources as NSArray);self.sources=sources;var rule=data["rule"] as? String ?? "";self.lastSourceRevision=self.revision;let omitted=data["omitted"] as? Int ?? 0;if omitted>0{rule+=" · \(omitted) further command sources omitted; trace links remain available."};if self.rule.stringValue != rule {self.rule.stringValue=rule};if changed && self.detailMode.selectedSegment==0 {self.reloadTableKeepingSelection()};if self.detailMode.selectedSegment==2{self.loadRecorded()}}}
   func poll(){if preferredRecording != nil{if !pending{openPreferredRecording()};return};if detailMode.selectedSegment==2,!needsCompletion,!pending,let current=onContext?().revisionToken,current != recordedRevision,ProcessInfo.processInfo.systemUptime-lastRecordedRead>0.5{loadRecorded();return};if recordedInspection != nil{return};let now=ProcessInfo.processInfo.systemUptime;guard !frozen,!pending,table.editedRow<0,now-lastPoll>=0.1 else{return};lastPoll=now
     if preferredTarget != nil || preferredGraph != nil || parameters.isEmpty || now-lastCatalog>2 {reloadTargets();return}
     guard parameterID != nil else{return}
@@ -265,10 +265,24 @@ final class ParameterActivityEditor:NSView,NSTableViewDataSource,NSTableViewDele
     let edit=pattern==editPattern ? Double(row):nil,play=pattern==playPattern ? position.map{$0/256}:nil
     if trace.editRow != edit || trace.playRow != play {trace.editRow=edit;trace.playRow=play}
   }
-  @objc func openSelected(){guard let source=selectedSource else{status.stringValue="Select a source, recent change, or point on the trace.";return};onOpen?(source)}
+  @objc func openSelected(){
+    guard let source=selectedSource else{status.stringValue="Select a source, recent change, or point on the trace.";return}
+    finishAutomaticEdit{[weak self] accepted in if accepted{self?.onOpen?(source)}}
+  }
   func openSelectedMapping(){
     guard var source=selectedSource,source["connection"] != nil || (source["scope"] as? String=="song" && source["node"] as? String != nil) else{status.stringValue="Select a modulation contribution to edit its range.";return}
-    source["editConnection"]=true;onOpen?(source)
+    source["editConnection"]=true
+    finishAutomaticEdit{[weak self] accepted in if accepted{self?.onOpen?(source)}}
+  }
+  func nextRecordedPage(){
+    if finishBefore({[weak self] in self?.nextRecordedPage()}){return}
+    guard !pending else{return}
+    recordedOffset=recordedOffset+512<recordedTotal ? recordedOffset+512:0;loadRecorded()
+  }
+  func refreshCopies(){
+    if finishBefore({[weak self] in self?.refreshCopies()}){return}
+    guard !pending else{return}
+    recordedInspection=nil;reloadTargets()
   }
   func loadRecorded(movedPoint:(from:Double,to:Double)?=nil){
     guard !pointDraft,!pointWriting else{return}

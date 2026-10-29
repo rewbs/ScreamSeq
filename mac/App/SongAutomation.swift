@@ -64,7 +64,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   private func readCanvas(){
     let existing=Dictionary(uniqueKeysWithValues:points.map{($0["frame"] as! Int,($0["value"] as! NSNumber).doubleValue)})
     points=canvas.points.map{p in let old=existing[p.position];let scalar=old.flatMap{normalize($0)==p.value ? $0:nil} ?? (minimum+p.value*(maximum-minimum));return ["frame":p.position,"value":scalar]}
-    changed()
+    changed();updateAccessiblePoint()
   }
   private func changed(){generation+=1;hasDraft=true;failed=false;status.stringValue="Saving song automation…";if !canvas.isDragging{schedule()}}
   private func schedule(){
@@ -135,7 +135,13 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
   func showPoint(){guard !fieldDraft else{return};setting=true;defer{setting=false}
     pointIndex.stringValue=String(canvas.selected ?? -1)
     if let i=canvas.selected,points.indices.contains(i){time.stringValue=unitIndex==0 ? String(format:"%.10g",Double(points[i]["frame"] as! Int)/48000):String(points[i]["frame"] as! Int);value.stringValue=String(format:"%.9g",(points[i]["value"] as! NSNumber).doubleValue)}else{time.stringValue="0";value.stringValue=String(format:"%.9g",(target?["value"] as? NSNumber)?.doubleValue ?? minimum)}
-    canvas.setAccessibilityValue("\(points.count) song points; selected time \(time.stringValue), value \(value.stringValue)")
+    updateAccessiblePoint()
+  }
+  private func updateAccessiblePoint(){
+    guard let index=canvas.selected,points.indices.contains(index) else{canvas.setAccessibilityValue("\(points.count) song points; no point selected");return}
+    let frame=points[index]["frame"] as? Int ?? 0,scalar=(points[index]["value"] as? NSNumber)?.doubleValue ?? 0
+    let position=unitIndex==0 ? String(format:"%.10g seconds",Double(frame)/48000):"\(frame) frames"
+    canvas.setAccessibilityValue("\(points.count) song points; selected time \(position), value \(String(format:"%.9g",scalar))")
   }
   @discardableResult private func acceptFields()->Bool {
     guard parameterID != nil,target?["writable"] as? Bool != false,let t=Double(time.stringValue),t.isFinite,t>=0,let v=Double(value.stringValue),v.isFinite,v>=minimum,v<=maximum else{fail("Enter a finite time and a value within the parameter's native range.");return false}
@@ -146,7 +152,7 @@ final class SongAutomationEditor: NSView, NSSearchFieldDelegate {
     var next=points;if let selected,next.indices.contains(selected){next.remove(at:selected)}
     guard next.count<100000 else{fail("Automation is limited to 100000 points.");return false}
     next.append(["frame":frame,"value":v]);next.sort{($0["frame"] as! Int)<($1["frame"] as! Int)}
-    fieldDraft=false;if !(next as NSArray).isEqual(points as NSArray){points=next;renderPoints();canvas.selected=points.firstIndex{$0["frame"] as? Int==frame};changed()};return true
+    fieldDraft=false;if !(next as NSArray).isEqual(points as NSArray){points=next;renderPoints();canvas.selected=points.firstIndex{$0["frame"] as? Int==frame};changed()};updateAccessiblePoint();return true
   }
   @objc func setPoint(){guard !pending else{return};if acceptFields(){schedule()}}
   func newPoint(){afterEdits{[weak self] in self?.canvas.selected=nil;self?.showPoint();if let self{self.window?.makeFirstResponder(self.time)}}}

@@ -1,156 +1,100 @@
-# Mac parity audit restarted from current main
+# Mac parity checkpoint from current main
 
-Baseline: `4885bb9997393bcf072639358da3a900a20efb01`, fetched from
-`rewbs/ScreamSeq` on 28 October 2026. Branch: `codex/mac-parity-current-main`.
-This audit supersedes the earlier attempt based on `ffe81aa4b`. Its test
-results do not qualify this branch. The original work remains preserved in
-local commit `0adfbb0db` for selective reuse.
+This PR is a tested partial parity checkpoint, not a claim that every Windows
+change has been ported. At the user's request, the work is being brought to a
+reviewable stopping point. The dynamic left menu is owned by another session and
+is outside this PR.
 
-The primary checkout contains other sessions' changes and has not been reset.
-The dynamic left context menu is owned by a separate session and is excluded
-from this implementation. Native platform conventions remain appropriate;
-Windows-specific HWND, WASAPI, WinMM and DPI implementation is not copied into
-AppKit/Core Audio/CoreMIDI.
+## Base and scope
 
-## Audit inventory
+The task restarted from freshly fetched main `4885bb9997393bcf072639358da3a900a20efb01`.
+The former attempt based on `ffe81aa4b` remains preserved in `0adfbb0db`; its test
+results do not qualify this branch. Before raising this PR, main was fetched again
+and the branch rebased onto `d1b52ade532d2d8fd9308a374ad61dd91ec7968c`, which includes
+PR #8's shared advanced gate implementation and Mac inspector. Both the Gate
+inspector and independent Graph Curve remain registered and tested.
 
-The fresh baseline contains 590 commits after the former baseline. Of these,
-384 touch `windows/`; 68 also touch Mac sources and 84 touch shared sources.
-These counts describe the review inventory, not completion. The local receipt
-`bin/mac-parity-current/evidence/windows-commits.json` records each commit,
-subject, changed files and review status. Earlier Windows features are also
-checked against the current platform implementations.
+The initial inventory covered 590 commits after the former baseline, including
+384 touching `windows/`. Those counts describe review scope, not completion.
+The primary checkout and other sessions' worktrees were not reset or edited.
+Native AppKit, Core Audio and CoreMIDI behavior remains platform-specific; musical
+editing continues through the existing shared model, APIs, Undo and persistence.
 
-| Area | Current source assessment | Work / verification remaining |
-| --- | --- | --- |
-| Named layouts and command search | Named storage/manager, Connected and Graph editing presets, categorized search and keyboard traversal ported. | First-batch tests and computer use passed; final integrated audit remains. |
-| Independent Graph Curve | Independent pinned/dockable owner and staged capture ported. | First-batch tests, socket and computer use passed. |
-| MIDI settings, capture and review | Guarded settings API, retained event review, ownership/loss handling, immediate Arm and busy intent ported. | First-batch tests/socket and Arm computer-use checks passed; remaining recording review edges are listed below. |
-| Precise-note live publication | Mac now uses prepared live publication and Undo/Redo. | Offline/live/refusal tests and looped playback computer use passed. |
-| Precise-note UI | Mac has automatic row editing; Windows adds cursor/edge hit testing, Save/history boundaries and queued navigation. | Port remaining behavior; retain invalid/newer drafts and exact target. |
-| Arrangement and annotations | Event counts, keyboard/page traversal and captured annotation drafts ported. | Focused interface tests passed; final combined UI qualification remains. |
-| Automatic pattern/graph/instrument edits | Both have automatic editing; Windows includes newer bank/Save/history handoffs. | Inspect each native boundary and port missing completion ordering. |
-| Plugin recording and recovery | Current main includes substantial Mac implementation and shared input/recovery contracts. | Compare original-input review, Keep-to-edit, completion guards, loss and departure behavior. |
-| Parameter Activity | Both have traces and recorded lanes; Windows has recent selection/search/keyboard/navigation fixes. | Compare field/list/canvas behavior, polling, history and target identity. |
-| Mixer, routing and plugin controls | Shared live publication and native controls exist. | Compare all newer Windows interaction fixes, retained previews, graph gestures and search. |
-| Samples, instruments and recorder | Mac native editors exist; Windows catch-up includes retained setup and keyboard fixes. | Verify current source and targeted UI/API behavior, including loop drawing and import failures. |
-| Export, project codec and history | Main includes shared codec/streaming render, guarded exports and Mac adapters. | Check accepted-song boundaries, long replies, retained takes, atomic failure and reopen. |
-| Track/row density, timing, pattern tools | Windows changes primarily implement counterparts of existing Mac tools. | Verify catalogs, stable identity, UI reachability, Undo and persistence. |
-| Native menus/accessibility/theme | Platform-native implementations differ. | Verify equivalent keyboard/accessibility workflows; dynamic left menu stays with its owner. |
+## Implemented in this checkpoint
 
-## Qualification state
+- Named workspace layouts, retained layout management, Connected and Graph editing
+  presets, categorized command search and keyboard traversal.
+- Independent pinned/dockable Graph Curve with staged target capture and draft
+  retention; arrangement event counts, page navigation and captured annotations.
+- Guarded MIDI settings API, retained MIDI capture review, immediate Arm using
+  accepted settings, source/loss handling and retained busy intent.
+- Prepared live precise-note publication and Undo/Redo without restarting transport;
+  bounded refusal, improved hit selection and ordered Save/history completion.
+- Retained song-time parameter automation editor using the shared 48 kHz timeline,
+  exact native values, automatic editing, Undo/Redo, search, zoom and source links.
+- Parameter Activity search that preserves the watched target, frozen trace
+  keyboard navigation, retained recorded-point identity and automatic editing.
+  Navigation, paging and explicit refresh finish pending point writes first.
+- Ordered composing completion across precise notes, pattern/graph curves,
+  instruments and recorded automation before native Save/export/history.
+- Captured instrument edit ownership, newer-text/keymap retention, Carry and
+  Release Node controls, and unchanged instrument edits preserving Redo.
+- Retained Core Audio settings with separate revision guards, stable device UIDs,
+  rescan retention and negotiated rate/buffer readback. A candidate output is
+  prepared before the previous output is stopped. No system default is changed.
 
-The source baseline was refetched at 12:21 UTC on 28 October; `origin/main`
-remained `4885bb9997393bcf072639358da3a900a20efb01` (zero commits ahead).
+## Qualification
 
-Full build 1 started at **07:17:23 UTC** and passed. Its exact source receipt,
-build log and test logs are retained in `bin/mac-parity-current/evidence/`.
-It passed **135/135 CTest tests**, **38/38 interface groups**, the full app socket
-suite, and the Mac parity socket suite. Live precise-note tests used an explicitly
-selected BlackHole 2ch output and passed edit/Undo/Redo continuity, refusal and
-render-clock checks. Computer use in the isolated QA app verified retained MIDI
-raw text while arming, named layouts with the independent Graph Curve, and precise
-note edits/Undo while loop playback continued with zero reported audio overruns.
-Screenshots are `cua-midi-arm.jpg`, `cua-graph-layout.jpg` and
-`cua-live-precise-undo.jpg`. These checks qualify the first batch only.
+All evidence below is local under `bin/mac-parity-current/evidence/`; build products,
+user songs, screenshots and private runtime files are excluded from the PR.
 
-Batch 2 adds the song-time automation editor, recorded-point automatic editing and
-Activity search/freeze/navigation, ordered composing completion, instrument draft
-ownership and Carry/Release Node controls, no-op instrument history preservation,
-and retained revision-guarded Core Audio settings. Before its full build, Swift
-whole-module type checking, Objective-C++ syntax checks, and **38/38 interface
-groups** passed (`interface-batch2-frozen.log`). Full build 2 started at
-**12:37:21 UTC** and passed; its frozen source hashes were verified unchanged.
-The build passed 135/135 CTest tests, the complete app socket suite, the Mac parity
-socket suite, and live precise-note publication/Undo/Redo/refusal checks with an
-explicit BlackHole 2ch output. The live test also rejects an invalid output device
-without interrupting the current renderer.
+| Checkpoint | Evidence |
+| --- | --- |
+| Full build 1, 2026-10-28 07:17:23 UTC | Build passed; 135/135 CTest tests and 38/38 interface groups passed; complete app socket and parity socket suites passed. |
+| Full build 1 computer use | MIDI raw text retained through Arm; named layouts and independent Graph Curve; precise note edit and Undo during looped playback with zero reported overruns. |
+| Full build 2, 2026-10-28 12:37:21 UTC | Build passed with unchanged frozen source hashes; 135/135 CTest tests, 38/38 interface groups, app socket and parity socket suites passed. Live precise-note publication/history/refusal test passed on explicitly selected BlackHole 2ch. |
+| Full build 2 computer use | Audio refresh retained the selected endpoint and switch reported 48 kHz/128 frames; song automation invalid-input retention, Undo/Redo and Command-S; instrument Carry/Release Node and bank handoff; Activity point relocation, saved-field completion, search, freeze, trace keyboard navigation and source opening. |
+| Full build 3, 2026-10-29 03:56:26 UTC, rebased on current main | Build and signature verification passed with 2,159 frozen source/test files unchanged; 138/138 CTest tests, 39/39 interface groups, 6/6 API inventory checks, app socket and Mac parity socket suites passed. The live precise-note publication/history/refusal test passed on BlackHole 2ch. |
+| Full build 3 computer use | Song automation numeric edit and immediate Command-S updated both the timeline accessibility value and saved project. Recorded-point raw text remained visible after invalid input and refresh; the corrected value was confirmed by API readback. Command search opened the Gate inspector alongside Graph Curve and Parameter Activity. |
 
-Computer use verified output selection retained across Refresh and truthful
-48 kHz/128-frame readback; song automation invalid-field retention, navigation
-guards, Undo/Redo, search retention and Command-S completion; instrument Carry,
-Release Node and automatic edit completion before opening the bank; Activity
-point relocation, saved field completion, search retention, freeze, keyboard trace
-navigation and Return-to-recorded-source. API and saved-project readback confirmed
-the UI writes. Evidence is in `cua-build2-*` screenshots/JSON receipts. One small
-accessibility issue remains: the song automation timeline value label does not
-refresh immediately after a numeric field write, although live/saved values do.
-The first QA process ended during a gap in testing; it was relaunched with verified
-inspection flags and history/persistence checks repeated. No crash report was
-present; no musician process was replaced.
-No further full build may start before **13:37:21 UTC**.
+Saved-project and API readback confirmed the UI edits, including a recorded point
+at frame 12000 with native value -7. The first build-2 QA process ended during a
+pause in testing, without a crash report; history/persistence tests were repeated
+in a newly launched process with verified inspection flags. All test apps used
+separate bundle identities and disposable songs. No musician process was replaced.
+The GUI observations do not establish sustained 60 fps or physical-device latency.
 
-No complete current-main parity claim is made. Full builds must be at least one
-hour apart, with computer-use validation after each completed build. QA uses a
-uniquely identified disposable bundle and project; other running app sessions
-and system audio defaults remain untouched.
+Final app source fingerprint: `dceb7bea65d6eb4d7a70ca1a1a3d8c6758570a2fb4aee6e1f9388f79ee775cf6`.
+Executable SHA-256 before assigning the QA bundle identity: `ab20eb6426ff18101328ae4fdd78e28318e837c7ffb0a17dfc7708e40dbf8d40`.
+The complete advertised read/write inventory matched the updated reviewed baseline.
+A computer-use connection timed out during command-palette dismissal; the app
+continued responding to its socket, and reconnecting the tool restored UI access.
 
-## Findings from the first audit pass
+Full builds are at least one hour apart, with computer-use validation after each.
+Swift type checks and the interface harness are separate from full app builds.
 
-The following findings were the initial implementation inventory. The qualification
-section above records which have since been implemented; remaining closure and
-readback edge cases continue under review.
+## Remaining parity work
 
-- **Parameter Activity:** `ParameterActivity.swift` changes the watch on search;
-  Windows keeps the observed parameter visible when it falls outside a name/unit/ID
-  filter. Mac point fields lack automatic saving and completion ordering for
-  selection, Delete, Save/history, source navigation and panel closure. Polling can
-  replace recent-event row identities and selected field revisions. A clean recorded
-  lane does not refresh from history when opened through Keep. Its trace has no
-  keyboard source navigation, and a single constant sample draws no visible mark.
-  Windows reference: `ParameterActivityWindow.hpp`, especially filterParameters,
-  refreshCleanRecordedPage, deferPointSelection, queuePointEdit and flushForProjectSave.
-- **Composing boundaries:** Mac pattern/graph envelope banks can open before their
-  automatic save finishes. Save/export/history now drain precise notes in the first
-  batch but still need equivalent pattern/graph/instrument/recorded-point ordering.
-  New/Open/Quit must also preserve pending native drafts. Windows references:
-  DocumentDraftRegistry, DocumentDepartureIntegration, ParameterAutomationWindow,
-  InstrumentEnvelopeWindow and WorkspaceCommands.
-- **Audio settings:** Mac opens a fresh basic form and closes after Apply; it lacks
-  `audio.devices.get` and separately guarded `audio.settings.get/set`, retained
-  choice/rescan and truthful negotiated-device diagnostics. Core Audio currently
-  exposes actual sample rate/buffer through telemetry. Port appropriate native
-  behavior without changing system defaults or borrowing WASAPI details.
-- **Recording review:** current Mac already has original-input pagination, loss
-  details, stopped restoration, captured Keep target, detached recovery and guarded
-  no-replay lifecycle. Compare newer Windows first-input selection, retained scroll,
-  queued Keep-to-edit during reads, failed-owner page clearing and root keyboard
-  traversal. These are UI differences, not a reason to duplicate shared take storage.
-- **Precise Notes:** live publication and project boundaries are in the first batch;
-  keyboard timeline/list traversal, Escape drag restoration, live refresh on reveal
-  and ordered hit selection still need comparison. Shared schedule PCM/audit tests
-  already exist; the new Mac session test uses explicit BlackHole only when requested.
-- **Plugin path repair:** Windows exposes guarded rack/graph path inspection, scan
-  and same-class reconnect. Mac already resolves trusted inventory matches during
-  project loading (`TrackerSession.mm`, `PluginTrust`), but no explicit repair UI/API
-  counterpart was found. Verify the native trust contract and add explicit repair
-  without class substitution or loss of opaque state. Rack editor API open/close and
-  musical keyboard settings also have Windows API paths absent from the Mac catalogue.
+These items are deliberately outside this checkpoint and must be resolved before
+claiming complete Windows parity:
 
-A source-string API inventory found all other Windows musical method names in Mac
-production sources. This establishes catalogue coverage only, not identical behavior
-or qualification. Windows-only `midi.test.inject` is a test hook; CoreMIDI needs its
-own bounded fixture rather than a production WinMM adapter.
+- Explicit rack/graph plugin path scan and reconnect with module-hash guards and
+  Undo. Mac's trusted automatic class resolution is not an equivalent workflow.
+- Rack plugin-editor open/close API and guarded musical-keyboard settings API,
+  including optional upper-octave C and custom Play/Stop binding integration.
+- Retained Song Settings form after invalid/refused edits; additional composing
+  departure, panel-close and newer-input guards.
+- Mixer raw-field retention and completion, sample-setting completion and retained
+  refused waveform strokes.
+- Remaining recorder/review focus, root keyboard traversal, paging and endpoint
+  duplicate-name/disconnection details.
+- Further source-by-source review of plugin/routing controls, instrument-envelope
+  navigation, recorded-point-row source links, accessibility and precise-note
+  navigation/cursor behavior.
+- Final integrated startup, workspace, recovery, long-export, reopening and
+  sustained presentation qualification across the remaining workflows.
 
-## Additional source audit during build 2
-
-- Sample recording duration is already equivalent: both platforms offer 60 and
-  300 seconds (`SampleRecording.swift`, `SampleRecordingWindow.hpp`). No extra
-  duration feature is needed. Endpoint duplicate names and retained setup still
-  need interaction review.
-- The Mac socket server already separates request input timeout from its 120-second
-  dispatched-operation wait, and the bundled client defaults to 120 seconds.
-  Windows' long offline-reply transport fix therefore does not require copying
-  named-pipe lifetime handling. Long-running export remains a runtime check.
-- Mac musical-keyboard preferences have a retained native form but still lack the
-  guarded `workspace.keyboard.set` API and the Windows configuration's optional
-  thirteenth upper key/custom Play-Stop binding integration. This is a confirmed gap.
-- Mac plugin-location trust and automatic matching preserve saved hints, but do
-  not provide explicit moved-path scan/reconnect with module-hash guards and Undo.
-  Both rack and graph path repair remain open; this must not be reported complete
-  merely because a trusted inventory can resolve a class on load.
-- Remaining automatic-edit edges include Activity source navigation/panel close,
-  mixer raw-field retention, sample settings, and failed waveform-stroke retention.
-  These need source changes and focused checks after batch 2 qualification.
-
-- **Song settings:** the Mac modal currently closes before validation/commit, losing invalid or refused title/channel drafts. Windows retains its native form and captured target. Add a retained form before declaring parity.
+Sample recording already offers the same 60- and 300-second duration choices as
+Windows. The Mac API already separates request input timeout from a 120-second
+operation wait; the bundled client defaults to 120 seconds. Those source findings
+avoid unnecessary ports but do not replace runtime checks of long exports.

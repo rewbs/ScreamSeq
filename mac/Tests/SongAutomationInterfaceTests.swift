@@ -40,6 +40,7 @@ extension InterfaceTests {
     try require(requests.last?.1["expectedRevision"] as? String=="song:2:0:0","Newer fields continue from the accepted revision")
     model.revisionToken="song:3:0:0";writeReply?(["result":["revision":model.revisionToken,"data":[:]]])
     try require(completed==true && !editor.hasDraft && !editor.fieldDraft && editor.canvas.selected==1,"Save completes after the newest edit and preserves the moved point selection")
+    try require((editor.canvas.accessibilityValue() as? String)?.contains("value 0.6")==true,"Numeric automation edits update the accessible timeline value without a reload")
     editor.value.stringValue="unfinished";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.value));completed=nil;let count=requests.count
     editor.finishAutomaticEdit{completed=$0}
     try require(completed==false && requests.count==count && editor.value.stringValue=="unfinished","Invalid fields block Save without dispatch or loss")
@@ -76,14 +77,22 @@ extension InterfaceTests {
     editor.inspectRecorded(plugin:"a",parameter:7);editor.table.selectRowIndexes(IndexSet(integer:0),byExtendingSelection:false)
     editor.pointTime.stringValue="3";editor.pointValue.stringValue="0.4";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.pointTime));editor.finishAutomaticEdit{finished=$0}
     try require(writes.last?["frame"] as? Int==48000 && writes.last?["newFrame"] as? Int==144000 && writes.last?["expectedRevision"] as? String=="activity:1" && finished==nil,"Recorded fields capture the original point and read revision")
+    var opened:[[String:Any]]=[];editor.onOpen={opened.append($0)}
+    editor.trace.onSelect?(ParameterTraceSample(["value":0.3,"source":["kind":"recorded","frame":48000]])!)
+    editor.openSelected()
+    editor.trace.onSelect?(ParameterTraceSample(["value":0.8,"source":["kind":"recorded","frame":96000]])!)
+    try require(opened.isEmpty,"Source navigation waits for the current recorded field write")
     editor.pointValue.stringValue="0.6";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.pointValue));revision="activity:2";answer?(["result":["revision":revision,"data":[:]]])
     RunLoop.current.run(until:Date().addingTimeInterval(0.35))
     try require(writes.count==2 && writes.last?["frame"] as? Int==144000 && writes.last?["value"] as? Double==0.6 && writes.last?["expectedRevision"] as? String==revision,"Newer raw fields follow the moved point at the acknowledged revision")
     revision="activity:3";stored=[["frame":96000,"value":0.8],["frame":144000,"value":0.6]];answer?(["result":["revision":revision,"data":[:]]])
-    try require(finished==true && !editor.needsCompletion,"Recorded Save completes after readback of the latest accepted edit")
+    try require(finished==true && !editor.needsCompletion && editor.table.selectedRow==1,"Recorded Save completes after readback and retains the relocated point")
+    try require(opened.count==1 && opened[0]["frame"] as? Int==48000,"Deferred source navigation retains its captured source while newer edits finish")
     editor.table.selectRowIndexes(IndexSet(integer:1),byExtendingSelection:false);editor.pointValue.stringValue="0.7";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.pointValue));editor.finishAutomaticEdit{finished=$0};answer?(["error":["message":"Refused"]]);let count=writes.count
     editor.finishAutomaticEdit{finished=$0};RunLoop.current.run(until:Date().addingTimeInterval(0.35))
     try require(finished==false && writes.count==count && editor.pointValue.stringValue=="0.7" && editor.needsCompletion,"A refused recorded write retains raw fields and never silently replays")
+    editor.nextRecordedPage();editor.refreshCopies();editor.openSelected()
+    try require(writes.count==count && editor.target?["plugin"] as? String=="a" && opened.count==1,"Paging, refresh and source navigation cannot discard or replay a refused recorded draft")
   }
   static func instrumentAutomaticChecks() throws {
     let editor=InstrumentEditor(frame:.zero),model=PatternModel(["revisionToken":"instrument:1:0:0","format":"IT","instruments":[["index":1,"id":"n20","name":"Lead"]]])
@@ -96,6 +105,9 @@ extension InterfaceTests {
     editor.name.stringValue="Newer";answer?(["result":["revision":"instrument:2:0:0","data":[:]]])
     try require(calls.count==2 && calls.last?.0["name"] as? String=="Newer" && calls.last?.1=="instrument:2:0:0" && finished==nil,"An acknowledgement retains newer instrument text and finishes it before Save")
     answer?(["result":["revision":"instrument:3:0:0","data":[:]]]);try require(finished==true && !editor.hasDraft,"Instrument completion follows the newest accepted fields")
+    editor.keymap[60]=3;editor.update(info,model:model)
+    try require(editor.keymap[60]==3 && editor.hasDraft,"A passive instrument refresh retains a keymap draft")
+    editor.keymap[60]=0
     editor.nodeTick.stringValue="unfinished";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.nodeTick));finished=nil;editor.finishAutomaticEdit{finished=$0}
     try require(finished==false && editor.nodeTick.stringValue=="unfinished" && calls.count==2,"Invalid instrument node text blocks departure and remains intact")
     editor.nodeTick.stringValue="0";editor.nodeValue.stringValue="32";editor.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:editor.nodeValue));editor.finishAutomaticEdit{finished=$0}

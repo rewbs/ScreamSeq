@@ -838,7 +838,7 @@ final class InstrumentEditor: NSView, NSTextFieldDelegate {
     }
   }
   func update(_ info: [AnyHashable: Any], model: PatternModel) {
-    if pending || nodeFieldsDirty || envelope.points != loadedPoints {updateCatalogue(model);return}
+    if pending || nodeFieldsDirty || envelope.points != loadedPoints || keymap != loadedMapping {updateCatalogue(model);return}
     if !settingsDraft.hasDraft {capturedRevision=model.revisionToken;capturedInstrument=model.instruments.first{$0["index"] as? Int==index}?["id"] as? String ?? ""}
     let restoreDraft = settingsDraft.begin(index: index); defer { restoreDraft() }
     updateCatalogue(model)
