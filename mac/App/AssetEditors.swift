@@ -429,7 +429,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     }
     if picker.selectedItem !== picker.menu?.item(withTag:index) {picker.select(picker.menu?.item(withTag:index))}
   }
-  func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil) {
+  func update(_ info: [AnyHashable: Any], samples: [[String: Any]], revision: String? = nil, loaded: SampleSelectionRead? = nil, acceptFocusedSettings: Bool = false) {
     let identity = samples.first { $0["index"] as? Int == index }?["id"] as? String ?? ""
     if protectsSampleOperation || loopReloadQuery != nil || loopWrite != nil { updateCatalogue(samples); return }
     if let draft = drawingDraft, draft.submitted || draft.numeric {
@@ -437,7 +437,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
       if identity != draft.identity { drawingStatus.stringValue = "The captured sample is unavailable. Stroke kept for review or discard." }
       return
     }
-    let retainSettings = settingsDraft.hasDraft || settingsPending || settingsNeedsReload || (!settingsIdentity.isEmpty && settingsFields.contains { $0.currentEditor() != nil })
+    // Only an owned operation with unchanged raw input and complete readback
+    // may advance focused settings. Ordinary refreshes still retain them.
+    let retainSettings = settingsDraft.hasDraft || settingsPending || settingsNeedsReload || (!acceptFocusedSettings && !settingsIdentity.isEmpty && settingsFields.contains { $0.currentEditor() != nil })
     if retainSettings {
       if identity != settingsIdentity { retireWaveform(); updateCatalogue(samples); settingsNeedsReload = true; settingsStatus.stringValue = "The captured sample is unavailable. Fields kept."; return }
     } else { settingsRevision = revision; settingsIdentity = identity }

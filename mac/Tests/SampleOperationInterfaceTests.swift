@@ -189,6 +189,89 @@ extension InterfaceTests {
     }
     try sampleOperationKeyboardRetryChecks()
     try sampleOperationFocusChecks()
+    try sampleOperationFocusMovementChecks()
+  }
+  static func sampleOperationFocusMovementChecks() throws {
+    for stage in 0...4 {
+      let f = SampleOperationFixture(), e = f.editor
+      let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false; window.contentView = e; defer { window.orderOut(nil) }
+      func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+      expand(e); window.layoutIfNeeded(); window.makeFirstResponder(e.loopStart)
+      e.clipboardAction("copy")
+      var completed = [Bool]()
+      e.finishAutomaticEdit { completed.append($0) }
+      func move() throws -> NSTextView {
+        try require(window.makeFirstResponder(e.rate), "Native settings field accepts focus during an operation")
+        guard let text = e.rate.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing rate field editor") }
+        text.setSelectedRange(NSRange(location: 2, length: 2)); return text
+      }
+      var current: NSTextView?
+      if stage == 0 { current = try move() }
+      try f.answer(f.clipboard())
+      try require(e.sampleOperation?.busy == true && f.pending.first?.0 == "document.get", "Moving focus during the receipt must continue matching readback")
+      if stage == 1 { current = try move() }
+      try f.answer(["samples": f.samples])
+      if stage == 2 { current = try move() }
+      try f.answer(f.info)
+      if stage == 3 { current = try move() }
+      var wave = f.pending[0].1; wave["peaks"] = Array(repeating: 0.5, count: (wave["bins"] as! Int) * 2)
+      try f.answer(wave)
+      if stage == 4 { current = try move() }
+      try f.answer(f.clipboard())
+      try require(e.sampleOperation == nil && completed == [true] && !e.operationNeedsReload,
+        "Focus alone cannot strand Copy or waiting Save at stage \(stage)")
+      try require(e.rate.currentEditor() === current && current?.string == "44100" && current?.selectedRange() == NSRange(location: 2, length: 2),
+        "Completion preserves the current field and selected digits at stage \(stage)")
+    }
+    for mode in ["process", "crossfade", "trim", "cut", "paste", "new"] {
+      let f = SampleOperationFixture(), e = f.editor
+      let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false; window.contentView = e; defer { window.orderOut(nil) }
+      func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+      expand(e); window.layoutIfNeeded(); window.makeFirstResponder(e.rate)
+      var report = f.processResult(), frames = 1024
+      switch mode {
+      case "crossfade":
+        e.crossfade(dryRun: false); report["loopBefore"] = ["frames":512]; report["loopAfter"] = ["frames":480]; f.info["loopEnd"] = 480
+      case "trim":
+        e.operationPicker.selectItem(at:9); e.process(dryRun:false); frames=10
+        report=["sample":1,"removedFrames":1014,"resultFrames":10]
+        f.info["loopEnd"]=10; f.info["sustainStart"]=0; f.info["sustainEnd"]=10
+      case "cut":
+        e.clipboardAction("cut"); frames=1014
+        report=["sample":1,"start":10,"removedFrames":10,"insertedFrames":0,"resultFrames":frames,"clipboardId":"clipboard-A"]
+      case "paste":
+        e.pasteClipboard(dryRun:false); try f.answer(f.clipboard()); frames=1034
+        report=["sample":1,"start":10,"removedFrames":0,"insertedFrames":10,"resultFrames":frames,"clipboardId":"clipboard-A"]
+      case "new":
+        e.clipboardAction("new"); frames=10; report=["sample":3,"id":"new-sample","frames":frames]
+        f.samples.append(["index":3,"id":"new-sample","name":"Copy"])
+        f.info["name"]="Copy"; f.info["loop"]=false; f.info["loopStart"]=0; f.info["loopEnd"]=0
+        f.info["sustainLoop"]=false; f.info["sustainStart"]=0; f.info["sustainEnd"]=0
+      default: e.process(dryRun:false)
+      }
+      var completed=[Bool](); e.finishAutomaticEdit { completed.append($0) }
+      try f.answer(report,revision:"accepted")
+      let field = mode == "new" ? e.name : mode == "trim" ? e.selectionEnd : mode == "crossfade" ? e.loopEnd : e.rate
+      try require(window.makeFirstResponder(field), "Accepted operation permits native field navigation: \(mode)")
+      guard let text=field.currentEditor() as? NSTextView else { throw InterfaceFailure(message:"Missing operation result field") }
+      let caret=NSRange(location:1,length:1); text.setSelectedRange(caret)
+      try f.finishRead(frames:frames)
+      try require(e.sampleOperation == nil && completed == [true] && !e.hasDraft && e.sampleRevision == "accepted" && e.settingsRevision == "accepted" && e.loopDraftRevision == "accepted" && e.waveformRevision == "accepted",
+        "Focus-only movement completes the operation and advances accepted baselines: \(mode)")
+      let expected = mode == "new" ? "Copy" : mode == "trim" ? "10" : mode == "crossfade" ? "480" : "44100"
+      try require(field.currentEditor() === text && text.string == expected && text.selectedRange() == caret,
+        "Readback preserves the current caret while displaying changed result coordinates: \(mode)")
+      // A following actual edit must use the adopted revision, not the old one
+      // retained merely because a settings field acquired focus mid-operation.
+      window.makeFirstResponder(e.rate)
+      guard let rate=e.rate.currentEditor() as? NSTextView else { throw InterfaceFailure(message:"Missing next settings editor") }
+      rate.insertText("48000",replacementRange:NSRange(location:0,length:rate.string.utf16.count))
+      e.finishAutomaticEdit { _ in }
+      try require(f.calls.last?.0 == "sample.patch" && f.calls.last?.1["expectedRevision"] as? String == "accepted", "The next native field edit uses the verified operation revision: \(mode)")
+      try f.fail("notCommitted"); e.settingsWork?.cancel()
+    }
   }
   static func sampleOperationKeyboardRetryChecks() throws {
     let f = SampleOperationFixture(), e = f.editor

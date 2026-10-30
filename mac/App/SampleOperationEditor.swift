@@ -6,8 +6,6 @@ final class SampleOperation {
   let method: String, sample: Int, identity: String, revision: String, documentID: String, generation: Int
   let dryRun: Bool, signature: NSDictionary, fields: [String: String], options: [Int]
   let settingsGeneration: Int, loopGeneration: Int, region: SampleViewRegion, channels: String
-  weak var responder: NSResponder?
-  var focusedField: Int?, caret: NSRange?
   var params: [String: Any]
   var busy = true, submitted = false, retryable = false
   var acceptedRevision: String?, result: [String: Any]?, reviewed: SampleOperationRead?
@@ -17,13 +15,8 @@ final class SampleOperation {
     fields = editor.drawingFields; options = editor.sampleSelectionOptions
     settingsGeneration = editor.settingsEditGeneration; loopGeneration = editor.loopEditGeneration
     region = SampleViewRegion(editor); channels = editor.waveformChannels
-    captureFocus(editor)
     self.params["expectedRevision"] = revision
     if method != "sample.clipboard.copy" { self.params["dryRun"] = dryRun }
-  }
-  func captureFocus(_ editor: SampleEditor) {
-    responder = editor.window?.firstResponder; focusedField = editor.focusedSampleField
-    caret = focusedField.flatMap { (editor.sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }
   }
   var usesClipboard: Bool { ["sample.clipboard.copy", "sample.cut", "sample.paste"].contains(method) }
 }
@@ -74,12 +67,10 @@ extension SampleEditor {
   func ownsOperation(_ operation: SampleOperation) -> Bool {
     sampleOperation === operation && index == operation.sample && sampleGeneration == operation.generation && settingsIdentity == operation.identity
   }
-  func operationFieldsUnchanged(_ operation: SampleOperation, includingFocus: Bool = true) -> Bool {
+  func operationFieldsUnchanged(_ operation: SampleOperation) -> Bool {
     drawingFields == operation.fields && sampleSelectionOptions == operation.options &&
       settingsEditGeneration == operation.settingsGeneration && loopEditGeneration == operation.loopGeneration &&
-      SampleViewRegion(self) == operation.region && waveformChannels == operation.channels && !hasSampleComposition &&
-      (!includingFocus || (window?.firstResponder === operation.responder && focusedSampleField == operation.focusedField &&
-      focusedSampleField.flatMap({ (sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }) == operation.caret))
+      SampleViewRegion(self) == operation.region && waveformChannels == operation.channels && !hasSampleComposition
   }
   func beginOperation(_ method: String, params: [String: Any], dryRun: Bool = false, previewRevision: String? = nil) -> SampleOperation? {
     let mayKeepLoops = dryRun || method == "sample.clipboard.copy"
@@ -151,10 +142,7 @@ extension SampleEditor {
   }
   func retryOperation() {
     guard let operation = sampleOperation, !operation.busy, operation.retryable else { return }
-    guard operationFieldsUnchanged(operation, includingFocus: false) else { retainOperation(operation, "Newer sample input kept"); return }
-    // Keyboard navigation to Retry is intentional. Preserve this activation's
-    // focus during completion without changing the captured edit or revision.
-    operation.captureFocus(self)
+    guard operationFieldsUnchanged(operation) else { retainOperation(operation, "Newer sample input kept"); return }
     submitOperation(operation)
   }
   func operationResult(_ response: [String: Any], _ operation: SampleOperation, revision: String?) -> [String: Any]? {
@@ -249,6 +237,11 @@ extension SampleEditor {
   }
   func adoptOperation(_ read: SampleOperationRead, operation: SampleOperation) {
     guard let view = read.view, let sample = read.sample else { retainOperation(operation, "Captured sample unavailable"); return }
+    // The caller has verified every raw field and edit generation. Focus and
+    // caret movement are independent: preserve the field editor active now,
+    // including when accepted metadata legitimately changes its displayed value.
+    let field = focusedSampleField.map { sampleEditingFields[$0] }
+    let text = field?.currentEditor() as? NSTextView, caret = text?.selectedRange()
     let waiters = operationWaiters; operationWaiters = []
     sampleOperation = nil; clearOperationPreview(operation); updateCatalogue(read.samples)
     if sample != index || read.identity != settingsIdentity {
@@ -256,8 +249,13 @@ extension SampleEditor {
       resetDocumentContext(); index = sample
     }
     preserveSelectionFields = sample == operation.sample && view.region.selection == operation.region.selection
-    update(view.info, samples: read.samples, revision: read.revision, loaded: view)
+    update(view.info, samples: read.samples, revision: read.revision, loaded: view, acceptFocusedSettings: true)
     preserveSelectionFields = false; updateOperationActions()
+    if let field, let text, let caret, field.currentEditor() === text, window?.firstResponder === text {
+      if text.string != field.stringValue { text.string = field.stringValue }
+      let location = min(caret.location, text.string.utf16.count)
+      text.setSelectedRange(NSRange(location: location, length: min(caret.length, text.string.utf16.count - location)))
+    }
     operationMessage(operation.method, operationReport(operation)); onSamplePresentation?()
     if sample != operation.sample { onSampleSelected?(sample) }
     waiters.forEach { $0(true) }
