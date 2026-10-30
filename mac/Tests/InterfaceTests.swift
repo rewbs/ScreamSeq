@@ -753,6 +753,7 @@ struct InterfaceFailure: Error { let message: String }
       ("sample-recording", sampleRecordingChecks), ("plugin-recording", pluginRecordingChecks),
       ("selection-render", patternSampleRenderChecks),
       ("instrument-creation", instrumentCreationChecks),
+      ("sample-library-completion", sampleLibraryCompletionChecks),
       ("sample-operation", sampleOperationChecks), ("sample-loop", sampleLoopChecks),
       ("plugin-control-delivery", pluginControlDeliveryChecks),
       ("parameter-boundary", parameterBoundaryChecks),

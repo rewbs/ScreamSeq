@@ -29,13 +29,20 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   var onFindMultisample: ((String, @escaping (MultisampleGroup?) -> Void) -> Void)?
   var onImportMultisample: ((MultisampleGroup) -> Void)?
   private(set) var entries = [SampleLibraryEntry](), tags = [(String, Int)](), selectedTags = [String](), total = 0
-  private(set) var importing = false
+  let imports = SampleLibraryImportWorkflow(), libraryChanges = SampleLibraryChangeWorkflow()
+  var importing: Bool { imports.needsCompletion }
+  var retainedWork: Bool { imports.needsCompletion || libraryChanges.needsCompletion }
+  var needsDocumentCompletion: Bool { imports.needsCompletion }
+  var needsApplicationCompletion: Bool { libraryChanges.needsCompletion }
+  private(set) var inputGeneration: UInt64 = 0
+  private var libraryState = [String: Any](), deferredLibraryState: [String: Any]?
+  var importReview: ActionButton!, importAccept: ActionButton!, libraryReview: ActionButton!, libraryAccept: ActionButton!
+  var chooseFilesButton: ActionButton!, addFolderButton: ActionButton!, removeFolderButton: ActionButton!
   private var roots = [String](), restoringSelection = false, searchGeneration = 0, detailGeneration = 0
   private var debounce: DispatchWorkItem?
   var loadButton: ActionButton!, moreButton: ActionButton!, previewButton: ActionButton!, rescanButton: ActionButton!
   var onSearch: ((SampleLibraryQuery, @escaping (SampleLibraryResults) -> Void) -> Void)?
   var onInspect: ((String, Bool, @escaping (Result<SampleAuditionData, Error>) -> Void) -> Void)?
-  var onImport: (([String], Bool, @escaping (Result<Int, Error>) -> Void) -> Void)?
   var onAddFolder: (() -> Void)?, onRemoveFolder: ((String) -> Void)?, onRescan: (() -> Void)?
   var onChooseFiles: (() -> Void)?, onStop: (() -> Void)?, onVolume: ((Double) -> Void)?
   var selectedPaths: [String] { table.selectedRowIndexes.compactMap { entries.indices.contains($0) ? entries[$0].path : nil } }
@@ -48,10 +55,14 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     tagSearch.setAccessibilityLabel("Filter folder tags")
     root.target = self; root.action = #selector(changedRoot); root.setAccessibilityLabel("Sample library folder")
     root.addItem(withTitle: "All libraries"); root.widthAnchor.constraint(lessThanOrEqualToConstant: 460).isActive = true
-    rescanButton = ActionButton("Rescan") { [weak self] in self?.onRescan?() }
+    rescanButton = ActionButton("Rescan") { [weak self] in guard let self, !self.retainedWork else { return }; self.onRescan?() }
+    addFolderButton = ActionButton("Add folder…") { [weak self] in guard let self, !self.retainedWork else { return }; self.onAddFolder?() }
+    removeFolderButton = ActionButton("Remove folder") { [weak self] in
+      guard let self, !self.retainedWork, self.roots.indices.contains(self.root.indexOfSelectedItem - 1) else { return }
+      self.onRemoveFolder?(self.roots[self.root.indexOfSelectedItem - 1])
+    }
     let locations = stack(.horizontal, [Theme.label("LIBRARY", size: 10, color: Theme.muted, weight: .semibold), root,
-      ActionButton("Add folder…") { [weak self] in self?.onAddFolder?() },
-      ActionButton("Remove folder") { [weak self] in guard let self, self.roots.indices.contains(self.root.indexOfSelectedItem - 1) else { return }; self.onRemoveFolder?(self.roots[self.root.indexOfSelectedItem - 1]) },
+      addFolderButton!, removeFolderButton!,
       NSView(), rescanButton], spacing: 10)
     let tagColumn = NSTableColumn(identifier: .init("tag")); tagColumn.title = "Folder tags"; tagColumn.width = 225; tagTable.addTableColumn(tagColumn)
     tagTable.delegate = self; tagTable.dataSource = self; tagTable.allowsMultipleSelection = true; tagTable.rowHeight = 27
@@ -88,22 +99,44 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
       ActionButton("Reveal in Finder") { [weak self] in if let path = self?.selectedPath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) } }], spacing: 10)
     loadButton = ActionButton("Load selected") { [weak self] in self?.loadSelection() }
     multisampleButton = ActionButton("Import as one instrument…") { [weak self] in
-      guard let self, !self.importing, let group = self.multisample else { return }; self.stop(); self.onImportMultisample?(group)
+      guard let self, !self.retainedWork, let group = self.multisample else { return }; self.stop(); self.onImportMultisample?(group)
     }
     multisampleHint.lineBreakMode = .byTruncatingMiddle
     let multisampling = stack(.horizontal, [multisampleHint, NSView(), multisampleButton], spacing: 12)
-    let loading = stack(.horizontal, [ActionButton("Choose files…") { [weak self] in self?.onChooseFiles?() }, createInstruments, NSView(), loadButton], spacing: 12)
+    chooseFilesButton = ActionButton("Choose files…") { [weak self] in self?.onChooseFiles?() }
+    let loading = stack(.horizontal, [chooseFilesButton!, createInstruments, NSView(), loadButton], spacing: 12)
+    importReview = ActionButton("Review import") { [weak self] in self?.imports.review() }
+    importAccept = ActionButton("Accept observed import") { [weak self] in self?.imports.accept() }
+    libraryReview = ActionButton("Review library") { [weak self] in self?.libraryChanges.review() }
+    libraryAccept = ActionButton("Accept observed library") { [weak self] in self?.libraryChanges.accept() }
+    let recovery = stack(.horizontal, [importReview!, importAccept!, libraryReview!, libraryAccept!, NSView()], spacing: 8)
     status.maximumNumberOfLines = 2; status.lineBreakMode = .byWordWrapping
     let shortcuts = Theme.label("↑/↓ browse · Space preview · Return load · ⌘/Shift-click select", size: 11, color: Theme.muted)
     let content = stack(.vertical, [stack(.horizontal, [Theme.label("Sample library", size: 23, weight: .semibold), NSView(), shortcuts]),
-      locations, search, filtering, body, detail, metadata, waveform, audition, multisampling, loading, status], spacing: 12)
-    content.stretchAcrossAxis(); content.fill(self, inset: 22); updateControls()
+      locations, search, filtering, body, detail, metadata, waveform, audition, multisampling, loading, recovery, status], spacing: 12)
+    content.stretchAcrossAxis(); content.fill(self, inset: 22)
+    imports.onDraft = { [weak self] in self!.completionDraft }
+    imports.composing = { [weak self] in self?.hasComposition == true }
+    imports.onChange = { [weak self] in guard let self else { return }; self.completionChanged(self.imports.status) }
+    libraryChanges.onDraft = { [weak self] in self!.completionDraft }
+    libraryChanges.composing = { [weak self] in self?.hasComposition == true }
+    libraryChanges.onChange = { [weak self] in guard let self else { return }; self.completionChanged(self.libraryChanges.status) }
+    libraryChanges.onAdopt = { [weak self] state in self?.updateLibrary(state) }
+    createInstruments.target = self; createInstruments.action = #selector(changedImportMode)
+    updateControls()
   }
   required init?(coder: NSCoder) { fatalError() }
   func updateLibrary(_ data: [String: Any]) {
+    if retainedWork || hasComposition { deferredLibraryState = data; return }
+    libraryState = data; deferredLibraryState = nil
     let selectedRoot = roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : nil
     roots = data["roots"] as? [String] ?? []; root.removeAllItems(); root.addItem(withTitle: "All libraries")
     for path in roots { root.addItem(withTitle: URL(fileURLWithPath: path).lastPathComponent); root.lastItem?.toolTip = path }
+    // A concurrent folder removal must not silently retarget a browser query.
+    if let selectedRoot, !roots.contains(selectedRoot) {
+      roots.append(selectedRoot); root.addItem(withTitle: "Unavailable · " + URL(fileURLWithPath: selectedRoot).lastPathComponent)
+      root.lastItem?.toolTip = selectedRoot
+    }
     if let selectedRoot, let index = roots.firstIndex(of: selectedRoot) { root.selectItem(at: index + 1) }
     rescanButton.isEnabled = data["indexing"] as? Bool != true
     if let error = data["error"] as? String { status.stringValue = error }
@@ -118,15 +151,17 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
       tagText: tagSearch.stringValue)
   }
   func requestSearch(append: Bool = false, loadWhenReady: Bool = false) {
+    guard !retainedWork, !hasComposition else { return }
     debounce?.cancel(); searchGeneration += 1; let generation = searchGeneration
     var query = query; query.offset = append ? entries.count : 0
     onSearch?(query) { [weak self] result in
-      guard let self, self.searchGeneration == generation else { return }
+      guard let self, self.searchGeneration == generation, !self.retainedWork, !self.hasComposition else { return }
       self.updateResults(result, append: append)
       if loadWhenReady { self.loadSelection() }
     }
   }
   func updateResults(_ results: SampleLibraryResults, append: Bool = false) {
+    guard !retainedWork, !hasComposition else { return }
     let selected = Set(selectedPaths); restoringSelection = true
     entries = append ? entries + results.items : results.items; total = results.total; tags = results.tags
     table.reloadData(); tagTable.reloadData()
@@ -140,7 +175,7 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     inspect(audible: false); findMultisample(); updateControls()
   }
   func controlTextDidChange(_ notification: Notification) {
-    stop(); searchGeneration += 1; debounce?.cancel()
+    inputGeneration &+= 1; stop(); searchGeneration += 1; debounce?.cancel()
     let item = DispatchWorkItem { [weak self] in self?.requestSearch() }; debounce = item
     DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: item)
   }
@@ -153,10 +188,11 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     }
     return false
   }
-  @objc func changedRoot() { stop(); selectedTags = []; requestSearch() }
-  @objc func changedAutoPreview() { if autoPreview.state == .off { stop() } }
-  @objc func changedVolume() { volumeLabel.stringValue = String(format: "%.0f dB", volume.doubleValue); onVolume?(volume.doubleValue) }
-  func clearFilters() { stop(); search.stringValue = ""; tagSearch.stringValue = ""; selectedTags = []; root.selectItem(at: 0); requestSearch() }
+  @objc func changedRoot() { inputGeneration &+= 1; stop(); selectedTags = []; requestSearch() }
+  @objc func changedImportMode() { inputGeneration &+= 1 }
+  @objc func changedAutoPreview() { inputGeneration &+= 1; if autoPreview.state == .off { stop() } }
+  @objc func changedVolume() { inputGeneration &+= 1; volumeLabel.stringValue = String(format: "%.0f dB", volume.doubleValue); onVolume?(volume.doubleValue) }
+  func clearFilters() { inputGeneration &+= 1; stop(); search.stringValue = ""; tagSearch.stringValue = ""; selectedTags = []; root.selectItem(at: 0); requestSearch() }
   func numberOfRows(in tableView: NSTableView) -> Int { tableView === tagTable ? tags.count : entries.count }
   func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
     let id = NSUserInterfaceItemIdentifier(tableView === tagTable ? "tag" : column?.identifier.rawValue ?? "name")
@@ -175,16 +211,18 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   }
   func tableViewSelectionDidChange(_ notification: Notification) {
     guard !restoringSelection else { return }
+    inputGeneration &+= 1
     if notification.object as? NSTableView === tagTable {
       selectedTags = tagTable.selectedRowIndexes.compactMap { tags.indices.contains($0) ? tags[$0].0 : nil }; stop(); requestSearch()
     } else { inspect(audible: autoPreview.state == .on); findMultisample(); updateControls() }
   }
   func findMultisample() {
+    guard !retainedWork else { return }
     groupGeneration += 1; let generation = groupGeneration; multisample = nil; updateControls()
     multisampleHint.stringValue = "Select a note-named sample to find related notes"
     guard let path = selectedPath, let onFindMultisample else { return }
     onFindMultisample(path) { [weak self] group in
-      guard let self, self.groupGeneration == generation, self.selectedPath == path else { return }
+      guard let self, !self.retainedWork, self.groupGeneration == generation, self.selectedPath == path else { return }
       self.multisample = group
       self.multisampleHint.stringValue = group.map { "Detected \($0.members.count) note variations · \($0.name)" } ?? "No related note variations detected in this folder"
       self.updateControls()
@@ -193,12 +231,13 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   func stop() { detailGeneration += 1; onStop?() }
   func preview() { inspect(audible: true) }
   private func inspect(audible: Bool) {
+    guard !retainedWork else { return }
     stop(); let generation = detailGeneration
     guard let path = selectedPath else { waveform.peaks = []; waveform.frames = 0; detail.stringValue = "No matching samples"; detail.toolTip = nil; metadata.stringValue = "Try fewer search terms or clear the folder filters."; return }
     detail.stringValue = path; detail.toolTip = path; metadata.stringValue = "Preparing waveform…"
     waveform.peaks = []; waveform.frames = 0
     onInspect?(path, audible) { [weak self] result in
-      guard let self, self.detailGeneration == generation, self.selectedPath == path else { return }
+      guard let self, !self.retainedWork, self.detailGeneration == generation, self.selectedPath == path else { return }
       switch result {
       case .success(let data):
         self.waveform.frames = data.frames; self.waveform.peaks = data.peaks
@@ -212,23 +251,47 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     loadPaths(selectedPaths)
   }
   func loadPaths(_ paths: [String]) {
-    guard !importing, !paths.isEmpty, let onImport else { return }
+    if imports.needsCompletion { imports.review(); return }
+    guard !libraryChanges.needsCompletion, !paths.isEmpty else { return }
     guard paths.count <= 128 else { status.stringValue = "Load at most 128 samples at a time. Choose a smaller batch."; return }
-    stop(); importing = true; updateControls(); status.stringValue = "Loading \(paths.count) sample\(paths.count == 1 ? "" : "s")…"
-    onImport(paths, createInstruments.state == .on) { [weak self] result in
-      guard let self else { return }; self.importing = false; self.updateControls()
-      switch result { case .success(let count): self.status.stringValue = "Loaded \(count) sample\(count == 1 ? "" : "s") · one Undo step"
-      case .failure(let error): self.status.stringValue = error.localizedDescription }
-    }
+    stop(); imports.load(paths, instruments: createInstruments.state == .on)
+  }
+  var hasComposition: Bool { [search, tagSearch].contains { ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true } }
+  var completionDraft: SampleBrowserDraft {
+    .init(generation: inputGeneration, fields: [
+      "search": (search.currentEditor() as? NSTextView)?.string ?? search.stringValue,
+      "tags": (tagSearch.currentEditor() as? NSTextView)?.string ?? tagSearch.stringValue,
+      "root": roots.indices.contains(root.indexOfSelectedItem - 1) ? roots[root.indexOfSelectedItem - 1] : "",
+      "instruments": String(createInstruments.state.rawValue), "autoPreview": String(autoPreview.state.rawValue), "gain": String(volume.doubleValue)
+    ], paths: selectedPaths, tags: selectedTags)
+  }
+  private func completionChanged(_ message: String) {
+    if retainedWork { debounce?.cancel(); searchGeneration += 1; groupGeneration += 1; stop() }
+    else if let state = deferredLibraryState, !hasComposition { updateLibrary(state) }
+    updateControls(); status.stringValue = message
   }
   private func updateControls() {
     let count = selectedPaths.count
+    func enabled(_ button: NSButton?, _ available: Bool) {
+      guard let button else { return }
+      // Retained-operation guards remain authoritative. Keeping the focused
+      // control enabled avoids AppKit moving keyboard focus during completion.
+      button.isEnabled = available || window?.firstResponder === button
+    }
     loadButton?.title = count > 0 ? "Load \(count) selected" : "Load selected"
-    loadButton?.isEnabled = !importing && count > 0 && count <= 128
+    enabled(loadButton, !retainedWork && count > 0 && count <= 128)
     loadButton?.toolTip = "Loads up to 128 selected files into new sample slots, with one Undo step"
-    previewButton?.isEnabled = count > 0; createInstruments.isEnabled = !importing
-    multisampleButton?.isEnabled = !importing && multisample != nil
-    if count > 128 { status.stringValue = "Select at most 128 samples per load. ⌘-click or Shift-click to choose a smaller batch." }
+    enabled(previewButton, !retainedWork && count > 0); enabled(createInstruments, !retainedWork)
+    enabled(multisampleButton, !retainedWork && multisample != nil)
+    enabled(chooseFilesButton, !retainedWork); enabled(addFolderButton, !retainedWork); enabled(removeFolderButton, !retainedWork)
+    enabled(rescanButton, !retainedWork && libraryState["indexing"] as? Bool != true)
+    for (button, visible, enabled) in [(importReview, imports.needsCompletion, imports.canReview), (importAccept, imports.needsCompletion, imports.canAccept),
+      (libraryReview, libraryChanges.needsCompletion, libraryChanges.canReview), (libraryAccept, libraryChanges.needsCompletion, libraryChanges.canAccept)] {
+      guard let button else { continue }
+      if !visible, window?.firstResponder === button { window?.makeFirstResponder(table) }
+      button.isHidden = !visible; button.isEnabled = enabled || window?.firstResponder === button
+    }
+    if count > 128 && !retainedWork { status.stringValue = "Select at most 128 samples per load. ⌘-click or Shift-click to choose a smaller batch." }
   }
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "f" { window?.makeFirstResponder(search); return true }

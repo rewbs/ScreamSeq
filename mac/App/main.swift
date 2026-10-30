@@ -1695,6 +1695,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     if shuttingDown { return .terminateLater }
+    if sampleBrowser?.needsApplicationCompletion == true {
+      statusLabel.stringValue = "Review the retained library request before quitting."
+      showSampleBrowser(); return .terminateCancel
+    }
     if finishPendingNotes({[weak self] in self?.requestQuit()}){return .terminateCancel}
     let confirmed = terminateConfirmed; terminateConfirmed = false
     if busy {

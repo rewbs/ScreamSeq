@@ -140,6 +140,9 @@ extension AppController {
         menus.append(menu)
       }
       menus.append(ContextActions.controls(in: self.orderEditor, title: "Arrangement"))
+      if let window = self.sampleBrowserWindow, window.isVisible, let content = window.contentView {
+        menus.append(ContextActions.controls(in: content, title: "Sample library"))
+      }
       if let window = self.scratchGestureWindow, window.isVisible, let content = window.contentView {
         menus.append(ContextActions.controls(in: content, title: "Scratch phrases"))
       }

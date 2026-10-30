@@ -51,7 +51,7 @@ extension AppController {
   }
 
   func submitInstrumentPluginRequest(_ method: String, params: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-    guard method.hasSuffix(".get") || !instrumentEditor.creation.needsCompletion else {
+    guard method.hasSuffix(".get") || (!instrumentEditor.creation.needsCompletion && sampleBrowser?.imports.needsCompletion != true) else {
       reply(AutomationServer.notAdmittedBusy("Review the retained instrument creation before creating or assigning another instrument.")); return
     }
     handleAutomation(method, params: params, reply: reply)

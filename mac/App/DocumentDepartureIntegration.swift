@@ -11,6 +11,7 @@ extension AppController: TrackerDocumentDepartureDelegate {
     retain("Mixer", mixerEditor.needsCompletion)
     retain("Samples", sampleEditor.hasDraft)
     retain("Instruments", instrumentEditor.hasDraft)
+    retain("Sample library import", sampleBrowser?.needsDocumentCompletion == true)
     retain("Precise notes", workspaceNotes.hasDraft || workspaceNotes.pending)
     retain("Pattern automation", workspaceAutomation.hasDraft || workspaceAutomation.loading)
     retain("Gate inspector", gateInspector.needsCompletion)

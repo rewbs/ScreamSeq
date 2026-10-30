@@ -10,13 +10,14 @@ extension AppController {
     instrumentCreationBanks.map { "\(ObjectIdentifier($0)):\($0.generation):\($0.workbench?.generation ?? 0)" }.joined(separator: "|") +
       "|input:\(patternView.instrument)|cursor:\(patternView.contextToken)"
   }
-  var instrumentCreationCanBegin: Bool {
+  var assetCreationCanBegin: Bool {
     let tools = instrumentEnvelopeToolsWindow?.contentView as? InstrumentEnvelopeToolsEditor
     return !busy && !shuttingDown && model.editable && !instrumentEditor.hasEditingDraft && !sampleEditor.hasDraft &&
       !instrumentCreationBanks.contains { $0.dirty || $0.pending || $0.workbench?.hasDraft == true || ($0.window?.firstResponder as? NSTextView)?.hasMarkedText() == true } &&
       tools?.pending != true && tools?.preview == nil && (tools?.window?.firstResponder as? NSTextView)?.hasMarkedText() != true &&
       (instrumentPluginWindow?.contentView as? InstrumentPluginEditor)?.pending != true
   }
+  var instrumentCreationCanBegin: Bool { assetCreationCanBegin && sampleBrowser?.imports.needsCompletion != true }
   func configureInstrumentCreation() {
     let creation = instrumentEditor.creation
     creation.onTarget = { [weak self] in

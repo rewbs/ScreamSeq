@@ -1,6 +1,10 @@
 import AppKit
 extension AppController {
   func finishPendingNotes(_ action:@escaping ()->Void)->Bool {
+    if sampleBrowser?.needsDocumentCompletion == true {
+      statusLabel.stringValue = "Review the retained sample-library import before saving, changing history or replacing the song."
+      showSampleBrowser(); return true
+    }
     if patternView.nudgeEditor?.needsCompletion == true {
       statusLabel.stringValue="Save the in-grid command with Return, or cancel it with Escape, before continuing."
       return true
