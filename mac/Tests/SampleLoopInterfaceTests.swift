@@ -67,6 +67,7 @@ extension InterfaceTests {
     try sampleLoopWriteFailureChecks()
     try sampleLoopPreviewChecks()
     try sampleLoopWriteFocusChecks()
+    try sampleLoopWriteFocusMovementChecks()
     try sampleLoopReloadChecks()
   }
   static func sampleLoopRetryCompletionChecks() throws {
@@ -204,6 +205,42 @@ extension InterfaceTests {
       } else {
         try f.finishRead()
         try require(done == [true] && window.firstResponder === e.loopApplyButton && !e.hasDraft, "Keyboard Save loops retains button focus through complete readback and releases Save")
+      }
+    }
+  }
+  static func sampleLoopWriteFocusMovementChecks() throws {
+    for stage in ["write", "metadata", "waveform", "preview"] {
+      for move in ["caret", "next field"] {
+        let f = SampleOperationFixture(), e = f.editor
+        let window = NSWindow(contentRect: e.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = e
+        defer { e.settingsWork?.cancel(); e.loopSaveWork?.cancel(); window.orderOut(nil); window.contentView = nil }
+        func expand(_ view: NSView) { if let section = view as? ToolSection { section.setExpanded(true, persist: false) }; view.subviews.forEach(expand) }
+        expand(e); window.layoutIfNeeded(); window.makeFirstResponder(e.loopStart)
+        guard let initial = e.loopStart.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Missing loop boundary field editor") }
+        initial.insertText("100", replacementRange: NSRange(location: 0, length: initial.string.utf16.count))
+        if stage == "preview" { e.setLoops(dryRun: true) } else { f.waitForLoopDispatch() }
+        try require(f.loopCalls.count == 1, "A typed loop boundary starts autosave or explicit preview")
+        var done = [Bool](); e.finishAutomaticEdit { done.append($0) }
+        if ["metadata", "waveform"].contains(stage) { try f.answerLoops() }
+        if stage == "waveform" { try f.answer(f.info) }
+        // An unordered test window has no navigable AppKit key-view loop.
+        // Move its real field editor explicitly and verify the focus change.
+        if move == "next field" { window.makeFirstResponder(e.loopEnd) }
+        try require(move != "next field" || (e.loopStart.currentEditor() == nil && e.loopEnd.currentEditor() != nil), "Native focus actually leaves the submitted loop field")
+        let responder = window.firstResponder
+        guard let current = responder as? NSTextView else { throw InterfaceFailure(message: "Navigation should reach the next native field") }
+        current.setSelectedRange(NSRange(location: 1, length: 0))
+        let text = current.string, caret = current.selectedRange()
+        if stage == "write" { try f.answerLoops() }
+        if stage == "preview" {
+          try f.answerLoops("original")
+          try require(f.pending.first?.0 == "sample.loops.set" && done.isEmpty, "Focus movement does not prevent Preview from servicing waiting Save")
+          try f.answerLoops()
+        }
+        try f.finishRead()
+        try require(done == [true] && !e.hasDraft && e.loopDraftRevision == "accepted" && window.firstResponder === responder && current.string == text && current.selectedRange() == caret,
+          "\(move) during \(stage) preserves current focus/caret and releases Save without Reload")
       }
     }
   }

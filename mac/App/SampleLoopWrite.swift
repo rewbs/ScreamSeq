@@ -27,9 +27,7 @@ extension SampleEditor {
       loopEditGeneration == query.loopGeneration && settingsEditGeneration == query.settingsGeneration &&
       rawLoopDraft.isEqual(write.gestureSignature) && otherFields(drawingFields) == otherFields(query.fields) &&
       sampleSelectionOptions == query.options && SampleViewRegion(self) == query.originalRegion &&
-      waveformChannels == query.channels && waveform.stroke == query.stroke && !hasSampleComposition &&
-      window?.firstResponder === query.responder && focusedSampleField == query.focusedField &&
-      focusedSampleField.flatMap({ (sampleEditingFields[$0].currentEditor() as? NSTextView)?.selectedRange() }) == query.caret
+      waveformChannels == query.channels && waveform.stroke == query.stroke && !hasSampleComposition
   }
   func failLoopWrite(_ write: SampleLoopWrite, _ message: String) {
     guard ownsLoopWrite(write) else { return }
@@ -74,7 +72,7 @@ extension SampleEditor {
         return
       }
       guard self.loopWriteUnchanged(write), (self.onSampleRevision?() ?? revision) == revision else {
-        self.failLoopWrite(write, "Newer sample fields, focus or revision kept"); return
+        self.failLoopWrite(write, "Newer sample fields or revision kept"); return
       }
       if write.dryRun {
         guard revision == query.revision else { self.failLoopWrite(write, "Preview revision changed"); return }
@@ -108,7 +106,7 @@ extension SampleEditor {
   func continueLoopWrite(_ write: SampleLoopWrite, revision: String) -> Bool {
     guard ownsLoopWrite(write) else { return false }
     guard loopWriteUnchanged(write), (onSampleRevision?() ?? revision) == revision else {
-      failLoopWrite(write, "Sample, fields or focus changed during loop readback"); return false
+      failLoopWrite(write, "Sample or fields changed during loop readback"); return false
     }
     return true
   }
@@ -145,6 +143,8 @@ extension SampleEditor {
     waveformRevision = revision; sampleRevision = revision; settingsRevision = revision
     savedLoopInfo = info; loopDraftBaseline = write.signature; loopDraftRevision = revision
     loopPreviewSignature = nil; loopPreviewRevision = nil
+    // No text fields or responders are reassigned here. Tab navigation and
+    // caret movement can survive completion without invalidating a saved edit.
     syncLoopMarkers(); updateCrossfadeInfo(info)
     loopWrite = nil; loopsBusy = false
     loopsStatus.stringValue = changed ? "Both loops saved in one Undo step." : "Both loops are already saved."

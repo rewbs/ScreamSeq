@@ -41,7 +41,7 @@ extension SampleEditor {
     waveform.sustainStart=sustaining.state == .on ? sustainStart.integerValue:0;waveform.sustainEnd=sustaining.state == .on ? sustainEnd.integerValue:0
     waveform.needsDisplay=true
   }
-  @objc func loopFieldChanged() {loopEditGeneration += 1;syncLoopMarkers();saveLoopsSoon(immediate:true)}
+  @objc func loopFieldChanged() {syncLoopMarkers();saveLoopsSoon(immediate:true)}
   func controlTextDidChange(_ notification:Notification) {
     if let field = notification.object as? NSTextField, field === drawingFrame || field === drawingValue { numericDrawingInputChanged(); return }
     if let field = notification.object as? NSTextField, [name, rate, volume, pan].contains(where: { $0 === field }) { scheduleSettings(); return }
