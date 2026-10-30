@@ -213,6 +213,32 @@ extension InterfaceTests {
     browser.libraryChanges.finishChoosing(libraryChooser, roots: nil)
     try require(!browser.needsApplicationCompletion, "Cancel releases the app-wide chooser")
 
+    let queued = sampleBrowserFixture(), queuedImport = SampleLibraryImportFixture(queued.imports)
+    var queries = [SampleLibraryQuery]()
+    queued.onSearch = { query, _ in queries.append(query) }
+    queued.loadSelection(); queuedImport.answer([:])
+    queued.search.stringValue = "newer query"; queued.requestSearch(loadWhenReady: true)
+    try require(queries.isEmpty, "A retained import postpones the latest search")
+    queued.imports.review(); queuedImport.answer(queuedImport.catalogue()); queued.imports.accept()
+    try require(queries.count == 1 && queries[0].text == "newer query" && queuedImport.writes.count == 1,
+      "Completion resumes the latest query without replaying the old load-when-ready intent")
+    let debounced = sampleBrowserFixture(), cancelledImport = SampleLibraryImportFixture(debounced.imports)
+    var afterCancel = [SampleLibraryQuery]()
+    debounced.onSearch = { query, _ in afterCancel.append(query) }
+    debounced.search.stringValue = "before chooser"; debounced.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: debounced.search))
+    let chooser = debounced.imports.begin(instruments: false)!
+    debounced.imports.finishChoosing(chooser, paths: nil)
+    try require(afterCancel.count == 1 && afterCancel[0].text == "before chooser" && cancelledImport.writes.isEmpty,
+      "Cancelling a chooser resumes the search whose debounce it interrupted")
+    let active = sampleBrowserFixture(), activeImport = SampleLibraryImportFixture(active.imports)
+    var activeSearches = [(SampleLibraryResults) -> Void]()
+    active.onSearch = { _, reply in activeSearches.append(reply) }; active.requestSearch()
+    let activeChooser = active.imports.begin(instruments: false)!
+    active.imports.finishChoosing(activeChooser, paths: nil)
+    try require(activeSearches.count == 2 && activeImport.writes.isEmpty, "Chooser completion resumes an interrupted in-flight search")
+    activeSearches[0](.init(items: [], total: 0, tags: [], offset: 0))
+    try require(active.entries.count == 15, "Retired pre-chooser response cannot overwrite the resumed search")
+
     let input = sampleBrowserFixture(), native = SampleLibraryImportFixture(input.imports)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1140, height: 820), styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = input; window.makeFirstResponder(input.search)

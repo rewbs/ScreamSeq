@@ -39,7 +39,7 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   var importReview: ActionButton!, importAccept: ActionButton!, libraryReview: ActionButton!, libraryAccept: ActionButton!
   var chooseFilesButton: ActionButton!, addFolderButton: ActionButton!, removeFolderButton: ActionButton!
   private var roots = [String](), restoringSelection = false, searchGeneration = 0, detailGeneration = 0
-  private var debounce: DispatchWorkItem?
+  private var debounce: DispatchWorkItem?, deferredSearch = false, searchPending = false
   var loadButton: ActionButton!, moreButton: ActionButton!, previewButton: ActionButton!, rescanButton: ActionButton!
   var onSearch: ((SampleLibraryQuery, @escaping (SampleLibraryResults) -> Void) -> Void)?
   var onInspect: ((String, Bool, @escaping (Result<SampleAuditionData, Error>) -> Void) -> Void)?
@@ -151,11 +151,15 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
       tagText: tagSearch.stringValue)
   }
   func requestSearch(append: Bool = false, loadWhenReady: Bool = false) {
-    guard !retainedWork, !hasComposition else { return }
+    guard !retainedWork, !hasComposition else { deferredSearch = true; return }
+    deferredSearch = false
     debounce?.cancel(); searchGeneration += 1; let generation = searchGeneration
     var query = query; query.offset = append ? entries.count : 0
+    searchPending = onSearch != nil
     onSearch?(query) { [weak self] result in
-      guard let self, self.searchGeneration == generation, !self.retainedWork, !self.hasComposition else { return }
+      guard let self, self.searchGeneration == generation else { return }
+      self.searchPending = false
+      guard !self.retainedWork, !self.hasComposition else { self.deferredSearch = true; return }
       self.updateResults(result, append: append)
       if loadWhenReady { self.loadSelection() }
     }
@@ -176,7 +180,7 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
   }
   func controlTextDidChange(_ notification: Notification) {
     inputGeneration &+= 1; stop(); searchGeneration += 1; debounce?.cancel()
-    let item = DispatchWorkItem { [weak self] in self?.requestSearch() }; debounce = item
+    let item = DispatchWorkItem { [weak self] in self?.debounce = nil; self?.requestSearch() }; debounce = item
     DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(120), execute: item)
   }
   func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -266,8 +270,14 @@ final class SampleBrowser: NSView, NSTableViewDataSource, NSTableViewDelegate, N
     ], paths: selectedPaths, tags: selectedTags)
   }
   private func completionChanged(_ message: String) {
-    if retainedWork { debounce?.cancel(); searchGeneration += 1; groupGeneration += 1; stop() }
-    else if let state = deferredLibraryState, !hasComposition { updateLibrary(state) }
+    if retainedWork {
+      if debounce != nil || searchPending { deferredSearch = true }
+      debounce?.cancel(); debounce = nil; searchPending = false
+      searchGeneration += 1; groupGeneration += 1; stop()
+    } else if !hasComposition {
+      if let state = deferredLibraryState { updateLibrary(state) }
+      else if deferredSearch { requestSearch() }
+    }
     updateControls(); status.stringValue = message
   }
   private func updateControls() {
