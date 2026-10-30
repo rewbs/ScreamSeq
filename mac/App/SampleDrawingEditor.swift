@@ -24,11 +24,14 @@ struct SampleDrawingRead {
 }
 
 extension SampleEditor {
+  var sampleEditingFields: [NSTextField] {
+    settingsFields + [loopStart, loopEnd, sustainStart, sustainEnd, selectionStart, selectionEnd,
+      exponent, gain, target, smoothing, crossfadeFrames, pasteSourceGain, pasteDestinationGain,
+      snapRadius, snapStep, snapOrigin]
+  }
   var drawingFields: [String: String] {
     var values = settingsDraft.snapshot
-    for (i, field) in [loopStart, loopEnd, sustainStart, sustainEnd, selectionStart, selectionEnd,
-      exponent, gain, target, smoothing, crossfadeFrames, pasteSourceGain, pasteDestinationGain,
-      snapRadius, snapStep, snapOrigin].enumerated() { values["field\(i)"] = field.stringValue }
+    for (i, field) in sampleEditingFields.enumerated() { values["field\(i)"] = field.currentEditor()?.string ?? field.stringValue }
     for (i, control) in [looping, pingpong, loopReverse, sustaining, sustainPingpong, sustainReverse].enumerated() {
       values["loop\(i)"] = String(control.state.rawValue)
     }
@@ -159,7 +162,7 @@ extension SampleEditor {
   func adoptDrawing(_ read: SampleDrawingRead, draft: SampleDrawingDraft) {
     drawingDraft = nil; drawingBusy = false; waveform.retainsStroke = false; waveform.cancelStroke(force: true)
     // Retire ordinary reads that began before this owned readback.
-    waveformRequest += 1; waveformPending = false; waveformRetry?.cancel(); waveformRetry = nil
+    cancelWaveformQuery()
     waveform.frames = read.info["frames"] as? Int ?? 0
     channelPicker.selectItem(at: ["both", "left", "right"].firstIndex(of: draft.channels) ?? 0)
     updateSampleDescription(read.info)

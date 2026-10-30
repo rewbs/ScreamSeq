@@ -83,12 +83,15 @@ extension InterfaceTests {
     var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     editor.onSettingsRequest = { method, params, _, reply in calls.append((method, params)); replies.append(reply) }
     try begin(editor); let retired = replies.removeFirst()
+    editor.onSettingsRequest = nil
     editor.resetDocumentContext(); editor.index = 2
     var other = info; other["index"] = 2
     editor.update(other, samples: samples, revision: "other")
     editor.waveform.frame = NSRect(x: 0, y: 0, width: 512, height: 180)
     editor.waveform.setViewport(256..<288); editor.waveform.peaksRange = 256..<288; editor.waveform.peaks = Array(repeating: 0.25, count: 64)
-    editor.waveformRevision = "other"; try begin(editor)
+    editor.waveformRevision = "other"
+    editor.onSettingsRequest = { method, params, _, reply in calls.append((method, params)); replies.append(reply) }
+    try begin(editor)
     retired(response(["changedFrames": 5]))
     try require(editor.drawingBusy && editor.drawingDraft?.sample == 2 && replies.count == 1, "A retired sample callback cannot release a newer stroke's busy state")
     editor.resetDocumentContext()

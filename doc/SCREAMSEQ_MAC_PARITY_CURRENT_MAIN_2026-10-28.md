@@ -498,6 +498,33 @@ groups and complete application Swift type checking pass. Evidence:
 desktop qualification of this follow-up, numeric staged-point drawing controls
 and general staged viewport/selection navigation remain open.
 
+## Staged viewport and channel navigation — 2026-10-30
+
+The Mac sample view now stages viewport and channel reads before changing its
+accepted range, channel menu or peaks. This ports the viewport/channel cases in
+Windows `SampleReadback.inc` and `SampleReadbackApplicationTests.inc`. A complete
+reply must match the captured sample identity, document/revision, frame range,
+channels and bins. Failure, malformed or non-finite peaks, newer raw fields and
+active composition leave the accepted presentation and focus intact. Raw sample
+fields keep their original revision; these read-only operations do not write
+music or create history.
+
+A single in-flight read remains bounded while newer requests coalesce. Repeated
+zoom/pan gestures accumulate intent against the pending range. Draw mode keeps
+that pending target; no drawing gesture begins while navigation is unresolved.
+Agent viewport context still reports the accepted view. Empty samples adopt
+valid channel choices without inventing waveform data. Sample replacement and
+metadata refresh retire obsolete navigation replies before adoption.
+
+Focused native tests exercise failure and malformed replies, changed revisions,
+newer raw input, active AppKit composition/caret/focus, original target identity,
+rapid zoom/channel changes, empty samples and retired callbacks. All 43 native
+interface groups and complete application Swift type checking pass. Evidence:
+`interface-sample-navigation-all.log`, `interface-sample-navigation-final.log`
+and `typecheck-sample-navigation-final.log`. This source is newer than build 9 and still needs
+packaged computer-use validation. Staged sample-target selection/reload and
+numeric staged-point drawing remain separate open tasks.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
@@ -509,7 +536,8 @@ claiming complete Windows parity:
   editors.
 - Packaged qualification of the Mixer, sample completion, recorder focus and
   startup-frame fixes in build 9; packaged qualification of retained drawing,
-  numeric staged-point controls and broader sample-operation/readback handling.
+  numeric staged-point controls, staged target selection/reload and broader
+  sample-operation/readback handling.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
   presentation, including the source-tested input identity changes above.
 - Further source-by-source review of plugin/routing controls, instrument-envelope

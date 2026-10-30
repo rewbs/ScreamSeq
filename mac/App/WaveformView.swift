@@ -30,6 +30,8 @@ final class WaveformView: NSView {
   }
   private(set) var viewport: Range<Int>?
   var visibleRange: Range<Int> { viewport ?? 0..<max(0, frames) }
+  var requestedRange: Range<Int>?
+  var navigationRange: Range<Int> { requestedRange ?? visibleRange }
   var selection: ClosedRange<Int>? { didSet { if retainsStroke { selection = oldValue; return }; needsDisplay = true; onSelection?(selection) } }
   var drawing = false { didSet { if retainsStroke { drawing = oldValue; return }; if !drawing { cancelStroke() }; needsDisplay = true } }
   // A submitted stroke belongs to its completion owner until verified or
@@ -38,6 +40,7 @@ final class WaveformView: NSView {
   var onSelection: ((ClosedRange<Int>?) -> Void)?
   var onClipboard: ((String) -> Void)?
   var onViewport: (() -> Void)?
+  var onRequestViewport: ((Range<Int>?) -> Void)?
   var onFinishSelection: (() -> Void)?
   var onBeginStroke: (() -> Bool)?
   var onStroke: (([SampleStrokePoint]) -> Void)?
@@ -51,20 +54,22 @@ final class WaveformView: NSView {
       (peaksRange ?? 0..<max(0, frames)) == range && peaks.count == range.count * 2
   }
   override var acceptsFirstResponder: Bool { true }
-  private func clampViewport() {
-    guard let view = viewport else { return }
-    if frames <= 0 { viewport = nil; return }
+  private func boundedViewport(_ view: Range<Int>?) -> Range<Int>? {
+    guard let view, frames > 0 else { return nil }
     let size = min(frames, max(1, view.count)), first = max(0, min(view.lowerBound, frames-size))
-    viewport = first == 0 && size == frames ? nil : first..<(first+size)
+    return first == 0 && size == frames ? nil : first..<(first+size)
   }
+  private func clampViewport() { viewport = boundedViewport(viewport) }
   func setViewport(_ range: Range<Int>?, notify: Bool = true) {
     guard stroke.isEmpty else { return }
-    cancelStroke(); viewport = range; clampViewport(); needsDisplay = true
+    let next = boundedViewport(range)
+    if notify, let onRequestViewport { onRequestViewport(next); return }
+    cancelStroke(); viewport = next; needsDisplay = true
     if notify { onViewport?() }
   }
   func zoom(_ factor: Double, center: Double? = nil) {
     guard frames > 0, factor.isFinite, factor > 0 else { return }
-    let range = visibleRange
+    let range = navigationRange
     let anchor = center ?? selection.flatMap { range.contains($0.lowerBound) ? Double($0.lowerBound) : nil } ?? Double(range.lowerBound + range.count/2)
     guard anchor.isFinite else { return }
     let middle = max(0, min(Double(frames), anchor))
@@ -79,7 +84,7 @@ final class WaveformView: NSView {
     else { let size=min(frames,128), start=max(0,min(frames-size,selection.lowerBound-size/2)); setViewport(start..<(start+size)) }
   }
   func panFrames(_ delta: Int) {
-    let range=visibleRange
+    let range=navigationRange
     // Bound the displacement before adding: clamping an overflowed sum is too late.
     let last=max(0,frames-range.count)
     let start=range.lowerBound+max(-range.lowerBound,min(last-range.lowerBound,delta))

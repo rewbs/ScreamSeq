@@ -3,7 +3,7 @@ import AppKit
 extension SampleEditor {
   var settingsFields: [NSTextField] { [name, rate, volume, pan] }
   var hasSampleComposition: Bool {
-    (settingsFields + [loopStart, loopEnd, sustainStart, sustainEnd]).contains { ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true }
+    sampleEditingFields.contains { ($0.currentEditor() as? NSTextView)?.hasMarkedText() == true }
   }
   func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
     if settingsFields.contains(where: { $0 === control }), onSettingsRequest != nil {

@@ -627,6 +627,16 @@ channels and bin count and contain complete finite peaks before becoming loaded.
 
 `context.get.data.sampleViewport` reports `sample`, absolute `start`, exclusive `end`, `channels`, `drawing`, `loaded` and `precise`. `loaded` is false when the displayed waveform has not caught up with the current document revision. `precise` also requires one loaded bin per visible frame. If a hidden editor has an obsolete sample length, the context uses the current whole-sample range and reports it as unloaded. This context is separate from `sampleSelection`; read `sample.waveform.get` or `sample.pcm.get` to inspect exact current data.
 
+Viewport and channel navigation stage their reads before changing the visible
+range, channel menu or peaks. Failed, malformed or stale replies keep the previous
+accepted view. Newer raw input or active composition also prevents adoption;
+navigation never clears those fields or takes focus. Rapid zoom/pan gestures
+accumulate the requested range while only the latest request waits behind one
+in-flight read. Turning on Draw preserves that pending navigation. Agent viewport
+context continues to describe the accepted view while loading, and drawing waits
+until the pending read has settled. These navigation reads do not edit audio or
+history.
+
 `sample.draw` accepts `sample`, `expectedRevision`, `points:[{frame,value}]`, optional `channels` (`both`, `left`, `right`), `interpolation` (`linear`, default, or `step`) and `dryRun`. Supply 1…4096 strictly increasing, unique, in-range integer frame positions and finite amplitudes −1…1. The span from the first through the last point must be at most 1,048,576 frames. A single point edits one frame. The last point is included; the returned exclusive `end` is that point's frame plus one. Linear interpolation fills every intervening frame; step holds the preceding point until the next point's frame. Both writes the same curve to both channels; a single selected channel leaves the other unchanged.
 
 Values scale by 128 or 32768 for native signed 8-/16-bit PCM, saturate to its integer limits and round exact halves away from zero. Thus −1 maps exactly to negative full scale, while +1 saturates to +127 or +32767 and counts as clipped. Preview returns the same counts, peaks, used patch bytes and first 256 exact changes as fixed-length processing, plus `interpolation`. It changes no PCM, revision, history or playback. Actual changes stop playback and create one compact document Undo step; no-op and rejected drawings preserve playback/history/redo. Loops, cues and sample length are unchanged, and native saving retains exact results.

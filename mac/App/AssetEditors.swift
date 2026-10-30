@@ -146,7 +146,9 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     ("Copy left to right", "copy-left"), ("Copy right to left", "copy-right"), ("Average stereo channels", "stereo-average")]
   var onRequest: ((String, [String: Any], @escaping ([String: Any]) -> Void) -> Void)?
   private(set) var processing = false
-  var waveformRequest = 0, waveformInFlight = false, waveformPending = false, waveformAttempts = 0
+  var waveformInFlight = false, waveformPending = false, waveformAttempts = 0
+  var waveformQuery: SampleWaveformQuery?
+  var waveformChannels = "both"
   var waveformRetry: DispatchWorkItem?
   var waveformRevision: String?, strokeRevision: String?
   var sampleRevision: String?
@@ -275,7 +277,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     }
     waveform.onSelection = { [weak self] range in self?.selectionChanged(range) }
     waveform.onClipboard = { [weak self] action in self?.clipboardAction(action) }
-    waveform.onViewport = { [weak self] in self?.viewportChanged() }
+    waveform.onRequestViewport = { [weak self] range in self?.requestWaveform(range: range) }
     waveform.onFinishSelection = { [weak self] in self?.snapAfterSelection() }
     waveform.onBeginStroke = { [weak self] in self?.beginDrawing() ?? false }
     waveform.onCancelStroke = { [weak self] in
@@ -327,12 +329,10 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     smoothGroup.isHidden = op != "smooth"
   }
   @objc func channelChanged() {
-    if let draft = drawingDraft, draft.submitted {
-      channelPicker.selectItem(at: ["both", "left", "right"].firstIndex(of: draft.channels) ?? 0)
-      drawingStatus.stringValue = "Review or discard the retained stroke before changing channels."; return
-    }
-    waveform.cancelStroke()
-    refreshWaveform()
+    let requested = selectedChannels
+    channelPicker.selectItem(at: ["both", "left", "right"].firstIndex(of: waveformChannels) ?? 0)
+    guard waveform.stroke.isEmpty else { drawingStatus.stringValue = "Finish or discard the stroke before changing channels."; return }
+    requestWaveform(range: waveform.requestedRange ?? waveform.viewport, channels: requested)
   }
   func processingParams() -> [String: Any]? {
     guard let a = Int(selectionStart.stringValue), let b = Int(selectionEnd.stringValue),
@@ -413,7 +413,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     }
     let retainSettings = settingsDraft.hasDraft || settingsPending || settingsNeedsReload || (!settingsIdentity.isEmpty && settingsFields.contains { $0.currentEditor() != nil })
     if retainSettings {
-      if identity != settingsIdentity { updateCatalogue(samples); settingsNeedsReload = true; settingsStatus.stringValue = "The captured sample is unavailable. Fields kept."; return }
+      if identity != settingsIdentity { retireWaveform(); updateCatalogue(samples); settingsNeedsReload = true; settingsStatus.stringValue = "The captured sample is unavailable. Fields kept."; return }
     } else { settingsRevision = revision; settingsIdentity = identity }
     let restoreDraft: () -> Void = retainSettings ? {} : settingsDraft.begin(index: index); defer { restoreDraft() }
     updateCatalogue(samples)
@@ -456,6 +456,7 @@ final class SampleEditor: NSView, NSTextFieldDelegate {
     let stereo = (info["channels"] as? Int ?? 1) == 2
     channelPicker.item(at: 2)?.isEnabled = stereo
     if !stereo && channelPicker.indexOfSelectedItem == 2 { channelPicker.selectItem(at: 0) }
+    waveformChannels = selectedChannels
     for i in 10..<operations.count { operationPicker.item(at: i)?.isEnabled = stereo }
     if !stereo && operationPicker.indexOfSelectedItem >= 10 { operationPicker.selectItem(at: 0) }
     updateProcessingOptions()

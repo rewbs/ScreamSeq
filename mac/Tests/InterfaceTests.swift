@@ -50,7 +50,7 @@ struct InterfaceFailure: Error { let message: String }
     view.frames = 0; view.zoom(2); view.panFrames(1); try require(view.visibleRange.isEmpty, "Empty samples have a safe empty viewport")
     let editor = SampleEditor(frame: NSRect(x: 0, y: 0, width: 729, height: 1400))
     let samples: [[String: Any]] = [["index": 1, "name": "Drawing fixture"]]
-    editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "initial")
+    editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "fresh")
     editor.waveform.frame = NSRect(x: 0, y: 0, width: 512, height: 180)
     var requests = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
     editor.onRequest = { method, params, reply in requests.append((method, params)); replies.append(reply) }
@@ -90,6 +90,7 @@ struct InterfaceFailure: Error { let message: String }
     replies.removeFirst()(["error": ["code": -32001, "message": "Song changed"]])
     try require(editor.drawingStatus.stringValue.contains("Song changed") && !editor.waveform.stroke.isEmpty && requests.last?.0 == "sample.draw",
       "Stale drawings retain their overlay and never automatically repeat the write")
+    editor.sampleRevision = "next"
     editor.discardDrawing()
     answer("next")
     try require(editor.waveform.beginStroke(SampleStrokePoint(frame: 269, value: -1)), "A refreshed waveform accepts the next gesture")
@@ -110,7 +111,7 @@ struct InterfaceFailure: Error { let message: String }
     try require(retry != nil && editor.waveformPending, "Busy reads schedule a bounded retry")
     editor.waveform.setViewport(400..<432)
     try require(retry?.isCancelled == true && requests.last?.1["start"] as? Int == 400, "A new viewport retires the old busy retry")
-    answer("moved")
+    answer("drawn")
     try require(editor.waveform.beginStroke(SampleStrokePoint(frame: 410, value: 0)), "Begin before a document refresh")
     editor.update(["frames": 1000, "channels": 2], samples: samples, revision: "external")
     let afterRefresh = requests.count
@@ -130,6 +131,7 @@ struct InterfaceFailure: Error { let message: String }
     _ = editor.waveform.beginStroke(SampleStrokePoint(frame: 1020, value: 0.2))
     editor.waveform.extendStroke(SampleStrokePoint(frame: 1032, value: -0.5))
     try drawingRetentionChecks()
+    try sampleNavigationChecks()
     return editor
   }
   static func parameterBoundaryChecks() throws {
@@ -272,7 +274,7 @@ struct InterfaceFailure: Error { let message: String }
     try require(sample.waveform.peaks == displayPeaks, "Out-of-order channel waveform replies cannot replace the active channel")
     sampleReplies.removeFirst()(["result": ["data": ["peaks": [-0.25, 0.25]]]])
     try require(sample.waveform.peaks == displayPeaks && sample.waveformRevision == nil, "Incomplete waveform replies cannot become a loaded view")
-    sample.refreshWaveform()
+    sample.channelPicker.selectItem(at: 2); sample.channelChanged()
     var currentWave = sampleRequests.last!.1
     let currentPeaks = Array(repeating: [-0.25, 0.25], count: currentWave["bins"] as! Int).flatMap { $0 }
     currentWave["peaks"] = currentPeaks
