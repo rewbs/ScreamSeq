@@ -379,19 +379,59 @@ Whole-application Swift type checking also passes. This follow-up is newer than
 build 7; recorder desktop and keyboard qualification remain pending. Evidence:
 `interface-recorder-devices.log` and `typecheck-recorder-devices.log`.
 
+## Build 8 desktop qualification and Mixer review follow-up — 2026-10-30
+
+Build 8 started at 09:29:37 UTC, more than one hour after build 7, and succeeded
+at 09:32:17 UTC on `f4cdc25845d29971531e477bec26d679f7fb539c`. All 3534 tracked
+source hashes stayed unchanged during the build. The complete packaged-app socket
+suite passed, including refused rack/graph reconnect receipts and the new atomic
+Mixer name/color transaction. The copied, separately identified QA bundle ran
+with inspection and automation enabled against a disposable project.
+
+Computer use confirmed retained invalid Mixer fields, corrected name/color Save,
+one-step document Undo/Redo, Add return with stable selection/name focus, and
+native Save/Open preserving the exact untouched gain `-3.2718281828`. Final live
+Mixer state matched the saved native metadata. The dynamic left pane exposed the
+Mixer actions. A 1230-character saved Windows plugin path stayed within the
+700-point location dialog; invalid scanning, readback, candidate check and rack
+reconnect behaved as expected. The repaired rack and graph paths survived reopen;
+graph repair itself used the API in this pass. Recorder checks selected BlackHole
+2ch explicitly and exercised setup refresh without starting capture or changing
+system audio defaults. Evidence: `build-8-identity.json`, `socket-build8-app.log`,
+`qa8-desktop-validation.json` and `qa8-final-state.json`.
+
+Two Greptile findings were reproduced in the built app: a pending send and bus
+name blocked each other, and a second bus could accept gain text while the first
+bus held an invalid draft. The source follow-up lets Set send finish while
+preserving other raw fields, then completes those fields against the owned send
+revision. It also guards native strip text admission before accepting another
+bus's input and preserves table selection after a successful control commit.
+These fixes are newer than build 8 and are not covered by its desktop evidence.
+All 42 native interface groups passed; focused Mixer regressions additionally
+cover equivalent numeric send spelling. Tests exercise real AppKit field-editor
+input, independent send completion, retained invalid color, correction at the
+owned revision, send replacement without duplication, newer input during a write
+and stable table selection. Complete application Swift type checking passed.
+Evidence: `interface-mixer-review-all.log`, `interface-mixer-review-final.log`
+and `typecheck-mixer-review-final.log`.
+
+The initial main window was visibly compressed until native Zoom. Recorder name
+entry survived Refresh after Tab completion, but reverted when clicking the
+instrument checkbox and Refresh directly from active editing. Both presentation
+and active-field retention issues remain open; no performance qualification is
+claimed from this pass.
+
 ## Remaining parity work
 
 These items are deliberately outside this checkpoint and must be resolved before
 claiming complete Windows parity:
 
-- Packaged-app confirmation of the plugin-location refusal receipt and long-path
-  layout follow-ups newer than build 7.
 - Integrated application/socket/computer-use qualification of the newly added
   keyboard settings, rack editor APIs and retained Song Settings.
 - Additional composing departure, panel-close and newer-input guards in other
   editors.
-- Packaged qualification of the retained Mixer fields and location-revision
-  changes above; sample-setting completion and retained refused waveform strokes.
+- Packaged qualification of the two Mixer review fixes newer than build 8;
+  sample-setting completion and retained refused waveform strokes.
 - Remaining recorder/review focus, root keyboard traversal, paging and endpoint
   presentation, including the source-tested input identity changes above.
 - Further source-by-source review of plugin/routing controls, instrument-envelope

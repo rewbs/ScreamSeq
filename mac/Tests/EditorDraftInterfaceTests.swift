@@ -271,6 +271,68 @@ extension InterfaceTests {
     try require(mixer.peak.stringValue == "—", "Missing observation is unavailable rather than measured silence")
     try mixerUncertainOutcomeChecks(data)
     try mixerRawCompletionChecks(data)
+    try mixerOverlappingDraftChecks(data)
+  }
+
+  static func mixerOverlappingDraftChecks(_ data: [String: Any]) throws {
+    let mixer = MixerEditor(frame: NSRect(x: 0, y: 0, width: 1040, height: 650))
+    mixer.revision = "overlap:0"; mixer.update(data); mixer.automaticDelay = 60
+    var calls = [(String, [String: Any])](), replies = [([String: Any]) -> Void]()
+    mixer.onRequest = { method, params, reply in calls.append((method, params)); replies.append(reply) }
+    func answer(_ revision: String) { replies.removeFirst()(["result": ["revision": revision, "data": [:]]]) }
+    mixer.sendGain.stringValue = "-6"; mixer.name.stringValue = "Retained name"; mixer.color.stringValue = "not hex"
+    var completed = true; mixer.finishAutomaticEdit { completed = $0 }
+    try require(!completed && calls.isEmpty, "Save waits for the explicit send draft")
+    try press(mixer, "Set send")
+    try require(calls.count == 1 && calls[0].0 == "mixer.sends.set" && calls[0].1["expectedRevision"] as? String == "overlap:0", "A send can finish independently of retained bus fields")
+    answer("overlap:1")
+    try require(mixer.name.stringValue == "Retained name" && mixer.color.stringValue == "not hex" && mixer.hasRawDraft && mixer.send.indexOfSelectedItem == 1,
+      "Send acknowledgement preserves other raw fields and selects the accepted send")
+    mixer.finishAutomaticEdit { completed = $0 }
+    try require(!completed && calls.count == 1 && mixer.status.stringValue.contains("hexadecimal"), "An invalid other field remains correctable after saving the send")
+    mixer.color.stringValue = "12AB90"; mixer.finishAutomaticEdit { completed = $0 }
+    try require(calls.count == 2 && calls[1].0 == "mixer.bus.set" && calls[1].1["expectedRevision"] as? String == "overlap:1" && calls[1].1["sends"] == nil,
+      "Corrected bus fields use the owned send revision without replacing sends")
+    answer("overlap:2")
+    try require(completed && !mixer.needsCompletion && mixer.table.selectedRow == 0 && (mixer.selected?["sends"] as? [[String: Any]])?.count == 1,
+      "Both forms finish and retain the stable bus selection")
+    mixer.sendGain.stringValue = "-8"; try press(mixer, "Set send"); answer("overlap:3")
+    try require((mixer.selected?["sends"] as? [[String: Any]])?.count == 1 && (mixer.selected?["sends"] as? [[String: Any]])?.first?["gainDB"] as? Double == -8,
+      "Editing the accepted send updates it rather than appending another send")
+    mixer.sendGain.stringValue = "-8.000"; try press(mixer, "Set send"); answer("overlap:3")
+    try require(!mixer.needsCompletion, "A no-change send write also accepts equivalent numeric spelling")
+    mixer.sendGain.stringValue = "-9"; mixer.name.stringValue = "Before send acknowledgement"; try press(mixer, "Set send")
+    mixer.name.stringValue = "Newer name"; answer("overlap:4")
+    try require(mixer.needsReload && mixer.revision == "overlap:3" && mixer.name.stringValue == "Newer name" && mixer.sendGain.stringValue == "-9",
+      "Newer input during a send write retains its original revision and requires readback")
+
+    let editor = MixerEditor(frame: .zero)
+    editor.widthAnchor.constraint(equalToConstant: 1040).isActive = true
+    editor.heightAnchor.constraint(equalToConstant: 650).isActive = true
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 650), styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = editor; window.setContentSize(NSSize(width: 1040, height: 650))
+    editor.revision = "strip:0"; editor.update(data); editor.layoutSubtreeIfNeeded(); editor.automaticDelay = 60
+    var writes = [[String: Any]]()
+    editor.onRequest = { _, params, reply in writes.append(params); reply(["result": ["revision": "strip:\(writes.count)", "data": [:]]]) }
+    guard let first = editor.strips.visible[0], let second = editor.strips.visible[1] else { throw InterfaceFailure(message: "Missing native Mixer strips") }
+    func type(_ field: NSTextField, _ value: String) throws {
+      window.makeFirstResponder(field)
+      guard let text = field.currentEditor() as? NSTextView else { throw InterfaceFailure(message: "Strip field editor did not attach") }
+      text.insertText(value, replacementRange: NSRange(location: 0, length: (text.string as NSString).length))
+    }
+    try type(first.gain, "-")
+    try require(first.gain.stringValue == "-" && editor.selectedID == "t1", "Native input captures the first strip's stable bus")
+    let originalSecond = second.gain.stringValue
+    try type(second.gain, "-6")
+    try require(second.gain.stringValue == originalSecond && !second.hasDraft && editor.selectedID == "t1" && first.gain.stringValue == "-",
+      "AppKit refuses another bus's input before it becomes a second raw draft")
+    try type(first.gain, "-4.5"); editor.finishAutomaticEdit { completed = $0 }
+    try require(completed && writes.count == 1 && writes[0]["bus"] as? String == "t1" && writes[0]["gainDB"] as? Double == -4.5,
+      "Correcting the first strip completes Save without reverting another strip")
+    try type(second.preGain, "-6"); editor.finishAutomaticEdit { completed = $0 }
+    try require(completed && writes.count == 2 && writes[1]["bus"] as? String == "g1" && writes[1]["preGainDB"] as? Double == -6 && editor.table.selectedRow == 1,
+      "After the first edit completes, native input can capture and save the second bus")
+    window.makeFirstResponder(nil)
   }
 
   static func mixerRawCompletionChecks(_ fixture: [String: Any]) throws {

@@ -146,6 +146,9 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
     strips.onRawEnter = { [weak self] id in
       guard let self, self.claimRawBus(id) else { return }; self.finishAutomaticEdit { _ in }
     }
+    // Claim the bus before AppKit accepts text, not after textDidChange. A
+    // second bus must not acquire a draft while the first bus still owns one.
+    strips.canBeginRawEdit = { [weak self] id in self?.selectBus(id) == true }
     strips.canAdjust = { [weak self] in self?.hasRawDraft == false && self?.hasSendDraft == false }
     strips.onFinish = { [weak self] id in guard self?.selectedID == id else { return }; self?.finishGesture() }
     strips.onInspect = { [weak self] id in
@@ -549,6 +552,9 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
           for (key, value) in values { self.buses[index][key] = value }
         }
         self.table.reloadData()
+        if let index = self.buses.firstIndex(where: { $0["id"] as? String == selectedID }) {
+          self.table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        }
         self.refreshStrips()
         self.status.stringValue = "Mixer controls saved · ⌘Z to undo"
         if !self.draft.isEmpty { self.sendControls() }
@@ -627,14 +633,16 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
       let destination = buses.first { $0["id"] as? String == target }?["name"] as? String ?? (output == 0 ? "Master" : "Unrouted")
       return (title: "\(p["name"] as? String ?? "Instrument") · out \(output + 1) → \(destination)", id: "\(p["id"] as? String ?? ""):\(output)")
     }, saved: nil, sameBus: sameBus)
-    let sends = bus["sends"] as? [[String: Any]] ?? []
+    showSendList(keeping: sameBus ? chosen(send) : nil)
+  }
+  private func showSendList(keeping selection: String?) {
+    let sends = selected?["sends"] as? [[String: Any]] ?? []
     // A send has no ID of its own; its position in this bus's list, paired
     // with its destination, identifies it within one snapshot.
-    let previousSend = sameBus && send.numberOfItems > 0 ? chosen(send) : nil
     fill(send, [(title: "New send", id: "")] + sends.enumerated().map { index, s in
       (title: buses.first { $0["id"] as? String == s["target"] as? String }?["name"] as? String ?? "Bus", id: "\(index):\(s["target"] as? String ?? "")")
     })
-    if !choose(send, previousSend) { send.selectItem(at: 0) }
+    if !choose(send, selection) { send.selectItem(at: 0) }
     showSend(refreshing: true)
   }
   func showMeters(_ meters: [[AnyHashable: Any]]) {
@@ -757,18 +765,29 @@ final class MixerEditor: NSView, NSTableViewDataSource, NSTableViewDelegate, NST
   }
   private func setSend() {
     guard let selectedID, let target = chosen(sendTarget), destinations.contains(where: { $0["id"] as? String == target }),
-      let gain = Double(sendGain.stringValue), gain.isFinite else { return }
+      let gain = Double(sendGain.stringValue), gain.isFinite else {
+      status.stringValue = "Choose an available send destination and a finite gain. Fields kept."; return
+    }
     var values = selected?["sends"] as? [[String: Any]] ?? []
     let value: [String: Any] = ["target": target, "gainDB": gain, "preFader": preSend.state == .on, "enabled": sendEnabled.state == .on]
+    let index: Int
     if send.indexOfSelectedItem > 0 {
       guard let current = chosenSend else { status.stringValue = "That send changed. Choose it again."; return }
-      values[current.index] = value
-    } else { values.append(value) }
-    guard !loading, !needsReload, draft.isEmpty, committingControls.isEmpty, !hasRawDraft, !hasMarkedText else {
+      index = current.index; values[index] = value
+    } else { index = values.count; values.append(value) }
+    guard !loading, !needsReload, draft.isEmpty, committingControls.isEmpty, !hasMarkedText else {
       status.stringValue = "Finish or reload the other mixer fields before setting this send."; return
     }
     request("mixer.sends.set", ["bus": selectedID, "sends": values, "expectedRevision": revision]) { _, _ in
-      self.shownSendFields = self.sendFields; self.load()
+      // The request guard has checked the complete raw snapshot. Carry other
+      // unchanged fields across this owned revision, refreshing only the send.
+      if let busIndex = self.buses.firstIndex(where: { $0["id"] as? String == selectedID }) {
+        self.buses[busIndex]["sends"] = values
+      }
+      self.shownSendFields = self.sendFields
+      self.showSendList(keeping: "\(index):\(target)"); self.refreshStrips()
+      self.status.stringValue = "Send saved · ⌘Z to undo"
+      if self.hasRawDraft { self.scheduleAutomaticEdit() }
     }
   }
   private func removeSend() {

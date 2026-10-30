@@ -30,6 +30,7 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
   var onControl: ((String, String, Any, Bool) -> Void)?
   var onFinish: ((String) -> Void)?, onInspect: ((String) -> Void)?
   var onRawChange: ((String) -> Void)?, onRawEnter: ((String) -> Void)?
+  var canBeginRawEdit: ((String) -> Bool)?
   var canAdjust: (() -> Bool)?
   var rawChanges: [String: String] {
     var values = [String: String]()
@@ -124,6 +125,9 @@ final class MixerStrip: NSView, NSTextFieldDelegate {
     onControl?(busID, key, sender.doubleValue, !sender.trackingGesture)
   }
   @objc func entered(_ sender: NSTextField) { if hasDraft { onRawEnter?(busID) } }
+  func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
+    canBeginRawEdit?(busID) != false
+  }
   func controlTextDidChange(_ notification: Notification) { onRawChange?(busID) }
   func controlTextDidEndEditing(_ notification: Notification) {
     if let field = notification.object as? NSTextField { entered(field) }
@@ -150,6 +154,7 @@ final class MixerStrips: NSView {
   var onControl: ((String, String, Any, Bool) -> Void)?
   var onFinish: ((String) -> Void)?, onInspect: ((String) -> Void)?
   var onRawChange: ((String) -> Void)?, onRawEnter: ((String) -> Void)?
+  var canBeginRawEdit: ((String) -> Bool)?
   var canAdjust: (() -> Bool)?
   private var updating = false
   let stripWidth: CGFloat = 160, stripHeight: CGFloat = 508
@@ -195,6 +200,7 @@ final class MixerStrips: NSView {
       if let reused = spare.popLast() { strip = reused } else { strip = MixerStrip(frame: .zero); createdCount += 1 }
       strip.onRawChange = { [weak self] id in self?.onRawChange?(id) }
       strip.onRawEnter = { [weak self] id in self?.onRawEnter?(id) }
+      strip.canBeginRawEdit = { [weak self] id in self?.canBeginRawEdit?(id) != false }
       strip.canAdjust = { [weak self] in self?.canAdjust?() != false }
       strip.onControl = { [weak self] id, key, value, final in self?.onControl?(id, key, value, final) }
       strip.onFinish = { [weak self] id in
