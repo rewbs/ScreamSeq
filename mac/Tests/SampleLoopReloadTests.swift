@@ -50,7 +50,7 @@ extension InterfaceTests {
       try require(e.loopNeedsReload && !e.loopsBusy && e.waveformRevision == "original" && e.drawingFields == fields && e.sampleSelectionOptions == options,
         "A late loop reload preserves newer \(change) input without rebasing or partial adoption")
     }
-    for malformed in ["fractional", "negative", "past end", "reversed", "empty enabled", "directions", "identity"] {
+    for malformed in ["fractional", "negative", "past end", "reversed", "empty enabled", "directions", "identity", "rate", "volume", "pan"] {
       let f = SampleOperationFixture(), e = f.editor
       f.revision = "latest"; e.reloadLoops(); var info = metadata(f)
       switch malformed {
@@ -60,6 +60,9 @@ extension InterfaceTests {
       case "reversed": info["loopStart"] = 20; info["loopEnd"] = 10
       case "empty enabled": info["loopEnd"] = 0
       case "directions": info["pingpong"] = true; info["reverseLoop"] = true
+      case "rate": info["rate"] = 44100.5
+      case "volume": info["volume"] = -1
+      case "pan": info["pan"] = Double.nan
       default: info["id"] = "other-sample"
       }
       try f.answer(info)

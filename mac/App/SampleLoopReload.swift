@@ -69,6 +69,7 @@ extension SampleEditor {
   }
   func validLoopReloadInfo(_ info: [String: Any], query: SampleSelectionQuery) -> Bool {
     guard validDrawingInfo(info, query.sample), let frames = info["frames"] as? Int, (0...Int(UInt32.max)).contains(frames),
+      ["rate", "volume", "pan"].allSatisfy({ key in (info[key] as? Int).map { (0...Int(UInt32.max)).contains($0) } == true }),
       info["id"] == nil || info["id"] as? String == query.identity else { return false }
     for keys in [("loopStart", "loopEnd", "loop", "pingpong", "reverseLoop"),
       ("sustainStart", "sustainEnd", "sustainLoop", "sustainPingpong", "sustainReverse")] {
